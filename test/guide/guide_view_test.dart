@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/rendering.dart'
+    show RenderParagraph, RenderRepaintBoundary;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -2432,6 +2434,274 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('ultrawide long programs cover and tune from the timeline edge', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(3440, 1440);
+    addTearDown(tester.view.reset);
+    final now = DateTime(2026, 8, 13, 12, 47);
+    final lineup = _Lineup(2, anchor: now.subtract(const Duration(hours: 1)));
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    final tunes = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (id) async => tunes.add(id),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final program = guide.row('channel-0').programs.single;
+    final cell = find.byKey(ValueKey(program.id));
+    final cellRect = _drawnRect(tester, cell);
+    final listRect = _drawnRect(
+      tester,
+      find.byKey(const Key('guide-schedule-list')),
+    );
+    expect(tester.getSize(cell).width, greaterThan(2000));
+    expect(cellRect.right, closeTo(listRect.right, .01));
+    guide.moveVertical(1);
+    await tester.pumpAndSettle();
+    final edge = Offset(listRect.right - 20, cellRect.center.dy);
+    await tester.tapAt(edge);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(guide.focusedProgramId, program.id);
+    await tester.tapAt(edge);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(edge);
+    await tester.pumpAndSettle();
+    expect(tunes, ['channel-0']);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final (restoredHours, message) in [
+    (1, "Couldn't change visible hours. Still showing 1 hour."),
+    (2, "Couldn't change visible hours. Still showing 2 hours."),
+    (3, "Couldn't change visible hours. Still showing 3 hours."),
+  ]) {
+    testWidgets(
+      'Guide hours failure retains $restoredHours hours and Retry saves the choice',
+      (tester) async {
+        final store = _RetryStore();
+        final lineup = _Lineup(1, store: store)
+          ..settings = LineupSettings(guideHours: restoredHours);
+        store.saved = PersistedState(settings: lineup.settings);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        addTearDown(guide.dispose);
+        addTearDown(lineup.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            home: Scaffold(
+              body: GuideView(
+                controller: guide,
+                onClose: () {},
+                onTune: (_) async {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('guide-hours')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('4 hours').last);
+        await tester.pumpAndSettle();
+        expect(find.text(message), findsOneWidget);
+        final feedback = tester.widget<SnackBar>(find.byType(SnackBar));
+        final roles = LineupTheme.of(tester.element(find.byType(SnackBar)));
+        expect(feedback.backgroundColor, roles.elevatedSurface);
+        expect(feedback.elevation, 0);
+        expect(feedback.action!.textColor, roles.primaryText);
+        expect(guide.guideHours, restoredHours);
+        expect(lineup.settings.guideHours, restoredHours);
+        expect(store.saved.settings.guideHours, restoredHours);
+        expect(store.attempts, 1);
+        store.fail = false;
+        await tester.tap(find.text('Retry'));
+        await tester.pumpAndSettle();
+        expect(guide.guideHours, 4);
+        expect(lineup.settings.guideHours, 4);
+        expect(store.saved.settings.guideHours, 4);
+        expect(store.attempts, 2);
+        expect(find.text(message), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  for (final size in [const Size(1920, 1080), const Size(960, 720)]) {
+    testWidgets('hours feedback paints above the grid and Now line at $size', (
+      tester,
+    ) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = size;
+      addTearDown(tester.view.reset);
+      final now = DateTime(2026, 8, 13, 12, 47);
+      final lineup = _Lineup(
+        20,
+        store: _RetryStore(),
+        anchor: now.subtract(const Duration(hours: 1)),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      const boundaryKey = Key('feedback-paint-boundary');
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: LineupCanvas.builder,
+            home: GuideView(
+              controller: guide,
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('guide-hours')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('4 hours').last);
+      await tester.pumpAndSettle();
+      final feedback = find.byType(SnackBar);
+      final roles = LineupTheme.of(tester.element(feedback));
+      final material = find.descendant(
+        of: feedback,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Material && widget.color == roles.elevatedSurface,
+        ),
+      );
+      final bannerRect = _drawnRect(tester, material);
+      final lineRect = _drawnRect(
+        tester,
+        find.byKey(const Key('guide-now-line')),
+      );
+      final gridRect = _drawnRect(
+        tester,
+        find.byKey(const Key('guide-schedule-list')),
+      );
+      final crossing = Offset(lineRect.center.dx, bannerRect.top + 4);
+      final gridCovered = Offset(bannerRect.right - 100, bannerRect.top + 4);
+      expect(bannerRect.contains(crossing), isTrue);
+      expect(lineRect.contains(crossing), isTrue);
+      expect(gridRect.contains(gridCovered), isTrue);
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(boundaryKey),
+      );
+      await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final bytes = (await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
+        final argb = roles.elevatedSurface.toARGB32();
+        final expected = [
+          (argb >> 16) & 255,
+          (argb >> 8) & 255,
+          argb & 255,
+          255,
+        ];
+        for (final point in [crossing, gridCovered]) {
+          final index = (point.dy.floor() * image.width + point.dx.floor()) * 4;
+          expect(
+            List.generate(4, (i) => bytes.getUint8(index + i)),
+            expected,
+            reason: 'The opaque banner must paint over the grid and Now line',
+          );
+        }
+        image.dispose();
+      });
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  for (final pending in [false, true]) {
+    testWidgets(
+      'Guide hours feedback leaves with its route (pending=$pending)',
+      (tester) async {
+        final store = _RetryStore();
+        if (pending) store.saveGate = Completer<void>();
+        final lineup = _Lineup(1, store: store);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        addTearDown(guide.dispose);
+        addTearDown(lineup.dispose);
+        final showGuide = ValueNotifier(true);
+        addTearDown(showGuide.dispose);
+        final shellMessenger = GlobalKey<ScaffoldMessengerState>();
+        await tester.pumpWidget(
+          MaterialApp(
+            scaffoldMessengerKey: shellMessenger,
+            builder: LineupCanvas.builder,
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            home: Scaffold(
+              body: ValueListenableBuilder<bool>(
+                valueListenable: showGuide,
+                builder: (_, visible, _) => visible
+                    ? GuideView(
+                        controller: guide,
+                        onClose: () {},
+                        onTune: (_) async {},
+                      )
+                    : const Center(child: Text('Other route')),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('guide-hours')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('4 hours').last);
+        await tester.pumpAndSettle();
+        expect(
+          find.text("Couldn't change visible hours. Still showing 2 hours."),
+          pending ? findsNothing : findsOneWidget,
+        );
+        showGuide.value = false;
+        await tester.pumpAndSettle();
+        store.saveGate?.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('Other route'), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(guide.guideHours, 2);
+        expect(tester.takeException(), isNull);
+        // The persistent shell messenger still works after the Guide scope leaves.
+        shellMessenger.currentState!.showSnackBar(
+          const SnackBar(content: Text('Shell feedback')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Shell feedback'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,
   ) async {
@@ -2442,13 +2712,28 @@ void main() {
     );
     var closes = 0;
     var tunes = 0;
+    var appChords = 0;
     await tester.pumpWidget(
       MaterialApp(
         builder: LineupCanvas.builder,
-        home: GuideView(
-          controller: guide,
-          onClose: () => closes++,
-          onTune: (_) async => tunes++,
+        home: Focus(
+          onKeyEvent: (_, event) {
+            if (event is KeyDownEvent &&
+                HardwareKeyboard.instance.isControlPressed &&
+                [
+                  LogicalKeyboardKey.keyG,
+                  LogicalKeyboardKey.keyP,
+                ].contains(event.logicalKey)) {
+              appChords++;
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: GuideView(
+            controller: guide,
+            onClose: () => closes++,
+            onTune: (_) async => tunes++,
+          ),
         ),
       ),
     );
@@ -2457,6 +2742,22 @@ void main() {
     final search = find.byKey(const Key('guide-channel-search'));
     expect(find.byTooltip('Clear search'), findsNothing);
     await tester.tap(search);
+    guide.moveWindow(2);
+    final browsedStart = guide.windowStart;
+    final inspected = guide.focusedProgramId;
+    for (final key in [LogicalKeyboardKey.keyG, LogicalKeyboardKey.keyP]) {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+      expect(closes, 0);
+      expect(guide.windowStart, browsedStart);
+      expect(guide.focusedProgramId, inspected);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    }
+    expect(appChords, 2);
+
     await tester.enterText(search, '   ');
     await tester.pump();
     expect(guide.searchQuery, isEmpty);
@@ -2492,7 +2793,16 @@ void main() {
     expect(tunes, 0);
     expect(closes, 0);
 
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    expect(guide.windowStart, isNot(browsedStart));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     expect(closes, 1);
     guide.dispose();
     lineup.dispose();
@@ -2999,14 +3309,19 @@ String _testTime(DateTime value) =>
     );
 
 class _Lineup extends LineupController {
-  _Lineup(int count, {this.artworkBytes, this.artworkLoader, DateTime? anchor})
-    : super(
-        store: _Store(),
-        credentials: _Credentials(),
-        plex: PlexClient(
-          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        ),
-      ) {
+  _Lineup(
+    int count, {
+    this.artworkBytes,
+    this.artworkLoader,
+    DateTime? anchor,
+    AppStore? store,
+  }) : super(
+         store: store ?? _Store(),
+         credentials: _Credentials(),
+         plex: PlexClient(
+           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+         ),
+       ) {
     channels = List.generate(
       count,
       (index) => Channel(
@@ -3047,6 +3362,21 @@ class _Store implements AppStore {
       const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
+}
+
+class _RetryStore extends _Store {
+  Completer<void>? saveGate;
+  bool fail = true;
+  int attempts = 0;
+  PersistedState saved = const PersistedState();
+
+  @override
+  Future<void> save(PersistedState state) async {
+    attempts++;
+    await saveGate?.future;
+    if (fail) throw StateError('Synthetic save failure');
+    saved = state;
+  }
 }
 
 class _Credentials implements CredentialStore {

@@ -538,17 +538,19 @@ class GuideController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setGuideHours(int hours) async {
+  Future<bool> setGuideHours(int hours) async {
     if (!LineupSettings.guideHoursOptions.contains(hours) ||
         hours == guideHours) {
-      return;
+      return true;
     }
     try {
       await lineup.updateSettings(
         (current) => current.copyWith(guideHours: hours),
       );
+      return true;
     } catch (_) {
       // LineupController owns rollback and persistence diagnostics.
+      return false;
     }
   }
 
@@ -1050,10 +1052,16 @@ bool _listEqualsBy<T>(List<T> left, List<T> right, bool Function(T, T) equals) {
 }
 
 DateTime _floorHalfHour(DateTime value) {
-  final minute = value.minute < 30 ? 0 : 30;
-  return value.isUtc
-      ? DateTime.utc(value.year, value.month, value.day, value.hour, minute)
-      : DateTime(value.year, value.month, value.day, value.hour, minute);
+  // Subtract elapsed time from the actual instant, retaining the timezone and
+  // the identity of either repeated local hour during a fall-back transition.
+  return value.subtract(
+    Duration(
+      minutes: value.minute % 30,
+      seconds: value.second,
+      milliseconds: value.millisecond,
+      microseconds: value.microsecond,
+    ),
+  );
 }
 
 int _distanceFrom(DateTime time, GuideProgram program) {

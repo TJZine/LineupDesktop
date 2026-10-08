@@ -84,6 +84,39 @@ void main() {
     expect(guide.windowStart.isUtc, isTrue);
   });
 
+  test('local half-hour rounding preserves both Eastern DST folds', () {
+    final lineup = _TestLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    for (final (instant, expected) in [
+      (
+        DateTime.utc(2026, 11, 1, 5, 47, 12, 345, 678),
+        DateTime.utc(2026, 11, 1, 5, 30),
+      ),
+      (
+        DateTime.utc(2026, 11, 1, 6, 47, 12, 345, 678),
+        DateTime.utc(2026, 11, 1, 6, 30),
+      ),
+      (DateTime.utc(2026, 3, 8, 6, 47), DateTime.utc(2026, 3, 8, 6, 30)),
+      (DateTime.utc(2026, 3, 8, 7, 17), DateTime.utc(2026, 3, 8, 7)),
+      (DateTime.utc(2026, 1, 2, 5, 17), DateTime.utc(2026, 1, 2, 5)),
+    ]) {
+      final local = instant.toLocal();
+      expect(
+        local.timeZoneOffset,
+        anyOf(const Duration(hours: -4), const Duration(hours: -5)),
+        reason: 'Run with TZ=America/New_York',
+      );
+      final guide = GuideController(lineup: lineup, clock: () => local);
+      expect(guide.windowStart.toUtc(), expected);
+      expect(guide.windowStart.isUtc, isFalse);
+      expect(guide.windowStart.minute, anyOf(0, 30));
+      expect(guide.windowStart.timeZoneOffset, local.timeZoneOffset);
+      guide.playToNow();
+      expect(guide.windowStart.toUtc(), expected);
+      guide.dispose();
+    }
+  });
+
   test('cardinality does not determine loaded or retained row count', () async {
     for (final count in [0, 1, 10, 200, 500, 1000]) {
       final lineup = _TestLineup(_channels(count));
@@ -1359,21 +1392,33 @@ void main() {
     },
   );
 
-  test('Guide hours absorb save failure after owner rollback', () async {
-    final lineup = _TestLineup(_channels(1), store: _FailingStore());
-    lineup.diagnostics.enabled = true;
-    final guide = GuideController(lineup: lineup);
+  test(
+    'Guide hours report save failure after owner rollback and retry',
+    () async {
+      final store = _FailingStore();
+      final lineup = _TestLineup(_channels(1), store: store);
+      lineup.diagnostics.enabled = true;
+      final guide = GuideController(lineup: lineup);
 
-    await guide.setGuideHours(2);
+      expect(await guide.setGuideHours(2), isFalse);
 
-    expect(lineup.settings.guideHours, 4);
-    expect(guide.guideHours, 4);
-    expect(lineup.diagnostics.entries, hasLength(1));
-    expect(lineup.diagnostics.entries.single.message, 'State save failed');
-    expect(lineup.diagnostics.entries.single.context, {'code': 'write-failed'});
-    guide.dispose();
-    lineup.dispose();
-  });
+      expect(lineup.settings.guideHours, 4);
+      expect(guide.guideHours, 4);
+      expect(lineup.diagnostics.entries, hasLength(1));
+      expect(lineup.diagnostics.entries.single.message, 'State save failed');
+      expect(lineup.diagnostics.entries.single.context, {
+        'code': 'write-failed',
+      });
+      expect(store.saved, isNull);
+      store.fail = false;
+      expect(await guide.setGuideHours(2), isTrue);
+      expect(store.saved!.settings.guideHours, 2);
+      expect(lineup.settings.guideHours, 2);
+      expect(guide.guideHours, 2);
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
 
   test('future return is preserved until its visible window elapses', () {
     var now = DateTime(2026, 8, 13, 12, 47);
@@ -1680,9 +1725,12 @@ class _MemoryStore implements AppStore {
 }
 
 class _FailingStore extends _MemoryStore {
+  bool fail = true;
+  PersistedState? saved;
   @override
   Future<void> save(PersistedState state) async {
-    throw StateError('Synthetic save failure');
+    if (fail) throw StateError('Synthetic save failure');
+    saved = state;
   }
 }
 

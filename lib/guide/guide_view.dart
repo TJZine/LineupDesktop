@@ -513,6 +513,11 @@ class _GuideViewState extends State<GuideView>
         keyboard.isControlPressed ||
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
+    // EditableText handles text input after focus-key dispatch. Do not let
+    // unmodified editor keys invoke the ancestor's grid shortcuts.
+    if (_searchFocus.hasFocus && !commandModified) {
+      return KeyEventResult.ignored;
+    }
     if (key == LogicalKeyboardKey.keyF &&
         (keyboard.isControlPressed || keyboard.isMetaPressed)) {
       _searchFocus.requestFocus();
@@ -775,37 +780,45 @@ class _GuideViewState extends State<GuideView>
   Widget build(BuildContext context) {
     final channels = widget.controller.channels;
     final roles = LineupTheme.of(context);
-    return Focus(
-      focusNode: widget.focusNode ?? _guideFocus,
-      autofocus: true,
-      onKeyEvent: _key,
-      child: Material(
-        key: const Key('classic-guide'),
-        color: Colors.transparent,
-        child: LayoutBuilder(
-          builder: (context, outer) {
-            final policy = GuideLayoutPolicy.forSize(
-              outer.biggest,
-              hasPicture: widget.pictureInPicture != null,
-              textScale: MediaQuery.textScalerOf(context).scale(1),
-              timeHeaderHeight: _TimeHeader.requiredHeight(
-                context,
-                widget.controller,
-              ),
-            );
-            final schedule = _schedule(policy, channels);
-            final theme = Theme.of(context);
-            return DefaultTextStyle(
-              style: theme.textTheme.bodyMedium!,
-              child: _ClassicGuideSurface(
-                color: roles.deepBackground,
-                showcaseHeight: policy.showcaseHeight,
-                toolbar: _toolbar(policy),
-                showcase: _showcase(policy),
-                body: schedule,
-              ),
-            );
-          },
+    // Keep Guide feedback inside this route's lifetime. The shell's Scaffold
+    // remains mounted when switching to Player or another destination. Its
+    // SnackBar paints after the body, above both the grid and the Now line.
+    return ScaffoldMessenger(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Focus(
+          focusNode: widget.focusNode ?? _guideFocus,
+          autofocus: true,
+          onKeyEvent: _key,
+          child: Material(
+            key: const Key('classic-guide'),
+            color: Colors.transparent,
+            child: LayoutBuilder(
+              builder: (context, outer) {
+                final policy = GuideLayoutPolicy.forSize(
+                  outer.biggest,
+                  hasPicture: widget.pictureInPicture != null,
+                  textScale: MediaQuery.textScalerOf(context).scale(1),
+                  timeHeaderHeight: _TimeHeader.requiredHeight(
+                    context,
+                    widget.controller,
+                  ),
+                );
+                final schedule = _schedule(policy, channels);
+                final theme = Theme.of(context);
+                return DefaultTextStyle(
+                  style: theme.textTheme.bodyMedium!,
+                  child: _ClassicGuideSurface(
+                    color: roles.deepBackground,
+                    showcaseHeight: policy.showcaseHeight,
+                    toolbar: _toolbar(policy),
+                    showcase: _showcase(policy),
+                    body: schedule,
+                  ),
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -968,6 +981,42 @@ class _GuideControls extends StatelessWidget {
   final TextEditingController searchController;
   final FocusNode searchFocus;
   final FocusOnKeyEventCallback onSearchKey;
+
+  Future<void> _saveHours(BuildContext context, int hours) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final saved = await controller.setGuideHours(hours);
+    if (!context.mounted) return;
+    messenger.hideCurrentSnackBar();
+    if (saved) return;
+    final roles = LineupTheme.of(context);
+    final restoredHours = controller.guideHours;
+    final unit = restoredHours == 1 ? 'hour' : 'hours';
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: roles.elevatedSurface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+          side: BorderSide(color: roles.defaultBorder),
+        ),
+        behavior: SnackBarBehavior.floating,
+        content: Semantics(
+          liveRegion: true,
+          child: Text(
+            "Couldn't change visible hours. Still showing $restoredHours $unit.",
+            style: Theme.of(context).textTheme.bodyMedium!
+                .copyWith(color: roles.primaryText),
+          ),
+        ),
+        action: SnackBarAction(
+          label: 'Retry',
+          textColor: roles.primaryText,
+          onPressed: () => unawaited(_saveHours(context, hours)),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1158,7 +1207,7 @@ class _GuideControls extends StatelessWidget {
                     : null,
               ),
               onChanged: (hours) {
-                if (hours != null) unawaited(controller.setGuideHours(hours));
+                if (hours != null) unawaited(_saveHours(context, hours));
               },
               dropdownColor: LineupTheme.of(context).elevatedSurface,
             ),
@@ -2118,7 +2167,7 @@ class _ProgramCellState extends State<_ProgramCell> {
 
     return Positioned(
       left: widget.left,
-      width: widget.width.clamp(28, 2000),
+      width: widget.width,
       top: 0,
       bottom: 0,
       child: Padding(
