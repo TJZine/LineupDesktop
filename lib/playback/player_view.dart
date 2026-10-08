@@ -972,7 +972,7 @@ class _Osd extends StatelessWidget {
             clearLogo: true,
             logoMaximumSize: Size(
               (size.width >= 1920 ? 520 : 360),
-              (size.height >= 900 ? 128 : 72),
+              (size.height >= 900 ? 104 : 72),
             ),
             logoMinimumVisibleSize: Size(96, (size.height >= 900 ? 28 : 24)),
           )
@@ -1411,15 +1411,15 @@ class _NowPlaying extends StatelessWidget {
       if (item.year != null) '${item.year}',
       ...item.genres.where((genre) => genre.trim().isNotEmpty).take(3),
     ].join(' · ');
-    final reportedCodec = controller.telemetry.videoCodec?.trim();
-    final videoCodec = reportedCodec?.isNotEmpty == true
-        ? reportedCodec
-        : item.videoCodec?.trim();
+    final videoCodec =
+        formatPlayerVideoCodec(controller.telemetry.videoFormat) ??
+        formatPlayerVideoCodec(item.videoCodec) ??
+        formatPlayerVideoCodec(controller.telemetry.videoCodec);
     final badges = <String>[
       ?item.contentRating,
       if (item.resolution case final resolution?) resolution.toUpperCase(),
       ?_dynamicRangeLabel(item.dynamicRange, controller.telemetry.isHdr),
-      if (videoCodec != null && videoCodec.isNotEmpty) videoCodec.toUpperCase(),
+      ?videoCodec,
       if (item.audioCodec case final codec?) codec.toUpperCase(),
       if (item.audioChannels case final channels?) _audioChannels(channels),
     ];
@@ -1949,6 +1949,88 @@ class _NowPlayingCast extends StatelessWidget {
   }
 }
 
+/// Measure painted bounds after layout: canvas pixels may be scaled before
+/// they reach the window, independently of the device's pixel ratio.
+class _CastPortrait extends StatefulWidget {
+  const _CastPortrait({
+    required this.portrait,
+    required this.controller,
+    required this.fallback,
+  });
+  final Uri portrait;
+  final PlayerCoordinator controller;
+  final Widget fallback;
+  @override
+  State<_CastPortrait> createState() => _CastPortraitState();
+}
+
+class _CastPortraitState extends State<_CastPortrait> {
+  Future<Uint8List?>? _future;
+  Object? _requestKey;
+  bool _measurementPending = false;
+  int? _generation;
+
+  @override
+  void didUpdateWidget(covariant _CastPortrait oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.portrait != widget.portrait ||
+        oldWidget.controller != widget.controller) {
+      _future = null;
+      _requestKey = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final generation = widget.controller.lineup.contentGeneration;
+    if (_generation != generation) {
+      _generation = generation;
+      _future = null;
+      _requestKey = null;
+    }
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    if (!_measurementPending) {
+      _measurementPending = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _measurementPending = false;
+        if (!mounted) return;
+        final box = context.findRenderObject() as RenderBox;
+        if (!box.hasSize) return;
+        final painted = MatrixUtils.transformRect(
+          box.getTransformTo(null),
+          Offset.zero & box.size,
+        );
+        final width = (painted.width * dpr).ceil().clamp(1, 4096);
+        final height = (painted.height * dpr).ceil().clamp(1, 4096);
+        final key = (
+          widget.controller,
+          widget.controller.lineup.contentGeneration,
+          widget.portrait,
+          width,
+          height,
+        );
+        if (key == _requestKey) return;
+        setState(() {
+          _requestKey = key;
+          _future = widget.controller.guide.artworkForPath(
+            widget.portrait,
+            width: width,
+            height: height,
+          );
+        });
+      });
+    }
+    return _future == null
+        ? widget.fallback
+        : _PlayerArtwork(
+            key: ValueKey(_requestKey),
+            future: _future!,
+            fit: BoxFit.cover,
+            fallback: widget.fallback,
+          );
+  }
+}
+
 class _NowPlayingCastColumn extends StatelessWidget {
   const _NowPlayingCastColumn({
     required this.width,
@@ -2014,9 +2096,9 @@ class _NowPlayingCastColumn extends StatelessWidget {
               ),
               child: portrait == null
                   ? _CastFallback(index: index, roles: roles)
-                  : _PlayerArtwork(
-                      future: controller.guide.artworkForPath(portrait),
-                      fit: BoxFit.cover,
+                  : _CastPortrait(
+                      portrait: portrait,
+                      controller: controller,
                       fallback: _CastFallback(index: index, roles: roles),
                     ),
             ),

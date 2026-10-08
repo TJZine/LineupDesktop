@@ -574,7 +574,7 @@ void main() {
           ),
           PlexCastMember(name: 'Mina Park'),
           PlexCastMember(
-            name: 'Unsafe Absolute',
+            name: 'External Portrait',
             role: 'Reporter',
             thumbPath: 'https://plex.invalid/library/metadata/2/thumb',
           ),
@@ -593,7 +593,7 @@ void main() {
             thumbPath: '/photo/:/transcode?url=private',
           ),
           PlexCastMember(
-            name: 'Unsafe File',
+            name: 'Other PMS Path',
             thumbPath: '/Users/private/cast.png',
           ),
         ],
@@ -606,19 +606,23 @@ void main() {
       item.cast.first.portrait,
       Uri.parse('/library/metadata/avery/thumb'),
     );
-    expect(item.cast[2].name, 'Unsafe Absolute');
+    expect(item.cast[2].name, 'External Portrait');
     expect(item.cast[2].role, 'Reporter');
     expect(item.cast[3].name, 'Unsafe Token');
     expect(item.cast[3].role, 'Dispatcher');
     expect(item.cast[4].name, 'Unsafe Fragment');
     expect(item.cast[4].role, 'Archivist');
-    expect(
-      item.cast.skip(1).map((member) => member.portrait),
-      everyElement(isNull),
-    );
+    expect(item.cast.skip(1).map((member) => member.portrait), [
+      null,
+      Uri.parse('https://plex.invalid/library/metadata/2/thumb'),
+      null,
+      null,
+      null,
+      Uri.parse('/Users/private/cast.png'),
+    ]);
   });
 
-  test('maps trusted Plex metadata cast portraits only for cast', () {
+  test('maps external sources only for cast transcoding', () {
     const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
     final item = channelItemFor(
       const PlexMediaItem(
@@ -640,7 +644,10 @@ void main() {
 
     expect(item.poster, isNull);
     expect(item.cast.first.portrait, Uri.parse(trusted));
-    expect(item.cast.last.portrait, isNull);
+    expect(
+      item.cast.last.portrait,
+      Uri.parse('https://metadata-static.plex.tv.evil.example/f/people/a.jpg'),
+    );
   });
 
   test('drops noncanonical artwork from manually supplied Plex models', () {

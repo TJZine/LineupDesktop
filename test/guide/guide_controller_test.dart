@@ -663,6 +663,37 @@ void main() {
     expect(await first, isNotNull);
   });
 
+  test(
+    'sized artwork shares only an identical size in the bounded cache',
+    () async {
+      final lineup = _ArtworkLineup(_channels(1));
+      addTearDown(lineup.dispose);
+      final guide = GuideController(lineup: lineup);
+      addTearDown(guide.dispose);
+      final path = Uri.parse('/cast/avery');
+
+      final first = guide.artworkForPath(path, width: 72, height: 72);
+      final cached = guide.artworkForPath(path, width: 72, height: 72);
+      final larger = guide.artworkForPath(path, width: 144, height: 144);
+      final unsized = guide.artworkForPath(path);
+      await _settle();
+
+      expect(identical(first, cached), isTrue);
+      expect(identical(first, larger), isFalse);
+      expect(identical(first, unsized), isFalse);
+      expect(lineup.artworkSizes, [
+        (width: 72, height: 72),
+        (width: 144, height: 144),
+        (width: null, height: null),
+      ]);
+      lineup.completeArtwork();
+      expect(
+        await Future.wait([first, larger, unsized]),
+        everyElement(isNotNull),
+      );
+    },
+  );
+
   test('production schedules use the persistent catalog worker', () async {
     final channel = Channel(
       id: 'library-channel',
@@ -1618,12 +1649,14 @@ class _ArtworkLineup extends _TestLineup {
 
   final _artwork = <Completer<Uint8List?>>[];
   final artworkPaths = <Uri>[];
+  final artworkSizes = <({int? width, int? height})>[];
   int artworkLoads = 0;
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) {
+  Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) {
     artworkLoads++;
     artworkPaths.add(path);
+    artworkSizes.add((width: width, height: height));
     final completer = Completer<Uint8List?>();
     _artwork.add(completer);
     return completer.future;

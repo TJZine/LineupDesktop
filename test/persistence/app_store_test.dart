@@ -348,7 +348,7 @@ void main() {
                   name: 'Unsafe Absolute',
                   role: 'Reporter',
                   portrait: Uri.parse(
-                    'https://plex.invalid/library/metadata/2/thumb',
+                    'https://user@plex.invalid/library/metadata/2/thumb',
                   ),
                 ),
                 ChannelCastMember(
@@ -369,7 +369,7 @@ void main() {
                 ),
                 ChannelCastMember(
                   name: 'Unsafe File',
-                  portrait: Uri.parse('/Users/private/cast.png'),
+                  portrait: Uri.parse('file:///Users/private/cast.png'),
                 ),
               ],
             ),
@@ -461,11 +461,11 @@ void main() {
 
   test('unsafe persisted cast portraits cannot be revived', () {
     for (final unsafe in [
-      'https://plex.invalid/library/metadata/2/thumb',
+      'https://user@plex.invalid/library/metadata/2/thumb',
       '/library/metadata/3/thumb?X-Plex-Token=secret',
       '/library/metadata/4/thumb#private',
       '/photo/:/transcode?url=private',
-      '/Users/private/cast.png',
+      'file:///Users/private/cast.png',
     ]) {
       final item = ChannelItem.fromJson({
         'id': 'item',
@@ -482,6 +482,62 @@ void main() {
       expect(item.toJson().toString(), isNot(contains(unsafe)));
     }
   });
+
+  test(
+    'new portrait source shapes persist without changing the state schema',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-portrait-state-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final sources = [
+        '/library/metadata/1/thumb',
+        '/photo/people/2',
+        'https://metadata-static.plex.tv/people/3.jpg',
+        'https://images.example/4.jpg?size=large',
+        'http://images.example/5.jpg',
+      ];
+      final item = ChannelItem(
+        id: 'portrait-item',
+        title: 'Synthetic',
+        duration: const Duration(minutes: 1),
+        cast: [
+          for (final source in sources)
+            ChannelCastMember(name: 'Actor', portrait: Uri.parse(source)),
+        ],
+      );
+      final json = _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [
+              _channelJson()
+                ..['source'] = {
+                  'type': 'manual',
+                  'items': [item.toJson()],
+                },
+            ],
+          },
+        };
+      final store = FileAppStore(directory);
+      await store.save(PersistedState.fromJson(json));
+      final loaded = await store.load();
+      expect(loaded.recoveredCorruptState, isFalse);
+      final restored =
+          (loaded
+                      .state
+                      .channelsByProfileServer['profile']!['server']!
+                      .single
+                      .source
+                  as ManualSource)
+              .items
+              .single;
+      expect(
+        restored.cast.map((member) => member.portrait.toString()),
+        sources,
+      );
+      expect(loaded.state.toJson().keys.toSet(), _canonicalJson().keys.toSet());
+    },
+  );
 
   test('trusted Plex metadata cast portraits round-trip', () {
     const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';

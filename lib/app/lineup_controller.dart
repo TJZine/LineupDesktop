@@ -2052,20 +2052,76 @@ class LineupController extends ChangeNotifier {
     );
   }
 
-  Future<Uint8List?> artworkForPath(Uri path) async {
-    if (canonicalPlexCastPortrait(path) == path && path.isAbsolute) {
-      return plex.metadataArtwork(path);
-    }
+  Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     final serverId = server?.id;
-    if (serverId == null || connection == null || path.toString().isEmpty) {
+    final selectedConnection = connection;
+    if (serverId == null ||
+        selectedConnection == null ||
+        path.toString().isEmpty) {
       return null;
     }
-    return _withPmsAuthorization(
-      _epoch,
-      serverId,
-      (token, refreshedConnection) =>
-          plex.artwork((refreshedConnection ?? connection!).uri, token, path),
-    );
+    final portrait = width != null || height != null;
+    if (!portrait) {
+      return _withPmsAuthorization(
+        _epoch,
+        serverId,
+        (token, refreshedConnection) =>
+            plex.artwork((refreshedConnection ?? connection!).uri, token, path),
+      );
+    }
+    final scope = _authorizationScope;
+    bool current() =>
+        _isCurrentAuthorizationScope(scope) &&
+        server?.id == serverId &&
+        _logoutFuture == null;
+    try {
+      final bytes = await _withPmsAuthorization(_epoch, serverId, (
+        token,
+        refreshedConnection,
+      ) {
+        if (!current()) {
+          return Future<Uint8List>.error(
+            const PlexException(
+              'authorization-unavailable',
+              'Artwork session ended.',
+            ),
+          );
+        }
+        final endpoint = (refreshedConnection ?? selectedConnection).uri;
+        return plex.castPortraitArtwork(
+          endpoint,
+          token,
+          path,
+          width: width ?? 0,
+          height: height ?? 0,
+        );
+      });
+      return current() ? bytes : null;
+    } catch (error) {
+      if (!current()) return null;
+      final source = canonicalPlexCastPortrait(path) == null
+          ? 'invalid'
+          : path.isAbsolute
+          ? (path.scheme == 'https' ? 'https' : 'http')
+          : 'pms';
+      final failure = error is PlexException
+          ? switch (error.code) {
+              'auth-invalid' ||
+              'access-denied' ||
+              'authorization-unavailable' => 'authorization',
+              'network-timeout' => 'timeout',
+              'artwork-too-large' => 'size',
+              'artwork-unavailable' => 'unavailable',
+              _ => 'transport',
+            }
+          : 'transport';
+      diagnostics.add('plex', 'Cast portrait unavailable', {
+        'code': 'portrait_$source',
+        'failureCode': failure,
+        'count': 1,
+      });
+      return null;
+    }
   }
 
   Future<void> setCurrentChannel(String? id) async {

@@ -345,7 +345,7 @@ void main() {
         {
           'tag': 'Unsafe Absolute',
           'role': 'Reporter',
-          'thumb': 'https://plex.invalid/library/metadata/2/thumb',
+          'thumb': 'https://user@plex.invalid/library/metadata/2/thumb',
         },
         {
           'tag': 'Unsafe Token',
@@ -390,34 +390,34 @@ void main() {
     );
   });
 
-  test('retains only trusted absolute Plex cast portraits', () {
-    const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
-    final item = parseMediaItem({
-      'ratingKey': 'cast-portraits',
-      'title': 'Episode',
-      'type': 'episode',
-      'duration': 1000,
-      'Role': [
-        {'tag': 'Trusted', 'thumb': trusted},
-        for (final unsafe in [
-          'http://metadata-static.plex.tv/f/people/http.jpg',
-          'https://user@metadata-static.plex.tv/f/people/user.jpg',
-          'https://metadata-static.plex.tv:444/f/people/port.jpg',
-          'https://metadata-static.plex.tv/f/people/query.jpg?token=secret',
-          'https://metadata-static.plex.tv/f/people/fragment.jpg#private',
-          'https://metadata-static.plex.tv.evil.example/f/people/lookalike.jpg',
-          'https://metadata-static.plex.tv./f/people/trailing-dot.jpg',
-        ].indexed)
-          {'tag': 'Unsafe ${unsafe.$1}', 'thumb': unsafe.$2},
-      ],
-    });
+  test(
+    'retains validated transcoder sources and drops unsafe cast portraits',
+    () {
+      const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
+      final item = parseMediaItem({
+        'ratingKey': 'cast-portraits',
+        'title': 'Episode',
+        'type': 'episode',
+        'duration': 1000,
+        'Role': [
+          {'tag': 'Trusted', 'thumb': trusted},
+          for (final unsafe in [
+            'file:///portrait.jpg',
+            '/library/../portrait.jpg',
+            'https://user@metadata-static.plex.tv/f/people/user.jpg',
+            'https://metadata-static.plex.tv/f/people/fragment.jpg#private',
+          ].indexed)
+            {'tag': 'Unsafe ${unsafe.$1}', 'thumb': unsafe.$2},
+        ],
+      });
 
-    expect(item.cast.first.thumbPath, trusted);
-    expect(
-      item.cast.skip(1).map((member) => member.thumbPath),
-      everyElement(isNull),
-    );
-  });
+      expect(item.cast.first.thumbPath, trusted);
+      expect(
+        item.cast.skip(1).map((member) => member.thumbPath),
+        everyElement(isNull),
+      );
+    },
+  );
 
   test('bounds rich cast without truncating actor names', () {
     final roles = [

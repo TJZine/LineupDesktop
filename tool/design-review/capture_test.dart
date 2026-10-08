@@ -1456,7 +1456,11 @@ class _VisualController extends FixtureController {
   );
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async =>
+  Future<Uint8List?> artworkForPath(
+    Uri path, {
+    int? width,
+    int? height,
+  }) async =>
       omitClearLogoArtwork && path == Uri.parse('test://now-playing/title')
       ? null
       : useWordmarkArtwork

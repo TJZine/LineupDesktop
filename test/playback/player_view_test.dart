@@ -1853,7 +1853,7 @@ void main() {
     );
     expect(
       nowPlayingSemantics.properties.label,
-      allOf(contains('H264'), isNot(contains('1920×1080'))),
+      allOf(contains('H.264'), isNot(contains('1920×1080'))),
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1943,6 +1943,52 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets(
+    'chosen OSD logo height preserves width and small-window bounds',
+    (tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      for (final config in [
+        (
+          window: const Size(1920, 1080),
+          maximum: const Size(520, 104),
+          minimum: const Size(96, 28),
+        ),
+        (
+          window: const Size(1280, 720),
+          maximum: const Size(360, 104),
+          minimum: const Size(96, 28),
+        ),
+        (
+          window: const Size(800, 600),
+          maximum: const Size(360, 72),
+          minimum: const Size(96, 24),
+        ),
+      ]) {
+        await tester.binding.setSurfaceSize(config.window);
+        final fixture = _Fixture(PlayerState.playing, richProgram: true);
+        await fixture.guide.ensureCurrentProgram('channel');
+        fixture.player.showOsd();
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final logo = tester.widget<ClearLogoImage>(
+          find.descendant(
+            of: find.byKey(const Key('player-osd-identity')),
+            matching: find.byType(ClearLogoImage),
+          ),
+        );
+        expect(logo.maximumSize, config.maximum);
+        expect(logo.minimumVisibleSize, config.minimum);
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    },
+  );
 
   testWidgets('OSD uses official title artwork with a text fallback', (
     tester,
@@ -2936,13 +2982,16 @@ void main() {
 
     expect(find.text('English — Original theatrical mix'), findsOneWidget);
     expect(find.text('Stereo • AAC'), findsOneWidget);
-    expect(find.text('español (Latinoamérica)'), findsOneWidget);
-    expect(find.text('5.1 surround • Dolby Digital Plus'), findsOneWidget);
+    expect(find.text('Español'), findsOneWidget);
+    expect(
+      find.text('Latinoamérica • 5.1 surround • Dolby Digital Plus'),
+      findsOneWidget,
+    );
 
     const selectedLabel =
         'Select Audio track: English — Original theatrical mix; Stereo; AAC.';
     const alternateLabel =
-        'Select Audio track: español (Latinoamérica); 5.1 surround; '
+        'Select Audio track: Español; Latinoamérica; 5.1 surround; '
         'Dolby Digital Plus.';
     final selectedFinder = find.bySemanticsLabel(selectedLabel);
     final alternateFinder = find.bySemanticsLabel(alternateLabel);
@@ -4455,7 +4504,7 @@ void main() {
     expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
     expect(find.bySemanticsLabel('Channel 7, Channel'), findsOneWidget);
     expect(find.bySemanticsLabel('7 • Channel'), findsNothing);
-    expect(find.text('H264'), findsOneWidget);
+    expect(find.text('H.264'), findsOneWidget);
     expect(
       find.byKey(const Key('player-now-playing-runtime-facts')),
       findsNothing,
@@ -4563,6 +4612,49 @@ void main() {
     },
     semanticsEnabled: true,
   );
+
+  for (final config in [
+    (size: const Size(1920, 1080), dpr: 1.0),
+    (size: const Size(3840, 2160), dpr: 1.0),
+    (size: const Size(1536, 864), dpr: 1.25),
+  ]) {
+    testWidgets(
+      'portrait requests match painted pixels ${config.size}/${config.dpr}',
+      (tester) async {
+        tester.view
+          ..devicePixelRatio = config.dpr
+          ..physicalSize = config.size * config.dpr;
+        addTearDown(tester.view.reset);
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richItemOverride: _fixtureItem(
+            0,
+            rich: true,
+            duration: const Duration(hours: 1),
+            cast: _fixtureCast,
+          ),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        fixture.player.showNowPlaying();
+        await tester.pumpAndSettle();
+        final size = _drawnSize(
+          tester,
+          find.byKey(const Key('player-now-playing-cast-portrait-0')),
+        );
+        final request =
+            fixture.lineup.portraitSizes[_fixtureCast.first.portrait]!;
+        expect(request.width, (size.width * config.dpr).ceil());
+        expect(request.height, (size.height * config.dpr).ceil());
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
 
   testWidgets('failed cast portrait uses the neutral person fallback', (
     tester,
@@ -5615,6 +5707,7 @@ class _Lineup extends LineupController {
   }
 
   final artworkRequests = <Uri>[];
+  final portraitSizes = <Uri, ({int? width, int? height})>{};
   final bool failArtwork;
   final Uint8List? artworkBytes;
   final bool blockArtwork;
@@ -5625,8 +5718,11 @@ class _Lineup extends LineupController {
   int get contentGeneration => _contentGeneration;
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async {
+  Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     artworkRequests.add(path);
+    if (width != null || height != null) {
+      portraitSizes[path] = (width: width, height: height);
+    }
     if (failArtwork) return null;
     if (blockArtwork) {
       return (artworkCompletions[path] ??= Completer<Uint8List?>()).future;

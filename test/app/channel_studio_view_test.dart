@@ -4825,7 +4825,11 @@ Channel _channel({
 
 class _ArtworkController extends _RecordingSaveController {
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async => Uint8List.fromList(
+  Future<Uint8List?> artworkForPath(
+    Uri path, {
+    int? width,
+    int? height,
+  }) async => Uint8List.fromList(
     base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     ),

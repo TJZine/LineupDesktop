@@ -280,12 +280,20 @@ class GuideController extends ChangeNotifier {
     return _artworkForPath(path, '${item.id}|${kind.name}|$path');
   }
 
-  Future<Uint8List?> artworkForPath(Uri path) {
+  Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) {
     if (_disposed || path.toString().isEmpty) return Future.value();
-    return _artworkForPath(path, 'path|$path');
+    final key = width == null && height == null
+        ? 'path|$path'
+        : 'path|${width}x$height|$path';
+    return _artworkForPath(path, key, width: width, height: height);
   }
 
-  Future<Uint8List?> _artworkForPath(Uri path, String key) {
+  Future<Uint8List?> _artworkForPath(
+    Uri path,
+    String key, {
+    int? width,
+    int? height,
+  }) {
     final existing = _artwork.remove(key);
     if (existing != null) {
       _artwork[key] = existing;
@@ -294,7 +302,16 @@ class GuideController extends ChangeNotifier {
     final completer = Completer<Uint8List?>();
     final loading = completer.future;
     _artwork[key] = loading;
-    _pendingArtwork.add(_ArtworkRequest(key, path, completer, _generation));
+    _pendingArtwork.add(
+      _ArtworkRequest(
+        key,
+        path,
+        completer,
+        _generation,
+        width: width,
+        height: height,
+      ),
+    );
     while (_artwork.length > maximumCachedArtworkEntries) {
       final evicted = _artwork.keys.first;
       _artwork.remove(evicted);
@@ -319,7 +336,11 @@ class GuideController extends ChangeNotifier {
       }
       _activeArtworkLoads++;
       lineup
-          .artworkForPath(request.path)
+          .artworkForPath(
+            request.path,
+            width: request.width,
+            height: request.height,
+          )
           .then<Uint8List?>((value) => value, onError: (_) => null)
           .then((value) {
             final cached = identical(
@@ -981,12 +1002,21 @@ class _GuideLoadDeadline {
 }
 
 class _ArtworkRequest {
-  const _ArtworkRequest(this.key, this.path, this.completer, this.generation);
+  const _ArtworkRequest(
+    this.key,
+    this.path,
+    this.completer,
+    this.generation, {
+    this.width,
+    this.height,
+  });
 
   final String key;
   final Uri path;
   final Completer<Uint8List?> completer;
   final int generation;
+  final int? width;
+  final int? height;
 }
 
 bool _channelEquals(Channel left, Channel right) =>

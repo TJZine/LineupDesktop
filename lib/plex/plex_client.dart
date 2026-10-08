@@ -1241,28 +1241,59 @@ class PlexClient {
     return response.bodyBytes;
   }
 
-  Future<Uint8List> metadataArtwork(
-    Uri uri, {
+  Future<Uint8List> castPortraitArtwork(
+    Uri server,
+    String token,
+    Uri portrait, {
+    required int width,
+    required int height,
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
-    if (canonicalPlexCastPortrait(uri) != uri || !uri.isAbsolute) {
+    if (canonicalPlexCastPortrait(portrait) != portrait ||
+        width < 1 ||
+        width > 4096 ||
+        height < 1 ||
+        height > 4096) {
       throw const PlexException(
         'artwork-unavailable',
-        'Program artwork is unavailable.',
+        'Cast portrait is unavailable.',
+      );
+    }
+    final uri = server
+        .resolve('/photo/:/transcode')
+        .replace(
+          queryParameters: {
+            'width': '$width',
+            'height': '$height',
+            'minSize': '1',
+            'upscale': '1',
+            'url': portrait.toString(),
+          },
+        );
+    if (!_isSameServerUri(server, uri)) {
+      throw const PlexException(
+        'artwork-unavailable',
+        'Cast portrait is unavailable.',
       );
     }
     final response = await _send(
       'GET',
       uri,
-      headers: const {'Accept': 'image/*'},
+      headers: _headers(token),
       maximumBytes: maximumBytes,
       oversizedCode: 'artwork-too-large',
-      oversizedMessage: 'Program artwork is too large.',
+      oversizedMessage: 'Cast portrait is too large.',
     );
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw PlexException(
+        response.statusCode == 401 ? 'auth-invalid' : 'access-denied',
+        'Cast portrait authorization failed.',
+      );
+    }
     if (response.statusCode != 200) {
       throw const PlexException(
         'artwork-unavailable',
-        'Program artwork is unavailable.',
+        'Cast portrait is unavailable.',
       );
     }
     return response.bodyBytes;

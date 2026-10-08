@@ -187,8 +187,11 @@ class _VisualController extends FixtureController {
   bool useWordmarkArtwork = false;
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async =>
-      useWordmarkArtwork ? _nowPlayingArtwork[path] : _syntheticArtwork;
+  Future<Uint8List?> artworkForPath(
+    Uri path, {
+    int? width,
+    int? height,
+  }) async => useWordmarkArtwork ? _nowPlayingArtwork[path] : _syntheticArtwork;
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
