@@ -35,6 +35,7 @@ class UpstreamOnboardingView extends StatefulWidget {
 
 class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Timer? _clock;
+  final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
   final _profileReturnFocus = FocusNode(debugLabel: 'Return to profiles');
@@ -110,6 +111,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   void dispose() {
     widget.controller.removeListener(_controllerChanged);
     _clock?.cancel();
+    _navigationFocus.dispose();
     _linkActionFocus.dispose();
     _profileCancelFocus.dispose();
     _profileReturnFocus.dispose();
@@ -119,7 +121,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   void _returnFromPin() {
     if (_pinUser == null) return;
     setState(() => _pinUser = null);
-    if (widget.accountOrigin && widget.controller.profileSelectionCanCancel) {
+    if (widget.accountOrigin &&
+        widget.controller.profileSelectionCanCancel &&
+        widget.controller.profileSelectionOriginStage == SetupStage.ready) {
       widget.controller.cancelProfileSelection();
       return;
     }
@@ -137,13 +141,37 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       return;
     }
     final controller = widget.controller;
+    var handled = false;
     if (controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel) {
       controller.cancelProfileSelection();
+      handled = true;
     } else if (controller.stage == SetupStage.servers &&
         controller.serverSelectionCanCancel) {
       controller.cancelServerSelection();
+      handled = true;
     }
+    if (handled) {
+      _focusNavigation();
+    }
+  }
+
+  void _focusNavigation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _navigationFocus.canRequestFocus) {
+        _navigationFocus.requestFocus();
+      }
+    });
+  }
+
+  void _cancelProfileSelection() {
+    widget.controller.cancelProfileSelection();
+    _focusNavigation();
+  }
+
+  void _cancelServerSelection() {
+    widget.controller.cancelServerSelection();
+    _focusNavigation();
   }
 
   KeyEventResult _navigationKey(FocusNode _, KeyEvent event) {
@@ -153,7 +181,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack ||
         event.logicalKey == LogicalKeyboardKey.backspace) {
-      if (widget.accountOrigin) {
+      final controller = widget.controller;
+      if (controller.profileSelectionCanCancel ||
+          controller.serverSelectionCanCancel) {
         _handleBack();
         return KeyEventResult.handled;
       }
@@ -172,59 +202,68 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       canPop: false,
       onPopInvokedWithResult: (_, _) => _handleBack(),
       child: Focus(
-        canRequestFocus: false,
+        focusNode: _navigationFocus,
+        canRequestFocus: true,
         onKeyEvent: _navigationKey,
-        child: Scaffold(
-          body: DecoratedBox(
-            decoration: refinedStage
-                ? BoxDecoration(color: roles.deepBackground)
-                : BoxDecoration(
-                    gradient: RadialGradient(
-                      center: const Alignment(-0.6, -0.65),
-                      radius: 1.25,
-                      colors: [
-                        roles.progressFill.withValues(alpha: 0.08),
-                        roles.deepBackground,
-                      ],
+        child: CallbackShortcuts(
+          bindings: <ShortcutActivator, VoidCallback>{
+            const SingleActivator(LogicalKeyboardKey.escape): _handleBack,
+            const SingleActivator(LogicalKeyboardKey.goBack): _handleBack,
+            const SingleActivator(LogicalKeyboardKey.backspace): _handleBack,
+          },
+          child: Scaffold(
+            body: DecoratedBox(
+              decoration: refinedStage
+                  ? BoxDecoration(color: roles.deepBackground)
+                  : BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(-0.6, -0.65),
+                        radius: 1.25,
+                        colors: [
+                          roles.progressFill.withValues(alpha: 0.08),
+                          roles.deepBackground,
+                        ],
+                      ),
                     ),
-                  ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  if (refinedStage)
-                    LineupTopBar(
-                      menuKey: const ValueKey('onboarding-app-menu'),
-                      onOpenMenu: widget.onOpenMenu,
-                      menuFocusNode: widget.menuFocusNode,
-                    ),
-                  Expanded(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 48,
-                          vertical: 24,
-                        ),
-                        child: ConstrainedBox(
-                          key: const ValueKey('onboarding-content'),
-                          constraints: BoxConstraints(
-                            maxWidth: refinedStage ? 1040 : double.infinity,
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    if (refinedStage)
+                      LineupTopBar(
+                        menuKey: const ValueKey('onboarding-app-menu'),
+                        onOpenMenu: widget.onOpenMenu,
+                        menuFocusNode: widget.menuFocusNode,
+                      ),
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 48,
+                            vertical: 24,
                           ),
-                          child: FocusTraversalGroup(
-                            policy: ReadingOrderTraversalPolicy(),
-                            child: AnimatedSwitcher(
-                              duration: widget.controller.settings.reduceMotion
-                                  ? Duration.zero
-                                  : const Duration(milliseconds: 180),
-                              child: _screen(
-                                key: ValueKey(widget.controller.stage),
+                          child: ConstrainedBox(
+                            key: const ValueKey('onboarding-content'),
+                            constraints: BoxConstraints(
+                              maxWidth: refinedStage ? 1040 : double.infinity,
+                            ),
+                            child: FocusTraversalGroup(
+                              policy: ReadingOrderTraversalPolicy(),
+                              child: AnimatedSwitcher(
+                                duration:
+                                    widget.controller.settings.reduceMotion
+                                    ? Duration.zero
+                                    : const Duration(milliseconds: 180),
+                                child: _screen(
+                                  key: ValueKey(widget.controller.stage),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -754,8 +793,14 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           SizedBox(height: 12),
           TextButton(
             focusNode: _profileCancelFocus,
-            onPressed: widget.controller.cancelProfileSelection,
-            child: Text(widget.accountOrigin ? '‹ Settings · Account' : 'Back'),
+            onPressed: _cancelProfileSelection,
+            child: Text(
+              widget.accountOrigin &&
+                      widget.controller.profileSelectionOriginStage ==
+                          SetupStage.ready
+                  ? '‹ Settings · Account'
+                  : 'Back',
+            ),
           ),
         ],
         _onboardingFeedback(const ValueKey('profile-feedback-slot')),
@@ -854,7 +899,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               ),
             if (widget.controller.serverSelectionCanCancel)
               TextButton(
-                onPressed: widget.controller.cancelServerSelection,
+                onPressed: _cancelServerSelection,
                 child: Text(
                   widget.accountOrigin ? '‹ Settings · Account' : 'Back',
                 ),
@@ -944,6 +989,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     key: key,
     user: _pinUser!,
     accountOrigin: widget.accountOrigin,
+    profileOriginIsReady:
+        widget.controller.profileSelectionOriginStage == SetupStage.ready,
     onBack: _returnFromPin,
     onAccepted: () {
       if (mounted) setState(() => _pinUser = null);
@@ -1435,6 +1482,7 @@ class _ProfilePinStep extends StatefulWidget {
   const _ProfilePinStep({
     required this.user,
     required this.accountOrigin,
+    required this.profileOriginIsReady,
     required this.onBack,
     required this.onAccepted,
     required this.onSubmit,
@@ -1443,6 +1491,7 @@ class _ProfilePinStep extends StatefulWidget {
   });
   final PlexHomeUser user;
   final bool accountOrigin;
+  final bool profileOriginIsReady;
   final VoidCallback onBack;
   final VoidCallback onAccepted;
   final Future<bool> Function(String pin) onSubmit;
@@ -1573,7 +1622,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   child: LineupInlineLink(
                     onPressed: _submitting ? null : widget.onBack,
                     child: Text(
-                      widget.accountOrigin
+                      widget.accountOrigin && widget.profileOriginIsReady
                           ? '‹ Settings · Account'
                           : '‹ Profiles',
                     ),

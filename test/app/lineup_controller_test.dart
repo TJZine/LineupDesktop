@@ -6671,6 +6671,120 @@ void main() {
     expect(controller.server?.id, 'old');
   });
 
+  for (final origin in [
+    (
+      name: 'ready account',
+      stage: SetupStage.ready,
+      restoring: false,
+      canCancelSetup: false,
+    ),
+    (
+      name: 'first setup',
+      stage: SetupStage.channelSetup,
+      restoring: false,
+      canCancelSetup: false,
+    ),
+    (
+      name: 'regeneration',
+      stage: SetupStage.channelSetup,
+      restoring: false,
+      canCancelSetup: true,
+    ),
+    (
+      name: 'saved restore',
+      stage: SetupStage.channelSetup,
+      restoring: true,
+      canCancelSetup: false,
+    ),
+  ]) {
+    test(
+      'nested profile cancellation preserves the ${origin.name} server origin',
+      () {
+        final controller = _NoopRestoreController()
+          ..stage = origin.stage
+          ..server = _server('server')
+          ..connection = _server('server').connections.single
+          ..restoringSavedLineup = origin.restoring
+          ..channelSetupCanCancel = origin.canCancelSetup;
+        addTearDown(controller.dispose);
+
+        controller.showServers();
+        controller.showProfiles();
+
+        expect(controller.profileSelectionCanCancel, isTrue);
+        controller.cancelProfileSelection();
+        expect(controller.stage, SetupStage.servers);
+        expect(controller.serverSelectionCanCancel, isTrue);
+
+        controller.cancelServerSelection();
+        expect(controller.stage, origin.stage);
+        expect(controller.channelSetupCanCancel, origin.canCancelSetup);
+      },
+    );
+  }
+
+  test('nested profile cancellation does not require a current server', () {
+    final controller = _NoopRestoreController()
+      ..stage = SetupStage.ready
+      ..server = _server('server')
+      ..connection = _server('server').connections.single;
+    addTearDown(controller.dispose);
+
+    controller.showServers();
+    controller.server = null;
+    controller.showProfiles();
+
+    expect(controller.profileSelectionCanCancel, isTrue);
+    controller.cancelProfileSelection();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.serverSelectionCanCancel, isTrue);
+
+    controller.cancelServerSelection();
+    expect(controller.stage, SetupStage.ready);
+  });
+
+  test('initial server picker profile switch returns to Servers without outer cancel', () {
+    final controller = _NoopRestoreController()
+      ..stage = SetupStage.servers
+      ..server = null
+      ..serverSelectionCanCancel = false;
+    addTearDown(controller.dispose);
+
+    controller.showProfiles();
+    expect(controller.profileSelectionCanCancel, isTrue);
+    controller.cancelProfileSelection();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.serverSelectionCanCancel, isFalse);
+    controller.cancelServerSelection();
+    expect(controller.stage, SetupStage.servers);
+  });
+
+  test(
+    'successful nested profile selection retires the outer server origin',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+      const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+      fixture.plex.homeUsersResult = const [owner, child];
+      await controller.initialize();
+      controller
+        ..profile = owner
+        ..server = _server('server')
+        ..connection = _server('server').connections.single
+        ..stage = SetupStage.ready;
+
+      controller.showServers();
+      controller.showProfiles();
+      await controller.selectProfile(child);
+
+      expect(controller.profile?.id, 'child');
+      expect(controller.profileSelectionCanCancel, isFalse);
+      expect(controller.serverSelectionCanCancel, isFalse);
+      expect(controller.stage, SetupStage.servers);
+    },
+  );
+
   test(
     'profile cancellation is hidden before the save commit window',
     () async {
@@ -7968,6 +8082,18 @@ class _FakePlex extends PlexClient {
 
   @override
   void close() {}
+}
+
+class _NoopRestoreController extends LineupController {
+  _NoopRestoreController()
+    : super(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+
+  @override
+  Future<void> selectServer(PlexServer selected) async {}
 }
 
 class _ThrowingPlaybackPlex extends _FakePlex {

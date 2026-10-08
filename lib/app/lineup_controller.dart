@@ -17,6 +17,19 @@ enum SetupStage { welcome, linking, profiles, servers, channelSetup, ready }
 
 enum ChannelPlanApplyResult { applied, stale }
 
+@immutable
+class _PickerOrigin {
+  const _PickerOrigin({
+    required this.stage,
+    this.restoring = false,
+    this.canCancelSetup = false,
+  });
+
+  final SetupStage stage;
+  final bool restoring;
+  final bool canCancelSetup;
+}
+
 class ChannelStateConflictException extends FormatException {
   const ChannelStateConflictException()
     : super('The lineup changed. Review the current channels and try again.');
@@ -155,10 +168,19 @@ class LineupController extends ChangeNotifier {
   /// Discovery and scans can be cancelled; a started state commit cannot.
   bool get canSwitchServer => !_setupStateCommitInProgress;
 
+  /// The immediate stage to which a cancellable profile picker returns.
+  ///
+  /// The fallback keeps manually configured test controllers and older callers
+  /// that only set the public cancellation flag behaving like the direct ready
+  /// picker they represent.
+  SetupStage? get profileSelectionOriginStage =>
+      _profilePickerOrigin?.stage ??
+      (profileSelectionCanCancel ? SetupStage.ready : null);
+
   /// Takes precedence over [stage] while the saved inventory is restoring.
   bool restoringSavedLineup = false;
-  ({SetupStage stage, bool restoring, bool canCancelSetup})?
-  _serverPickerOrigin;
+  _PickerOrigin? _profilePickerOrigin;
+  _PickerOrigin? _serverPickerOrigin;
   bool secureCancellationRequired = false;
   LibraryScanStatus libraryScanStatus = LibraryScanStatus.idle;
   int libraryScanCompletedPages = 0;
@@ -647,13 +669,16 @@ class LineupController extends ChangeNotifier {
         }
         await _queueStateOperation(operation, () async {
           final oldCanCancel = profileSelectionCanCancel;
+          final oldProfileOrigin = _profilePickerOrigin;
           profileSelectionCanCancel = false;
+          _profilePickerOrigin = null;
           notifyListeners();
           final next = _stateSnapshot(profileId: selected.id, serverId: null);
           try {
             await _persistState(next);
           } catch (_) {
             profileSelectionCanCancel = oldCanCancel;
+            _profilePickerOrigin = oldProfileOrigin;
             rethrow;
           }
           if (_disposed) return;
@@ -666,6 +691,8 @@ class LineupController extends ChangeNotifier {
           _invalidatePmsRefresh();
           server = null;
           connection = null;
+          serverSelectionCanCancel = false;
+          _serverPickerOrigin = null;
           libraries = const [];
           selectedLibraryIds = const {};
           availableMedia = const [];
@@ -678,7 +705,10 @@ class LineupController extends ChangeNotifier {
         });
         if (!_isCurrent(operation)) return;
         await _discover(operation);
-        if (operation == _epoch) profileSelectionCanCancel = false;
+        if (operation == _epoch) {
+          profileSelectionCanCancel = false;
+          _profilePickerOrigin = null;
+        }
       },
       operation: operation,
       fallbackStage: SetupStage.profiles,
@@ -803,6 +833,7 @@ class LineupController extends ChangeNotifier {
           _serverAccess = {..._serverAccess, selected.id: committedAccess};
           _persisted = next;
           _retireScope();
+          _serverPickerOrigin = null;
           server = access.server;
           connection = workingConnection;
           _pmsToken = committedAccess.token;
@@ -1471,14 +1502,19 @@ class LineupController extends ChangeNotifier {
   }
 
   void showProfiles() {
-    profileSelectionCanCancel = stage == SetupStage.ready;
+    _profilePickerOrigin = switch (stage) {
+      SetupStage.ready => const _PickerOrigin(stage: SetupStage.ready),
+      SetupStage.servers => const _PickerOrigin(stage: SetupStage.servers),
+      _ => null,
+    };
+    profileSelectionCanCancel = _profilePickerOrigin != null;
     stage = SetupStage.profiles;
     error = null;
     notifyListeners();
   }
 
   void cancelProfileSelection() {
-    if (!profileSelectionCanCancel || server == null) return;
+    if (!profileSelectionCanCancel) return;
     if (busy) {
       _invalidateOperation();
       _invalidatePmsRefresh();
@@ -1487,8 +1523,12 @@ class LineupController extends ChangeNotifier {
       busy = false;
     }
     profileSelectionCanCancel = false;
+    final origin = _profilePickerOrigin;
+    _profilePickerOrigin = null;
     error = null;
-    stage = SetupStage.ready;
+    stage =
+        origin?.stage ??
+        (stage == SetupStage.servers ? SetupStage.servers : SetupStage.ready);
     notifyListeners();
   }
 
@@ -1498,7 +1538,7 @@ class LineupController extends ChangeNotifier {
     if (stage != SetupStage.servers) {
       _serverPickerOrigin = server == null
           ? null
-          : (
+          : _PickerOrigin(
               stage: stage,
               restoring: restoringSavedLineup,
               canCancelSetup: channelSetupCanCancel,
@@ -1515,7 +1555,7 @@ class LineupController extends ChangeNotifier {
   }
 
   void cancelServerSelection() {
-    if (!canSwitchServer || !serverSelectionCanCancel || server == null) return;
+    if (!canSwitchServer || !serverSelectionCanCancel) return;
     if (busy) {
       _invalidateOperation();
       _invalidatePmsRefresh();
@@ -1529,7 +1569,7 @@ class LineupController extends ChangeNotifier {
     _serverPickerOrigin = null;
     channelSetupCanCancel = origin?.canCancelSetup ?? false;
     stage = origin?.stage ?? SetupStage.ready;
-    if (origin?.restoring == true) {
+    if (origin?.restoring == true && server != null) {
       unawaited(selectServer(server!));
     } else {
       notifyListeners();
@@ -2506,6 +2546,7 @@ class LineupController extends ChangeNotifier {
 
   void _resetLibraryScan() {
     restoringSavedLineup = false;
+    _profilePickerOrigin = null;
     _serverPickerOrigin = null;
     _retainScanReadiness = null;
     _lastScanFailure = null;
