@@ -306,7 +306,10 @@ class Diagnostics extends ChangeNotifier {
     ('plex-auth', 'PIN poll failed'),
     ('plex-library', 'Playlist discovery unavailable'),
     ('plex-library', 'Some playlists could not be loaded'),
+    ('plex-library', 'Some collections could not be loaded'),
+    ('plex-library', 'Collection discovery unavailable'),
     ('plex-library', 'Library scan timing'),
+    ('plex', 'Cast portrait unavailable'),
     ('guide', 'Guide current program wait timed out'),
     ('guide', 'Guide schedule load timed out'),
     ('playback', 'Native playback failed'),
@@ -337,6 +340,15 @@ class Diagnostics extends ChangeNotifier {
     'server-unreachable',
     'resource-not-found',
     'parse-error',
+    'portrait_invalid',
+    'portrait_https',
+    'portrait_http',
+    'portrait_pms',
+    'authorization',
+    'timeout',
+    'size',
+    'unavailable',
+    'transport',
   };
   static const _containers = {'mpeg-ts', 'mpegts', 'mp4', 'mkv'};
   static const _videoCodecs = {'h264', 'hevc', 'av1', 'mpeg2video', 'vp9'};

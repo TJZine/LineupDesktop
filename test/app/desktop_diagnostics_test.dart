@@ -62,6 +62,24 @@ void main() {
       addTearDown(controller.dispose);
       controller.diagnostics.enabled = true;
       controller.diagnostics.add('plex-auth', 'PIN cancellation failed');
+      controller.diagnostics.add(
+        'plex-library',
+        'Some collections could not be loaded',
+        {'count': 2},
+      );
+      controller.diagnostics.add('plex', 'Cast portrait unavailable', {
+        'code': 'portrait_https',
+        'failureCode': 'unavailable',
+        'count': 1,
+      });
+      controller.diagnostics.add('plex', 'Cast portrait unavailable', {
+        'code': 'portrait_unknown_secret',
+        'failureCode': 'private-failure',
+        'count': 1,
+        'server': 'https://private.example/secret?X-Plex-Token=token-secret',
+        'path': '/Users/private/title.mkv',
+        'title': 'Private Title Sentinel',
+      });
       var failures = true;
       String? copied;
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -92,6 +110,23 @@ void main() {
       expect(copied, contains('Playback state: stopped'));
       expect(copied, contains('Playback method: Unknown'));
       expect(copied, contains('plex-auth: PIN cancellation failed'));
+      expect(
+        copied,
+        contains(
+          'plex-library: Some collections could not be loaded (count=2)',
+        ),
+      );
+      expect(
+        copied,
+        contains(
+          'plex: Cast portrait unavailable (code=portrait_https, '
+          'failureCode=unavailable, count=1)',
+        ),
+      );
+      expect(copied, isNot(contains('portrait_unknown_secret')));
+      expect(copied, isNot(contains('private-failure')));
+      expect(copied, isNot(contains('private.example')));
+      expect(copied, isNot(contains('Private Title Sentinel')));
       expect(copied, isNot(contains(controller.server!.name)));
     },
   );

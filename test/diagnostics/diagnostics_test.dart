@@ -184,6 +184,90 @@ void main() {
     );
   });
 
+  test(
+    'support report includes safe collection and portrait producer facts',
+    () {
+      final diagnostics = Diagnostics()..enabled = true;
+      diagnostics.add('plex-library', 'Some collections could not be loaded', {
+        'count': 2,
+      });
+      diagnostics.add('plex-library', 'Collection discovery unavailable', {
+        'count': 1,
+      });
+      const portraitSources = [
+        'portrait_invalid',
+        'portrait_https',
+        'portrait_http',
+        'portrait_pms',
+      ];
+      const portraitFailures = [
+        'authorization',
+        'timeout',
+        'size',
+        'unavailable',
+        'transport',
+      ];
+      for (final source in portraitSources) {
+        for (final failure in portraitFailures) {
+          diagnostics.add('plex', 'Cast portrait unavailable', {
+            'code': source,
+            'failureCode': failure,
+            'count': 1,
+          });
+        }
+      }
+      diagnostics.add('plex', 'Cast portrait unavailable', {
+        'code': 'portrait_unknown_secret',
+        'failureCode': 'private-failure',
+        'count': 1,
+        'server': 'https://private.example/secret?X-Plex-Token=token-secret',
+        'path': '/Users/private/title.mkv',
+        'title': 'Private Title Sentinel',
+      });
+
+      final report = diagnostics.buildSupportReport(
+        diagnostics.snapshot(
+          reportTime: DateTime.utc(2026, 10, 8),
+          timeZone: 'UTC',
+          appVersion: '1.0.0',
+          appBuild: '1',
+          platform: 'windows',
+          plexServerSelected: true,
+          plexConnectionVerified: true,
+          playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+        ),
+      );
+
+      expect(
+        report,
+        contains(
+          'plex-library: Some collections could not be loaded (count=2)',
+        ),
+      );
+      expect(
+        report,
+        contains('plex-library: Collection discovery unavailable (count=1)'),
+      );
+      expect(
+        report,
+        contains(
+          'plex: Cast portrait unavailable (code=portrait_invalid, '
+          'failureCode=authorization, count=1)',
+        ),
+      );
+      for (final source in portraitSources) {
+        expect(report, contains('code=$source'));
+      }
+      for (final failure in portraitFailures) {
+        expect(report, contains('failureCode=$failure'));
+      }
+      expect(report, isNot(contains('portrait_unknown_secret')));
+      expect(report, isNot(contains('private-failure')));
+      expect(report, isNot(contains('private.example')));
+      expect(report, isNot(contains('Private Title Sentinel')));
+    },
+  );
+
   test('library scan timing keeps only bounded redacted scan facts', () {
     final diagnostics = Diagnostics()..enabled = true;
     diagnostics.add('plex-library', 'Library scan timing', {
