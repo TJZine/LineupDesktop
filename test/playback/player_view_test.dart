@@ -731,6 +731,113 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('sleep picker keeps arrow navigation within its focused rows', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+
+    final thirtyMinutes = find.text('30 minutes');
+    final oneHour = find.text('1 hour');
+    expect(thirtyMinutes, findsOneWidget);
+    expect(oneHour, findsOneWidget);
+    Focus.of(tester.element(thirtyMinutes)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
+    expect(Focus.of(tester.element(oneHour)).hasFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(Focus.of(tester.element(thirtyMinutes)).hasFocus, isTrue);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  for (final dvrControlsEnabled in [false, true]) {
+    testWidgets(
+      'sleep picker Space activates a preset without playback commands '
+      '(DVR ${dvrControlsEnabled ? 'on' : 'off'})',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          dvrControlsEnabled: dvrControlsEnabled,
+        );
+        await tester.binding.setSurfaceSize(const Size(1280, 720));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        fixture.player.showOsd();
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+        await tester.pumpAndSettle();
+        Focus.of(tester.element(find.text('30 minutes'))).requestFocus();
+        await tester.pump();
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pump();
+        expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+        expect(fixture.native.transportCommands, 0);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        expect(fixture.player.sleepPickerOpen, isFalse);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
+  testWidgets('OSD Up still opens Mini Guide outside the sleep picker', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+    final sleepButton = tester.widget<TextButton>(
+      find.byKey(const Key('player-osd-sleep')),
+    );
+    sleepButton.focusNode!.requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+    expect(fixture.player.sleepPickerOpen, isFalse);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets(
     'keyboard track traversal reveals each focused row below its header',
     (tester) async {

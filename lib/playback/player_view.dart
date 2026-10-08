@@ -2789,62 +2789,82 @@ class _SleepTimerPicker extends StatelessWidget {
             key: const Key('sleep-timer-picker'),
             color: _overlayColor(context, controller),
             borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: 354,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
+            child: FocusTraversalGroup(
+              child: Shortcuts(
+                shortcuts: <ShortcutActivator, Intent>{
+                  const SingleActivator(LogicalKeyboardKey.arrowUp):
+                      const DirectionalFocusIntent(TraversalDirection.up),
+                  const SingleActivator(LogicalKeyboardKey.arrowDown):
+                      const DirectionalFocusIntent(TraversalDirection.down),
+                  const SingleActivator(LogicalKeyboardKey.enter):
+                      const ActivateIntent(),
+                  const SingleActivator(LogicalKeyboardKey.numpadEnter):
+                      const ActivateIntent(),
+                  const SingleActivator(LogicalKeyboardKey.space):
+                      const ActivateIntent(),
+                  const SingleActivator(LogicalKeyboardKey.select):
+                      const ActivateIntent(),
+                  const SingleActivator(LogicalKeyboardKey.mediaPlayPause):
+                      const ActivateIntent(),
+                },
+                child: SizedBox(
+                  width: 354,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: maxHeight),
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(
-                              child: Text(
-                                'Sleep timer',
-                                style: theme.textTheme.titleLarge,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Sleep timer',
+                                    style: theme.textTheme.titleLarge,
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    controller.closeOverlay();
+                                    restoreFocus();
+                                  },
+                                  child: const _OverlayCloseLabel(),
+                                ),
+                              ],
+                            ),
+                            if (remaining != null)
+                              Text(
+                                'Sleep · ${(remaining.inSeconds / 60).ceil()}m',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: supportingText,
+                                ),
                               ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                controller.closeOverlay();
-                                restoreFocus();
-                              },
-                              child: const _OverlayCloseLabel(),
-                            ),
+                            for (final choice in choices)
+                              LineupRowSurface(
+                                selected: choice.$2 == selected,
+                                child: ListTile(
+                                  key: Key(
+                                    'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
+                                  ),
+                                  minTileHeight: 44,
+                                  autofocus: choice.$2 == selected,
+                                  title: Text(choice.$1),
+                                  trailing: choice.$2 == selected
+                                      ? Icon(
+                                          Icons.check,
+                                          color: roles.progressFill,
+                                          size: 20,
+                                          semanticLabel: 'Selected preset',
+                                        )
+                                      : null,
+                                  onTap: () => _choose(choice.$2),
+                                ),
+                              ),
                           ],
                         ),
-                        if (remaining != null)
-                          Text(
-                            'Sleep · ${(remaining.inSeconds / 60).ceil()}m',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: supportingText,
-                            ),
-                          ),
-                        for (final choice in choices)
-                          LineupRowSurface(
-                            selected: choice.$2 == selected,
-                            child: ListTile(
-                              key: Key(
-                                'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
-                              ),
-                              minTileHeight: 44,
-                              autofocus: choice.$2 == selected,
-                              title: Text(choice.$1),
-                              trailing: choice.$2 == selected
-                                  ? Icon(
-                                      Icons.check,
-                                      color: roles.progressFill,
-                                      size: 20,
-                                      semanticLabel: 'Selected preset',
-                                    )
-                                  : null,
-                              onTap: () => _choose(choice.$2),
-                            ),
-                          ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
