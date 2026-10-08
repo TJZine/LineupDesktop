@@ -17,6 +17,9 @@ import '../support/ui_fixture.dart';
 
 class _SurfaceController extends FixtureController {
   PlexLibraryScanPhase phase = PlexLibraryScanPhase.items;
+  PlexPlaylistProgress? playlistProgress;
+  @override
+  PlexPlaylistProgress? get playlistScanProgress => playlistProgress;
   bool switchingAllowed = true;
   int scans = 0;
   @override
@@ -100,6 +103,21 @@ void main() {
             : 'Loading show details',
       );
       expect(tester.widget<Semantics>(status).properties.liveRegion, isTrue);
+    }
+    c.playlistProgress = const PlexPlaylistProgress();
+    c.notifyListeners();
+    await tester.pump();
+    expect(find.text('Finding playlists'), findsOneWidget);
+    expect(tester.getSemantics(status).label, 'Finding playlists');
+    for (final completed in [0, 4]) {
+      c.playlistProgress = PlexPlaylistProgress(
+        completedPlaylists: completed,
+        totalPlaylists: 8,
+      );
+      c.notifyListeners();
+      await tester.pump();
+      expect(find.text('Loading playlists · $completed of 8'), findsOneWidget);
+      expect(tester.getSemantics(status).label, 'Loading playlists');
     }
     expect(
       tester
@@ -231,6 +249,31 @@ void main() {
       await tester.tap(find.text('Switch server'));
       await tester.pumpAndSettle();
       expect(c.stage, SetupStage.servers);
+    },
+  );
+
+  testWidgets(
+    'setup phase displays bounded playlist work after library facts complete',
+    (tester) async {
+      final c = _SurfaceController()
+        ..stage = SetupStage.channelSetup
+        ..libraryScanStatus = LibraryScanStatus.scanning
+        ..playlistProgress = const PlexPlaylistProgress(
+          completedPlaylists: 4,
+          totalPlaylists: 8,
+        )
+        ..libraries = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ];
+      addTearDown(c.dispose);
+      await _pump(tester, c);
+      expect(find.text('Loading playlists · 4 of 8'), findsOneWidget);
+      expect(find.text('Checking items · 0'), findsNothing);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -571,5 +614,6 @@ class _RestorePlex extends PlexClient {
     String token, {
     required bool Function() isCurrent,
     Future<void>? cancelled,
+    void Function(PlexPlaylistProgress progress)? onProgress,
   }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
 }

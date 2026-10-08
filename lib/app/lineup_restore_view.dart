@@ -86,14 +86,21 @@ class LibraryScanPhaseStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final phase = controller.libraryScanPhase;
-    final label = switch (phase) {
-      PlexLibraryScanPhase.items => 'Checking items',
-      PlexLibraryScanPhase.collections => 'Loading collections',
-      PlexLibraryScanPhase.showGenres => 'Loading show details',
-    };
+    final playlist = controller.playlistScanProgress;
+    final label = playlist != null
+        ? playlist.totalPlaylists == null
+              ? 'Finding playlists'
+              : 'Loading playlists'
+        : switch (phase) {
+            PlexLibraryScanPhase.items => 'Checking items',
+            PlexLibraryScanPhase.collections => 'Loading collections',
+            PlexLibraryScanPhase.showGenres => 'Loading show details',
+          };
     final count = _formatCount(controller.libraryScanCompletedItems);
     final total = controller.libraryScanTotalItems;
-    final text = phase == PlexLibraryScanPhase.items
+    final text = playlist != null
+        ? '$label${playlist.totalPlaylists == null ? '' : ' · ${_formatCount(playlist.completedPlaylists)} of ${_formatCount(playlist.totalPlaylists!)}'}'
+        : phase == PlexLibraryScanPhase.items
         ? '$label · $count${total == null ? '' : ' of ${_formatCount(total)}'}'
         : label;
     return Semantics(

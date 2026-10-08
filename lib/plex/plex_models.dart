@@ -286,3 +286,14 @@ class PlexException implements Exception {
 
 /// Item paging is followed by collection membership and (for TV) show genres.
 enum PlexLibraryScanPhase { items, collections, showGenres }
+
+/// Catalog discovery has an unknown total; contents settle in bounded batches.
+class PlexPlaylistProgress {
+  const PlexPlaylistProgress({
+    this.completedPlaylists = 0,
+    this.totalPlaylists,
+  });
+
+  final int completedPlaylists;
+  final int? totalPlaylists;
+}

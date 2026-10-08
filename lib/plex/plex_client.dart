@@ -916,6 +916,7 @@ class PlexClient {
     String token, {
     required bool Function() isCurrent,
     Future<void>? cancelled,
+    void Function(PlexPlaylistProgress progress)? onProgress,
   }) async {
     void checkCurrent() {
       if (!isCurrent()) {
@@ -924,6 +925,7 @@ class PlexClient {
     }
 
     checkCurrent();
+    onProgress?.call(const PlexPlaylistProgress());
     // One attempt-local lifetime for this catalog load. The first fatal
     // authorization failure is recorded for propagation and aborts active
     // sibling IO through the existing abortable transport; a fresh retry gets
@@ -971,6 +973,9 @@ class PlexClient {
       checkCurrent: checkCurrent,
     );
     checkCurrent();
+    onProgress?.call(
+      PlexPlaylistProgress(totalPlaylists: catalogRecords.length),
+    );
     final output = <PlexPlaylist>[];
     final failed = <String>{};
     const fatalCodes = {'auth-invalid', 'auth-required', 'access-denied'};
@@ -1035,6 +1040,15 @@ class PlexClient {
         rethrow;
       }
       checkCurrent();
+      onProgress?.call(
+        PlexPlaylistProgress(
+          completedPlaylists: (start + results.length).clamp(
+            0,
+            catalogRecords.length,
+          ),
+          totalPlaylists: catalogRecords.length,
+        ),
+      );
       for (final playlist in results) {
         if (playlist != null) output.add(playlist);
       }

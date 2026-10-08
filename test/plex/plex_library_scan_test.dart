@@ -51,6 +51,56 @@ Matcher _error(String code) =>
     throwsA(isA<PlexException>().having((e) => e.code, 'code', code));
 
 void main() {
+  test('playlist progress spans discovery and bounded content batches, including failed rows', () async {
+    final catalogGate = Completer<void>();
+    final contentsGate = Completer<void>();
+    final firstBatchStarted = Completer<void>();
+    final secondBatchStarted = Completer<void>();
+    final progress = <PlexPlaylistProgress>[];
+    var requests = 0;
+    final client = _client((request) async {
+      if (request.url.path == '/playlists/all') {
+        await catalogGate.future;
+        return _page([
+          for (var i = 0; i < 6; i++)
+            {'ratingKey': 'p$i', 'title': 'Playlist $i'},
+        ], total: 6);
+      }
+      requests++;
+      if (requests == 4) firstBatchStarted.complete();
+      if (requests <= 4) await contentsGate.future;
+      if (requests > 4 && !secondBatchStarted.isCompleted) {
+        secondBatchStarted.complete();
+      }
+      if (request.url.path == '/playlists/p1/items') {
+        return http.Response('{}', 503);
+      }
+      return _page([], total: 0);
+    });
+    final load = client.playlists(
+      _server,
+      'token',
+      isCurrent: () => true,
+      onProgress: progress.add,
+    );
+    expect(progress.single.totalPlaylists, isNull);
+    catalogGate.complete();
+    await firstBatchStarted.future;
+    expect(progress.last.totalPlaylists, 6);
+    expect(progress.last.completedPlaylists, 0);
+    expect(requests, 4);
+    contentsGate.complete();
+    await secondBatchStarted.future;
+    final catalog = await load;
+    expect(catalog.failedIds, {'p1'});
+    expect(progress.map((p) => (p.completedPlaylists, p.totalPlaylists)), [
+      (0, null),
+      (0, 6),
+      (4, 6),
+      (6, 6),
+    ]);
+  });
+
   for (final payload in <String, Object?>{
     'missing envelope': {},
     'invalid envelope': {'MediaContainer': []},

@@ -366,9 +366,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     if (!_libraryScanSettled || statuses.isEmpty) {
       return 'Select the Plex libraries to scan for channel ideas.';
     }
-    final ready = count(LibraryScanStatus.complete);
+    final ready = controller.libraryScanCommittableIds
+        .intersection(_selectedLibraries)
+        .length;
     if (ready == 0) {
-      return count(LibraryScanStatus.transientFailure) > 0
+      return controller.libraryScanRetryIds
+              .intersection(_selectedLibraries)
+              .isNotEmpty
           ? 'No libraries are ready. Retry failed scans or change your selection.'
           : 'No libraries are ready. Change your selection or scan again.';
     }
@@ -387,7 +391,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   Widget _libraryStep() {
     final controller = widget.controller;
-    final ready = controller.libraryScanReadyIds.intersection(
+    final ready = controller.libraryScanCommittableIds.intersection(
       _selectedLibraries,
     );
     final retry = controller.libraryScanRetryIds.intersection(
@@ -399,7 +403,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final canRetry =
         !scanning &&
         controller.libraryScanStatus != LibraryScanStatus.cancelled &&
-        (retry.isNotEmpty || controller.error != null);
+        (retry.isNotEmpty ||
+            controller.error != null ||
+            (_libraryScanSettled &&
+                (controller.playlistCatalogUnavailable ||
+                    controller.failedPlaylistIds.isNotEmpty)));
     final roles = LineupTheme.of(context);
     final bodyStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
@@ -434,7 +442,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ],
       ),
       leading: [
-        if (canContinue)
+        if (hasLibraries &&
+            !scanning &&
+            controller.libraryScanReadyIds
+                .intersection(_selectedLibraries)
+                .isNotEmpty)
           OutlinedButton(
             key: const ValueKey('scan-again-libraries'),
             onPressed: controller.busy
@@ -756,7 +768,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 Text(library.title, style: titleStyle),
                 if (selected &&
                     _libraryScanSettled &&
-                    fact?.status != LibraryScanStatus.complete)
+                    !widget.controller.libraryScanCommittableIds.contains(
+                      library.id,
+                    ))
                   Text("Won't be used", style: typeStyle),
               ],
             ),
@@ -865,7 +879,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         setState(() {});
         return;
       }
-      final ready = widget.controller.libraryScanReadyIds.intersection(
+      final ready = widget.controller.libraryScanCommittableIds.intersection(
         _selectedLibraries,
       );
       if (advanceWhenReady && ready.length == _selectedLibraries.length) {

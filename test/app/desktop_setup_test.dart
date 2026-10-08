@@ -313,15 +313,15 @@ void main() {
   testWidgets(
     'collection failure excludes unmatched channel from missing source review',
     (tester) async {
-      final controller = _SetupController(
-        channels: [_missingChannel],
-        collectionFailures: {
-          'movies': {'Retired collection'},
-        },
-      );
+      final controller = _SetupController(channels: [_missingChannel]);
       addTearDown(controller.dispose);
       await _pump(tester, controller);
-      await _advanceToReview(tester);
+      await _advanceToConfigure(tester);
+      controller.collectionFailures = {
+        'movies': {'Retired collection'},
+      };
+      await tester.tap(find.byKey(const ValueKey('review-channels')));
+      await tester.pumpAndSettle();
       expect(find.text('Source not found'), findsNothing);
     },
   );
@@ -350,13 +350,13 @@ void main() {
           shuffleSeed: 90,
           builderKey: 'missing-playlist',
         );
-        final controller = _SetupController(
-          channels: [channel],
-          playlistUnavailable: unavailable,
-          playlistFailures: unavailable ? {} : {'failed'},
-        );
+        final controller = _SetupController(channels: [channel]);
         await _pump(tester, controller);
-        await _advanceToReview(tester);
+        await _advanceToConfigure(tester);
+        controller.playlistUnavailable = unavailable;
+        controller.playlistFailures = unavailable ? {} : {'failed'};
+        await tester.tap(find.byKey(const ValueKey('review-channels')));
+        await tester.pumpAndSettle();
         expect(find.text('Source not found'), findsNothing);
         await tester.pumpWidget(const SizedBox());
         controller.dispose();
@@ -513,6 +513,112 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.committedIds, {'movies'});
       expect(find.byKey(const ValueKey('configure-section-0')), findsOneWidget);
+    },
+  );
+
+  for (final required in [false, true]) {
+    testWidgets(
+      'Continue offers only committable sources and footer retry recovers (required=$required)',
+      (tester) async {
+        final channel = Channel(
+          id: 'saved',
+          number: 1,
+          name: 'Saved',
+          source: LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            filters: required
+                ? {
+                    LibraryFilter.collection: ['Saved'],
+                  }
+                : {},
+          ),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 1,
+        );
+        final c =
+            _SetupController(
+                channels: [channel],
+                collectionFailures: {
+                  'movies': {'Saved'},
+                },
+              )
+              ..ready = {'movies', 'shows', 'archive'}
+              ..facts = {
+                for (final id in ['movies', 'shows', 'archive'])
+                  id: const LibraryScanFact(status: LibraryScanStatus.complete),
+              }
+              ..libraryScanStatus = LibraryScanStatus.complete;
+        addTearDown(c.dispose);
+        await _pump(tester, c);
+        expect(
+          find.text('Continue with ${required ? 2 : 3} libraries'),
+          findsOneWidget,
+        );
+        expect(find.text('Scan again'), findsOneWidget);
+        await tester.tap(find.text('Shows'));
+        await tester.tap(find.text('Long Form Archive'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('continue-ready-libraries')),
+          required ? findsNothing : findsOneWidget,
+        );
+        expect(find.text('Scan again'), findsOneWidget);
+        if (required) {
+          expect(
+            find.text(
+              'No libraries are ready. Retry failed scans or change your selection.',
+            ),
+            findsOneWidget,
+          );
+          expect(find.text("Won't be used"), findsOneWidget);
+        }
+        await tester.tap(find.byKey(const ValueKey('retry-failed-libraries')));
+        await tester.pumpAndSettle();
+        expect(c.footerRetries, 1);
+        expect(c.committedIds, {'movies'});
+        expect(find.text('Shape your lineup'), findsOneWidget);
+      },
+    );
+  }
+
+  testWidgets(
+    'required playlist failure offers Retry scan with retained library facts',
+    (tester) async {
+      final c =
+          _SetupController(
+              playlistFailures: {'saved'},
+              channels: [
+                Channel(
+                  id: 'saved',
+                  number: 1,
+                  name: 'Saved',
+                  source: const PlaylistSource('saved'),
+                  playbackMode: PlaybackMode.sequential,
+                  anchor: DateTime.utc(2026),
+                  shuffleSeed: 1,
+                ),
+              ],
+            )
+            ..ready = {'movies', 'shows', 'archive'}
+            ..facts = {
+              for (final id in ['movies', 'shows', 'archive'])
+                id: const LibraryScanFact(status: LibraryScanStatus.complete),
+            }
+            ..libraryScanStatus = LibraryScanStatus.complete;
+      addTearDown(c.dispose);
+      await _pump(tester, c);
+      expect(
+        find.byKey(const ValueKey('continue-ready-libraries')),
+        findsNothing,
+      );
+      expect(find.text('Retry scan'), findsOneWidget);
+      expect(find.text('Scan again'), findsOneWidget);
+      await tester.tap(find.text('Retry scan'));
+      await tester.pumpAndSettle();
+      expect(c.footerRetries, 1);
+      expect(find.text('Shape your lineup'), findsOneWidget);
     },
   );
 
@@ -1619,6 +1725,7 @@ class _SetupController extends FixtureController {
   Set<String> retry = const {};
   Set<String> committedIds = const {};
   int applyCalls = 0;
+  int footerRetries = 0;
   Completer<void>? applyGate;
   Set<String>? rowRetryIds;
   Set<String>? rowRetryInventory;
@@ -1639,13 +1746,24 @@ class _SetupController extends FixtureController {
   @override
   Set<String> get libraryScanReadyIds => ready;
   @override
-  Set<String> get libraryScanRetryIds => retry;
+  Set<String> get libraryScanRetryIds => {
+    ...retry,
+    ...collectionUnavailable.where(facts.containsKey),
+    ...collectionFailures.keys.where(facts.containsKey),
+  };
 
   @override
   Future<bool> scanLibraries(
     Set<String> ids, {
     bool retryFailedOnly = false,
   }) async {
+    if (retryFailedOnly) {
+      footerRetries++;
+      collectionUnavailable = {};
+      collectionFailures = {};
+      playlistUnavailable = false;
+      playlistFailures = {};
+    }
     if (blockScan) {
       libraryScanStatus = LibraryScanStatus.scanning;
       ready = {ids.first};

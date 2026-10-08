@@ -416,6 +416,7 @@ class _ProductPlex extends PlexClient {
     String token, {
     required bool Function() isCurrent,
     Future<void>? cancelled,
+    void Function(PlexPlaylistProgress progress)? onProgress,
   }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
 
   @override

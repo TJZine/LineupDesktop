@@ -846,6 +846,390 @@ void main() {
     );
   }
 
+  for (final required in [false, true]) {
+    for (final unavailable in [false, true]) {
+      test(
+        'footer retry recovers collection enrichment (required=$required, unavailable=$unavailable)',
+        () async {
+          final selected = _server('server');
+          final calls = <String>[];
+          var failed = true;
+          final plex = _FakePlex()
+            ..serversResult = [selected]
+            ..librariesResult = const [
+              PlexLibrary(
+                id: 'movies',
+                title: 'Movies',
+                type: PlexLibraryType.movie,
+              ),
+              PlexLibrary(
+                id: 'untargeted',
+                title: 'Untargeted',
+                type: PlexLibraryType.movie,
+              ),
+            ]
+            ..scanLibraryHandler = (_, _, id, _, _, _, _) async {
+              calls.add(id);
+              return PlexLibraryScan(
+                items: [
+                  PlexMediaItem(
+                    id: id,
+                    title: id,
+                    type: 'movie',
+                    libraryId: id,
+                    duration: const Duration(minutes: 1),
+                    parts: [PlexMediaPart(path: '/parts/$id')],
+                    collections: failed ? [] : ['Saved'],
+                  ),
+                ],
+                collections: failed && id == 'movies'
+                    ? PlexCollectionMembership(
+                        failedTitles: unavailable ? {} : {'Saved'},
+                        unavailable: unavailable,
+                      )
+                    : const PlexCollectionMembership(),
+              );
+            };
+          final store = _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          );
+          final c = LineupController(
+            store: store,
+            credentials: _MemoryCredentials(accountToken: 'token'),
+            plex: plex,
+          );
+          addTearDown(c.dispose);
+          await c.initialize();
+          c.channels = [
+            Channel(
+              id: 'saved',
+              number: 1,
+              name: 'Saved',
+              source: MixedSource(
+                sources: [
+                  LibrarySource(
+                    libraryId: 'movies',
+                    libraryType: PlexLibraryType.movie,
+                    filters: required
+                        ? {
+                            LibraryFilter.collection: ['Saved'],
+                          }
+                        : {},
+                  ),
+                ],
+              ),
+              playbackMode: PlaybackMode.sequential,
+              anchor: DateTime.utc(2026),
+              shuffleSeed: 1,
+            ),
+          ];
+          const ids = {'movies', 'untargeted'};
+          expect(await c.scanLibraries(ids), isTrue);
+          expect(c.libraryScanReadyIds, ids);
+          expect(c.libraryScanRetryIds, {'movies'});
+          expect(c.libraryScanCommittableIds, required ? {'untargeted'} : ids);
+          final retained = c.libraryScanFacts['untargeted'];
+          expect(await c.commitLibraryScan(ids), !required);
+          if (required) {
+            expect(c.error, contains('collection used'));
+            expect(await c.commitLibraryScan({'untargeted'}), isTrue);
+          }
+          failed = false;
+          expect(await c.scanLibraries(ids, retryFailedOnly: true), isTrue);
+          expect(calls, ['movies', 'untargeted', 'movies']);
+          expect(c.libraryScanFacts['untargeted'], same(retained));
+          expect(c.libraryScanRetryIds, isEmpty);
+          expect(c.libraryScanCommittableIds, ids);
+          expect(await c.commitLibraryScan(ids), isTrue);
+          expect(c.availableMedia.first.collections, ['Saved']);
+          expect(
+            store.state.selectedLibraryIdsByProfileServer['owner']!['server'],
+            ['movies', 'untargeted'],
+          );
+          expect(await c.scanLibraries(ids), isTrue);
+          expect(calls.where((id) => id == 'movies'), hasLength(3));
+          expect(calls.where((id) => id == 'untargeted'), hasLength(2));
+          expect(await c.commitLibraryScan(ids), isTrue);
+        },
+      );
+    }
+  }
+
+  for (final required in [false, true]) {
+    test(
+      'playlist failure blocks only a required source and retry retains library IO (required=$required)',
+      () async {
+        final selected = _server('server');
+        var failed = true;
+        final plex = _FakePlex()
+          ..serversResult = [selected]
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie])
+          ..playlistsHandler = (_, _) async => PlexPlaylistCatalog(
+            playlists: failed
+                ? []
+                : [
+                    PlexPlaylist(
+                      id: 'saved',
+                      title: 'Saved',
+                      items: [_playableMovie],
+                    ),
+                  ],
+            failedIds: failed ? {'saved'} : {},
+          );
+        final c = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
+        );
+        addTearDown(c.dispose);
+        await c.initialize();
+        c.channels = [
+          Channel(
+            id: 'saved',
+            number: 1,
+            name: 'Saved',
+            source: required
+                ? const MixedSource(sources: [PlaylistSource('saved')])
+                : const LibrarySource(
+                    libraryId: 'movies',
+                    libraryType: PlexLibraryType.movie,
+                  ),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 1,
+          ),
+        ];
+        expect(await c.scanLibraries({'movies'}), isTrue);
+        expect(c.libraryScanReadyIds, {'movies'});
+        expect(c.libraryScanCommittableIds, required ? isEmpty : {'movies'});
+        expect(await c.commitLibraryScan({'movies'}), !required);
+        failed = false;
+        expect(
+          await c.scanLibraries({'movies'}, retryFailedOnly: true),
+          isTrue,
+        );
+        expect(plex.itemTokens, hasLength(1));
+        expect(plex.playlistTokens, hasLength(2));
+        expect(c.libraryScanCommittableIds, {'movies'});
+        expect(await c.commitLibraryScan({'movies'}), isTrue);
+      },
+    );
+  }
+
+  test('cancelled enrichment retry retains prior facts and rejects late recovered membership', () async {
+    final selected = _server('server');
+    final started = Completer<void>();
+    final gate = Completer<void>();
+    var retry = false;
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+        if (retry) {
+          started.complete();
+          await gate.future;
+        }
+        return PlexLibraryScan(
+          items: [_playableMovie],
+          collections: retry
+              ? const PlexCollectionMembership()
+              : const PlexCollectionMembership(failedTitles: {'Saved'}),
+        );
+      };
+    final c = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(c.dispose);
+    await c.initialize();
+    c.channels = [
+      Channel(
+        id: 'saved',
+        number: 1,
+        name: 'Saved',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            LibraryFilter.collection: ['Saved'],
+          },
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1,
+      ),
+    ];
+    expect(await c.scanLibraries({'movies'}), isTrue);
+    final fact = c.libraryScanFacts['movies'];
+    retry = true;
+    final scan = c.scanLibraries({'movies'}, retryFailedOnly: true);
+    await started.future;
+    c.cancelLibraryScan();
+    expect(c.libraryScanReadyIds, {'movies'});
+    expect(c.libraryScanFacts['movies'], same(fact));
+    expect(c.failedCollectionTitles['movies'], {'Saved'});
+    expect(c.libraryScanCommittableIds, isEmpty);
+    gate.complete();
+    expect(await scan, isFalse);
+    expect(c.failedCollectionTitles['movies'], {'Saved'});
+    expect(await c.commitLibraryScan({'movies'}), isFalse);
+  });
+
+  test(
+    'failed enrichment retry keeps valid item facts and required failure guard',
+    () async {
+      final selected = _server('server');
+      var throwOnRetry = false;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+          if (throwOnRetry) throw const PlexException('offline', 'Try again');
+          return PlexLibraryScan(
+            items: [_playableMovie],
+            collections: const PlexCollectionMembership(
+              failedTitles: {'Saved'},
+            ),
+          );
+        };
+      final c = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(c.dispose);
+      await c.initialize();
+      c.channels = [
+        Channel(
+          id: 'saved',
+          number: 1,
+          name: 'Saved',
+          source: const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            filters: {
+              LibraryFilter.collection: ['Saved'],
+            },
+          ),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 1,
+        ),
+      ];
+      expect(await c.scanLibraries({'movies'}), isTrue);
+      final fact = c.libraryScanFacts['movies'];
+      throwOnRetry = true;
+      expect(await c.scanLibraries({'movies'}, retryFailedOnly: true), isTrue);
+      expect(c.error, 'Try again');
+      expect(c.libraryScanFacts['movies'], same(fact));
+      expect(c.libraryScanReadyIds, {'movies'});
+      expect(c.failedCollectionTitles['movies'], {'Saved'});
+      expect(c.libraryScanCommittableIds, isEmpty);
+      expect(await c.commitLibraryScan({'movies'}), isFalse);
+    },
+  );
+
+  for (final retirement in ['complete', 'cancel', 'server']) {
+    test(
+      'playlist phase follows completed libraries and retires on $retirement',
+      () async {
+        final selected = _server('server');
+        final other = _server('other');
+        final started = Completer<void>();
+        final gate = Completer<void>();
+        Future<void>? cancellation;
+        void Function(PlexPlaylistProgress)? report;
+        final plex = _FakePlex()
+          ..serversResult = [selected, other]
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie])
+          ..playlistProgressHandler = (_, _, _, cancelled, onProgress) async {
+            cancellation = cancelled;
+            report = onProgress;
+            started.complete();
+            await gate.future;
+            onProgress?.call(
+              const PlexPlaylistProgress(
+                completedPlaylists: 8,
+                totalPlaylists: 8,
+              ),
+            );
+            return const PlexPlaylistCatalog(playlists: [], failedIds: {});
+          };
+        final c = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
+        );
+        addTearDown(c.dispose);
+        await c.initialize();
+        final scan = c.scanLibraries({'movies'});
+        await started.future;
+        expect(
+          c.libraryScanFacts['movies']!.status,
+          LibraryScanStatus.complete,
+        );
+        expect(c.libraryScanStatus, LibraryScanStatus.scanning);
+        expect(c.playlistScanProgress!.totalPlaylists, isNull);
+        report!(
+          const PlexPlaylistProgress(completedPlaylists: 4, totalPlaylists: 8),
+        );
+        expect(c.playlistScanProgress!.completedPlaylists, 4);
+        expect(c.libraryScanCommittableIds, isEmpty);
+        if (retirement == 'cancel') c.cancelLibraryScan();
+        if (retirement == 'server') {
+          c.showServers();
+          await c.selectServer(other);
+        }
+        if (retirement != 'complete') {
+          await cancellation;
+          expect(c.playlistScanProgress, isNull);
+        }
+        gate.complete();
+        expect(await scan, retirement == 'complete');
+        expect(c.playlistScanProgress, isNull);
+        if (retirement == 'complete') {
+          expect(c.libraryScanCommittableIds, {'movies'});
+          expect(await c.commitLibraryScan({'movies'}), isTrue);
+        } else if (retirement == 'server') {
+          expect(c.server!.id, 'other');
+          expect(c.libraryScanReadyIds, isEmpty);
+          expect(c.availablePlaylists, isEmpty);
+        }
+      },
+    );
+  }
+
   test(
     'superseded annotated scan cannot publish inventory or failure metadata',
     () async {
@@ -7344,6 +7728,14 @@ class _FakePlex extends PlexClient {
     Future<void>?,
   )?
   playlistsScanHandler;
+  Future<PlexPlaylistCatalog> Function(
+    Uri,
+    String,
+    bool Function(),
+    Future<void>?,
+    void Function(PlexPlaylistProgress)?,
+  )?
+  playlistProgressHandler;
   Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
   Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
   List<PlexPlaybackPartDescriptor>? playbackDescriptorResult;
@@ -7534,8 +7926,13 @@ class _FakePlex extends PlexClient {
     String token, {
     required bool Function() isCurrent,
     Future<void>? cancelled,
+    void Function(PlexPlaylistProgress progress)? onProgress,
   }) async {
     playlistTokens.add(token);
+    final progressHandler = playlistProgressHandler;
+    if (progressHandler != null) {
+      return progressHandler(server, token, isCurrent, cancelled, onProgress);
+    }
     final scanHandler = playlistsScanHandler;
     if (scanHandler != null) {
       return scanHandler(server, token, isCurrent, cancelled);
