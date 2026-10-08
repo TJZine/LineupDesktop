@@ -51,6 +51,86 @@ Matcher _error(String code) =>
     throwsA(isA<PlexException>().having((e) => e.code, 'code', code));
 
 void main() {
+  for (final payload in <String, Object?>{
+    'missing envelope': {},
+    'invalid envelope': {'MediaContainer': []},
+    'missing inventory': {'MediaContainer': {}},
+    'nonempty count without inventory': {
+      'MediaContainer': {'size': 1},
+    },
+    'invalid inventory': {
+      'MediaContainer': {'Directory': {}},
+    },
+    'invalid row': {
+      'MediaContainer': {
+        'Directory': [null],
+      },
+    },
+    'missing row type': {
+      'MediaContainer': {
+        'Directory': [{}],
+      },
+    },
+    'contradictory size': {
+      'MediaContainer': {'size': 1, 'Directory': []},
+    },
+  }.entries) {
+    test('library endpoint rejects ${payload.key}', () async {
+      final client = _client((request) async {
+        expect(request.url.path, '/library/sections');
+        return http.Response(jsonEncode(payload.value), 200);
+      });
+      await expectLater(
+        client.libraries(_server, 'token'),
+        _error('parse-error'),
+      );
+    });
+  }
+
+  for (final container in [
+    {'size': 0},
+    {'size': '0', 'Directory': <Object?>[]},
+    {'Directory': <Object?>[]},
+  ]) {
+    test(
+      'library endpoint accepts explicit empty inventory $container',
+      () async {
+        final client = _client(
+          (_) async =>
+              http.Response(jsonEncode({'MediaContainer': container}), 200),
+        );
+        expect(await client.libraries(_server, 'token'), isEmpty);
+      },
+    );
+  }
+
+  test(
+    'library endpoint keeps supported directories in response order',
+    () async {
+      final client = _client(
+        (_) async => http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'size': 3,
+              'Directory': [
+                {'key': 'tv', 'title': 'TV', 'type': 'show'},
+                {'key': 'music', 'title': 'Music', 'type': 'artist'},
+                {'key': 1, 'title': 'Movies', 'type': 'movie'},
+              ],
+            },
+          }),
+          200,
+        ),
+      );
+      final libraries = await client.libraries(_server, 'token');
+      expect(libraries.map((library) => library.id), ['tv', '1']);
+      expect(libraries.map((library) => library.type), [
+        PlexLibraryType.show,
+        PlexLibraryType.movie,
+      ]);
+    },
+  );
+
   test('collection listing and children paginate independently and normalize names', () async {
     final calls = <String>[];
     final client = _client((request) async {

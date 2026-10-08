@@ -348,7 +348,28 @@ class PlexClient {
 
   Future<List<PlexLibrary>> libraries(Uri server, String token) async {
     final json = await _serverJson(server.resolve('/library/sections'), token);
-    final directories = _containerList(json, 'Directory');
+    const invalid = PlexException(
+      'parse-error',
+      'Plex returned an invalid library inventory.',
+    );
+    final container = json['MediaContainer'];
+    if (container is! Map) throw invalid;
+    final size = _libraryPageCount(container['size']);
+    final rawDirectories = container['Directory'];
+    // PMS can omit Directory for an explicitly empty server. Missing inventory
+    // without that evidence must not authorize removal of saved selections.
+    final List<Object?> directories;
+    if (!container.containsKey('Directory') && size == 0) {
+      directories = const [];
+    } else if (rawDirectories is List) {
+      directories = rawDirectories;
+    } else {
+      throw invalid;
+    }
+    if (size != null && size != directories.length) throw invalid;
+    for (final raw in directories) {
+      if (raw is! Map || _optionalText(raw['type']) == null) throw invalid;
+    }
     return [
       for (final raw in directories)
         if (raw is Map && {'movie', 'show'}.contains(raw['type']))
@@ -1864,12 +1885,6 @@ Never _throwResponse(http.Response response) {
 Map<String, Object?> _record(Object? value, String label) {
   if (value is! Map) throw PlexException('parse-error', '$label was invalid.');
   return Map<String, Object?>.from(value);
-}
-
-List<Object?> _containerList(Map<String, Object?> json, String key) {
-  final container = json['MediaContainer'];
-  final value = container is Map ? container[key] : json[key];
-  return value is List ? value : const [];
 }
 
 String _text(Object? value, String label) =>

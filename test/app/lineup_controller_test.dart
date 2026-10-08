@@ -38,6 +38,146 @@ Future<void> _waitForTestState(
 
 void main() {
   test(
+    'malformed startup inventory leaves saved lineup intact and can retry',
+    () async {
+      final fixture = _reentryFixture();
+      final saved = fixture.store.state;
+      var malformed = true;
+      final inventory = PlexClient(
+        clientIdentifier: 'test',
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode(
+              malformed
+                  ? {
+                      'MediaContainer': {'size': 2},
+                    }
+                  : {
+                      'MediaContainer': {
+                        'size': 2,
+                        'Directory': [
+                          {'key': 'movies', 'title': 'Movies', 'type': 'movie'},
+                          {'key': 'tv', 'title': 'TV', 'type': 'show'},
+                        ],
+                      },
+                    },
+            ),
+            200,
+          ),
+        ),
+      );
+      addTearDown(inventory.close);
+      fixture.plex.librariesHandler = inventory.libraries;
+      await fixture.controller.initialize();
+
+      expect(fixture.controller.stage, SetupStage.servers);
+      expect(fixture.controller.error, isNotNull);
+      expect(fixture.store.state, same(saved));
+      expect(
+        fixture
+            .store
+            .state
+            .selectedLibraryIdsByProfileServer['owner']!['server'],
+        ['movies', 'tv'],
+      );
+      expect(
+        fixture
+            .store
+            .state
+            .channelsByProfileServer['owner']!['server']!
+            .single
+            .id,
+        'saved',
+      );
+
+      malformed = false;
+      await fixture.controller.selectServer(fixture.plex.serversResult.first);
+      expect(fixture.controller.error, isNull);
+      expect(fixture.controller.stage, SetupStage.ready);
+      expect(fixture.controller.selectedLibraryIds, {'movies', 'tv'});
+      expect(fixture.controller.channels.single.id, 'saved');
+      expect(fixture.plex.libraryTokens, everyElement('pms-token'));
+    },
+  );
+
+  test('malformed library success preserves restored runtime and durable selection', () async {
+    final fixture = _reentryFixture();
+    final controller = fixture.controller;
+    await controller.initialize();
+    final saved = fixture.store.state;
+    final libraries = controller.libraries;
+    final channels = controller.channels;
+    final media = controller.availableMedia;
+    final inventory = PlexClient(
+      clientIdentifier: 'test',
+      httpClient: MockClient((_) async => http.Response('{}', 200)),
+    );
+    addTearDown(inventory.close);
+    fixture.plex.librariesHandler = inventory.libraries;
+    controller.showServers();
+    await controller.selectServer(fixture.plex.serversResult.first);
+
+    expect(controller.error, isNotNull);
+    expect(controller.stage, SetupStage.servers);
+    expect(fixture.store.state, same(saved));
+    expect(controller.selectedLibraryIds, {'movies', 'tv'});
+    expect(controller.libraries, same(libraries));
+    expect(controller.channels, same(channels));
+    expect(controller.availableMedia, same(media));
+    expect(fixture.plex.libraryTokens.last, 'pms-token');
+  });
+
+  for (final empty in [true, false]) {
+    test(
+      'valid library inventory commits ${empty ? 'zero inventory' : 'removed library'} without deleting channels',
+      () async {
+        final fixture = _reentryFixture();
+        final controller = fixture.controller;
+        await controller.initialize();
+        final savedChannels =
+            fixture.store.state.channelsByProfileServer['owner']!['server']!;
+        final inventory = PlexClient(
+          clientIdentifier: 'test',
+          httpClient: MockClient(
+            (_) async => http.Response(
+              jsonEncode({
+                'MediaContainer': empty
+                    ? {'size': 0}
+                    : {
+                        'size': 1,
+                        'Directory': [
+                          {'key': 'movies', 'title': 'Movies', 'type': 'movie'},
+                        ],
+                      },
+              }),
+              200,
+            ),
+          ),
+        );
+        addTearDown(inventory.close);
+        fixture.plex.librariesHandler = inventory.libraries;
+        controller.showServers();
+        await controller.selectServer(fixture.plex.serversResult.first);
+
+        expect(controller.error, isNull);
+        expect(controller.selectedLibraryIds, empty ? isEmpty : {'movies'});
+        expect(
+          fixture
+              .store
+              .state
+              .selectedLibraryIdsByProfileServer['owner']!['server'],
+          empty ? isEmpty : ['movies'],
+        );
+        expect(
+          fixture.store.state.channelsByProfileServer['owner']!['server'],
+          savedChannels,
+        );
+        expect(controller.channels, savedChannels);
+      },
+    );
+  }
+
+  test(
     'saved restore exposes phases and aggregate items until Ready',
     () async {
       final fixture = _reentryFixture();
