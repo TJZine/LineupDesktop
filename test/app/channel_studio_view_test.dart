@@ -12,6 +12,8 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -744,6 +746,54 @@ void main() {
     expect(find.text('Edit custom channel'), findsNothing);
   });
 
+  for (final destination in ['Settings', 'Guide']) {
+    testWidgets('late Studio Tune respects newer $destination route', (
+      tester,
+    ) async {
+      final controller = _ShellTuneController()
+        ..stage = SetupStage.ready
+        ..channels = [
+          _channel(
+            id: 'custom',
+            number: 3,
+            name: 'Custom',
+            source: ManualSource([_itemForHealth(1)]),
+          ),
+        ]
+        ..availableMedia = [_media('program-1')];
+      final player = _DelayedStudioPlayer();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        UiFixture(controller: controller, player: player).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await tester.tap(find.byTooltip('Open Custom'));
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Tune in'));
+      await tester.pump();
+      await tester.pump();
+      expect(player.started.isCompleted, isTrue);
+      await tester.tap(find.byTooltip('Open Lineup menu'));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.text(destination).last);
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Edit custom channel'), findsNothing);
+      expect(find.byType(ChannelStudioView), findsNothing);
+      player.release.complete();
+      await tester.pumpAndSettle();
+      expect(player.generation, 1);
+      expect(player.status.state, PlayerState.playing);
+      // A stale Player transition would replace the management/Guide route.
+      expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
+      if (destination == 'Settings') {
+        expect(find.text('Appearance'), findsWidgets);
+      } else {
+        expect(find.byType(GuideView), findsOneWidget);
+      }
+    });
+  }
+
   testWidgets('saved Air Check agrees with Guide and Player boundaries', (
     tester,
   ) async {
@@ -1100,6 +1150,105 @@ void main() {
     expect(saved.libraryType, PlexLibraryType.movie);
     expect(saved.includeWatched, isFalse);
   });
+
+  testWidgets(
+    'source switch cancels pending filter and preserves completed drafts',
+    (tester) async {
+      final original = _channel(
+        id: 'playlist-channel',
+        number: 3,
+        name: 'Playlist channel',
+        source: const PlaylistSource('favorites'),
+      );
+      final controller = _RecordingSaveController()
+        ..channels = [original]
+        ..libraries = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..selectedLibraryIds = {'movies'}
+        ..availableMedia = [
+          _media('drama', libraryId: 'movies', genres: ['Drama']),
+          _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+        ]
+        ..availablePlaylists = [_playlist('favorites'), _playlist('later')];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await _settleAirCheck(tester);
+      await _chooseDropdown(tester, 'studio-playlist', 'Playlist later');
+      await tester.ensureVisible(find.text('Library').first);
+      await tester.tap(find.text('Library').first);
+      await _settleAirCheck(tester);
+      await _openStudioFilter(tester, 'genre');
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+      await tester.ensureVisible(find.text('Done'));
+      await tester.tap(find.text('Done'));
+      await _settleAirCheck(tester);
+      await _openStudioFilter(tester, 'genre');
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
+      await tester.ensureVisible(find.text('Plex playlist'));
+      await tester.tap(find.text('Plex playlist'));
+      await _settleAirCheck(tester);
+      expect(
+        tester
+            .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save changes'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+              find.byKey(const Key('studio-playlist')),
+            )
+            .initialValue,
+        'later',
+      );
+      await tester.ensureVisible(find.text('Library').first);
+      await tester.tap(find.text('Library').first);
+      await _settleAirCheck(tester);
+      expect(find.text('Genre: Drama'), findsOneWidget);
+      expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
+      await _openStudioFilter(tester, 'genre');
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.widgetWithText(CheckboxListTile, 'Comedy'),
+            )
+            .value,
+        isFalse,
+      );
+      await tester.ensureVisible(find.text('Cancel'));
+      await tester.tap(find.text('Cancel'));
+      await tester.ensureVisible(find.text('Plex playlist'));
+      await tester.tap(find.text('Plex playlist'));
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(
+        controller.saved!.source.toJson(),
+        const PlaylistSource('later').toJson(),
+      );
+      expect(
+        tester
+            .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
 
   testWidgets('custom mixed sources stay lossless until explicitly replaced', (
     tester,
@@ -5240,3 +5389,16 @@ Rect _drawnRect(WidgetTester tester, Finder finder) {
 
 Size _drawnSize(WidgetTester tester, Finder finder) =>
     _drawnRect(tester, finder).size;
+
+class _DelayedStudioPlayer extends FixturePlayer {
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    started.complete();
+    await release.future;
+    emit(const PlayerStatus(state: PlayerState.playing, message: 'Playing'));
+  }
+}

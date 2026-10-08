@@ -432,6 +432,22 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     };
   }
 
+  void _selectSource(_SourceChoice? choice) {
+    if (choice == _sourceChoice) return;
+    _changed(() {
+      // Pending picker/selection work belongs to the visible editor. Completed
+      // filters, playlist choices and hand-picked entries remain in their drafts.
+      _activeFilterKey = null;
+      _pendingFilterValues.clear();
+      _browseSelecting = false;
+      _browseSelection.clear();
+      _browseSelectionItems.clear();
+      _showBrowseSelected = false;
+      _sourceChoice = choice;
+    });
+    _scheduleCountAnnouncement();
+  }
+
   void _filterChanged([VoidCallback? change]) {
     _changed(change);
     _scheduleCountAnnouncement();
@@ -1127,9 +1143,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                     showSelectedIcon: false,
                     onSelectionChanged: _saving
                         ? null
-                        : (value) => _changed(
-                            () => _sourceChoice = value.singleOrNull,
-                          ),
+                        : (value) => _selectSource(value.singleOrNull),
                   ),
             ),
             SizedBox(height: 8),

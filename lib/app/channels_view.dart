@@ -231,8 +231,16 @@ class ChannelsViewState extends State<ChannelsView> {
           onOpenGenerateLineup: _openGenerateLineupFromStudio,
           clock: widget.clock,
           onTune: (id) async {
+            final originatingStudio = _studioKey;
             final success = await widget.player.tune(id);
-            if (success) widget.onOpenPlayer();
+            // Leaving Studio retires its navigation continuation, independently
+            // of the playback load which may still succeed on the newer route.
+            if (success &&
+                mounted &&
+                _studioOpen &&
+                identical(_studioKey, originatingStudio)) {
+              widget.onOpenPlayer();
+            }
             return success;
           },
         ),
