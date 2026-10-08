@@ -46,6 +46,37 @@ this log is silent, the earlier documents still govern.
 - The sleep status reads "Sleep · 42m" (replaces "Stops in N min").
 - Studio's retained schedule reads "Previous schedule · <source>" (replaces
   "Previous preview").
+- The October 7 [Player and Guide polish plan](player-guide-polish-plan.md)
+  records these approved supersessions; their implementation and render gates
+  are tracked by that plan:
+  - G3 removes the Guide's shared 20px bar/grid side insets from F2/G2 and
+    the Guide family. The grid, channel column, picture and information area
+    become full-bleed; the bar's leading content aligns with the channel text
+    inset, and cell/panel inner padding remains.
+    The October 7 render approval refines this: the filter/control row alone
+    keeps a small side inset (about 12px at the reference, aligned with channel
+    text). PiP corners touching a window edge are square; interior corners
+    remain rounded. Grid, channel column, picture and information stay full-bleed.
+  - G4 replaces the Guide information area's single 920px details column and
+    three-line synopsis clamp with the user-selected two-column composition
+    beside the unchanged picture. C1 is selected: identity beside synopsis,
+    with progress spanning both columns. The identity time line shows remaining
+    time for the airing program, duration for a future program, and no suffix
+    for a past program. Year and genres share the next line; metadata segments
+    on a shared line always use " · "; wrapped lines start with content, never
+    a separator. Final C1 renders are approved with that wrapping refinement.
+  - P3 replaces the track-label plan's always-regional primary label with the
+    language self-name; a region appears in primary/compact text only when
+    needed to distinguish same-language tracks of the same type. It may remain
+    a secondary drawer fact.
+  - P5/D5 replaces direct-fetch-only cast portraits with sized requests through
+    the selected server's photo transcoder, including validated PMS-relative
+    paths and HTTP/HTTPS portrait sources. The app contacts only that server
+    and sends its credential in the header.
+  - P6's October 7 render choice replaces only the Player OSD's 128px logo
+    height cap with 104px. The existing 520/360px width caps, 72px small-window
+    height cap and 96×28 readability fallback remain. Final chosen-logo renders
+    are approved.
 
 ## Foundations
 
@@ -414,11 +445,19 @@ Reference mocks: `build/design-review/s2-setup.html`, `s2-cards.html`.
 
 Reference mock: `build/design-review/s3-guide.html`.
 
-- The Guide uses the F1 80px bar with its G2 20px insets.
+- The Guide uses the F1 80px bar. October 7 G3 removes the shared G2 side
+  insets: the control row keeps 12px reference insets, and grid, channel column,
+  picture and information area are full-bleed.
 
-- Information area: details sit in one 920px column (reference px); the
-  synopsis shows at least three lines (clamped at three with an ellipsis so the
-  area never grows); the progress bar spans the same column width.
+- Information area: October 7 G4 selects C1 identity and synopsis columns
+  beside the unchanged picture. Synopsis uses the available height, ellipsizing
+  only when needed; missing synopsis widens identity. Progress spans both
+  columns. The time line shows remaining time for an airing program, duration
+  for a future program, and the range alone for a past program. Year and genres
+  follow on the next line; compact metadata may share a line with " · "
+  separators. Enlarged text keeps time and year/genres on separate lines and
+  binds each separator to the preceding segment so wrapped lines start with
+  content. Final C1 renders are approved with that wrapping refinement.
 - Schedule unavailable: when every visible row has failed, the grid shows one
   message ("Schedules couldn't load") with one Retry that retries all failed
   rows; the channel column stays navigable and Retry is reachable by keyboard
@@ -836,4 +875,3 @@ Phase 9a (Player)
 - Hover and focus treatment covers the DVR transport buttons when they are
   enabled, not only the five standard actions.
 - Full-screen tooltips read "Full screen" and "Exit full screen".
-

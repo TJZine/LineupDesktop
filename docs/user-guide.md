@@ -177,6 +177,13 @@ artwork geometry remains stable while it loads or if loading fails. Only a
 program with no poster reference at all omits that slot so the existing details
 can use the available width without decorative placeholder art.
 
+Beside the picture, program identity and synopsis share the information area.
+The synopsis uses the available height, with an ellipsis when it cannot fit;
+without a synopsis, identity uses the whole area. The time line shows remaining
+time for a currently airing program, duration for a future program, and the time
+range alone for a past program. Year and genres appear beneath it, or share the
+line with middle-dot separators when space is compact.
+
 ## Player
 
 Move the pointer or click/tap the Player to show the on-screen controls. The OSD
@@ -213,13 +220,17 @@ cancel the timer.
 Unavailable tracks or unsupported native actions remain disabled rather than
 showing controls that cannot work. The Guide retains the catalog media facts it
 displays, including resolution, dynamic range, and audio facts. Expanded Now
-Playing includes rating, resolution, HDR, video codec, audio codec, and channel
-count in its format chips. Decoded dimensions and hardware-decoder facts appear
-in Diagnostics.
+Playing includes rating, resolution, HDR, a short video codec name such as HEVC
+or H.264, audio codec, and channel count in its format chips. Decoded dimensions
+and hardware-decoder facts appear in Diagnostics.
 
 Track panels show the selection confirmed by native playback. A requested
 change remains marked pending until that confirmation arrives; a failed change
 keeps the prior confirmed selection and shows an inline error.
+Language labels use their self-names. A regional qualifier appears in the
+primary label when it distinguishes same-language tracks of that type with
+different supplied regions; otherwise the region remains a secondary drawer
+fact. The OSD uses the same primary-label policy.
 
 Press `I` or `Down` to expand the bottom OSD into persistent Now Playing
 details without leaving playback. The expanded panel shares the OSD actions,

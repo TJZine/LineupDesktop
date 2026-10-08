@@ -44,6 +44,32 @@ conflict. Record each supersession in the decision log's "Supersedes" list.
 | P6 | **OSD title-logo size.** Decided from renders, not in advance. The user is concerned that smaller logos would become too small. | — |
 | P7 | **OSD and Guide color pass: not in this plan.** The user will analyze and lock color decisions with Claude in a separate session, then hand them over as their own plan. Do not change colors or theme roles here, except as G1 requires for cell separation. Clear logos are never tinted. | — |
 
+## October 7 render approval refinements
+
+- **B approved with changes:** square PiP corners touching a window edge and
+  retain rounding only on interior corners. Inset the filter/control row alone
+  by about 12px at the reference, matching the channel text inset. Grid, channel
+  column, PiP and information remain full-bleed. Send matched renders; the
+  orchestrator may commit without another gate when they meet these instructions,
+  then dispatch C.
+- **D:** P3, P4 and P5 renders are approved. P6 is **104px**, replacing only the
+  128px height cap. Keep the production 520/360px width caps, 72px small-window
+  height cap and 96×28 readability fallback unchanged. This overrides the
+  comparison's standardized 520px width at 720p. Final chosen-logo renders
+  are approved; D may be committed.
+- **C:** C1 is selected. The identity time line shows the time range plus
+  remaining time for an airing program ("10:12 PM–11:00 PM · 43m left"), full
+  duration for a future focused program ("10:12 PM–11:00 PM · 48m"), and the
+  time range alone for a past program. Keep elapsed/remaining progress semantics.
+  Put year and genres on the next line ("2026 · Mystery · Drama · Thriller");
+  whenever metadata segments share a line, join them with " · ", including
+  compact windows and enlarged text. Remove the candidate selector and C2.
+  Final C1 renders at 1920×1080, 1280×720, 2560×1440, 3440×1440, 150% text
+  and Slate & Pine, with long, short, no-synopsis and no-logo states, are
+  approved. Before commit, prevent wrapped metadata from starting a line with
+  a separator: break between segments or keep time and year/genres separate
+  at enlarged text. Add a regression test; no further render gate is required.
+
 ## Confirmed causes
 
 ### P1. `Up` ignored while the OSD shows

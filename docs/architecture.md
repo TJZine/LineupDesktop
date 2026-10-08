@@ -98,6 +98,10 @@ is emergency cleanup, not the normal path. See
   section, notice, empty-state and confirmation primitives, focus-aware
   Material controls, semantic labels, navigation shell, and explicit startup
   failure surface.
+  Saved-lineup restore can show the shell's dedicated loading surface after
+  native initialization, while catalog initialization is still pending. The
+  shell stays mounted when Switch server retires that restore; a native startup
+  failure takes precedence immediately, even while the catalog is unresolved.
 - A persisted five-theme Flutter system using `ThemeData` plus one semantic
   `ThemeExtension`. Ember & Steel is the default; onboarding, management,
   Guide, player, overlays, dialogs, progress and focus consume shared roles
@@ -118,6 +122,15 @@ is emergency cleanup, not the normal path. See
   artwork caches, stale-result rejection, library filters, accessible
   visible-cell semantics, responsive PiP allocation, and selection/time/scroll
   restoration across player transitions.
+  Rows snap to whole-row offsets and fill the bottom. Grid, picture and
+  information are full-bleed; the control row keeps a 12px reference inset.
+  The unchanged PiP footprint has square window-edge corners and rounded
+  interior corners, with matching Flutter masks and native aperture bounds.
+  The companion information area has identity and synopsis columns, with
+  progress across both. The synopsis uses available height and ellipsizes when
+  needed; missing synopsis gives identity the full width. Airing programs show
+  remaining time, future programs show duration, and past programs show only
+  their time range. Shared metadata lines use middle-dot separators.
 - One Flutter player coordinator and overlay model for contract-valid playback
   projection, the status-sensitive OSD, persistent-on-request rich Now Playing,
   bounded five-row mini Guide, full Guide, channel entry, available
@@ -128,6 +141,8 @@ is emergency cleanup, not the normal path. See
   reuses `GuideController`'s bounded artwork futures/cache for poster, backdrop,
   optional clear-logo, and cast-portrait bytes; artwork identity includes the
   current content generation so replaced content cannot retain stale imagery.
+  Sized portrait cache entries also include physical width and height, measured
+  from painted bounds and device pixel ratio after the root canvas transform.
   Ordered Plex parts remain one Flutter-owned playback lifetime: the
   coordinator gives every native load its own generation, advances natural
   completion once, and maps only known part boundaries. One part-load operation
@@ -144,6 +159,11 @@ is emergency cleanup, not the normal path. See
   Presentation generations reject stale focus callbacks. Player transitions
   use Flutter's effective Reduce Motion setting, and track rails initially
   focus the selected track. Product state does not move into the native player.
+  The Sleep picker is an OSD sub-state: opening or closing it retains the
+  mounted OSD presentation and suspends auto-hide while it is open. Other OSD
+  actions dismiss it before running; a video click dismisses it and resumes
+  the OSD timeout. Up opens the Mini Guide from the OSD as well as from the
+  unobstructed Player.
 - The Player OSD defaults to classic-TV behavior: transport buttons and
   Player-local pause/play/seek/stop/rewind/fast-forward keyboard/media
   shortcuts are suppressed, while channel surfing, number entry,
@@ -166,9 +186,14 @@ is emergency cleanup, not the normal path. See
   server's probes, libraries, artwork, and playback. A bounded
   authorization recovery refreshes the same server credential once without
   exposing it through public models, persisted state, URLs, or diagnostics.
-  Cast portraits from Plex's exact HTTPS metadata image origin use a separate,
-  redirect-disabled, size-bounded request that sends no Plex credentials;
-  other foreign artwork references remain rejected.
+  Cast portraits use the selected PMS photo transcoder with physical dimensions
+  and the PMS credential in a header. Accepted durable portrait sources are
+  bounded HTTP/HTTPS URLs without user info or fragments, or queryless PMS paths
+  without authority or traversal. The app never fetches those external sources
+  directly; other artwork retains its existing PMS-path restrictions. Portrait
+  failures use the existing fallback and bounded source/failure diagnostics
+  without URLs or names. Late portrait results after authorization or server
+  retirement are discarded; ordinary artwork retains its typed error contract.
   Authenticated media requires HTTPS in both the Dart adapter and native
   boundary. The PMS credential crosses the privileged load seam separately
   from the URL and is applied as a per-load header, never as a global mpv
@@ -307,6 +332,14 @@ queued work remain retired. Successful logout clears runtime after the barrier.
 Library scans stage per-library results outside the committed inventory. Retrying
 the same profile/server/selection reuses completed libraries; an explicit ready
 subset commit persists selection and schedule migration before publishing it.
+Successful saved-lineup restoration stages that same inventory against the
+committed content lifetime, so setup re-entry can commit a ready subset without
+rescanning. A failed or cancelled explicit refresh retains previous readiness,
+but retained evidence cannot prove that a generated source has disappeared.
+Restore has a distinct controller flag and per-library item/collection/show-genre
+phases. Server selection remembers its origin; returning to a cancelled restore
+restarts it. Server switching remains available during scan work, while a started
+setup state commit blocks picker transitions through save and runtime publication.
 Reviewed setup application and reorder compare the complete captured lineup
 inside the state-operation queue. Batch deletion compares only its confirmed
 targets, so unrelated changes do not invalidate the confirmation. A mismatch
