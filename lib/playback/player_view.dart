@@ -270,9 +270,14 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
             (controller.overlay == PlayerOverlay.miniGuide && selects))) {
       return KeyEventResult.handled;
     }
-    if (controller.overlay == PlayerOverlay.audioTracks ||
-        controller.overlay == PlayerOverlay.subtitleTracks ||
-        controller.overlay == PlayerOverlay.error) {
+    final overlayOwnsKey = switch (controller.overlay) {
+      PlayerOverlay.audioTracks || PlayerOverlay.subtitleTracks =>
+        key != LogicalKeyboardKey.keyG && key != LogicalKeyboardKey.f2,
+      PlayerOverlay.error =>
+        key != LogicalKeyboardKey.pageUp && key != LogicalKeyboardKey.pageDown,
+      _ => false,
+    };
+    if (overlayOwnsKey) {
       return KeyEventResult.ignored;
     }
     final showingNowPlaying = controller.overlay == PlayerOverlay.nowPlaying;
@@ -311,12 +316,16 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       controller.overlay == PlayerOverlay.miniGuide
           ? controller.moveMiniGuide(7)
           : unawaited(controller.nextChannel());
+    } else if (controller.overlay == PlayerOverlay.miniGuide &&
+        (key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.numpadEnter ||
+            key == LogicalKeyboardKey.space ||
+            key == LogicalKeyboardKey.select)) {
+      unawaited(controller.tuneMiniGuideSelection());
     } else if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.select) {
-      if (controller.overlay == PlayerOverlay.miniGuide) {
-        unawaited(controller.tuneMiniGuideSelection());
-      } else if (showingNowPlaying) {
+      if (showingNowPlaying) {
         controller.showOsd();
       } else if (controller.overlay == PlayerOverlay.none) {
         controller.showOsd();

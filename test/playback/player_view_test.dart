@@ -1236,6 +1236,109 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('Mini Guide activates with its supported keyboard selectors', (
+    tester,
+  ) async {
+    for (final key in [
+      LogicalKeyboardKey.enter,
+      LogicalKeyboardKey.space,
+      LogicalKeyboardKey.select,
+    ]) {
+      final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+      fixture.player.showMiniGuide();
+      fixture.player.moveMiniGuide(1);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+      expect(
+        fixture.native.loadCalls,
+        1,
+        reason: '$key tunes the selected Mini Guide channel',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
+
+  testWidgets(
+    'track drawers keep Guide shortcuts and errors keep channel recovery',
+    (tester) async {
+      final errorFixture = _Fixture(
+        PlayerState.playing,
+        failLoad: true,
+        channelCount: 2,
+      );
+      await errorFixture.player.loadInitialMedia(
+        Uri.parse('lineup-test://failure'),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: errorFixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(errorFixture.player.overlay, PlayerOverlay.error);
+      final loadsBeforeRecovery = errorFixture.native.loadCalls;
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await tester.pumpAndSettle();
+      expect(errorFixture.native.loadCalls, loadsBeforeRecovery + 1);
+      expect(errorFixture.player.overlay, PlayerOverlay.error);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      errorFixture.dispose();
+
+      for (final type in [PlayerTrackType.audio, PlayerTrackType.subtitle]) {
+        for (final key in [LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2]) {
+          var guideOpened = false;
+          final fixture = _Fixture(
+            PlayerState.playing,
+            tracks: const [
+              PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+              PlayerTrack(
+                id: 2,
+                type: PlayerTrackType.subtitle,
+                selected: true,
+              ),
+            ],
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: LineupCanvas.builder,
+              home: PlayerView(
+                controller: fixture.player,
+                openGuide: () => guideOpened = true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          fixture.player.showTracks(type);
+          await tester.pumpAndSettle();
+
+          await tester.sendKeyEvent(key);
+          await tester.pump();
+          expect(
+            guideOpened,
+            isTrue,
+            reason: '$key opens Guide from ${type.name} drawer',
+          );
+
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+        }
+      }
+    },
+  );
+
   testWidgets('Guide-sized player surface keeps load failures reachable', (
     tester,
   ) async {
@@ -2936,6 +3039,10 @@ void main() {
       ),
       findsOneWidget,
     );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(fixture.native.selectedTracks, [(PlayerTrackType.audio, 1)]);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
