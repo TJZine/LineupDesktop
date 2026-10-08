@@ -287,6 +287,8 @@ void main() {
           final lineup = _Lineup(20);
           final guide = GuideController(
             lineup: lineup,
+            // Match the non-midnight reference clock used for the frozen measurements.
+            clock: () => DateTime.utc(2026, 1, 15, 3, 17),
             loadSchedule: (c) async => _schedule(c),
           );
           final player = _GuideBoundsPlayer();
@@ -430,7 +432,10 @@ void main() {
           final synopsis = find.byKey(const Key('guide-program-synopsis'));
           expect(synopsis, findsOneWidget, reason: '$size, text $textScale');
           final text = tester.widget<Text>(synopsis);
-          expect(text.maxLines, 3);
+          expect(text.maxLines, greaterThan(0));
+          if (size == const Size(1920, 1080) && textScale == 1) {
+            expect(text.maxLines, greaterThan(3));
+          }
           expect(text.overflow, TextOverflow.ellipsis);
           final paragraph = tester.renderObject<RenderParagraph>(synopsis);
           final element = tester.element(synopsis);
@@ -441,7 +446,7 @@ void main() {
             ),
             textScaler: MediaQuery.textScalerOf(element),
             textDirection: Directionality.of(element),
-            maxLines: 3,
+            maxLines: text.maxLines,
             ellipsis: '…',
           )..layout(maxWidth: tester.getSize(synopsis).width);
           expect(tester.getSize(synopsis).height, closeTo(natural.height, .1));
@@ -466,14 +471,29 @@ void main() {
             expect(list.itemExtent, rowHeight);
           }
           expect(
-            tester
-                .widget<Text>(find.byKey(const Key('guide-program-meta')))
-                .data,
-            contains('2026  ·  Drama  ·  Science Fiction'),
+            _detailsMetadata(tester),
+            contains('2026 · Drama · Science Fiction'),
           );
           for (final badge in ['TV-14', '4K', 'EAC3']) {
             expect(find.text(badge), findsOneWidget);
           }
+          final progressRect = tester.getRect(
+            find.byKey(const Key('guide-program-progress')),
+          );
+          expect(
+            tester.getRect(synopsis).bottom,
+            lessThanOrEqualTo(progressRect.top),
+          );
+          await tester.ensureVisible(
+            find.byKey(const Key('guide-program-badges')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .getRect(find.byKey(const Key('guide-program-badges')))
+                .bottom,
+            lessThan(progressRect.top),
+          );
           await tester.ensureVisible(synopsis);
           await tester.pumpAndSettle();
           expect(synopsis.hitTestable(), findsOneWidget);
@@ -488,7 +508,259 @@ void main() {
   );
 
   testWidgets(
-    'Guide details share a 920 column and fitted cell times follow the episode',
+    'enlarged Guide metadata wraps with content at the start of each rendered line',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final start = DateTime.utc(2026, 1, 15, 3, 12);
+      final lineup = _Lineup(1, anchor: start)
+        ..settings = const LineupSettings(preferClearLogos: false);
+      final channel = lineup.channels.single;
+      lineup.channels = [
+        Channel(
+          id: channel.id,
+          number: 2,
+          name: 'Midnight Mysteries',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'signal',
+              title: 'The Last Frequency',
+              showTitle: 'Signal After Midnight',
+              duration: Duration(minutes: 48),
+              year: 2026,
+              genres: ['Mystery', 'Drama', 'Thriller'],
+              summary: 'A broadcast returns.',
+            ),
+          ]),
+          playbackMode: channel.playbackMode,
+          anchor: start,
+          shuffleSeed: 1,
+        ),
+      ];
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => start.add(const Duration(minutes: 5)),
+        loadSchedule: (c) async => _schedule(c),
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.5)),
+            child: LineupCanvas(child: child!),
+          ),
+          home: GuideView(
+            controller: guide,
+            pictureInPicture: const ColoredBox(color: Colors.black),
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final time = find.byKey(const Key('guide-program-meta'));
+      final facts = find.byKey(const Key('guide-info-genres'));
+      expect(
+        tester.getRect(facts).top,
+        greaterThan(tester.getRect(time).bottom),
+      );
+      expect(
+        tester.widget<Text>(time).data!.replaceAll('\u00a0', ' '),
+        '${_testTime(start.toLocal())}–${_testTime(start.add(const Duration(minutes: 48)).toLocal())} · 43m left',
+      );
+      expect(
+        _detailsMetadata(tester),
+        contains('2026 · Mystery · Drama · Thriller'),
+      );
+      for (final finder in [time, facts]) {
+        final paragraph = tester.renderObject<RenderParagraph>(finder);
+        final text = paragraph.text.toPlainText();
+        final lines = <double, String>{};
+        // Inspect actual glyph positions, including soft line breaks. The test
+        // font forces wrapping inside both paragraphs at this allocation.
+        for (var offset = 0; offset < text.length; offset++) {
+          final character = text.substring(offset, offset + 1);
+          if (character.trim().isEmpty) continue;
+          final boxes = paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: offset, extentOffset: offset + 1),
+          );
+          expect(boxes, isNotEmpty);
+          final top = boxes.first.top;
+          lines[top] = '${lines[top] ?? ''}$character';
+        }
+        expect(lines.length, greaterThan(1), reason: text);
+        for (final line in lines.values) {
+          expect(line.startsWith('·'), isFalse, reason: '$text: $line');
+        }
+        expect(paragraph.didExceedMaxLines, isFalse);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Guide detail time line follows start-inclusive and end-exclusive airing boundaries',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final start = DateTime.utc(2026, 1, 15, 3, 12);
+      var now = start.add(const Duration(minutes: 5));
+      final lineup = _Lineup(1, anchor: start)
+        ..settings = const LineupSettings(
+          preferClearLogos: false,
+          reduceMotion: true,
+        );
+      final old = lineup.channels.single;
+      lineup.channels = [
+        Channel(
+          id: old.id,
+          number: 2,
+          name: 'Midnight Mysteries',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'signal',
+              title: 'The Last Frequency',
+              showTitle: 'Signal After Midnight',
+              duration: Duration(minutes: 48),
+              year: 2026,
+              genres: ['Mystery', 'Drama', 'Thriller'],
+              summary: 'A broadcast returns.',
+            ),
+          ]),
+          playbackMode: old.playbackMode,
+          anchor: start,
+          shuffleSeed: 1,
+        ),
+      ];
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (c) async => _schedule(c),
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: GuideView(
+              controller: guide,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final program = guide.focusedProgram!;
+        final end = start.add(const Duration(minutes: 48));
+        expect(program.scheduled.start, start);
+        expect(program.scheduled.end, end);
+        final range =
+            '${_testTime(start.toLocal())}–${_testTime(end.toLocal())}';
+        for (final (at, suffix, progressLabel) in [
+          (start.subtract(const Duration(seconds: 1)), ' · 48m', null),
+          (start, ' · 48m left', '0m elapsed, 48m remaining'),
+          (
+            start.add(const Duration(minutes: 5)),
+            ' · 43m left',
+            '5m elapsed, 43m remaining',
+          ),
+          (
+            end.subtract(const Duration(seconds: 1)),
+            ' · 0m left',
+            '47m elapsed, 0m remaining',
+          ),
+          (end, '', null),
+          (end.add(const Duration(seconds: 1)), '', null),
+        ]) {
+          now = at;
+          guide.focusProgram(program);
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<Text>(find.byKey(const Key('guide-program-meta')))
+                .data,
+            '$range$suffix',
+            reason: '$at',
+          );
+          expect(
+            tester
+                .widget<Text>(find.byKey(const Key('guide-info-genres')))
+                .data,
+            '2026 · Mystery · Drama · Thriller',
+          );
+          expect(
+            find.byKey(const Key('guide-program-progress')),
+            progressLabel == null ? findsNothing : findsOneWidget,
+          );
+          if (progressLabel != null) {
+            expect(
+              find.bySemanticsLabel(RegExp(RegExp.escape(progressLabel))),
+              findsWidgets,
+            );
+          }
+          expect(tester.takeException(), isNull);
+        }
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+
+  testWidgets(
+    'Guide identity uses the full companion width when synopsis is missing',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final lineup = _Lineup(1)
+        ..settings = const LineupSettings(reduceMotion: true);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (c) async => _schedule(c),
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            pictureInPicture: const ColoredBox(color: Colors.black),
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('guide-program-synopsis')), findsNothing);
+      final identity = tester.getRect(
+        find.byKey(const Key('guide-program-identity')),
+      );
+      final progress = tester.getRect(
+        find.byKey(const Key('guide-program-progress')),
+      );
+      expect(identity.left, progress.left);
+      expect(identity.width, progress.width);
+      expect(
+        find.byKey(const Key('guide-clear-logo-fallback')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Guide details use companion columns and fitted cell times follow the episode',
     (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1;
@@ -530,10 +802,7 @@ void main() {
         loadSchedule: (c) async => _schedule(c),
       );
       addTearDown(guide.dispose);
-      for (final theme in [
-        LineupThemeName.slatePine,
-        LineupThemeName.directv,
-      ]) {
+      for (final theme in LineupThemeName.values) {
         await tester.pumpWidget(
           MaterialApp(
             builder: LineupCanvas.builder,
@@ -550,15 +819,35 @@ void main() {
         final meta = find.byKey(const Key('guide-program-meta'));
         final progress = find.byKey(const Key('guide-program-progress'));
         final synopsis = find.byKey(const Key('guide-program-synopsis'));
-        expect(tester.getSize(meta).width, lessThanOrEqualTo(920));
-        expect(tester.getSize(progress).width, 920);
+        final identity = find.byKey(const Key('guide-program-identity'));
+        expect(tester.getSize(progress).width, greaterThan(920));
+        expect(
+          tester.getSize(identity).width,
+          closeTo((tester.getSize(progress).width - 32) * .4, .1),
+        );
+        expect(
+          tester.getTopLeft(synopsis).dx,
+          greaterThan(tester.getTopRight(identity).dx),
+        );
+        expect(
+          tester.getTopLeft(synopsis).dy,
+          closeTo(
+            tester
+                .getTopLeft(find.byKey(const Key('guide-clear-logo-fallback')))
+                .dy,
+            .1,
+          ),
+        );
         expect(tester.getTopLeft(meta).dx, tester.getTopLeft(progress).dx);
         final summary = tester.widget<Text>(synopsis);
-        expect(summary.maxLines, 3);
+        expect(summary.maxLines, greaterThan(3));
         expect(summary.overflow, TextOverflow.ellipsis);
         final metadata = tester.widget<Text>(meta);
-        expect(metadata.maxLines, 1);
-        expect(metadata.data, contains('2026  ·  Drama  ·  Science Fiction'));
+        expect(metadata.data, contains('left'));
+        expect(
+          _detailsMetadata(tester),
+          contains('2026 · Drama · Science Fiction'),
+        );
         final cell = find.byKey(ValueKey(guide.focusedProgram!.id));
         final episode = find.descendant(
           of: cell,
@@ -1592,14 +1881,8 @@ void main() {
 
     expect(find.text('Signal House'), findsWidgets);
     expect(find.text('S01E02'), findsWidgets);
-    expect(
-      tester.widget<Text>(find.byKey(const Key('guide-program-meta'))).data,
-      contains('2026'),
-    );
-    expect(
-      tester.widget<Text>(find.byKey(const Key('guide-program-meta'))).data,
-      contains('Drama  ·  Science Fiction'),
-    );
+    expect(_detailsMetadata(tester), contains('2026'));
+    expect(_detailsMetadata(tester), contains('Drama · Science Fiction'));
     for (final badge in ['TV-14', '4K', 'HDR10', 'EAC3', '5.1']) {
       expect(find.textContaining(badge), findsOneWidget);
     }
@@ -2051,7 +2334,12 @@ void main() {
         find.byKey(const Key('guide-clear-logo-fallback')),
         findsOneWidget,
       );
-      expect(find.text('SIGNAL HOUSE'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('guide-clear-logo-fallback')))
+            .data,
+        'Signal House',
+      );
     });
   }
 
@@ -2691,6 +2979,12 @@ void main() {
     lineup.dispose();
   });
 }
+
+String _detailsMetadata(WidgetTester tester) => [
+  tester.widget<Text>(find.byKey(const Key('guide-program-meta'))).data!,
+  if (find.byKey(const Key('guide-info-genres')).evaluate().isNotEmpty)
+    tester.widget<Text>(find.byKey(const Key('guide-info-genres'))).data!,
+].join(' · ').replaceAll('\u00a0', ' ');
 
 ScheduleIndex _schedule(Channel channel) => buildSchedule(
   (channel.source as ManualSource).items,

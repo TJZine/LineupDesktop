@@ -2476,7 +2476,7 @@ class _Details extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: SizedBox(
-                  width: 920,
+                  width: double.infinity,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -2577,7 +2577,6 @@ class _ProgramDetails extends StatelessWidget {
     required this.playbackMessage,
     required this.now,
   });
-
   final GuideProgram program;
   final Channel? channel;
   final Uint8List? clearLogo;
@@ -2588,192 +2587,226 @@ class _ProgramDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final item = program.scheduled.item;
-    final episode = _episodeCode(item);
-    final badges = _mediaBadges(item);
-    final hasClearLogo = clearLogo != null;
-    final scheduledDuration = program.scheduled.end.difference(
-      program.scheduled.start,
-    );
-    final elapsedValue = now.difference(program.scheduled.start);
-    final elapsed = elapsedValue.isNegative
-        ? Duration.zero
-        : elapsedValue > scheduledDuration
-        ? scheduledDuration
-        : elapsedValue;
-    final progress = scheduledDuration.inMilliseconds <= 0
-        ? 0.0
-        : elapsed.inMilliseconds / scheduledDuration.inMilliseconds;
-
     final roles = LineupTheme.of(context);
-    final double gap = 10.0;
-    final channelStyle = TextStyle(
-      fontSize: 16.0,
-      color: roles.mutedText,
-      fontWeight: FontWeight.w500,
+    final scaler = MediaQuery.textScalerOf(context);
+    final enlarged = scaler.scale(1) > 1;
+    // Keep a wrapping separator attached to the preceding metadata segment.
+    final metadataSeparator = enlarged ? '\u00a0· ' : ' · ';
+    final hasSynopsis = item.summary?.trim().isNotEmpty == true;
+    final duration = program.scheduled.end.difference(program.scheduled.start);
+    final elapsed = Duration(
+      milliseconds: now
+          .difference(program.scheduled.start)
+          .inMilliseconds
+          .clamp(0, math.max(0, duration.inMilliseconds)),
     );
-    final leadStyle = LineupTypography.programTitle.copyWith(
-      color: roles.primaryText,
-    );
-    final secondaryStyle = TextStyle(
-      fontSize: 22.0,
-      height: 1.2,
-      color: roles.secondaryText,
-    );
-    final metadataStyle = TextStyle(
-      fontSize: 18.0,
+    final remaining = _duration(duration - elapsed);
+    final current = program.isCurrentAt(now);
+    final past = !now.isBefore(program.scheduled.end);
+    final metadataStyle = LineupTypography.body.copyWith(
       height: 1.2,
       color: roles.secondaryText,
       fontFeatures: const [ui.FontFeature.tabularFigures()],
     );
-    final bodyStyle = TextStyle(
-      fontSize: 18.0,
+    final bodyStyle = LineupTypography.body.copyWith(
       height: 1.3,
       color: roles.secondaryText,
     );
-    final episodeLine = [
-      ?episode,
-      if (item.showTitle != null) item.title,
-    ].join(' · ');
-    final contextLabel = program.isCurrentAt(now)
-        ? null
-        : program.scheduled.end.isBefore(now)
-        ? 'Ended'
-        : 'Upcoming';
-    final logoFallback = Text(
-      item.showTitle?.toUpperCase() ?? item.title,
+    final channelStyle = TextStyle(
+      fontSize: 16,
+      height: 1.2,
+      color: roles.mutedText,
+      fontWeight: FontWeight.w500,
+    );
+    final airing =
+        '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
+    final timeLine = [
+      airing,
+      if (current) '$remaining left' else if (!past) _duration(item.duration),
+    ].join(metadataSeparator);
+    final factsLine = [
+      if (item.year != null) '${item.year}',
+      ...item.genres.take(3),
+    ].join(metadataSeparator);
+    final eyebrow = Text(
+      channel == null ? '' : '${channel!.number} • ${channel!.name}',
+      key: const Key('guide-info-channel'),
+      style: channelStyle,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    final title = Text(
+      item.showTitle ?? item.title,
       key: const Key('guide-clear-logo-fallback'),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: leadStyle,
+      style: LineupTypography.programTitle.copyWith(color: roles.primaryText),
     );
+    final episode = [
+      ?_episodeCode(item),
+      if (item.showTitle != null) item.title,
+    ].join(' · ');
+    final badges = _mediaBadges(item);
     return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (channel != null)
-                Text(
-                  '${channel!.number} • ${channel!.name}',
-                  style: channelStyle,
-                ),
-              if (channel != null) SizedBox(height: gap),
-              if (hasClearLogo)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: (compactLogo ? 280 : 420),
-                      maxHeight: (compactLogo ? 42 : 64),
-                    ),
-                    child: ClearLogoImage(
-                      clearLogo!,
-                      imageKey: const Key('guide-clear-logo'),
-                      fallback: logoFallback,
-                      semanticLabel: '${item.showTitle ?? item.title} logo',
-                    ),
+      builder: (context, box) {
+        // Keep the existing type hierarchy. Compact spacing releases height to
+        // the facts before constraining the synopsis, including enlarged text.
+        final dense = box.maxHeight < 270 || enlarged;
+        final mergeFacts = dense && !enlarged;
+        final gap = dense ? 4.0 : 10.0;
+        final logoHeight = compactLogo || dense ? 42.0 : 64.0;
+        final identityFlex = box.maxHeight < 220
+            ? 6
+            : compactLogo || dense
+            ? 5
+            : 4;
+        final identity = Column(
+          key: const Key('guide-program-identity'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            eyebrow,
+            SizedBox(height: gap),
+            if (clearLogo != null)
+              SizedBox(
+                height: logoHeight,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: compactLogo || dense ? 280 : 420,
+                  ),
+                  child: ClearLogoImage(
+                    clearLogo!,
+                    imageKey: const Key('guide-clear-logo'),
+                    fallback: title,
+                    semanticLabel: '${item.showTitle ?? item.title} logo',
                   ),
                 ),
-              if (item.showTitle != null && !hasClearLogo)
-                Text(
-                  item.showTitle!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: leadStyle,
-                ),
-              if (item.showTitle == null && !hasClearLogo)
-                Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: leadStyle,
-                ),
-              if (episodeLine.isNotEmpty) ...[
-                SizedBox(height: gap),
-                Text(
-                  episodeLine,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: secondaryStyle,
-                ),
-              ],
-              Padding(
-                padding: EdgeInsets.only(top: gap),
-                child: Text(
-                  [
-                    '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                    _duration(item.duration),
-                    if (item.year != null) '${item.year}',
-                    ...item.genres.take(3),
-                    ?contextLabel,
-                  ].join('  ·  '),
-                  key: const Key('guide-program-meta'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: metadataStyle,
+              )
+            else
+              title,
+            if (episode.isNotEmpty) ...[
+              SizedBox(height: gap),
+              Text(
+                episode,
+                key: const Key('guide-info-episode'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 22,
+                  height: 1.2,
+                  color: roles.secondaryText,
                 ),
               ),
-              if (badges.isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.only(top: gap),
-                  child: Wrap(
-                    key: const Key('guide-program-badges'),
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      for (final badge in badges)
-                        _GuideMediaBadge(label: badge),
-                    ],
+            ],
+            SizedBox(height: gap),
+            Text(
+              mergeFacts && factsLine.isNotEmpty
+                  ? '$timeLine · $factsLine'
+                  : timeLine,
+              key: const Key('guide-program-meta'),
+              style: metadataStyle,
+            ),
+            if (!mergeFacts && factsLine.isNotEmpty) ...[
+              SizedBox(height: gap),
+              Text(
+                factsLine,
+                key: const Key('guide-info-genres'),
+                style: metadataStyle,
+              ),
+            ],
+            if (badges.isNotEmpty) ...[
+              SizedBox(height: gap),
+              Wrap(
+                key: const Key('guide-program-badges'),
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final badge in badges) _GuideMediaBadge(label: badge),
+                ],
+              ),
+            ],
+          ],
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: hasSynopsis ? identityFlex : 1,
+                    child: SingleChildScrollView(child: identity),
                   ),
-                ),
-              if (item.summary?.trim().isNotEmpty == true)
-                Padding(
-                  padding: EdgeInsets.only(top: gap),
-                  child: Text(
-                    item.summary!,
-                    key: const Key('guide-program-synopsis'),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: bodyStyle,
-                  ),
-                ),
-              if (program.isCurrentAt(now)) ...[
-                SizedBox(height: gap),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: 920.0),
-                    child: Semantics(
-                      label:
-                          '${_duration(elapsed)} elapsed, ${_duration(scheduledDuration - elapsed)} remaining',
-                      child: LinearProgressIndicator(
-                        key: const Key('guide-program-progress'),
-                        value: progress,
-                        minHeight: 4,
+                  if (hasSynopsis) ...[
+                    const SizedBox(width: 32),
+                    Expanded(
+                      flex: 10 - identityFlex,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top: _lineHeight(context, channelStyle) + gap,
+                        ),
+                        child: LayoutBuilder(
+                          builder: (context, synopsisBox) {
+                            final lineHeight = _lineHeight(context, bodyStyle);
+                            final lines = math.max(
+                              1,
+                              (synopsisBox.maxHeight / lineHeight).floor(),
+                            );
+                            return Text(
+                              item.summary!,
+                              key: const Key('guide-program-synopsis'),
+                              maxLines: lines,
+                              overflow: TextOverflow.ellipsis,
+                              style: bodyStyle,
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
+                  ],
+                ],
+              ),
+            ),
+            if (current) ...[
+              SizedBox(height: gap),
+              Semantics(
+                label: '${_duration(elapsed)} elapsed, $remaining remaining',
+                child: LinearProgressIndicator(
+                  key: const Key('guide-program-progress'),
+                  value: duration.inMilliseconds <= 0
+                      ? 0
+                      : elapsed.inMilliseconds / duration.inMilliseconds,
+                  minHeight: 4,
                 ),
-                SizedBox(height: 4),
-                Text(
-                  '${_duration(elapsed)} elapsed  ·  ${_duration(scheduledDuration - elapsed)} remaining',
-                  style: metadataStyle,
-                ),
-              ],
-              if (playbackMessage != null)
-                Text(
-                  playbackMessage!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: metadataStyle,
-                ),
+              ),
             ],
-          ),
-        ),
-      ),
+            if (playbackMessage != null)
+              Text(
+                playbackMessage!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metadataStyle,
+              ),
+          ],
+        );
+      },
     );
+  }
+
+  double _lineHeight(BuildContext context, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: 'Ag',
+        style: DefaultTextStyle.of(context).style.merge(style),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
   }
 }
 
