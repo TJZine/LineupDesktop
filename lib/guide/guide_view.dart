@@ -285,7 +285,7 @@ class GuideView extends StatefulWidget {
 }
 
 class _GuideViewState extends State<GuideView>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _retryFocus = FocusNode(debugLabel: 'Guide retry all schedules');
   final _setupFocus = FocusNode(debugLabel: 'Guide set up channels');
   bool _allVisibleFailed = false;
@@ -305,6 +305,7 @@ class _GuideViewState extends State<GuideView>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _lastFocusedChannelId = widget.controller.focusedChannelId;
     _searchController.text = widget.controller.searchQuery;
     _searchController.addListener(_searchChanged);
@@ -315,13 +316,25 @@ class _GuideViewState extends State<GuideView>
     widget.controller.refreshForPresentation();
     widget.controller.addListener(_changed);
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
+      _refreshClock();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestViewport());
   }
 
+  void _refreshClock() {
+    if (!mounted) return;
+    widget.controller.refreshForPresentation();
+    setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshClock();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _retryFocus.dispose();
     _setupFocus.dispose();
     _menuFocus.dispose();
@@ -1148,6 +1161,14 @@ class _GuideControls extends StatelessWidget {
         ),
       ),
     );
+    final now = controller.now;
+    final windowInFuture = now.isBefore(controller.windowStart);
+    final returnToLive = windowInFuture || !now.isBefore(controller.windowEnd);
+    final nowLabel = returnToLive
+        ? windowInFuture
+              ? '← Now'
+              : 'Now →'
+        : 'Now';
     final navigation = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1160,7 +1181,30 @@ class _GuideControls extends StatelessWidget {
           iconSize: 24,
           icon: const Icon(Icons.chevron_left),
         ),
-        TextButton(onPressed: controller.playToNow, child: const Text('Now')),
+        Tooltip(
+          message: returnToLive ? 'Return to live' : 'Now',
+          excludeFromSemantics: true,
+          child: TextButton(
+            key: const Key('guide-now'),
+            style: returnToLive
+                ? LineupTheme.buttonStyle(
+                    roles,
+                    LineupButtonTier.secondary,
+                  ).copyWith(
+                    shape: WidgetStatePropertyAll(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  )
+                : null,
+            onPressed: controller.playToNow,
+            child: Text(
+              nowLabel,
+              semanticsLabel: returnToLive ? 'Return to live' : null,
+            ),
+          ),
+        ),
         IconButton(
           key: const Key('guide-later'),
           tooltip: 'Later by 30 minutes',

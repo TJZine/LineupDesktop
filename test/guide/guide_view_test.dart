@@ -2702,6 +2702,205 @@ void main() {
     );
   }
 
+  testWidgets(
+    'Guide ticks and resumes live while reopening preserves browsed inspection',
+    (tester) async {
+      var now = DateTime(2026, 8, 13, 23, 47);
+      final lineup = _Lineup(2, anchor: now.subtract(const Duration(hours: 1)));
+      var loads = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async {
+          loads++;
+          return _schedule(channel);
+        },
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      Widget app() => MaterialApp(
+        builder: LineupCanvas.builder,
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      );
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+      now = DateTime(2026, 8, 14, 2, 17);
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pumpAndSettle();
+      expect(guide.windowStart, DateTime(2026, 8, 14, 2));
+      expect(
+        guide.focusedProgram!.id,
+        guide.currentProgram(guide.focusedChannelId!)!.id,
+      );
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      now = DateTime(2026, 8, 14, 3, 47);
+      for (final state in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pumpAndSettle();
+      expect(guide.windowStart, DateTime(2026, 8, 14, 3, 30));
+      guide.moveWindow(6);
+      final browsed = guide.windowStart;
+      guide.focusProgram(guide.row('channel-0').programs.first);
+      final inspected = guide.focusedProgramId;
+      await tester.pumpAndSettle();
+      final roles = LineupTheme.of(
+        tester.element(find.byKey(const Key('guide-now'))),
+      );
+      final button = tester.widget<TextButton>(
+        find.byKey(const Key('guide-now')),
+      );
+      expect(button.style!.foregroundColor!.resolve({}), roles.primaryText);
+      expect(find.text('← Now'), findsOneWidget);
+      expect(find.byTooltip('Return to live'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      now = now.add(const Duration(hours: 8));
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+      expect(guide.windowStart, browsed);
+      expect(guide.focusedProgramId, inspected);
+      expect(loads, 2);
+      await tester.tap(find.byKey(const Key('guide-now')));
+      await tester.pumpAndSettle();
+      expect(guide.followingLive, isTrue);
+      expect(guide.nowOffScreen, isFalse);
+      expect(
+        tester.widget<TextButton>(find.byKey(const Key('guide-now'))).style,
+        isNull,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      now = now.add(const Duration(hours: 4));
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+      expect(guide.windowStart.hour, now.hour);
+      expect(loads, 2);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final size in [const Size(1920, 1080), const Size(960, 720)]) {
+    testWidgets(
+      'Now outline points toward live time with accessible boundary states at $size',
+      (tester) async {
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = size;
+        addTearDown(tester.view.reset);
+        final semantics = tester.ensureSemantics();
+        var now = DateTime(2026, 8, 13, 12, 47);
+        final lineup = _Lineup(
+          1,
+          anchor: now.subtract(const Duration(hours: 1)),
+        );
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        addTearDown(guide.dispose);
+        addTearDown(lineup.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: LineupCanvas.builder,
+            home: GuideView(
+              controller: guide,
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final control = find.byKey(const Key('guide-now'));
+        final roles = LineupTheme.of(tester.element(control));
+        expect(find.text('Now'), findsOneWidget);
+        expect(tester.widget<TextButton>(control).style, isNull);
+        guide.moveWindow(6);
+        await tester.pumpAndSettle();
+        void outlined(String label) {
+          expect(find.text(label), findsOneWidget);
+          expect(find.byTooltip('Return to live'), findsOneWidget);
+          expect(tester.getSemantics(control).label, 'Return to live');
+          final button = tester.widget<TextButton>(control);
+          final dropdown = find
+              .ancestor(
+                of: find.byKey(const Key('guide-hours')),
+                matching: find.byType(LineupDropdownBox),
+              )
+              .first;
+          final frame = tester
+              .widgetList<Container>(
+                find.descendant(of: dropdown, matching: find.byType(Container)),
+              )
+              .firstWhere(
+                (c) =>
+                    c.decoration is BoxDecoration &&
+                    (c.decoration! as BoxDecoration).border != null,
+              );
+          final decoration = frame.decoration! as BoxDecoration;
+          expect(
+            button.style!.side!.resolve({}),
+            (decoration.border! as Border).top,
+          );
+          final shape =
+              button.style!.shape!.resolve({})! as RoundedRectangleBorder;
+          expect(shape.borderRadius, decoration.borderRadius);
+          expect(button.style!.foregroundColor!.resolve({}), roles.primaryText);
+          expect(
+            _drawnRect(tester, control).right,
+            lessThanOrEqualTo(size.width),
+          );
+          expect(tester.takeException(), isNull);
+        }
+
+        outlined('← Now');
+        now = guide.windowStart;
+        await tester.pump(const Duration(seconds: 30));
+        await tester.pumpAndSettle();
+        expect(guide.nowOffScreen, isFalse);
+        expect(find.text('Now'), findsOneWidget);
+        expect(tester.widget<TextButton>(control).style, isNull);
+        now = guide.windowEnd;
+        await tester.pump(const Duration(seconds: 30));
+        await tester.pumpAndSettle();
+        expect(guide.nowOffScreen, isTrue);
+        outlined('Now →');
+        now = guide.windowEnd.subtract(const Duration(microseconds: 1));
+        await tester.pump(const Duration(seconds: 30));
+        await tester.pumpAndSettle();
+        expect(find.text('Now'), findsOneWidget);
+        expect(tester.widget<TextButton>(control).style, isNull);
+        now = guide.windowStart.subtract(const Duration(microseconds: 1));
+        await tester.pump(const Duration(seconds: 30));
+        await tester.pumpAndSettle();
+        outlined('← Now');
+        await tester.tap(control);
+        await tester.pumpAndSettle();
+        expect(guide.followingLive, isTrue);
+        expect(guide.nowOffScreen, isFalse);
+        expect(find.text('Now'), findsOneWidget);
+        expect(tester.widget<TextButton>(control).style, isNull);
+        semantics.dispose();
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,
   ) async {

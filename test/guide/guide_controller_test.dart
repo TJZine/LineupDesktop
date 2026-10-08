@@ -117,6 +117,239 @@ void main() {
     }
   });
 
+  test('live clock advances current focus and window without repeated schedule work', () async {
+    var now = DateTime(2026, 8, 13, 23, 47);
+    final lineup = _TestLineup(_channels(2))
+      ..settings = const LineupSettings(guideHours: 2);
+    final loads = <String, int>{};
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async {
+        loads.update(channel.id, (n) => n + 1, ifAbsent: () => 1);
+        return _schedule(channel);
+      },
+    );
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    guide.requestViewport(0, 2);
+    await _settle();
+    guide.moveVertical(1);
+    final channel = guide.focusedChannelId;
+    var notifications = 0;
+    guide.addListener(() => notifications++);
+    final row = guide.row(channel!);
+    for (var i = 0; i < 100; i++) {
+      guide.refreshForPresentation();
+    }
+    expect(guide.row(channel), same(row));
+    expect(notifications, 0);
+    expect(guide.followingLive, isTrue);
+    now = DateTime(2026, 8, 14, 2, 17);
+    guide.refreshForPresentation();
+    expect(guide.windowStart, DateTime(2026, 8, 14, 2));
+    expect(guide.focusedChannelId, channel);
+    expect(guide.focusedProgram!.id, guide.currentProgram(channel)!.id);
+    expect(notifications, 1);
+    final rolled = guide.row(channel);
+    for (var i = 0; i < 100; i++) {
+      guide.refreshForPresentation();
+    }
+    expect(guide.row(channel), same(rolled));
+    expect(notifications, 1);
+    expect(loads.values, everyElement(1));
+  });
+
+  test(
+    'live focus advances within one half-hour without reprojecting rows',
+    () async {
+      var now = DateTime(2026, 8, 13, 12, 7);
+      final lineup = _TestLineup(_channels(1));
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => buildSchedule(
+          [
+            const ChannelItem(
+              id: 'a',
+              title: 'First',
+              duration: Duration(minutes: 10),
+            ),
+            const ChannelItem(
+              id: 'b',
+              title: 'Next',
+              duration: Duration(minutes: 10),
+            ),
+          ],
+          mode: PlaybackMode.sequential,
+          seed: 0,
+        ),
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      guide.requestViewport(0, 1);
+      await _settle();
+      final row = guide.row('channel-0');
+      final old = guide.focusedProgram!.id;
+      now = DateTime(2026, 8, 13, 12, 10);
+      guide.refreshForPresentation();
+      expect(guide.row('channel-0'), same(row));
+      expect(guide.windowStart, DateTime(2026, 8, 13, 12));
+      expect(guide.focusedProgram!.id, isNot(old));
+      expect(guide.focusedProgram!.id, guide.currentProgram('channel-0')!.id);
+    },
+  );
+
+  test('live rollover preserves failed rows until explicit retry', () async {
+    var now = DateTime(2026, 8, 13, 12, 47);
+    final lineup = _TestLineup(_channels(1));
+    var attempts = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async {
+        attempts++;
+        if (attempts == 1) throw StateError('synthetic offline');
+        return _schedule(channel);
+      },
+    );
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    guide.requestViewport(0, 1);
+    await _settle();
+    final failed = guide.row('channel-0');
+    expect(failed.state, GuideLoadState.error);
+    now = now.add(const Duration(hours: 4));
+    guide.refreshForPresentation();
+    guide.requestViewport(0, 1);
+    await _settle();
+    expect(guide.row('channel-0'), same(failed));
+    expect(attempts, 1);
+    await guide.retry('channel-0');
+    await _settle();
+    expect(attempts, 2);
+    expect(guide.row('channel-0').state, GuideLoadState.ready);
+  });
+
+  test('live window retains explicitly inspected program even after it leaves projection', () async {
+    var now = DateTime(2026, 8, 13, 12, 47);
+    final lineup = _TestLineup(_channels(2));
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    guide.requestViewport(0, 2);
+    await _settle();
+    final inspected = guide.row('channel-1').programs[1];
+    guide.focusProgram(inspected);
+    now = now.add(const Duration(hours: 5));
+    guide.refreshForPresentation();
+    expect(guide.followingLive, isTrue);
+    expect(guide.windowStart, DateTime(2026, 8, 13, 17, 30));
+    expect(
+      guide.row('channel-1').programs.any((p) => p.id == inspected.id),
+      isFalse,
+    );
+    expect(guide.focusedProgram!.id, inspected.id);
+    expect(guide.focusedProgram!.scheduled, inspected.scheduled);
+    guide.playToNow();
+    expect(guide.focusedProgram!.id, guide.currentProgram('channel-1')!.id);
+    guide.moveHorizontal(-1);
+    final header = guide.focusedProgramId;
+    now = now.add(const Duration(hours: 1));
+    guide.refreshForPresentation();
+    expect(guide.focusedProgramId, header);
+    // Replacing source data must retire retained inspection, not resurrect it.
+    lineup.changeContentScope();
+    guide.requestViewport(0, 2);
+    await _settle();
+    expect(
+      guide.focusedProgram!.id,
+      guide.currentProgram(guide.focusedChannelId!)!.id,
+    );
+  });
+
+  test(
+    'browsing earlier and later preserves its window and inspection until Now',
+    () async {
+      var now = DateTime(2026, 8, 13, 12, 47);
+      final lineup = _TestLineup(_channels(1));
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      guide.requestViewport(0, 1);
+      await _settle();
+      guide.moveWindow(6);
+      guide.moveWindow(-1);
+      final browsed = guide.windowStart;
+      final inspected = guide.row('channel-0').programs[1];
+      guide.focusProgram(inspected);
+      now = now.add(const Duration(hours: 8));
+      guide.refreshForPresentation();
+      expect(guide.windowStart, browsed);
+      expect(guide.focusedProgram!.id, inspected.id);
+      expect(guide.nowOffScreen, isTrue);
+      guide.playToNow();
+      expect(guide.followingLive, isTrue);
+      expect(guide.nowOffScreen, isFalse);
+      now = now.add(const Duration(minutes: 30));
+      guide.refreshForPresentation();
+      expect(guide.windowStart, DateTime(2026, 8, 13, 21));
+    },
+  );
+
+  test(
+    'live progression follows actual instants through Eastern DST transitions',
+    () async {
+      for (final (before, after, expected) in [
+        (
+          DateTime.utc(2026, 11, 1, 5, 17),
+          DateTime.utc(2026, 11, 1, 5, 47),
+          DateTime.utc(2026, 11, 1, 5, 30),
+        ),
+        (
+          DateTime.utc(2026, 11, 1, 5, 47),
+          DateTime.utc(2026, 11, 1, 6, 17),
+          DateTime.utc(2026, 11, 1, 6),
+        ),
+        (
+          DateTime.utc(2026, 11, 1, 6, 17),
+          DateTime.utc(2026, 11, 1, 6, 47),
+          DateTime.utc(2026, 11, 1, 6, 30),
+        ),
+        (
+          DateTime.utc(2026, 3, 8, 6, 47),
+          DateTime.utc(2026, 3, 8, 7, 17),
+          DateTime.utc(2026, 3, 8, 7),
+        ),
+      ]) {
+        var now = before.toLocal();
+        final lineup = _TestLineup(_channels(1));
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        guide.requestViewport(0, 1);
+        await _settle();
+        now = after.toLocal();
+        guide.refreshForPresentation();
+        expect(guide.windowStart.toUtc(), expected);
+        expect(guide.windowStart.isUtc, isFalse);
+        expect(guide.focusedProgram!.id, guide.currentProgram('channel-0')!.id);
+        guide.dispose();
+        lineup.dispose();
+      }
+    },
+  );
+
   test('cardinality does not determine loaded or retained row count', () async {
     for (final count in [0, 1, 10, 200, 500, 1000]) {
       final lineup = _TestLineup(_channels(count));
@@ -1420,26 +1653,34 @@ void main() {
     },
   );
 
-  test('future return is preserved until its visible window elapses', () {
-    var now = DateTime(2026, 8, 13, 12, 47);
-    final lineup = _TestLineup(_channels(1))
-      ..settings = const LineupSettings(guideHours: 2);
-    final guide = GuideController(lineup: lineup, clock: () => now);
+  test(
+    'browsed window stays preserved even after its visible range elapses',
+    () {
+      var now = DateTime(2026, 8, 13, 12, 47);
+      final lineup = _TestLineup(_channels(1))
+        ..settings = const LineupSettings(guideHours: 2);
+      final guide = GuideController(lineup: lineup, clock: () => now);
 
-    expect(guide.windowStart, DateTime(2026, 8, 13, 12, 30));
-    guide.moveWindow(2);
-    expect(guide.windowStart, DateTime(2026, 8, 13, 13, 30));
-    now = DateTime(2026, 8, 13, 14);
-    guide.refreshForPresentation();
-    expect(guide.windowStart, DateTime(2026, 8, 13, 13, 30));
+      expect(guide.windowStart, DateTime(2026, 8, 13, 12, 30));
+      guide.moveWindow(2);
+      expect(guide.windowStart, DateTime(2026, 8, 13, 13, 30));
+      now = DateTime(2026, 8, 13, 14);
+      guide.refreshForPresentation();
+      expect(guide.windowStart, DateTime(2026, 8, 13, 13, 30));
 
-    now = DateTime(2026, 8, 13, 15, 31);
-    guide.refreshForPresentation();
-    expect(guide.windowStart, DateTime(2026, 8, 13, 15, 30));
+      now = DateTime(2026, 8, 13, 15, 31);
+      guide.refreshForPresentation();
+      expect(guide.windowStart, DateTime(2026, 8, 13, 13, 30));
+      expect(guide.followingLive, isFalse);
+      expect(guide.nowOffScreen, isTrue);
+      guide.playToNow();
+      expect(guide.followingLive, isTrue);
+      expect(guide.windowStart, DateTime(2026, 8, 13, 15, 30));
 
-    guide.dispose();
-    lineup.dispose();
-  });
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
 
   test('retry is row-local and repeated activation is coalesced', () async {
     final lineup = _TestLineup(_channels(1));
