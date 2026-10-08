@@ -663,12 +663,14 @@ class _LineupShellState extends State<LineupShell> {
           : controller.stage == SetupStage.channelSetup
           ? UpstreamChannelSetupView(
               controller: controller,
+              onRequestLogout: _requestLogout,
               onViewLineup: _completeSetup,
               onAddCustomChannel: _completeSetupAndAdd,
             )
           : UpstreamOnboardingView(
               controller: controller,
               onLogout: _logout,
+              onRequestLogout: _requestLogout,
               accountOrigin: _onboardingFromAccount,
               onOpenMenu: onboardingMenuAvailable ? _openAppMenu : null,
               menuFocusNode: onboardingMenuAvailable

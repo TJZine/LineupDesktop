@@ -8,6 +8,14 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 
 import '../support/ui_fixture.dart';
 
+const _firstRunProfileCases = [
+  (label: 'zero profiles', profiles: <PlexHomeUser>[]),
+  (
+    label: 'one profile',
+    profiles: [PlexHomeUser(id: 'one', name: 'One', protected: false)],
+  ),
+];
+
 void main() {
   testWidgets('empty Guide Set up channels enters existing cancellable setup', (
     tester,
@@ -400,6 +408,109 @@ void main() {
     expect(find.text('Credential cleanup failed.'), findsOneWidget);
   });
 
+  testWidgets('first-run server Sign out can cancel and return to Welcome', (
+    tester,
+  ) async {
+    for (final testCase in _firstRunProfileCases) {
+      final controller = _FirstRunLogoutController(failFirst: true)
+        ..stage = SetupStage.servers
+        ..profiles = testCase.profiles;
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+
+      expect(find.text('No servers found'), findsOneWidget);
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      expect(find.text('Sign out of Plex?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.servers, reason: testCase.label);
+      expect(controller.logoutCalls, 0, reason: testCase.label);
+
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(LineupDestructiveButton, 'Sign out'),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.logoutCalls, 1, reason: testCase.label);
+      expect(find.text('Could not sign out'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.servers, reason: testCase.label);
+
+      controller.failFirst = false;
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(LineupDestructiveButton, 'Sign out'),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.logoutCalls, 2, reason: testCase.label);
+      expect(controller.stage, SetupStage.welcome, reason: testCase.label);
+      expect(find.text('Sign in to Plex'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('no-library setup Sign out keeps failed cleanup retryable', (
+    tester,
+  ) async {
+    for (final testCase in _firstRunProfileCases) {
+      final controller = _FirstRunLogoutController(failFirst: true)
+        ..stage = SetupStage.channelSetup
+        ..profiles = testCase.profiles
+        ..server = const PlexServer(
+          id: 'server',
+          name: 'Synthetic server',
+          connections: [],
+        )
+        ..libraries = const [];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('No movie or show libraries found'),
+        findsOneWidget,
+        reason: testCase.label,
+      );
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      expect(find.text('Sign out of Plex?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.channelSetup, reason: testCase.label);
+      expect(controller.logoutCalls, 0, reason: testCase.label);
+
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(LineupDestructiveButton, 'Sign out'),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.logoutCalls, 1, reason: testCase.label);
+      expect(find.text('Could not sign out'), findsOneWidget);
+      expect(find.text('Credential cleanup failed.'), findsWidgets);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.channelSetup, reason: testCase.label);
+
+      controller.failFirst = false;
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(LineupDestructiveButton, 'Sign out'),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.logoutCalls, 2, reason: testCase.label);
+      expect(controller.stage, SetupStage.welcome, reason: testCase.label);
+      expect(find.text('Sign in to Plex'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
   testWidgets('Player route remains unavailable until playback exists', (
     tester,
   ) async {
@@ -457,6 +568,24 @@ class _LogoutController extends FixtureController {
     logoutCalls++;
     error = 'Credential cleanup failed.';
     return false;
+  }
+}
+
+class _FirstRunLogoutController extends FixtureController {
+  _FirstRunLogoutController({this.failFirst = false});
+
+  bool failFirst;
+  int logoutCalls = 0;
+
+  @override
+  Future<bool> logout() async {
+    logoutCalls++;
+    if (failFirst && logoutCalls == 1) {
+      error = 'Credential cleanup failed.';
+      notifyListeners();
+      return false;
+    }
+    return super.logout();
   }
 }
 

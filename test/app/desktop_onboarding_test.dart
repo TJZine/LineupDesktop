@@ -15,6 +15,43 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('single-profile server picker exposes quiet Sign out', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..stage = SetupStage.servers
+      ..profiles = const [
+        PlexHomeUser(id: 'one', name: 'One', protected: false),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+          onRequestLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No servers found'), findsOneWidget);
+    expect(find.text('Refresh servers'), findsOneWidget);
+    final signOut = find.widgetWithText(TextButton, 'Sign out');
+    expect(signOut, findsOneWidget);
+    expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
+    controller.busy = true;
+    controller.notifyListeners();
+    await tester.pump();
+    expect(tester.widget<TextButton>(signOut).onPressed, isNull);
+    controller.busy = false;
+    controller.notifyListeners();
+    await tester.pump();
+    expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
+    expect(find.text('Switch profile'), findsNothing);
+  });
+
   testWidgets(
     'onboarding reflows at the two floor-constrained desktop windows',
     (tester) async {

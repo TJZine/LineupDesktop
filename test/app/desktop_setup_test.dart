@@ -19,6 +19,45 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  testWidgets('empty library recovery exposes quiet Sign out', (tester) async {
+    final controller = _SetupController()..libraries = const [];
+    addTearDown(controller.dispose);
+    var signOutCalls = 0;
+    Widget buildSetup() => MaterialApp(
+      builder: (context, child) =>
+          LineupCanvas.builder(context, LineupFocusScope(child: child!)),
+      theme: LineupTheme.forName(LineupThemeName.emberSteel),
+      home: UpstreamChannelSetupView(
+        controller: controller,
+        onRequestLogout: () async {
+          signOutCalls++;
+        },
+      ),
+    );
+    Future<void> pumpSetup() async {
+      await tester.pumpWidget(buildSetup());
+      await tester.pumpAndSettle();
+    }
+
+    await pumpSetup();
+
+    expect(find.text('No movie or show libraries found'), findsOneWidget);
+    expect(find.text('Switch server'), findsOneWidget);
+    final signOut = find.widgetWithText(TextButton, 'Sign out');
+    expect(signOut, findsOneWidget);
+    expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
+    controller.busy = true;
+    controller.notifyListeners();
+    await pumpSetup();
+    expect(tester.widget<TextButton>(signOut).onPressed, isNull);
+    controller.busy = false;
+    controller.notifyListeners();
+    await pumpSetup();
+    expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
+    await tester.tap(signOut);
+    expect(signOutCalls, 1);
+  });
+
   testWidgets(
     'Mini-marathon counts exclude specials-only sources until enabled',
     (tester) async {

@@ -24,12 +24,14 @@ typedef _ReviewEntry = ({Channel channel, Channel? before, _ReviewKind kind});
 class UpstreamChannelSetupView extends StatefulWidget {
   const UpstreamChannelSetupView({
     required this.controller,
+    this.onRequestLogout,
     this.onViewLineup,
     this.onAddCustomChannel,
     super.key,
   });
 
   final LineupController controller;
+  final Future<void> Function()? onRequestLogout;
   final VoidCallback? onViewLineup;
   final VoidCallback? onAddCustomChannel;
 
@@ -464,12 +466,25 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           ),
       ],
       trailing: !hasLibraries
-          ? FilledButton(
-              key: const ValueKey('setup-switch-server'),
-              onPressed: controller.canSwitchServer
-                  ? controller.showServers
-                  : null,
-              child: const Text('Switch server'),
+          ? Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (widget.onRequestLogout != null)
+                  TextButton(
+                    onPressed: controller.busy ? null : widget.onRequestLogout,
+                    child: const Text('Sign out'),
+                  ),
+                FilledButton(
+                  key: const ValueKey('setup-switch-server'),
+                  onPressed: controller.canSwitchServer
+                      ? controller.showServers
+                      : null,
+                  child: const Text('Switch server'),
+                ),
+              ],
             )
           : scanning
           ? TextButton(

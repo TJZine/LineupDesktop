@@ -15,6 +15,7 @@ class UpstreamOnboardingView extends StatefulWidget {
   const UpstreamOnboardingView({
     required this.controller,
     required this.onLogout,
+    this.onRequestLogout,
     this.openBrowser = openPlexLink,
     this.accountOrigin = false,
     this.onOpenMenu,
@@ -24,6 +25,7 @@ class UpstreamOnboardingView extends StatefulWidget {
 
   final LineupController controller;
   final Future<void> Function() onLogout;
+  final Future<void> Function()? onRequestLogout;
   final Future<void> Function() openBrowser;
   final bool accountOrigin;
   final LineupMenuCallback? onOpenMenu;
@@ -896,6 +898,13 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 onPressed: widget.controller.busy ? null : _showProfiles,
                 icon: const Icon(Icons.switch_account),
                 label: const Text('Switch profile'),
+              ),
+            if (widget.onRequestLogout != null)
+              TextButton(
+                onPressed: widget.controller.busy
+                    ? null
+                    : widget.onRequestLogout,
+                child: const Text('Sign out'),
               ),
             if (widget.controller.serverSelectionCanCancel)
               TextButton(
