@@ -147,6 +147,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     variantMode: _extras ? _variantMode : null,
     variantBlockSize: _variantBlockSize,
     includeSpecials: _includeSpecials,
+    minimumItems: _minimum,
     maximumChannels: _maximum,
     anchor: DateTime.now().toUtc(),
   );
@@ -1309,17 +1310,23 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final discoveryFailure = _discoveryFailure(strategy);
     final eligible = enabled
         ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
-        : buildChannelProposals(
-            libraries: widget.controller.libraries
-                .where((library) => _selectedLibraries.contains(library.id))
-                .toList(),
-            items: widget.controller.playableInventory.media,
-            playlists: widget.controller.playableInventory.playlists,
-            strategies: {strategy},
-            crossLibraryStrategies: _grouped,
-            minimumItems: _minimum,
-            maximumChannels: null,
-          ).length;
+        : _allocate(
+                widget.controller.channels,
+                proposals: buildChannelProposals(
+                  libraries: widget.controller.libraries
+                      .where(
+                        (library) => _selectedLibraries.contains(library.id),
+                      )
+                      .toList(),
+                  items: widget.controller.playableInventory.media,
+                  playlists: widget.controller.playableInventory.playlists,
+                  strategies: {strategy},
+                  crossLibraryStrategies: _grouped,
+                  minimumItems: _minimum,
+                  maximumChannels: null,
+                ),
+              ).eligibleOriginalsByStrategy[strategy] ??
+              0;
     final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
     final channels = enabled
         ? allocation.allocatedChannelsByStrategy[strategy] ?? 0

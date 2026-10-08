@@ -77,6 +77,25 @@ class ScheduleWindowResult {
   final DateTime? lastProjectedEnd;
 }
 
+/// Whether a resolved item participates in the selected schedule policy.
+/// Legacy schedules retain their original specials behavior.
+bool scheduleIncludesItem(
+  ChannelItem item, {
+  required PlaybackMode mode,
+  bool includeSpecials = true,
+  int scheduleVersion = currentScheduleVersion,
+}) {
+  if (mode != PlaybackMode.block || scheduleVersion < 2 || includeSpecials) {
+    return true;
+  }
+  final isEpisode =
+      item.mediaKind == ChannelMediaKind.episode ||
+      (item.mediaKind == ChannelMediaKind.unknown &&
+          (item.showTitle != null || item.showThumb != null));
+  final seriesId = item.seriesId ?? item.showThumb ?? item.showTitle;
+  return !isEpisode || seriesId == null || item.seasonNumber != 0;
+}
+
 ScheduleIndex buildSchedule(
   List<ChannelItem> content, {
   required PlaybackMode mode,
@@ -386,7 +405,11 @@ List<ChannelItem> blockOrder(
       occurrence++;
       continue;
     }
-    if (item.seasonNumber == 0 && !includeSpecials) {
+    if (!scheduleIncludesItem(
+      item,
+      mode: PlaybackMode.block,
+      includeSpecials: includeSpecials,
+    )) {
       occurrence++;
       continue;
     }

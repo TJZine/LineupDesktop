@@ -19,6 +19,79 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  testWidgets(
+    'Mini-marathon counts exclude specials-only sources until enabled',
+    (tester) async {
+      final controller = _SetupController(
+        media: [
+          for (var i = 0; i < 5; i++)
+            PlexMediaItem(
+              id: 'special-$i',
+              title: 'Special',
+              type: 'episode',
+              duration: const Duration(minutes: 20),
+              libraryId: 'shows',
+              grandparentRatingKey: 'show',
+              seasonNumber: 0,
+              episodeNumber: i,
+              collections: const ['Collection'],
+              parts: [PlexMediaPart(path: '/parts/$i')],
+            ),
+        ],
+      );
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await _advanceToConfigure(tester);
+      final recent = find.widgetWithText(CheckboxListTile, 'Recently Added');
+      await tester.ensureVisible(recent);
+      await tester.tap(recent);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('configure-section-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('setup-playback-block')));
+      await tester.pumpAndSettle();
+      final summary = find.byKey(
+        const ValueKey('configuration-allocation-summary'),
+      );
+      expect(
+        find.descendant(of: summary, matching: find.text('0')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+            .onPressed,
+        isNull,
+      );
+      expect(find.textContaining('Channel limit reached'), findsNothing);
+
+      final specials = find.widgetWithText(
+        CheckboxMenuButton,
+        'Include specials',
+      );
+      await tester.ensureVisible(specials);
+      await tester.tap(specials);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: summary, matching: find.text('1')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.byKey(const ValueKey('configure-section-0')));
+      await tester.pumpAndSettle();
+      final collections = find.widgetWithText(CheckboxListTile, 'Collections');
+      expect(
+        find.descendant(of: collections, matching: find.text('1 channel')),
+        findsOneWidget,
+      );
+    },
+  );
+
   for (final partial in [false, true]) {
     testWidgets(
       'Playlists ${partial ? 'partial' : 'unavailable'} supports retry',

@@ -2340,6 +2340,203 @@ void main() {
   });
 
   test(
+    'generated block plans cannot persist policy-excluded content',
+    () async {
+      const library = PlexLibrary(
+        id: 'tv',
+        title: 'TV',
+        type: PlexLibraryType.show,
+      );
+      final specials = [
+        for (var i = 0; i < 5; i++)
+          PlexMediaItem(
+            id: 'special-$i',
+            title: 'Special $i',
+            type: 'episode',
+            duration: const Duration(minutes: 20),
+            libraryId: 'tv',
+            grandparentRatingKey: 'show',
+            grandparentTitle: 'Show',
+            seasonNumber: 0,
+            episodeNumber: i,
+            collections: const ['Collection'],
+            parts: [PlexMediaPart(path: '/parts/$i')],
+          ),
+      ];
+      for (final mode in ChannelBuildMode.values) {
+        final store = _CountingMemoryStore();
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(),
+          plex: _FakePlex(),
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        final custom = _channel('retained-off-air');
+        final original = [custom];
+        controller
+          ..profile = const PlexHomeUser(
+            id: 'owner',
+            name: 'Owner',
+            protected: false,
+          )
+          ..server = _server('server')
+          ..connection = _server('server').connections.single
+          ..availableMedia = specials
+          ..channels = original
+          ..currentChannelId = custom.id;
+        final proposals = buildChannelProposals(
+          libraries: const [library],
+          items: controller.playableInventory.media,
+          strategies: const {BuilderStrategy.collections},
+        );
+        final excluded = materializeChannelPlan(
+          proposals: proposals,
+          existing: original,
+          mode: mode,
+          seriesMode: PlaybackMode.block,
+          minimumItems: 5,
+        );
+        expect(excluded.channels, isEmpty, reason: mode.name);
+        final included = materializeChannelPlan(
+          proposals: proposals,
+          existing: original,
+          mode: mode,
+          seriesMode: PlaybackMode.block,
+          includeSpecials: true,
+          anchor: DateTime.utc(2026),
+        );
+        final unsafe = Channel.fromJson({
+          ...included.channels.single.toJson(),
+          'includeSpecials': false,
+        });
+        await expectLater(
+          controller.loadScheduleFor(unsafe),
+          _throwsScheduleFailure(ScheduleFailureReason.noContent),
+        );
+        final saved = store.state;
+        await expectLater(
+          controller.applyReviewedChannelPlan(
+            [unsafe],
+            mode: mode,
+            expectedBase: original,
+          ),
+          throwsFormatException,
+        );
+        expect(store.state, same(saved));
+        expect(store.saveCalls, 0);
+        expect(controller.channels, same(original));
+        expect(controller.currentChannelId, custom.id);
+
+        expect(
+          await controller.applyReviewedChannelPlan(
+            included.channels,
+            mode: mode,
+            expectedBase: original,
+          ),
+          ChannelPlanApplyResult.applied,
+        );
+        expect(store.saveCalls, 1);
+        expect(controller.channels.first, same(custom));
+        final generated = controller.channels.last;
+        final schedule = await controller.loadScheduleFor(generated);
+        expect(
+          schedule.items.map((item) => item.id).toSet(),
+          specials.map((item) => item.id).toSet(),
+        );
+        expect(
+          store.state.channelsByProfileServer['owner']!['server']!.last
+              .toJson(),
+          generated.toJson(),
+        );
+      }
+    },
+  );
+
+  test('mixed movie and episode generation schedules regular content with specials off', () async {
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final media = [
+      for (var i = 0; i < 5; i++)
+        PlexMediaItem(
+          id: 'special-$i',
+          title: 'Special',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'tv',
+          grandparentRatingKey: 'show',
+          seasonNumber: 0,
+          episodeNumber: i,
+          collections: const ['Collection'],
+          parts: [PlexMediaPart(path: '/parts/special-$i')],
+        ),
+      for (var i = 0; i < 5; i++)
+        PlexMediaItem(
+          id: 'regular-$i',
+          title: 'Regular',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'tv',
+          grandparentRatingKey: 'show',
+          seasonNumber: 1,
+          episodeNumber: i,
+          collections: const ['Collection'],
+          parts: [PlexMediaPart(path: '/parts/regular-$i')],
+        ),
+      PlexMediaItem(
+        id: 'movie',
+        title: 'Movie',
+        type: 'movie',
+        duration: const Duration(minutes: 90),
+        libraryId: 'movies',
+        collections: const ['Collection'],
+        parts: [PlexMediaPart(path: '/parts/movie')],
+      ),
+    ];
+    controller
+      ..connection = _server('server').connections.single
+      ..availableMedia = media;
+    final proposals = buildChannelProposals(
+      libraries: const [
+        PlexLibrary(id: 'tv', title: 'TV', type: PlexLibraryType.show),
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ],
+      items: controller.playableInventory.media,
+      strategies: const {BuilderStrategy.collections},
+      crossLibraryStrategies: const {BuilderStrategy.collections},
+    );
+    final plan = materializeChannelPlan(
+      proposals: proposals,
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      seriesMode: PlaybackMode.block,
+      minimumItems: 5,
+      anchor: DateTime.utc(2026),
+    );
+    expect(plan.channels.single.source, isA<MixedSource>());
+    expect(
+      await controller.applyReviewedChannelPlan(
+        plan.channels,
+        mode: ChannelBuildMode.replace,
+        expectedBase: const [],
+      ),
+      ChannelPlanApplyResult.applied,
+    );
+    final schedule = await controller.loadScheduleFor(
+      controller.channels.single,
+    );
+    expect(schedule.items.map((item) => item.id).toSet(), {
+      'movie',
+      for (var i = 0; i < 5; i++) 'regular-$i',
+    });
+  });
+
+  test(
     'descriptor-invalid generated plans preserve lineup in every build mode',
     () async {
       for (final mode in ChannelBuildMode.values) {

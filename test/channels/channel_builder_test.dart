@@ -2,9 +2,226 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  test('block eligibility precedes channel limits and numbering', () {
+    const library = PlexLibrary(
+      id: 'tv',
+      title: 'TV',
+      type: PlexLibraryType.show,
+    );
+    final media = [
+      for (var i = 0; i < 5; i++)
+        _builderEpisode('special-$i', 0, 'A Specials'),
+      for (var i = 0; i < 5; i++) _builderEpisode('regular-$i', 1, 'B Regular'),
+    ];
+    final proposals = buildChannelProposals(
+      libraries: const [library],
+      items: media,
+      strategies: const {BuilderStrategy.collections},
+      maximumChannels: null,
+    );
+    expect(proposals.map((proposal) => proposal.name), [
+      'A Specials',
+      'B Regular',
+    ]);
+    for (final mode in ChannelBuildMode.values) {
+      final result = materializeChannelPlan(
+        proposals: proposals,
+        existing: const [],
+        mode: mode,
+        seriesMode: PlaybackMode.block,
+        minimumItems: 5,
+        maximumChannels: 1,
+        anchor: DateTime.utc(2026),
+      );
+      expect(result.channels.single.name, 'B Regular', reason: mode.name);
+      expect(result.channels.single.number, 1);
+      expect(
+        result.eligibleOriginalsByStrategy[BuilderStrategy.collections],
+        1,
+      );
+      expect(result.excludedOriginals, 0);
+      expect(result.truncated, isFalse);
+      final schedule = buildChannelSchedule(
+        result.channels.single,
+        resolveContent(result.channels.single.source, media),
+      );
+      expect(schedule.items, hasLength(5));
+    }
+  });
+
+  test('effective minimum and extras honor each playback policy', () {
+    const library = PlexLibrary(
+      id: 'tv',
+      title: 'TV',
+      type: PlexLibraryType.show,
+    );
+    final specials = [
+      for (var i = 0; i < 5; i++)
+        _builderEpisode('special-$i', 0, 'Collection'),
+    ];
+    ChannelPlanAllocation allocate(
+      List<PlexMediaItem> media, {
+      PlaybackMode playback = PlaybackMode.block,
+      PlaybackMode? variant,
+      bool includeSpecials = false,
+      int minimum = 5,
+    }) => materializeChannelPlan(
+      proposals: buildChannelProposals(
+        libraries: const [library],
+        items: media,
+        strategies: const {BuilderStrategy.collections},
+      ),
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      seriesMode: playback,
+      variantMode: variant,
+      alternateCopies: 1,
+      includeSpecials: includeSpecials,
+      minimumItems: minimum,
+      anchor: DateTime.utc(2026),
+    );
+    expect(allocate(specials).channels, isEmpty);
+    final included = allocate(specials, includeSpecials: true);
+    expect(included.channels, hasLength(2));
+    for (final channel in included.channels) {
+      expect(
+        buildChannelSchedule(
+          channel,
+          resolveContent(channel.source, specials),
+        ).items,
+        hasLength(5),
+      );
+    }
+    final shuffled = allocate(
+      specials,
+      playback: PlaybackMode.shuffle,
+      variant: PlaybackMode.block,
+    );
+    expect(shuffled.channels.map((channel) => channel.playbackMode), [
+      PlaybackMode.shuffle,
+      PlaybackMode.shuffle,
+    ]);
+    expect(shuffled.allocatedExtras, 1);
+    expect(shuffled.excludedExtras, 0);
+    final mixed = [...specials, _builderEpisode('regular', 1, 'Collection')];
+    expect(allocate(mixed).channels, isEmpty);
+    final usable = allocate(mixed, minimum: 1).channels.first;
+    expect(
+      buildChannelSchedule(
+        usable,
+        resolveContent(usable.source, mixed),
+      ).items.single.id,
+      'regular',
+    );
+    final sequential = allocate(
+      specials,
+      playback: PlaybackMode.sequential,
+    ).channels.single;
+    expect(
+      buildChannelSchedule(
+        sequential,
+        resolveContent(sequential.source, specials),
+      ).items,
+      hasLength(5),
+    );
+  });
+
+  test('proposal counts preserve resolved duplicates, filters and playlist occurrences', () {
+    final special = _builderEpisode('shared', 0, 'Collection');
+    final regular = _builderEpisode('regular', 1, 'Collection');
+    final media = [
+      special,
+      _builderEpisode('shared', 1, 'Other'),
+      _builderEpisode('shared', 1, 'Collection'),
+      regular,
+      _builderEpisode('whitespace', 1, ' Collection '),
+      PlexMediaItem(
+        id: 'shared',
+        title: 'Movie',
+        type: 'movie',
+        libraryId: 'movies',
+        duration: const Duration(minutes: 30),
+        collections: const ['Collection'],
+        parts: [PlexMediaPart(path: '/parts/movie')],
+      ),
+      const PlexMediaItem(
+        id: 'unplayable',
+        title: 'Unavailable',
+        type: 'episode',
+        libraryId: 'tv',
+        duration: Duration(minutes: 20),
+        collections: ['Collection'],
+      ),
+    ];
+    final playlists = [
+      PlexPlaylist(
+        id: 'playlist',
+        title: 'Playlist',
+        items: [special, regular, regular],
+      ),
+    ];
+    for (final grouped in [false, true]) {
+      final proposals = buildChannelProposals(
+        libraries: const [
+          PlexLibrary(id: 'tv', title: 'TV', type: PlexLibraryType.show),
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        items: media,
+        playlists: playlists,
+        strategies: const {
+          BuilderStrategy.collections,
+          BuilderStrategy.playlists,
+          BuilderStrategy.recentlyAdded,
+        },
+        crossLibraryStrategies: grouped ? {BuilderStrategy.collections} : {},
+        minimumItems: 1,
+        maximumChannels: null,
+      );
+      for (final proposal in proposals) {
+        final content = resolveContent(proposal.source, media, playlists);
+        expect(
+          proposal.playableItemCount,
+          content.length,
+          reason: proposal.name,
+        );
+        try {
+          final schedule = buildSchedule(
+            content,
+            mode: PlaybackMode.block,
+            seed: 0,
+            includeSpecials: false,
+            scheduleVersion: currentScheduleVersion,
+          );
+          expect(
+            proposal.blockItemCountWithoutSpecials,
+            schedule.items.length,
+            reason: proposal.name,
+          );
+        } on ScheduleBuildException catch (error) {
+          expect(error.reason, ScheduleFailureReason.noContent);
+          expect(
+            proposal.blockItemCountWithoutSpecials,
+            0,
+            reason: proposal.name,
+          );
+        }
+      }
+      final playlist = proposals.singleWhere(
+        (proposal) => proposal.strategy == BuilderStrategy.playlists,
+      );
+      expect(playlist.playableItemCount, 3);
+      expect(playlist.blockItemCountWithoutSpecials, 2);
+    }
+  });
+
   test('builder output is deterministic and applies item minimums', () {
     final library = const PlexLibrary(
       id: '1',
@@ -169,6 +386,8 @@ void main() {
       source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -271,6 +490,7 @@ void main() {
             duration: const Duration(minutes: 20),
             libraryId: library.id,
             collections: const ['Collection'],
+            parts: [PlexMediaPart(path: '/parts/$index')],
           ),
       ];
 
@@ -333,6 +553,8 @@ void main() {
         ),
         mode: PlaybackMode.shuffle,
         itemCount: 10,
+        playableItemCount: 10,
+        blockItemCountWithoutSpecials: 10,
         strategy: strategy,
         series: true,
       );
@@ -514,6 +736,7 @@ void main() {
             libraryId: 'tv',
             grandparentRatingKey: 'series-$index',
             actors: [name],
+            parts: [PlexMediaPart(path: '/parts/$index')],
           ),
       ],
       strategies: const {BuilderStrategy.actors},
@@ -626,6 +849,8 @@ void main() {
         ),
         mode: PlaybackMode.shuffle,
         itemCount: 10,
+        playableItemCount: 10,
+        blockItemCountWithoutSpecials: 10,
         strategy: BuilderStrategy.genres,
       );
       final first = materializeChannelPlan(
@@ -672,6 +897,8 @@ void main() {
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.genres,
     );
     final generated = materializeChannelPlan(
@@ -723,6 +950,8 @@ void main() {
         ),
         mode: PlaybackMode.shuffle,
         itemCount: 10,
+        playableItemCount: 10,
+        blockItemCountWithoutSpecials: 10,
         strategy: BuilderStrategy.genres,
       ),
     );
@@ -779,6 +1008,8 @@ void main() {
       source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -820,6 +1051,7 @@ void main() {
             duration: const Duration(minutes: 1),
             libraryId: 'movies',
             genres: ['Genre $index'],
+            parts: [PlexMediaPart(path: '/parts/$index')],
           ),
       ],
       strategies: const {BuilderStrategy.genres},
@@ -849,6 +1081,8 @@ void main() {
       source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -887,6 +1121,8 @@ void main() {
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.genres,
     );
     const matchedProposal = ChannelProposal(
@@ -900,6 +1136,8 @@ void main() {
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.genres,
     );
     final generated = materializeChannelPlan(
@@ -963,6 +1201,8 @@ void main() {
         ),
         mode: PlaybackMode.shuffle,
         itemCount: 10,
+        playableItemCount: 10,
+        blockItemCountWithoutSpecials: 10,
         strategy: BuilderStrategy.recentlyAdded,
         series: true,
       );
@@ -1046,6 +1286,8 @@ void main() {
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.genres,
     );
 
@@ -1067,6 +1309,8 @@ void main() {
       source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.collections,
       series: true,
     );
@@ -1101,6 +1345,8 @@ void main() {
       source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -1131,6 +1377,8 @@ void main() {
       source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -1186,6 +1434,8 @@ void main() {
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
+      playableItemCount: 10,
+      blockItemCountWithoutSpecials: 10,
       strategy: BuilderStrategy.genres,
     );
     final matched = materializeChannelPlan(
@@ -1288,6 +1538,8 @@ void main() {
       source: LibrarySource(libraryId: name, libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 20,
+      playableItemCount: 20,
+      blockItemCountWithoutSpecials: 20,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -1328,6 +1580,8 @@ void main() {
       source: LibrarySource(libraryId: name, libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 20,
+      playableItemCount: 20,
+      blockItemCountWithoutSpecials: 20,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -1357,6 +1611,8 @@ void main() {
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 20,
+      playableItemCount: 20,
+      blockItemCountWithoutSpecials: 20,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -1387,6 +1643,8 @@ void main() {
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 20,
+      playableItemCount: 20,
+      blockItemCountWithoutSpecials: 20,
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
@@ -1424,6 +1682,8 @@ void main() {
         ),
         mode: PlaybackMode.shuffle,
         itemCount: 20,
+        playableItemCount: 20,
+        blockItemCountWithoutSpecials: 20,
         strategy: BuilderStrategy.recentlyAdded,
       );
       final existing = materializeChannelPlan(
@@ -1489,3 +1749,18 @@ void main() {
     },
   );
 }
+
+PlexMediaItem _builderEpisode(String id, int season, String collection) =>
+    PlexMediaItem(
+      id: id,
+      title: id,
+      type: 'episode',
+      duration: const Duration(minutes: 20),
+      libraryId: 'tv',
+      grandparentRatingKey: 'show',
+      grandparentTitle: 'Show',
+      seasonNumber: season,
+      episodeNumber: 1,
+      collections: [collection],
+      parts: [PlexMediaPart(path: '/parts/$id')],
+    );

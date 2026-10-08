@@ -1605,6 +1605,21 @@ class LineupController extends ChangeNotifier {
           requirePlayableManual: true,
           validatedSources: validatedSources,
         );
+        final content = resolveContent(
+          channel.source,
+          _playableMedia,
+          _playablePlaylists,
+        );
+        if (!content.any(
+          (item) => scheduleIncludesItem(
+            item,
+            mode: channel.playbackMode,
+            includeSpecials: channel.includeSpecials,
+            scheduleVersion: channel.scheduleVersion,
+          ),
+        )) {
+          throw const FormatException('Channel source has no playable content');
+        }
       }
       await _commitChannelList(next, operation);
       if (_isCurrentMutationScope(operation)) {
