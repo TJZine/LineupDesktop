@@ -6,8 +6,121 @@ import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/guide/guide_controller.dart';
+
+import '../support/ui_fixture.dart';
 
 void main() {
+  test('fresh reordered inventories preserve production worker and Guide queries', () async {
+    final media = [
+      for (final (id, minutes) in [('c', 17), ('a', 11), ('b', 13)])
+        PlexMediaItem(
+          id: id,
+          title: id,
+          type: 'movie',
+          duration: Duration(minutes: minutes),
+          libraryId: 'library',
+          collections: const ['Collection'],
+          parts: [
+            PlexMediaPart(path: '/parts/$id/first'),
+            PlexMediaPart(path: '/parts/$id/second'),
+          ],
+        ),
+    ];
+    final occurrences = [media[0], media[1], media[0], media[2]];
+    const library = LibrarySource(
+      libraryId: 'library',
+      libraryType: PlexLibraryType.movie,
+      filters: {
+        LibraryFilter.collection: ['Collection'],
+      },
+    );
+    const playlist = PlaylistSource('playlist');
+    final sources = <ContentSource>[
+      library,
+      playlist,
+      const MixedSource(sources: [library, playlist], interleave: true),
+    ];
+    final now = DateTime.utc(2026, 10, 8, 12, 17);
+    for (final source in sources) {
+      for (final version in [1, currentScheduleVersion]) {
+        final channel = Channel(
+          id: 'channel',
+          number: 1,
+          name: 'Channel',
+          source: source,
+          playbackMode: PlaybackMode.shuffle,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 19,
+          scheduleVersion: version,
+        );
+        Object? expected;
+        for (var permutation = 0; permutation < 4; permutation++) {
+          List<T> reorder<T>(List<T> values) => switch (permutation) {
+            0 => List.of(values),
+            1 => values.reversed.toList(),
+            2 => [...values.skip(1), values.first],
+            _ => [...values.skip(2), ...values.take(2)],
+          };
+          final lineup = FixtureController()
+            ..channels = [Channel.fromJson(channel.toJson())]
+            ..availableMedia = reorder(media)
+            ..availablePlaylists = [
+              PlexPlaylist(
+                id: 'playlist',
+                title: 'Playlist',
+                items: reorder(occurrences),
+              ),
+            ];
+          final guide = GuideController(lineup: lineup, clock: () => now);
+          try {
+            final schedule = await lineup.loadScheduleFor(
+              lineup.channels.single,
+            );
+            final current = await guide.ensureCurrentProgram(channel.id);
+            expect(current, isNotNull);
+            expect(guide.row(channel.id).state, GuideLoadState.ready);
+            final actual = [
+              schedule.items.map((item) => item.id).toList(),
+              schedule.offsets,
+              schedule.loopDuration,
+              _scheduledIdentity(programAt(now, channel.anchor, schedule)),
+              _scheduledIdentity(current!.scheduled),
+              guide
+                  .row(channel.id)
+                  .programs
+                  .map((program) => _scheduledIdentity(program.scheduled))
+                  .toList(),
+            ];
+            if (permutation == 0) {
+              expected = actual;
+            } else {
+              expect(
+                actual,
+                expected,
+                reason:
+                    '${source.runtimeType}, version $version, permutation $permutation',
+              );
+            }
+            expect(
+              schedule.items,
+              hasLength(
+                source is LibrarySource
+                    ? 3
+                    : source is PlaylistSource
+                    ? 4
+                    : 7,
+              ),
+            );
+          } finally {
+            guide.dispose();
+            lineup.dispose();
+          }
+        }
+      }
+    }
+  });
+
   test('spawn failure does not prevent a later build', () async {
     final unsendable = ReceivePort();
     addTearDown(unsendable.close);
@@ -244,3 +357,12 @@ class _ExitingMediaItem extends PlexMediaItem {
   @override
   String? get libraryId => Isolate.exit();
 }
+
+Object _scheduledIdentity(ScheduledProgram program) => (
+  program.item.id,
+  program.start,
+  program.end,
+  program.elapsed,
+  program.index,
+  program.loop,
+);

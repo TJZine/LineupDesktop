@@ -56,6 +56,67 @@ void main() {
     },
   );
 
+  test(
+    'multipart media identity is shared without losing source occurrences',
+    () {
+      final multipart = PlexMediaItem(
+        id: 'multipart',
+        title: 'Multipart',
+        type: 'movie',
+        duration: const Duration(minutes: 40),
+        libraryId: 'movies',
+        parts: [
+          PlexMediaPart(path: '/parts/first'),
+          PlexMediaPart(path: '/parts/second'),
+        ],
+      );
+      final other = PlexMediaItem(
+        id: 'other',
+        title: 'Other',
+        type: 'movie',
+        duration: const Duration(minutes: 17),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/parts/other')],
+      );
+      const library = LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      );
+      const playlist = PlaylistSource('playlist');
+      final media = [multipart, other, multipart];
+      final playlists = [
+        PlexPlaylist(
+          id: 'playlist',
+          title: 'Playlist',
+          items: [multipart, other, multipart],
+        ),
+      ];
+      final libraryItems = resolveContent(library, media, playlists);
+      expect(libraryItems.map((item) => item.id), ['multipart', 'other']);
+      expect(libraryItems.first.duration, const Duration(minutes: 40));
+      expect(
+        resolveContent(playlist, media, playlists).map((item) => item.id),
+        ['multipart', 'other', 'multipart'],
+      );
+      for (final interleave in [false, true]) {
+        final mixed = resolveContent(
+          MixedSource(sources: [library, playlist], interleave: interleave),
+          media,
+          playlists,
+        );
+        expect(mixed.where((item) => item.id == 'multipart'), hasLength(3));
+        expect(mixed.where((item) => item.id == 'other'), hasLength(2));
+        expect(
+          mixed.fold(
+            Duration.zero,
+            (duration, item) => duration + item.duration,
+          ),
+          const Duration(minutes: 154),
+        );
+      }
+    },
+  );
+
   test('decades use one canonical four-digit representation', () {
     expect(channelDecadeForYear(1981), '1980s');
     expect(channelDecadeForYear(1000), '1000s');

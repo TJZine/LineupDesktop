@@ -119,6 +119,194 @@ void main() {
     expect(first.map((item) => item.id).toSet(), {'a', 'b'});
   });
 
+  test(
+    'shuffle input permutations preserve schedules across versions and cycles',
+    () {
+      const content = [
+        ChannelItem(id: 'c', title: 'C', duration: Duration(minutes: 7)),
+        ChannelItem(id: 'a', title: 'A', duration: Duration(minutes: 11)),
+        ChannelItem(id: 'b', title: 'B', duration: Duration(minutes: 13)),
+        ChannelItem(
+          id: 'a',
+          title: 'A repeated',
+          duration: Duration(minutes: 11),
+        ),
+      ];
+      for (final version in [1, currentScheduleVersion]) {
+        final expected = buildSchedule(
+          content,
+          mode: PlaybackMode.shuffle,
+          seed: 90210,
+          scheduleVersion: version,
+        );
+        for (final permutation in _permutations(content)) {
+          final actual = buildSchedule(
+            permutation,
+            mode: PlaybackMode.shuffle,
+            seed: 90210,
+            scheduleVersion: version,
+          );
+          expect(
+            actual.items.map((item) => item.id),
+            expected.items.map((item) => item.id),
+          );
+          expect(actual.offsets, expected.offsets);
+          expect(actual.loopDuration, expected.loopDuration);
+          expect(actual.items.where((item) => item.id == 'a'), hasLength(2));
+          for (final cycle in [-2, 0, 1, 50000]) {
+            final time = anchor.add(
+              expected.loopDuration * cycle + const Duration(minutes: 9),
+            );
+            expect(
+              _programIdentity(programAt(time, anchor, actual)),
+              _programIdentity(programAt(time, anchor, expected)),
+            );
+            expect(
+              scheduleWindow(
+                time,
+                time.add(expected.loopDuration * 2),
+                anchor,
+                actual,
+              ).map(_programIdentity),
+              scheduleWindow(
+                time,
+                time.add(expected.loopDuration * 2),
+                anchor,
+                expected,
+              ).map(_programIdentity),
+            );
+          }
+        }
+      }
+    },
+  );
+
+  test('shuffle retains distinct durations for repeated media identities', () {
+    const content = [
+      ChannelItem(id: 'a', title: 'A', duration: Duration(minutes: 11)),
+      ChannelItem(
+        id: 'a',
+        title: 'A refreshed',
+        duration: Duration(minutes: 17),
+      ),
+      ChannelItem(id: 'b', title: 'B', duration: Duration(minutes: 13)),
+    ];
+    for (final version in [1, currentScheduleVersion]) {
+      final expected = buildSchedule(
+        content,
+        mode: PlaybackMode.shuffle,
+        seed: 17,
+        scheduleVersion: version,
+      );
+      for (final permutation in _permutations(content)) {
+        final actual = buildSchedule(
+          permutation,
+          mode: PlaybackMode.shuffle,
+          seed: 17,
+          scheduleVersion: version,
+        );
+        expect(
+          actual.items.map((item) => (item.id, item.duration)),
+          expected.items.map((item) => (item.id, item.duration)),
+        );
+        expect(actual.offsets, expected.offsets);
+        expect(
+          scheduleWindow(
+            anchor,
+            anchor.add(expected.loopDuration * 3),
+            anchor,
+            actual,
+          ).map(_programIdentity),
+          scheduleWindow(
+            anchor,
+            anchor.add(expected.loopDuration * 3),
+            anchor,
+            expected,
+          ).map(_programIdentity),
+        );
+      }
+    }
+  });
+
+  test('canonical shuffle does not mask membership or duration changes', () {
+    const content = [
+      ChannelItem(id: 'a', title: 'A', duration: Duration(minutes: 11)),
+      ChannelItem(id: 'b', title: 'B', duration: Duration(minutes: 13)),
+      ChannelItem(id: 'c', title: 'C', duration: Duration(minutes: 17)),
+    ];
+    for (final version in [1, currentScheduleVersion]) {
+      ScheduleIndex build(List<ChannelItem> items) => buildSchedule(
+        items,
+        mode: PlaybackMode.shuffle,
+        seed: 17,
+        scheduleVersion: version,
+      );
+      final original = build(content);
+      final replaced = build([
+        content[0],
+        content[1],
+        const ChannelItem(id: 'd', title: 'D', duration: Duration(minutes: 17)),
+      ]);
+      final removed = build(content.sublist(0, 2));
+      final resized = build([
+        content[0],
+        content[1],
+        const ChannelItem(id: 'c', title: 'C', duration: Duration(minutes: 19)),
+      ]);
+      expect(replaced.items.map((item) => item.id).toSet(), {'a', 'b', 'd'});
+      expect(removed.items, hasLength(2));
+      expect(removed.loopDuration, const Duration(minutes: 24));
+      expect(resized.loopDuration, const Duration(minutes: 43));
+      for (final changed in [replaced, removed, resized]) {
+        expect(
+          scheduleWindow(
+            anchor,
+            anchor.add(original.loopDuration * 3),
+            anchor,
+            changed,
+          ).map(_programIdentity),
+          isNot(
+            scheduleWindow(
+              anchor,
+              anchor.add(original.loopDuration * 3),
+              anchor,
+              original,
+            ).map(_programIdentity),
+          ),
+        );
+      }
+    }
+  });
+
+  test('sequential and block retain supplied occurrence ordering', () {
+    const content = [
+      ChannelItem(id: 'c', title: 'C', duration: Duration(minutes: 7)),
+      ChannelItem(id: 'a', title: 'A', duration: Duration(minutes: 11)),
+      ChannelItem(id: 'b', title: 'B', duration: Duration(minutes: 13)),
+    ];
+    for (final permutation in _permutations(content)) {
+      for (final version in [1, currentScheduleVersion]) {
+        final sequential = buildSchedule(
+          permutation,
+          mode: PlaybackMode.sequential,
+          seed: 17,
+          scheduleVersion: version,
+        );
+        expect(sequential.items, orderedEquals(permutation));
+        final block = buildSchedule(
+          permutation,
+          mode: PlaybackMode.block,
+          seed: 17,
+          scheduleVersion: version,
+        );
+        final expected = version == 1
+            ? legacyBlockOrder(permutation, 17, 3)
+            : blockOrder(permutation, 17, 3);
+        expect(block.items, orderedEquals(expected));
+      }
+    }
+  });
+
   test('v2 shuffle is reproducible and varies complete cycles', () {
     final content = [
       ...items,
@@ -246,7 +434,7 @@ void main() {
       shuffleSeed: 7,
       scheduleTransition: ScheduleTransition(
         boundary: anchor.add(const Duration(minutes: 30)),
-        legacyCycleItems: items,
+        legacyCycleItems: items.reversed.toList(),
       ),
     );
     final schedule = buildChannelSchedule(channel, const [
@@ -265,7 +453,7 @@ void main() {
         anchor,
         schedule,
       ).item.id,
-      'b',
+      'a',
     );
     expect(
       programAt(
@@ -281,7 +469,7 @@ void main() {
         anchor,
         restarted,
       ).item.id,
-      'b',
+      'a',
     );
   });
 
@@ -337,6 +525,8 @@ void main() {
         );
         final migrated = migrateLegacySchedule(legacyChannel, content, now);
         final boundary = migrated.scheduleTransition!.boundary;
+        expect(migrated.anchor, legacyChannel.anchor);
+        expect(migrated.shuffleSeed, legacyChannel.shuffleSeed);
         final revised = buildChannelSchedule(migrated, content);
         final restarted = buildChannelSchedule(
           Channel.fromJson(migrated.toJson()),
@@ -495,3 +685,25 @@ void main() {
     );
   });
 }
+
+Iterable<List<T>> _permutations<T>(List<T> items) sync* {
+  if (items.isEmpty) {
+    yield <T>[];
+    return;
+  }
+  for (var index = 0; index < items.length; index++) {
+    final remainder = List<T>.of(items)..removeAt(index);
+    for (final tail in _permutations(remainder)) {
+      yield [items[index], ...tail];
+    }
+  }
+}
+
+Object _programIdentity(ScheduledProgram program) => (
+  program.item.id,
+  program.start,
+  program.end,
+  program.elapsed,
+  program.index,
+  program.loop,
+);

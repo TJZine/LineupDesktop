@@ -115,10 +115,13 @@ ScheduleIndex buildSchedule(
   }
   final items = switch (mode) {
     PlaybackMode.sequential => List<ChannelItem>.of(content),
-    PlaybackMode.shuffle when scheduleVersion >= 2 => List<ChannelItem>.of(
+    PlaybackMode.shuffle when scheduleVersion >= 2 => _canonicalShuffleInput(
       content,
     ),
-    PlaybackMode.shuffle => seededShuffle(content, seed),
+    PlaybackMode.shuffle => seededShuffle(
+      _canonicalShuffleInput(content),
+      seed,
+    ),
     PlaybackMode.block when scheduleVersion >= 2 => blockOrder(
       content,
       seed,
@@ -363,6 +366,16 @@ ScheduleWindowResult scheduleWindowResult(
     lastProjectedEnd: programs.last.end,
   );
 }
+
+// PMS media IDs identify whole programs, including multipart media. Playlist
+// and mixed sources can intentionally repeat them, so sort occurrences without
+// deduplicating. Duration breaks ties for differing snapshots of the same media;
+// equal ID/duration occurrences are interchangeable for schedule timing.
+List<ChannelItem> _canonicalShuffleInput(List<ChannelItem> content) =>
+    List<ChannelItem>.of(content)..sort((left, right) {
+      final identity = left.id.compareTo(right.id);
+      return identity != 0 ? identity : left.duration.compareTo(right.duration);
+    });
 
 List<T> seededShuffle<T>(List<T> input, int seed) {
   final output = List<T>.of(input);
