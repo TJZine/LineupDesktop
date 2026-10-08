@@ -1586,10 +1586,11 @@ void main() {
   testWidgets('makes a missing required Windows engine explicit', (
     tester,
   ) async {
+    final controller = _LoadingController()..restoringSavedLineup = true;
     await tester.pumpWidget(
       LineupBootstrap(
         player: _RequiredEngineFailingPlayer(),
-        controller: _FakeController(),
+        controller: controller,
       ),
     );
     await tester.pumpAndSettle();
@@ -1601,6 +1602,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
+    expect(find.byType(LineupShell), findsNothing);
+    controller.completeInitialization();
+    await tester.pumpAndSettle();
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
   });
 
   testWidgets('retains required-engine guidance through player errors', (

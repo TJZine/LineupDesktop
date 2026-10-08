@@ -18,6 +18,7 @@ import 'channel_setup_view.dart';
 import 'channels_view.dart';
 import 'diagnostics_view.dart';
 import 'lineup_controller.dart';
+import 'lineup_restore_view.dart';
 import 'onboarding_view.dart';
 
 class LineupShell extends StatefulWidget {
@@ -657,7 +658,9 @@ class _LineupShellState extends State<LineupShell> {
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {
       final onboardingMenuAvailable = _onboardingMenuAvailable;
-      final onboarding = controller.stage == SetupStage.channelSetup
+      final onboarding = controller.restoringSavedLineup
+          ? LineupRestoreView(controller: controller)
+          : controller.stage == SetupStage.channelSetup
           ? UpstreamChannelSetupView(
               controller: controller,
               onViewLineup: _completeSetup,

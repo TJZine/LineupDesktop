@@ -1627,6 +1627,8 @@ class _SetupController extends FixtureController {
 
   @override
   void cancelLibraryScan() {
+    // An interrupted initial scan has no staged result to commit.
+    ready = const {};
     libraryScanStatus = LibraryScanStatus.cancelled;
     facts = {
       for (final entry in facts.entries)

@@ -25,6 +25,16 @@ Read first:
   [.interface-design/system.md](../.interface-design/system.md), for the
   visual system.
 
+## October 7 render approval refinements
+
+The loading copy and library-step layout are approved with these changes before
+commit. In the no-libraries state, omit "Select the Plex libraries to scan for
+channel ideas." and the disabled Scan again action; make Switch server the
+filled primary action. In the populated library step, align the Switch server
+text button's text with the content's left edge, following the earlier Retry
+alignment. Send matched renders; the orchestrator may commit without another
+gate when those renders meet these instructions.
+
 ## Problems (confirmed)
 
 ### P1. Saved-lineup startup shows the Channel Setup library screen during its scan

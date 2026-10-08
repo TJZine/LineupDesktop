@@ -10,6 +10,7 @@ import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'form_error.dart';
 import 'lineup_controller.dart';
+import 'lineup_restore_view.dart';
 import 'setup_result_atmosphere.dart';
 
 enum _BuildPhase { review, applying, failed, complete }
@@ -243,7 +244,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             : _libraryScanSettled
             ? 'Review your libraries'
             : 'Choose libraries',
-        subtitleText: _libraryScanSettled ? '' : _librarySummary(),
+        subtitleText:
+            widget.controller.libraries.isEmpty ||
+                _libraryScanSettled ||
+                widget.controller.libraryScanStatus ==
+                    LibraryScanStatus.scanning
+            ? ''
+            : _librarySummary(),
       );
     }
     if (_step == 2) return _configurationHeader();
@@ -385,8 +392,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final retry = controller.libraryScanRetryIds.intersection(
       _selectedLibraries,
     );
+    final hasLibraries = controller.libraries.isNotEmpty;
     final scanning = controller.libraryScanStatus == LibraryScanStatus.scanning;
-    final canContinue = _libraryScanSettled && ready.isNotEmpty;
+    final canContinue = hasLibraries && !scanning && ready.isNotEmpty;
     final canRetry =
         !scanning &&
         controller.libraryScanStatus != LibraryScanStatus.cancelled &&
@@ -401,16 +409,38 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final excluded = _selectedLibraries.length - ready.length;
     final footer = _Footer(
       configuration: true,
-      summary: !scanning && controller.channelSetupCanCancel
-          ? Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: controller.cancelChannelSetup,
-                child: Text('Cancel', style: actionStyle),
+      summary: Wrap(
+        spacing: 8,
+        children: [
+          if (hasLibraries)
+            TextButton(
+              key: const ValueKey('setup-switch-server'),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 48),
+                alignment: Alignment.centerLeft,
               ),
-            )
-          : const SizedBox.shrink(),
+              onPressed: controller.canSwitchServer
+                  ? controller.showServers
+                  : null,
+              child: Text('Switch server', style: actionStyle),
+            ),
+          if (!scanning && controller.channelSetupCanCancel)
+            TextButton(
+              onPressed: controller.cancelChannelSetup,
+              child: Text('Cancel', style: actionStyle),
+            ),
+        ],
+      ),
       leading: [
+        if (canContinue)
+          OutlinedButton(
+            key: const ValueKey('scan-again-libraries'),
+            onPressed: controller.busy
+                ? null
+                : () => _scan(advanceWhenReady: false),
+            child: const Text('Scan again'),
+          ),
         if (canRetry && canContinue)
           OutlinedButton(
             key: const ValueKey('retry-failed-libraries'),
@@ -420,7 +450,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             child: Text(retryLabel),
           ),
       ],
-      trailing: scanning
+      trailing: !hasLibraries
+          ? FilledButton(
+              key: const ValueKey('setup-switch-server'),
+              onPressed: controller.canSwitchServer
+                  ? controller.showServers
+                  : null,
+              child: const Text('Switch server'),
+            )
+          : scanning
           ? TextButton(
               onPressed: controller.cancelLibraryScan,
               child: Text('Cancel scan', style: actionStyle),
@@ -469,6 +507,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _header(),
+            if (scanning) ...[
+              const SizedBox(height: 10),
+              LibraryScanPhaseStatus(controller: controller, centered: false),
+            ],
             SizedBox(height: 32),
             if (controller.libraries.isEmpty)
               Padding(
@@ -487,7 +529,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               else
                 Flexible(fit: FlexFit.loose, child: list),
             ],
-            if (!scanning && (_libraryScanSettled || scanError != null))
+            if (!scanning &&
+                ((hasLibraries && _libraryScanSettled) || scanError != null))
               Padding(
                 padding: const EdgeInsets.only(top: 16),
                 child: Semantics(
@@ -796,6 +839,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   Future<void> _scan({
     bool retryFailedOnly = false,
     Set<String>? retryLibraryIds,
+    bool advanceWhenReady = true,
   }) async {
     setState(() {
       _error = null;
@@ -823,7 +867,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       final ready = widget.controller.libraryScanReadyIds.intersection(
         _selectedLibraries,
       );
-      if (ready.length == _selectedLibraries.length) {
+      if (advanceWhenReady && ready.length == _selectedLibraries.length) {
         await _commitLibraries(ready);
       } else {
         setState(() {});
@@ -3428,8 +3472,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   String _scanDetail(LibraryScanFact fact) => switch (fact.status) {
     LibraryScanStatus.idle => 'Waiting to scan',
-    LibraryScanStatus.scanning =>
-      'Scanning · ${fact.completedItems} items checked',
+    LibraryScanStatus.scanning => switch (fact.phase) {
+      PlexLibraryScanPhase.items =>
+        'Scanning · ${fact.completedItems} items checked',
+      PlexLibraryScanPhase.collections => 'Loading collections',
+      PlexLibraryScanPhase.showGenres => 'Loading show details',
+    },
     LibraryScanStatus.complete =>
       'Ready · ${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'} checked',
     LibraryScanStatus.empty => 'No media found',
@@ -3597,7 +3645,12 @@ class _Footer extends StatelessWidget {
                 children: [
                   if (summary != null) Expanded(child: summary!),
                   if (summary != null) SizedBox(width: 24),
-                  actionGroup,
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: actionGroup,
+                    ),
+                  ),
                 ],
               );
             },
