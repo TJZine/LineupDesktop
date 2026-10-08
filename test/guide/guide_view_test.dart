@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +15,11 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/native_video_surface.dart';
+
+import '../support/ui_fixture.dart' show FixturePlayer;
+
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
@@ -32,6 +38,325 @@ final _narrowLogoPng = base64Decode(
 );
 
 void main() {
+  test('full-bleed layout and row snapping use the whole viewport', () {
+    for (final size in const [
+      Size(1280, 720),
+      Size(1920, 1080),
+      Size(1920, 1200),
+      Size(2560, 1440),
+      Size(3440, 1440),
+    ]) {
+      final canvas = size / LineupCanvas.scaleFor(size);
+      final policy = GuideLayoutPolicy.forSize(canvas, hasPicture: true);
+      expect(policy.padding, 0);
+      expect(GuideLayoutPolicy.availableWidth(canvas), canvas.width);
+      final row = policy.rowHeight;
+      expect(
+        GuideLayoutPolicy.snapRowOffset(row * 2.4, row, row * 10),
+        closeTo(row * 2, .000001),
+      );
+      expect(
+        GuideLayoutPolicy.snapRowOffset(row * 2.6, row, row * 10),
+        closeTo(row * 3, .000001),
+      );
+      expect(GuideLayoutPolicy.snapRowOffset(-row, row, row * 10), 0);
+      expect(
+        GuideLayoutPolicy.snapRowOffset(row * 20, row, row * 10),
+        closeTo(row * 10, .000001),
+      );
+    }
+  });
+
+  testWidgets(
+    'Guide rows fill the bottom and snap wheel, scrollbar, focus and page movement',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      for (final (size, textScale) in [
+        (const Size(1280, 720), 1.0),
+        (const Size(1920, 1080), 1.0),
+        (const Size(1920, 1200), 1.0),
+        (const Size(2560, 1440), 1.0),
+        (const Size(3440, 1440), 1.0),
+        (const Size(1920, 1080), 1.5),
+      ]) {
+        tester.view.physicalSize = size;
+        final lineup = _Lineup(40);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (c) async => _schedule(c),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel)
+                .copyWith(platform: TargetPlatform.windows),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(textScale)),
+              child: LineupCanvas(child: child!),
+            ),
+            home: GuideView(
+              controller: guide,
+              pictureInPicture: const SizedBox.expand(),
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final finder = find.byKey(const Key('guide-schedule-list'));
+        final list = tester.widget<ListView>(finder);
+        final row = list.itemExtent!;
+        ScrollPosition position() => list.controller!.position;
+        void expectSnapped() => expect(
+          position().pixels / row,
+          closeTo((position().pixels / row).round(), .000001),
+          reason: '$size text=$textScale',
+        );
+        final bounds = _drawnRect(tester, finder);
+        expect(bounds.left, closeTo(0, .001));
+        expect(bounds.right, closeTo(size.width, .001));
+        expect(bounds.bottom, closeTo(size.height, .001));
+        expect(tester.getSize(finder).height / row, closeTo(5, .000001));
+        final controls = _drawnRect(
+          tester,
+          find.byKey(const Key('guide-control-content')),
+        );
+        final inset = 12 * LineupCanvas.scaleFor(size);
+        expect(controls.left, closeTo(inset, .001));
+        expect(controls.right, closeTo(size.width - inset, .001));
+        expect(
+          _drawnRect(tester, find.text('1')).left,
+          closeTo(controls.left, .001),
+        );
+        // Scrollbar updates use ScrollPosition.jumpTo, not ScrollController.jumpTo.
+        position().jumpTo(row * 2.4);
+        await tester.pumpAndSettle();
+        expect(position().pixels, closeTo(row * 2, .000001));
+        expectSnapped();
+        tester.binding.handlePointerEvent(
+          PointerScrollEvent(
+            position: bounds.center,
+            scrollDelta: const Offset(0, 25),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(position().pixels, closeTo(row * 3, .000001));
+        expectSnapped();
+        // Drag the actual desktop thumb from the first row.
+        position().jumpTo(0);
+        await tester.pumpAndSettle();
+        await tester.dragFrom(
+          Offset(bounds.right - 4, bounds.top + 12),
+          const Offset(0, 100),
+        );
+        await tester.pumpAndSettle();
+        expect(position().pixels, greaterThan(0));
+        expectSnapped();
+        for (var i = 0; i < 15; i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expectSnapped();
+        }
+        final beforePage = guide.focusedChannelIndex;
+        await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+        await tester.pumpAndSettle();
+        expect(guide.focusedChannelIndex, beforePage + 5);
+        expectSnapped();
+        await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+        await tester.pumpAndSettle();
+        expectSnapped();
+        position().jumpTo(position().maxScrollExtent);
+        await tester.pumpAndSettle();
+        expectSnapped();
+        expect(position().pixels, closeTo(position().maxScrollExtent, .000001));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        guide.dispose();
+        lineup.dispose();
+      }
+    },
+  );
+
+  testWidgets(
+    'hours trigger is plain text and search hint and input share the field center',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      for (final scale in [1.0, 1.5]) {
+        final lineup = _Lineup(10);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (c) async => _schedule(c),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(scale)),
+              child: LineupCanvas(child: child!),
+            ),
+            home: GuideView(
+              controller: guide,
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final hours = find.byKey(const Key('guide-hours'));
+        expect(
+          find.descendant(
+            of: hours,
+            matching: find.byType(LineupDropdownMenuRow),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: hours,
+            matching: find.text('${guide.guideHours} hours'),
+          ),
+          findsOneWidget,
+        );
+        final search = find.byKey(const Key('guide-channel-search'));
+        final center = _drawnRect(tester, search).center.dy;
+        final hint = find.descendant(
+          of: search,
+          matching: find.text('Search channels'),
+        );
+        final hintCenter = _drawnRect(tester, hint).center.dy;
+        expect(
+          hintCenter,
+          closeTo(center, 1),
+          reason: 'hint at text scale $scale',
+        );
+        await tester.enterText(search, 'Channel');
+        await tester.pumpAndSettle();
+        final editable = tester
+            .state<EditableTextState>(
+              find.descendant(of: search, matching: find.byType(EditableText)),
+            )
+            .renderEditable;
+        final caret = editable.getLocalRectForCaret(
+          const TextPosition(offset: 0),
+        );
+        final inputCenter = editable.localToGlobal(caret.center).dy;
+        expect(
+          inputCenter,
+          closeTo(center, 1),
+          reason: 'input at text scale $scale',
+        );
+        expect(inputCenter, closeTo(hintCenter, 1));
+        await tester.tap(hours);
+        await tester.pumpAndSettle();
+        expect(find.byType(LineupDropdownMenuRow), findsWidgets);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(const SizedBox.shrink());
+        guide.dispose();
+        lineup.dispose();
+      }
+    },
+  );
+
+  testWidgets(
+    'Guide PiP preserves pre-full-bleed dimensions and native alignment across the matrix',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      // Frozen drawn dimensions measured from the retained pre-B production
+      // Guide widget with the same canvas, theme and text scale. This protects
+      // the approved aperture size independently of the current layout policy.
+      for (final (size, textScale, expectedPicture, expectedInformationHeight)
+          in const [
+            (Size(1280.0, 720.0), 1.0, Size(296.967111, 167.044), 167.036),
+            (Size(1920.0, 1080.0), 1.0, Size(576.0, 324.0), 323.995),
+            (Size(1920.0, 1200.0), 1.0, Size(576.0, 324.0), 443.995),
+            (Size(2560.0, 1440.0), 1.0, Size(768.0, 432.0), 431.993333),
+            (Size(3440.0, 1440.0), 1.0, Size(768.0, 432.0), 431.993333),
+            (Size(3840.0, 2160.0), 1.0, Size(1152.0, 648.0), 647.99),
+            (Size(1920.0, 1080.0), 1.5, Size(576.0, 324.0), 323.995),
+          ]) {
+        for (final dpr in [1.0, 1.5]) {
+          tester.view
+            ..devicePixelRatio = dpr
+            ..physicalSize = size * dpr;
+          final lineup = _Lineup(20);
+          final guide = GuideController(
+            lineup: lineup,
+            loadSchedule: (c) async => _schedule(c),
+          );
+          final player = _GuideBoundsPlayer();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(LineupThemeName.emberSteel),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(textScale)),
+                child: LineupCanvas(child: child!),
+              ),
+              home: GuideView(
+                controller: guide,
+                pictureInPicture: NativeVideoSurface(player: player),
+                onClose: () {},
+                onTune: (_) async {},
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final aperture = _drawnRect(
+            tester,
+            find.byKey(const Key('guide-picture-in-picture')),
+          );
+          final clip = tester.widget<ClipRRect>(
+            find.descendant(
+              of: find.byKey(const Key('guide-picture-in-picture')),
+              matching: find.byType(ClipRRect),
+            ),
+          );
+          final radius = clip.borderRadius.resolve(TextDirection.ltr);
+          expect(radius.topLeft, Radius.zero);
+          expect(radius.bottomLeft, Radius.zero);
+          expect(radius.topRight, const Radius.circular(12));
+          expect(radius.bottomRight, const Radius.circular(12));
+          final rect = player.rects.last;
+          expect(
+            _drawnRect(
+              tester,
+              find.byKey(const Key('guide-information-area')),
+            ).height,
+            closeTo(expectedInformationHeight, .001),
+            reason: '$size text=$textScale information height',
+          );
+
+          expect(
+            aperture.width,
+            closeTo(expectedPicture.width, .001),
+            reason: '$size text=$textScale DPR=$dpr',
+          );
+          expect(
+            aperture.height,
+            closeTo(expectedPicture.height, .001),
+            reason: '$size text=$textScale DPR=$dpr',
+          );
+          expect(aperture.left, closeTo(0, .001));
+          expect(rect.left, closeTo(aperture.left, .001));
+          expect(rect.top, closeTo(aperture.top, .001));
+          expect(rect.width, closeTo(aperture.width, .001));
+          expect(rect.height, closeTo(aperture.height, .001));
+          expect(rect.scale, dpr);
+          await tester.pumpWidget(const SizedBox.shrink());
+          guide.dispose();
+          lineup.dispose();
+          await player.dispose();
+        }
+      }
+    },
+  );
+
   testWidgets(
     'short and long synopsis retain media facts in bounded small and enlarged Guide details',
     (tester) async {
@@ -618,7 +943,7 @@ void main() {
       hasPicture: true,
       textScale: 2,
     );
-    expect(comfortable.rowHeight, closeTo(110.4, 0.1));
+    expect(comfortable.rowHeight, closeTo(114.4, 0.1));
     expect(enlarged.rowHeight, greaterThanOrEqualTo(116));
     expect(comfortable.minimumRows, 5);
     expect(enlarged.minimumRows, 5);
@@ -1137,7 +1462,7 @@ void main() {
           size == const Size(2560, 1440) ||
           size == const Size(3840, 2160);
       expect(
-        (scheduleHeight / list.itemExtent!).floor(),
+        ((scheduleHeight + 0.000001) / list.itemExtent!).floor(),
         greaterThanOrEqualTo(standardFiveRowSize ? 5 : 3),
         reason: '$size',
       );
@@ -1185,7 +1510,8 @@ void main() {
     );
     expect(
       (_drawnSize(tester, find.byKey(const Key('guide-schedule-list'))).height /
-              (classicList.itemExtent! * .8))
+                  (classicList.itemExtent! * .8) +
+              0.000001)
           .floor(),
       greaterThanOrEqualTo(5),
       reason:
@@ -2413,7 +2739,7 @@ class _Lineup extends LineupController {
   int artworkLoads = 0;
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async {
+  Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     artworkLoads++;
     return artworkLoader == null ? artworkBytes : await artworkLoader!(path);
   }
@@ -2452,3 +2778,9 @@ Rect _drawnRect(WidgetTester tester, Finder finder) {
 
 Size _drawnSize(WidgetTester tester, Finder finder) =>
     _drawnRect(tester, finder).size;
+
+class _GuideBoundsPlayer extends FixturePlayer {
+  final rects = <PlayerVideoRect>[];
+  @override
+  Future<void> setVideoRect(PlayerVideoRect rect) async => rects.add(rect);
+}
