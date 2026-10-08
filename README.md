@@ -34,11 +34,11 @@ the Windows media boundary deliberately narrow.
 - A guided Channel Builder with library, playlist, collection, genre, decade,
   studio, actor, and director strategies
 - Custom channels built from an entire library or hand-picked media
-- Classic picture-in-picture and full-video Overlay Guide layouts
+- Classic picture-in-picture Guide layout with a responsive schedule surface
 - Native Windows playback with an OSD, mini Guide, channel entry, seeking,
   track selection, sleep timer, and fullscreen controls
-- Five themes, compact and comfortable Guide densities, reduced motion, and
-  larger focus indicators
+- Four themes, reduced motion, larger focus indicators, and optional DVR
+  playback controls
 - Bounded, credential-safe diagnostics intended for support and testing
 
 ## Platform status
@@ -105,7 +105,7 @@ unpinned components; follow the exact Windows procedure in
 | [Windows Native Acceptance](docs/windows-native-validation.md) | Physical-machine test campaign and Codex handoff |
 | [Windows Runtime Provenance](docs/windows-runtime.md) | libmpv/FFmpeg/libplacebo provenance and redistribution obligations |
 | [Portable UI Parity](docs/ui-parity.md) | Detailed source, test, and visual-parity evidence record |
-| [Guide PiP Specification](docs/guide-pip-composition-spec.md) | Approved Guide/PiP composition and physical-acceptance requirements |
+| [Desktop UI target specification](docs/desktop-ui-design-spec.md) | Approved Guide/PiP composition target; implementation and physical acceptance remain separate evidence |
 | [Security Policy](SECURITY.md) | Private vulnerability reporting and secret-handling rules |
 
 ## Security and privacy

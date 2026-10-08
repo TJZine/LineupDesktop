@@ -102,7 +102,7 @@ is emergency cleanup, not the normal path. See
   native initialization, while catalog initialization is still pending. The
   shell stays mounted when Switch server retires that restore; a native startup
   failure takes precedence immediately, even while the catalog is unresolved.
-- A persisted five-theme Flutter system using `ThemeData` plus one semantic
+- A persisted four-theme Flutter system using `ThemeData` plus one semantic
   `ThemeExtension`. Ember & Steel is the default; onboarding, management,
   Guide, player, overlays, dialogs, progress and focus consume shared roles
   without theme-specific native code or feature-widget theme branches.
@@ -132,7 +132,8 @@ is emergency cleanup, not the normal path. See
   remaining time, future programs show duration, and past programs show only
   their time range. Shared metadata lines use middle-dot separators.
 - One Flutter player coordinator and overlay model for contract-valid playback
-  projection, the status-sensitive OSD, persistent-on-request rich Now Playing,
+  projection, the status-sensitive OSD, and the expanded bottom-OSD Now Playing
+  surface with persistent-on-request rich details,
   bounded five-row mini Guide, full Guide, channel entry, available
   audio/subtitle tracks, recoverable/terminal errors, sleep timer, fullscreen
   intent, cursor timeout, cancellable epoch-safe auto-hide, and input/focus
@@ -154,8 +155,10 @@ is emergency cleanup, not the normal path. See
   intent is retired. Windows stop completion uses a separate request identity
   and confirms libmpv is idle with an empty playlist; failed or timed-out stops
   remain retryable and replacement playback waits for cleanup.
-  Keyboard focus in the active timed OSD suspends dismissal; the Mini Guide and
-  track panels remain open until explicitly dismissed or an action closes them.
+  Keyboard focus in the active timed OSD suspends dismissal; the Mini Guide has
+  no inactivity timeout and remains open until explicitly dismissed or an action
+  closes it, while track panels remain open until explicitly dismissed or an
+  action closes them.
   Presentation generations reject stale focus callbacks. Player transitions
   use Flutter's effective Reduce Motion setting, and track rails initially
   focus the selected track. Product state does not move into the native player.
@@ -269,9 +272,10 @@ is emergency cleanup, not the normal path. See
   enable and validate the data-protection Keychain. Tokens remain outside
   ordinary application state and durable JSON; selected-server persistence
   stores only profile-scoped server identity.
-- Persisted Guide preferences own the two-, three- or four-hour span, information
-  background, the Now Playing context banner, and player-control auto-hide
-  duration. The full Guide is PiP-only with permanent search/library controls;
+- Persisted Guide preferences own the two-, three- or four-hour span, channel
+  source labels, information background, the Now Playing context banner, and
+  player-control auto-hide duration. The full Guide is PiP-only with permanent
+  search/library controls;
   retired layout, density, past-window and library-visibility keys are validated
   on legacy reads and omitted from canonical writes. Existing Guide and player
   coordinators consume updates directly; there is no second settings or overlay
@@ -357,15 +361,21 @@ generic migration framework without a current need.
 
 Before the first refinement-schema rewrite, the store retains the original bytes
 in a sibling backup. Backup or migration IO failures propagate without classifying
-valid legacy state as corrupt. Schedule migration embeds the resolved legacy cycle
-and a UTC boundary before publishing the revised algorithm; pre-boundary lookup
-uses that frozen cycle, and explicit programming edits retire the transition.
+valid legacy state as corrupt. Shuffled schedule input is canonicalized by media
+identity and duration, so a reordered PMS response does not change the seeded
+schedule. Schedule migration embeds the resolved legacy cycle and a UTC boundary
+before publishing the revised algorithm; pre-boundary lookup uses that frozen
+cycle, and explicit programming edits retire the transition. Sequential and
+block schedules continue using their existing ordering policies; the
+canonicalization change applies to shuffled input.
 The private backup and embedded media snapshot never belong in diagnostic reports.
 
 ## Integration and acceptance status
 
-The owner reports that native Player, Classic PiP/Overlay presentation, and
-fullscreen work at a surface level on Windows. Exact-commit remote Plex,
+The owner reports that native Player, current Classic PiP presentation, and
+fullscreen work at a surface level on Windows; older smoke notes also mentioned
+the retired full-screen Overlay path, which is not a current Guide option.
+Exact-commit remote Plex,
 representative HDR, broad codec/container/audio/subtitle, transition, and
 packaged-runtime acceptance remain deeper evidence work. This evidence boundary
 limits support claims, not playback attempts: the Windows libmpv backend accepts

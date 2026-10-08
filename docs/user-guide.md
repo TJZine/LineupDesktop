@@ -69,8 +69,9 @@ reuse another profile's server or lineup.
 Choose a discovered server. Lineup prioritizes usable direct connections before
 relay connections. Each row distinguishes an owned server from a shared one. **Current** marks
 the connected server, while **Previously used** identifies a saved selection. Only the selected server shows its measured path and
-latency; 100–499 ms is labeled **Slow**, 500 ms or more is **Very slow**, and a
-relay is labeled **Limited** rather than failed.
+latency; 500 ms or more is labeled **Very slow**, and a relay is labeled
+**Limited** rather than failed. Lower measured latencies show their route and
+value without a Slow warning.
 
 Plex supplies each discovered server with its own PMS credential, separate from
 the Plex.tv account or Home-profile credential. Lineup keeps that server
@@ -82,7 +83,8 @@ When no server appears:
 - confirm Plex Media Server is running and reachable;
 - select **Retry discovery**;
 - switch profiles when the expected server belongs to another profile; or
-- clear the saved server when a previous selection is no longer valid.
+- select another server. The picker also offers **Sign out** when you need to
+  link Plex again; signing out uses a confirmation and stops playback.
 
 ### 4. Build the initial lineup
 
@@ -99,6 +101,10 @@ Scans report pages, items, and ready, empty, unsupported, cancelled, or failed
 outcomes. Continuing commits the selected ready libraries; cancelled or failed
 scans preserve the previous committed selection. Successful libraries remain
 available when retrying failures in the same profile/server scope.
+
+If the selected server has no usable movie or show libraries, setup offers
+**Switch server** and a quiet **Sign out** action. Sign out uses the same
+confirmation as the server picker, stops playback, and returns to Plex linking.
 
 Allocation takes one eligible original from each enabled source in order,
 repeats, and skips exhausted sources. Additional versions are off by default
@@ -126,10 +132,11 @@ Success offers **View lineup** and **Add a custom channel**.
 | Diagnostics | Review bounded, redacted support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
 
-**Windows playback acceptance:** the owner reports that native Player, Classic
-PiP/Overlay, and fullscreen work at a surface level. The complete exact-commit
-physical matrix is still pending, so broad format/HDR/device/package wording
-remains provisional rather than unsupported-by-design.
+**Windows playback acceptance:** the current Guide presentation is Classic PiP
+only. Earlier owner smoke notes also mentioned a full-screen Overlay surface,
+but that path is retired and is not a current user-facing option. The complete
+exact-commit physical matrix is still pending, so broad format/HDR/device/
+package wording remains provisional rather than unsupported-by-design.
 
 Guide, Player, Settings, and Diagnostics use immersive surfaces. Activate the
 visible **Open Lineup menu** control on one of those surfaces to open the
@@ -160,10 +167,16 @@ available. The Guide and Player share one playback session.
 The Guide toolbar always shows a library picker and channel search. The picker
 offers **All libraries** or one library, and search accepts a channel name or
 number within that scope. **Jump to now** returns the time window and focus to
-the current schedule.
+the current schedule. While the Guide follows live, its window and focus track
+the presentation clock. Moving to an earlier or later window stops that live
+following and preserves the browsed window and explicitly inspected program
+until you choose **Now** again. When the current time is off screen, the
+button shows `← Now` for a future window or `Now →` for a past window; its
+tooltip and accessible label are **Return to live**. When the current time is
+visible, it is simply **Now**.
 
 The Guide uses a detailed two-hour window by default, with three- and
-four-hour options. Its standard layout targets five comfortable channel rows;
+four-hour options. Its standard layout targets five channel rows;
 the rows reflow when the window or text scale requires more room. There is no
 configurable past window or row-density preference.
 
@@ -300,7 +313,7 @@ report to Flutter.
 | Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
 | Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
-| Player | Enter a channel number | Number keys; confirm with `Enter` while the entry overlay is open |
+| Player | Enter a channel number | Number keys; confirm with `Enter`, numpad `Enter`, or Select while the entry overlay is open |
 | Player | Audio / subtitle tracks | `A` / `C` |
 | Player | Sleep timer | `S` |
 | Player | Toggle fullscreen | `F` or `F11` |
@@ -355,7 +368,12 @@ grouping. **Air Check** uses the same content resolver and deterministic
 scheduler as Guide and Player to show what is on now, what follows, cycle and
 timing facts, why content was included, and actionable unavailable or invalid
 states. A new channel saves the same schedule anchor and shuffle identity that
-Air Check previewed.
+Air Check previewed. Shuffled schedules canonicalize each media occurrence by
+its media identity and duration before applying the seed, so a PMS response
+that merely changes input order does not reshuffle the schedule. An existing
+shuffled schedule can make one accepted transition at a schedule-version
+boundary while retaining its pre-boundary cycle; **In order** and
+**Mini-marathons** keep their existing ordering policies.
 
 Saving and tuning are separate. Save is enabled only for a dirty, valid draft.
 A successful save leaves Studio in a clean saved state and makes **Tune in**
@@ -368,22 +386,22 @@ with my draft…**. Both paths require an explicit confirmation, and a second
 intervening change is rejected again. Leaving a dirty draft asks whether to
 discard changes or keep editing.
 
-Deletion requires confirmation and cannot be undone. Deleting a generated
-channel also warns that a later Generate lineup refresh may propose it again.
+Deletion requires confirmation and cannot be undone.
 
 ## Settings
 
 | Category | Current controls |
 | --- | --- |
-| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
-| Guide | Visible hours of 2, 3, or 4; and whether to show the now-playing channel and program in Guide |
+| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Mint Noir, and Satellite Blue; three Player overlay-transparency choices; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
+| Guide | Visible hours of 2, 3, or 4; whether to show channel sources; and whether to show the now-playing channel and program in Guide |
 | Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; and optional DVR playback controls |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, show the profile picker on startup, switch the Plex Media Server, and sign out of Plex |
 | Support | Enable or disable bounded redacted diagnostic recording and open Diagnostics |
 
-Settings save immediately. When persistence fails, the previous value remains
-active and the screen shows an error.
+Settings save immediately. The edited control is temporarily disabled while its
+save is pending. When persistence fails, the previous value remains active and
+the screen shows an error.
 
 ## Diagnostics and safe support reports
 
@@ -413,7 +431,7 @@ vulnerabilities only through the private process in
 | Symptom | Action |
 | --- | --- |
 | Plex link code expired | Select **Request a new code** and complete linking before the new timer expires. |
-| No Plex servers found | Confirm the server is online and reachable, retry discovery, switch profile, or clear a stale saved server. |
+| No Plex servers found | Confirm the server is online and reachable, retry discovery, switch profile, choose another server, or use the server picker's confirmed **Sign out** action to link Plex again. |
 | The app reports playback unsupported on macOS | This is expected. macOS currently supports portable UI development, not native playback. |
 | Windows reports that `vulkan-1.dll` is missing | Install or update the GPU vendor's current driver or an appropriate Vulkan Runtime. Do not copy a driver DLL from another machine into the package. |
 | Audio plays but video is black or hidden | Record the exact window size, display scaling, fullscreen state, Guide layout, whether audio continues, and whether the problem follows a resize/minimize/restore transition. Treat this as a native-composition failure and report it with the current commit. |
