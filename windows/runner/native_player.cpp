@@ -6,8 +6,10 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <exception>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -40,6 +42,7 @@ enum PropertyId : uint64_t {
   kCurrentVideoOutput,
   kHardwareDecoder,
   kVideoParameters,
+  kDiscoveryTargetParameters,
 };
 
 const flutter::EncodableMap* AsMap(const flutter::EncodableValue* value) {
@@ -169,6 +172,87 @@ const mpv_node* FindNode(const mpv_node& map, const char* key) {
     }
   }
   return nullptr;
+}
+
+// Development-only, read-only diagnostics. Never print arbitrary mpv strings.
+bool HdrDiscoveryTraceEnabled() {
+  wchar_t value[2] = {};
+  return ::GetEnvironmentVariableW(L"LINEUP_HDR_DISCOVERY_TRACE", value, 2) ==
+             1 &&
+         value[0] == L'1';
+}
+
+std::string DiscoveryEnum(
+    const char* value, std::initializer_list<std::string_view> allowed) {
+  if (!value) {
+    return "unavailable";
+  }
+  const std::string bounded = BoundedUtf8(value, 64);
+  for (const auto candidate : allowed) {
+    if (bounded == candidate) {
+      return std::string(candidate);
+    }
+  }
+  return "unrecognized";
+}
+
+void WriteHdrDiscoveryTrace(const std::string& facts) {
+  SYSTEMTIME utc = {};
+  ::GetSystemTime(&utc);
+  char timestamp[32] = {};
+  std::snprintf(timestamp, sizeof(timestamp),
+                "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", utc.wYear,
+                utc.wMonth, utc.wDay, utc.wHour, utc.wMinute, utc.wSecond,
+                utc.wMilliseconds);
+  std::cerr << "[lineup-hdr] time=" << timestamp << ' ' << facts << std::endl;
+}
+
+void TraceHdrDiscoveryOptions(mpv_handle* player) {
+  constexpr const char* options[] = {
+      "target-colorspace-hint", "target-colorspace-hint-mode",
+      "target-colorspace-hint-strict", "d3d11-output-format",
+      "d3d11-output-csp", "d3d11-output-mode"};
+  for (const auto* name : options) {
+    char* value = nullptr;
+    const int status = mpv_get_property(player, name, MPV_FORMAT_STRING, &value);
+    const std::string normalized =
+        status < 0 ? "unavailable"
+                   : DiscoveryEnum(value, {"auto", "yes", "no", "target",
+                                           "source", "window", "composition",
+                                           "rgba8", "rgb10_a2", "rgba16f",
+                                           "rgb10a2", "srgb", "linear",
+                                           "pq", "bt.2020", "bt.709"});
+    mpv_free(value);
+    WriteHdrDiscoveryTrace(std::string("option=") + name + " value=" +
+                           normalized + " status=" + std::to_string(status));
+  }
+}
+
+std::string HdrDiscoveryParameters(const mpv_event_property& property) {
+  const mpv_node* map = property.format == MPV_FORMAT_NODE && property.data
+                           ? static_cast<const mpv_node*>(property.data)
+                           : nullptr;
+  const auto field = [map](const char* key,
+                           std::initializer_list<std::string_view> allowed) {
+    const mpv_node* node = map ? FindNode(*map, key) : nullptr;
+    return DiscoveryEnum(node && node->format == MPV_FORMAT_STRING
+                             ? node->u.string
+                             : nullptr,
+                         allowed);
+  };
+  return "transfer=" +
+         field("gamma", {"auto", "bt.1886", "bt.709", "srgb", "linear",
+                         "gamma1.8", "gamma2.0", "gamma2.2", "gamma2.4",
+                         "gamma2.6", "gamma2.8", "pq", "hlg",
+                         "smpte-st-2084"}) +
+         " primaries=" +
+         field("primaries", {"auto", "bt.709", "bt.2020", "bt.601-525",
+                             "bt.601-625", "dci-p3", "display-p3"}) +
+         " format=" +
+         field("pixelformat", {"rgb10a2", "rgba16hf", "rgba16f", "rgba8",
+                               "bgra8", "bgrx8", "yuv420p", "yuv420p10",
+                               "yuv420p10le", "nv12", "p010", "d3d11",
+                               "d3d11va", "cuda"});
 }
 
 flutter::EncodableValue EncodeWhitelistedNode(const mpv_node* node,
@@ -629,6 +713,13 @@ bool WindowsNativePlayer::Initialize(std::string& error,
   }
   std::cerr << "[lineup-player] libmpv initialized client-api="
             << mpv_client_api_version() << std::endl;
+  if (HdrDiscoveryTraceEnabled()) {
+    TraceHdrDiscoveryOptions(mpv_);
+    const int status = mpv_observe_property(
+        mpv_, kDiscoveryTargetParameters, "video-target-params", MPV_FORMAT_NODE);
+    WriteHdrDiscoveryTrace("observe=video-target-params status=" +
+                           std::to_string(status));
+  }
   mpv_request_log_messages(mpv_, "error");
 
   struct Observation {
@@ -1014,6 +1105,9 @@ void WindowsNativePlayer::StopEventThread() {
 }
 
 void WindowsNativePlayer::EventLoop(uint64_t generation) {
+  const bool discovery_trace = HdrDiscoveryTraceEnabled();
+  std::string last_source_parameters;
+  std::string last_target_parameters;
   while (!stopping_) {
     if (!wakeup_posted_) {
       bool has_events = false;
@@ -1053,6 +1147,21 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
       break;
     }
     if (event && event->event_id != MPV_EVENT_NONE) {
+      if (discovery_trace && event->event_id == MPV_EVENT_PROPERTY_CHANGE &&
+          (event->reply_userdata == kVideoParameters ||
+           event->reply_userdata == kDiscoveryTargetParameters) && event->data) {
+        const auto& property =
+            *static_cast<const mpv_event_property*>(event->data);
+        const bool target = event->reply_userdata == kDiscoveryTargetParameters;
+        const std::string facts = HdrDiscoveryParameters(property);
+        auto& previous = target ? last_target_parameters : last_source_parameters;
+        if (facts != previous) {
+          WriteHdrDiscoveryTrace(
+              std::string("property=") +
+              (target ? "video-target-params " : "video-params ") + facts);
+          previous = facts;
+        }
+      }
       HandleMpvEvent(*event, generation);
     }
   }
@@ -1215,6 +1324,10 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
                                    "The libmpv event queue overflowed"));
       break;
     case MPV_EVENT_PROPERTY_CHANGE: {
+      // Optional discovery observations never enter the Flutter event channel.
+      if (event.reply_userdata == kDiscoveryTargetParameters) {
+        break;
+      }
       const auto* property = static_cast<mpv_event_property*>(event.data);
       if (!property || !property->name) {
         break;
