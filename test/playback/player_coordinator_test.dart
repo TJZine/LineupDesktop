@@ -66,8 +66,9 @@ void main() {
           addTearDown(fixture.close);
           await fixture.coordinator.tune('channel-b');
           await fixture.coordinator.toggleFullscreen();
-          if (change == 'close')
+          if (change == 'close') {
             _showPresentation(fixture.coordinator, overlay);
+          }
           fixture.endNaturally();
           await player.secondLoadStarted.future;
           if (change == 'open') {
@@ -507,8 +508,9 @@ void main() {
         addTearDown(fixture.close);
         await fixture.coordinator.tune('channel-b');
         fixture.guide.resolution = resolution;
-        if (resolution == 'missing successor')
+        if (resolution == 'missing successor') {
           fixture.now = fixture.now.add(const Duration(seconds: 160));
+        }
         fixture.endNaturally();
         await pumpEventQueue(times: 8);
         expect(fixture.coordinator.error, isNull);
