@@ -255,7 +255,13 @@ void main() {
     );
   }
 
-  for (final state in ['recreated', 'gone', 'still-listed']) {
+  for (final state in [
+    'recreated',
+    'gone',
+    'still-listed',
+    'replacement-limit',
+    'relisting-limit',
+  ]) {
     test('children 404 $state re-lists once', () async {
       var listings = 0;
       final paths = <String>[];
@@ -263,6 +269,15 @@ void main() {
         paths.add(request.url.path);
         if (request.url.path.contains('/sections/')) {
           listings++;
+          if (listings > 1 && state == 'relisting-limit') {
+            return _page([_collection('new', 'Title')], total: 100001);
+          }
+          if (listings > 1 && state == 'replacement-limit') {
+            return _page([
+              _collection('new', 'Title'),
+              _collection('new-2', 'Title'),
+            ], total: 2);
+          }
           return _page(
             listings == 1
                 ? [_collection('old', 'Title')]
@@ -272,12 +287,31 @@ void main() {
             total: state == 'gone' && listings > 1 ? 0 : 1,
           );
         }
+        if (state == 'replacement-limit') {
+          if (request.url.path.contains('/old/')) {
+            return request.url.queryParameters['X-Plex-Container-Start'] == '0'
+                ? _page([_member('prefix')], total: 2)
+                : http.Response('', 404);
+          }
+          return _page(
+            List.generate(50000, (i) => _member('$i')),
+            total: 50000,
+          );
+        }
         return request.url.path.contains('/new/')
             ? _page([_member('movie')], total: 1)
             : http.Response('', 404);
       });
       final result = await _membership(client);
       expect(listings, 2);
+      expect(result.failure, switch (state) {
+        'replacement-limit' => PlexCollectionFailure.memberLimitExceeded,
+        'relisting-limit' => PlexCollectionFailure.listingLimitExceeded,
+        _ => null,
+      });
+      if (state == 'replacement-limit') {
+        expect(paths.where((path) => path.contains('/children')).length, 4);
+      }
       expect(
         result.failedTitles,
         state == 'still-listed' ? {'Title'} : isEmpty,
@@ -353,15 +387,21 @@ void main() {
         ),
       );
       expect(result.unavailable, isTrue);
+      expect(
+        result.failure,
+        badPage['totalSize'] == 100001
+            ? PlexCollectionFailure.listingLimitExceeded
+            : PlexCollectionFailure.transient,
+      );
       expect(result.titlesByMember, isEmpty);
     });
   }
-  test('listing transport failure is unavailable', () async {
-    expect(
-      (await _membership(_client((_) async => http.Response('', 500))))
-          .unavailable,
-      isTrue,
+  test('listing transport failure is transient', () async {
+    final result = await _membership(
+      _client((_) async => http.Response('', 500)),
     );
+    expect(result.unavailable, isTrue);
+    expect(result.failure, PlexCollectionFailure.transient);
   });
 
   for (final status in [401, 403]) {
@@ -470,7 +510,9 @@ void main() {
                 _member('1'),
               ], total: PlexClient.maximumLibraryCollectionMembers + 1),
       );
-      expect((await _membership(client)).unavailable, isTrue);
+      final result = await _membership(client);
+      expect(result.failure, PlexCollectionFailure.memberLimitExceeded);
+      expect(result.titlesByMember, isEmpty);
     },
   );
 
@@ -544,7 +586,9 @@ void main() {
     );
     final result = await _membership(client);
     expect(result.unavailable, isTrue);
+    expect(result.failure, PlexCollectionFailure.memberLimitExceeded);
     expect(result.titlesByMember, isEmpty);
+    expect(result.failedTitles, isEmpty);
   });
 
   for (final invalid in ['changed-total', 'duplicate-page', 'oversized']) {
@@ -583,7 +627,10 @@ void main() {
       );
       return _page([_collection('$start', 'Title')], offset: start);
     });
-    expect((await _membership(client)).unavailable, isTrue);
+    expect(
+      (await _membership(client)).failure,
+      PlexCollectionFailure.pagingLimitExceeded,
+    );
     expect(requests, 1000);
   });
 

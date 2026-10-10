@@ -484,11 +484,18 @@ Add the following methods.
 Collection children use four sliding workers per library and a shared cap of
 eight active collection streams per `PlexClient`, across up to four simultaneous
 library scans. Pages request 100 records and each metadata stream stops at 1,000
-pages. A library is limited to 100,000 collection listing records and 100,000
-aggregate member entries, counting repeated membership across collections and
-404 recovery fetches. Oversized child pages are accepted only when they complete
-the reported total. A scale failure marks membership unavailable and publishes
-no partial index. These bounds have synthetic test coverage.
+pages. Each collection listing is limited to 100,000 records; a library scan is
+limited to 100,000 aggregate member entries, counting repeated membership across
+collections and 404 recovery fetches. Oversized child pages are accepted only when
+they complete the reported total. A scale failure marks membership unavailable
+and publishes no partial index. These bounds have synthetic test coverage.
+
+The October 10 follow-up retains these limits. Recovery distinguishes collection
+listing exhaustion, aggregate member exhaustion, and page-budget exhaustion from
+transient discovery failure. Affected saved channels remain preserved; an
+over-limit inventory must be reduced in Plex before rescanning can recover it.
+A larger work budget is not approved by this correction. Neither synthetic
+coverage nor this recovery change establishes the live measurement budget below.
 
 **Approved budget (October 7, 2026); no live measurement performed:** added
 median scan time must be at most `max(20 seconds, 50% of the item-only median)`,

@@ -191,69 +191,120 @@ void main() {
       },
     );
   }
-  for (final unavailable in [false, true]) {
-    testWidgets(
-      'Collections ${unavailable ? 'unavailable' : 'partial'} supports retry',
-      (tester) async {
-        final controller = _SetupController(
-          collectionUnavailable: unavailable ? {'movies'} : {},
-          media: unavailable ? _media : _partialMedia,
-          collectionFailures: unavailable
-              ? {}
-              : {
-                  'movies': {'Failed collection'},
-                },
-        );
-        addTearDown(controller.dispose);
-        await _pump(tester, controller);
-        await _advanceToConfigure(tester);
-        await tester.ensureVisible(find.text('Collections'));
-        expect(
-          find.text(
-            unavailable
-                ? 'Collections unavailable in 1 library · Retry'
-                : '1 collection unavailable · Retry',
-          ),
-          findsOneWidget,
-        );
-        final tile = find.widgetWithText(CheckboxListTile, 'Collections');
-        expect(
-          find.descendant(
-            of: tile,
-            matching: find.text(unavailable ? '0 channels' : '1 channel'),
-          ),
-          findsOneWidget,
-        );
-        final retry = find.byKey(const ValueKey('retry-discovery-collections'));
-        expect(
+  for (final failure in [null, ...PlexCollectionFailure.values]) {
+    final unavailable = failure != null;
+    final scale = failure?.isScaleLimit == true;
+    testWidgets('Collections $failure supports recovery', (tester) async {
+      final controller = _SetupController(
+        collectionDiscovery: failure == null ? {} : {'movies': failure},
+        media: unavailable ? _media : _partialMedia,
+        collectionFailures: unavailable
+            ? {}
+            : {
+                'movies': {'Failed collection'},
+              },
+      );
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await _advanceToConfigure(tester);
+      await tester.ensureVisible(find.text('Collections'));
+      expect(
+        find.text(
+          scale
+              ? 'Collection limit exceeded in 1 library · Rescan'
+              : unavailable
+              ? 'Collections unavailable in 1 library · Retry'
+              : '1 collection unavailable · Retry',
+        ),
+        findsOneWidget,
+      );
+      final tile = find.widgetWithText(CheckboxListTile, 'Collections');
+      expect(
+        find.descendant(
+          of: tile,
+          matching: find.text(unavailable ? '0 channels' : '1 channel'),
+        ),
+        findsOneWidget,
+      );
+      final retry = find.byKey(const ValueKey('retry-discovery-collections'));
+      expect(
+        tester
+            .getTopLeft(
+              find.descendant(of: retry, matching: find.byIcon(Icons.refresh)),
+            )
+            .dx,
+        closeTo(
           tester
               .getTopLeft(
-                find.descendant(
-                  of: retry,
-                  matching: find.byIcon(Icons.refresh),
+                find.text(
+                  'Create channels from collections in each selected library.',
                 ),
               )
               .dx,
-          closeTo(
-            tester
-                .getTopLeft(
-                  find.text(
-                    'Create channels from collections in each selected library.',
-                  ),
-                )
-                .dx,
-            0.01,
-          ),
+          0.01,
+        ),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('retry-discovery-collections')),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.rowRetryIds, {'movies'});
+      expect(controller.collectionDiscoveryFailures, isEmpty);
+      expect(
+        find.textContaining(
+          'Reduce the collection inventory in Plex before rescanning',
+        ),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('retry-discovery-collections')),
+        findsNothing,
+      );
+    });
+  }
+  for (final failure in [
+    PlexCollectionFailure.listingLimitExceeded,
+    PlexCollectionFailure.memberLimitExceeded,
+  ]) {
+    testWidgets(
+      'Choose libraries explains $failure and preserves saved channels',
+      (tester) async {
+        final controller = _SetupController(
+          collectionDiscovery: {'movies': failure},
+          channels: [_missingChannel],
         );
-        await tester.tap(
-          find.byKey(const ValueKey('retry-discovery-collections')),
-        );
+        addTearDown(controller.dispose);
+        await _pump(tester, controller);
+        await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
         await tester.pumpAndSettle();
-        expect(controller.rowRetryIds, {'movies'});
+        expect(find.text('Review your libraries'), findsOneWidget);
         expect(
-          find.byKey(const ValueKey('retry-discovery-collections')),
+          find.textContaining(
+            'Reduce the collection inventory in Plex before rescanning',
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('100000'), findsOneWidget);
+        expect(find.text('Rescan after Plex changes'), findsWidgets);
+        expect(controller.channels.single.id, _missingChannel.id);
+        expect(
+          controller.isGeneratedSourceConfirmedGone(_missingChannel),
+          isFalse,
+        );
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('retry-library-movies')),
+        );
+        await tester.tap(find.byKey(const ValueKey('retry-library-movies')));
+        await tester.pumpAndSettle();
+        expect(controller.collectionDiscoveryFailures, isEmpty);
+        expect(
+          find.textContaining(
+            'Reduce the collection inventory in Plex before rescanning',
+          ),
           findsNothing,
         );
+        expect(find.text('Shape your lineup'), findsOneWidget);
+        expect(controller.channels.single.id, _missingChannel.id);
       },
     );
   }
@@ -1726,7 +1777,7 @@ class _SetupController extends FixtureController {
     this.failApply = false,
     this.playlistUnavailable = false,
     this.playlistFailures = const {},
-    this.collectionUnavailable = const {},
+    this.collectionDiscovery = const {},
     this.collectionFailures = const {},
     List<Channel> channels = const [],
     List<PlexMediaItem>? media,
@@ -1743,14 +1794,15 @@ class _SetupController extends FixtureController {
 
   bool playlistUnavailable;
   Set<String> playlistFailures;
-  Set<String> collectionUnavailable;
+  Map<String, PlexCollectionFailure> collectionDiscovery;
   Map<String, Set<String>> collectionFailures;
   @override
   bool get playlistCatalogUnavailable => playlistUnavailable;
   @override
   Set<String> get failedPlaylistIds => playlistFailures;
   @override
-  Set<String> get unavailableCollectionLibraryIds => collectionUnavailable;
+  Map<String, PlexCollectionFailure> get collectionDiscoveryFailures =>
+      collectionDiscovery;
   @override
   Map<String, Set<String>> get failedCollectionTitles => collectionFailures;
   final bool mixedScan;
@@ -1773,7 +1825,7 @@ class _SetupController extends FixtureController {
   Future<bool> retryLibraryScan(Set<String> ids, Set<String> retryIds) {
     playlistUnavailable = false;
     playlistFailures = {};
-    collectionUnavailable = {};
+    collectionDiscovery = {};
     collectionFailures = {};
     rowRetryInventory = Set.of(ids);
     rowRetryIds = Set.of(retryIds);
@@ -1787,7 +1839,7 @@ class _SetupController extends FixtureController {
   @override
   Set<String> get libraryScanRetryIds => {
     ...retry,
-    ...collectionUnavailable.where(facts.containsKey),
+    ...collectionDiscovery.keys.where(facts.containsKey),
     ...collectionFailures.keys.where(facts.containsKey),
   };
 
@@ -1798,7 +1850,7 @@ class _SetupController extends FixtureController {
   }) async {
     if (retryFailedOnly) {
       footerRetries++;
-      collectionUnavailable = {};
+      collectionDiscovery = {};
       collectionFailures = {};
       playlistUnavailable = false;
       playlistFailures = {};

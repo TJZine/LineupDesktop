@@ -452,7 +452,12 @@ void main() {
             if (!cancelled.isCompleted) cancelled.complete();
           });
           await finish.future;
-          return PlexLibraryScan(items: [_scanMovie(id)]);
+          return PlexLibraryScan(
+            items: [_scanMovie(id)],
+            collections: const PlexCollectionMembership(
+              failure: PlexCollectionFailure.memberLimitExceeded,
+            ),
+          );
         };
         final running = origin == 'restore'
             ? controller.initialize()
@@ -468,6 +473,8 @@ void main() {
         await running;
         expect(controller.stage, SetupStage.servers);
         expect(fixture.store.state, same(saved));
+        expect(controller.collectionDiscoveryFailures, isEmpty);
+        expect(controller.collectionScaleRecovery({'movies', 'tv'}), isNull);
         fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, _) async =>
             PlexLibraryScan(items: [_scanMovie(id)]);
         controller.cancelServerSelection();
@@ -594,6 +601,8 @@ void main() {
     'unused-title',
     'unavailable',
     'mixed-used',
+    'listing-limit',
+    'member-limit',
   ]) {
     test('restored collection channel handles $failure membership', () async {
       final selected = _server('server');
@@ -644,7 +653,12 @@ void main() {
         ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie])
         ..collectionMembership = PlexCollectionMembership(
           failedTitles: failure == 'unused-title' ? {'Other'} : {'Saved'},
-          unavailable: failure == 'unavailable',
+          failure: switch (failure) {
+            'unavailable' => PlexCollectionFailure.transient,
+            'listing-limit' => PlexCollectionFailure.listingLimitExceeded,
+            'member-limit' => PlexCollectionFailure.memberLimitExceeded,
+            _ => null,
+          },
         );
       final controller = LineupController(
         store: store,
@@ -660,16 +674,41 @@ void main() {
         expect(controller.error, isNull);
       } else {
         expect(controller.stage, SetupStage.servers);
-        expect(controller.error, contains('Retry setup'));
+        final scale = failure.endsWith('-limit');
+        expect(
+          controller.error,
+          contains(scale ? 'before rescanning' : 'Retry setup'),
+        );
+        if (scale) {
+          expect(controller.error, contains('100000'));
+          expect(
+            controller.error,
+            contains(
+              failure == 'listing-limit'
+                  ? 'listing records'
+                  : 'member occurrences',
+            ),
+          );
+        }
+        expect(
+          store.state.channelsByProfileServer['owner']!['server']!.single.id,
+          'saved',
+        );
         expect(
           controller.diagnostics.entries.any(
-            (entry) => entry.context['code'] == 'collection-unavailable',
+            (entry) =>
+                entry.context['code'] ==
+                (scale
+                    ? 'collection-scale-exceeded'
+                    : 'collection-unavailable'),
           ),
           isTrue,
         );
         plex.collectionMembership = const PlexCollectionMembership();
         await controller.selectServer(selected);
         expect(controller.stage, SetupStage.ready);
+        expect(controller.collectionDiscoveryFailures, isEmpty);
+        expect(controller.error, isNull);
       }
       expect(
         controller.diagnostics.entries
@@ -807,7 +846,9 @@ void main() {
                     items: [_playableMovie],
                     collections: PlexCollectionMembership(
                       failedTitles: membershipUnavailable ? {} : {'Recovered'},
-                      unavailable: membershipUnavailable,
+                      failure: membershipUnavailable
+                          ? PlexCollectionFailure.transient
+                          : null,
                     ),
                   );
           };
@@ -847,9 +888,10 @@ void main() {
   }
 
   for (final required in [false, true]) {
-    for (final unavailable in [false, true]) {
+    for (final failure in [null, ...PlexCollectionFailure.values]) {
+      final unavailable = failure != null;
       test(
-        'footer retry recovers collection enrichment (required=$required, unavailable=$unavailable)',
+        'footer retry recovers collection enrichment (required=$required, failure=$failure)',
         () async {
           final selected = _server('server');
           final calls = <String>[];
@@ -885,7 +927,7 @@ void main() {
                 collections: failed && id == 'movies'
                     ? PlexCollectionMembership(
                         failedTitles: unavailable ? {} : {'Saved'},
-                        unavailable: unavailable,
+                        failure: failure,
                       )
                     : const PlexCollectionMembership(),
               );
@@ -931,7 +973,19 @@ void main() {
           final retained = c.libraryScanFacts['untargeted'];
           expect(await c.commitLibraryScan(ids), !required);
           if (required) {
-            expect(c.error, contains('collection used'));
+            expect(
+              c.error,
+              contains(
+                failure?.isScaleLimit == true
+                    ? 'before rescanning'
+                    : 'collection used',
+              ),
+            );
+            expect(c.channels.single.id, 'saved');
+            expect(
+              c.isGeneratedSourceConfirmedGone(c.channels.single),
+              isFalse,
+            );
             expect(await c.commitLibraryScan({'untargeted'}), isTrue);
           }
           failed = false;
@@ -939,6 +993,8 @@ void main() {
           expect(calls, ['movies', 'untargeted', 'movies']);
           expect(c.libraryScanFacts['untargeted'], same(retained));
           expect(c.libraryScanRetryIds, isEmpty);
+          expect(c.collectionDiscoveryFailures, isEmpty);
+          expect(c.collectionScaleRecovery(ids), isNull);
           expect(c.libraryScanCommittableIds, ids);
           expect(await c.commitLibraryScan(ids), isTrue);
           expect(c.availableMedia.first.collections, ['Saved']);
@@ -1025,69 +1081,96 @@ void main() {
     );
   }
 
-  test('cancelled enrichment retry retains prior facts and rejects late recovered membership', () async {
-    final selected = _server('server');
-    final started = Completer<void>();
-    final gate = Completer<void>();
-    var retry = false;
-    final plex = _FakePlex()
-      ..serversResult = [selected]
-      ..librariesResult = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
-        if (retry) {
-          started.complete();
-          await gate.future;
-        }
-        return PlexLibraryScan(
-          items: [_playableMovie],
-          collections: retry
-              ? const PlexCollectionMembership()
-              : const PlexCollectionMembership(failedTitles: {'Saved'}),
+  for (final failure in [null, PlexCollectionFailure.memberLimitExceeded]) {
+    test(
+      'cancelled enrichment retry retains $failure and rejects late recovered membership',
+      () async {
+        final selected = _server('server');
+        final started = Completer<void>();
+        final gate = Completer<void>();
+        var retry = false;
+        final plex = _FakePlex()
+          ..serversResult = [selected]
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+            if (retry) {
+              started.complete();
+              await gate.future;
+            }
+            return PlexLibraryScan(
+              items: [_playableMovie],
+              collections: retry
+                  ? const PlexCollectionMembership()
+                  : PlexCollectionMembership(
+                      failedTitles: failure == null ? {'Saved'} : {},
+                      failure: failure,
+                    ),
+            );
+          };
+        final c = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
         );
-      };
-    final c = LineupController(
-      store: _MemoryStore(
-        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
-      ),
-      credentials: _MemoryCredentials(accountToken: 'token'),
-      plex: plex,
+        addTearDown(c.dispose);
+        await c.initialize();
+        c.channels = [
+          Channel(
+            id: 'saved',
+            number: 1,
+            name: 'Saved',
+            source: const LibrarySource(
+              libraryId: 'movies',
+              libraryType: PlexLibraryType.movie,
+              filters: {
+                LibraryFilter.collection: ['Saved'],
+              },
+            ),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 1,
+          ),
+        ];
+        expect(await c.scanLibraries({'movies'}), isTrue);
+        final fact = c.libraryScanFacts['movies'];
+        retry = true;
+        final scan = c.scanLibraries({'movies'}, retryFailedOnly: true);
+        await started.future;
+        expect(c.collectionScaleRecovery({'movies'}), isNull);
+        c.cancelLibraryScan();
+        expect(c.libraryScanReadyIds, {'movies'});
+        expect(c.libraryScanFacts['movies'], same(fact));
+        expect(
+          c.failedCollectionTitles['movies'],
+          failure == null ? {'Saved'} : isEmpty,
+        );
+        expect(
+          c.collectionDiscoveryFailures,
+          failure == null ? isEmpty : {'movies': failure},
+        );
+        expect(c.libraryScanCommittableIds, isEmpty);
+        gate.complete();
+        expect(await scan, isFalse);
+        expect(
+          c.failedCollectionTitles['movies'],
+          failure == null ? {'Saved'} : isEmpty,
+        );
+        expect(
+          c.collectionDiscoveryFailures,
+          failure == null ? isEmpty : {'movies': failure},
+        );
+        expect(await c.commitLibraryScan({'movies'}), isFalse);
+      },
     );
-    addTearDown(c.dispose);
-    await c.initialize();
-    c.channels = [
-      Channel(
-        id: 'saved',
-        number: 1,
-        name: 'Saved',
-        source: const LibrarySource(
-          libraryId: 'movies',
-          libraryType: PlexLibraryType.movie,
-          filters: {
-            LibraryFilter.collection: ['Saved'],
-          },
-        ),
-        playbackMode: PlaybackMode.sequential,
-        anchor: DateTime.utc(2026),
-        shuffleSeed: 1,
-      ),
-    ];
-    expect(await c.scanLibraries({'movies'}), isTrue);
-    final fact = c.libraryScanFacts['movies'];
-    retry = true;
-    final scan = c.scanLibraries({'movies'}, retryFailedOnly: true);
-    await started.future;
-    c.cancelLibraryScan();
-    expect(c.libraryScanReadyIds, {'movies'});
-    expect(c.libraryScanFacts['movies'], same(fact));
-    expect(c.failedCollectionTitles['movies'], {'Saved'});
-    expect(c.libraryScanCommittableIds, isEmpty);
-    gate.complete();
-    expect(await scan, isFalse);
-    expect(c.failedCollectionTitles['movies'], {'Saved'});
-    expect(await c.commitLibraryScan({'movies'}), isFalse);
-  });
+  }
 
   test(
     'failed enrichment retry keeps valid item facts and required failure guard',
@@ -3223,7 +3306,7 @@ void main() {
         isFalse,
       );
       plex.collectionMembership = const PlexCollectionMembership(
-        unavailable: true,
+        failure: PlexCollectionFailure.listingLimitExceeded,
       );
       expect(await controller.scanLibraries({'movies'}), isTrue);
       expect(

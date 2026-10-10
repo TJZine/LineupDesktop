@@ -372,6 +372,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         .intersection(_selectedLibraries)
         .length;
     if (ready == 0) {
+      if (controller.collectionScaleRecovery(_selectedLibraries) != null) {
+        return 'No libraries are ready. Change the collection inventory in Plex before rescanning, or change your selection.';
+      }
       return controller.libraryScanRetryIds
               .intersection(_selectedLibraries)
               .isNotEmpty
@@ -415,7 +418,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
     final actionStyle = Theme.of(context).textTheme.labelLarge!
         .copyWith(fontSize: 18);
-    final retryLabel = retry.isEmpty ? 'Retry scan' : 'Retry failed scans';
+    final retryLabel =
+        controller.collectionScaleRecovery(_selectedLibraries) != null
+        ? 'Rescan after Plex changes'
+        : retry.isEmpty
+        ? 'Retry scan'
+        : 'Retry failed scans';
     final scanError = _error ?? controller.error;
     final excluded = _selectedLibraries.length - ready.length;
     final footer = _Footer(
@@ -744,6 +752,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final textTheme = Theme.of(context).textTheme;
     final selected = _selectedLibraries.contains(library.id);
     final fact = widget.controller.libraryScanFacts[library.id];
+    final collectionRecovery = widget.controller.collectionScaleRecovery({
+      library.id,
+    });
     final titleStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
       fontSize: 20,
@@ -799,16 +810,26 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     _scanDetail(fact),
                     style: statusStyle.copyWith(color: _scanColor(fact.status)),
                   ),
-                  if (fact.status == LibraryScanStatus.transientFailure)
+                  if (fact.status == LibraryScanStatus.transientFailure ||
+                      widget.controller.unavailableCollectionLibraryIds
+                          .contains(library.id))
                     LineupInlineLink(
                       key: ValueKey('retry-library-${library.id}'),
                       onPressed: widget.controller.busy
                           ? null
                           : () => _scan(retryLibraryIds: {library.id}),
-                      child: const Text('Retry'),
+                      child: Text(
+                        collectionRecovery == null
+                            ? 'Retry'
+                            : 'Rescan after Plex changes',
+                      ),
                     ),
                 ],
               ),
+              if (collectionRecovery != null) ...[
+                const SizedBox(height: 8),
+                Text(collectionRecovery, style: statusStyle),
+              ],
             ],
           ],
         );
@@ -1398,6 +1419,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ),
       ],
     );
+    final collectionRecovery = strategy == BuilderStrategy.collections
+        ? widget.controller.collectionScaleRecovery(_selectedLibraries)
+        : null;
     final subtitle = Padding(
       padding: EdgeInsets.only(top: 12),
       child: Text(_strategyDescription(strategy), style: detailStyle),
@@ -1421,6 +1445,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           subtitle: subtitle,
           onChanged: changed,
         ),
+        if (collectionRecovery case final recovery?)
+          Padding(
+            padding: const EdgeInsets.only(left: 56, top: 4),
+            child: Text(recovery, style: detailStyle),
+          ),
         if (discoveryFailure != null)
           Padding(
             padding: const EdgeInsets.only(left: 56, top: 4),
@@ -1437,7 +1466,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     ? null
                     : () => _retryDiscovery(strategy),
                 icon: const Icon(Icons.refresh, size: 18),
-                label: Text('$discoveryFailure · Retry'),
+                label: Text(
+                  '$discoveryFailure · ${collectionRecovery != null ? 'Rescan' : 'Retry'}',
+                ),
               ),
             ),
           ),
@@ -1457,6 +1488,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       }
     }
     if (strategy == BuilderStrategy.collections) {
+      final scaleCount = _selectedLibraries
+          .where((id) => controller.collectionScaleRecovery({id}) != null)
+          .length;
       final unavailable = controller.unavailableCollectionLibraryIds
           .intersection(_selectedLibraries)
           .length;
@@ -1465,6 +1499,16 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         (count, id) =>
             count + (controller.failedCollectionTitles[id]?.length ?? 0),
       );
+      if (scaleCount > 0) {
+        final transient = unavailable - scaleCount;
+        return [
+          'Collection limit exceeded in $scaleCount ${scaleCount == 1 ? 'library' : 'libraries'}',
+          if (transient > 0)
+            'collections unavailable in $transient other ${transient == 1 ? 'library' : 'libraries'}',
+          if (failed > 0)
+            '$failed ${failed == 1 ? 'collection' : 'collections'} unavailable',
+        ].join(' · ');
+      }
       if (unavailable > 0) {
         return 'Collections unavailable in $unavailable ${unavailable == 1 ? 'library' : 'libraries'}${failed > 0 ? ' · $failed ${failed == 1 ? 'collection' : 'collections'} unavailable' : ''}';
       }

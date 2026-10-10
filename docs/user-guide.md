@@ -102,6 +102,17 @@ outcomes. Continuing commits the selected ready libraries; cancelled or failed
 scans preserve the previous committed selection. Successful libraries remain
 available when retrying failures in the same profile/server scope.
 
+Collection discovery supports at most 100,000 records per collection listing and
+100,000 collection member occurrences per library scan. Each listing or member
+stream also stops at 1,000 pages. Repeated membership
+across collections and reads used to recover recreated collections count toward
+the member limit. If setup reports a collection limit, reduce the collection
+inventory in Plex before rescanning; retrying an unchanged inventory will reach
+the same limit. Saved channels are preserved, and incomplete collection discovery
+cannot confirm that a saved source has disappeared. A saved lineup that requires
+those collections cannot restore or commit that library until discovery succeeds.
+Temporary collection failures instead offer **Retry**.
+
 If the selected server has no usable movie or show libraries, setup offers
 **Switch server** and a quiet **Sign out** action. Sign out uses the same
 confirmation as the server picker, stops playback, and returns to Plex linking.

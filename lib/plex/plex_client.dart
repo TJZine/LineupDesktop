@@ -49,6 +49,7 @@ class PlexClient {
   // member occurrences (including duplicates across collections) are bounded.
   static const maximumLibraryCollections = 100000;
   static const maximumLibraryCollectionMembers = 100000;
+  static const maximumLibraryMetadataPages = 1000;
   final _collectionRequests = _CollectionRequestPool(8);
 
   Map<String, String> _headers([String? token]) => {
@@ -648,16 +649,25 @@ class PlexClient {
     }
 
     Future<List<({String key, String title})>> list() async {
-      final raws = await _libraryMetadata(
-        server
-            .resolve('/library/sections/$libraryId/all')
-            .replace(queryParameters: {'type': '18'}),
-        token,
-        checkCurrent: checkCurrent,
-        cancelled: abort.future,
-        maximumEntries: maximumLibraryCollections,
-        parseRow: (raw) => _record(raw, 'collection'),
-      );
+      final List<Map<String, Object?>> raws;
+      try {
+        raws = await _libraryMetadata(
+          server
+              .resolve('/library/sections/$libraryId/all')
+              .replace(queryParameters: {'type': '18'}),
+          token,
+          checkCurrent: checkCurrent,
+          cancelled: abort.future,
+          maximumEntries: maximumLibraryCollections,
+          parseRow: (raw) => _record(raw, 'collection'),
+        );
+      } on PlexException catch (error) {
+        if (error is _LibraryMetadataPageLimitException) rethrow;
+        if (error.code == 'library-scale-exceeded') {
+          throw const _CollectionListingScaleException();
+        }
+        rethrow;
+      }
       final result = <({String key, String title})>[];
       for (final raw in raws) {
         final row = _record(raw, 'collection');
@@ -689,17 +699,25 @@ class PlexClient {
         records = await list();
       } on PlexException catch (error) {
         if (fatalCodes.contains(error.code)) rethrow;
-        return const PlexCollectionMembership(unavailable: true);
+        return PlexCollectionMembership(
+          failure: error is _LibraryMetadataPageLimitException
+              ? PlexCollectionFailure.pagingLimitExceeded
+              : error is _CollectionListingScaleException
+              ? PlexCollectionFailure.listingLimitExceeded
+              : PlexCollectionFailure.transient,
+        );
       } catch (_) {
         checkCurrent();
-        return const PlexCollectionMembership(unavailable: true);
+        return const PlexCollectionMembership(
+          failure: PlexCollectionFailure.transient,
+        );
       }
       Future<List<({String key, String title})>>? relisted;
       final members = <String, Set<String>>{};
       final failed = <String>{};
       PlexException? fatal;
       StackTrace? fatalStack;
-      var scaleExceeded = false;
+      PlexCollectionFailure? scaleFailure;
       var consumed = 0;
       var next = 0;
       Future<List<String>> children(String key) async {
@@ -771,7 +789,13 @@ class PlexClient {
               return;
             }
             if (error.code == 'library-scale-exceeded') {
-              scaleExceeded = true;
+              if (error is _CollectionListingScaleException) {
+                scaleFailure = PlexCollectionFailure.listingLimitExceeded;
+              } else {
+                scaleFailure ??= error is _LibraryMetadataPageLimitException
+                    ? PlexCollectionFailure.pagingLimitExceeded
+                    : PlexCollectionFailure.memberLimitExceeded;
+              }
               stop();
               return;
             }
@@ -787,8 +811,8 @@ class PlexClient {
         List.generate(records.length.clamp(0, 4), (_) => worker()),
       );
       if (fatal != null) Error.throwWithStackTrace(fatal!, fatalStack!);
-      if (scaleExceeded) {
-        return const PlexCollectionMembership(unavailable: true);
+      if (scaleFailure != null) {
+        return PlexCollectionMembership(failure: scaleFailure);
       }
       checkCurrent();
       return PlexCollectionMembership(
@@ -837,7 +861,7 @@ class PlexClient {
       final rows = <T>[];
       final seen = <String>{};
       int? total;
-      for (var page = 0; page < 1000; page++) {
+      for (var page = 0; page < maximumLibraryMetadataPages; page++) {
         check();
         final start = rows.length;
         final json = await _serverJson(
@@ -905,7 +929,7 @@ class PlexClient {
           return rows;
         }
       }
-      throw _libraryScaleException;
+      throw const _LibraryMetadataPageLimitException();
     } finally {
       finished = true;
     }
@@ -2131,4 +2155,21 @@ DynamicRange _dynamicRange(Map? media, Iterable<String> streamCodecs) {
     return DynamicRange.hdr10;
   }
   return media == null ? DynamicRange.unknown : DynamicRange.sdr;
+}
+
+/// Keeps a replacement listing's limit distinct from a children-stream limit.
+class _CollectionListingScaleException extends PlexException {
+  const _CollectionListingScaleException()
+    : super(
+        'library-scale-exceeded',
+        'Collection listing exceeded the supported limit.',
+      );
+}
+
+class _LibraryMetadataPageLimitException extends PlexException {
+  const _LibraryMetadataPageLimitException()
+    : super(
+        'library-scale-exceeded',
+        'Library metadata exceeded the supported page limit.',
+      );
 }

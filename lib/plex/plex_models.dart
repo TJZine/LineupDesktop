@@ -137,18 +137,30 @@ class PlexPlaylistCatalog {
   final Set<String> failedIds;
 }
 
+/// Why all collection membership for a library is unavailable. Individual
+/// transient title failures remain in [PlexCollectionMembership.failedTitles].
+enum PlexCollectionFailure {
+  transient,
+  listingLimitExceeded,
+  memberLimitExceeded,
+  pagingLimitExceeded;
+
+  bool get isScaleLimit => this != transient;
+}
+
 /// Authoritative collection membership for one library. Failed titles have no
 /// published members, even when another collection has the same title.
 class PlexCollectionMembership {
   const PlexCollectionMembership({
     this.titlesByMember = const {},
     this.failedTitles = const {},
-    this.unavailable = false,
+    this.failure,
   });
 
   final Map<String, Set<String>> titlesByMember;
   final Set<String> failedTitles;
-  final bool unavailable;
+  final PlexCollectionFailure? failure;
+  bool get unavailable => failure != null;
 }
 
 /// Phase durations and redacted counts for one successful library scan. Phases

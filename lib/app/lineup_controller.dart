@@ -38,7 +38,7 @@ class ChannelStateConflictException extends FormatException {
 typedef _LibraryScanResult = ({
   Set<String> failedPlaylistIds,
   Map<String, Set<String>> failedCollectionTitles,
-  Set<String> unavailableCollectionLibraryIds,
+  Map<String, PlexCollectionFailure> collectionDiscoveryFailures,
   List<PlexMediaItem> media,
   List<PlexPlaylist> playlists,
   LibraryScanStatus status,
@@ -203,7 +203,9 @@ class LineupController extends ChangeNotifier {
   void Function()? _retainScanReadiness;
   final Map<String, List<PlexMediaItem>> _scanResults = {};
   final Map<String, Set<String>> _failedCollectionTitles = {};
-  final Set<String> _unavailableCollectionLibraryIds = {};
+  final Map<String, PlexCollectionFailure> _collectionDiscoveryFailures = {};
+  Set<String> get _unavailableCollectionLibraryIds =>
+      _collectionDiscoveryFailures.keys.toSet();
   bool _playlistCatalogUnavailable = true;
   Set<String> _failedPlaylistIds = const {};
 
@@ -266,7 +268,42 @@ class LineupController extends ChangeNotifier {
   Map<String, Set<String>> get failedCollectionTitles =>
       Map.unmodifiable(_failedCollectionTitles);
   Set<String> get unavailableCollectionLibraryIds =>
-      Set.unmodifiable(_unavailableCollectionLibraryIds);
+      Set.unmodifiable(collectionDiscoveryFailures.keys);
+  Map<String, PlexCollectionFailure> get collectionDiscoveryFailures =>
+      Map.unmodifiable(_collectionDiscoveryFailures);
+
+  /// Scale exhaustion requires a changed inventory before another scan helps.
+  String? collectionScaleRecovery(Set<String> libraryIds) =>
+      _collectionScaleRecovery(
+        collectionDiscoveryFailures,
+        libraryIds
+            .where(
+              (id) => !const {
+                LibraryScanStatus.scanning,
+                LibraryScanStatus.idle,
+              }.contains(libraryScanFacts[id]?.status),
+            )
+            .toSet(),
+      );
+
+  String? _collectionScaleRecovery(
+    Map<String, PlexCollectionFailure> failures,
+    Set<String> libraryIds,
+  ) {
+    final reasons = libraryIds.map((id) => failures[id]).toSet();
+    final limits = [
+      if (reasons.contains(PlexCollectionFailure.listingLimitExceeded))
+        '${PlexClient.maximumLibraryCollections} collection listing records per listing',
+      if (reasons.contains(PlexCollectionFailure.memberLimitExceeded))
+        '${PlexClient.maximumLibraryCollectionMembers} collection member occurrences per library scan (including repeats and replacement reads)',
+      if (reasons.contains(PlexCollectionFailure.pagingLimitExceeded))
+        '${PlexClient.maximumLibraryMetadataPages} pages per collection listing or member stream',
+    ];
+    if (limits.isEmpty) return null;
+    return 'Collection discovery exceeds the supported limit of ${limits.join(' or ')}. '
+        'Reduce the collection inventory in Plex before rescanning. Saved channels are preserved.';
+  }
+
   Set<String> _scanIds = const {};
   ({String? profileId, String serverId})? _scanScope;
   _LibraryScanResult? _pendingScan;
@@ -901,8 +938,8 @@ class LineupController extends ChangeNotifier {
     final previousCollections = Map<String, Set<String>>.of(
       _failedCollectionTitles,
     );
-    final previousUnavailable = Set<String>.of(
-      _unavailableCollectionLibraryIds,
+    final previousUnavailable = Map<String, PlexCollectionFailure>.of(
+      _collectionDiscoveryFailures,
     );
     final previousCatalogUnavailable = _playlistCatalogUnavailable;
     final previousFailedPlaylists = _failedPlaylistIds;
@@ -928,7 +965,7 @@ class LineupController extends ChangeNotifier {
       _failedCollectionTitles
         ..clear()
         ..addAll(previousCollections);
-      _unavailableCollectionLibraryIds
+      _collectionDiscoveryFailures
         ..clear()
         ..addAll(previousUnavailable);
       _playlistCatalogUnavailable = previousCatalogUnavailable;
@@ -1087,7 +1124,7 @@ class LineupController extends ChangeNotifier {
     if (!retain) {
       _scanResults.clear();
       _failedCollectionTitles.clear();
-      _unavailableCollectionLibraryIds.clear();
+      _collectionDiscoveryFailures.clear();
     }
     _scanDiscoveryObsolete = false;
     final retainedFacts = _libraryScanFacts;
@@ -1209,10 +1246,10 @@ class LineupController extends ChangeNotifier {
             }
             _failedCollectionTitles[library.id] =
                 scanned.collections.failedTitles;
-            if (scanned.collections.unavailable) {
-              _unavailableCollectionLibraryIds.add(library.id);
+            if (scanned.collections.failure case final failure?) {
+              _collectionDiscoveryFailures[library.id] = failure;
             } else {
-              _unavailableCollectionLibraryIds.remove(library.id);
+              _collectionDiscoveryFailures.remove(library.id);
             }
             results[index] = items;
             _scanResults[library.id] = List.unmodifiable(items);
@@ -1270,7 +1307,7 @@ class LineupController extends ChangeNotifier {
       if (!_isCurrent(operation)) {
         return (
           failedCollectionTitles: const <String, Set<String>>{},
-          unavailableCollectionLibraryIds: const <String>{},
+          collectionDiscoveryFailures: const <String, PlexCollectionFailure>{},
           failedPlaylistIds: const <String>{},
           media: const <PlexMediaItem>[],
           playlists: const <PlexPlaylist>[],
@@ -1322,7 +1359,7 @@ class LineupController extends ChangeNotifier {
       if (!_isCurrent(operation)) {
         return (
           failedCollectionTitles: const <String, Set<String>>{},
-          unavailableCollectionLibraryIds: const <String>{},
+          collectionDiscoveryFailures: const <String, PlexCollectionFailure>{},
           failedPlaylistIds: const <String>{},
           media: const <PlexMediaItem>[],
           playlists: const <PlexPlaylist>[],
@@ -1377,9 +1414,10 @@ class LineupController extends ChangeNotifier {
             if (_failedCollectionTitles[id]?.isNotEmpty ?? false)
               id: _failedCollectionTitles[id]!,
         }),
-        unavailableCollectionLibraryIds: Set<String>.unmodifiable(
-          _unavailableCollectionLibraryIds.intersection(ids),
-        ),
+        collectionDiscoveryFailures:
+            Map<String, PlexCollectionFailure>.unmodifiable({
+              for (final id in ids) id: ?_collectionDiscoveryFailures[id],
+            }),
         failedPlaylistIds: Set<String>.unmodifiable(catalog.failedIds),
         media: List<PlexMediaItem>.unmodifiable(playable),
         playlists: List<PlexPlaylist>.unmodifiable(catalog.playlists),
@@ -1461,13 +1499,19 @@ class LineupController extends ChangeNotifier {
   }) {
     final blocked = _unavailableRequiredCollectionIds(
       scan.failedCollectionTitles,
-      scan.unavailableCollectionLibraryIds,
+      scan.collectionDiscoveryFailures.keys.toSet(),
     );
     if (libraryIds != null) blocked.retainAll(libraryIds);
     if (blocked.isNotEmpty) {
-      throw const PlexException(
-        'collection-unavailable',
-        'A collection used by this lineup could not be loaded. Retry setup.',
+      final recovery = _collectionScaleRecovery(
+        scan.collectionDiscoveryFailures,
+        blocked,
+      );
+      throw PlexException(
+        recovery == null
+            ? 'collection-unavailable'
+            : 'collection-scale-exceeded',
+        recovery ?? 'A collection used by this lineup could not be loaded. Retry setup.',
       );
     }
   }
@@ -2556,7 +2600,7 @@ class LineupController extends ChangeNotifier {
     _failedPlaylistIds = const {};
     _scanResults.clear();
     _failedCollectionTitles.clear();
-    _unavailableCollectionLibraryIds.clear();
+    _collectionDiscoveryFailures.clear();
     _scanIds = const {};
     _scanScope = null;
     _pendingScan = null;
