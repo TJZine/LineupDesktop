@@ -21,6 +21,7 @@ void main() {
       final pending = <String, Completer<ScheduleIndex>>{};
       final guide = GuideController(
         lineup: lineup,
+        maximumCachedRows: 4,
         loadSchedule: (channel) {
           final attempt = attempts.update(
             channel.id,
@@ -37,13 +38,13 @@ void main() {
       for (var i = 0; i < 25; i++) {
         await _settle();
       }
-      expect(
-        lineup.channels.every(
-          (c) => guide.row(c.id).state == GuideLoadState.error,
-        ),
-        isTrue,
-      );
+      expect(attempts.length, 20);
+      expect(attempts.values, everyElement(1));
+      expect(guide.cachedRowCount, 4);
+      expect(guide.row('channel-0').error, isNull, reason: 'payload evicted');
+      expect(guide.row('channel-19').error, isNotNull);
       guide.setSearchQuery('Channel 0');
+      expect(guide.channels.single.id, 'channel-0');
       guide.retryFailedRows();
       guide.retryFailedRows();
       expect(
@@ -51,6 +52,17 @@ void main() {
         lessThanOrEqualTo(guide.maximumConcurrentLoads),
       );
       for (var i = 0; i < 25; i++) {
+        guide.retryFailedRows();
+        for (final entry in pending.entries.toList()) {
+          if (!entry.value.isCompleted) {
+            await guide.retry(entry.key);
+            guide.requestChannels([
+              lineup.channels.firstWhere((c) => c.id == entry.key),
+            ]);
+          }
+        }
+        expect(guide.activeLoadCount, lessThanOrEqualTo(4));
+        expect(guide.cachedRowCount, lessThanOrEqualTo(4));
         for (final entry in pending.entries.toList()) {
           if (!entry.value.isCompleted) {
             entry.value.complete(
@@ -62,12 +74,14 @@ void main() {
       }
       expect(attempts.values, everyElement(2));
       expect(attempts.length, 20);
-      expect(
-        lineup.channels.every(
-          (c) => guide.row(c.id).state == GuideLoadState.ready,
-        ),
-        isTrue,
-      );
+      expect(pending.keys.toSet(), lineup.channels.map((c) => c.id).toSet());
+      expect(guide.activeLoadCount, 0);
+      expect(guide.cachedRowCount, 4);
+      expect(guide.row('channel-19').state, GuideLoadState.ready);
+      guide.setSearchQuery('');
+      guide.retryFailedRows();
+      await _settle();
+      expect(attempts.values, everyElement(2));
     },
   );
 
@@ -85,34 +99,52 @@ void main() {
   });
 
   test('local half-hour rounding preserves both Eastern DST folds', () {
+    final cases = [
+      (
+        instant: DateTime.utc(2026, 11, 1, 5, 47, 12, 345, 678),
+        expected: DateTime.utc(2026, 11, 1, 5, 30),
+        offset: const Duration(hours: -4),
+      ),
+      (
+        instant: DateTime.utc(2026, 11, 1, 6, 47, 12, 345, 678),
+        expected: DateTime.utc(2026, 11, 1, 6, 30),
+        offset: const Duration(hours: -5),
+      ),
+      (
+        instant: DateTime.utc(2026, 3, 8, 6, 47),
+        expected: DateTime.utc(2026, 3, 8, 6, 30),
+        offset: const Duration(hours: -5),
+      ),
+      (
+        instant: DateTime.utc(2026, 3, 8, 7, 17),
+        expected: DateTime.utc(2026, 3, 8, 7),
+        offset: const Duration(hours: -4),
+      ),
+      (
+        instant: DateTime.utc(2026, 1, 2, 5, 17),
+        expected: DateTime.utc(2026, 1, 2, 5),
+        offset: const Duration(hours: -5),
+      ),
+    ];
+    if (cases.any((c) => c.instant.toLocal().timeZoneOffset != c.offset)) {
+      markTestSkipped(
+        'Requires Eastern DST offsets; use the documented timezone setup.',
+      );
+      return;
+    }
     final lineup = _TestLineup(_channels(1));
     addTearDown(lineup.dispose);
-    for (final (instant, expected) in [
-      (
-        DateTime.utc(2026, 11, 1, 5, 47, 12, 345, 678),
-        DateTime.utc(2026, 11, 1, 5, 30),
-      ),
-      (
-        DateTime.utc(2026, 11, 1, 6, 47, 12, 345, 678),
-        DateTime.utc(2026, 11, 1, 6, 30),
-      ),
-      (DateTime.utc(2026, 3, 8, 6, 47), DateTime.utc(2026, 3, 8, 6, 30)),
-      (DateTime.utc(2026, 3, 8, 7, 17), DateTime.utc(2026, 3, 8, 7)),
-      (DateTime.utc(2026, 1, 2, 5, 17), DateTime.utc(2026, 1, 2, 5)),
-    ]) {
-      final local = instant.toLocal();
-      expect(
-        local.timeZoneOffset,
-        anyOf(const Duration(hours: -4), const Duration(hours: -5)),
-        reason: 'Run with TZ=America/New_York',
-      );
+    for (final c in cases) {
+      final local = c.instant.toLocal();
       final guide = GuideController(lineup: lineup, clock: () => local);
-      expect(guide.windowStart.toUtc(), expected);
+      expect(guide.windowStart.toUtc(), c.expected);
       expect(guide.windowStart.isUtc, isFalse);
       expect(guide.windowStart.minute, anyOf(0, 30));
-      expect(guide.windowStart.timeZoneOffset, local.timeZoneOffset);
+      expect(guide.windowStart.timeZoneOffset, c.offset);
       guide.playToNow();
-      expect(guide.windowStart.toUtc(), expected);
+      expect(guide.windowStart.toUtc(), c.expected);
+      expect(guide.windowStart.isUtc, isFalse);
+      expect(guide.windowStart.timeZoneOffset, c.offset);
       guide.dispose();
     }
   });
@@ -270,6 +302,116 @@ void main() {
       guide.focusedProgram!.id,
       guide.currentProgram(guide.focusedChannelId!)!.id,
     );
+  });
+
+  test('pending inspected navigation recovers the retained airing after clock rollover', () async {
+    var now = DateTime(2026, 8, 13, 12, 17);
+    final lineup = _TestLineup(_channels(2))..currentChannelId = 'channel-0';
+    final target = Completer<ScheduleIndex>();
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) => channel.id == 'channel-1'
+          ? target.future
+          : Future.value(_schedule(channel)),
+    );
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    guide.requestChannels(lineup.channels);
+    await _settle();
+    guide.selectProgram(guide.focusedProgram!);
+    expect(guide.selectedChannelId, 'channel-0');
+    expect(guide.selectedProgramId, guide.focusedProgramId);
+    final retained = guide.focusTime;
+    guide.moveVertical(1);
+    expect(guide.focusedProgram, isNull);
+
+    now = now.add(const Duration(hours: 5));
+    guide.refreshForPresentation();
+    expect(guide.focusTime, retained);
+    // The explicit selection expires with its projection; pending focus does not.
+    final selectionAfterRollover = (
+      channelId: guide.selectedChannelId,
+      programId: guide.selectedProgramId,
+    );
+    expect(selectionAfterRollover, (channelId: null, programId: null));
+    final tunedAfterRollover = lineup.currentChannelId;
+    expect(tunedAfterRollover, 'channel-0');
+    target.complete(_schedule(lineup.channels.last));
+    await _settle();
+
+    expect(guide.focusedChannelId, 'channel-1');
+    expect(guide.focusedProgram!.isCurrentAt(retained), isTrue);
+    expect(guide.focusedProgram!.isCurrentAt(now), isFalse);
+    expect(guide.focusTime, retained);
+    expect(guide.selectedChannelId, selectionAfterRollover.channelId);
+    expect(guide.selectedProgramId, selectionAfterRollover.programId);
+    expect(lineup.currentChannelId, tunedAfterRollover);
+    expect(
+      guide
+          .row('channel-1')
+          .programs
+          .any((p) => p.id == guide.focusedProgramId),
+      isFalse,
+    );
+  });
+
+  test('later intent retires pending program navigation', () async {
+    for (final action in [
+      'header',
+      'newer target',
+      'Now',
+      'invalidation',
+      'filter',
+      'disposal',
+    ]) {
+      var now = DateTime(2026, 8, 13, 12, 17);
+      final lineup = _TestLineup(_channels(3));
+      final target = Completer<ScheduleIndex>();
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) => channel.id == 'channel-1'
+            ? target.future
+            : Future.value(_schedule(channel)),
+      );
+      guide.requestChannels(lineup.channels);
+      await _settle();
+      guide.focusProgram(guide.focusedProgram!);
+      guide.moveVertical(1);
+      expect(guide.focusedProgram, isNull, reason: action);
+      final retained = guide.focusTime;
+      now = now.add(const Duration(minutes: 40));
+      switch (action) {
+        case 'header':
+          guide.moveHorizontal(-1);
+        case 'newer target':
+          guide.moveVertical(1);
+        case 'Now':
+          guide.playToNow();
+        case 'invalidation':
+          lineup.changeContentScope();
+        case 'filter':
+          guide.setSearchQuery('Channel 0');
+        case 'disposal':
+          guide.dispose();
+      }
+      final latestChannel = guide.focusedChannelId;
+      final latestProgram = guide.focusedProgramId;
+      target.complete(_schedule(lineup.channels[1]));
+      await _settle();
+      expect(guide.focusedChannelId, latestChannel, reason: action);
+      if (action == 'Now') {
+        expect(guide.focusedProgram!.isCurrentAt(now), isTrue);
+        expect(guide.focusTime, now);
+        expect(guide.focusTime, isNot(retained));
+      } else {
+        expect(guide.focusedProgramId, latestProgram, reason: action);
+      }
+      expect(guide.selectedProgramId, isNull, reason: action);
+      if (action != 'disposal') guide.dispose();
+      lineup.dispose();
+    }
   });
 
   test(
@@ -1777,42 +1919,50 @@ void main() {
     lineup.dispose();
   });
 
-  test('current program retry wait settles on removal and disposal', () async {
-    for (final disposeDuringRetry in [false, true]) {
-      final lineup = _TestLineup(_channels(1));
-      final retryLoad = Completer<ScheduleIndex>();
-      var attempts = 0;
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (_) {
-          attempts++;
-          return attempts == 1
-              ? Future.error(StateError('offline'))
-              : retryLoad.future;
-        },
-      );
-      expect(await guide.ensureCurrentProgram('channel-0'), isNull);
+  test(
+    'current program retry wait settles on removal, invalidation, and disposal',
+    () async {
+      for (final retirement in ['removal', 'invalidation', 'disposal']) {
+        final lineup = _TestLineup(_channels(1));
+        final retryLoad = Completer<ScheduleIndex>();
+        var attempts = 0;
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (_) {
+            attempts++;
+            return attempts == 1
+                ? Future.error(StateError('offline'))
+                : retryLoad.future;
+          },
+        );
+        expect(await guide.ensureCurrentProgram('channel-0'), isNull);
 
-      await guide.retry('channel-0');
-      final current = guide.ensureCurrentProgram('channel-0');
-      if (disposeDuringRetry) {
-        guide.dispose();
-      } else {
-        lineup.setChannels(const []);
+        await guide.retry('channel-0');
+        final current = guide.ensureCurrentProgram('channel-0');
+        if (retirement == 'disposal') {
+          guide.dispose();
+        } else if (retirement == 'invalidation') {
+          lineup.changeContentScope();
+        } else {
+          lineup.setChannels(const []);
+        }
+
+        expect(
+          await current.timeout(const Duration(milliseconds: 500)),
+          isNull,
+          reason: retirement,
+        );
+
+        retryLoad.completeError(StateError('obsolete failure'));
+        await _settle();
+        guide.retryFailedRows();
+        expect(attempts, 2, reason: retirement);
+        expect(guide.row('channel-0').state, isNot(GuideLoadState.error));
+        if (retirement != 'disposal') guide.dispose();
+        lineup.dispose();
       }
-
-      expect(
-        await current.timeout(const Duration(milliseconds: 500)),
-        isNull,
-        reason: disposeDuringRetry ? 'disposal' : 'removal',
-      );
-
-      if (!disposeDuringRetry) guide.dispose();
-      retryLoad.complete(_schedule(_channels(1).single));
-      await _settle();
-      lineup.dispose();
-    }
-  });
+    },
+  );
 }
 
 List<Channel> _channels(

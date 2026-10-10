@@ -120,6 +120,10 @@ class GuideController extends ChangeNotifier {
   final LinkedHashMap<String, GuideRowData> _rows = LinkedHashMap();
   final LinkedHashMap<String, ScheduleIndex> _schedules = LinkedHashMap();
   final LinkedHashMap<String, Future<Uint8List?>> _artwork = LinkedHashMap();
+  // Identity-only state survives projection eviction; payload caches stay bounded.
+  final Set<String> _failedChannelIds = {};
+  final Set<String> _retryingChannelIds = {};
+  final Map<String, int> _loadingGenerationByChannel = {};
   final Queue<Channel> _pendingExplicit = Queue();
   final Set<String> _explicitQueuedIds = {};
   final Queue<Channel> _pendingViewport = Queue();
@@ -142,6 +146,7 @@ class GuideController extends ChangeNotifier {
   // Retain one explicitly inspected airing for details after it leaves the
   // projected window. Source invalidation and Now retire this snapshot.
   GuideProgram? _inspectedProgram;
+  ({String channelId, DateTime time})? _pendingProgramFocus;
   String? _selectedChannelId;
   String? _selectedProgramId;
   String? _libraryFilterId;
@@ -188,7 +193,14 @@ class GuideController extends ChangeNotifier {
   Channel? get focusedChannel => _channelById[_focusedChannelId];
 
   GuideRowData row(String channelId) =>
-      _rows[channelId] ?? const GuideRowData(state: GuideLoadState.loading);
+      _rows[channelId] ??
+      GuideRowData(
+        state: _retryingChannelIds.contains(channelId)
+            ? GuideLoadState.retrying
+            : _failedChannelIds.contains(channelId)
+            ? GuideLoadState.error
+            : GuideLoadState.loading,
+      );
 
   GuideProgram? get selectedProgram {
     final id = _selectedProgramId;
@@ -246,13 +258,15 @@ class GuideController extends ChangeNotifier {
     if (_schedules.containsKey(channelId)) return currentProgram(channelId);
     final existing = _rows[channelId];
     if (existing?.state == GuideLoadState.error) _rows.remove(channelId);
+    _failedChannelIds.remove(channelId);
     final generation = _generation;
     _request(channel, prioritize: true);
     final completer = Completer<void>();
     _rowWaiters.add(completer);
     void changed() {
-      final value = _rows[channelId];
-      if (value != null && !_isLoadInProgress(value.state)) {
+      final value = row(channelId);
+      if (_schedules.containsKey(channelId) ||
+          !_isLoadInProgress(value.state)) {
         if (!completer.isCompleted) completer.complete();
       } else if (generation != _generation ||
           !_channelById.containsKey(channelId)) {
@@ -404,23 +418,27 @@ class GuideController extends ChangeNotifier {
   }
 
   Future<void> retry(String channelId) async {
-    if (_rows[channelId]?.state != GuideLoadState.error) return;
+    if (_disposed || !_failedChannelIds.contains(channelId)) return;
     final channel = _channelById[channelId];
     if (channel == null) return;
-    _rows[channelId] = const GuideRowData(state: GuideLoadState.retrying);
+    _failedChannelIds.remove(channelId);
+    _retryingChannelIds.add(channelId);
+    _putRow(channelId, const GuideRowData(state: GuideLoadState.retrying));
     notifyListeners();
     _request(channel, prioritize: true, retrying: true);
   }
 
   /// Retries the authoritative failed rows, including filtered and offscreen rows.
   void retryFailedRows() {
-    final failed = _rows.entries
-        .where((entry) => entry.value.state == GuideLoadState.error)
-        .map((entry) => _channelById[entry.key])
+    if (_disposed) return;
+    final failed = _failedChannelIds
+        .map((id) => _channelById[id])
         .nonNulls
         .toList();
     for (final channel in failed) {
-      _rows[channel.id] = const GuideRowData(state: GuideLoadState.retrying);
+      _failedChannelIds.remove(channel.id);
+      _retryingChannelIds.add(channel.id);
+      _putRow(channel.id, const GuideRowData(state: GuideLoadState.retrying));
       _request(channel, retrying: true, pump: false);
     }
     if (failed.isEmpty) return;
@@ -466,10 +484,22 @@ class GuideController extends ChangeNotifier {
       0,
       visible.length - 1,
     );
+    final programIntent =
+        _focusedProgramId != null || _pendingProgramFocus != null;
+    _pendingProgramFocus = null;
     _focusedChannelId = visible[target].id;
     if (_followingLive && !_inspectionActive) _focusTime = _clock();
     _selectAtFocusTime();
-    if (_inspectionActive) _inspectedProgram = focusedProgram;
+    if (_inspectionActive) {
+      if (!programIntent) _focusedProgramId = null;
+      _inspectedProgram = focusedProgram;
+      if (programIntent && _focusedProgramId == null) {
+        _pendingProgramFocus = (
+          channelId: _focusedChannelId!,
+          time: _focusTime,
+        );
+      }
+    }
     notifyListeners();
   }
 
@@ -482,6 +512,7 @@ class GuideController extends ChangeNotifier {
     if (offset == 0) return;
     _inspectionActive = false;
     _inspectedProgram = null;
+    _pendingProgramFocus = null;
     final programs = _focusedChannelId == null
         ? const <GuideProgram>[]
         : row(_focusedChannelId!).programs;
@@ -531,6 +562,7 @@ class GuideController extends ChangeNotifier {
     _followingLive = true;
     _inspectionActive = false;
     _inspectedProgram = null;
+    _pendingProgramFocus = null;
     final now = _clock();
     _focusTime = now;
     _windowStart = _floorHalfHour(now);
@@ -554,6 +586,7 @@ class GuideController extends ChangeNotifier {
   }
 
   void _retainInspection() {
+    _pendingProgramFocus = null;
     _inspectionActive = true;
     _inspectedProgram = focusedProgram;
   }
@@ -569,6 +602,7 @@ class GuideController extends ChangeNotifier {
       }
       return;
     }
+    _pendingProgramFocus = null;
     _followingLive = false;
     _windowStart = target;
     _reloadRows();
@@ -665,8 +699,13 @@ class GuideController extends ChangeNotifier {
     bool retrying = false,
     bool pump = true,
   }) {
-    if (_disposed) return;
-    if (_rows.containsKey(channel.id) && !retrying) return;
+    if (_disposed || !_channelById.containsKey(channel.id)) return;
+    if (_loadingGenerationByChannel[channel.id] == _generation) return;
+    if (!retrying &&
+        (_rows.containsKey(channel.id) ||
+            _failedChannelIds.contains(channel.id))) {
+      return;
+    }
     final cachedSchedule = _schedules[channel.id];
     if (cachedSchedule != null) {
       _putRow(channel.id, _projectedRow(channel, cachedSchedule));
@@ -715,9 +754,15 @@ class GuideController extends ChangeNotifier {
       }
       final generation = _generation;
       _activeLoads++;
-      if (_rows[channel.id]?.state != GuideLoadState.retrying) {
-        _rows[channel.id] = const GuideRowData(state: GuideLoadState.loading);
-      }
+      _loadingGenerationByChannel[channel.id] = generation;
+      _putRow(
+        channel.id,
+        GuideRowData(
+          state: _retryingChannelIds.contains(channel.id)
+              ? GuideLoadState.retrying
+              : GuideLoadState.loading,
+        ),
+      );
       final cachedSchedule = _schedules.remove(channel.id);
       final loading = cachedSchedule == null
           ? _loadScheduleWithTimeout(channel)
@@ -731,13 +776,23 @@ class GuideController extends ChangeNotifier {
                   !_channelById.containsKey(channel.id)) {
                 return;
               }
+              _loadingGenerationByChannel.remove(channel.id);
+              _failedChannelIds.remove(channel.id);
+              _retryingChannelIds.remove(channel.id);
               _putSchedule(channel.id, schedule);
               _putRow(channel.id, _projectedRow(channel, schedule));
               _updateFocusAndSelection(channel.id);
               notifyListeners();
             },
             onError: (Object error) {
-              if (_disposed || generation != _generation) return;
+              if (_disposed ||
+                  generation != _generation ||
+                  !_channelById.containsKey(channel.id)) {
+                return;
+              }
+              _loadingGenerationByChannel.remove(channel.id);
+              _retryingChannelIds.remove(channel.id);
+              _failedChannelIds.add(channel.id);
               if (error is TimeoutException) {
                 lineup.diagnostics.add(
                   'guide',
@@ -826,6 +881,18 @@ class GuideController extends ChangeNotifier {
       );
 
   void _updateFocusAndSelection(String channelId) {
+    final pending = _pendingProgramFocus;
+    if (pending?.channelId == channelId && _focusedChannelId == channelId) {
+      // Presentation may have moved beyond the retained time while loading.
+      // Resolve the intended airing from the schedule, not the new window.
+      final program = currentProgram(channelId, pending!.time);
+      if (program != null) {
+        _focusTime = pending.time;
+        _focusedProgramId = program.id;
+        _inspectedProgram = program;
+        _pendingProgramFocus = null;
+      }
+    }
     if (_focusedChannelId == channelId && !_inspectionActive) {
       _selectAtFocusTime();
     }
@@ -874,6 +941,10 @@ class GuideController extends ChangeNotifier {
     if (clearSchedules) {
       _inspectionActive = false;
       _inspectedProgram = null;
+      _pendingProgramFocus = null;
+      _failedChannelIds.clear();
+      _retryingChannelIds.clear();
+      _loadingGenerationByChannel.clear();
       if (_followingLive) _focusTime = _clock();
       _generation++;
       _pendingExplicit.clear();
@@ -987,6 +1058,7 @@ class GuideController extends ChangeNotifier {
   }
 
   void _applyFilters() {
+    _pendingProgramFocus = null;
     _updateVisibleChannels();
     if (_visibleChannels.isEmpty) {
       _focusedChannelId = null;
@@ -1026,6 +1098,10 @@ class GuideController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _pendingProgramFocus = null;
+    _failedChannelIds.clear();
+    _retryingChannelIds.clear();
+    _loadingGenerationByChannel.clear();
     lineup.removeListener(_reconcileLineup);
     _generation++;
     _pendingExplicit.clear();

@@ -1960,6 +1960,8 @@ void main() {
       addTearDown(lineup.dispose);
       final firstLoad = Completer<ScheduleIndex>();
       final retryLoad = Completer<ScheduleIndex>();
+      final recoveryLoad = Completer<ScheduleIndex>();
+      final tuned = <String>[];
       var channelBAttempts = 0;
       final guide = GuideController(
         lineup: lineup,
@@ -1969,7 +1971,11 @@ void main() {
             return Future.value(_schedule(channel));
           }
           channelBAttempts++;
-          return channelBAttempts == 1 ? firstLoad.future : retryLoad.future;
+          return switch (channelBAttempts) {
+            1 => firstLoad.future,
+            2 => retryLoad.future,
+            _ => recoveryLoad.future,
+          };
         },
       );
       addTearDown(guide.dispose);
@@ -1980,7 +1986,7 @@ void main() {
           home: GuideView(
             controller: guide,
             onClose: () {},
-            onTune: (_) async {},
+            onTune: (id) async => tuned.add(id),
           ),
         ),
       );
@@ -2026,6 +2032,28 @@ void main() {
 
       retryLoad.completeError(StateError('still offline'));
       await tester.pumpAndSettle();
+      expect(find.text('Schedule unavailable'), findsWidgets);
+      expect(guide.focusedProgram, isNull);
+      await guide.retry('channel-b');
+      await tester.pump();
+      recoveryLoad.complete(_schedule(lineup.channels.last));
+      await tester.pumpAndSettle();
+
+      expect(detailText('Program B'), findsOneWidget);
+      expect(guide.focusedChannelId, 'channel-b');
+      expect(guide.focusedProgram!.scheduled.item.id, 'program-b');
+      expect(guide.selectedChannelId, 'channel-a');
+      expect(lineup.currentChannelId, 'channel-a');
+      expect(tuned, isEmpty);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(guide.selectedChannelId, 'channel-b');
+      expect(guide.selectedProgramId, guide.focusedProgramId);
+      expect(tuned, ['channel-b']);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(tuned, ['channel-b', 'channel-b']);
+      expect(tester.takeException(), isNull);
     },
   );
 
