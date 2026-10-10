@@ -432,6 +432,7 @@ class WindowsNativePlayer implements NativePlayer {
       'loading' => PlayerState.loading,
       'playing' => PlayerState.playing,
       'paused' => PlayerState.paused,
+      'ended' => PlayerState.ended,
       'stopped' => PlayerState.stopped,
       'error' => PlayerState.error,
       _ => PlayerState.idle,

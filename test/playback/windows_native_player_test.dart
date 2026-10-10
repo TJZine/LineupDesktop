@@ -366,6 +366,78 @@ void main() {
     },
   );
 
+  test('maps a correlated native ended state to PlayerState.ended', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    final events = <PlayerEvent>[];
+    final subscription = player.events.listen(events.add);
+    addTearDown(subscription.cancel);
+    await player.initialize();
+    final load = player.load(Uri.parse('file:///ended.mp4'), generation: 42);
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments!['loadId']! as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+    });
+    await load;
+
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'ended',
+      'message': 'Playback ended',
+    });
+
+    expect(player.status.state, PlayerState.ended);
+    expect(player.status.message, 'Playback ended');
+    expect(events.last.status.state, PlayerState.ended);
+    expect(events.last.generation, 42);
+  });
+
+  test(
+    'leaves stopped state unchanged for a correlated terminal event',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(Uri.parse('file:///stopped.mp4'));
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments!['loadId']! as int;
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+      });
+      await load;
+
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'stopped',
+        'message': 'Playback stopped',
+      });
+
+      expect(player.status.state, PlayerState.stopped);
+      expect(player.status.message, 'Playback stopped');
+    },
+  );
+
   test('dispatches the complete bounded outgoing command contract', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
@@ -944,6 +1016,12 @@ void main() {
         'type': 'state',
         'loadId': firstId,
         'state': 'playing',
+      });
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': firstId,
+        'state': 'ended',
+        'message': 'Playback ended',
       });
       await _sendNativeEvent(messenger, {'type': 'state', 'state': 'playing'});
       expect(player.status.state, PlayerState.loading);
