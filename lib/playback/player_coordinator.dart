@@ -501,9 +501,15 @@ class PlayerCoordinator extends ChangeNotifier {
               (playback == null
                   ? null
                   : playback.parts[load.partIndex].duration);
+          // Readiness clears the pending target after seeking. Until time-pos
+          // arrives, retain the live join's start as progress evidence.
+          final position = load.lastPositivePosition > Duration.zero
+              ? load.lastPositivePosition
+              : load.startTarget ?? Duration.zero;
+          final target = load.target ?? Duration.zero;
+          final observedProgress = position > target ? position : target;
           if (knownDuration != null &&
-              load.lastPositivePosition <
-                  knownDuration - _prematureEndTolerance) {
+              observedProgress < knownDuration - _prematureEndTolerance) {
             unawaited(_failPrematureEnd(load.tuneGeneration));
             break;
           }
@@ -1911,13 +1917,14 @@ class _PlaybackLoad {
     required this.target,
     required this.replacing,
     required this.authorizationRetried,
-  });
+  }) : startTarget = target;
 
   final int generation;
   final int tuneGeneration;
   final LineupPlaybackRequest? request;
   final int partIndex;
   final bool authorizationRetried;
+  final Duration? startTarget;
   Duration lastPositivePosition = Duration.zero;
   Duration? lastPositiveDuration;
   Duration? target;

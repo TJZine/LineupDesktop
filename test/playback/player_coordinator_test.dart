@@ -161,6 +161,86 @@ void main() {
     },
   );
 
+  for (final startSeconds in [10, 60, 90]) {
+    test(
+      'live join at $startSeconds seconds classifies EOF without position telemetry',
+      () async {
+        final fixture = _ContinuationFixture(
+          parts: [
+            LineupPlaybackPart(
+              uri: Uri.parse('https://media.test/only.mkv'),
+              duration: const Duration(seconds: 120),
+            ),
+          ],
+        );
+        addTearDown(fixture.close);
+        fixture.now = fixture.now.add(Duration(seconds: startSeconds));
+        await fixture.coordinator.tune('channel-b');
+        expect(fixture.player.seeks, [Duration(seconds: startSeconds)]);
+        final loaded = fixture.coordinator.currentProgram!;
+        fixture.player.position = Duration.zero;
+        fixture.player.duration = const Duration(seconds: 60);
+        fixture.player.emitStatus(
+          PlayerState.ended,
+          generation: fixture.player.loadGenerations.last,
+        );
+        await pumpEventQueue(times: 8);
+        if (startSeconds >= 60) {
+          expect(fixture.player.loads, hasLength(2));
+          expect(fixture.coordinator.currentProgram!.id, isNot(loaded.id));
+          expect(
+            fixture.coordinator.currentProgram!.scheduled.item.id,
+            'short-1',
+          );
+          expect(fixture.coordinator.error, isNull);
+          expect(fixture.coordinator.hasPlaybackIntent, isTrue);
+          // The successor starts from its beginning rather than seeking live.
+          expect(fixture.player.seeks, [Duration(seconds: startSeconds)]);
+        } else {
+          expect(fixture.player.loads, hasLength(1));
+          expect(fixture.coordinator.hasPlaybackIntent, isFalse);
+          expect(
+            fixture.coordinator.error,
+            'Playback ended before the program finished.',
+          );
+          expect(fixture.coordinator.overlay, PlayerOverlay.error);
+          expect(fixture.coordinator.canRetry, isTrue);
+          expect(fixture.coordinator.status.failureCode, 'premature_end');
+        }
+      },
+    );
+  }
+
+  test(
+    'positive position after a backward seek replaces live join fallback',
+    () async {
+      final fixture = _ContinuationFixture();
+      addTearDown(fixture.close);
+      fixture.now = fixture.now.add(const Duration(seconds: 90));
+      await fixture.coordinator.tune('channel-b');
+      await fixture.coordinator.seekTo(const Duration(seconds: 10));
+      fixture.player.position = const Duration(seconds: 10);
+      fixture.player.duration = const Duration(seconds: 60);
+      fixture.player.emitStatus(
+        PlayerState.playing,
+        generation: fixture.player.loadGenerations.last,
+      );
+      fixture.player.position = Duration.zero;
+      fixture.player.emitStatus(
+        PlayerState.ended,
+        generation: fixture.player.loadGenerations.last,
+      );
+      await pumpEventQueue(times: 8);
+      expect(fixture.player.loads, hasLength(1));
+      expect(
+        fixture.coordinator.error,
+        'Playback ended before the program finished.',
+      );
+      expect(fixture.coordinator.overlay, PlayerOverlay.error);
+      expect(fixture.coordinator.canRetry, isTrue);
+    },
+  );
+
   for (final lateness in [-10, 0, 30, 31, 130]) {
     test('continuation at successor lateness $lateness seconds', () async {
       final fixture = _ContinuationFixture();
