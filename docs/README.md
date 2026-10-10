@@ -102,6 +102,9 @@ audience and purpose.
 - [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) records
   the planned automatic HDR/SDR fullscreen contract, composition decision gate,
   ownership boundary, and required physical Windows evidence.
+- [Scheduled Program Continuation Plan](schedule-continuation-plan.md) records
+  the approved next-program continuation behavior, implementation units, and
+  physical acceptance rows.
 - [Fullscreen HDR Discovery Plan](fullscreen-hdr-discovery-plan.md) is the
   Windows 10 discovery procedure, pinned-source pre-analysis, and Codex
   handoff that precede the HDR implementation plan.

@@ -116,9 +116,8 @@ were not measured.
 - Detect external changes by re-querying on `WM_DISPLAYCHANGE` or
   `WM_SETTINGCHANGE`, with bounded polling as a backstop.
 - Resolve the [product questions](#product-questions-for-the-implementation-plan).
-  The transition policy (question 1) depends on the not-yet-implemented
-  continuation to the next scheduled program, described as a known limitation
-  in the [user guide](user-guide.md#known-limitations).
+  The transition policy (question 1) builds on the approved
+  [scheduled program continuation plan](schedule-continuation-plan.md).
 
 **Still open for acceptance.**
 - The Windows 11 route.
@@ -200,7 +199,9 @@ Discovery measurements inform these questions; they do not block discovery.
    schedule, so HDR↔SDR replacement during continuous viewing is the common
    case. A display transition blanks the television, and HDMI may resynchronize
    audio. Decide whether playback holds during the transition (drifting from
-   the schedule) or continues (the viewer misses those seconds).
+   the schedule) or continues (the viewer misses those seconds). The approved
+   [continuation plan](schedule-continuation-plan.md#hdr-interaction-recorded-for-the-hdr-plan)
+   carries small lateness, so a bounded hold at the boundary fits it.
 2. **HDR already active before an SDR program.** The contract switches to SDR.
    Confirm or revise this after the Plex HTPC observation in Step 3.
 3. **Out-of-scope HDR families.** `PlayerTelemetry.isHdr`
