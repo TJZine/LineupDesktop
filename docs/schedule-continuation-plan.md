@@ -1,14 +1,17 @@
 # Scheduled Program Continuation Plan
 
 **Status:** Implemented on October 10, 2026. Product decisions below were made
-by the user. Windows native compilation and the physical acceptance rows below
-remain outstanding; portable verification does not establish native behavior.
+by the user. The [Windows CI compile check](https://github.com/TJZine/LineupDesktop/actions/runs/38092564118/job/114331827048)
+passed for head `cd2c08f6d9758caaf0a39ac0b7aa5aa077e19f51`, using the pinned
+libmpv runtime and stock Flutter engine. The physical acceptance rows below
+remain outstanding; compilation and portable verification do not establish
+native runtime behavior or a runnable patched-engine package.
 
-**Problem:** When a channel's program reaches the end of its final media part,
-Lineup clears playback and shows **Playback stopped**. A channel should keep
+**Original problem:** When a channel's program reached the end of its final media part,
+Lineup cleared playback and showed **Playback stopped**. A channel should keep
 airing: the next scheduled program should start. The
-[user guide](user-guide.md#known-limitations) currently lists this as a known
-limitation.
+[user guide](user-guide.md#known-limitations) now describes the implemented
+continuation behavior and its remaining physical acceptance limit.
 
 ## Approved behavior
 
@@ -47,9 +50,11 @@ Rejected alternatives:
   never catch up. This needs a behind-live indicator, a jump-to-live action, and
   Guide/OSD changes.
 
-## Current design facts
+## Pre-implementation design facts
 
-Line references are against `c23f65ae` and may move.
+These historical facts and line references are against `c23f65ae`, before the
+implementation recorded above. They explain the original plan, not current
+behavior.
 
 - **Tune joins live.** `PlayerCoordinator._performTune`
   (`lib/playback/player_coordinator.dart:534`) resolves
