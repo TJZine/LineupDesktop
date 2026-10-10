@@ -17,43 +17,49 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  for (final overlay in [
-    PlayerOverlay.none,
-    PlayerOverlay.osd,
-    PlayerOverlay.fullGuide,
-    PlayerOverlay.miniGuide,
-    PlayerOverlay.nowPlaying,
-  ]) {
-    test(
-      'automatic continuation preserves $overlay through synchronous native states',
-      () async {
-        final fixture = _ContinuationFixture(
-          player: _ContinuationStatePlayer(),
-        );
-        addTearDown(fixture.close);
-        await fixture.coordinator.tune('channel-b');
-        await fixture.coordinator.toggleFullscreen();
-        _showPresentation(fixture.coordinator, overlay);
-        final presentation = fixture.coordinator.overlayPresentationGeneration;
-        final observed = <PlayerOverlay>[];
-        fixture.coordinator.addListener(
-          () => observed.add(fixture.coordinator.overlay),
-        );
-        fixture.endNaturally();
-        await pumpEventQueue(times: 8);
-        expect(fixture.player.loads, hasLength(2));
-        expect(observed, isNotEmpty);
-        expect(observed.every((value) => value == overlay), isTrue);
-        expect(fixture.coordinator.overlay, overlay);
-        expect(fixture.coordinator.overlayPresentationGeneration, presentation);
-        expect(fixture.coordinator.fullscreen, isTrue);
-        expect(fixture.player.fullscreenValues, [true]);
-        expect(
-          fixture.coordinator.currentProgram!.scheduled.item.id,
-          'short-1',
-        );
-      },
-    );
+  for (final firstReady in [PlayerState.ready, PlayerState.playing]) {
+    for (final overlay in [
+      PlayerOverlay.none,
+      PlayerOverlay.osd,
+      PlayerOverlay.fullGuide,
+      PlayerOverlay.miniGuide,
+      PlayerOverlay.nowPlaying,
+    ]) {
+      test(
+        'automatic continuation preserves $overlay through first $firstReady',
+        () async {
+          final fixture = _ContinuationFixture(
+            player: _ContinuationStatePlayer(firstReady),
+          );
+          addTearDown(fixture.close);
+          await fixture.coordinator.tune('channel-b');
+          await fixture.coordinator.toggleFullscreen();
+          _showPresentation(fixture.coordinator, overlay);
+          final presentation =
+              fixture.coordinator.overlayPresentationGeneration;
+          final observed = <PlayerOverlay>[];
+          fixture.coordinator.addListener(
+            () => observed.add(fixture.coordinator.overlay),
+          );
+          fixture.endNaturally();
+          await pumpEventQueue(times: 8);
+          expect(fixture.player.loads, hasLength(2));
+          expect(observed, isNotEmpty);
+          expect(observed.every((value) => value == overlay), isTrue);
+          expect(fixture.coordinator.overlay, overlay);
+          expect(
+            fixture.coordinator.overlayPresentationGeneration,
+            presentation,
+          );
+          expect(fixture.coordinator.fullscreen, isTrue);
+          expect(fixture.player.fullscreenValues, [true]);
+          expect(
+            fixture.coordinator.currentProgram!.scheduled.item.id,
+            'short-1',
+          );
+        },
+      );
+    }
   }
 
   for (final overlay in [PlayerOverlay.fullGuide, PlayerOverlay.miniGuide]) {
@@ -85,7 +91,6 @@ void main() {
           );
           for (final state in [
             PlayerState.loading,
-            PlayerState.ready,
             PlayerState.paused,
             PlayerState.buffering,
             PlayerState.seeking,
@@ -96,20 +101,6 @@ void main() {
           await pumpEventQueue(times: 5);
           player.releaseSecondLoad.complete();
           await pumpEventQueue(times: 8);
-          // These events can arrive after the tune Future has completed too.
-          player.emitStatus(
-            PlayerState.buffering,
-            generation: player.loadGenerations.last,
-          );
-          player.emitStatus(
-            PlayerState.ready,
-            generation: player.loadGenerations.last,
-          );
-          player.emitStatus(
-            PlayerState.playing,
-            generation: player.loadGenerations.last,
-          );
-          await pumpEventQueue(times: 5);
           expect(observed.every((value) => value == expected), isTrue);
           expect(fixture.coordinator.overlay, expected);
           expect(
@@ -118,6 +109,50 @@ void main() {
           );
           expect(fixture.coordinator.fullscreen, isTrue);
           expect(player.fullscreenValues, [true]);
+        },
+      );
+    }
+  }
+
+  for (final firstReady in [PlayerState.ready, PlayerState.playing]) {
+    for (final laterState in [PlayerState.loading, PlayerState.paused]) {
+      test(
+        'continued program resumes manual overlay handling after $firstReady for $laterState',
+        () async {
+          final manual = _ContinuationFixture();
+          final continued = _ContinuationFixture();
+          addTearDown(manual.close);
+          addTearDown(continued.close);
+          await manual.coordinator.tune('channel-b');
+          await continued.coordinator.tune('channel-b');
+          continued.coordinator.showMiniGuide();
+          continued.endNaturally();
+          await pumpEventQueue(times: 8);
+          for (final fixture in [manual, continued]) {
+            fixture.player.emitStatus(
+              firstReady,
+              generation: fixture.player.loadGenerations.last,
+            );
+          }
+          await pumpEventQueue(times: 2);
+          expect(continued.coordinator.overlay, PlayerOverlay.miniGuide);
+          for (final fixture in [manual, continued]) {
+            if (laterState == PlayerState.loading) {
+              fixture.coordinator.showOsd();
+            } else {
+              fixture.coordinator.showMiniGuide();
+            }
+            fixture.player.emitStatus(
+              laterState,
+              generation: fixture.player.loadGenerations.last,
+            );
+          }
+          await pumpEventQueue(times: 2);
+          final expected = laterState == PlayerState.loading
+              ? PlayerOverlay.none
+              : PlayerOverlay.osd;
+          expect(manual.coordinator.overlay, expected);
+          expect(continued.coordinator.overlay, manual.coordinator.overlay);
         },
       );
     }
@@ -5393,7 +5428,9 @@ void _showPresentation(PlayerCoordinator coordinator, PlayerOverlay overlay) {
 }
 
 class _ContinuationStatePlayer extends _EventPlayer {
-  _ContinuationStatePlayer() : super(sync: true);
+  _ContinuationStatePlayer(this.firstReady) : super(sync: true);
+
+  final PlayerState firstReady;
 
   @override
   Future<void> stop() async {
@@ -5408,11 +5445,10 @@ class _ContinuationStatePlayer extends _EventPlayer {
     if (loads.length != 2) return;
     for (final state in [
       PlayerState.loading,
-      PlayerState.ready,
       PlayerState.paused,
       PlayerState.buffering,
       PlayerState.seeking,
-      PlayerState.playing,
+      firstReady,
     ]) {
       emitStatus(state, generation: generation);
     }

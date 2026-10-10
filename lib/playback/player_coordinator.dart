@@ -532,6 +532,14 @@ class PlayerCoordinator extends ChangeNotifier {
           break;
       }
     }
+    // Preserve the first readiness event itself, then let later state changes
+    // use the same presentation policy as a manually tuned program.
+    if (_preservePresentation &&
+        load != null &&
+        (event.status.state == PlayerState.ready ||
+            event.status.state == PlayerState.playing)) {
+      _continuationGeneration = null;
+    }
     if (!_disposed && previousFacts != _eventVisibleFacts) notifyListeners();
   }
 
@@ -546,7 +554,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _resolvingProgram = null;
     final generation = ++_tuneGeneration;
     // Automatic continuation changes media, not the user's current presentation.
-    // Keep this identity for native events after readiness too; never restore a
+    // Keep this identity through the first readiness event; never restore a
     // snapshot that could overwrite an overlay opened or closed during loading.
     _continuationGeneration = endedProgram == null ? null : generation;
     ++_controlGeneration;
