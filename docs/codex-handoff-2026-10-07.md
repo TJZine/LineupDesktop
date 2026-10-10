@@ -32,8 +32,9 @@ to this orchestrator chat. I authorize creating those child chats and their
 callbacks to this chat, for this task only.
 
 SOURCE
-Local checkout /Users/tristan/Software/LineupDesktop, branch
-codex/desktop-ui-second-pass, base c5fccffe. Local execution, no worktrees.
+Use the current local LineupDesktop checkout attached to the orchestrator,
+branch codex/desktop-ui-second-pass, base c5fccffe. Local execution, no
+worktrees.
 Preserve these untracked paths untouched and uncommitted: .claude/launch.json,
 docs/design/desktop-ui/review-packets/lineup-1080p-cbf3dbd5/,
 docs/reviews/test-slimming-2026-10-02/, tool/windows/__pycache__/.
@@ -129,8 +130,8 @@ chats and their callbacks to this chat, for this review only. Children never
 write outside build/review-probes/<their packet>/.
 
 SOURCE
-Local checkout /Users/tristan/Software/LineupDesktop, branch
-codex/desktop-ui-second-pass, at the integrated tip after both
+Use the current local LineupDesktop checkout attached to the orchestrator,
+branch codex/desktop-ui-second-pass, at the integrated tip after both
 docs/setup-reentry-startup-plan.md and docs/player-guide-polish-plan.md have
 landed. Record the full SHA once and keep it fixed. If either plan has not
 landed, stop and tell me.
@@ -229,8 +230,8 @@ EVIDENCE RULES
   TZ=America/New_York flutter test.
 - Compare docs/user-guide.md and docs/product-parity.md claims against the
   code and tests; unsupported claims are findings.
-- Use the upstream checkout at /Users/tristan/Software/Lineup only as
-  behavioral evidence for what users expect; it is not a compatibility target.
+- Use the upstream sibling Lineup checkout only as behavioral evidence for what
+  users expect; it is not a compatibility target.
 - No credentials, tokens, server addresses, media titles or personal paths in
   probes, logs or the report.
 

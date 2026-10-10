@@ -16,8 +16,8 @@ and their callbacks to this chat, for this task only.
 
 **Source.**
 
-- Local checkout `/Users/tristan/Software/LineupDesktop`, branch
-  `codex/desktop-ui-second-pass`, base `97cf093a`.
+- Use the current local LineupDesktop checkout attached to the orchestrator,
+  branch `codex/desktop-ui-second-pass`, base `97cf093a`.
 - Use local execution. Do not create worktrees.
 - Preserve the existing untracked files. Do not modify or commit them:
   - `.claude/launch.json`

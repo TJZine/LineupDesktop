@@ -393,22 +393,30 @@ owner has been implemented and armed before mutation.
 
 ### 6. Run one reversible setter/refresh probe
 
-With fullscreen Lineup playing, and for SDR-to-HDR and HDR-to-SDR:
+With fullscreen Lineup playing, run the reversible setter/refresh controls for
+both SDR-to-HDR and HDR-to-SDR:
 
 1. Re-query and capture the initial state; arm handled normal restoration.
 2. Request the new state and record the API return.
 3. Re-query until the state is observed or a bounded deadline expires.
-4. Observe whether mpv converges unaided. If Step 4 found a paused-state gap,
-   try the ordered candidates below, one at a time, and stop at the first that
-   works:
-   1. render a new frame (resume, or `frame-step` then restore pause);
+4. Observe whether mpv converges unaided while playing. If Step 4 found a
+   paused-state gap, add a paused reproduction for each affected direction.
+5. For each paused reproduction, try the ordered candidates below one at a
+   time. Each candidate attempt starts again from the observed paused gap,
+   requests the new state, and stops at the first candidate that works:
+   1. render a new frame (temporarily resume, or use `frame-step`, then restore
+      pause);
    2. a one-pixel resize of the video host (which reconfigures the D3D11
       swapchain);
    3. VO reinitialization through a supported mpv property or command
       confirmed in Step 2.
-5. Validate source/render/display correlation, visual patterns, and protected
-   Player behavior.
-6. Restore the initial state and re-query to verify normal restoration.
+6. After every candidate attempt, restore pause and observe that the correct
+   output persists. If it fails, re-establish the observed paused starting
+   state before the next attempt so a prior resume or resize cannot contaminate
+   the result.
+7. Validate source/render/display correlation, visual patterns, and protected
+   Player behavior, then restore the initial state and re-query to verify
+   normal restoration.
 
 Record setter request/return, Windows state-observed, renderer-observed, and
 software frame/reconfiguration timestamps separately from visually measured

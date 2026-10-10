@@ -26,8 +26,8 @@ Read first:
 - [guide-freshness-collection-investigation.md](guide-freshness-collection-investigation.md),
   for Package B identity rules. Its non-goals still apply.
 
-The upstream behavioral reference is the sibling checkout
-`/Users/tristan/Software/Lineup` (TypeScript). It is evidence only, not a
+The upstream behavioral reference is the named sibling Lineup checkout
+(TypeScript) available to the orchestrator. It is evidence only, not a
 compatibility target.
 
 ## Reported problems
@@ -717,8 +717,14 @@ addresses, or tokens.
 
 ## Verification commands (orchestrator, after integration)
 
+On macOS/Linux, run the portable commands from the pinned toolchain:
+
 ```bash
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 TZ=America/New_York flutter test
 ```
+
+On Windows, follow [Development's portable commands](DEVELOPMENT.md#portable-commands),
+record the machine's actual OS timezone, and do not treat `TZ` alone as
+canonical. Do not change the OS timezone automatically.

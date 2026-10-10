@@ -320,7 +320,8 @@ Server publication uses any same-profile authorization refreshed during the save
 retaining the chosen connection and validated access if discovery omits the target.
 Selection cancellation is hidden during the save and restored on failure. Once a
 save has started, a changed request epoch does not suppress its successful commit;
-logout still retires authorization immediately and clears runtime after its barrier.
+logout still retires authorization immediately; successful credential cleanup then
+clears runtime after the state barrier completes.
 
 Settings transformations derive from committed settings inside the controller's
 queue. The controller persists the proposal before publishing it; a view may

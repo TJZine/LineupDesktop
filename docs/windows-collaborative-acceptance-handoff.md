@@ -292,18 +292,22 @@ Probes:
   count with `smart=1`, and how many of the smart ones carry `childCount`.
 - **7.5 Cast portraits.** Sample 20 movies (`/all?type=1`) and 20 episodes
   (`/all?type=4`), and fetch the same items from `/library/metadata/{key}`.
-  For each response, count `Role` entries by `thumb` class:
+  For each response, count `Role` entries by `thumb` class using exactly
+  these labels:
   - missing;
-  - a PMS `/library/metadata/` path;
-  - `https://metadata-static.plex.tv`;
-  - another `https` host (print the **host name only**, such as
-    `image.tmdb.org`);
-  - `http`;
+  - PMS metadata path (a path under `/library/metadata/`);
+  - metadata-static host (`https://metadata-static.plex.tv`);
+  - other HTTPS;
+  - HTTP;
   - other.
 
-  Print the counts per class and per endpoint. Print no names, URLs, or
-  paths. This settles why Now Playing cast portraits show the fallback (see
-  P5 in `docs/player-guide-polish-plan.md`).
+  Print counts for every class for each sample type (movies and episodes) and
+  each endpoint (`/all` and `/library/metadata`). For `other HTTPS`, print
+  only the aggregate count within each sample/endpoint bucket; do not group by
+  or print any host name. Do not print the source `thumb` values themselves,
+  names, URLs, or paths. This preserves the `/all` versus metadata comparison
+  while settling why Now Playing cast portraits show the fallback (see P5 in
+  `docs/player-guide-polish-plan.md`).
 
 Show me the script before I run it, and point out where the token is used.
 
