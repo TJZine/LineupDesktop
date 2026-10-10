@@ -1,9 +1,10 @@
 # Fullscreen HDR Presentation Specification
 
-**Status:** Planned native-media work. Discovery proceeds under the
-[Fullscreen HDR Discovery Plan](fullscreen-hdr-discovery-plan.md). Defer
-production implementation until that discovery is complete and the
-desktop UI second pass has settled the Player surfaces.
+**Status:** Planned native-media work. Windows 10 discovery is complete, and
+the existing composition passed; see the
+[discovery result](fullscreen-hdr-discovery-plan.md#discovery-result-october-9-2026).
+Production implementation awaits its implementation plan and the desktop UI
+second pass settling the Player surfaces.
 
 ## Goal
 

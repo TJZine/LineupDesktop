@@ -1,6 +1,8 @@
 # Fullscreen HDR Discovery Plan
 
-**Status:** Focused evidence-gathering plan. It does not authorize production
+**Status:** Windows 10 discovery completed on October 9, 2026; see
+[Discovery result](#discovery-result-october-9-2026). The result is
+feasibility evidence for planning. It does not authorize production
 implementation or establish an HDR-support claim.
 
 **Purpose:** Determine whether the existing composited Player renders SDR and
@@ -19,6 +21,117 @@ Windows 11 evidence or support claim.
 `dev/desktop-ui-refinement` `cda27a86` inspection is historical. Resolve and
 record the actual target commit before every instrumented build or physical
 run.
+
+## Discovery result (October 9, 2026)
+
+**Classification: existing composition passes** (Step 7, outcome 1) for SDR
+and static HDR10 on the tested Windows 10 / Sony A90K configuration. No
+renderer/composition blocker or required correction was found; no
+presentation-mode change is justified. The full redacted report and evidence
+remain untracked on the test machine under the identities below.
+
+**Identities.** Frozen target `50c4e9d345209a1e504b2d9b8190ee4fe2a152b0`
+(`codex/desktop-ui-second-pass`). The read-only trace was the only change:
+`a1dd26933d58aae8fd8cdbd4ec6a9e8ec9578768` on `codex/hdr-discovery-win10`,
+touching `windows/runner/native_player.cpp`. That branch is discovery
+evidence and must not be merged. Debug EXE SHA-256: baseline
+`A04B5A7BE5D8062FB7DCC81CCC47D59AECFEDBF442FBDC9D48E35570577E7389`, trace
+`02B1DB441E0FC3ACB8AC794158879B8866CB44DF54AD5DEB03BEDFC8D953A1F5`. Pinned
+Flutter, patched engine, libmpv, FFmpeg, and libplacebo identities matched
+[build metadata](../tool/windows/build-metadata.psd1) and
+[runtime provenance](windows-runtime.md). The application build selected
+Windows SDK `10.0.26100.0`. Standalone probe SHA-256:
+`1C770E4FDBDAA2D981E1510B69FC9A8F858156D06429644E6883EA19AC88C907`.
+
+**Environment.**
+- Windows 10 Home `10.0.19045`, NVIDIA RTX 5080 with driver `32.0.16.1714`.
+- Sony A90K directly over HDMI at 3840×2160, 120 Hz. A second HDR monitor was
+  connected, but the Lineup window still mapped to exactly one active target.
+- Audio played through computer speakers, so there is no HDMI/eARC audio
+  evidence.
+- Stimuli were synthetic BT.709 SDR and PQ/BT.2020 HDR10 (1000-nit mastering)
+  patterns with a continuous tone, plus local SDR, HDR10, and Dolby Vision
+  profile 8.1 footage.
+- Visual results are qualitative operator judgments; no meter was used and TV
+  signal information was not recorded.
+
+**Windows 10 route.**
+- `GET_ADVANCED_COLOR_INFO` and `GET_SDR_WHITE_LEVEL` succeeded.
+  `GET_ADVANCED_COLOR_INFO_2` returned 87 (`ERROR_INVALID_PARAMETER`).
+- All four `SET_ADVANCED_COLOR_STATE` writes returned 0, and re-queries
+  verified each requested state.
+- Each synchronous set call took about 350 ms, and display messages could
+  arrive before it returned.
+
+**Renderer.** Every [pinned-source prediction](#pinned-source-pre-analysis)
+that was observed held:
+- The binary used the predicted defaults for all six options.
+- HDR10 on an HDR display rendered as PQ/BT.2020 in `rgb10a2`.
+- HDR10 on an SDR display used a gamma 2.2/BT.709 `rgb10a2` fallback.
+- SDR on an HDR display was placed in PQ/BT.2020 `rgb10a2`.
+- FP16 was not needed.
+- The renderer converged with **no explicit refresh**, both while playing and
+  while paused.
+- DXGI colorspace enums and HDR-metadata writes were not instrumented and
+  remain source predictions.
+
+**Rows.**
+- All four static rows passed qualitatively.
+- Manual HDR10 transitions passed in both directions while playing and while
+  paused, with normal resume.
+- The SDR manual row passed visually; its audio was not observed.
+- Programmatic HDR→SDR and SDR→HDR, each followed by restoration, passed, with
+  handled normal restoration physically verified.
+- Dolby Vision profile 8.1 decoded as PQ/BT.2020, and the current `isHdr` check
+  reports it as HDR.
+- No HLG sample was available. Plex HTPC was not run.
+- Overlay, input, and geometry were good in the local-media rows. Rich Now
+  Playing with Plex was not exercised, and composition remains provisional
+  until the second-pass Player work lands.
+
+**Timings.** Software timings below were taken from the polling state sample
+or the request; blanking times are human estimates.
+
+| Measurement | Result |
+| --- | --- |
+| Manual, playing: Windows state → renderer target | 0.85–1.22 s |
+| Manual, paused: Windows state → renderer target | 3.39–4.03 s |
+| Manual: Windows state → `WM_DISPLAYCHANGE` | 0.16–0.80 s |
+| Programmatic: request → state observed (switch / restore) | ≈1.12–1.13 s / ≈0.35 s |
+| Programmatic: request → renderer target | 1.20–1.38 s |
+| Visible blanking and audio interruption (estimate) | ≈1–3 s |
+
+**Notifications.** A hidden top-level window received `WM_DISPLAYCHANGE` and
+later, often repeated, `WM_SETTINGCHANGE` messages. No single message proves
+the resulting HDR state or who changed it; treat a message as a reason to
+re-query. Receipt by the Lineup window and attribution of external changes
+were not measured.
+
+**Implications for the implementation plan.**
+- Plan around the current `gpu-next`/D3D11/DirectComposition composition and a
+  capability-selected legacy Windows 10 route. No mpv refresh operation is
+  required.
+- Run the synchronous setter off the platform/UI thread so it cannot stall
+  input or have display messages handled in the middle of the call.
+- Detect external changes by re-querying on `WM_DISPLAYCHANGE` or
+  `WM_SETTINGCHANGE`, with bounded polling as a backstop.
+- Resolve the [product questions](#product-questions-for-the-implementation-plan).
+  The transition policy (question 1) depends on the not-yet-implemented
+  continuation to the next scheduled program, described as a known limitation
+  in the [user guide](user-guide.md#known-limitations).
+
+**Still open for acceptance.**
+- The Windows 11 route.
+- HLG, other Dolby Vision profiles, and HDR10+.
+- HDMI/eARC audio behavior during transitions.
+- TV signal information and meter verification.
+- The SDR rows the operator declined to repeat on the trace build.
+- Rich Now Playing over Plex, and the final second-pass Player UI.
+- Lifecycle, currentness, user override, and failure reconciliation.
+- Crash recovery, which is currently absent.
+- Driver-hang bounds.
+- Multi-display and disconnect behavior.
+- The packaged release.
 
 ## Fixed direction and product contract
 
@@ -129,7 +242,9 @@ Static reading of the pinned sources on October 7, 2026: mpv
 `3186d369f9f090cd1363be0ac46a037824b702c6` and libplacebo base
 `92b5ac6db79f4d680eb656692f7bf51e9606f42a`. The shipped libplacebo build is
 recorded as `-dirty`, so confirm behavior on the binary. These are predictions
-to verify, not physical evidence.
+to verify, not physical evidence. The
+[October 9 discovery](#discovery-result-october-9-2026) confirmed every
+prediction it observed on the binary.
 
 1. **Defaults.** Lineup sets none of the HDR-related options. The effective
    defaults are `target-colorspace-hint=auto`,
@@ -201,7 +316,7 @@ observations from different binaries under one result identity.
 Against the pinned runtime on the Windows 10 machine:
 
 1. Confirm the pre-analysis defaults on the binary through the Step 4 trace,
-   which logs the five effective option values once at initialization.
+   which logs the six effective option values once at initialization.
 2. Confirm that `video-target-params` and `video-params` are observable through
    libmpv in the current window-output path.
 3. Record the Windows 10 route results: `GET_ADVANCED_COLOR_INFO`
@@ -318,7 +433,7 @@ currently surfaced, make one dev-only, read-only change on a discovery branch.
 Gate it behind the `LINEUP_HDR_DISCOVERY_TRACE=1` environment variable in
 `windows/runner/native_player.cpp`. When enabled it:
 
-- logs the five effective option values once after initialization;
+- logs the six effective option values once after initialization;
 - observes `video-target-params` and `video-params`; and
 - writes normalized, timestamped lines with the `[lineup-hdr]` prefix to stderr
   for changes in transfer, primaries, and surface format.
