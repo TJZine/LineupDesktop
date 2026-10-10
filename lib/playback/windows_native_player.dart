@@ -63,6 +63,7 @@ class WindowsNativePlayer implements NativePlayer {
   int? _activeLoadId;
   int? _activeGeneration;
   bool _initialized = false;
+  bool _paused = false;
 
   @override
   PlayerStatus get status => _status;
@@ -431,6 +432,7 @@ class WindowsNativePlayer implements NativePlayer {
       'loading' => PlayerState.loading,
       'playing' => PlayerState.playing,
       'paused' => PlayerState.paused,
+      'ended' => PlayerState.ended,
       'stopped' => PlayerState.stopped,
       'error' => PlayerState.error,
       _ => PlayerState.idle,
@@ -442,8 +444,8 @@ class WindowsNativePlayer implements NativePlayer {
         ? _nativeFailureMessage(event, failureCode)
         : event['message'] as String? ?? state.name;
     _setStatus(
-      state,
-      message,
+      state == PlayerState.playing && _paused ? PlayerState.paused : state,
+      state == PlayerState.playing && _paused ? 'Paused' : message,
       recoverable: state == PlayerState.error,
       failureCode: failureCode,
       httpStatus: event['httpStatus'] is int
@@ -503,6 +505,7 @@ class WindowsNativePlayer implements NativePlayer {
   void _handleProperty(String? name, Object? value) {
     switch (name) {
       case 'pause':
+        _paused = value == true;
         if (_status.state == PlayerState.playing ||
             _status.state == PlayerState.paused) {
           _status = PlayerStatus(
@@ -716,6 +719,8 @@ class WindowsNativePlayer implements NativePlayer {
   }
 
   void _resetMediaState() {
+    // The native load command resets mpv pause before replacing the file.
+    _paused = false;
     _position = Duration.zero;
     _duration = Duration.zero;
     _telemetry = const PlayerTelemetry();
@@ -747,7 +752,7 @@ class WindowsNativePlayer implements NativePlayer {
         position: _position,
         duration: _duration,
         telemetry: _telemetry,
-        tracks: List.unmodifiable(_tracks),
+        tracks: _tracks,
         generation: _activeGeneration,
       ),
     );

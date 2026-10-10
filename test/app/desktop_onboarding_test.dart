@@ -4,22 +4,162 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('single-profile server picker exposes quiet Sign out', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..stage = SetupStage.servers
+      ..profiles = const [
+        PlexHomeUser(id: 'one', name: 'One', protected: false),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+          onRequestLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No servers found'), findsOneWidget);
+    expect(find.text('Refresh servers'), findsOneWidget);
+    final signOut = find.widgetWithText(TextButton, 'Sign out');
+    expect(signOut, findsOneWidget);
+    expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
+    controller.busy = true;
+    controller.notifyListeners();
+    await tester.pump();
+    expect(tester.widget<TextButton>(signOut).onPressed, isNull);
+    controller.busy = false;
+    controller.notifyListeners();
+    await tester.pump();
+    expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
+    expect(find.text('Switch profile'), findsNothing);
+  });
+
+  testWidgets(
+    'onboarding reflows at the two floor-constrained desktop windows',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      for (final window in const [Size(1280, 720), Size(1366, 768)]) {
+        tester.view.physicalSize = window;
+        for (final stage in [
+          SetupStage.welcome,
+          SetupStage.linking,
+          SetupStage.profiles,
+          SetupStage.servers,
+        ]) {
+          final controller = FixtureController()
+            ..settings = const LineupSettings(reduceMotion: true)
+            ..stage = stage
+            ..profiles = const [
+              PlexHomeUser(
+                id: 'guest',
+                name: 'Synthetic guest profile',
+                protected: false,
+              ),
+            ]
+            ..servers = const [
+              PlexServer(
+                id: 'server',
+                name: 'Synthetic local server',
+                connections: [],
+              ),
+            ];
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: LineupCanvas.builder,
+              home: UpstreamOnboardingView(
+                controller: controller,
+                onLogout: () async {},
+                openBrowser: () async {},
+              ),
+            ),
+          );
+          await tester.pump();
+          expect(
+            find.byKey(const ValueKey('onboarding-content')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull, reason: '$window $stage');
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+        }
+      }
+    },
+  );
+
+  testWidgets('first-run focused tasks use a centred 1040 canvas column', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(3440, 1440);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    for (final stage in [
+      SetupStage.linking,
+      SetupStage.profiles,
+      SetupStage.servers,
+      SetupStage.welcome,
+    ]) {
+      final controller = FixtureController()..stage = stage;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: UpstreamOnboardingView(
+            controller: controller,
+            onLogout: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (stage == SetupStage.welcome) {
+        expect(find.byType(LineupTopBar), findsNothing);
+      } else {
+        final column = find.byKey(const ValueKey('onboarding-content'));
+        expect(tester.getSize(column).width, 1040);
+        expect(tester.getRect(column).center.dx, closeTo(1720, .001));
+        expect(find.byType(LineupTopBar), findsOneWidget);
+        expect(find.byTooltip('Open Lineup menu'), findsNothing);
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+    }
+  });
+
   Future<void> show(
     WidgetTester tester,
     FixtureController controller, {
     Future<void> Function()? browser,
+    bool accountOrigin = false,
+    double textScale = 1,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: LineupCanvas.builder(context, child),
+        ),
         theme: LineupTheme.forName(
           LineupThemeName.emberSteel,
           largeFocusIndicators: false,
@@ -28,6 +168,7 @@ void main() {
           controller: controller,
           onLogout: () async {},
           openBrowser: browser ?? () async {},
+          accountOrigin: accountOrigin,
         ),
       ),
     );
@@ -66,6 +207,11 @@ void main() {
     }
     expect(find.widgetWithText(TextButton, 'Back'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Cancel'), findsNothing);
+    final avatars = find.byType(LineupProfileAvatar);
+    expect(
+      tester.getTopLeft(avatars.first).dy,
+      tester.getTopLeft(avatars.last).dy,
+    );
   }, semanticsEnabled: true);
 
   testWidgets('profile card clamp accepts a sub-pixel width constraint', (
@@ -80,6 +226,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Align(
           alignment: Alignment.topLeft,
           child: SizedBox(
@@ -233,6 +380,90 @@ void main() {
     expect(controller.activePin?.id, 1);
   });
 
+  testWidgets('linking slots stay aligned across code and failure states', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(640, 560)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = FixtureController()
+      ..stage = SetupStage.linking
+      ..activePin = PlexPin(
+        id: 1,
+        code: 'ACTIVE',
+        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+      );
+    addTearDown(controller.dispose);
+    await show(tester, controller, textScale: 1.75);
+
+    Rect rect(String key) => tester.getRect(find.byKey(ValueKey(key)));
+    final codeState = [
+      rect('linking-code-slot'),
+      rect('linking-action-slot'),
+      rect('linking-qr-slot'),
+      rect('linking-footer'),
+    ];
+
+    controller
+      ..activePin = PlexPin(
+        id: 2,
+        code: 'EXPIRED',
+        expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
+      )
+      ..error = null;
+    controller.notifyListeners();
+    await tester.pump();
+    final expiredState = [
+      rect('linking-code-slot'),
+      rect('linking-action-slot'),
+      rect('linking-qr-slot'),
+      rect('linking-footer'),
+    ];
+
+    controller
+      ..activePin = PlexPin(
+        id: 3,
+        code: 'FAILED',
+        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+      )
+      ..error = 'Synthetic safe Plex failure.';
+    controller.notifyListeners();
+    await tester.pump();
+    final failureState = [
+      rect('linking-code-slot'),
+      rect('linking-action-slot'),
+      rect('linking-qr-slot'),
+      rect('linking-footer'),
+    ];
+
+    for (var index = 0; index < codeState.length; index++) {
+      expect(
+        expiredState[index],
+        codeState[index],
+        reason: 'expired slot $index',
+      );
+      expect(
+        failureState[index],
+        codeState[index],
+        reason: 'failure slot $index',
+      );
+    }
+    final separator = tester.widget<Visibility>(
+      find
+          .ancestor(of: find.text('or'), matching: find.byType(Visibility))
+          .first,
+    );
+    expect(separator.visible, isFalse);
+    expect(
+      find.text('That code expired before sign-in finished.'),
+      findsNothing,
+    );
+    expect(find.text('Synthetic safe Plex failure.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('PIN fourth digit submits; empty Backspace retains dialog', (
     tester,
   ) async {
@@ -243,7 +474,7 @@ void main() {
       ];
     addTearDown(controller.dispose);
     await show(tester, controller);
-    await tester.tap(find.text('Test Profile'));
+    await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
@@ -346,6 +577,458 @@ void main() {
     await tester.pump();
     expect(find.text('Server selection failed.'), findsNothing);
   });
+
+  testWidgets('current server Continue returns without selecting again', (
+    tester,
+  ) async {
+    final current = PlexServer(
+      id: 'current',
+      name: 'Current server',
+      connections: const [],
+    );
+    final other = PlexServer(
+      id: 'other',
+      name: 'Other server',
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://other.invalid'),
+          local: false,
+          relay: false,
+          latency: Duration(milliseconds: 126),
+        ),
+      ],
+    );
+    final controller = _ServerController()
+      ..stage = SetupStage.servers
+      ..servers = [current, other]
+      ..server = current
+      ..connection = PlexConnection(
+        uri: Uri.parse('https://current.invalid'),
+        local: true,
+        relay: false,
+      )
+      ..serverSelectionCanCancel = true;
+    addTearDown(controller.dispose);
+    await show(tester, controller, accountOrigin: true);
+
+    expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Connect'), findsOneWidget);
+    expect(
+      tester.getSize(find.widgetWithText(FilledButton, 'Continue')).height,
+      56,
+    );
+    expect(
+      tester
+          .getSize(
+            find.descendant(
+              of: find.widgetWithText(OutlinedButton, 'Connect'),
+              matching: find.byType(Material),
+            ),
+          )
+          .height,
+      44,
+    );
+    expect(find.text('‹ Settings · Account'), findsOneWidget);
+    expect(find.text('Not measured yet'), findsOneWidget);
+    expect(find.text('Direct remote · 126 ms'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pump();
+    expect(controller.selectCalls, 0);
+    expect(controller.stage, SetupStage.ready);
+  });
+
+  testWidgets('first-run current Continue enters setup without reconnecting', (
+    tester,
+  ) async {
+    final current = PlexServer(
+      id: 'current',
+      name: 'Current server',
+      connections: const [],
+    );
+    final controller = _ServerController()
+      ..stage = SetupStage.servers
+      ..servers = [current]
+      ..server = current
+      ..connection = PlexConnection(
+        uri: Uri.parse('https://current.invalid'),
+        local: true,
+        relay: false,
+        latency: const Duration(milliseconds: 126),
+      );
+    addTearDown(controller.dispose);
+    await show(tester, controller);
+
+    expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pump();
+    expect(controller.stage, SetupStage.channelSetup);
+    expect(controller.selectCalls, 0);
+  });
+
+  for (final origin in [
+    (
+      name: 'ready Account',
+      stage: SetupStage.ready,
+      restoring: false,
+      canCancelSetup: false,
+      accountOrigin: true,
+    ),
+    (
+      name: 'first setup Libraries',
+      stage: SetupStage.channelSetup,
+      restoring: false,
+      canCancelSetup: false,
+      accountOrigin: false,
+    ),
+    (
+      name: 'regeneration Libraries',
+      stage: SetupStage.channelSetup,
+      restoring: false,
+      canCancelSetup: true,
+      accountOrigin: false,
+    ),
+    (
+      name: 'saved-lineup Restore',
+      stage: SetupStage.channelSetup,
+      restoring: true,
+      canCancelSetup: false,
+      accountOrigin: false,
+    ),
+  ]) {
+    testWidgets(
+      'nested profile picker Back and Escape preserve ${origin.name} origin',
+      (tester) async {
+        const server = PlexServer(
+          id: 'server',
+          name: 'Server',
+          connections: [],
+        );
+        const profile = PlexHomeUser(
+          id: 'profile',
+          name: 'Profile',
+          protected: false,
+        );
+        final controller = _ServerController()
+          ..stage = origin.stage
+          ..server = server
+          ..connection = PlexConnection(
+            uri: Uri.parse('https://server.invalid'),
+            local: true,
+            relay: false,
+          )
+          ..servers = const [server]
+          ..profiles = const [profile]
+          ..restoringSavedLineup = origin.restoring
+          ..channelSetupCanCancel = origin.canCancelSetup;
+        addTearDown(controller.dispose);
+
+        controller.showServers();
+        controller.showProfiles();
+        await show(tester, controller, accountOrigin: origin.accountOrigin);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Back'), findsAtLeastNWidgets(1));
+        expect(find.text('‹ Settings · Account'), findsNothing);
+        await tester.tap(find.widgetWithText(TextButton, 'Back').last);
+        await tester.pumpAndSettle();
+        expect(controller.stage, SetupStage.servers);
+        expect(controller.serverSelectionCanCancel, isTrue);
+        expect(
+          find.text(origin.accountOrigin ? '‹ Settings · Account' : 'Back'),
+          findsOneWidget,
+        );
+
+        // The first pass uses profile Back and then the server Escape path.
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pump();
+        expect(controller.stage, origin.stage);
+        expect(controller.serverSelectionCanCancel, isFalse);
+
+        // Re-enter the same nested picker to cover profile Escape and the
+        // subsequent server Back path independently.
+        controller
+          ..stage = origin.stage
+          ..server = server
+          ..restoringSavedLineup = origin.restoring
+          ..channelSetupCanCancel = origin.canCancelSetup;
+        controller.showServers();
+        controller.showProfiles();
+        await tester.pumpAndSettle();
+        expect(find.text('Back'), findsAtLeastNWidgets(1));
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pump();
+        expect(controller.stage, SetupStage.servers);
+        expect(controller.serverSelectionCanCancel, isTrue);
+        await tester.tap(
+          find
+              .widgetWithText(
+                TextButton,
+                origin.accountOrigin ? '‹ Settings · Account' : 'Back',
+              )
+              .last,
+        );
+        await tester.pumpAndSettle();
+        expect(controller.stage, origin.stage);
+        expect(controller.serverSelectionCanCancel, isFalse);
+      },
+    );
+  }
+
+  testWidgets(
+    'nested protected PIN returns to Profiles without discarding Servers origin',
+    (tester) async {
+      const server = PlexServer(id: 'server', name: 'Server', connections: []);
+      const profile = PlexHomeUser(
+        id: 'profile',
+        name: 'Protected profile',
+        protected: true,
+      );
+      final controller = _ServerController()
+        ..stage = SetupStage.ready
+        ..server = server
+        ..connection = PlexConnection(
+          uri: Uri.parse('https://server.invalid'),
+          local: true,
+          relay: false,
+        )
+        ..servers = const [server]
+        ..profiles = const [profile];
+      addTearDown(controller.dispose);
+
+      controller.showServers();
+      controller.showProfiles();
+      await show(tester, controller, accountOrigin: true);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
+      await tester.pump();
+      expect(find.text('‹ Profiles'), findsOneWidget);
+      expect(find.text('‹ Settings · Account'), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(controller.stage, SetupStage.profiles);
+      expect(
+        find.byKey(const ValueKey('profile-card-profile')),
+        findsOneWidget,
+      );
+      expect(find.text('Back'), findsOneWidget);
+
+      await tester.tap(find.text('Back'));
+      await tester.pump();
+      expect(controller.stage, SetupStage.servers);
+      expect(controller.serverSelectionCanCancel, isTrue);
+      expect(find.text('‹ Settings · Account'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(controller.stage, SetupStage.ready);
+      expect(controller.serverSelectionCanCancel, isFalse);
+    },
+  );
+
+  testWidgets(
+    'nested origin remains cancellable when its server is unavailable',
+    (tester) async {
+      final controller = _ServerController()
+        ..stage = SetupStage.ready
+        ..server = const PlexServer(
+          id: 'server',
+          name: 'Server',
+          connections: [],
+        )
+        ..servers = const [
+          PlexServer(id: 'server', name: 'Server', connections: []),
+        ]
+        ..profiles = const [
+          PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
+        ];
+      addTearDown(controller.dispose);
+
+      controller.showServers();
+      controller.server = null;
+      controller.showProfiles();
+      await show(tester, controller, accountOrigin: true);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Back'));
+      await tester.pump();
+      expect(controller.stage, SetupStage.servers);
+      expect(controller.serverSelectionCanCancel, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(controller.stage, SetupStage.ready);
+    },
+  );
+
+  testWidgets('initial profile selection remains uncancellable', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [
+        PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
+      ];
+    addTearDown(controller.dispose);
+    await show(tester, controller);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Back'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(controller.stage, SetupStage.profiles);
+
+    // A profile picker reached directly during linking has no origin.
+    expect(controller.profileSelectionCanCancel, isFalse);
+  });
+
+  testWidgets(
+    'initial server picker Switch profile returns to Servers but Servers stays uncancellable',
+    (tester) async {
+      final controller = FixtureController()
+        ..stage = SetupStage.servers
+        ..server = null
+        ..serverSelectionCanCancel = false
+        ..profiles = const [
+          PlexHomeUser(id: 'one', name: 'One', protected: false),
+          PlexHomeUser(id: 'two', name: 'Two', protected: false),
+        ];
+      addTearDown(controller.dispose);
+      await show(tester, controller);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(OutlinedButton, 'Switch profile'),
+        findsOneWidget,
+      );
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Switch profile'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextButton, 'Back'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Back'));
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.servers);
+      expect(controller.serverSelectionCanCancel, isFalse);
+      expect(find.widgetWithText(TextButton, 'Back'), findsNothing);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Switch profile'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.servers);
+      expect(controller.serverSelectionCanCancel, isFalse);
+      expect(find.widgetWithText(TextButton, 'Back'), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(controller.stage, SetupStage.servers);
+    },
+  );
+
+  testWidgets(
+    'pending and failed current selections keep one label and do not reconnect on Continue',
+    (tester) async {
+      final current = PlexServer(
+        id: 'current',
+        name: 'Current server',
+        connections: const [],
+      );
+      final other = PlexServer(
+        id: 'other',
+        name: 'Other server',
+        connections: const [],
+      );
+      final controller = _ServerController()
+        ..stage = SetupStage.servers
+        ..servers = [current, other]
+        ..server = current
+        ..promoteSelection = true;
+      addTearDown(controller.dispose);
+      await show(tester, controller);
+
+      final pending = Completer<void>();
+      controller.pendingSelection = pending;
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Connect'));
+      await tester.pump();
+      final pendingButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Connecting…'),
+      );
+      expect(pendingButton.onPressed, isNull);
+      expect(
+        tester
+            .getSemantics(find.widgetWithText(FilledButton, 'Connecting…'))
+            .getSemanticsData()
+            .label,
+        'Connecting…',
+      );
+
+      pending.complete();
+      await tester.pumpAndSettle();
+      controller.failSelection = true;
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Connect'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+      expect(
+        tester
+            .getSemantics(find.widgetWithText(FilledButton, 'Continue'))
+            .getSemanticsData()
+            .label,
+        'Continue',
+      );
+      final calls = controller.selectCalls;
+      await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+      await tester.pump();
+      expect(controller.selectCalls, calls);
+    },
+    semanticsEnabled: true,
+  );
+
+  test(
+    'continue current server rejects busy, missing, and incorrect stages',
+    () {
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      final current = PlexServer(
+        id: 'current',
+        name: 'Current server',
+        connections: const [],
+      );
+      controller.server = current;
+      expect(controller.continueCurrentServer(), isFalse);
+
+      controller
+        ..stage = SetupStage.servers
+        ..busy = true;
+      expect(controller.continueCurrentServer(), isFalse);
+
+      controller
+        ..busy = false
+        ..server = null;
+      expect(controller.continueCurrentServer(), isFalse);
+    },
+  );
+
+  testWidgets('account-origin PIN back returns directly to Account', (
+    tester,
+  ) async {
+    final controller = _PinController()
+      ..stage = SetupStage.profiles
+      ..server = const PlexServer(id: 'server', name: 'Server', connections: [])
+      ..profileSelectionCanCancel = true
+      ..profiles = const [
+        PlexHomeUser(id: 'profile', name: 'Protected profile', protected: true),
+      ];
+    addTearDown(controller.dispose);
+    await show(tester, controller, accountOrigin: true);
+    await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
+    await tester.pump();
+
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('‹ Settings · Account'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(controller.stage, SetupStage.ready);
+  });
 }
 
 class _PinController extends FixtureController {
@@ -361,9 +1044,16 @@ class _PinController extends FixtureController {
 class _ServerController extends FixtureController {
   Completer<void>? pendingSelection;
   bool failSelection = false;
+  bool promoteSelection = false;
+  int selectCalls = 0;
 
   @override
   Future<void> selectServer(PlexServer server) async {
+    selectCalls++;
+    if (promoteSelection) {
+      this.server = server;
+      notifyListeners();
+    }
     final pending = pendingSelection;
     if (pending != null) {
       await pending.future;

@@ -63,11 +63,17 @@ void main() {
       await tester.tap(
         route == 'Settings'
             ? find.byKey(const Key('settings-app-menu'))
-            : find.byTooltip('Open Lineup menu'),
+            : find.byTooltip(
+                route == 'Player' ? 'Lineup menu' : 'Open Lineup menu',
+              ),
       );
       await tester.pumpAndSettle();
       final action = find.byKey(const Key('app-menu-now-playing'));
       expect(action, findsOneWidget);
+      expect(
+        find.descendant(of: action, matching: find.text(_program.title)),
+        findsOneWidget,
+      );
       await tester.tap(action);
       await tester.pumpAndSettle();
 
@@ -80,7 +86,7 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
-      expect(view.controller.overlay, PlayerOverlay.none);
+      expect(view.controller.overlay, PlayerOverlay.osd);
       expect(find.byType(PlayerView), findsOneWidget);
       expect(player.commands, before);
       await tester.pumpWidget(const SizedBox.shrink());

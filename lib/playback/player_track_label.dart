@@ -27,11 +27,11 @@ PlayerTrackDisplay formatPlayerTrackDisplay(
   final sameType = peers
       .where((peer) => peer.type == track.type)
       .toList(growable: false);
-  final facts = _TrackFacts.from(track);
+  final facts = _TrackFacts.from(track, peers: sameType);
   final base = _baseDisplay(track, facts);
   final needsTrackDiscriminator = sameType.any((peer) {
     if (peer.id == track.id) return false;
-    final peerFacts = _TrackFacts.from(peer);
+    final peerFacts = _TrackFacts.from(peer, peers: sameType);
     final peerBase = _baseDisplay(peer, peerFacts);
     return peerBase.visibleKey == base.visibleKey;
   });
@@ -56,14 +56,30 @@ class _TrackFacts {
   const _TrackFacts({
     required this.language,
     required this.title,
+    required this.region,
     required this.purposes,
     required this.channels,
     required this.codec,
   });
 
-  factory _TrackFacts.from(PlayerTrack track) {
+  factory _TrackFacts.from(
+    PlayerTrack track, {
+    Iterable<PlayerTrack> peers = const [],
+  }) {
     final title = _clean(track.title);
-    final language = _language(track.language);
+    final regional = _regionalLanguage(track.language);
+    final disambiguateRegion =
+        regional.region != null &&
+        peers.any((peer) {
+          if (peer.id == track.id || peer.type != track.type) return false;
+          final other = _regionalLanguage(peer.language);
+          return other.language == regional.language &&
+              other.region != null &&
+              other.region != regional.region;
+        });
+    final language = disambiguateRegion
+        ? _language(track.language)
+        : regional.language;
     final purposes = <String>[
       if (track.type == PlayerTrackType.audio && track.visualImpaired == true)
         'Audio description',
@@ -80,6 +96,7 @@ class _TrackFacts {
         : null;
     return _TrackFacts(
       language: language,
+      region: disambiguateRegion ? null : regional.region,
       title: title,
       purposes: purposes,
       channels: channels,
@@ -88,6 +105,7 @@ class _TrackFacts {
   }
 
   final String? language;
+  final String? region;
   final String? title;
   final List<String> purposes;
   final String? channels;
@@ -150,6 +168,7 @@ _BaseDisplay _baseDisplay(PlayerTrack track, _TrackFacts facts) {
   for (final purpose in facts.purposes) {
     if (purpose != primaryPurpose) addFact(purpose);
   }
+  addFact(facts.region);
   addFact(facts.channels);
   addFact(facts.codec);
   if (track.external == true) addFact('External');
@@ -174,7 +193,7 @@ String? _compactText(
   if (language == null) return title ?? purposes.firstOrNull;
 
   final sameCompact = peers.where((peer) => peer.id != track.id).any((peer) {
-    final otherFacts = _TrackFacts.from(peer);
+    final otherFacts = _TrackFacts.from(peer, peers: peers);
     return _compactKey(otherFacts) == _compactKey(facts);
   });
   final purposeText = purposes.join(' • ');
@@ -182,7 +201,10 @@ String? _compactText(
       title != null &&
       peers.any((peer) {
         if (peer.id == track.id || peer.type != track.type) return false;
-        final otherTitle = _baseDisplay(peer, _TrackFacts.from(peer)).titleText;
+        final otherTitle = _baseDisplay(
+          peer,
+          _TrackFacts.from(peer, peers: peers),
+        ).titleText;
         return _equivalenceKey(otherTitle) != _equivalenceKey(title);
       });
   if (title == null || !sameCompact || !titleDiffers) {
@@ -219,6 +241,48 @@ String _semanticsDescription(_BaseDisplay base, List<String> secondaryFacts) {
       )
       .join('; ');
   return secondary.isEmpty ? primary : '$primary; $secondary';
+}
+
+({String? language, String? region}) _regionalLanguage(String? value) {
+  final full = _language(value);
+  final parts = _clean(value)?.split(RegExp(r'[-_]'));
+  if (parts == null || parts.length < 2) return (language: full, region: null);
+  final last = parts.last;
+  if (!RegExp(r'^(?:[A-Za-z]{2}|[0-9]{3})$').hasMatch(last)) {
+    return (language: full, region: null);
+  }
+  final base = _language(parts.take(parts.length - 1).join('-'));
+  // Unknown tags retain the original label instead of inventing a region.
+  if (full == _clean(value) || base == null || full == base) {
+    return (language: full, region: null);
+  }
+  final qualifier =
+      full!.toLowerCase().startsWith('${base.toLowerCase()} (') &&
+          full.endsWith(')')
+      ? full.substring(base.length + 2, full.length - 1)
+      : full;
+  return (language: base, region: qualifier);
+}
+
+/// Canonical short video codec policy shared by runtime and Plex facts.
+String? formatPlayerVideoCodec(String? value) {
+  final cleaned = _clean(value)?.toLowerCase();
+  if (cleaned == null) return null;
+  final token = RegExp(r'^[a-z0-9][a-z0-9_.-]{0,31}')
+      .firstMatch(cleaned)
+      ?.group(0);
+  return switch (token) {
+    'hevc' || 'h265' || 'h.265' => 'HEVC',
+    'h264' || 'h.264' || 'avc' || 'avc1' => 'H.264',
+    'av1' => 'AV1',
+    'vp9' => 'VP9',
+    'vp8' => 'VP8',
+    'mpeg2video' || 'mpeg2' || 'mpeg-2' => 'MPEG-2',
+    'mpeg1video' || 'mpeg1' || 'mpeg-1' => 'MPEG-1',
+    'vc1' || 'vc-1' || 'wmv3' => 'VC-1',
+    'mpeg4' => 'MPEG-4',
+    _ => token?.toUpperCase(),
+  };
 }
 
 String? _language(String? value) {
@@ -261,7 +325,8 @@ String? _channels(int? count, String? layout) {
     case '5.1(side)':
       return '5.1 surround';
   }
-  return count != null && count > 0 ? '$count channels' : null;
+  if (count == null || count <= 0) return null;
+  return count == 1 ? '1 channel' : '$count channels';
 }
 
 String? _codec(String? value) {

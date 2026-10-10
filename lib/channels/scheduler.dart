@@ -77,6 +77,25 @@ class ScheduleWindowResult {
   final DateTime? lastProjectedEnd;
 }
 
+/// Whether a resolved item participates in the selected schedule policy.
+/// Legacy schedules retain their original specials behavior.
+bool scheduleIncludesItem(
+  ChannelItem item, {
+  required PlaybackMode mode,
+  bool includeSpecials = true,
+  int scheduleVersion = currentScheduleVersion,
+}) {
+  if (mode != PlaybackMode.block || scheduleVersion < 2 || includeSpecials) {
+    return true;
+  }
+  final isEpisode =
+      item.mediaKind == ChannelMediaKind.episode ||
+      (item.mediaKind == ChannelMediaKind.unknown &&
+          (item.showTitle != null || item.showThumb != null));
+  final seriesId = item.seriesId ?? item.showThumb ?? item.showTitle;
+  return !isEpisode || seriesId == null || item.seasonNumber != 0;
+}
+
 ScheduleIndex buildSchedule(
   List<ChannelItem> content, {
   required PlaybackMode mode,
@@ -96,10 +115,13 @@ ScheduleIndex buildSchedule(
   }
   final items = switch (mode) {
     PlaybackMode.sequential => List<ChannelItem>.of(content),
-    PlaybackMode.shuffle when scheduleVersion >= 2 => List<ChannelItem>.of(
+    PlaybackMode.shuffle when scheduleVersion >= 2 => _canonicalShuffleInput(
       content,
     ),
-    PlaybackMode.shuffle => seededShuffle(content, seed),
+    PlaybackMode.shuffle => seededShuffle(
+      _canonicalShuffleInput(content),
+      seed,
+    ),
     PlaybackMode.block when scheduleVersion >= 2 => blockOrder(
       content,
       seed,
@@ -345,6 +367,16 @@ ScheduleWindowResult scheduleWindowResult(
   );
 }
 
+// PMS media IDs identify whole programs, including multipart media. Playlist
+// and mixed sources can intentionally repeat them, so sort occurrences without
+// deduplicating. Duration breaks ties for differing snapshots of the same media;
+// equal ID/duration occurrences are interchangeable for schedule timing.
+List<ChannelItem> _canonicalShuffleInput(List<ChannelItem> content) =>
+    List<ChannelItem>.of(content)..sort((left, right) {
+      final identity = left.id.compareTo(right.id);
+      return identity != 0 ? identity : left.duration.compareTo(right.duration);
+    });
+
 List<T> seededShuffle<T>(List<T> input, int seed) {
   final output = List<T>.of(input);
   var state = seed & 0xffffffff;
@@ -386,7 +418,11 @@ List<ChannelItem> blockOrder(
       occurrence++;
       continue;
     }
-    if (item.seasonNumber == 0 && !includeSpecials) {
+    if (!scheduleIncludesItem(
+      item,
+      mode: PlaybackMode.block,
+      includeSpecials: includeSpecials,
+    )) {
       occurrence++;
       continue;
     }

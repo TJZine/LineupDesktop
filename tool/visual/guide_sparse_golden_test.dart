@@ -155,5 +155,9 @@ class _ComparisonController extends FixtureController {
   );
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async => _artworkBytes;
+  Future<Uint8List?> artworkForPath(
+    Uri path, {
+    int? width,
+    int? height,
+  }) async => _artworkBytes;
 }

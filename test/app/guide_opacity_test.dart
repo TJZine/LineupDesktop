@@ -87,11 +87,40 @@ Future<void> _expectClassicOpacity(
   final height = capture.height;
   final pixels = capture.pixels!;
 
-  final boundaryOrigin = tester.getTopLeft(boundaryFinder);
-  final allowed = aperture == null
+  final apertureBox = aperture == null
       ? null
-      : (tester.getTopLeft(aperture) - boundaryOrigin) &
-            tester.getSize(aperture);
+      : tester.renderObject<RenderBox>(aperture);
+  final allowed = apertureBox == null
+      ? null
+      : MatrixUtils.transformRect(
+          apertureBox.getTransformTo(boundary),
+          Offset.zero & apertureBox.size,
+        );
+  if (allowed != null) {
+    int alphaAt(int x, int y) => pixels.getUint8((y * width + x) * 4 + 3);
+    final left = allowed.left.ceil();
+    final right = allowed.right.floor() - 2;
+    final top = allowed.top.ceil() + 1;
+    final bottom = allowed.bottom.floor() - 2;
+    // The aperture is flush with the window on the left: those corners reveal
+    // video all the way to the edge. Only the interior right corners are masked.
+    expect(alphaAt(left, top), 0, reason: 'Square top-left native corner');
+    expect(
+      alphaAt(left, bottom),
+      0,
+      reason: 'Square bottom-left native corner',
+    );
+    expect(
+      alphaAt(right, top),
+      255,
+      reason: 'Rounded interior top-right corner',
+    );
+    expect(
+      alphaAt(right, bottom),
+      255,
+      reason: 'Rounded interior bottom-right corner',
+    );
+  }
   Offset? firstUnexpectedTransparency;
   var transparentPixels = 0;
   for (var y = 0; y < height; y++) {
@@ -142,7 +171,11 @@ UiFixture _readyFixture({PlayerStatus? playerState}) {
 
 class _OpacityController extends FixtureController {
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async => _syntheticArtwork;
+  Future<Uint8List?> artworkForPath(
+    Uri path, {
+    int? width,
+    int? height,
+  }) async => _syntheticArtwork;
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>

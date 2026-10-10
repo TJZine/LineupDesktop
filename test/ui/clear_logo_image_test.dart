@@ -48,9 +48,46 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets(
+    'visible height cap is opt-in and retains minimum artwork guards',
+    (tester) async {
+      final bytes = await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder).drawRect(
+          const Rect.fromLTWH(0, 0, 600, 120),
+          Paint()..color = Colors.white,
+        );
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(600, 120);
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        picture.dispose();
+        return data!.buffer.asUint8List();
+      });
+      await _show(tester, bytes!);
+      expect(tester.getSize(find.byType(ClearLogoImage)).height, 84);
+      await _show(tester, bytes, maximumVisibleHeight: 56);
+      expect(find.byKey(const Key('accepted-logo')), findsOneWidget);
+      expect(tester.getSize(find.byType(ClearLogoImage)), const Size(280, 56));
+      await _show(
+        tester,
+        bytes,
+        maximumVisibleHeight: 56,
+        minimumVisibleSize: const Size(300, 28),
+      );
+      expect(find.byKey(const Key('accepted-logo')), findsNothing);
+      expect(find.text('Readable title'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
-Future<void> _show(WidgetTester tester, Uint8List bytes) async {
+Future<void> _show(
+  WidgetTester tester,
+  Uint8List bytes, {
+  double? maximumVisibleHeight,
+  Size minimumVisibleSize = const Size(96, 28),
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Align(
@@ -58,7 +95,8 @@ Future<void> _show(WidgetTester tester, Uint8List bytes) async {
         child: ClearLogoImage(
           bytes,
           maximumSize: const Size(420, 84),
-          minimumVisibleSize: const Size(96, 28),
+          minimumVisibleSize: minimumVisibleSize,
+          maximumVisibleHeight: maximumVisibleHeight,
           imageKey: const Key('accepted-logo'),
           fallback: const Text('Readable title'),
         ),

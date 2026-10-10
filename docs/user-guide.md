@@ -69,8 +69,9 @@ reuse another profile's server or lineup.
 Choose a discovered server. Lineup prioritizes usable direct connections before
 relay connections. Each row distinguishes an owned server from a shared one. **Current** marks
 the connected server, while **Previously used** identifies a saved selection. Only the selected server shows its measured path and
-latency; 100–499 ms is labeled **Slow**, 500 ms or more is **Very slow**, and a
-relay is labeled **Limited** rather than failed.
+latency; 500 ms or more is labeled **Very slow**, and a relay is labeled
+**Limited** rather than failed. Lower measured latencies show their route and
+value without a Slow warning.
 
 Plex supplies each discovered server with its own PMS credential, separate from
 the Plex.tv account or Home-profile credential. Lineup keeps that server
@@ -82,7 +83,8 @@ When no server appears:
 - confirm Plex Media Server is running and reachable;
 - select **Retry discovery**;
 - switch profiles when the expected server belongs to another profile; or
-- clear the saved server when a previous selection is no longer valid.
+- select another server. The picker also offers **Sign out** when you need to
+  link Plex again; signing out uses a confirmation and stops playback.
 
 ### 4. Build the initial lineup
 
@@ -99,6 +101,21 @@ Scans report pages, items, and ready, empty, unsupported, cancelled, or failed
 outcomes. Continuing commits the selected ready libraries; cancelled or failed
 scans preserve the previous committed selection. Successful libraries remain
 available when retrying failures in the same profile/server scope.
+
+Collection discovery supports at most 100,000 records per collection listing and
+100,000 collection member occurrences per library scan. Each listing or member
+stream also stops at 1,000 pages. Repeated membership
+across collections and reads used to recover recreated collections count toward
+the member limit. If setup reports a collection limit, reduce the collection
+inventory in Plex before rescanning; retrying an unchanged inventory will reach
+the same limit. Saved channels are preserved, and incomplete collection discovery
+cannot confirm that a saved source has disappeared. A saved lineup that requires
+those collections cannot restore or commit that library until discovery succeeds.
+Temporary collection failures instead offer **Retry**.
+
+If the selected server has no usable movie or show libraries, setup offers
+**Switch server** and a quiet **Sign out** action. Sign out uses the same
+confirmation as the server picker, stops playback, and returns to Plex linking.
 
 Allocation takes one eligible original from each enabled source in order,
 repeats, and skips exhausted sources. Additional versions are off by default
@@ -126,10 +143,11 @@ Success offers **View lineup** and **Add a custom channel**.
 | Diagnostics | Review bounded, redacted support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
 
-**Windows playback acceptance:** the owner reports that native Player, Classic
-PiP/Overlay, and fullscreen work at a surface level. The complete exact-commit
-physical matrix is still pending, so broad format/HDR/device/package wording
-remains provisional rather than unsupported-by-design.
+**Windows playback acceptance:** the current Guide presentation is Classic PiP
+only. Earlier owner smoke notes also mentioned a full-screen Overlay surface,
+but that path is retired and is not a current user-facing option. The complete
+exact-commit physical matrix is still pending, so broad format/HDR/device/
+package wording remains provisional rather than unsupported-by-design.
 
 Guide, Player, Settings, and Diagnostics use immersive surfaces. Activate the
 visible **Open Lineup menu** control on one of those surfaces to open the
@@ -160,10 +178,16 @@ available. The Guide and Player share one playback session.
 The Guide toolbar always shows a library picker and channel search. The picker
 offers **All libraries** or one library, and search accepts a channel name or
 number within that scope. **Jump to now** returns the time window and focus to
-the current schedule.
+the current schedule. While the Guide follows live, its window and focus track
+the presentation clock. Moving to an earlier or later window stops that live
+following and preserves the browsed window and explicitly inspected program
+until you choose **Now** again. When the current time is off screen, the
+button shows `← Now` for a future window or `Now →` for a past window; its
+tooltip and accessible label are **Return to live**. When the current time is
+visible, it is simply **Now**.
 
 The Guide uses a detailed two-hour window by default, with three- and
-four-hour options. Its standard layout targets five comfortable channel rows;
+four-hour options. Its standard layout targets five channel rows;
 the rows reflow when the window or text scale requires more room. There is no
 configurable past window or row-density preference.
 
@@ -176,6 +200,13 @@ in their slot. When a program has a Plex poster reference, the normal
 artwork geometry remains stable while it loads or if loading fails. Only a
 program with no poster reference at all omits that slot so the existing details
 can use the available width without decorative placeholder art.
+
+Beside the picture, program identity and synopsis share the information area.
+The synopsis uses the available height, with an ellipsis when it cannot fit;
+without a synopsis, identity uses the whole area. The time line shows remaining
+time for a currently airing program, duration for a future program, and the time
+range alone for a past program. Year and genres appear beneath it, or share the
+line with middle-dot separators when space is compact.
 
 ## Player
 
@@ -212,36 +243,36 @@ cancel the timer.
 
 Unavailable tracks or unsupported native actions remain disabled rather than
 showing controls that cannot work. The Guide retains the catalog media facts it
-displays, including resolution, dynamic range, and audio facts. Rich Now
-Playing retains detailed source/runtime resolution, video codec, HDR, and
-hardware-decoder facts when available rather than repeating those facts in the
-default OSD.
+displays, including resolution, dynamic range, and audio facts. Expanded Now
+Playing includes rating, resolution, HDR, a short video codec name such as HEVC
+or H.264, audio codec, and channel count in its format chips. Decoded dimensions
+and hardware-decoder facts appear in Diagnostics.
 
 Track panels show the selection confirmed by native playback. A requested
 change remains marked pending until that confirmation arrives; a failed change
 keeps the prior confirmed selection and shows an inline error.
+Language labels use their self-names. A regional qualifier appears in the
+primary label when it distinguishes same-language tracks of that type with
+different supplied regions; otherwise the region remains a secondary drawer
+fact. The OSD uses the same primary-label policy.
 
-Press `I` for persistent rich Now Playing details without leaving playback.
-The details surface keeps the shared top-right channel bug, then uses the
-current scheduled program for title/episode identity, synopsis, year and
-genres, concise rating/resolution/dynamic-range/audio badges, poster, and
-official title artwork. When **Prefer official title artwork** is enabled, an
-available Plex
-clear logo leads the identity and text remains the fallback when the logo is
-missing, disabled, fails, or would render too small to read. Its playback line
-is shown only for facts that are available: source/runtime details are separate,
-and actual native playback
-position/duration are preferred, with schedule timing used when native duration
-is unavailable. When Plex supplies cast facts, actor portraits appear between
-the synopsis and progress, with names and roles available to accessibility.
-Missing or failed headshots use a neutral person silhouette, never fabricated
-initials, and no cast space is reserved when cast facts are absent. Up Next and
-secondary actions remain owned by the OSD. Pointer movement leaves this reading
-surface open. Press `I` or Back
-to close it; `Down`, `Enter`, click/tap, or a successful enabled transport
-action replaces it with the OSD, while a failed action retains the safe error
-surface. `A` or `C` opens the requested track list directly when that track type
-is available.
+Press `I` or `Down` to expand the bottom OSD into persistent Now Playing
+details without leaving playback. The expanded panel shares the OSD actions,
+Up Next, timing and full-width progress lane. It shows the loaded
+program's title, one line of episode/runtime/year/genre facts, format chips,
+poster, official title artwork, and a synopsis clamped to three lines.
+When **Prefer official title artwork** is enabled, an available Plex clear logo
+leads the identity; text is the fallback when the logo is missing, disabled,
+fails, or would render too small to read. Actual native playback duration is
+preferred, with schedule timing used when native duration is unavailable.
+
+When Plex supplies cast facts, up to four actor portraits appear in one row,
+with names and roles beneath them. Full cast facts remain available to
+accessibility. Missing or failed headshots use a neutral person silhouette,
+never fabricated initials, and no cast space is reserved when cast facts are
+absent. Pointer movement leaves the expanded reading surface open. Press `I`,
+`Enter`, `Esc`, or Back, or choose **Close**, to collapse it to the OSD. `A` or
+`C` opens the requested track list directly when that track type is available.
 
 The mini Guide displays a bounded group of nearby channels without leaving
 playback. Selecting a row replaces the current tune through the same Player
@@ -252,6 +283,21 @@ them under the same tune. When DVR playback controls are enabled, progress and
 cross-part seeking use aggregate timing only when the required part durations
 are known; otherwise the Player shows the current part's timing rather than
 estimating missing boundaries.
+
+At the natural end of a channel's final media part, Lineup immediately starts
+the next scheduled program from its beginning, even if the media finishes
+before its scheduled slot ends. Small loading delays are carried rather than
+skipping the next program's opening. If that program's scheduled start is more
+than 30 seconds in the past, for example after a DVR pause, Lineup instead joins
+whatever is airing now at its live position. A manual tune or **Retry** also
+joins live.
+
+If a stream ends more than 30 seconds before its known duration, Lineup shows
+the existing playback error with **Retry** instead of advancing. Failed
+continuations do not retry automatically. Player title, progress context, and
+**Up Next** follow the loaded program; the Guide and mini Guide remain on the
+wall-clock schedule. User tune, Stop, sleep-timer expiry, sign-out, and lineup
+or content changes supersede a pending continuation.
 
 The timed OSD remains open while keyboard focus is inside its controls. Leaving
 the active OSD restarts its full timeout. The Mini Guide has no inactivity
@@ -289,15 +335,15 @@ report to Flutter.
 | Guide | Close Guide to Player when playback exists; otherwise open the Lineup menu | `Esc`, `Backspace`, Back, `G`, or `F2` |
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
-| Player | Show OSD / rich Now Playing | `Down` or `Enter` shows OSD; `I` toggles rich Now Playing details |
+| Player | Show OSD / expand Now Playing | `Enter` shows OSD; `I` or `Down` expands Now Playing; `I` or `Enter` collapses it |
 | Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
 | Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
-| Player | Enter a channel number | Number keys; confirm with `Enter` while the entry overlay is open |
+| Player | Enter a channel number | Number keys; confirm with `Enter`, numpad `Enter`, or Select while the entry overlay is open |
 | Player | Audio / subtitle tracks | `A` / `C` |
 | Player | Sleep timer | `S` |
 | Player | Toggle fullscreen | `F` or `F11` |
-| Player | Close the active overlay; otherwise return to Guide | `Esc`, `Backspace`, or Back |
+| Player | Collapse Now Playing to OSD; close other overlays; otherwise return to Guide | `Esc`, `Backspace`, or Back |
 | Mini Guide | Browse nearby channels | `Up` / `Down` |
 | Mini Guide | Move seven channels | `Page Up` / `Page Down` |
 | Mini Guide | Tune focused channel | `Enter`, `Space`, or Select |
@@ -348,7 +394,12 @@ grouping. **Air Check** uses the same content resolver and deterministic
 scheduler as Guide and Player to show what is on now, what follows, cycle and
 timing facts, why content was included, and actionable unavailable or invalid
 states. A new channel saves the same schedule anchor and shuffle identity that
-Air Check previewed.
+Air Check previewed. Shuffled schedules canonicalize each media occurrence by
+its media identity and duration before applying the seed, so a PMS response
+that merely changes input order does not reshuffle the schedule. An existing
+shuffled schedule can make one accepted transition at a schedule-version
+boundary while retaining its pre-boundary cycle; **In order** and
+**Mini-marathons** keep their existing ordering policies.
 
 Saving and tuning are separate. Save is enabled only for a dirty, valid draft.
 A successful save leaves Studio in a clean saved state and makes **Tune in**
@@ -361,22 +412,22 @@ with my draft…**. Both paths require an explicit confirmation, and a second
 intervening change is rejected again. Leaving a dirty draft asks whether to
 discard changes or keep editing.
 
-Deletion requires confirmation and cannot be undone. Deleting a generated
-channel also warns that a later Generate lineup refresh may propose it again.
+Deletion requires confirmation and cannot be undone.
 
 ## Settings
 
 | Category | Current controls |
 | --- | --- |
-| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
-| Guide | Visible hours of 2, 3, or 4; and whether to show the now-playing channel and program in Guide |
+| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Mint Noir, and Satellite Blue; three Player overlay-transparency choices; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
+| Guide | Visible hours of 2, 3, or 4; whether to show channel sources; and whether to show the now-playing channel and program in Guide |
 | Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; and optional DVR playback controls |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, show the profile picker on startup, switch the Plex Media Server, and sign out of Plex |
 | Support | Enable or disable bounded redacted diagnostic recording and open Diagnostics |
 
-Settings save immediately. When persistence fails, the previous value remains
-active and the screen shows an error.
+Settings save immediately. The edited control is temporarily disabled while its
+save is pending. When persistence fails, the previous value remains active and
+the screen shows an error.
 
 ## Diagnostics and safe support reports
 
@@ -406,7 +457,7 @@ vulnerabilities only through the private process in
 | Symptom | Action |
 | --- | --- |
 | Plex link code expired | Select **Request a new code** and complete linking before the new timer expires. |
-| No Plex servers found | Confirm the server is online and reachable, retry discovery, switch profile, or clear a stale saved server. |
+| No Plex servers found | Confirm the server is online and reachable, retry discovery, switch profile, choose another server, or use the server picker's confirmed **Sign out** action to link Plex again. |
 | The app reports playback unsupported on macOS | This is expected. macOS currently supports portable UI development, not native playback. |
 | Windows reports that `vulkan-1.dll` is missing | Install or update the GPU vendor's current driver or an appropriate Vulkan Runtime. Do not copy a driver DLL from another machine into the package. |
 | Audio plays but video is black or hidden | Record the exact window size, display scaling, fullscreen state, Guide layout, whether audio continues, and whether the problem follows a resize/minimize/restore transition. Treat this as a native-composition failure and report it with the current commit. |
@@ -421,9 +472,8 @@ vulnerabilities only through the private process in
 - Windows native playback and packaging have not yet completed the full
   physical acceptance matrix on the current branch.
 - macOS playback is intentionally unsupported.
-- Playback stops after the tuned program's final media part. Automatic
-  continuation to another scheduled program is not implemented; its behavior
-  after pauses or an early media ending still needs a schedule-alignment decision.
+- Scheduled program continuation is implemented; its native end-of-file
+  behavior and boundary scenarios still require physical Windows acceptance.
 - Audio-output selection and passthrough controls are not exposed.
 - The native player deliberately has no application codec/container/HDR
   allowlist. Representative codec, HDR, TrueHD/DTS-to-PCM, text/image subtitle,

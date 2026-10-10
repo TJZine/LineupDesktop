@@ -1,11 +1,20 @@
+enum OverlayTransparency {
+  moreTransparent('more-transparent', 'More transparent'),
+  standard('standard', 'Standard'),
+  reduced('reduced', 'Reduce transparency');
+
+  const OverlayTransparency(this.storageKey, this.label);
+  final String storageKey;
+  final String label;
+}
+
 enum GuideInfoBackgroundMode { bleed, themeDefault, artwork }
 
 enum LineupThemeName {
   emberSteel('ember-steel', 'Ember & Steel'),
   slatePine('slate-pine', 'Slate & Pine'),
-  swiss('swiss', 'Swiss Minimal'),
-  directv('directv', 'DirecTV Classic'),
-  glass('glass', 'Glassmorphism');
+  swiss('swiss', 'Mint Noir'),
+  directv('directv', 'Satellite Blue');
 
   const LineupThemeName(this.storageKey, this.label);
 
@@ -18,8 +27,10 @@ class LineupSettings {
   static const osdAutoHideSecondsOptions = [2, 4, 6, 8, 10, 15];
 
   const LineupSettings({
+    this.overlayTransparency = OverlayTransparency.standard,
     this.theme = LineupThemeName.emberSteel,
     this.guideHours = 2,
+    this.guideShowChannelSources = false,
     this.guideInfoBackgroundMode = GuideInfoBackgroundMode.bleed,
     this.preferClearLogos = true,
     this.dvrControlsEnabled = false,
@@ -31,8 +42,10 @@ class LineupSettings {
     this.diagnosticsEnabled = false,
   });
 
+  final OverlayTransparency overlayTransparency;
   final LineupThemeName theme;
   final int guideHours;
+  final bool guideShowChannelSources;
   final GuideInfoBackgroundMode guideInfoBackgroundMode;
   final bool preferClearLogos;
   final bool dvrControlsEnabled;
@@ -44,8 +57,10 @@ class LineupSettings {
   final bool diagnosticsEnabled;
 
   LineupSettings copyWith({
+    OverlayTransparency? overlayTransparency,
     LineupThemeName? theme,
     int? guideHours,
+    bool? guideShowChannelSources,
     GuideInfoBackgroundMode? guideInfoBackgroundMode,
     bool? preferClearLogos,
     bool? dvrControlsEnabled,
@@ -56,8 +71,11 @@ class LineupSettings {
     bool? profilePickerOnStartup,
     bool? diagnosticsEnabled,
   }) => LineupSettings(
+    overlayTransparency: overlayTransparency ?? this.overlayTransparency,
     theme: theme ?? this.theme,
     guideHours: guideHours ?? this.guideHours,
+    guideShowChannelSources:
+        guideShowChannelSources ?? this.guideShowChannelSources,
     guideInfoBackgroundMode:
         guideInfoBackgroundMode ?? this.guideInfoBackgroundMode,
     preferClearLogos: preferClearLogos ?? this.preferClearLogos,
@@ -72,8 +90,10 @@ class LineupSettings {
   );
 
   Map<String, Object?> toJson() => {
+    'overlayTransparency': overlayTransparency.storageKey,
     'theme': theme.storageKey,
     'guideHours': guideHours,
+    'guideShowChannelSources': guideShowChannelSources,
     'guideInfoBackgroundMode': guideInfoBackgroundMode.name,
     'preferClearLogos': preferClearLogos,
     'dvrControlsEnabled': dvrControlsEnabled,
@@ -97,8 +117,10 @@ class LineupSettings {
       throw FormatException('Invalid settings', error);
     }
     const fields = {
+      'overlayTransparency',
       'theme',
       'guideHours',
+      'guideShowChannelSources',
       'pastMinutes',
       'guideDensity',
       'guideLayoutMode',
@@ -122,7 +144,9 @@ class LineupSettings {
       'libraryTabsEnabled',
     };
     final requiredFields = fields.difference({
+      'overlayTransparency',
       'dvrControlsEnabled',
+      'guideShowChannelSources',
       ...retiredFields,
     });
     if (!keys.containsAll(requiredFields) ||
@@ -184,12 +208,25 @@ class LineupSettings {
       12,
     ]);
     return LineupSettings(
-      theme: enumValue(
-        LineupThemeName.values,
-        'theme',
-        (theme) => theme.storageKey,
-      ),
+      overlayTransparency: json.containsKey('overlayTransparency')
+          ? enumValue(
+              OverlayTransparency.values,
+              'overlayTransparency',
+              (level) => level.storageKey,
+            )
+          : OverlayTransparency.standard,
+      theme: json['theme'] == 'glass'
+          ? LineupThemeName.emberSteel
+          : enumValue(
+              LineupThemeName.values,
+              'theme',
+              (theme) => theme.storageKey,
+            ),
       guideHours: persistedGuideHours > 4 ? 4 : persistedGuideHours,
+      guideShowChannelSources: optionalBoolean(
+        'guideShowChannelSources',
+        fallback: false,
+      ),
       guideInfoBackgroundMode: enumValue(
         GuideInfoBackgroundMode.values,
         'guideInfoBackgroundMode',

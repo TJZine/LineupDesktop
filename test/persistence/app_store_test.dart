@@ -8,6 +8,171 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
   test(
+    'pre-source-setting file loads saves and reloads without quarantine',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-guide-sources',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/state.json');
+      final old = _canonicalJson();
+      // Literal settings from the pre-change schema, independent of new serialization.
+      old['settings'] = {
+        'theme': 'slate-pine',
+        'guideHours': 3,
+        'guideInfoBackgroundMode': 'bleed',
+        'preferClearLogos': false,
+        'dvrControlsEnabled': true,
+        'nowWatchingBanner': false,
+        'osdAutoHideSeconds': 8,
+        'audioSetupComplete': true,
+        'reduceMotion': true,
+        'largeFocusIndicators': true,
+        'profilePickerOnStartup': true,
+        'diagnosticsEnabled': true,
+      };
+      final original = _encodedState(old);
+      await file.writeAsString(original);
+      final store = FileAppStore(directory);
+      final loaded = await store.load();
+      expect(loaded.recoveredCorruptState, isFalse);
+      expect(loaded.state.settings.guideShowChannelSources, isFalse);
+      final expected = Map<String, Object?>.from(old)
+        ..['settings'] = {
+          ...old['settings'] as Map,
+          'guideShowChannelSources': false,
+          'overlayTransparency': 'standard',
+        };
+      expect(loaded.state.toJson(), expected);
+      await store.save(loaded.state);
+      expect(jsonDecode(await file.readAsString()), expected);
+      final reloaded = await FileAppStore(directory).load();
+      expect(reloaded.recoveredCorruptState, isFalse);
+      expect(reloaded.state.toJson(), expected);
+      expect(
+        await directory
+            .list()
+            .where((file) => file.path.contains('.corrupt-'))
+            .isEmpty,
+        isTrue,
+      );
+      expect(
+        await File('${file.path}.pre-desktop-ui').readAsString(),
+        original,
+      );
+    },
+  );
+
+  test(
+    'pre-overlay-setting file loads saves and reloads without quarantine',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-guide-sources',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/state.json');
+      final old = _canonicalJson();
+      // Literal settings from the pre-change schema, independent of new serialization.
+      old['settings'] = {
+        'theme': 'slate-pine',
+        'guideHours': 3,
+        'guideShowChannelSources': true,
+        'guideInfoBackgroundMode': 'bleed',
+        'preferClearLogos': false,
+        'dvrControlsEnabled': true,
+        'nowWatchingBanner': false,
+        'osdAutoHideSeconds': 8,
+        'audioSetupComplete': true,
+        'reduceMotion': true,
+        'largeFocusIndicators': true,
+        'profilePickerOnStartup': true,
+        'diagnosticsEnabled': true,
+      };
+      final original = _encodedState(old);
+      await file.writeAsString(original);
+      final store = FileAppStore(directory);
+      final loaded = await store.load();
+      expect(loaded.recoveredCorruptState, isFalse);
+      expect(loaded.state.settings.guideShowChannelSources, isTrue);
+      expect(
+        loaded.state.settings.overlayTransparency,
+        OverlayTransparency.standard,
+      );
+      final expected = Map<String, Object?>.from(old)
+        ..['settings'] = {
+          ...old['settings'] as Map,
+          'overlayTransparency': 'standard',
+        };
+      expect(loaded.state.toJson(), expected);
+      await store.save(loaded.state);
+      expect(jsonDecode(await file.readAsString()), expected);
+      final reloaded = await FileAppStore(directory).load();
+      expect(reloaded.recoveredCorruptState, isFalse);
+      expect(reloaded.state.toJson(), expected);
+      expect(
+        await directory
+            .list()
+            .where((file) => file.path.contains('.corrupt-'))
+            .isEmpty,
+        isTrue,
+      );
+      expect(
+        await File('${file.path}.pre-desktop-ui').readAsString(),
+        original,
+      );
+    },
+  );
+
+  test(
+    'pre-change Glass state loads and saves as Ember without quarantine',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-retired-theme',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final oldState = _canonicalJson();
+      oldState['settings'] = {
+        ...const LineupSettings(
+          guideHours: 3,
+          reduceMotion: true,
+          dvrControlsEnabled: true,
+        ).toJson(),
+        'theme': 'glass',
+      };
+      final original = _encodedState(oldState);
+      await stateFile.writeAsString(original);
+      final store = FileAppStore(directory);
+      final loaded = await store.load();
+      expect(loaded.recoveredCorruptState, isFalse);
+      expect(loaded.state.settings.theme, LineupThemeName.emberSteel);
+      expect(loaded.state.settings.guideHours, 3);
+      expect(loaded.state.settings.reduceMotion, isTrue);
+      expect(loaded.state.settings.dvrControlsEnabled, isTrue);
+      expect(loaded.state.profileId, 'profile');
+      await store.save(loaded.state);
+      final written = jsonDecode(await stateFile.readAsString()) as Map;
+      expect((written['settings'] as Map)['theme'], 'ember-steel');
+      expect((written['settings'] as Map)['guideHours'], 3);
+      expect(
+        (await FileAppStore(directory).load()).state.toJson(),
+        loaded.state.toJson(),
+      );
+      expect(
+        await directory
+            .list()
+            .where((file) => file.path.contains('.corrupt-'))
+            .isEmpty,
+        isTrue,
+      );
+      expect(
+        await File('${stateFile.path}.pre-desktop-ui').readAsString(),
+        original,
+      );
+    },
+  );
+
+  test(
     'first overwrite preserves exact bytes across queued saves and restart',
     () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -183,7 +348,7 @@ void main() {
                   name: 'Unsafe Absolute',
                   role: 'Reporter',
                   portrait: Uri.parse(
-                    'https://plex.invalid/library/metadata/2/thumb',
+                    'https://user@plex.invalid/library/metadata/2/thumb',
                   ),
                 ),
                 ChannelCastMember(
@@ -204,7 +369,7 @@ void main() {
                 ),
                 ChannelCastMember(
                   name: 'Unsafe File',
-                  portrait: Uri.parse('/Users/private/cast.png'),
+                  portrait: Uri.parse('file:///Users/private/cast.png'),
                 ),
               ],
             ),
@@ -296,11 +461,11 @@ void main() {
 
   test('unsafe persisted cast portraits cannot be revived', () {
     for (final unsafe in [
-      'https://plex.invalid/library/metadata/2/thumb',
+      'https://user@plex.invalid/library/metadata/2/thumb',
       '/library/metadata/3/thumb?X-Plex-Token=secret',
       '/library/metadata/4/thumb#private',
       '/photo/:/transcode?url=private',
-      '/Users/private/cast.png',
+      'file:///Users/private/cast.png',
     ]) {
       final item = ChannelItem.fromJson({
         'id': 'item',
@@ -317,6 +482,62 @@ void main() {
       expect(item.toJson().toString(), isNot(contains(unsafe)));
     }
   });
+
+  test(
+    'new portrait source shapes persist without changing the state schema',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-portrait-state-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final sources = [
+        '/library/metadata/1/thumb',
+        '/photo/people/2',
+        'https://metadata-static.plex.tv/people/3.jpg',
+        'https://images.example/4.jpg?size=large',
+        'http://images.example/5.jpg',
+      ];
+      final item = ChannelItem(
+        id: 'portrait-item',
+        title: 'Synthetic',
+        duration: const Duration(minutes: 1),
+        cast: [
+          for (final source in sources)
+            ChannelCastMember(name: 'Actor', portrait: Uri.parse(source)),
+        ],
+      );
+      final json = _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [
+              _channelJson()
+                ..['source'] = {
+                  'type': 'manual',
+                  'items': [item.toJson()],
+                },
+            ],
+          },
+        };
+      final store = FileAppStore(directory);
+      await store.save(PersistedState.fromJson(json));
+      final loaded = await store.load();
+      expect(loaded.recoveredCorruptState, isFalse);
+      final restored =
+          (loaded
+                      .state
+                      .channelsByProfileServer['profile']!['server']!
+                      .single
+                      .source
+                  as ManualSource)
+              .items
+              .single;
+      expect(
+        restored.cast.map((member) => member.portrait.toString()),
+        sources,
+      );
+      expect(loaded.state.toJson().keys.toSet(), _canonicalJson().keys.toSet());
+    },
+  );
 
   test('trusted Plex metadata cast portraits round-trip', () {
     const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
@@ -482,14 +703,33 @@ void main() {
   });
 
   test(
-    'wrong-typed persisted structure is refused and a null profile loads',
+    'rejects malformed persisted state structure but allows null profile',
     () {
-      expect(
-        () => PersistedState.fromJson(
-          _canonicalJson()..['selectedServerByProfile'] = {'profile': 1},
-        ),
-        throwsFormatException,
-      );
+      final invalidStates = <String, Map<String, Object?>>{
+        'missing profile': _canonicalJson()..remove('profileId'),
+        'mistyped profile': _canonicalJson()..['profileId'] = 7,
+        'unknown field': _canonicalJson()..['legacy'] = true,
+        'null settings': _canonicalJson()..['settings'] = null,
+        'wrong selected server shape': _canonicalJson()
+          ..['selectedServerByProfile'] = {'profile': 1},
+        'mixed library IDs': _canonicalJson()
+          ..['selectedLibraryIdsByProfileServer'] = {
+            'profile': {
+              'server': ['library', 2],
+            },
+          },
+        'wrong channel list shape': _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {'server': <String, Object?>{}},
+          },
+      };
+      for (final invalid in invalidStates.entries) {
+        expect(
+          () => PersistedState.fromJson(invalid.value),
+          throwsFormatException,
+          reason: invalid.key,
+        );
+      }
       expect(
         PersistedState.fromJson(_canonicalJson()..['profileId'] = null)
             .profileId,
@@ -501,6 +741,40 @@ void main() {
   for (final corruptState in <String, String>{
     'malformed JSON': '{broken',
     'schema-invalid JSON': '{"selectedServerByProfile":[]}',
+    'invalid settings JSON': _encodedState(
+      _canonicalJson()
+        ..['settings'] = {
+          ...const LineupSettings().toJson(),
+          'theme': 'future-theme',
+        },
+    ),
+    'null manual items JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [
+              _channelJson()..['source'] = {'type': 'manual', 'items': null},
+            ],
+          },
+        },
+    ),
+    'null mixed source items JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [
+              _channelJson()
+                ..['source'] = {
+                  'type': 'mixed',
+                  'interleave': false,
+                  'sources': [
+                    {'type': 'manual', 'items': null},
+                  ],
+                },
+            ],
+          },
+        },
+    ),
     'legacy artwork JSON': _encodedState(
       _canonicalJson()
         ..['channelsByProfileServer'] = {
@@ -526,7 +800,8 @@ void main() {
       );
       addTearDown(() => directory.delete(recursive: true));
       final stateFile = File('${directory.path}/state.json');
-      await stateFile.writeAsString(corruptState.value);
+      final originalBytes = utf8.encode(corruptState.value);
+      await stateFile.writeAsBytes(originalBytes);
       final store = FileAppStore(
         directory,
         clock: () => DateTime.utc(2026, 8, 23),
@@ -540,8 +815,8 @@ void main() {
       expect(await stateFile.exists(), isFalse);
       final quarantine = (await _quarantineContainers(directory)).single;
       expect(
-        await File('${quarantine.path}/state.json').readAsString(),
-        corruptState.value,
+        await File('${quarantine.path}/state.json').readAsBytes(),
+        originalBytes,
       );
 
       final restart = await store.load();
@@ -624,7 +899,9 @@ void main() {
       'lineup-store-test',
     );
     addTearDown(() => directory.delete(recursive: true));
-    final stateFile = File('${directory.path}/state.json');
+    final stateFile = File(
+      '${directory.path}${Platform.pathSeparator}state.json',
+    );
     await stateFile.writeAsString('{broken');
     final instant = DateTime.utc(2026, 8, 23);
     final existing = Directory(

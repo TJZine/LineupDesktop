@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import '../plex/plex_models.dart';
 import 'channel.dart';
 import 'content_resolver.dart';
+import 'scheduler.dart';
 
 enum BuilderStrategy {
   playlists,
@@ -38,6 +39,8 @@ class ChannelProposal {
     required this.itemCount,
     required this.strategy,
     this.series = false,
+    required this.playableItemCount,
+    required this.blockItemCountWithoutSpecials,
   });
 
   final String name;
@@ -46,6 +49,11 @@ class ChannelProposal {
   final int itemCount;
   final BuilderStrategy strategy;
   final bool series;
+
+  /// Resolved inventory counts used to allocate each playback version.
+  /// Apply validates the current inventory independently of these proposal facts.
+  final int playableItemCount;
+  final int blockItemCountWithoutSpecials;
 }
 
 List<ChannelProposal> buildChannelProposals({
@@ -60,6 +68,33 @@ List<ChannelProposal> buildChannelProposals({
 }) {
   final proposals = <ChannelProposal>[];
   final sourceLibraries = libraries.toList();
+  // Each media item is classified at most once per build, even when it belongs
+  // to many tags. No full content list is materialized for an individual proposal.
+  final blockInclusion = <PlexMediaItem, bool>{};
+  bool includedWithoutSpecials(PlexMediaItem item) =>
+      blockInclusion.putIfAbsent(
+        item,
+        () => scheduleIncludesItem(
+          channelItemFor(item),
+          mode: PlaybackMode.block,
+          includeSpecials: false,
+        ),
+      );
+
+  ({int playable, int withoutSpecials}) contentCounts(
+    Iterable<PlexMediaItem> media, {
+    bool unique = false,
+  }) {
+    final seen = <String>{};
+    var playable = 0;
+    var withoutSpecials = 0;
+    for (final item in media) {
+      if (!item.isPlayable || (unique && !seen.add(item.id))) continue;
+      playable++;
+      if (includedWithoutSpecials(item)) withoutSpecials++;
+    }
+    return (playable: playable, withoutSpecials: withoutSpecials);
+  }
 
   void addTags(
     BuilderStrategy strategy,
@@ -68,6 +103,8 @@ List<ChannelProposal> buildChannelProposals({
   ) {
     if (!strategies.contains(strategy)) return;
     final countsByLibrary = <PlexLibrary, Map<String, int>>{};
+    final playableCountsByLibrary = <PlexLibrary, Map<String, int>>{};
+    final blockCountsByLibrary = <PlexLibrary, Map<String, int>>{};
     final seriesByLibrary = <PlexLibrary, Map<String, Set<String>>>{};
     final tagLabels = <String, String>{};
     final requiresSeriesBreadth = {
@@ -76,9 +113,15 @@ List<ChannelProposal> buildChannelProposals({
     }.contains(strategy);
     for (final library in sourceLibraries) {
       final counts = <String, int>{};
+      final playableCounts = <String, int>{};
+      final blockCounts = <String, int>{};
+      // Library resolution filters before deduplicating by ID: a repeated item
+      // can belong to a different tag, but counts once within each tag source.
+      final seenPlayableByTag = <String, Set<String>>{};
       final seriesByTag = <String, Set<String>>{};
       for (final item in items.where((item) => item.libraryId == library.id)) {
         final selectedTags = <String, String>{};
+        final matchingTags = <String>{};
         for (final value in select(item)) {
           final label = value.trim();
           if (label.isEmpty) continue;
@@ -86,6 +129,9 @@ List<ChannelProposal> buildChannelProposals({
               ? canonicalFilterIdentity(LibraryFilter.actor, label)
               : label;
           selectedTags.putIfAbsent(tag, () => label);
+          // People filters canonicalize names; other source filters match their
+          // supplied tag exactly, including any surrounding whitespace.
+          if (requiresSeriesBreadth || value == tag) matchingTags.add(tag);
           tagLabels.update(
             tag,
             (current) => requiresSeriesBreadth
@@ -96,6 +142,14 @@ List<ChannelProposal> buildChannelProposals({
         }
         for (final tag in selectedTags.keys) {
           counts[tag] = (counts[tag] ?? 0) + 1;
+          if (matchingTags.contains(tag) &&
+              item.isPlayable &&
+              (seenPlayableByTag[tag] ??= {}).add(item.id)) {
+            playableCounts[tag] = (playableCounts[tag] ?? 0) + 1;
+            if (includedWithoutSpecials(item)) {
+              blockCounts[tag] = (blockCounts[tag] ?? 0) + 1;
+            }
+          }
           if (requiresSeriesBreadth && library.type == PlexLibraryType.show) {
             final series = _peopleSeriesKey(library.id, item);
             if (series != null) (seriesByTag[tag] ??= {}).add(series);
@@ -103,6 +157,8 @@ List<ChannelProposal> buildChannelProposals({
         }
       }
       countsByLibrary[library] = counts;
+      playableCountsByLibrary[library] = playableCounts;
+      blockCountsByLibrary[library] = blockCounts;
       seriesByLibrary[library] = seriesByTag;
     }
     bool eligible(PlexLibrary library, String tag, {bool minimum = true}) {
@@ -122,10 +178,14 @@ List<ChannelProposal> buildChannelProposals({
       for (final tag in tags) {
         final sources = <ContentSource>[];
         var count = 0;
+        var playableCount = 0;
+        var blockCount = 0;
         for (final library in sourceLibraries) {
           final libraryCount = countsByLibrary[library]![tag] ?? 0;
           if (!eligible(library, tag, minimum: false)) continue;
           count += libraryCount;
+          playableCount += playableCountsByLibrary[library]![tag] ?? 0;
+          blockCount += blockCountsByLibrary[library]![tag] ?? 0;
           sources.add(
             LibrarySource(
               libraryId: library.id,
@@ -145,6 +205,8 @@ List<ChannelProposal> buildChannelProposals({
                   : MixedSource(sources: sources, interleave: true),
               mode: PlaybackMode.shuffle,
               itemCount: count,
+              playableItemCount: playableCount,
+              blockItemCountWithoutSpecials: blockCount,
               strategy: strategy,
             ),
           );
@@ -170,6 +232,10 @@ List<ChannelProposal> buildChannelProposals({
             ),
             mode: PlaybackMode.shuffle,
             itemCount: entry.value,
+            playableItemCount:
+                playableCountsByLibrary[library]![entry.key] ?? 0,
+            blockItemCountWithoutSpecials:
+                blockCountsByLibrary[library]![entry.key] ?? 0,
             strategy: strategy,
           ),
         );
@@ -180,12 +246,17 @@ List<ChannelProposal> buildChannelProposals({
   if (strategies.contains(BuilderStrategy.playlists)) {
     for (final playlist in playlists) {
       if (playlist.items.length < minimumItems) continue;
+      // Playlist occurrences are intentional; unlike library sources, repeated
+      // IDs remain distinct programs in the resolved schedule.
+      final counts = contentCounts(playlist.items);
       proposals.add(
         ChannelProposal(
           name: playlist.title,
           source: PlaylistSource(playlist.id),
           mode: PlaybackMode.shuffle,
           itemCount: playlist.items.length,
+          playableItemCount: counts.playable,
+          blockItemCountWithoutSpecials: counts.withoutSpecials,
           strategy: BuilderStrategy.playlists,
           series: playlist.items.any((item) => item.type == 'episode'),
         ),
@@ -203,6 +274,10 @@ List<ChannelProposal> buildChannelProposals({
           .where((item) => item.libraryId == library.id)
           .length;
       if (itemCount >= minimumItems) {
+        final counts = contentCounts(
+          items.where((item) => item.libraryId == library.id),
+          unique: true,
+        );
         proposals.add(
           ChannelProposal(
             name: '${library.title} Recently Added',
@@ -213,6 +288,8 @@ List<ChannelProposal> buildChannelProposals({
             ),
             mode: PlaybackMode.sequential,
             itemCount: itemCount,
+            playableItemCount: counts.playable,
+            blockItemCountWithoutSpecials: counts.withoutSpecials,
             strategy: BuilderStrategy.recentlyAdded,
           ),
         );
@@ -289,6 +366,8 @@ typedef ChannelPlanAllocation = ({
   int allocatedExtras,
   int excludedExtras,
   int numberLimitExcluded,
+  int existingSkipped,
+  List<Channel> unmatchedGenerated,
   Map<BuilderStrategy, int> eligibleOriginalsByStrategy,
   Map<BuilderStrategy, int> allocatedOriginalsByStrategy,
   Map<BuilderStrategy, int> allocatedChannelsByStrategy,
@@ -305,6 +384,7 @@ ChannelPlanAllocation materializeChannelPlan({
   PlaybackMode? variantMode,
   int variantBlockSize = 3,
   bool includeSpecials = false,
+  int minimumItems = 1,
   int maximumChannels = 200,
   DateTime? anchor,
 }) {
@@ -318,7 +398,9 @@ ChannelPlanAllocation materializeChannelPlan({
         })
       >[];
   for (final proposal in proposals) {
-    final isSeries = proposal.series || _containsShows(proposal.source);
+    final isSeries =
+        proposal.mode == PlaybackMode.shuffle &&
+        (proposal.series || _containsShows(proposal.source));
     final baseMode = isSeries ? seriesMode : proposal.mode;
     final baseBlockSize = baseMode == PlaybackMode.block
         ? seriesBlockSize
@@ -330,6 +412,22 @@ ChannelPlanAllocation materializeChannelPlan({
       blockSize: baseBlockSize,
     ));
   }
+  bool eligible(
+    ({
+      ChannelProposal proposal,
+      String suffix,
+      PlaybackMode mode,
+      int? blockSize,
+    })
+    entry,
+  ) {
+    final count = entry.mode == PlaybackMode.block && !includeSpecials
+        ? entry.proposal.blockItemCountWithoutSpecials
+        : entry.proposal.playableItemCount;
+    return count >= minimumItems;
+  }
+
+  final eligibleOriginals = originals.where(eligible).toList();
   final used = mode == ChannelBuildMode.replace
       ? existing
             .where((channel) => channel.builderKey == null)
@@ -339,7 +437,22 @@ ChannelPlanAllocation materializeChannelPlan({
   final output = <Channel>[];
   final allocatedOriginalsByStrategy = <BuilderStrategy, int>{};
   final allocatedChannelsByStrategy = <BuilderStrategy, int>{};
+  final existingBuilderKeys = mode == ChannelBuildMode.append
+      ? existing
+            .map((channel) => channel.builderKey)
+            .whereType<String>()
+            .toSet()
+      : const <String>{};
   final selectedOriginals =
+      <
+        ({
+          ChannelProposal proposal,
+          String suffix,
+          PlaybackMode mode,
+          int? blockSize,
+        })
+      >[];
+  final expansionOriginals =
       <
         ({
           ChannelProposal proposal,
@@ -350,6 +463,9 @@ ChannelPlanAllocation materializeChannelPlan({
       >[];
   var next = 1;
   var numberLimitExcluded = 0;
+  var existingSkipped = 0;
+  var skippedOriginals = 0;
+  var skippedExtras = 0;
 
   Channel? materialize(
     ({
@@ -405,12 +521,23 @@ ChannelPlanAllocation materializeChannelPlan({
     return channel;
   }
 
-  for (final entry in originals) {
+  for (final entry in eligibleOriginals) {
     if (output.length == maximumChannels) break;
+    if (existingBuilderKeys.contains(
+      _builderKey(entry.proposal, entry.suffix),
+    )) {
+      existingSkipped++;
+      skippedOriginals++;
+      expansionOriginals.add(entry);
+      continue;
+    }
     final channel = materialize(entry);
     if (channel == null) {
-      numberLimitExcluded = originals.length - selectedOriginals.length;
-      break;
+      numberLimitExcluded++;
+      // A merge can still match an existing extra for this source even when
+      // its original cannot receive a new channel number.
+      expansionOriginals.add(entry);
+      continue;
     }
     output.add(channel);
     allocatedChannelsByStrategy.update(
@@ -419,6 +546,7 @@ ChannelPlanAllocation materializeChannelPlan({
       ifAbsent: () => 1,
     );
     selectedOriginals.add(entry);
+    expansionOriginals.add(entry);
     allocatedOriginalsByStrategy.update(
       entry.proposal.strategy,
       (count) => count + 1,
@@ -427,13 +555,13 @@ ChannelPlanAllocation materializeChannelPlan({
   }
 
   final extrasByOriginal = [
-    for (final original in selectedOriginals)
+    for (final original in expansionOriginals)
       _extraVersions(
         original,
         alternateCopies: alternateCopies,
         variantMode: variantMode,
         variantBlockSize: variantBlockSize,
-      ),
+      ).where(eligible).toList(),
   ];
   final eligibleExtras = extrasByOriginal.fold<int>(
     0,
@@ -448,11 +576,17 @@ ChannelPlanAllocation materializeChannelPlan({
   ) {
     for (final extras in extrasByOriginal) {
       if (round >= extras.length) continue;
+      if (existingBuilderKeys.contains(
+        _builderKey(extras[round].proposal, extras[round].suffix),
+      )) {
+        existingSkipped++;
+        skippedExtras++;
+        continue;
+      }
       final channel = materialize(extras[round]);
       if (channel == null) {
-        numberLimitExcluded += eligibleExtras - allocatedExtras;
-        round = eligibleExtras;
-        break;
+        numberLimitExcluded++;
+        continue;
       }
       output.add(channel);
       allocatedChannelsByStrategy.update(
@@ -464,8 +598,22 @@ ChannelPlanAllocation materializeChannelPlan({
       if (output.length == maximumChannels) break;
     }
   }
-  final excludedOriginals = originals.length - selectedOriginals.length;
-  final excludedExtras = eligibleExtras - allocatedExtras;
+  final excludedOriginals =
+      eligibleOriginals.length - selectedOriginals.length - skippedOriginals;
+  final excludedExtras = eligibleExtras - allocatedExtras - skippedExtras;
+  final plannedBuilderKeys = output
+      .map((channel) => channel.builderKey)
+      .whereType<String>()
+      .toSet();
+  final unmatchedGenerated = mode == ChannelBuildMode.merge
+      ? existing
+            .where(
+              (channel) =>
+                  channel.builderKey != null &&
+                  !plannedBuilderKeys.contains(channel.builderKey),
+            )
+            .toList()
+      : const <Channel>[];
   return (
     channels: List.unmodifiable(output),
     allocatedOriginals: selectedOriginals.length,
@@ -473,10 +621,12 @@ ChannelPlanAllocation materializeChannelPlan({
     allocatedExtras: allocatedExtras,
     excludedExtras: excludedExtras,
     numberLimitExcluded: numberLimitExcluded,
+    existingSkipped: existingSkipped,
+    unmatchedGenerated: List.unmodifiable(unmatchedGenerated),
     eligibleOriginalsByStrategy: Map.unmodifiable({
       for (final strategy in BuilderStrategy.values)
-        strategy: proposals
-            .where((proposal) => proposal.strategy == strategy)
+        strategy: eligibleOriginals
+            .where((entry) => entry.proposal.strategy == strategy)
             .length,
     }),
     allocatedOriginalsByStrategy: Map.unmodifiable({

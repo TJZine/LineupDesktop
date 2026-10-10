@@ -20,25 +20,25 @@ void main() {
       plexConnectionDescription(
         connection(local: true, relay: false, latency: 99),
       ),
-      'Direct local • 99 ms measured',
+      'Direct local · 99 ms',
     );
     expect(
       plexConnectionDescription(
         connection(local: false, relay: false, latency: 100),
       ),
-      'Direct remote • 100 ms measured • Slow',
+      'Direct remote · 100 ms',
     );
     expect(
       plexConnectionDescription(
         connection(local: false, relay: false, latency: 499),
       ),
-      'Direct remote • 499 ms measured • Slow',
+      'Direct remote · 499 ms',
     );
     expect(
       plexConnectionDescription(
         connection(local: true, relay: true, latency: 500),
       ),
-      'Relay • Limited • 500 ms measured • Very slow',
+      'Relay · Limited · Very slow · 500 ms',
     );
     expect(
       plexConnectionKind(connection(local: true, relay: true, latency: 1)),
@@ -46,18 +46,21 @@ void main() {
     );
   });
 
-  test('parses collection metadata for builder sources', () {
-    final item = parseMediaItem({
-      'ratingKey': '1',
-      'title': 'Movie',
-      'type': 'movie',
-      'duration': 1000,
-      'Collection': [
-        {'tag': 'Friday Night'},
-      ],
-    });
-    expect(item.collections, ['Friday Night']);
-  });
+  test(
+    'parses collection tags for playlist metadata (library scans replace them)',
+    () {
+      final item = parseMediaItem({
+        'ratingKey': '1',
+        'title': 'Movie',
+        'type': 'movie',
+        'duration': 1000,
+        'Collection': [
+          {'tag': 'Friday Night'},
+        ],
+      });
+      expect(item.collections, ['Friday Night']);
+    },
+  );
 
   test('parses media, part, and Dolby Vision facts', () {
     final item = parseMediaItem({
@@ -342,7 +345,7 @@ void main() {
         {
           'tag': 'Unsafe Absolute',
           'role': 'Reporter',
-          'thumb': 'https://plex.invalid/library/metadata/2/thumb',
+          'thumb': 'https://user@plex.invalid/library/metadata/2/thumb',
         },
         {
           'tag': 'Unsafe Token',
@@ -387,34 +390,34 @@ void main() {
     );
   });
 
-  test('retains only trusted absolute Plex cast portraits', () {
-    const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
-    final item = parseMediaItem({
-      'ratingKey': 'cast-portraits',
-      'title': 'Episode',
-      'type': 'episode',
-      'duration': 1000,
-      'Role': [
-        {'tag': 'Trusted', 'thumb': trusted},
-        for (final unsafe in [
-          'http://metadata-static.plex.tv/f/people/http.jpg',
-          'https://user@metadata-static.plex.tv/f/people/user.jpg',
-          'https://metadata-static.plex.tv:444/f/people/port.jpg',
-          'https://metadata-static.plex.tv/f/people/query.jpg?token=secret',
-          'https://metadata-static.plex.tv/f/people/fragment.jpg#private',
-          'https://metadata-static.plex.tv.evil.example/f/people/lookalike.jpg',
-          'https://metadata-static.plex.tv./f/people/trailing-dot.jpg',
-        ].indexed)
-          {'tag': 'Unsafe ${unsafe.$1}', 'thumb': unsafe.$2},
-      ],
-    });
+  test(
+    'retains validated transcoder sources and drops unsafe cast portraits',
+    () {
+      const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
+      final item = parseMediaItem({
+        'ratingKey': 'cast-portraits',
+        'title': 'Episode',
+        'type': 'episode',
+        'duration': 1000,
+        'Role': [
+          {'tag': 'Trusted', 'thumb': trusted},
+          for (final unsafe in [
+            'file:///portrait.jpg',
+            '/library/../portrait.jpg',
+            'https://user@metadata-static.plex.tv/f/people/user.jpg',
+            'https://metadata-static.plex.tv/f/people/fragment.jpg#private',
+          ].indexed)
+            {'tag': 'Unsafe ${unsafe.$1}', 'thumb': unsafe.$2},
+        ],
+      });
 
-    expect(item.cast.first.thumbPath, trusted);
-    expect(
-      item.cast.skip(1).map((member) => member.thumbPath),
-      everyElement(isNull),
-    );
-  });
+      expect(item.cast.first.thumbPath, trusted);
+      expect(
+        item.cast.skip(1).map((member) => member.thumbPath),
+        everyElement(isNull),
+      );
+    },
+  );
 
   test('bounds rich cast without truncating actor names', () {
     final roles = [

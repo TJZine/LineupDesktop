@@ -367,27 +367,59 @@ class ChannelCastMember {
   }
 }
 
-/// Returns a cast portrait that is either owned by the selected PMS or served
-/// directly by Plex's public metadata image origin.
+/// Validates a Plex-supplied portrait source for fetching by the selected PMS
+/// photo transcoder. Absolute sources are never fetched by the app directly.
 Uri? canonicalPlexCastPortrait(Uri? value) {
-  final serverPath = canonicalPlexArtworkPath(value);
-  if (serverPath != null) return serverPath;
   if (value == null ||
-      value.scheme != 'https' ||
-      value.host != 'metadata-static.plex.tv' ||
-      value.port != 443 ||
+      value.toString().length > 2048 ||
+      _hasPortraitTraversal(value.toString()) ||
       value.userInfo.isNotEmpty ||
+      value.hasFragment) {
+    return null;
+  }
+  if (value.isAbsolute) {
+    return (value.scheme == 'http' || value.scheme == 'https') &&
+            value.host.isNotEmpty
+        ? value
+        : null;
+  }
+  if (value.hasAuthority ||
       value.hasQuery ||
-      value.hasFragment ||
-      value.pathSegments.isEmpty ||
-      value.pathSegments.any((segment) => segment == '.' || segment == '..')) {
+      !value.path.startsWith('/') ||
+      value.path == '/' ||
+      value.toString() != value.path) {
     return null;
   }
   return value;
 }
 
+bool _hasPortraitTraversal(String value) {
+  var pathText = value.split(RegExp(r'[?#]')).first;
+  // Inspect raw text before Uri normalizes dot segments, then inspect bounded
+  // decoding passes so encoded separators cannot disguise traversal.
+  for (var pass = 0; pass < 4; pass++) {
+    if (pathText.contains('\\') ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(pathText) ||
+        pathText
+            .split('/')
+            .any((segment) => segment == '.' || segment == '..')) {
+      return true;
+    }
+    try {
+      final decoded = Uri.decodeComponent(pathText);
+      if (decoded == pathText) break;
+      pathText = decoded;
+    } on FormatException {
+      return true;
+    }
+  }
+  return false;
+}
+
 String? canonicalPlexCastPortraitText(String? value) {
-  if (value == null) return null;
+  if (value == null || value.length > 2048 || _hasPortraitTraversal(value)) {
+    return null;
+  }
   return canonicalPlexCastPortrait(Uri.tryParse(value))?.toString();
 }
 
@@ -756,7 +788,7 @@ Uri? _optionalCastPortraitUri(Map<String, Object?> json, String key) {
   final value = _nonNull(json, key);
   if (value is! String) throw FormatException('Invalid $key');
   final uri = Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
-  return canonicalPlexCastPortrait(uri);
+  return canonicalPlexCastPortraitText(value) == null ? null : uri;
 }
 
 String? _optionalArtworkPath(Map<String, Object?> json, String key) {

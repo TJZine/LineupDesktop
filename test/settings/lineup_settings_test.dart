@@ -2,6 +2,62 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'overlay transparency defaults compatibly and round trips each level',
+    () {
+      final old = const LineupSettings().toJson()
+        ..remove('overlayTransparency');
+      expect(
+        LineupSettings.fromJson(old).overlayTransparency,
+        OverlayTransparency.standard,
+      );
+      for (final level in OverlayTransparency.values) {
+        final settings = const LineupSettings().copyWith(
+          overlayTransparency: level,
+        );
+        expect(
+          LineupSettings.fromJson(settings.toJson()).overlayTransparency,
+          level,
+        );
+        expect(settings.toJson()['overlayTransparency'], level.storageKey);
+      }
+      for (final invalid in [null, true, 'future']) {
+        expect(
+          () =>
+              LineupSettings.fromJson({...old, 'overlayTransparency': invalid}),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+  test(
+    'channel source setting defaults compatibly and rejects wrong types',
+    () {
+      final old = const LineupSettings().toJson()
+        ..remove('guideShowChannelSources');
+      expect(LineupSettings.fromJson(old).guideShowChannelSources, isFalse);
+      expect(
+        LineupSettings.fromJson(old).toJson(),
+        containsPair('guideShowChannelSources', false),
+      );
+      for (final value in [null, 1, 'true']) {
+        expect(
+          () => LineupSettings.fromJson({
+            ...old,
+            'guideShowChannelSources': value,
+          }),
+          throwsFormatException,
+        );
+      }
+      expect(
+        const LineupSettings()
+            .copyWith(guideShowChannelSources: true)
+            .guideShowChannelSources,
+        isTrue,
+      );
+    },
+  );
+
   test('uses the two-hour Guide default and final desktop options', () {
     const settings = LineupSettings();
     expect(settings.theme, LineupThemeName.emberSteel);
@@ -23,6 +79,7 @@ void main() {
       profilePickerOnStartup: true,
       diagnosticsEnabled: true,
       dvrControlsEnabled: true,
+      guideShowChannelSources: true,
     );
     expect(
       LineupSettings.fromJson(original.toJson()).toJson(),
@@ -72,11 +129,17 @@ void main() {
     );
   });
 
-  test('rejects unsupported option, enum, and Boolean values', () {
+  test('rejects malformed canonical and retired values', () {
     final canonical = const LineupSettings().toJson();
     for (final invalid in [
+      {...canonical}..remove('theme'),
+      {...canonical, 'future': true},
+      {...canonical, 'guideHours': 2.0},
       {...canonical, 'guideHours': 5},
       {...canonical, 'theme': 'future-theme'},
+      {...canonical, 'guideLayoutMode': 'future-layout'},
+      {...canonical, 'pastMinutes': 45},
+      {...canonical, 'libraryTabsEnabled': 'false'},
       {...canonical, 'reduceMotion': 1},
     ]) {
       expect(() => LineupSettings.fromJson(invalid), throwsFormatException);

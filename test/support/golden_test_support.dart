@@ -44,6 +44,14 @@ Future<void> loadPinnedTestFonts() async {
     }
     await loader.load();
   }
+  for (final entry in {
+    'Instrument Sans': 'instrumentsans/InstrumentSans[wdth,wght].ttf',
+    'Inter': 'inter/Inter[opsz,wght].ttf',
+  }.entries) {
+    final loader = FontLoader(entry.key)
+      ..addFont(rootBundle.load('assets/fonts/${entry.value}'));
+    await loader.load();
+  }
   final icons = ByteData.sublistView(
     await File('$fontDirectory/MaterialIcons-Regular.otf').readAsBytes(),
   );

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
@@ -26,6 +27,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: LineupSelectionCard(
           selected: true,
           onPressed: () {},
@@ -50,7 +52,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        builder: LineupCanvas.builder,
         home: LineupSelectionCard(
           selected: false,
           onPressed: null,
@@ -80,6 +83,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         theme: LineupTheme.forName(LineupThemeName.swiss),
         home: const Column(
           children: [
@@ -136,6 +140,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Align(
           child: SizedBox(
             width: 800,
@@ -337,6 +342,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () => showDialog<void>(
@@ -537,7 +543,7 @@ void main() {
         find.descendant(of: sourceChoices, matching: find.text('Hand-picked')),
         findsOneWidget,
       );
-      await tester.tap(find.text('Back to Channels'));
+      await tester.tap(find.text('‹ Channels'));
       await tester.pumpAndSettle();
     }
   });
@@ -570,7 +576,7 @@ void main() {
 
     await _openChannelEditor(tester, controller, original);
     await tester.enterText(find.byType(TextFormField).first, 'Cancelled');
-    await tester.tap(find.text('Back to Channels'));
+    await tester.tap(find.text('‹ Channels'));
     await tester.pumpAndSettle();
     expect(controller.channels.single.toJson(), original.toJson());
 
@@ -674,7 +680,10 @@ void main() {
       ];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamChannelSetupView(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -707,7 +716,10 @@ void main() {
       ];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamChannelSetupView(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -717,7 +729,7 @@ void main() {
     expect(
       find.descendant(
         of: find.widgetWithText(CheckboxListTile, 'Playlists'),
-        matching: find.textContaining('2 qualifying · 2 included'),
+        matching: find.text('2 channels'),
       ),
       findsOneWidget,
     );
@@ -738,7 +750,10 @@ void main() {
       ];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamChannelSetupView(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Scan selected libraries'));
@@ -817,7 +832,10 @@ void main() {
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: UpstreamChannelSetupView(controller: controller),
+        ),
       );
       await tester.pumpAndSettle();
       Focus.of(tester.element(find.text('Select all'))).requestFocus();
@@ -845,6 +863,7 @@ void main() {
     addTearDown(outsideFocus.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Column(
           children: [
             TextButton(
@@ -871,7 +890,7 @@ void main() {
 Future<void> _confirmDelete(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Actions for Newsroom'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Delete'));
+  await tester.tap(find.text('Delete…'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Delete channel'));
   await tester.pumpAndSettle();
@@ -884,6 +903,7 @@ Future<void> _openChannelEditor(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
+      builder: LineupCanvas.builder,
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () => showDialog<void>(
@@ -996,6 +1016,8 @@ class _ProfileFixtureController extends FixtureController {
 }
 
 abstract class _SetupScanFixtureController extends FixtureController {
+  @override
+  bool get playlistCatalogUnavailable => false;
   Set<String> _readyIds = const {};
   Map<String, LibraryScanFact> _scanFacts = const {};
 
@@ -1070,10 +1092,13 @@ class _PendingChannelSetupController extends _MediaChannelSetupController {
     List<Channel> planned, {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
+    Set<String> removeChannelIds = const {},
   }) async {
     await _apply.future;
     channels = composeChannelPlan(
-      existing: channels,
+      existing: channels
+          .where((channel) => !removeChannelIds.contains(channel.id))
+          .toList(),
       planned: planned,
       mode: mode,
     );

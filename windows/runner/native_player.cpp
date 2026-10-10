@@ -1171,6 +1171,9 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
                               load_id,
                               has_detail ? "Media playback failed"
                                          : mpv_error_string(end->error)));
+      } else if (end && end->reason == MPV_END_FILE_REASON_EOF) {
+        QueueEvent(generation,
+                   StateEvent("ended", "Playback ended", load_id));
       } else {
         QueueEvent(generation,
                    StateEvent("stopped", "Playback stopped", load_id));

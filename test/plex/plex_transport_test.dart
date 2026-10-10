@@ -923,7 +923,7 @@ void main() {
       );
     });
 
-    test('fetches trusted metadata artwork without Plex credentials', () async {
+    test('fetches metadata portraits only through authenticated sized PMS transcoder', () async {
       late http.BaseRequest request;
       final plex = client((value, _) async {
         request = value;
@@ -933,22 +933,40 @@ void main() {
         'https://metadata-static.plex.tv/f/people/avery-vale.jpg',
       );
 
-      final bytes = await plex.metadataArtwork(uri, maximumBytes: 4);
+      final bytes = await plex.castPortraitArtwork(
+        Uri.parse('https://selected.example:32400'),
+        'secret',
+        uri,
+        width: 144,
+        height: 144,
+        maximumBytes: 4,
+      );
 
       expect(bytes, [1, 2, 3, 4]);
-      expect(request.url, uri);
+      expect(request.url.host, 'selected.example');
+      expect(request.url.path, '/photo/:/transcode');
+      expect(request.url.queryParameters, {
+        'width': '144',
+        'height': '144',
+        'minSize': '1',
+        'upscale': '1',
+        'url': uri.toString(),
+      });
       expect(request.followRedirects, isFalse);
-      expect(request.headers.keys, everyElement(isNot(startsWith('X-Plex-'))));
+      expect(request.headers['X-Plex-Token'], 'secret');
+      expect(request.url.toString(), isNot(contains('secret')));
     });
 
     test('rejects untrusted metadata artwork before sending', () async {
       final plex = client((_, _) async => throw StateError('sent request'));
 
       await expectLater(
-        plex.metadataArtwork(
-          Uri.parse(
-            'https://metadata-static.plex.tv.evil.example/f/people/a.jpg',
-          ),
+        plex.castPortraitArtwork(
+          Uri.parse('https://selected.example:32400'),
+          'secret',
+          Uri.parse('https://user@metadata-static.plex.tv/f/people/a.jpg'),
+          width: 144,
+          height: 144,
         ),
         plexError('artwork-unavailable'),
       );
@@ -968,8 +986,12 @@ void main() {
       });
 
       await expectLater(
-        plex.metadataArtwork(
+        plex.castPortraitArtwork(
+          Uri.parse('https://selected.example:32400'),
+          'secret',
           Uri.parse('https://metadata-static.plex.tv/f/people/redirect.jpg'),
+          width: 144,
+          height: 144,
         ),
         plexError('artwork-unavailable'),
       );
@@ -985,8 +1007,12 @@ void main() {
       );
 
       await expectLater(
-        plex.metadataArtwork(
+        plex.castPortraitArtwork(
+          Uri.parse('https://selected.example:32400'),
+          'secret',
           Uri.parse('https://metadata-static.plex.tv/f/people/large.jpg'),
+          width: 144,
+          height: 144,
           maximumBytes: 3,
         ),
         plexError('artwork-too-large'),
