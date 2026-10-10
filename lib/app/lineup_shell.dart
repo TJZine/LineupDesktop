@@ -80,6 +80,7 @@ class _LineupShellState extends State<LineupShell> {
       player: widget.player,
       lineup: widget.controller,
       guide: _guide,
+      clock: widget.guideClock,
     );
     final initialMediaPath = widget.initialMediaPath;
     if (initialMediaPath != null) {

@@ -22,6 +22,8 @@ enum PlayerOverlay {
 }
 
 class PlayerCoordinator extends ChangeNotifier {
+  static const _catchUpTolerance = Duration(seconds: 30);
+  static const _prematureEndTolerance = Duration(seconds: 30);
   static const _nativeStopTimeout = Duration(seconds: 10);
   static const _trackConfirmationTimeout = Duration(seconds: 5);
 
@@ -30,7 +32,8 @@ class PlayerCoordinator extends ChangeNotifier {
     required this.lineup,
     required this.guide,
     this.overlayTimeout,
-  }) {
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now {
     _indexChannels();
     _status = player.status;
     _position = player.position;
@@ -49,6 +52,9 @@ class PlayerCoordinator extends ChangeNotifier {
   final LineupController lineup;
   final GuideController guide;
   final Duration? overlayTimeout;
+  final DateTime Function() _clock;
+  GuideProgram? _loadedProgram;
+  GuideProgram? _resolvingProgram;
   late PlayerStatus _status;
   late Duration _position;
   late Duration _duration;
@@ -88,6 +94,8 @@ class PlayerCoordinator extends ChangeNotifier {
   int? _pendingTrackId;
   String? _trackSelectionError;
   int _tuneGeneration = 0;
+  int? _continuationGeneration;
+  bool get _preservePresentation => _continuationGeneration == _tuneGeneration;
   int _controlGeneration = 0;
   int _trackSelectionGeneration = 0;
   int _seekGeneration = 0;
@@ -195,7 +203,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Duration? get sleepRemaining {
     final deadline = _sleepDeadline;
     if (deadline == null) return null;
-    final remaining = deadline.difference(DateTime.now());
+    final remaining = deadline.difference(_clock());
     return remaining.isNegative ? Duration.zero : remaining;
   }
 
@@ -209,11 +217,20 @@ class PlayerCoordinator extends ChangeNotifier {
 
   GuideProgram? get currentProgram {
     final id = lineup.currentChannelId;
-    return id == null ? null : guide.currentProgram(id);
+    return _resolvingProgram ??
+        _loadedProgram ??
+        (id == null ? null : guide.currentProgram(id));
   }
 
   GuideProgram? get nextProgram {
     final id = lineup.currentChannelId;
+    final represented = _resolvingProgram ?? _loadedProgram;
+    if (represented != null) {
+      return guide.currentProgram(
+        represented.channelId,
+        represented.scheduled.end,
+      );
+    }
     return id == null ? null : guide.nextProgram(id);
   }
 
@@ -307,6 +324,13 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _event(PlayerEvent event) {
     if (event.generation != _activeLoadGeneration) return;
+    final load = _activeLoad;
+    if (event.position > Duration.zero) {
+      load?.lastPositivePosition = event.position;
+    }
+    if (event.duration > Duration.zero) {
+      load?.lastPositiveDuration = event.duration;
+    }
     final previousFacts = _eventVisibleFacts;
     final previousState = _status.state;
     _status = event.status.state == PlayerState.error
@@ -419,10 +443,12 @@ class PlayerCoordinator extends ChangeNotifier {
       _canRetry = event.status.recoverable && _retryChannelId != null;
       _activePlayback = null;
       _activeChannel = null;
+      _loadedProgram = null;
       _setOverlay(PlayerOverlay.error, timed: false);
     } else {
       switch (event.status.state) {
         case PlayerState.loading:
+          if (_preservePresentation) break;
           _cancelOverlayTimer();
           if (_overlay == PlayerOverlay.osd) {
             _presentOverlay(PlayerOverlay.none);
@@ -432,13 +458,15 @@ class PlayerCoordinator extends ChangeNotifier {
         case PlayerState.paused:
         case PlayerState.buffering:
         case PlayerState.seeking:
-          if (event.status.state != previousState &&
+          if (!_preservePresentation &&
+              event.status.state != previousState &&
               _overlay != PlayerOverlay.nowPlaying) {
             _setOverlay(PlayerOverlay.osd);
           }
           break;
         case PlayerState.playing:
-          if (previousState != PlayerState.playing &&
+          if (!_preservePresentation &&
+              previousState != PlayerState.playing &&
               _overlay == PlayerOverlay.osd) {
             _scheduleOverlayHide(_overlay);
           }
@@ -449,9 +477,11 @@ class PlayerCoordinator extends ChangeNotifier {
           final request = _activePlayback;
           if (request == null && playback == null) {
             _activeLoad = null;
-            _cancelOverlayTimer();
-            if (_overlay != PlayerOverlay.error) {
-              _presentOverlay(PlayerOverlay.none);
+            if (!_preservePresentation) {
+              _cancelOverlayTimer();
+              if (_overlay != PlayerOverlay.error) {
+                _presentOverlay(PlayerOverlay.none);
+              }
             }
             break;
           }
@@ -460,17 +490,30 @@ class PlayerCoordinator extends ChangeNotifier {
             _activeLoad?.replacing = false;
             break;
           }
-          if (event.status.state == PlayerState.ended &&
-              _activeLoad?.replacing == true) {
-            _activeLoad?.replacing = false;
+          if (_activeLoad?.replacing == true) break;
+          if (event.status.state == PlayerState.stopped) {
+            _retireEndedPlayback();
+            break;
+          }
+          if (load == null) break;
+          final knownDuration =
+              load.lastPositiveDuration ??
+              (playback == null
+                  ? null
+                  : playback.parts[load.partIndex].duration);
+          if (knownDuration != null &&
+              load.lastPositivePosition <
+                  knownDuration - _prematureEndTolerance) {
+            unawaited(_failPrematureEnd(load.tuneGeneration));
+            break;
           }
           if (generation != null &&
               request != null &&
               _advancingGeneration != generation) {
             _advancingGeneration = generation;
             if (_partDurations[_activePartIndex] == null &&
-                event.duration > Duration.zero) {
-              _partDurations[_activePartIndex] = event.duration;
+                load.lastPositiveDuration != null) {
+              _partDurations[_activePartIndex] = load.lastPositiveDuration!;
             }
             unawaited(_advancePart(request, generation));
           }
@@ -486,13 +529,20 @@ class PlayerCoordinator extends ChangeNotifier {
     if (!_disposed && previousFacts != _eventVisibleFacts) notifyListeners();
   }
 
-  Future<bool> tune(String channelId) {
+  Future<bool> tune(String channelId) => _tune(channelId);
+
+  Future<bool> _tune(String channelId, {GuideProgram? endedProgram}) {
     final deadline = _sleepDeadline;
-    if (deadline != null && !DateTime.now().isBefore(deadline)) {
+    if (deadline != null && !_clock().isBefore(deadline)) {
       return _expireSleepTimer(_sleepEpoch).then((_) => false);
     }
-    _clearTransientStatus();
+    if (endedProgram == null) _clearTransientStatus();
+    _resolvingProgram = null;
     final generation = ++_tuneGeneration;
+    // Automatic continuation changes media, not the user's current presentation.
+    // Keep this identity for native events after readiness too; never restore a
+    // snapshot that could overwrite an overlay opened or closed during loading.
+    _continuationGeneration = endedProgram == null ? null : generation;
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
     final nativeStop = _beginNativeStop();
@@ -500,11 +550,13 @@ class PlayerCoordinator extends ChangeNotifier {
     _canRetry = false;
     _error = null;
     _retryChannelId = channelId;
-    _cancelOverlayTimer();
-    _presentOverlay(PlayerOverlay.osd);
+    if (endedProgram == null) {
+      _cancelOverlayTimer();
+      _presentOverlay(PlayerOverlay.osd);
+    }
     notifyListeners();
     final operation = _tuneOperations.then(
-      (_) => _performTune(channelId, generation, nativeStop),
+      (_) => _performTune(channelId, generation, nativeStop, endedProgram),
     );
     _tuneOperations = operation.then<void>((_) {}).catchError((_) {});
     return operation;
@@ -535,6 +587,7 @@ class PlayerCoordinator extends ChangeNotifier {
     String channelId,
     int generation,
     Future<void>? nativeStop,
+    GuideProgram? endedProgram,
   ) async {
     if (generation != _tuneGeneration) return false;
     if (nativeStop != null) {
@@ -555,36 +608,65 @@ class PlayerCoordinator extends ChangeNotifier {
       }
     }
     if (generation != _tuneGeneration) return false;
-    final program = await guide.ensureCurrentProgram(channelId);
+    var program = await guide.ensureCurrentProgram(channelId);
     if (generation != _tuneGeneration) return false;
     if (program == null) {
+      if (endedProgram != null) {
+        _tuning = false;
+        _retireEndedPlayback();
+        return false;
+      }
       _tuning = false;
       _canRetry = true;
       _error = 'The current program could not be loaded.';
       _setOverlay(PlayerOverlay.error, timed: false);
       return false;
     }
+    var fromBeginning = false;
+    if (endedProgram != null) {
+      final successor = guide.currentProgram(
+        channelId,
+        endedProgram.scheduled.end,
+      );
+      if (successor != null &&
+          successor.id != endedProgram.id &&
+          _clock().difference(successor.scheduled.start) <= _catchUpTolerance) {
+        program = successor;
+        fromBeginning = true;
+      }
+      // A stale or incomplete schedule must never replay the item that ended.
+      if (program.id == endedProgram.id) {
+        _tuning = false;
+        _retireEndedPlayback();
+        return false;
+      }
+    }
+    _resolvingProgram = program;
     LineupPlaybackRequest? request;
     LineupPlaybackRequest? replaced;
     final previousChannelId = lineup.currentChannelId;
     try {
       request = lineup.playbackFor(program.scheduled.item.id);
       replaced = _activePlayback;
-      final elapsed = DateTime.now().difference(program.scheduled.start);
+      final elapsed = _clock().difference(program.scheduled.start);
       request = await _loadPlayback(
         request,
-        initialPosition: elapsed > const Duration(seconds: 2) ? elapsed : null,
+        initialPosition: !fromBeginning && elapsed > const Duration(seconds: 2)
+            ? elapsed
+            : null,
       );
       _invalidateAuthorizationRecovery();
       if (identical(_activePlayback, replaced)) {
         _activePlayback = null;
         _activeChannel = null;
+        _loadedProgram = null;
       }
       if (generation != _tuneGeneration) {
         if (_tuning || _disposed) await _stopQuietly();
         return false;
       }
       _activePlayback = request;
+      _loadedProgram = program;
       _activeChannel = lineup.channels
           .where((channel) => channel.id == channelId)
           .firstOrNull;
@@ -592,6 +674,7 @@ class PlayerCoordinator extends ChangeNotifier {
         if (identical(_activePlayback, request)) {
           _activePlayback = null;
           _activeChannel = null;
+          _loadedProgram = null;
         }
         if (_tuning || _disposed) await _stopQuietly();
         return false;
@@ -602,7 +685,11 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       await lineup.setCurrentChannel(channelId);
       if (generation != _tuneGeneration) {
-        if (identical(_activePlayback, request)) _activePlayback = null;
+        if (identical(_activePlayback, request)) {
+          _activePlayback = null;
+          _activeChannel = null;
+          _loadedProgram = null;
+        }
         if (lineup.currentChannelId == channelId &&
             previousChannelId != channelId) {
           await lineup.setCurrentChannel(previousChannelId);
@@ -621,7 +708,11 @@ class PlayerCoordinator extends ChangeNotifier {
       _tuning = false;
       _canRetry = false;
       _error = null;
-      showOsd();
+      if (endedProgram == null) {
+        showOsd();
+      } else {
+        notifyListeners();
+      }
       return !_disposed &&
           generation == _tuneGeneration &&
           identical(_activePlayback, request) &&
@@ -634,10 +725,12 @@ class PlayerCoordinator extends ChangeNotifier {
       if (identical(_activePlayback, request)) {
         _activePlayback = null;
         _activeChannel = null;
+        _loadedProgram = null;
       }
       if (identical(_activePlayback, replaced)) {
         _activePlayback = null;
         _activeChannel = null;
+        _loadedProgram = null;
       }
       if (request != null) await _stopQuietly();
       if (generation != _tuneGeneration) return false;
@@ -647,6 +740,8 @@ class PlayerCoordinator extends ChangeNotifier {
       _error = _safePlaybackError(error);
       _setOverlay(PlayerOverlay.error, timed: false);
       return false;
+    } finally {
+      if (generation == _tuneGeneration) _resolvingProgram = null;
     }
   }
 
@@ -926,15 +1021,13 @@ class PlayerCoordinator extends ChangeNotifier {
       return;
     }
     if (_activePartIndex == request.parts.length - 1) {
-      _activeLoad = null;
-      _advancingGeneration = null;
-      _activePlayback = null;
-      _activeChannel = null;
-      _cancelOverlayTimer();
-      if (_overlay != PlayerOverlay.error) {
-        _presentOverlay(PlayerOverlay.none);
+      final ended = _loadedProgram;
+      final channelId = _activeChannel?.id;
+      if (ended != null && channelId != null) {
+        await _tune(channelId, endedProgram: ended);
+      } else {
+        _retireEndedPlayback();
       }
-      if (!_disposed) notifyListeners();
       return;
     }
     await _loadPartAtPosition(request, _activePartIndex + 1, null);
@@ -942,6 +1035,26 @@ class PlayerCoordinator extends ChangeNotifier {
       _advancingGeneration = null;
     }
     if (!_disposed && tuneGeneration == _tuneGeneration) notifyListeners();
+  }
+
+  void _retireEndedPlayback() {
+    _retirePlaybackIntent();
+    _cancelOverlayTimer();
+    if (_overlay != PlayerOverlay.error) _presentOverlay(PlayerOverlay.none);
+    notifyListeners();
+  }
+
+  Future<void> _failPrematureEnd(int generation) {
+    _status = const PlayerStatus(
+      state: PlayerState.error,
+      message: 'Playback error',
+      recoverable: true,
+      failureCode: 'premature_end',
+    );
+    return _failTransition(
+      const PlayerUnavailable('Premature end', failureCode: 'premature_end'),
+      generation,
+    );
   }
 
   Future<void> _failTransition(Object error, int tuneGeneration) async {
@@ -1387,7 +1500,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final epoch = ++_sleepEpoch;
     _sleepTimer?.cancel();
     _sleepDuration = duration;
-    _sleepDeadline = duration == null ? null : DateTime.now().add(duration);
+    _sleepDeadline = duration == null ? null : _clock().add(duration);
     if (duration != null) {
       _sleepTimer = Timer(duration, () => _expireSleepTimer(epoch));
     }
@@ -1396,7 +1509,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<bool> _expireSleepIfNeeded() async {
     final deadline = _sleepDeadline;
-    if (deadline == null || DateTime.now().isBefore(deadline)) return false;
+    if (deadline == null || _clock().isBefore(deadline)) return false;
     await _expireSleepTimer(_sleepEpoch);
     return true;
   }
@@ -1438,6 +1551,7 @@ class PlayerCoordinator extends ChangeNotifier {
     }
     _activePlayback = null;
     _activeChannel = null;
+    _loadedProgram = null;
     _telemetry = const PlayerTelemetry();
     _tracks = const [];
     _status = const PlayerStatus(
@@ -1667,6 +1781,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _miniGuideWindowStart = null;
     _retryChannelId = null;
     _activeChannel = null;
+    _loadedProgram = null;
     _error = null;
   }
 
@@ -1717,9 +1832,11 @@ class PlayerCoordinator extends ChangeNotifier {
     ++_trackSelectionGeneration;
     _clearTrackSelection();
     _activeLoad = null;
+    _resolvingProgram = null;
     _advancingGeneration = null;
     _activePlayback = null;
     _activeChannel = null;
+    _loadedProgram = null;
   }
 
   void _recordPlaybackFailure(Object error, {String operation = 'request'}) {
@@ -1739,6 +1856,8 @@ class PlayerCoordinator extends ChangeNotifier {
 
   static String _safePlaybackError(Object error) => switch (error) {
     PlexException(:final message) => message,
+    PlayerUnavailable(failureCode: 'premature_end') =>
+      'Playback ended before the program finished.',
     PlayerUnavailable() =>
       'Playback could not start. Retry or choose another channel.',
     _ => 'Playback could not start. Retry or choose another channel.',
@@ -1774,6 +1893,8 @@ class PlayerCoordinator extends ChangeNotifier {
     _cursorTimer?.cancel();
     _clearTrackSelection();
     _activePlayback = null;
+    _loadedProgram = null;
+    _resolvingProgram = null;
     unawaited(fullscreenReset.catchError((_) {}));
     super.dispose();
   }
@@ -1797,6 +1918,8 @@ class _PlaybackLoad {
   final LineupPlaybackRequest? request;
   final int partIndex;
   final bool authorizationRetried;
+  Duration lastPositivePosition = Duration.zero;
+  Duration? lastPositiveDuration;
   Duration? target;
   bool replacing;
   bool pending = true;
