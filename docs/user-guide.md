@@ -258,7 +258,7 @@ fact. The OSD uses the same primary-label policy.
 
 Press `I` or `Down` to expand the bottom OSD into persistent Now Playing
 details without leaving playback. The expanded panel shares the OSD actions,
-Up Next, timing and full-width progress lane. It shows the current scheduled
+Up Next, timing and full-width progress lane. It shows the loaded
 program's title, one line of episode/runtime/year/genre facts, format chips,
 poster, official title artwork, and a synopsis clamped to three lines.
 When **Prefer official title artwork** is enabled, an available Plex clear logo
@@ -283,6 +283,21 @@ them under the same tune. When DVR playback controls are enabled, progress and
 cross-part seeking use aggregate timing only when the required part durations
 are known; otherwise the Player shows the current part's timing rather than
 estimating missing boundaries.
+
+At the natural end of a channel's final media part, Lineup immediately starts
+the next scheduled program from its beginning, even if the media finishes
+before its scheduled slot ends. Small loading delays are carried rather than
+skipping the next program's opening. If that program's scheduled start is more
+than 30 seconds in the past, for example after a DVR pause, Lineup instead joins
+whatever is airing now at its live position. A manual tune or **Retry** also
+joins live.
+
+If a stream ends more than 30 seconds before its known duration, Lineup shows
+the existing playback error with **Retry** instead of advancing. Failed
+continuations do not retry automatically. Player title, progress context, and
+**Up Next** follow the loaded program; the Guide and mini Guide remain on the
+wall-clock schedule. User tune, Stop, sleep-timer expiry, sign-out, and lineup
+or content changes supersede a pending continuation.
 
 The timed OSD remains open while keyboard focus is inside its controls. Leaving
 the active OSD restarts its full timeout. The Mini Guide has no inactivity
@@ -457,9 +472,8 @@ vulnerabilities only through the private process in
 - Windows native playback and packaging have not yet completed the full
   physical acceptance matrix on the current branch.
 - macOS playback is intentionally unsupported.
-- Playback stops after the tuned program's final media part. Automatic
-  continuation to another scheduled program is not implemented; its behavior
-  after pauses or an early media ending still needs a schedule-alignment decision.
+- Scheduled program continuation is implemented; its native end-of-file
+  behavior and boundary scenarios still require physical Windows acceptance.
 - Audio-output selection and passthrough controls are not exposed.
 - The native player deliberately has no application codec/container/HDR
   allowlist. Representative codec, HDR, TrueHD/DTS-to-PCM, text/image subtitle,

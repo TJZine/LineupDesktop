@@ -1,8 +1,8 @@
 # Scheduled Program Continuation Plan
 
-**Status:** Approved for implementation on October 10, 2026. Product decisions
-below were made by the user. Physical Windows acceptance is still required
-before claiming the behavior.
+**Status:** Implemented on October 10, 2026. Product decisions below were made
+by the user. Windows native compilation and the physical acceptance rows below
+remain outstanding; portable verification does not establish native behavior.
 
 **Problem:** When a channel's program reaches the end of its final media part,
 Lineup clears playback and shows **Playback stopped**. A channel should keep
