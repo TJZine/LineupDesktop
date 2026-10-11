@@ -210,6 +210,43 @@ line with middle-dot separators when space is compact.
 
 ## Player
 
+On Windows, **Settings > Playback > Match display HDR in fullscreen** is on
+by default, after **DVR playback controls**. Its subtitle is: "Switch Windows
+HDR on for HDR programs and off for SDR programs while fullscreen, then restore
+your display setting."
+
+Matching starts when fullscreen playback is visible in Player with the full
+Guide closed. Opening the full Guide after matching starts keeps the session
+active. HDR programs select HDR and SDR programs select SDR, including when
+Windows HDR was already on. Leaving fullscreen, turning the setting off, Stop,
+an error, signing out, or closing Lineup releases the display and restores the
+setting it found. A manual HDR change suspends matching and is respected.
+Moving to another display releases the old target and evaluates the new one.
+
+Eligible program starts may briefly show **Preparing playback**, then
+**Starting playback…** after two seconds, while playback is held for the display
+transition. The hold releases after a successful switch and a 1.5-second settle,
+or sooner when no switch is needed or matching cannot proceed. A change request
+has a four-second hold deadline; unknown video parameters have a bounded
+fallback. User Play releases the hold immediately, and user Pause cancels its
+automatic resume when DVR controls are enabled. Holds also work with DVR
+controls off and contribute to continuation lateness.
+
+Decoded PQ and HLG select HDR. Dolby Vision is presented as HDR10, not true Dolby
+Vision; profile 7 uses its HDR10 base layer. HDR10+ is presented as static HDR10.
+These content and transition rows still need integrated physical acceptance.
+Both Windows 10 and Windows 11 matching routes are enabled according to detected
+capabilities; Windows 11 remains unverified on the borrowed machine.
+
+Lineup permits one instance per Windows user session. A second launch restores
+and focuses the existing window and ignores the new launch's arguments,
+including a local-media argument.
+
+A separate guardian attempts original-state restoration if the main app exits
+abnormally. Lineup changes no display state unless the guardian is confirmed
+armed. Power loss, an OS crash, a shutdown that cuts recovery short, or ending
+the guardian together with Lineup can leave Windows in its last display state.
+
 Move the pointer or click/tap the Player to show the on-screen controls. The OSD
 uses a responsive shallow broadcast layout at 1280×720 and 1920×1080. The
 channel bug is in the top-right. When **Prefer official title artwork** is
@@ -420,7 +457,7 @@ Deletion requires confirmation and cannot be undone.
 | --- | --- |
 | Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Mint Noir, and Satellite Blue; three Player overlay-transparency choices; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
 | Guide | Visible hours of 2, 3, or 4; whether to show channel sources; and whether to show the now-playing channel and program in Guide |
-| Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; and optional DVR playback controls |
+| Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; optional DVR playback controls; Match display HDR in fullscreen (default on) |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, show the profile picker on startup, switch the Plex Media Server, and sign out of Plex |
 | Support | Enable or disable bounded redacted diagnostic recording and open Diagnostics |
@@ -433,6 +470,11 @@ the screen shows an error.
 
 Diagnostics are disabled by default. Enable **Record redacted diagnostics** in
 **Settings > Support** before reproducing a problem that needs support context.
+
+Technical details and the support report include **Windows display**, **HDR
+matching**, and **Renderer output**, with normalized values. Display state is
+reported by Windows; it does not verify the TV's picture. Source HDR metadata,
+renderer output, and Windows display state are separate observations.
 
 The application stores diagnostic context only from a small allowlist of
 bounded structured facts; arbitrary exception and native message text is not

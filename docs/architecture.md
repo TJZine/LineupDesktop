@@ -81,10 +81,43 @@ idle confirmation. None substitutes for the others. Dart remains the owner of
 application playback coordination; Plex authentication, networking, channel
 policy, settings, Guide behavior, and navigation do not enter C++.
 
+Fullscreen HDR matching keeps that boundary. Dart's
+`lib/playback/display_matching.dart`, driven by `PlayerCoordinator`, owns
+session eligibility, desired state from the active load's first decoded transfer,
+and clock/generation-bound holds. Each eligible load uses `startPaused`;
+post-load session entry pauses only when a change is needed. The coordinator
+projects an active hold as preparing/loading in Player UI without rewriting
+playback state, overlays, or continuation presentation. Display reports are
+player-scoped and independent of load telemetry; renderer target parameters
+remain per-load Diagnostics facts.
+
+`display_dynamic_range.*` owns every DisplayConfig call on a dedicated worker,
+separate from the platform and mpv threads. Capability detection selects the
+HDR-state route or legacy advanced-color route. Original state and attempted/
+verified writes belong to each display target beyond an individual session.
+External changes suspend matching and relinquish ownership without restoration.
+Target remapping reports an ordered inactive edge before the new active or
+unavailable session, even when its Dart revision is unchanged. Release restores
+the original state conditionally; failed release retains the guardian record.
+
+`display_guardian.*` launches the same executable in hidden guardian mode with
+only its two pipe ends and a synchronize-only parent handle inherited. Versioned,
+sequenced records are acknowledged; a confirmed arm and attempted-state update
+precede a display write. On parent loss it conditionally restores a state matching
+Lineup's last attempted or verified write. Startup dispatch precedes COM/Flutter
+and the per-user-session instance mutex; a second ordinary launch focuses the
+existing window and ignores its arguments. The guardian restore mutex is held
+only while restoring, and the controller waits for it once at startup on its
+worker. See the [HDR implementation contracts](fullscreen-hdr-implementation-plan.md).
+
 Normal shutdown is asynchronous: stop accepting commands and invalidate the
 native generation, let the worker destroy libmpv, then handle its platform
 message, join the worker, destroy the presentation host, and complete disposal.
-Window close waits for that handshake. The runner destroys the native owner
+Window close waits for that handshake and display release, with a three-second
+display deadline. Windows end-session release waits at most two seconds. The
+display worker destructor also has bounded emergency cleanup; a guardian covers
+abnormal parent loss, but cannot guarantee restoration across power loss or an
+OS shutdown that cuts recovery short. The runner destroys the native owner
 before the Flutter controller/messenger. Preserve this ordering when changing
 close or recreation; the destructor's five-second wait and termination fallback
 is emergency cleanup, not the normal path. See
