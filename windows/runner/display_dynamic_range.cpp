@@ -197,8 +197,15 @@ void DisplayMatchingEngine::Report(Record* record, const char* outcome,
   }
   report_(report);
 }
-void DisplayMatchingEngine::Process(DisplayRequest request, bool remap) {
+void DisplayMatchingEngine::Process(DisplayRequest request, bool remap,
+                                    bool retry) {
   const bool was_active = request_.session;
+  if (request.revision != request_.revision &&
+      (request.session != request_.session ||
+       request.desired != request_.desired)) {
+    for (auto &record : records_)
+      record->failure.reset();
+  }
   request_ = request;
   if (!request.session) {
     Record* ending = active_ ? Find(*active_) : nullptr;
@@ -209,8 +216,8 @@ void DisplayMatchingEngine::Process(DisplayRequest request, bool remap) {
            HasOwnership() ? "restore_failed" : nullptr);
   } else if (!was_active) {
     Start();
-  } else if (remap) {
-    Poll(true);
+  } else if (remap || retry) {
+    Poll(remap, retry);
   } else if (session_ == std::string("active")) {
     Reconcile();
   } else {
@@ -255,6 +262,7 @@ void DisplayMatchingEngine::Start() {
     record->guardian_lost = false;
     record->unobserved_attempt = false;
     record->write_revision = -1;
+    record->failure.reset();
   }
   session_ = "active";
   session_reason_ = nullptr;
@@ -308,6 +316,10 @@ bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
   if (verified) {
     own.verified = desired;
     record.unobserved_attempt = false;
+  }
+  if (!restore && !verified) {
+    record.failure =
+        Record::Failure{request_, accepted ? "not_observed" : "set_rejected"};
   }
   // Never erase attempted on timeout: Windows may finish after our deadline.
   if (record.guardian && !record.guardian->Update(own))
@@ -363,6 +375,12 @@ void DisplayMatchingEngine::Reconcile() {
     Report(record, "matched", false);
     return;
   }
+  // Polling still observes late success/external changes, but a failed intent
+  // is attempted again only after changed intent or a display/settings notice.
+  if (record->failure && record->failure->request.desired == request_.desired) {
+    Report(record, "failed", false, record->failure->reason);
+    return;
+  }
   if (!record->owned) {
     record->guardian = guardian_();
     if (!record->guardian || !record->guardian->Arm(record->ownership)) {
@@ -409,7 +427,11 @@ void DisplayMatchingEngine::Release(Record& record) {
 void DisplayMatchingEngine::ReleaseAll() {
   for (auto& record : records_) Release(*record);
 }
-void DisplayMatchingEngine::Poll(bool remap) {
+void DisplayMatchingEngine::Poll(bool remap, bool retry) {
+  if (retry) {
+    for (auto &record : records_)
+      record->failure.reset();
+  }
   if (request_.session && (remap || !active_)) {
     const auto mapping = api_.MapWindow(window_);
     if (!mapping.target || !active_ || !(*mapping.target == *active_)) {
@@ -485,10 +507,11 @@ void DisplayDynamicRange::ResetRevision() {
   released_ = false;
   changed_.notify_one();
 }
-void DisplayDynamicRange::Notify(bool remap) {
+void DisplayDynamicRange::Notify(bool remap, bool retry) {
   std::lock_guard lock(mutex_);
   notified_ = true;
   remap_ = remap_ || remap;
+  retry_ = retry_ || retry;
   changed_.notify_one();
 }
 void DisplayDynamicRange::EndSession() {
@@ -523,6 +546,7 @@ void DisplayDynamicRange::Run() {
   while (true) {
     std::optional<Pending> request;
     bool remap = false;
+    bool retry = false;
     bool stop = false;
     {
       std::unique_lock lock(mutex_);
@@ -531,7 +555,9 @@ void DisplayDynamicRange::Run() {
       });
       stop = stopping_;
       remap = remap_;
+      retry = retry_;
       notified_ = remap_ = false;
+      retry_ = false;
       if (!requests_.empty()) {
         request = requests_.front();
         requests_.pop_front();
@@ -543,9 +569,9 @@ void DisplayDynamicRange::Run() {
     }
     if (request) {
       processing_epoch = request->epoch;
-      engine.Process(request->request, remap);
+      engine.Process(request->request, remap, retry);
     } else if (engine.SessionActive() || engine.HasOwnership())
-      engine.Poll(remap);
+      engine.Poll(remap, retry);
     {
       std::lock_guard lock(mutex_);
       released_ = requests_.empty() && !engine.SessionActive() &&

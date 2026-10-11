@@ -107,14 +107,18 @@ class DisplayMatchingEngine {
                         DisplayGuardianFactory guardian, DisplayClock& clock,
                         Reporter report,
                         std::function<bool()> restart_pending = {});
-  void Process(DisplayRequest request, bool remap = false);
-  void Poll(bool remap);
+  void Process(DisplayRequest request, bool remap = false, bool retry = false);
+  void Poll(bool remap, bool retry = false);
   void ReleaseAll();
   bool HasOwnership() const;
   bool SessionActive() const { return request_.session; }
 
  private:
   struct Record {
+    struct Failure {
+      DisplayRequest request;
+      const char *reason;
+    };
     DisplayOwnership ownership;
     DisplayObservation observed;
     std::unique_ptr<DisplayGuardianLink> guardian;
@@ -122,6 +126,7 @@ class DisplayMatchingEngine {
     bool guardian_lost = false;
     bool unobserved_attempt = false;
     int64_t write_revision = -1;
+    std::optional<Failure> failure;
   };
   Record* Find(DisplayTarget target);
   void Start();
@@ -154,7 +159,7 @@ class DisplayDynamicRange {
   ~DisplayDynamicRange();
   bool Submit(DisplayRequest request);
   void ResetRevision();
-  void Notify(bool remap);
+  void Notify(bool remap, bool retry = false);
   void EndSession();
   bool ReleaseComplete() const { return released_.load(); }
   void EndSessionAndWait(std::chrono::milliseconds timeout);
@@ -178,6 +183,7 @@ class DisplayDynamicRange {
   int64_t revision_ = -1;
   bool notified_ = false;
   bool remap_ = false;
+  bool retry_ = false;
   bool stopping_ = false;
   std::atomic<bool> released_{true};
   std::atomic<bool> finished_{false};

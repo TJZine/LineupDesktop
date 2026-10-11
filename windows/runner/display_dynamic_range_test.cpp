@@ -169,6 +169,55 @@ void FailedAndLateWrites() {
             stale.Last().observed == DisplayState::sdr,
         "stale success reconciled newest desired");
 }
+void FailedIntentRetryGates() {
+  for (bool accepted : {false, true}) {
+    Fixture f;
+    f.api.accept = accepted;
+    f.api.apply = false;
+    f.Request(1, true, DisplayState::hdr);
+    for (int i = 0; i < 4; ++i)
+      f.engine.Poll(false);
+    Check(f.api.writes.size() == 1 && f.Last().observed == DisplayState::sdr &&
+              Text(f.Last().outcome, "failed") &&
+              Text(f.Last().reason, accepted ? "not_observed" : "set_rejected"),
+          "failed intent polls observe without repeating Set");
+    f.Request(2, true, DisplayState::hdr);
+    f.engine.Poll(true);
+    Check(f.api.writes.size() == 1,
+          "same intent new revision and same-target movement do not retry");
+    f.engine.Poll(false, true);
+    for (int i = 0; i < 3; ++i)
+      f.engine.Poll(false);
+    Check(f.api.writes.size() == 2,
+          "settings notification permits exactly one more attempt");
+    f.engine.Process({3, true, DisplayState::hdr}, true, true);
+    f.engine.Poll(false);
+    Check(f.api.writes.size() == 3,
+          "display notification with queued same intent permits one attempt");
+    f.Request(4, true, DisplayState::unknown);
+    f.Request(5, true, DisplayState::hdr);
+    f.engine.Poll(false);
+    Check(f.api.writes.size() == 4,
+          "changed desired state permits one fresh attempt");
+    f.Request(6, false, DisplayState::unknown);
+    f.Request(7, true, DisplayState::hdr);
+    f.engine.Poll(false);
+    Check(f.api.writes.size() == 5,
+          "new session permits one fresh attempt and inherits ownership");
+  }
+  Fixture late;
+  late.api.apply = false;
+  late.Request(1, true, DisplayState::hdr);
+  late.api.displays[1].state = DisplayState::hdr;
+  late.engine.Poll(false);
+  Check(late.api.writes.size() == 1 && Text(late.Last().outcome, "matched") &&
+            late.guardian->last.verified == DisplayState::hdr,
+        "blocked retry still observes and records late success");
+  late.Request(2, true, DisplayState::sdr);
+  late.engine.Poll(false);
+  Check(late.api.writes.size() == 2 && Text(late.Last().reason, "not_observed"),
+        "opposite desired state permits one attempt after late success");
+}
 void ExternalChanges() {
   Fixture before;
   before.Request(1, true, DisplayState::unknown);
@@ -463,6 +512,7 @@ int main() {
   try {
     MatchingAndRestore();
     FailedAndLateWrites();
+    FailedIntentRetryGates();
     ExternalChanges();
     RestoreFailureAndInheritance();
     TargetLossAndChange();

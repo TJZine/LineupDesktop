@@ -1402,7 +1402,9 @@ void WindowsNativePlayer::DrainEvents() {
 bool WindowsNativePlayer::HandleWindowMessage(UINT message, WPARAM wparam) {
   if (message == WM_DISPLAYCHANGE || message == WM_MOVE ||
       message == WM_WINDOWPOSCHANGED || message == WM_SETTINGCHANGE) {
-    display_->Notify(message != WM_SETTINGCHANGE);
+    display_->Notify(message != WM_SETTINGCHANGE,
+                     message == WM_DISPLAYCHANGE ||
+                         message == WM_SETTINGCHANGE);
     return false;
   }
   const bool close_timer = message == WM_TIMER && wparam == kPlatformEventMessage;
