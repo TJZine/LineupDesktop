@@ -210,12 +210,9 @@ abstract final class LineupTheme {
       outline: palette.defaultBorder,
       outlineVariant: palette.subtleBorder,
     );
+    final textTheme = LineupTypography.textTheme(palette);
     final controlShape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(palette.panelRadius),
-    );
-    final textTheme = ThemeData.dark().textTheme.apply(
-      bodyColor: palette.primaryText,
-      displayColor: palette.primaryText,
+      borderRadius: BorderRadius.circular(8),
     );
 
     return ThemeData(
@@ -240,7 +237,7 @@ abstract final class LineupTheme {
         selectedIconTheme: IconThemeData(color: palette.progressFill),
         selectedLabelTextStyle: textTheme.labelMedium!.copyWith(
           color: palette.progressFill,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
         ),
         useIndicator: true,
       ),
@@ -252,26 +249,7 @@ abstract final class LineupTheme {
           side: BorderSide(color: palette.subtleBorder),
         ),
       ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: palette.deepBackground,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(palette.panelRadius),
-          borderSide: BorderSide(color: palette.defaultBorder),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(palette.panelRadius),
-          borderSide: BorderSide(color: palette.defaultBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(palette.panelRadius),
-          borderSide: BorderSide(
-            color: palette.focusBorder,
-            width: largeFocusIndicators ? palette.focusBorderWidth : 2,
-          ),
-        ),
-        errorMaxLines: 2,
-      ),
+      inputDecorationTheme: fieldDecoration(palette),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith(
@@ -323,50 +301,85 @@ abstract final class LineupTheme {
         shape: const StadiumBorder(),
       ),
       listTileTheme: ListTileThemeData(
+        titleTextStyle: LineupTypography.control.copyWith(
+          color: palette.primaryText,
+        ),
+        subtitleTextStyle: LineupTypography.body.copyWith(
+          color: palette.secondaryText,
+        ),
         iconColor: palette.secondaryText,
         textColor: palette.primaryText,
       ),
-      iconButtonTheme: IconButtonThemeData(
-        style: ButtonStyle(
-          shape: WidgetStatePropertyAll(controlShape),
-          foregroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.disabled)
-                ? palette.mutedText
-                : states.contains(WidgetState.focused)
-                ? palette.focusBorder
-                : states.contains(WidgetState.hovered)
-                ? palette.progressFill
-                : palette.secondaryText,
-          ),
-        ),
-      ),
+      iconButtonTheme: IconButtonThemeData(style: iconStyle(palette)),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: palette.progressFill,
-          foregroundColor: palette.onFocus,
-          minimumSize: const Size(148, 54),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          textStyle: textTheme.labelLarge?.copyWith(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
-          shape: controlShape,
-        ),
+        style: buttonStyle(palette, LineupButtonTier.primary),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(148, 54),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          side: BorderSide(color: palette.defaultBorder),
-          textStyle: textTheme.labelLarge?.copyWith(
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-          ),
-          shape: controlShape,
-        ),
+        style: buttonStyle(palette, LineupButtonTier.secondary),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(shape: controlShape),
+        style: buttonStyle(palette, LineupButtonTier.text),
+      ),
+      tabBarTheme: TabBarThemeData(
+        indicatorColor: palette.progressFill,
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: palette.subtleBorder,
+        labelColor: palette.primaryText,
+        unselectedLabelColor: palette.secondaryText,
+        labelStyle: LineupTypography.control,
+        unselectedLabelStyle: LineupTypography.control,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: palette.elevatedSurface,
+        surfaceTintColor: Colors.transparent,
+        textStyle: LineupTypography.control.copyWith(
+          color: palette.primaryText,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: palette.defaultBorder),
+        ),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(palette.elevatedSurface),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: palette.defaultBorder),
+          ),
+          shape: WidgetStatePropertyAll(controlShape),
+        ),
+      ),
+      menuButtonTheme: MenuButtonThemeData(
+        style: buttonStyle(palette, LineupButtonTier.text, compact: true)
+            .copyWith(
+              shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+              alignment: Alignment.centerLeft,
+            ),
+      ),
+      dropdownMenuTheme: DropdownMenuThemeData(
+        textStyle: LineupTypography.body,
+        inputDecorationTheme: fieldDecoration(palette),
+        menuStyle: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(palette.elevatedSurface),
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        side: BorderSide(color: palette.defaultBorder, width: 2),
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? palette.progressFill
+              : Colors.transparent,
+        ),
+        checkColor: WidgetStatePropertyAll(palette.onFocus),
+      ),
+      switchTheme: SwitchThemeData(
+        trackOutlineColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? Colors.transparent
+              : palette.defaultBorder,
+        ),
+        trackOutlineWidth: const WidgetStatePropertyAll(2),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: palette.progressFill,
@@ -374,6 +387,135 @@ abstract final class LineupTheme {
       ),
     );
   }
+
+  static InputDecorationTheme fieldDecoration(
+    LineupThemeRoles roles, {
+    bool focusVisible = true,
+    bool compact = false,
+  }) {
+    OutlineInputBorder border(Color color, [double width = 1]) =>
+        OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: color, width: width),
+        );
+    return InputDecorationTheme(
+      filled: true,
+      fillColor: roles.onFocus,
+      floatingLabelBehavior: FloatingLabelBehavior.never,
+      constraints: BoxConstraints(minHeight: compact ? 44 : 56),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 14 : 18,
+        vertical: compact ? 10 : 16,
+      ),
+      hintStyle: LineupTypography.body.copyWith(color: roles.mutedText),
+      labelStyle: LineupTypography.fieldLabel.copyWith(
+        color: roles.secondaryText,
+      ),
+      border: border(roles.defaultBorder),
+      enabledBorder: border(roles.defaultBorder),
+      disabledBorder: border(roles.defaultBorder.withValues(alpha: .5)),
+      focusedBorder: border(
+        focusVisible ? roles.focusBorder : roles.defaultBorder,
+        focusVisible ? roles.focusBorderWidth : 1,
+      ),
+      errorBorder: border(roles.liveAccent),
+      focusedErrorBorder: border(
+        roles.liveAccent,
+        focusVisible ? roles.focusBorderWidth : 1,
+      ),
+      errorStyle: LineupTypography.small.copyWith(color: roles.liveAccent),
+      errorMaxLines: 3,
+    );
+  }
+
+  static ButtonStyle buttonStyle(
+    LineupThemeRoles roles,
+    LineupButtonTier tier, {
+    bool compact = false,
+    bool focusVisible = true,
+  }) {
+    final filled =
+        tier == LineupButtonTier.primary ||
+        tier == LineupButtonTier.destructive;
+    final accent = tier == LineupButtonTier.destructive
+        ? roles.liveAccent
+        : roles.progressFill;
+    return ButtonStyle(
+      minimumSize: WidgetStatePropertyAll(Size(0, compact ? 44 : 56)),
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: compact ? 20 : 28),
+      ),
+      textStyle: WidgetStatePropertyAll(
+        LineupTypography.button.copyWith(fontSize: compact ? 16 : 18),
+      ),
+      iconSize: const WidgetStatePropertyAll(20),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(compact ? 6 : 8),
+        ),
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        final disabled = states.contains(WidgetState.disabled);
+        if (filled) {
+          return disabled
+              ? accent.withValues(alpha: .22)
+              : states.contains(WidgetState.hovered)
+              ? Color.lerp(accent, roles.primaryText, .18)
+              : accent;
+        }
+        return states.contains(WidgetState.hovered)
+            ? roles.primaryText.withValues(alpha: .08)
+            : Colors.transparent;
+      }),
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return (filled ? accent : roles.secondaryText).withValues(alpha: .45);
+        }
+        if (filled) return roles.onFocus;
+        if (tier == LineupButtonTier.link) return roles.progressFill;
+        return tier == LineupButtonTier.secondary ||
+                states.contains(WidgetState.hovered)
+            ? roles.primaryText
+            : roles.secondaryText;
+      }),
+      side: WidgetStateProperty.resolveWith((states) {
+        if (focusVisible && states.contains(WidgetState.focused)) {
+          return BorderSide(
+            color: roles.focusBorder,
+            width: roles.focusBorderWidth,
+          );
+        }
+        if (tier == LineupButtonTier.secondary) {
+          return BorderSide(
+            color: roles.defaultBorder.withValues(
+              alpha: states.contains(WidgetState.disabled) ? .5 : 1,
+            ),
+          );
+        }
+        return BorderSide.none;
+      }),
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+    );
+  }
+
+  static ButtonStyle iconStyle(
+    LineupThemeRoles roles, {
+    bool focusVisible = true,
+  }) =>
+      buttonStyle(
+        roles,
+        LineupButtonTier.text,
+        compact: true,
+        focusVisible: focusVisible,
+      ).copyWith(
+        minimumSize: const WidgetStatePropertyAll(Size(44, 44)),
+        padding: const WidgetStatePropertyAll(EdgeInsets.all(10)),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? roles.secondaryText.withValues(alpha: .3)
+              : roles.secondaryText,
+        ),
+      );
 
   static LineupThemeRoles _palette(LineupThemeName name) => switch (name) {
     LineupThemeName.emberSteel => const LineupThemeRoles(
@@ -410,6 +552,7 @@ abstract final class LineupTheme {
       live: const Color(0xFFFF4444),
       radius: 8,
       scrim: const Color(0xDB161816),
+      focusBorder: const Color(0xFFA8C49E),
     ),
     LineupThemeName.swiss => _roles(
       deep: const Color(0xFF020202),
@@ -433,19 +576,8 @@ abstract final class LineupTheme {
       radius: 2,
       scrim: const Color(0xE3001830),
       focus: const Color(0xFFFFCC00),
-      focusBorder: const Color(0xFFE5A00D),
+      focusBorder: const Color(0xFFFFCC00),
       onFocus: Colors.black,
-    ),
-    LineupThemeName.glass => _roles(
-      deep: const Color(0xFF05080B),
-      surface: const Color(0xB8090C10),
-      elevated: const Color(0xD10C1015),
-      overlay: const Color(0xC7040609),
-      primary: const Color(0xFF00E5FF),
-      tuned: const Color(0xFF123D46),
-      live: const Color(0xFFFF4444),
-      radius: 16,
-      scrim: const Color(0xE3080B0F),
     ),
   };
 
@@ -480,7 +612,7 @@ abstract final class LineupTheme {
       focusedText: focus == null ? Colors.white : onFocus,
       subtleBorder: Colors.white.withValues(alpha: 0.08),
       defaultBorder: Colors.white.withValues(alpha: 0.12),
-      focusBorder: focusBorder ?? primary,
+      focusBorder: focusBorder ?? const Color(0xFFF0D39A),
       focusBorderWidth: 3,
       progressTrack: Colors.white.withValues(alpha: 0.12),
       progressFill: primary,
@@ -489,4 +621,76 @@ abstract final class LineupTheme {
       overlaySafeArea: 16,
     );
   }
+}
+
+enum LineupButtonTier { primary, secondary, text, link, destructive }
+
+/// Canvas-pixel roles. Width variation applies only to Instrument Sans titles.
+abstract final class LineupTypography {
+  static const body = TextStyle(
+    fontFamily: 'Inter',
+    fontFeatures: [FontFeature.tabularFigures()],
+    fontSize: 18,
+    fontWeight: FontWeight.w400,
+  );
+  static const control = TextStyle(
+    fontFamily: 'Inter',
+    fontFeatures: [FontFeature.tabularFigures()],
+    fontSize: 18,
+    fontWeight: FontWeight.w500,
+  );
+  static const button = TextStyle(
+    fontFamily: 'Inter',
+    fontFeatures: [FontFeature.tabularFigures()],
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+  );
+  static const small = TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 14,
+    fontWeight: FontWeight.w500,
+    letterSpacing: .5,
+  );
+  static const fieldLabel = TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 16,
+    fontWeight: FontWeight.w500,
+  );
+  static const time = TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 18,
+    fontWeight: FontWeight.w400,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+  static TextStyle title(double size, double width, {double? height}) =>
+      TextStyle(
+        fontFamily: 'Instrument Sans',
+        fontFamilyFallback: const ['Inter'],
+        fontSize: size,
+        fontWeight: FontWeight.w600,
+        fontVariations: [FontVariation('wdth', width)],
+        letterSpacing: -size * .01,
+        height: height,
+      );
+  static final programTitle = title(54, 88, height: 1.04);
+  static final pageTitle = title(44, 92, height: 1.08);
+  static final guideTitle = title(22, 90, height: 1.1);
+  static final osdTitle = title(38, 90);
+  static TextTheme textTheme(LineupThemeRoles roles) => TextTheme(
+    displayLarge: programTitle,
+    displayMedium: programTitle,
+    displaySmall: osdTitle,
+    headlineLarge: pageTitle,
+    headlineMedium: pageTitle,
+    headlineSmall: pageTitle,
+    titleLarge: title(24, 92),
+    titleMedium: control,
+    titleSmall: fieldLabel,
+    bodyLarge: body,
+    bodyMedium: body,
+    bodySmall: body.copyWith(color: roles.secondaryText),
+    labelLarge: button,
+    labelMedium: control,
+    labelSmall: small,
+  ).apply(bodyColor: roles.primaryText, displayColor: roles.primaryText);
 }

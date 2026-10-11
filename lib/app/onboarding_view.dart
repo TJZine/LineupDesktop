@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,13 +15,21 @@ class UpstreamOnboardingView extends StatefulWidget {
   const UpstreamOnboardingView({
     required this.controller,
     required this.onLogout,
+    this.onRequestLogout,
     this.openBrowser = openPlexLink,
+    this.accountOrigin = false,
+    this.onOpenMenu,
+    this.menuFocusNode,
     super.key,
   });
 
   final LineupController controller;
   final Future<void> Function() onLogout;
+  final Future<void> Function()? onRequestLogout;
   final Future<void> Function() openBrowser;
+  final bool accountOrigin;
+  final LineupMenuCallback? onOpenMenu;
+  final FocusNode? menuFocusNode;
 
   @override
   State<UpstreamOnboardingView> createState() => _UpstreamOnboardingViewState();
@@ -28,12 +37,12 @@ class UpstreamOnboardingView extends StatefulWidget {
 
 class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Timer? _clock;
+  final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
+  final _profileReturnFocus = FocusNode(debugLabel: 'Return to profiles');
   late bool _linkingStopped;
   late bool _busy;
-  String? _linkFeedback;
-  int? _feedbackPinId;
   int? _browserPinId;
   bool get _openingBrowser =>
       _browserPinId != null && _browserPinId == widget.controller.activePin?.id;
@@ -41,6 +50,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   String? _failedServerId;
   String? _serverError;
   int _serverAttempt = 0;
+  PlexHomeUser? _pinUser;
+  bool _pulse = true;
 
   @override
   void initState() {
@@ -50,7 +61,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     widget.controller.addListener(_controllerChanged);
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && widget.controller.stage == SetupStage.linking) {
-        setState(() {});
+        setState(() => _pulse = !_pulse);
       }
     });
   }
@@ -74,6 +85,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final cancelNeedsFocus =
         !_busy &&
         nextBusy &&
+        _pinUser == null &&
         controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel;
     setState(() {
@@ -101,48 +113,158 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   void dispose() {
     widget.controller.removeListener(_controllerChanged);
     _clock?.cancel();
+    _navigationFocus.dispose();
     _linkActionFocus.dispose();
     _profileCancelFocus.dispose();
+    _profileReturnFocus.dispose();
     super.dispose();
+  }
+
+  void _returnFromPin() {
+    if (_pinUser == null) return;
+    setState(() => _pinUser = null);
+    if (widget.accountOrigin &&
+        widget.controller.profileSelectionCanCancel &&
+        widget.controller.profileSelectionOriginStage == SetupStage.ready) {
+      widget.controller.cancelProfileSelection();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _profileReturnFocus.canRequestFocus) {
+        _profileReturnFocus.requestFocus();
+      }
+    });
+  }
+
+  void _handleBack() {
+    if (_pinUser != null) {
+      if (widget.controller.busy) return;
+      _returnFromPin();
+      return;
+    }
+    final controller = widget.controller;
+    var handled = false;
+    if (controller.stage == SetupStage.profiles &&
+        controller.profileSelectionCanCancel) {
+      controller.cancelProfileSelection();
+      handled = true;
+    } else if (controller.stage == SetupStage.servers &&
+        controller.serverSelectionCanCancel) {
+      controller.cancelServerSelection();
+      handled = true;
+    }
+    if (handled) {
+      _focusNavigation();
+    }
+  }
+
+  void _focusNavigation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _navigationFocus.canRequestFocus) {
+        _navigationFocus.requestFocus();
+      }
+    });
+  }
+
+  void _cancelProfileSelection() {
+    widget.controller.cancelProfileSelection();
+    _focusNavigation();
+  }
+
+  void _cancelServerSelection() {
+    widget.controller.cancelServerSelection();
+    _focusNavigation();
+  }
+
+  KeyEventResult _navigationKey(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent || _pinUser != null) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack ||
+        event.logicalKey == LogicalKeyboardKey.backspace) {
+      final controller = widget.controller;
+      if (controller.profileSelectionCanCancel ||
+          controller.serverSelectionCanCancel) {
+        _handleBack();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final refinedStage = switch (widget.controller.stage) {
       SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
       _ => false,
     };
-    return Scaffold(
-      body: DecoratedBox(
-        decoration: refinedStage
-            ? BoxDecoration(color: roles.deepBackground)
-            : BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(-0.6, -0.65),
-                  radius: 1.25,
-                  colors: [
-                    roles.progressFill.withValues(alpha: 0.08),
-                    roles.deepBackground,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (_, _) => _handleBack(),
+      child: Focus(
+        focusNode: _navigationFocus,
+        canRequestFocus: true,
+        onKeyEvent: _navigationKey,
+        child: CallbackShortcuts(
+          bindings: <ShortcutActivator, VoidCallback>{
+            const SingleActivator(LogicalKeyboardKey.escape): _handleBack,
+            const SingleActivator(LogicalKeyboardKey.goBack): _handleBack,
+            const SingleActivator(LogicalKeyboardKey.backspace): _handleBack,
+          },
+          child: Scaffold(
+            body: DecoratedBox(
+              decoration: refinedStage
+                  ? BoxDecoration(color: roles.deepBackground)
+                  : BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(-0.6, -0.65),
+                        radius: 1.25,
+                        colors: [
+                          roles.progressFill.withValues(alpha: 0.08),
+                          roles.deepBackground,
+                        ],
+                      ),
+                    ),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    if (refinedStage)
+                      LineupTopBar(
+                        menuKey: const ValueKey('onboarding-app-menu'),
+                        onOpenMenu: widget.onOpenMenu,
+                        menuFocusNode: widget.menuFocusNode,
+                      ),
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 48,
+                            vertical: 24,
+                          ),
+                          child: ConstrainedBox(
+                            key: const ValueKey('onboarding-content'),
+                            constraints: BoxConstraints(
+                              maxWidth: refinedStage ? 1040 : double.infinity,
+                            ),
+                            child: FocusTraversalGroup(
+                              policy: ReadingOrderTraversalPolicy(),
+                              child: AnimatedSwitcher(
+                                duration:
+                                    widget.controller.settings.reduceMotion
+                                    ? Duration.zero
+                                    : const Duration(milliseconds: 180),
+                                child: _screen(
+                                  key: ValueKey(widget.controller.stage),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
-                ),
-              ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(32 * scale),
-              child: ConstrainedBox(
-                key: const ValueKey('onboarding-content'),
-                constraints: const BoxConstraints(maxWidth: double.infinity),
-                child: FocusTraversalGroup(
-                  policy: ReadingOrderTraversalPolicy(),
-                  child: AnimatedSwitcher(
-                    duration: widget.controller.settings.reduceMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 180),
-                    child: _screen(key: ValueKey(widget.controller.stage)),
-                  ),
                 ),
               ),
             ),
@@ -154,48 +276,17 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
 
   Widget _screen({required Key key}) {
     final controller = widget.controller;
-    final content = switch (controller.stage) {
-      SetupStage.welcome => _welcome(),
-      SetupStage.linking => Builder(builder: _linking),
-      SetupStage.profiles => _profiles(),
-      SetupStage.servers => _servers(),
-      SetupStage.channelSetup || SetupStage.ready => const SizedBox.shrink(),
-    };
-    final compactWidth = switch (controller.stage) {
-      SetupStage.linking => 736.0,
-      SetupStage.profiles => 1080.0,
-      SetupStage.servers => 880.0,
-      _ => null,
-    };
-    if (compactWidth != null) {
-      return Theme(
-        key: key,
-        data: _onboardingButtonTheme(context),
-        child: _OnboardingCompactPanel(
-          maxWidth: compactWidth,
-          busy: controller.busy,
-          error: controller.stage == SetupStage.servers && _serverError != null
-              ? null
-              : controller.error,
-          child: content,
-        ),
-      );
-    }
-    return Theme(
-      key: key,
-      data: _onboardingButtonTheme(context),
-      child: _OnboardingPanel(
-        busy: controller.busy,
-        error: controller.stage == SetupStage.servers && _serverError != null
-            ? null
-            : controller.error,
-        refinedSurface:
-            controller.stage == SetupStage.linking ||
-            controller.stage == SetupStage.profiles ||
-            controller.stage == SetupStage.servers,
-        child: content,
-      ),
-    );
+    final content = _pinUser != null
+        ? _profilePin(key: key)
+        : switch (controller.stage) {
+            SetupStage.welcome => _welcome(),
+            SetupStage.linking => Builder(builder: _linking),
+            SetupStage.profiles => _profiles(),
+            SetupStage.servers => _servers(),
+            SetupStage.channelSetup ||
+            SetupStage.ready => const SizedBox.shrink(),
+          };
+    return Theme(key: key, data: Theme.of(context), child: content);
   }
 
   Widget _welcome() {
@@ -203,15 +294,22 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     return _HeroContent(
       title: 'Your Plex library, scheduled like television',
       subtitle: 'Link Plex once, choose who is watching, then tune Lineup to your server.',
+      leading: Image.asset('assets/branding/lineup-logo-mark.png', height: 120),
       child: Shortcuts(
         shortcuts: const {
           SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
         },
-        child: FilledButton.icon(
-          autofocus: true,
-          onPressed: enabled ? widget.controller.startLinking : null,
-          icon: const Icon(Icons.link),
-          label: const Text('Sign in to Plex'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilledButton.icon(
+              autofocus: true,
+              onPressed: enabled ? widget.controller.startLinking : null,
+              icon: const Icon(Icons.link),
+              label: const Text('Sign in to Plex'),
+            ),
+            _onboardingFeedback(const ValueKey('welcome-feedback-slot')),
+          ],
         ),
       ),
     );
@@ -229,7 +327,6 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final pinId = widget.controller.activePin!.id;
     setState(() {
       _browserPinId = pinId;
-      _linkFeedback = null;
     });
     String? feedback;
     try {
@@ -240,11 +337,10 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     if (!mounted || _browserPinId != pinId) return;
     setState(() {
       _browserPinId = null;
-      if (widget.controller.activePin?.id == pinId) {
-        _feedbackPinId = pinId;
-        _linkFeedback = feedback;
-      }
     });
+    if (feedback != null && widget.controller.activePin?.id == pinId) {
+      _showLinkFeedback(feedback);
+    }
   }
 
   Future<void> _copyCode() async {
@@ -258,16 +354,31 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       feedback = 'Couldn’t copy the code. Enter the code shown here.';
     }
     if (!mounted || widget.controller.activePin?.id != pin.id) return;
-    setState(() {
-      _feedbackPinId = pin.id;
-      _linkFeedback = feedback;
-    });
+    _showLinkFeedback(feedback);
   }
 
-  Widget _linking(BuildContext context) {
+  void _showLinkFeedback(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Semantics(liveRegion: true, child: Text(message)),
+        ),
+      );
+  }
+
+  Widget _linking(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        _linkingContent(context, constraints.maxWidth),
+  );
+
+  Widget _linkingContent(BuildContext context, double contentWidth) {
     final controller = widget.controller;
     final pin = controller.activePin;
-    final usable = _usableLink;
+    final usable = _usableLink && controller.error == null;
     final expired =
         pin != null &&
         !pin.expiresAt.isAfter(DateTime.now()) &&
@@ -277,46 +388,86 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final seconds = remaining.inSeconds.clamp(0, 3599);
     final time =
         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
-    final feedback = _feedbackPinId == pin?.id ? _linkFeedback : null;
     final roles = LineupTheme.of(context);
-    final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
-    final narrow =
-        size.width <= 720 * scale ||
-        MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final narrow = contentWidth <= 720 || textScaler.scale(1) >= 1.6;
     final theme = Theme.of(context);
-    final bodyFontSize = (narrow ? 14.0 : 18.0) * scale;
     final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
-      fontSize: bodyFontSize,
+      fontSize: 18,
       height: 1.45,
     );
-    final actionStyle = theme.textTheme.labelLarge?.copyWith(
-      fontSize: bodyFontSize,
+    double textHeight(String text, TextStyle? style, double width) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: textScaler,
+      )..layout(maxWidth: math.max(1, width));
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    const qrColumnWidth = 232.0;
+    final deviceWidth = narrow
+        ? contentWidth
+        : contentWidth - qrColumnWidth - 40;
+    final instructionsHeight = math.max(
+      textHeight(
+        'Open plex.tv/link and enter this code.',
+        bodyStyle,
+        deviceWidth,
+      ),
+      textHeight(
+        'Request a fresh code to finish signing in.',
+        bodyStyle,
+        deviceWidth,
+      ),
     );
-    final instructions = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Sign in to Plex',
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontSize: (narrow ? 26.0 : 36.0) * scale,
-            height: 1.2,
-            fontWeight: FontWeight.w600,
-          ),
+    final bodyLineHeight = textScaler.scale(18) * 1.45;
+    final codeHeight = math.max(
+      58.0,
+      math.max(
+        textScaler.scale(narrow ? 32 : 40) * 1.4,
+        bodyLineHeight *
+            (narrow
+                ? 4
+                : textScaler.scale(1) > 1
+                ? 3
+                : 2),
+      ),
+    );
+    final captionHeight = math.max(
+      28.0,
+      math.max(
+        textHeight(
+          'Or scan with your phone',
+          theme.textTheme.bodyMedium,
+          qrColumnWidth,
         ),
-        SizedBox(height: 12 * scale),
-        Text(
-          pin == null || expired
-              ? 'Request a fresh code to finish signing in.'
-              : 'Open plex.tv/link and enter this code.',
-          style: bodyStyle,
+        textHeight(
+          'Request a new code',
+          theme.textTheme.bodyMedium,
+          qrColumnWidth,
         ),
-        SizedBox(height: 20 * scale),
-        if (pin != null)
-          Wrap(
-            spacing: 16 * scale,
-            runSpacing: 12 * scale,
+      ),
+    );
+    final cancelWidth = textScaler.scale(18) * 4 + 56;
+    final footerHeight = math.max(
+      56.0,
+      textHeight(
+        'Waiting for sign-in · Expires in 3:59',
+        bodyStyle,
+        contentWidth - cancelWidth - 18,
+      ),
+    );
+    final safeError = controller.error;
+    final message = expired
+        ? 'That code expired before sign-in finished.'
+        : safeError;
+    final codeRow = message == null && pin != null
+        ? Wrap(
+            spacing: 16,
+            runSpacing: 12,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Semantics(
@@ -324,201 +475,227 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 excludeSemantics: true,
                 child: SelectableText(
                   pin.code,
-                  style: theme.textTheme.headlineLarge?.copyWith(
-                    fontSize: (narrow ? 32.0 : 40.0) * scale,
-                    letterSpacing: 6 * scale,
+                  style: LineupTypography.time.copyWith(
+                    fontSize: narrow ? 32 : 40,
+                    letterSpacing: 6,
                     fontWeight: FontWeight.w500,
-                    color: usable ? roles.primaryText : roles.mutedText,
+                    color: roles.primaryText,
                   ),
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: usable ? _copyCode : null,
-                style: OutlinedButton.styleFrom(textStyle: actionStyle),
-                icon: const Icon(Icons.copy),
-                label: const Text('Copy code'),
+              LineupCompactControls(
+                child: OutlinedButton(
+                  onPressed: usable ? _copyCode : null,
+                  child: const Text('Copy code'),
+                ),
               ),
             ],
+          )
+        : message == null
+        ? const SizedBox.shrink()
+        : Semantics(
+            key: const ValueKey('linking-message-slot'),
+            liveRegion: true,
+            child: Text(
+              message,
+              style: bodyStyle?.copyWith(color: roles.secondaryText),
+            ),
+          );
+    final action = usable
+        ? FilledButton.icon(
+            onPressed: _openingBrowser ? null : _openBrowser,
+            icon: const Icon(Icons.open_in_browser),
+            label: const Text('Open browser'),
+          )
+        : FilledButton(
+            focusNode: _linkActionFocus,
+            autofocus: true,
+            onPressed: controller.busy
+                ? null
+                : controller.secureCancellationRequired
+                ? controller.cancelLinking
+                : controller.startLinking,
+            child: Text(
+              controller.secureCancellationRequired
+                  ? 'Retry secure cancellation'
+                  : 'Get a new code',
+            ),
+          );
+    final qrSize = narrow ? 172.0 : 200.0;
+    final qr = SizedBox(
+      width: qrColumnWidth,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Visibility(
+            visible: usable,
+            maintainState: true,
+            maintainAnimation: true,
+            maintainSize: true,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(width: 64, child: Divider(color: roles.subtleBorder)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('or', style: TextStyle(color: roles.mutedText)),
+                ),
+                SizedBox(width: 64, child: Divider(color: roles.subtleBorder)),
+              ],
+            ),
           ),
-        SizedBox(height: 16 * scale),
-        Wrap(
-          spacing: 12 * scale,
-          runSpacing: 12 * scale,
-          children: [
-            if (usable)
-              FilledButton.icon(
-                onPressed: _openingBrowser ? null : _openBrowser,
-                style: FilledButton.styleFrom(textStyle: actionStyle),
-                icon: const Icon(Icons.open_in_browser),
-                label: const Text('Open browser'),
-              )
-            else
-              FilledButton(
-                focusNode: _linkActionFocus,
-                autofocus: true,
-                onPressed: controller.busy
-                    ? null
-                    : controller.secureCancellationRequired
-                    ? controller.cancelLinking
-                    : controller.startLinking,
-                style: FilledButton.styleFrom(textStyle: actionStyle),
-                child: Text(
-                  controller.secureCancellationRequired
-                      ? 'Retry secure cancellation'
-                      : 'Get a new code',
-                ),
+          const SizedBox(height: 12),
+          Semantics(
+            key: const ValueKey('linking-qr-slot'),
+            label: usable ? 'QR code for plex.tv/link' : 'QR code unavailable',
+            image: true,
+            excludeSemantics: true,
+            child: Container(
+              width: qrSize,
+              height: qrSize,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3E8D2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: roles.subtleBorder),
               ),
-          ],
-        ),
-        if (feedback != null) ...[
-          SizedBox(height: 12 * scale),
-          Semantics(liveRegion: true, child: Text(feedback, style: bodyStyle)),
+              alignment: Alignment.center,
+              child: usable
+                  ? QrImageView(
+                      data: 'https://plex.tv/link',
+                      size: qrSize - 24,
+                      padding: EdgeInsets.zero,
+                      semanticsLabel: 'QR code for plex.tv/link',
+                    )
+                  : Text(
+                      expired ? 'Code expired' : 'Unavailable',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFF2D241C)),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: captionHeight,
+            child: Center(
+              child: Text(
+                usable ? 'Or scan with your phone' : 'Request a new code',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: roles.secondaryText),
+              ),
+            ),
+          ),
         ],
-      ],
+      ),
     );
-    final hasQr = usable || expired;
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 736 * scale),
-        child: SizedBox(
-          width: double.infinity,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 736 * scale),
-                  child: LayoutBuilder(
-                    builder: (context, bodyConstraints) {
-                      final qrSize = (narrow ? 172.0 : 200.0) * scale;
-                      final qr = hasQr
-                          ? Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: qrSize,
-                                  height: qrSize,
-                                  padding: EdgeInsets.all(12 * scale),
-                                  decoration: BoxDecoration(
-                                    color: usable
-                                        ? Colors.white
-                                        : roles.primarySurface,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: expired
-                                        ? Border.all(color: roles.subtleBorder)
-                                        : null,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: usable
-                                      ? QrImageView(
-                                          data: 'https://plex.tv/link',
-                                          size: qrSize - 24 * scale,
-                                          padding: EdgeInsets.zero,
-                                          semanticsLabel:
-                                              'QR code for plex.tv/link',
-                                        )
-                                      : Semantics(
-                                          label: 'Code expired',
-                                          image: true,
-                                          child: Text(
-                                            'Code expired',
-                                            textAlign: TextAlign.center,
-                                            style: theme.textTheme.bodyMedium
-                                                ?.copyWith(
-                                                  fontSize:
-                                                      (theme
-                                                              .textTheme
-                                                              .bodyMedium
-                                                              ?.fontSize ??
-                                                          14) *
-                                                      scale,
-                                                  color: roles.secondaryText,
-                                                ),
-                                          ),
-                                        ),
-                                ),
-                                SizedBox(height: 8 * scale),
-                                Text(
-                                  expired
-                                      ? 'Request a new code'
-                                      : 'Or scan with your phone',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontSize:
-                                        (theme.textTheme.bodySmall?.fontSize ??
-                                            12) *
-                                        scale,
-                                    color: roles.secondaryText,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : const SizedBox.shrink();
-                      return narrow
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                instructions,
-                                if (hasQr) ...[
-                                  SizedBox(height: 24 * scale),
-                                  Align(alignment: Alignment.center, child: qr),
-                                ],
-                              ],
-                            )
-                          : hasQr
-                          ? Row(
-                              children: [
-                                Expanded(child: instructions),
-                                if (hasQr) ...[SizedBox(width: 40 * scale), qr],
-                              ],
-                            )
-                          : SizedBox(
-                              width: double.infinity,
-                              child: instructions,
-                            );
-                    },
-                  ),
-                ),
-              ),
-              SizedBox(height: 20 * scale),
-              const Divider(),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+    final deviceColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Sign in to Plex',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontSize: 44,
+            height: 1.2,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: instructionsHeight,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: RichText(
+              textScaler: textScaler,
+              text: TextSpan(
+                style: bodyStyle,
                 children: [
-                  Expanded(
-                    child: Text(
-                      usable
-                          ? 'Waiting for sign-in · Expires in $time'
-                          : expired
-                          ? 'This code has expired'
-                          : 'This code is no longer active.',
-                      style: bodyStyle?.copyWith(
-                        fontSize: (narrow ? 14.0 : 16.0) * scale,
-                        color: roles.secondaryText,
-                      ),
-                    ),
+                  TextSpan(
+                    text: usable
+                        ? 'Open '
+                        : 'Request a fresh code to finish signing in. ',
                   ),
-                  if (!controller.secureCancellationRequired)
-                    Padding(
-                      padding: EdgeInsets.only(left: 12 * scale),
-                      child: TextButton(
-                        onPressed: controller.busy
-                            ? null
-                            : controller.cancelLinking,
-                        style: TextButton.styleFrom(
-                          foregroundColor: roles.secondaryText,
-                          textStyle: actionStyle,
-                        ),
-                        child: const Text('Cancel'),
+                  if (usable)
+                    TextSpan(
+                      text: 'plex.tv/link',
+                      style: bodyStyle?.copyWith(
+                        color: roles.progressFill,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
+                  if (usable) const TextSpan(text: ' and enter this code.'),
                 ],
               ),
-            ],
+            ),
           ),
         ),
+        const SizedBox(height: 20),
+        SizedBox(
+          key: const ValueKey('linking-code-slot'),
+          height: codeHeight,
+          child: Align(alignment: Alignment.centerLeft, child: codeRow),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          key: const ValueKey('linking-action-slot'),
+          height: 56,
+          child: Align(alignment: Alignment.centerLeft, child: action),
+        ),
+      ],
+    );
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          narrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [deviceColumn, const SizedBox(height: 24), qr],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: deviceColumn),
+                    const SizedBox(width: 40),
+                    qr,
+                  ],
+                ),
+          const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 12),
+          SizedBox(
+            key: const ValueKey('linking-footer'),
+            height: footerHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _LinkStatusDot(
+                  animated: usable && !controller.settings.reduceMotion,
+                  phase: _pulse,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    usable
+                        ? 'Waiting for sign-in · Expires in $time'
+                        : 'Sign-in unavailable',
+                    style: bodyStyle?.copyWith(color: roles.secondaryText),
+                  ),
+                ),
+                if (!controller.secureCancellationRequired)
+                  TextButton(
+                    onPressed: controller.busy
+                        ? null
+                        : controller.cancelLinking,
+                    child: const Text('Cancel'),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -527,22 +704,18 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     title: "Who's watching?",
     subtitle: 'Choose a Plex Home profile to continue.',
     compact: true,
-    titleFontSize: 36,
-    subtitleFontSize: 18,
-    titleWeight: FontWeight.w600,
     child: Column(
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
-            final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
             final textScale = MediaQuery.textScalerOf(context)
                 .scale(1)
                 .clamp(1.0, 1.75);
             final availableWidth = constraints.maxWidth.isFinite
                 ? constraints.maxWidth
-                : 1080 * scale;
-            final gap = 16 * scale;
-            final itemWidth = 200 * scale * textScale;
+                : 1080.0;
+            final double gap = 16;
+            final itemWidth = 200 * textScale;
             final count = widget.controller.profiles.length;
             final targetColumns = count <= 3
                 ? count.clamp(1, 3)
@@ -554,8 +727,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             final rows = <Widget>[];
             for (var start = 0; start < count; start += columns) {
               final rowCount = (count - start).clamp(0, columns).toInt();
-              final rowWidth = ((rowCount * itemWidth) + ((rowCount - 1) * gap))
-                  .clamp(0.0, availableWidth);
+              final double rowWidth =
+                  ((rowCount * itemWidth) + ((rowCount - 1) * gap)).clamp(
+                    0.0,
+                    availableWidth,
+                  );
               rows.add(
                 Padding(
                   padding: EdgeInsets.only(top: start == 0 ? 0 : gap),
@@ -574,6 +750,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                               if (column > 0) SizedBox(width: gap),
                               Expanded(
                                 child: _ProfileCard(
+                                  key: ValueKey(
+                                    'profile-card-${widget.controller.profiles[start + column].id}',
+                                  ),
                                   user: widget
                                       .controller
                                       .profiles[start + column],
@@ -584,6 +763,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                           .id ==
                                       widget.controller.profile?.id,
                                   autofocus: start + column == 0,
+                                  focusNode: start + column == 0
+                                      ? _profileReturnFocus
+                                      : null,
                                   onPressed: widget.controller.busy
                                       ? null
                                       : () => _selectProfile(
@@ -604,61 +786,69 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             return Center(child: Column(children: rows));
           },
         ),
-        SizedBox(
-          height: 28 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-        ),
-        OutlinedButton.icon(
+        SizedBox(height: 28),
+        TextButton(
           onPressed: widget.controller.busy ? null : widget.onLogout,
-          style: OutlinedButton.styleFrom(
-            textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontSize: 18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-            ),
-          ),
-          icon: const Icon(Icons.logout),
-          label: const Text('Sign out'),
+          child: const Text('Sign out'),
         ),
         if (widget.controller.profileSelectionCanCancel) ...[
-          SizedBox(
-            height: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-          ),
+          SizedBox(height: 12),
           TextButton(
             focusNode: _profileCancelFocus,
-            onPressed: widget.controller.cancelProfileSelection,
-            style: TextButton.styleFrom(
-              textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontSize:
-                    18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-              ),
+            onPressed: _cancelProfileSelection,
+            child: Text(
+              widget.accountOrigin &&
+                      widget.controller.profileSelectionOriginStage ==
+                          SetupStage.ready
+                  ? '‹ Settings · Account'
+                  : 'Back',
             ),
-            child: const Text('Back'),
           ),
         ],
+        _onboardingFeedback(const ValueKey('profile-feedback-slot')),
       ],
     ),
   );
+
+  Widget _onboardingFeedback(Key key) {
+    final controller = widget.controller;
+    final message = controller.busy ? 'Working…' : controller.error;
+    final roles = LineupTheme.of(context);
+    if (message == null) return SizedBox.shrink(key: key);
+    return Padding(
+      key: key,
+      padding: const EdgeInsets.only(top: 12),
+      child: Semantics(
+        liveRegion: true,
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: controller.busy
+                ? roles.secondaryText
+                : Theme.of(context).colorScheme.error,
+            fontSize: 18,
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _servers() => _HeroContent(
     title: 'Choose a server',
     subtitle: 'Select the Plex server you want to watch from.',
     centered: false,
-    maxWidth: 880,
-    titleFontSize: 36,
-    subtitleFontSize: 18,
-    titleWeight: FontWeight.w600,
+    maxWidth: 1040,
     child: Column(
       children: [
         if (widget.controller.servers.isEmpty && !widget.controller.busy)
           Builder(
             builder: (context) {
-              final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
               final theme = Theme.of(context);
               return Theme(
-                data: theme.copyWith(
-                  textTheme: theme.textTheme.apply(fontSizeFactor: scale),
-                ),
+                data: theme.copyWith(textTheme: theme.textTheme),
                 child: DefaultTextStyle.merge(
-                  style: DefaultTextStyle.of(context).style
-                      .apply(fontSizeFactor: scale),
+                  style: DefaultTextStyle.of(context).style,
                   child: const LineupEmptyState(
                     icon: Icons.dns_outlined,
                     title: 'No servers found',
@@ -670,67 +860,76 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           ),
         for (final server in widget.controller.servers)
           Padding(
-            padding: EdgeInsets.only(
-              bottom: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-            ),
+            padding: EdgeInsets.only(bottom: 12),
             child: _ServerCard(
               server: server,
+              current: widget.controller.server?.id == server.id,
+              primary: widget.controller.server == null
+                  ? widget.controller.servers.first.id == server.id
+                  : widget.controller.server?.id == server.id,
               connection: widget.controller.server?.id == server.id
                   ? widget.controller.connection
                   : null,
-              onPressed: widget.controller.busy
+              onPressed:
+                  widget.controller.busy || _connectingServerId == server.id
                   ? null
+                  : widget.controller.server?.id == server.id
+                  ? () => _continueServer(server)
                   : () => _connectServer(server),
               previouslyUsed: widget.controller.savedServerId == server.id,
               pending: _connectingServerId == server.id,
               error: _failedServerId == server.id ? _serverError : null,
             ),
           ),
-        SizedBox(
-          height: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-        ),
+        SizedBox(height: 12),
         Wrap(
-          spacing: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-          runSpacing: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+          spacing: 12,
+          runSpacing: 12,
           alignment: WrapAlignment.center,
           children: [
             OutlinedButton.icon(
               autofocus: widget.controller.servers.isEmpty,
               onPressed: widget.controller.busy ? null : _refreshServers,
-              style: OutlinedButton.styleFrom(
-                textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontSize:
-                      18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-                ),
-              ),
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh servers'),
             ),
             if (widget.controller.profiles.length > 1)
               OutlinedButton.icon(
                 onPressed: widget.controller.busy ? null : _showProfiles,
-                style: OutlinedButton.styleFrom(
-                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontSize:
-                        18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-                  ),
-                ),
                 icon: const Icon(Icons.switch_account),
                 label: const Text('Switch profile'),
               ),
+            if (widget.onRequestLogout != null)
+              TextButton(
+                onPressed: widget.controller.busy
+                    ? null
+                    : widget.onRequestLogout,
+                child: const Text('Sign out'),
+              ),
             if (widget.controller.serverSelectionCanCancel)
               TextButton(
-                onPressed: widget.controller.cancelServerSelection,
-                style: TextButton.styleFrom(
-                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontSize:
-                        18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-                  ),
+                onPressed: _cancelServerSelection,
+                child: Text(
+                  widget.accountOrigin ? '‹ Settings · Account' : 'Back',
                 ),
-                child: const Text('Back'),
               ),
           ],
         ),
+        if ((_serverError ?? widget.controller.error) != null &&
+            _failedServerId == null)
+          Align(
+            alignment: Alignment.center,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  _serverError ?? widget.controller.error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            ),
+          ),
       ],
     ),
   );
@@ -747,6 +946,10 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     if (!mounted || widget.controller.busy) return;
     _clearServerError();
     await widget.controller.refreshServers();
+    if (!mounted || widget.controller.stage != SetupStage.servers) return;
+    if (widget.controller.error != null) {
+      setState(() => _serverError = widget.controller.error);
+    }
   }
 
   void _showProfiles() {
@@ -775,232 +978,54 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     });
   }
 
+  void _continueServer(PlexServer server) {
+    if (widget.controller.busy || widget.controller.server?.id != server.id) {
+      return;
+    }
+    widget.controller.continueCurrentServer();
+  }
+
   Future<void> _selectProfile(PlexHomeUser user) async {
     if (!user.protected) {
       await widget.controller.selectProfile(user);
       return;
     }
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _ProfilePinDialog(
-        user: user,
-        onSubmit: (pin) => widget.controller.selectProfile(user, pin: pin),
-        error: () => widget.controller.error,
-      ),
-    );
+    if (!mounted || widget.controller.busy) return;
+    setState(() => _pinUser = user);
   }
-}
 
-ThemeData _onboardingButtonTheme(BuildContext context) {
-  final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
-  final theme = Theme.of(context);
-  return theme.copyWith(
-    filledButtonTheme: FilledButtonThemeData(
-      style: _scaledOnboardingButtonStyle(
-        theme.filledButtonTheme.style,
-        scale: scale,
-        minimumSize: const Size(148, 54),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        iconSize: 18,
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: _scaledOnboardingButtonStyle(
-        theme.outlinedButtonTheme.style,
-        scale: scale,
-        minimumSize: const Size(148, 54),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        iconSize: 18,
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: _scaledOnboardingButtonStyle(
-        theme.textButtonTheme.style,
-        scale: scale,
-        minimumSize: const Size(64, 40),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        iconSize: 18,
-      ),
-    ),
+  Widget _profilePin({required Key key}) => _ProfilePinStep(
+    key: key,
+    user: _pinUser!,
+    accountOrigin: widget.accountOrigin,
+    profileOriginIsReady:
+        widget.controller.profileSelectionOriginStage == SetupStage.ready,
+    onBack: _returnFromPin,
+    onAccepted: () {
+      if (mounted) setState(() => _pinUser = null);
+    },
+    onSubmit: (pin) => widget.controller.selectProfile(_pinUser!, pin: pin),
+    error: () => widget.controller.error,
   );
 }
 
-ButtonStyle _scaledOnboardingButtonStyle(
-  ButtonStyle? source, {
-  required double scale,
-  required Size minimumSize,
-  required EdgeInsets padding,
-  required double iconSize,
-}) {
-  final base = source ?? const ButtonStyle();
-  var scaled = base.copyWith(
-    minimumSize: WidgetStatePropertyAll(
-      Size(minimumSize.width * scale, minimumSize.height * scale),
-    ),
-    padding: WidgetStatePropertyAll(
-      EdgeInsets.fromLTRB(
-        padding.left * scale,
-        padding.top * scale,
-        padding.right * scale,
-        padding.bottom * scale,
-      ),
-    ),
-    iconSize: WidgetStatePropertyAll(iconSize * scale),
-  );
-  final textStyle = base.textStyle;
-  if (textStyle == null) return scaled;
-  scaled = scaled.copyWith(
-    textStyle: WidgetStateProperty.resolveWith((states) {
-      final resolved = textStyle.resolve(states);
-      final fontSize = resolved?.fontSize;
-      return resolved == null || fontSize == null
-          ? resolved
-          : resolved.copyWith(fontSize: fontSize * scale);
-    }),
-  );
-  return scaled;
-}
+class _LinkStatusDot extends StatelessWidget {
+  const _LinkStatusDot({required this.animated, required this.phase});
 
-class _OnboardingCompactPanel extends StatelessWidget {
-  const _OnboardingCompactPanel({
-    required this.busy,
-    required this.error,
-    required this.child,
-    this.maxWidth = 736,
-  });
-
-  final bool busy;
-  final String? error;
-  final Widget child;
-  final double maxWidth;
+  final bool animated;
+  final bool phase;
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
-    final narrow =
-        size.width <= 720 * scale ||
-        MediaQuery.textScalerOf(context).scale(1) >= 1.6;
-    final roles = LineupTheme.of(context);
-    final bodyFontSize = (narrow ? 14.0 : 18.0) * scale;
-    final content = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: maxWidth * scale),
-      child: SizedBox(
-        width: double.infinity,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Image.asset(
-                  'assets/branding/lineup-logo-mark.png',
-                  height: 24 * scale,
-                  width: 24 * scale,
-                ),
-                SizedBox(width: 8 * scale),
-                Text(
-                  'LINEUP',
-                  style: TextStyle(
-                    color: roles.progressFill,
-                    fontFamily: 'Arial',
-                    fontSize: 18 * scale,
-                    letterSpacing: 1.5 * scale,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 20 * scale),
-            if (busy) ...[
-              LinearProgressIndicator(semanticsLabel: 'Working'),
-              SizedBox(height: 16 * scale),
-            ],
-            if (error != null) ...[
-              DefaultTextStyle(
-                style: Theme.of(context).textTheme.bodyMedium!
-                    .copyWith(fontSize: bodyFontSize, height: 1.45),
-                child: LineupNotice(message: error!),
-              ),
-              SizedBox(height: 16 * scale),
-            ],
-            child,
-          ],
-        ),
-      ),
-    );
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth * scale),
-        child: content,
-      ),
-    );
-  }
-}
-
-class _OnboardingPanel extends StatelessWidget {
-  const _OnboardingPanel({
-    required this.busy,
-    required this.error,
-    required this.refinedSurface,
-    required this.child,
-  });
-  final bool busy;
-  final String? error;
-  final bool refinedSurface;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
-    final theme = Theme.of(context);
-    return Theme(
-      data: theme.copyWith(
-        textTheme: theme.textTheme.apply(fontSizeFactor: scale),
-      ),
+    final color = LineupTheme.of(context).progressFill;
+    return AnimatedOpacity(
+      duration: animated ? const Duration(milliseconds: 450) : Duration.zero,
+      opacity: animated && !phase ? .35 : 1,
       child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(
-          horizontal: 48 * scale,
-          vertical: 38 * scale,
-        ),
-        decoration: BoxDecoration(
-          color: refinedSurface
-              ? LineupTheme.of(context).deepBackground
-              : LineupTheme.of(context).primarySurface,
-          borderRadius: BorderRadius.circular(
-            LineupTheme.of(context).panelRadius,
-          ),
-          border: refinedSurface
-              ? Border.all(color: LineupTheme.of(context).subtleBorder)
-              : Border(
-                  bottom: BorderSide(
-                    color: LineupTheme.of(context).defaultBorder,
-                  ),
-                ),
-        ),
-        child: Column(
-          children: [
-            Image.asset(
-              'assets/branding/lineup-logo-mark.png',
-              height: 62 * scale,
-            ),
-            if (busy) ...[
-              SizedBox(height: 16 * scale),
-              const LinearProgressIndicator(semanticsLabel: 'Working'),
-            ],
-            if (error != null) ...[
-              SizedBox(height: 16 * scale),
-              LineupNotice(message: error!),
-            ],
-            SizedBox(height: 18 * scale),
-            DefaultTextStyle(
-              style: theme.textTheme.bodyMedium!.apply(fontSizeFactor: scale),
-              child: child,
-            ),
-          ],
-        ),
+        key: const ValueKey('linking-status-dot'),
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }
@@ -1011,193 +1036,256 @@ class _HeroContent extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.child,
+    this.leading,
     this.compact = false,
     this.centered = true,
     this.maxWidth,
-    this.titleFontSize,
-    this.subtitleFontSize,
-    this.titleWeight,
   });
   final String title;
   final String subtitle;
+  final Widget? leading;
   final bool compact;
   final bool centered;
   final double? maxWidth;
-  final double? titleFontSize;
-  final double? subtitleFontSize;
-  final FontWeight? titleWeight;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final content = Column(
       crossAxisAlignment: centered
           ? CrossAxisAlignment.center
           : CrossAxisAlignment.start,
       children: [
+        if (leading != null) ...[leading!, SizedBox(height: compact ? 20 : 28)],
         Semantics(
           header: true,
           child: Text(
             title,
             textAlign: centered ? TextAlign.center : TextAlign.left,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontSize: titleFontSize == null ? null : titleFontSize! * scale,
-              fontWeight: titleWeight ?? FontWeight.w800,
-            ),
+            style: LineupTypography.pageTitle,
           ),
         ),
-        SizedBox(height: 10 * scale),
+        SizedBox(height: 10),
         Text(
           subtitle,
           textAlign: centered ? TextAlign.center : TextAlign.left,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontSize: subtitleFontSize == null
-                ? null
-                : subtitleFontSize! * scale,
+          style: LineupTypography.body.copyWith(
             color: LineupTheme.of(context).secondaryText,
           ),
         ),
-        SizedBox(height: (compact ? 16 : 30) * scale),
+        SizedBox(height: (compact ? 16 : 30)),
         child,
       ],
     );
     if (maxWidth == null) return content;
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth! * scale),
+        constraints: BoxConstraints(maxWidth: maxWidth!),
         child: SizedBox(width: double.infinity, child: content),
       ),
     );
   }
 }
 
-class _ProfileCard extends StatelessWidget {
+class _ProfileCard extends StatefulWidget {
   const _ProfileCard({
     required this.user,
     required this.active,
     required this.autofocus,
     required this.onPressed,
+    this.focusNode,
+    super.key,
   });
   final PlexHomeUser user;
   final bool active;
   final bool autofocus;
   final VoidCallback? onPressed;
+  final FocusNode? focusNode;
+
+  @override
+  State<_ProfileCard> createState() => _ProfileCardState();
+}
+
+class _ProfileCardState extends State<_ProfileCard> {
+  FocusNode? _ownedFocusNode;
+  bool _focused = false;
+  final _nameOverlay = OverlayPortalController();
+  final _nameAnchor = LayerLink();
+
+  FocusNode get _focusNode =>
+      widget.focusNode ?? (_ownedFocusNode ??= FocusNode());
+
+  @override
+  void initState() {
+    super.initState();
+    _attachFocusNode(_focusNode);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode == widget.focusNode) return;
+    _detachFocusNode(oldWidget.focusNode ?? _ownedFocusNode!);
+    _attachFocusNode(_focusNode);
+  }
+
+  void _attachFocusNode(FocusNode node) {
+    node.addListener(_focusChanged);
+    _focused = node.hasFocus;
+  }
+
+  void _detachFocusNode(FocusNode node) {
+    node.removeListener(_focusChanged);
+  }
+
+  void _focusChanged() {
+    final next = _focusNode.hasFocus;
+    if (next == _focused || !mounted) return;
+    setState(() => _focused = next);
+    final style = LineupTypography.body.copyWith(fontWeight: FontWeight.w600);
+    final painter = TextPainter(
+      text: TextSpan(text: widget.user.name, style: style),
+      maxLines: 2,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout(maxWidth: _nameAnchor.leaderSize?.width ?? 200);
+    final clipped = painter.didExceedMaxLines;
+    painter.dispose();
+    if (next && clipped) {
+      _nameOverlay.show();
+    } else {
+      _nameOverlay.hide();
+    }
+  }
+
+  @override
+  void dispose() {
+    _detachFocusNode(_focusNode);
+    _ownedFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
-    final roles = LineupTheme.of(context);
-    final buttonStyle = ButtonStyle(
-      alignment: Alignment.topCenter,
-      padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-      minimumSize: const WidgetStatePropertyAll(Size.zero),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(roles.panelRadius),
-        ),
-      ),
-      backgroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.pressed)) {
-          return roles.progressFill.withValues(alpha: 0.14);
-        }
-        if (active) return roles.selectedSurface;
-        if (states.contains(WidgetState.focused)) {
-          return roles.focusedSurface;
-        }
-        if (states.contains(WidgetState.hovered)) {
-          return roles.primarySurface.withValues(alpha: 0.7);
-        }
-        return Colors.transparent;
-      }),
-      foregroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.disabled)) return roles.mutedText;
-        if (states.contains(WidgetState.focused)) return roles.focusedText;
-        return roles.primaryText;
-      }),
-      side: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.focused)) {
-          return BorderSide(
-            color: roles.focusBorder,
-            width: _onboardingFocusWidth(roles) * scale,
-          );
-        }
-        if (states.contains(WidgetState.hovered)) {
-          return BorderSide(color: roles.defaultBorder);
-        }
-        return BorderSide.none;
-      }),
-      overlayColor: WidgetStatePropertyAll(
-        roles.progressFill.withValues(alpha: 0.12),
-      ),
-    );
+    final user = widget.user;
     return SizedBox(
       width: double.infinity,
       child: MergeSemantics(
         child: Semantics(
           button: true,
-          selected: active,
-          enabled: onPressed != null,
-          child: TextButton(
-            autofocus: autofocus,
-            onPressed: onPressed,
-            style: buttonStyle,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                12 * scale,
-                16 * scale,
-                12 * scale,
-                16 * scale,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircleAvatar(
-                    radius: 48 * scale,
-                    backgroundColor: roles.elevatedSurface,
-                    foregroundColor: roles.secondaryText,
-                    backgroundImage: user.thumb?.isAbsolute == true
-                        ? NetworkImage(user.thumb.toString())
-                        : null,
-                    child: user.thumb?.isAbsolute == true
-                        ? null
-                        : Text(
-                            user.name.characters.first.toUpperCase(),
-                            style: TextStyle(fontSize: 32 * scale),
-                          ),
-                  ),
-                  SizedBox(height: 12 * scale),
-                  Text(
-                    user.name,
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                    style: TextStyle(
-                      fontSize: 18 * scale,
-                      fontWeight: FontWeight.w600,
+          selected: widget.active,
+          enabled: widget.onPressed != null,
+          child: LineupRowSurface(
+            selected: widget.active,
+            child: TextButton(
+              focusNode: _focusNode,
+              autofocus: widget.autofocus,
+              onPressed: widget.onPressed,
+              style: TextButton.styleFrom(alignment: Alignment.topCenter),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(12, 16, 12, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LineupProfileAvatar(
+                      name: user.name,
+                      identity: user.id,
+                      size: 120,
+                      locked: user.protected,
+                      photo: user.thumb?.isAbsolute == true
+                          ? NetworkImage(user.thumb.toString())
+                          : null,
                     ),
-                  ),
-                  if (user.protected ||
-                      user.admin ||
-                      user.restricted == true ||
-                      active)
-                    Padding(
-                      padding: EdgeInsets.only(top: 4 * scale),
-                      child: Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 4 * scale,
-                        runSpacing: 4 * scale,
-                        children: [
-                          if (user.protected) const _ProfileBadge('PIN'),
-                          if (user.admin) const _ProfileBadge('Admin'),
-                          if (user.restricted == true)
-                            const _ProfileBadge('Restricted'),
-                          if (active) const _ProfileBadge('Active'),
-                        ],
+                    SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: Builder(
+                        builder: (context) {
+                          final roles = LineupTheme.of(context);
+                          final nameStyle = LineupTypography.body.copyWith(
+                            color: roles.primaryText,
+                            fontWeight: FontWeight.w600,
+                          );
+                          return OverlayPortal(
+                            controller: _nameOverlay,
+                            overlayChildBuilder: (_) => Positioned(
+                              left: 0,
+                              top: 0,
+                              width:
+                                  (_nameAnchor.leaderSize?.width ?? 200) + 16,
+                              child: CompositedTransformFollower(
+                                link: _nameAnchor,
+                                showWhenUnlinked: false,
+                                offset: const Offset(-8, -4),
+                                child: IgnorePointer(
+                                  child: ExcludeSemantics(
+                                    child: DecoratedBox(
+                                      key: ValueKey(
+                                        'profile-name-full-${user.id}',
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: roles.elevatedSurface,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: roles.subtleBorder,
+                                        ),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        child: Text(
+                                          user.name,
+                                          textAlign: TextAlign.center,
+                                          style: nameStyle,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            child: CompositedTransformTarget(
+                              link: _nameAnchor,
+                              child: Tooltip(
+                                message: user.name,
+                                child: Semantics(
+                                  label: user.name,
+                                  child: Text(
+                                    user.name,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: nameStyle,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
-                ],
+                    if (user.protected ||
+                        user.admin ||
+                        user.restricted == true ||
+                        widget.active)
+                      Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            if (user.admin) const _ProfileBadge('Admin'),
+                            if (user.restricted == true)
+                              const _ProfileBadge('Restricted'),
+                            if (widget.active) const _ProfileBadge('Current'),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1215,152 +1303,160 @@ class _ProfileBadge extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: label,
     child: ExcludeSemantics(
-      child: Text(
-        label,
-        style: TextStyle(
-          color: LineupTheme.of(context).secondaryText,
-          fontSize: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: LineupTheme.of(context).elevatedSurface,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: LineupTheme.of(context).subtleBorder),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: label == 'Current'
+                  ? LineupTheme.of(context).progressFill
+                  : LineupTheme.of(context).secondaryText,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ),
     ),
   );
 }
 
+PlexConnection? _measuredConnection(PlexServer server) {
+  for (final connection in server.connections) {
+    if (connection.latency != null) return connection;
+  }
+  return null;
+}
+
 class _ServerCard extends StatelessWidget {
   const _ServerCard({
     required this.server,
+    required this.current,
     required this.connection,
     required this.onPressed,
+    required this.primary,
     this.pending = false,
     this.previouslyUsed = false,
     this.error,
   });
   final PlexServer server;
+  final bool current;
   final PlexConnection? connection;
   final VoidCallback? onPressed;
+  final bool primary;
   final bool pending;
   final bool previouslyUsed;
   final String? error;
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final measuredConnection = connection ?? _measuredConnection(server);
     final supportStyle = TextStyle(
       color: LineupTheme.of(context).secondaryText,
-      fontSize: 16 * scale,
+      fontSize: 18,
     );
-    final actionStyle = Theme.of(context).textTheme.labelLarge
-        ?.copyWith(fontSize: 18 * scale);
-    final actionLabel = pending
-        ? 'Connecting…'
-        : error != null
-        ? 'Retry'
-        : 'Connect to ${server.name}';
+
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
-          spacing: 12 * scale,
-          runSpacing: 8 * scale,
+          spacing: 12,
+          runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               server.name,
               softWrap: true,
-              style: TextStyle(
-                fontSize: 22 * scale,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
             ),
-            if (connection != null)
+            if (current)
               Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 8 * scale,
-                  vertical: 4 * scale,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: LineupTheme.of(context).progressFill
                       .withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6 * scale),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   'Current',
                   style: TextStyle(
                     color: LineupTheme.of(context).progressFill,
-                    fontSize: 12 * scale,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
           ],
         ),
-        SizedBox(height: 4 * scale),
+        SizedBox(height: 4),
         Text(
           server.owned ? 'Owned server' : 'Shared server',
           style: supportStyle,
         ),
-        if (previouslyUsed && connection == null)
+        if (previouslyUsed && !current)
           Text('Previously used', style: supportStyle),
-        if (connection != null) ...[
-          SizedBox(height: 8 * scale),
-          Text(
-            'Current connection: ${plexConnectionDescription(connection!)}',
-            softWrap: true,
-            style: supportStyle,
-          ),
-        ],
+        const SizedBox(height: 8),
+        LineupConnectionStatus(connection: measuredConnection),
       ],
     );
-    final trailing = connection == null
-        ? MergeSemantics(
-            child: Semantics(
-              label: actionLabel,
-              child: FilledButton(
+    final buttonLabel = pending
+        ? 'Connecting…'
+        : current
+        ? 'Continue'
+        : error != null
+        ? 'Retry'
+        : 'Connect';
+    final actionLabel = buttonLabel == 'Connect'
+        ? 'Connect to ${server.name}'
+        : buttonLabel;
+    final trailing = MergeSemantics(
+      child: Semantics(
+        label: actionLabel,
+        child: primary
+            ? FilledButton(
                 onPressed: onPressed,
-                style: FilledButton.styleFrom(textStyle: actionStyle),
-                child: ExcludeSemantics(
-                  child: Text(
-                    pending
-                        ? 'Connecting…'
-                        : error != null
-                        ? 'Retry'
-                        : 'Connect',
-                  ),
+                child: ExcludeSemantics(child: Text(buttonLabel)),
+              )
+            : LineupCompactControls(
+                child: OutlinedButton(
+                  onPressed: onPressed,
+                  child: ExcludeSemantics(child: Text(buttonLabel)),
                 ),
               ),
-            ),
-          )
-        : null;
+      ),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final stacked =
-            constraints.maxWidth < 520 * scale ||
+            constraints.maxWidth < 520 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.6;
         final content = stacked
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   details,
-                  if (trailing != null) ...[
-                    SizedBox(height: 12 * scale),
-                    Align(alignment: Alignment.centerLeft, child: trailing),
-                  ],
+                  SizedBox(height: 12),
+                  Align(alignment: Alignment.centerLeft, child: trailing),
                 ],
               )
             : Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: details),
-                  if (trailing != null) ...[
-                    SizedBox(width: 24 * scale),
-                    trailing,
-                  ],
+                  SizedBox(width: 24),
+                  trailing,
                 ],
               );
         return Container(
           width: double.infinity,
-          padding: EdgeInsets.symmetric(vertical: 20 * scale),
+          padding: EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
@@ -1371,14 +1467,14 @@ class _ServerCard extends StatelessWidget {
             children: [
               content,
               if (error != null) ...[
-                SizedBox(height: 12 * scale),
+                SizedBox(height: 12),
                 Semantics(
                   liveRegion: true,
                   child: Text(
                     error!,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
-                      fontSize: 16 * scale,
+                      fontSize: 18,
                     ),
                   ),
                 ),
@@ -1391,23 +1487,34 @@ class _ServerCard extends StatelessWidget {
   }
 }
 
-class _ProfilePinDialog extends StatefulWidget {
-  const _ProfilePinDialog({
+class _ProfilePinStep extends StatefulWidget {
+  const _ProfilePinStep({
     required this.user,
+    required this.accountOrigin,
+    required this.profileOriginIsReady,
+    required this.onBack,
+    required this.onAccepted,
     required this.onSubmit,
     required this.error,
+    super.key,
   });
   final PlexHomeUser user;
+  final bool accountOrigin;
+  final bool profileOriginIsReady;
+  final VoidCallback onBack;
+  final VoidCallback onAccepted;
   final Future<bool> Function(String pin) onSubmit;
   final String? Function() error;
+
   @override
-  State<_ProfilePinDialog> createState() => _ProfilePinDialogState();
+  State<_ProfilePinStep> createState() => _ProfilePinStepState();
 }
 
-class _ProfilePinDialogState extends State<_ProfilePinDialog> {
+class _ProfilePinStepState extends State<_ProfilePinStep> {
   String _pin = '';
   String? _error;
   bool _submitting = false;
+  int _attempt = 0;
   final _keyboardFocus = FocusNode(debugLabel: 'Profile PIN keyboard owner');
   final _firstDigitFocus = FocusNode(debugLabel: 'Profile PIN digit 1');
 
@@ -1429,17 +1536,22 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
 
   Future<void> _submit() async {
     if (_submitting || _pin.length != 4) return;
+    final attempt = ++_attempt;
+    final pin = _pin;
     setState(() => _submitting = true);
-    final accepted = await widget.onSubmit(_pin);
-    if (!mounted) return;
+    final accepted = await widget.onSubmit(pin);
+    if (!mounted || attempt != _attempt) return;
     if (accepted) {
-      Navigator.pop(context);
+      widget.onAccepted();
       return;
     }
+    final reportedError = widget.error();
     setState(() {
       _pin = '';
       _submitting = false;
-      _error = widget.error();
+      _error = reportedError == 'That Plex Home PIN was not accepted.'
+          ? 'Incorrect PIN. Try again.'
+          : reportedError ?? 'Incorrect PIN. Try again.';
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _firstDigitFocus.canRequestFocus) {
@@ -1476,11 +1588,18 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
       _digit(digit);
       return KeyEventResult.handled;
     }
-    if (!_submitting && event.logicalKey == LogicalKeyboardKey.backspace) {
-      setState(() {
-        _error = null;
-        if (_pin.isNotEmpty) _pin = _pin.substring(0, _pin.length - 1);
-      });
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (!_submitting) {
+        setState(() {
+          _error = null;
+          if (_pin.isNotEmpty) _pin = _pin.substring(0, _pin.length - 1);
+        });
+      }
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      if (!_submitting) widget.onBack();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -1488,129 +1607,106 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: !_submitting,
+    canPop: false,
+    onPopInvokedWithResult: (_, _) {
+      if (!_submitting) widget.onBack();
+    },
     child: Focus(
       key: const Key('profile-pin-keyboard-owner'),
       focusNode: _keyboardFocus,
       autofocus: true,
       onKeyEvent: _key,
-      child: Dialog(
+      child: SizedBox(
         key: const Key('profile-pin-sheet'),
-        backgroundColor: LineupTheme.of(context).primarySurface,
-        alignment: Alignment.center,
-        insetPadding: const EdgeInsets.all(24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(
-            LineupTheme.of(context).panelRadius,
-          ),
-          side: BorderSide(color: LineupTheme.of(context).defaultBorder),
-        ),
+        width: double.infinity,
         child: ConstrainedBox(
           key: const Key('profile-pin-surface'),
-          constraints: const BoxConstraints(maxWidth: 384),
+          constraints: const BoxConstraints(maxWidth: 520),
           child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Enter PIN',
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w700),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: LineupInlineLink(
+                    onPressed: _submitting ? null : widget.onBack,
+                    child: Text(
+                      widget.accountOrigin && widget.profileOriginIsReady
+                          ? '‹ Settings · Account'
+                          : '‹ Profiles',
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 280),
+                ),
+                const SizedBox(height: 28),
+                LineupProfileAvatar(
+                  name: widget.user.name,
+                  identity: widget.user.id,
+                  size: 120,
+                  locked: true,
+                  photo: widget.user.thumb?.isAbsolute == true
+                      ? NetworkImage(widget.user.thumb.toString())
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  widget.user.name,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: LineupTypography.pageTitle,
+                ),
+                const SizedBox(height: 28),
+                Semantics(
+                  key: const Key('profile-pin-progress'),
+                  container: true,
+                  explicitChildNodes: true,
+                  liveRegion: true,
+                  label: '${_pin.length} of 4 digits entered',
+                  child: ExcludeSemantics(
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: LineupTheme.of(context)
-                              .elevatedSurface,
-                          foregroundColor: LineupTheme.of(context)
-                              .secondaryText,
-                          backgroundImage: widget.user.thumb?.isAbsolute == true
-                              ? NetworkImage(widget.user.thumb.toString())
-                              : null,
-                          child: widget.user.thumb?.isAbsolute == true
-                              ? null
-                              : Text(
-                                  widget.user.name.characters.first
-                                      .toUpperCase(),
-                                  style: const TextStyle(fontSize: 18),
-                                ),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            widget.user.name,
-                            softWrap: true,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: LineupTheme.of(context).secondaryText,
-                                ),
+                        for (var index = 0; index < 4; index++)
+                          Container(
+                            width: 24,
+                            height: 24,
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: index < _pin.length
+                                  ? LineupTheme.of(context).progressFill
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: index < _pin.length
+                                    ? LineupTheme.of(context).progressFill
+                                    : LineupTheme.of(context).defaultBorder,
+                              ),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Semantics(
-                    key: const Key('profile-pin-progress'),
-                    container: true,
-                    explicitChildNodes: true,
-                    liveRegion: true,
-                    label: '${_pin.length} of 4 digits entered',
-                    child: ExcludeSemantics(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (var index = 0; index < 4; index++)
-                            Container(
-                              width: 16,
-                              height: 16,
-                              margin: const EdgeInsets.symmetric(horizontal: 6),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: index < _pin.length
-                                    ? LineupTheme.of(context).progressFill
-                                    : Colors.transparent,
-                                border: Border.all(
-                                  color: index < _pin.length
-                                      ? LineupTheme.of(context).progressFill
-                                      : LineupTheme.of(context).defaultBorder,
-                                  width: 1,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 38),
-                    child: _submitting
-                        ? Semantics(
-                            label: 'Checking PIN',
-                            child: const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : _error == null
-                        ? const Align(
-                            alignment: Alignment.center,
-                            child: Text('Type or use the number pad.'),
-                          )
-                        : Semantics(
-                            key: const Key('profile-pin-error'),
-                            container: true,
-                            liveRegion: true,
-                            label: _error,
-                            child: ExcludeSemantics(
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 44,
+                  child: _submitting
+                      ? Semantics(
+                          label: 'Checking PIN',
+                          child: const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : _error == null
+                      ? const SizedBox.shrink()
+                      : Semantics(
+                          key: const Key('profile-pin-error'),
+                          container: true,
+                          liveRegion: true,
+                          label: _error,
+                          child: ExcludeSemantics(
+                            child: Center(
                               child: Text(
                                 _error!,
                                 softWrap: true,
@@ -1621,17 +1717,15 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
                               ),
                             ),
                           ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: 224,
-                    child: GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 3,
-                      childAspectRatio: 1.33,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
+                        ),
+                ),
+                const SizedBox(height: 16),
+                LineupCompactControls(
+                  child: SizedBox(
+                    width: 3 * 104 + 2 * 8,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         for (var digit = 1; digit <= 9; digit++)
                           _PinKey(
@@ -1640,8 +1734,13 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
                             autofocus: digit == 1,
                             onPressed: _submitting ? null : () => _digit(digit),
                           ),
+                        const SizedBox(width: 104, height: 76),
+                        _PinKey(
+                          digit: 0,
+                          onPressed: _submitting ? null : () => _digit(0),
+                        ),
                         _PinControlKey(
-                          tooltip: 'Delete',
+                          tooltip: 'Backspace',
                           onPressed: _submitting || _pin.isEmpty
                               ? null
                               : () => setState(() {
@@ -1649,35 +1748,20 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
                                   _pin = _pin.substring(0, _pin.length - 1);
                                 }),
                           child: const Text(
-                            'Delete',
-                            style: TextStyle(fontSize: 12),
+                            '⌫',
+                            style: TextStyle(fontSize: 24),
                           ),
                         ),
-                        _PinKey(
-                          digit: 0,
-                          onPressed: _submitting ? null : () => _digit(0),
-                        ),
-                        const SizedBox.shrink(),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: _submitting
-                        ? null
-                        : () => Navigator.pop(context),
-                    style: TextButton.styleFrom(
-                      foregroundColor: LineupTheme.of(context).secondaryText,
-                      minimumSize: const Size(0, 44),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                    child: const Text('Cancel'),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 20),
+                TextButton(
+                  onPressed: _submitting ? null : widget.onBack,
+                  child: const Text('Cancel'),
+                ),
+              ],
             ),
           ),
         ),
@@ -1703,15 +1787,18 @@ class _PinKey extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: '$digit',
     button: true,
-    child: FilledButton(
-      focusNode: focusNode,
-      autofocus: autofocus,
-      onPressed: onPressed,
-      style: _pinKeyStyle(context),
-      child: ExcludeSemantics(
-        child: Text(
-          '$digit',
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+    child: SizedBox(
+      width: 104,
+      height: 76,
+      child: OutlinedButton(
+        focusNode: focusNode,
+        autofocus: autofocus,
+        onPressed: onPressed,
+        child: ExcludeSemantics(
+          child: Text(
+            '$digit',
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+          ),
         ),
       ),
     ),
@@ -1736,53 +1823,11 @@ class _PinControlKey extends StatelessWidget {
     child: Tooltip(
       message: tooltip,
       excludeFromSemantics: true,
-      child: FilledButton(
-        onPressed: onPressed,
-        style: _pinKeyStyle(context, secondary: true),
-        child: child,
+      child: SizedBox(
+        width: 104,
+        height: 76,
+        child: OutlinedButton(onPressed: onPressed, child: child),
       ),
     ),
   );
 }
-
-ButtonStyle _pinKeyStyle(BuildContext context, {bool secondary = false}) {
-  final roles = LineupTheme.of(context);
-  return ButtonStyle(
-    minimumSize: const WidgetStatePropertyAll(Size.zero),
-    padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-    shape: WidgetStatePropertyAll(
-      RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    ),
-    backgroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) {
-        return roles.elevatedSurface.withValues(alpha: 0.45);
-      }
-      if (states.contains(WidgetState.pressed)) {
-        return roles.progressFill.withValues(alpha: secondary ? 0.14 : 0.28);
-      }
-      if (states.contains(WidgetState.focused)) return roles.focusedSurface;
-      return roles.elevatedSurface.withValues(alpha: secondary ? 0.55 : 0.82);
-    }),
-    foregroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) return roles.mutedText;
-      if (states.contains(WidgetState.focused)) return roles.focusedText;
-      return secondary ? roles.secondaryText : roles.primaryText;
-    }),
-    side: WidgetStateProperty.resolveWith(
-      (states) => BorderSide(
-        color: states.contains(WidgetState.focused)
-            ? roles.focusBorder
-            : roles.subtleBorder,
-        width: states.contains(WidgetState.focused)
-            ? _onboardingFocusWidth(roles)
-            : 1,
-      ),
-    ),
-    overlayColor: WidgetStatePropertyAll(
-      roles.progressFill.withValues(alpha: 0.12),
-    ),
-  );
-}
-
-double _onboardingFocusWidth(LineupThemeRoles roles) =>
-    roles.focusBorderWidth >= 5 ? roles.focusBorderWidth : 2;

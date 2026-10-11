@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
-import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -57,15 +56,11 @@ void main() {
         const Key('immersive-app-menu'),
       );
     }
-    for (final label in [
-      'Guide',
-      'Player',
-      'Channels',
-      'Settings',
-      'Account',
-    ]) {
+    for (final label in ['Guide', 'Player', 'Channels', 'Settings']) {
       expect(find.text(label), findsWidgets);
     }
+    expect(find.byKey(const Key('app-menu-account')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Account')), findsOneWidget);
     await tester.tap(find.text('Channels').last);
     await tester.pumpAndSettle();
 
@@ -97,10 +92,7 @@ void main() {
 
     final rail = find.byKey(const Key('settings-category-rail'));
     expect(MediaQuery.sizeOf(tester.element(rail)), const Size(1920, 1080));
-    expect(
-      tester.getSize(rail).width,
-      312 * LineupLayout.scaleFor(const Size(1920, 1080)),
-    );
+    expect(tester.getSize(rail).width, 312);
     expect(tester.takeException(), isNull);
   });
 
@@ -119,7 +111,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Actions for Newsroom'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
     expect(find.text('Delete 1 channel?'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
@@ -130,7 +122,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Actions for Newsroom'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete channel'));
     await tester.pumpAndSettle();
@@ -152,7 +144,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Actions for Newsroom'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
     fixture.controller
       ..channels = const []

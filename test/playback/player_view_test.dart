@@ -1,14 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show Tristate;
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
@@ -22,6 +26,8 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 
+import '../support/golden_test_support.dart';
+
 final _fixtureArtwork = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 );
@@ -33,6 +39,897 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  testWidgets(
+    'paused Mini Guide clock refreshes without player events and stops in background',
+    (tester) async {
+      var now = DateTime(2026, 1, 15, 12);
+      final fixture = _Fixture(
+        PlayerState.paused,
+        guideClock: () => now,
+        shortPrograms: true,
+      );
+      await fixture.guide.ensureCurrentProgram('channel');
+      fixture.player.showMiniGuide();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('12:00 PM'), findsOneWidget);
+      final beforeProgress = tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value!;
+      now = now.add(const Duration(minutes: 1));
+      await tester.pump(const Duration(seconds: 30));
+      expect(find.text('12:01 PM'), findsOneWidget);
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.byType(LinearProgressIndicator),
+            )
+            .value!,
+        greaterThan(beforeProgress),
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      now = now.add(const Duration(minutes: 1));
+      await tester.pump(const Duration(seconds: 30));
+      expect(find.text('12:01 PM'), findsOneWidget);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(find.text('12:02 PM'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  for (final overlay in [PlayerOverlay.osd, PlayerOverlay.nowPlaying]) {
+    testWidgets(
+      'paused ${overlay.name} schedule changes without player events',
+      (tester) async {
+        var now = DateTime(2026, 1, 15, 12);
+        final fixture = _Fixture(
+          PlayerState.paused,
+          guideClock: () => now,
+          shortPrograms: true,
+          overlayTimeout: const Duration(hours: 1),
+        );
+        await fixture.guide.ensureCurrentProgram('channel');
+        if (overlay == PlayerOverlay.osd) {
+          fixture.player.showOsd();
+        } else {
+          fixture.player.showNowPlaying();
+        }
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final title = find.byKey(
+          Key(
+            overlay == PlayerOverlay.osd
+                ? 'player-osd-title'
+                : 'player-now-playing-title',
+          ),
+        );
+        expect(tester.widget<Text>(title).data, 'Program');
+        now = now.add(const Duration(minutes: 31));
+        await tester.pump(const Duration(seconds: 30));
+        expect(tester.widget<Text>(title).data, 'Replacement Program');
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'stopped slate stays opaque at every level with working Browse and Close',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.stopped);
+      var closed = false;
+      for (final level in OverlayTransparency.values) {
+        fixture.lineup.settings = fixture.lineup.settings.copyWith(
+          overlayTransparency: level,
+        );
+        fixture.lineup.notifyListeners();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.slatePine),
+            builder: LineupCanvas.builder,
+            home: PlayerView(
+              controller: fixture.player,
+              openGuide: () => closed = true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Playback stopped'), findsOneWidget);
+        expect(find.text('Retry'), findsNothing);
+        expect(find.byType(NativeVideoSurface), findsNothing);
+        final roles = LineupTheme.of(
+          tester.element(find.text('Playback stopped')),
+        );
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is ColoredBox &&
+                w.color == roles.deepBackground &&
+                w.color.a == 1,
+          ),
+          findsWidgets,
+        );
+      }
+      await tester.tap(find.text('Browse channels'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
+      fixture.player.closeOverlay();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(closed, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
+    'overlay settings update the mounted Player with each theme tint',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing);
+      await tester.binding.setSurfaceSize(const Size(1920, 1080));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      for (final theme in LineupThemeName.values) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(theme),
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final surface = find.byKey(const Key('player-osd-surface'));
+        final roles = LineupTheme.of(tester.element(surface));
+        final before = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-title')),
+        );
+        for (final level in OverlayTransparency.values) {
+          fixture.lineup.settings = fixture.lineup.settings.copyWith(
+            overlayTransparency: level,
+          );
+          fixture.lineup.notifyListeners();
+          await tester.pumpAndSettle();
+          final painter = tester
+              .widget<CustomPaint>(
+                find
+                    .ancestor(of: surface, matching: find.byType(CustomPaint))
+                    .first,
+              )
+              .painter!;
+          final recorder = ui.PictureRecorder();
+          final canvas = Canvas(recorder)..translate(0, 55);
+          painter.paint(canvas, const Size(8, 256));
+          final picture = recorder.endRecording();
+          final image = await tester.runAsync(() => picture.toImage(8, 311));
+          final pixels = await tester.runAsync(
+            () => image!.toByteData(format: ui.ImageByteFormat.rawStraightRgba),
+          );
+          final offset = (310 * 8 + 4) * 4;
+          final tint = roles.overlaySurface;
+          expect(pixels!.getUint8(offset), closeTo(tint.r * 255, 2));
+          expect(pixels.getUint8(offset + 1), closeTo(tint.g * 255, 2));
+          expect(pixels.getUint8(offset + 2), closeTo(tint.b * 255, 2));
+          expect(
+            pixels.getUint8(offset + 3) / 255,
+            closeTo(switch (level) {
+              OverlayTransparency.moreTransparent => .45,
+              OverlayTransparency.standard => .78,
+              OverlayTransparency.reduced => .94,
+            }, .006),
+          );
+          if (level != OverlayTransparency.moreTransparent) {
+            // A single shader joins the feather to flat material without
+            // an uncovered pixel or two separately anti-aliased edges.
+            final above = pixels.getUint8((54 * 8 + 4) * 4 + 3);
+            final below = pixels.getUint8((55 * 8 + 4) * 4 + 3);
+            expect(above, closeTo(below, 3));
+          }
+          image!.dispose();
+          picture.dispose();
+          expect(
+            _drawnRect(tester, find.byKey(const Key('player-osd-title'))),
+            before,
+          );
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
+    'expanded proposal displays approved title artwork within its cap',
+    (tester) async {
+      final bytes = await tester.runAsync(
+        () =>
+            File('test/support/now_playing/signal-after-midnight-title.png')
+                .readAsBytes(),
+      );
+      final inkFraction = await tester.runAsync(() async {
+        final codec = await ui.instantiateImageCodec(bytes!);
+        final image = (await codec.getNextFrame()).image;
+        final pixels = await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
+        var top = image.height, bottom = -1;
+        for (var y = 0; y < image.height; y++) {
+          for (var x = 0; x < image.width; x++) {
+            if (pixels!.getUint8((y * image.width + x) * 4 + 3) >= 32) {
+              top = math.min(top, y);
+              bottom = math.max(bottom, y);
+            }
+          }
+        }
+        final fraction = (bottom - top + 1) / image.height;
+        image.dispose();
+        codec.dispose();
+        return fraction;
+      });
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      for (final size in [const Size(1280, 720), const Size(1920, 1080)]) {
+        for (final textScale in [1.0, 1.5]) {
+          await tester.binding.setSurfaceSize(size);
+          final fixture = _Fixture(
+            PlayerState.playing,
+            richProgram: true,
+            artworkBytes: bytes,
+          );
+          await fixture.guide.ensureCurrentProgram('channel');
+          fixture.player.showNowPlaying();
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(textScale)),
+                child: LineupCanvas(child: child!),
+              ),
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await _settleNowPlayingArtwork(tester);
+          final logo = find.byKey(const Key('player-now-playing-logo'));
+          expect(logo, findsOneWidget, reason: '$size text$textScale');
+          final image = tester.widget<Image>(logo);
+          expect(image.image, MemoryImage(bytes!));
+          final visibleLogo = find
+              .ancestor(of: logo, matching: find.byType(ClearLogoImage))
+              .first;
+          final drawn = _drawnSize(tester, visibleLogo);
+          expect(
+            drawn.height,
+            lessThanOrEqualTo(56 * LineupCanvas.scaleFor(size) + .01),
+          );
+          expect(
+            drawn.height,
+            greaterThanOrEqualTo(48 * LineupCanvas.scaleFor(size)),
+          );
+          expect(drawn.width, greaterThan(0));
+          final paintedInkHeight =
+              _drawnSize(tester, logo).height * inkFraction!;
+          final canvasScale = LineupCanvas.scaleFor(size);
+          expect(
+            paintedInkHeight,
+            inInclusiveRange(48 * canvasScale, 56 * canvasScale),
+          );
+
+          expect(
+            find.byKey(const Key('player-now-playing-series')),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+        }
+      }
+    },
+  );
+
+  testWidgets('expanded proposal keeps metadata, cast and controls reachable', (
+    tester,
+  ) async {
+    await tester.runAsync(loadPinnedTestFonts);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final size in [const Size(1280, 720), const Size(1920, 1080)]) {
+      for (final textScale in [1.0, 1.5]) {
+        await tester.binding.setSurfaceSize(size);
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richItemOverride: _fixtureItem(
+            0,
+            rich: true,
+            duration: const Duration(hours: 1),
+            cast: _fixtureCast,
+          ),
+          shortPrograms: true,
+          dvrControlsEnabled: textScale > 1,
+          guideClock: () => DateTime(2026, 1, 15, 12),
+          tracks: const [
+            PlayerTrack(
+              id: 1,
+              type: PlayerTrackType.audio,
+              language: 'eng',
+              selected: true,
+            ),
+            PlayerTrack(
+              id: 2,
+              type: PlayerTrackType.subtitle,
+              language: 'eng',
+              selected: true,
+            ),
+          ],
+        );
+        await fixture.guide.ensureCurrentProgram('channel');
+        fixture.player.showNowPlaying();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(textScale)),
+              child: LineupCanvas(child: child!),
+            ),
+            home: PlayerView(
+              controller: fixture.player,
+              openGuide: () {},
+              openMenu: (_, _) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await _settleNowPlayingArtwork(tester);
+        expect(
+          find.text('S2 E6 · 60 min · 2026 · Drama · Adventure'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Season 2'), findsNothing);
+        final logo = find.byKey(const Key('player-now-playing-logo'));
+        final canvasScale = LineupCanvas.scaleFor(size);
+        expect(
+          _drawnSize(
+            tester,
+            find
+                .ancestor(of: logo, matching: find.byType(ClearLogoImage))
+                .first,
+          ).height,
+          lessThanOrEqualTo(56 * canvasScale + .01),
+        );
+        final summaryFinder = find.byKey(
+          const Key('player-now-playing-summary'),
+        );
+        final summary = tester.widget<Text>(summaryFinder);
+        expect(summary.maxLines, 3);
+        expect(summary.overflow, TextOverflow.ellipsis);
+        expect(
+          _drawnSize(tester, summaryFinder).width,
+          lessThanOrEqualTo(900 * canvasScale + .01),
+        );
+        final castFinder = find.byKey(const Key('player-now-playing-cast'));
+        final castLeft = _drawnRect(tester, castFinder).left;
+        final roleStyle = tester
+            .widget<Text>(
+              find.byKey(const ValueKey('player-now-playing-cast-role-0')),
+            )
+            .style!;
+        final roles = LineupTheme.of(tester.element(castFinder));
+        expect(roleStyle.color, roles.secondaryText);
+        for (var i = 0; i < 4; i++) {
+          final nameFinder = find.byKey(
+            ValueKey('player-now-playing-cast-name-$i'),
+          );
+          final roleFinder = find.byKey(
+            ValueKey('player-now-playing-cast-role-$i'),
+          );
+          final name = tester.widget<Text>(nameFinder);
+          expect(name.style!.color, roles.primaryText);
+          expect(name.maxLines, 2);
+          final nameRect = _drawnRect(tester, nameFinder);
+          final roleRect = _drawnRect(tester, roleFinder);
+          expect(roleRect.left, closeTo(nameRect.left, .01));
+          expect(roleRect.top - nameRect.bottom, closeTo(3 * canvasScale, .01));
+          if (i == 0) expect(nameRect.left, closeTo(castLeft, .01));
+          final roleParagraph = tester.renderObject<RenderParagraph>(
+            roleFinder,
+          );
+          expect(roleParagraph.didExceedMaxLines, isFalse);
+        }
+        expect(
+          find.byKey(const ValueKey('player-now-playing-cast-name-4')),
+          findsNothing,
+        );
+        for (final key in [
+          'player-osd-subtitles',
+          'player-osd-audio',
+          'player-osd-sleep',
+        ]) {
+          final labelFinder = find.descendant(
+            of: find.byKey(Key(key)),
+            matching: find.byType(Text),
+          );
+          final text = tester.widget<Text>(labelFinder);
+          expect(text.overflow, isNot(TextOverflow.ellipsis));
+          expect(
+            tester.renderObject<RenderParagraph>(labelFinder).didExceedMaxLines,
+            isFalse,
+          );
+        }
+        final standardActions = [
+          find.byKey(const Key('player-osd-subtitles')),
+          find.byKey(const Key('player-osd-audio')),
+          find.byKey(const Key('player-osd-sleep')),
+          find.byKey(const Key('player-app-menu')),
+          find.byTooltip('Full screen'),
+        ].map((finder) => _drawnRect(tester, finder)).toList();
+        final availableWidth =
+            size.width -
+            2 *
+                (size.width / LineupCanvas.scaleFor(size) * .05).clamp(
+                  24.0,
+                  96.0,
+                ) *
+                LineupCanvas.scaleFor(size);
+        final naturalStandardWidth = standardActions.fold<double>(
+          16 * LineupCanvas.scaleFor(size),
+          (sum, rect) => sum + rect.width,
+        );
+        if (naturalStandardWidth <= availableWidth) {
+          for (final rect in standardActions.skip(1)) {
+            expect(
+              rect.center.dy,
+              closeTo(standardActions.first.center.dy, .01),
+              reason: 'All five actions fit at $size text$textScale',
+            );
+          }
+        }
+        final actions = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-action-groups')),
+        );
+        final close = _drawnRect(
+          tester,
+          find.byKey(const Key('player-now-playing-collapse')),
+        );
+        expect(close.right, closeTo(actions.right, .01));
+        final closeGlyph = find.descendant(
+          of: find.byKey(const Key('player-now-playing-collapse')),
+          matching: find.byIcon(Icons.close),
+        );
+        final fullscreenGlyph = find.byIcon(Icons.fullscreen);
+        expect(
+          await _paintedIconRight(tester, closeGlyph),
+          closeTo(await _paintedIconRight(tester, fullscreenGlyph), .5),
+        );
+
+        final next = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-next')),
+        );
+        expect(next.right, closeTo(actions.right, .01));
+        expect(next.top, greaterThanOrEqualTo(actions.bottom));
+        expect(tester.takeException(), isNull, reason: '$size text$textScale');
+        fixture.player.showOsd();
+        await tester.pumpAndSettle();
+        for (final key in [
+          'player-osd-subtitles',
+          'player-osd-audio',
+          'player-osd-sleep',
+        ]) {
+          final labelFinder = find.descendant(
+            of: find.byKey(Key(key)),
+            matching: find.byType(Text),
+          );
+          expect(
+            tester.renderObject<RenderParagraph>(labelFinder).didExceedMaxLines,
+            isFalse,
+          );
+        }
+        final collapsedActions = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-action-groups')),
+        );
+        final collapsedNext = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-next')),
+        );
+        expect(collapsedNext.right, closeTo(collapsedActions.right, .01));
+        expect(
+          collapsedNext.top,
+          greaterThanOrEqualTo(collapsedActions.bottom),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    }
+  });
+
+  testWidgets('sleep popover is above its real button and remains clickable', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.subtitle, selected: false),
+      ],
+    );
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final generation = fixture.player.overlayPresentationGeneration;
+    await tester.tap(find.byKey(const Key('player-osd-sleep')));
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
+    expect(fixture.player.overlayPresentationGeneration, generation);
+    final popup = _drawnRect(
+      tester,
+      find.byKey(const Key('sleep-timer-picker')),
+    );
+    final button = _drawnRect(
+      tester,
+      find.byKey(const Key('player-osd-sleep')),
+    );
+    expect(popup.bottom, lessThan(button.top));
+    expect(popup.right, closeTo(button.right, .1));
+    expect(popup.left, greaterThanOrEqualTo(0));
+    expect(popup.top, greaterThanOrEqualTo(0));
+    await tester.tap(find.byKey(const Key('player-osd-subtitles')));
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
+    expect(fixture.player.sleepPickerOpen, isFalse);
+    fixture.player.closeOverlay();
+    await tester.pumpAndSettle();
+    fixture.player.showSleepTimer();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('30 minutes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sleep · 30m'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'video click closes the sleep picker and restarts the OSD timer',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        overlayTimeout: const Duration(seconds: 1),
+      );
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('player-osd-sleep')));
+      await tester.pumpAndSettle();
+      expect(fixture.player.sleepPickerOpen, isTrue);
+
+      await tester.tapAt(const Offset(8, 8), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(fixture.player.sleepPickerOpen, isFalse);
+      await tester.pump(const Duration(milliseconds: 999));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(fixture.player.overlay, PlayerOverlay.none);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
+    'pointer activity and timeout changes do not dismiss an open picker',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing);
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('player-osd-sleep')),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendEventToBinding(
+        PointerHoverEvent(position: const Offset(8, 8)),
+      );
+      fixture.lineup.settings = fixture.lineup.settings.copyWith(
+        osdAutoHideSeconds: 2,
+      );
+      fixture.lineup.notifyListeners();
+      await tester.pump(const Duration(seconds: 3));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(fixture.player.sleepPickerOpen, isTrue);
+
+      fixture.player.closeOverlay();
+      await tester.pump(const Duration(milliseconds: 1999));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(fixture.player.overlay, PlayerOverlay.none);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('OSD menu and fullscreen actions close the picker first', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    var menuOpened = false;
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(
+          controller: fixture.player,
+          openGuide: () {},
+          openMenu: (_, _) => menuOpened = true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final generation = fixture.player.overlayPresentationGeneration;
+
+    await tester.tap(find.byKey(const Key('player-osd-sleep')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('player-app-menu')));
+    await tester.pump();
+    expect(menuOpened, isTrue);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isFalse);
+    expect(fixture.player.overlayPresentationGeneration, generation);
+
+    fixture.player.showSleepTimer();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Full screen'));
+    await tester.pumpAndSettle();
+    expect(fixture.native.fullscreenValues, [true]);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isFalse);
+    expect(fixture.player.overlayPresentationGeneration, generation);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('sleep picker keeps arrow navigation within its focused rows', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+
+    final thirtyMinutes = find.text('30 minutes');
+    final oneHour = find.text('1 hour');
+    expect(thirtyMinutes, findsOneWidget);
+    expect(oneHour, findsOneWidget);
+    Focus.of(tester.element(thirtyMinutes)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
+    expect(Focus.of(tester.element(oneHour)).hasFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(Focus.of(tester.element(thirtyMinutes)).hasFocus, isTrue);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  for (final dvrControlsEnabled in [false, true]) {
+    testWidgets(
+      'sleep picker Space activates a preset without playback commands '
+      '(DVR ${dvrControlsEnabled ? 'on' : 'off'})',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          dvrControlsEnabled: dvrControlsEnabled,
+        );
+        await tester.binding.setSurfaceSize(const Size(1280, 720));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        fixture.player.showOsd();
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+        await tester.pumpAndSettle();
+        Focus.of(tester.element(find.text('30 minutes'))).requestFocus();
+        await tester.pump();
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pump();
+        expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+        expect(fixture.native.transportCommands, 0);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        expect(fixture.player.sleepPickerOpen, isFalse);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
+  testWidgets('OSD Up still opens Mini Guide outside the sleep picker', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+    final sleepButton = tester.widget<TextButton>(
+      find.byKey(const Key('player-osd-sleep')),
+    );
+    sleepButton.focusNode!.requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+    expect(fixture.player.sleepPickerOpen, isFalse);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'keyboard track traversal reveals each focused row below its header',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: [
+          for (var index = 0; index < 30; index++)
+            PlayerTrack(
+              id: index + 1,
+              type: PlayerTrackType.audio,
+              selected: index == 0,
+              title: 'Audio choice ${index + 1}',
+            ),
+        ],
+      );
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('player-osd-audio')));
+      await tester.pumpAndSettle();
+      final selected = find.byKey(const Key('playback-track-audio-1'));
+      final selectedSurface = find.ancestor(
+        of: selected,
+        matching: find.byType(LineupRowSurface),
+      );
+      final ring =
+          tester
+                  .widget<Container>(
+                    find
+                        .descendant(
+                          of: selectedSurface,
+                          matching: find.byWidgetPredicate(
+                            (w) =>
+                                w is Container &&
+                                w.foregroundDecoration != null,
+                          ),
+                        )
+                        .first,
+                  )
+                  .foregroundDecoration!
+              as BoxDecoration;
+      expect((ring.border! as Border).top.color.a, 0);
+      for (var index = 2; index <= 12; index++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        final row = find.byKey(Key('playback-track-audio-$index'));
+        expect(Focus.of(tester.element(row)).hasFocus, isTrue);
+        final rowSurface = find.ancestor(
+          of: row,
+          matching: find.byType(LineupRowSurface),
+        );
+        final keyboardRing =
+            tester
+                    .widget<Container>(
+                      find
+                          .descendant(
+                            of: rowSurface,
+                            matching: find.byWidgetPredicate(
+                              (w) =>
+                                  w is Container &&
+                                  w.foregroundDecoration != null,
+                            ),
+                          )
+                          .first,
+                    )
+                    .foregroundDecoration!
+                as BoxDecoration;
+        final roles = LineupTheme.of(tester.element(row));
+        final keyboardBorder = keyboardRing.border! as Border;
+        expect(keyboardBorder.top.color, roles.focusBorder);
+        expect(keyboardBorder.top.width, roles.focusBorderWidth);
+        final rect = _drawnRect(tester, row);
+        final list = _drawnRect(
+          tester,
+          find.byKey(const Key('playback-options-list')),
+        );
+        expect(rect.top, greaterThanOrEqualTo(list.top));
+        expect(rect.bottom, lessThanOrEqualTo(list.bottom));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
   testWidgets('unsupported macOS backend keeps the Flutter player accessible', (
     tester,
   ) async {
@@ -41,6 +938,7 @@ void main() {
     addTearDown(focus.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: focus,
@@ -83,6 +981,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -99,7 +998,8 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyS);
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyS);
     await tester.pump();
-    expect(fixture.player.overlay, PlayerOverlay.sleepTimer);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
     expect(find.byKey(const Key('sleep-timer-picker')), findsOneWidget);
 
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyI);
@@ -122,6 +1022,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -139,9 +1040,11 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f11);
     expect(fixture.native.fullscreenValues, [true]);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
-    await tester.pump();
-    expect(fixture.player.overlay, PlayerOverlay.sleepTimer);
-    await tester.tap(find.text('30 minutes'));
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
+    final sleepChoice = find.text('30 minutes');
+    await tester.tap(sleepChoice);
     await tester.pump();
     expect(fixture.player.sleepDuration, const Duration(minutes: 30));
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
@@ -161,6 +1064,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -198,6 +1102,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -228,6 +1133,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -256,6 +1162,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -267,10 +1174,12 @@ void main() {
       await tester.sendKeyEvent(key);
       await tester.pump();
       expect(
-        fixture.player.error,
+        fixture.player.notice,
         'Playback controls are temporarily unavailable. Try again.',
       );
-      expect(fixture.player.overlay, PlayerOverlay.error);
+      expect(fixture.player.error, isNull);
+      expect(fixture.player.overlay, isNot(PlayerOverlay.error));
+      expect(find.byType(NativeVideoSurface), findsOneWidget);
       expect(tester.takeException(), isNull);
       fixture.player.closeOverlay();
     }
@@ -284,6 +1193,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -303,6 +1213,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () => guideOpened = true,
@@ -325,6 +1236,109 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('Mini Guide activates with its supported keyboard selectors', (
+    tester,
+  ) async {
+    for (final key in [
+      LogicalKeyboardKey.enter,
+      LogicalKeyboardKey.space,
+      LogicalKeyboardKey.select,
+    ]) {
+      final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+      fixture.player.showMiniGuide();
+      fixture.player.moveMiniGuide(1);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+      expect(
+        fixture.native.loadCalls,
+        1,
+        reason: '$key tunes the selected Mini Guide channel',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
+
+  testWidgets(
+    'track drawers keep Guide shortcuts and errors keep channel recovery',
+    (tester) async {
+      final errorFixture = _Fixture(
+        PlayerState.playing,
+        failLoad: true,
+        channelCount: 2,
+      );
+      await errorFixture.player.loadInitialMedia(
+        Uri.parse('lineup-test://failure'),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: errorFixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(errorFixture.player.overlay, PlayerOverlay.error);
+      final loadsBeforeRecovery = errorFixture.native.loadCalls;
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await tester.pumpAndSettle();
+      expect(errorFixture.native.loadCalls, loadsBeforeRecovery + 1);
+      expect(errorFixture.player.overlay, PlayerOverlay.error);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      errorFixture.dispose();
+
+      for (final type in [PlayerTrackType.audio, PlayerTrackType.subtitle]) {
+        for (final key in [LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2]) {
+          var guideOpened = false;
+          final fixture = _Fixture(
+            PlayerState.playing,
+            tracks: const [
+              PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+              PlayerTrack(
+                id: 2,
+                type: PlayerTrackType.subtitle,
+                selected: true,
+              ),
+            ],
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: LineupCanvas.builder,
+              home: PlayerView(
+                controller: fixture.player,
+                openGuide: () => guideOpened = true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          fixture.player.showTracks(type);
+          await tester.pumpAndSettle();
+
+          await tester.sendKeyEvent(key);
+          await tester.pump();
+          expect(
+            guideOpened,
+            isTrue,
+            reason: '$key opens Guide from ${type.name} drawer',
+          );
+
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+        }
+      }
+    },
+  );
+
   testWidgets('Guide-sized player surface keeps load failures reachable', (
     tester,
   ) async {
@@ -333,6 +1347,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: SizedBox(
           width: 320,
           height: 180,
@@ -356,6 +1371,7 @@ void main() {
     await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -390,7 +1406,10 @@ void main() {
     await fixture.native.loadStarted.future;
 
     await tester.pumpWidget(
-      MaterialApp(home: PlayerSurface(controller: fixture.player)),
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerSurface(controller: fixture.player),
+      ),
     );
 
     expect(find.bySemanticsLabel('Preparing playback'), findsOneWidget);
@@ -410,6 +1429,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () => guideOpened = true,
@@ -419,6 +1439,25 @@ void main() {
     await tester.pump();
 
     expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+    expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
+
+    fixture.player.closeOverlay();
+    fixture.player.showOsd();
+    await tester.pumpAndSettle();
+    final sleepButton = tester.widget<TextButton>(
+      find.byKey(const Key('player-osd-sleep')),
+    );
+    sleepButton.focusNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+
+    fixture.player.closeOverlay();
+    fixture.player.showOsd();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
@@ -451,6 +1490,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -480,6 +1520,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -497,7 +1538,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-    expect(fixture.player.overlay, PlayerOverlay.none);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
     await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
     expect(fixture.player.overlay, PlayerOverlay.osd);
 
@@ -525,6 +1566,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -535,15 +1577,16 @@ void main() {
         findsOneWidget,
       );
       expect(
-        tester.getSize(find.byKey(const Key('player-osd-surface'))).width,
-        size.width,
+        _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).width,
+        closeTo(size.width, .001),
       );
-      final progressLine = tester.getRect(
+      final progressLine = _drawnRect(
+        tester,
         find.byKey(const Key('player-osd-progress-line')),
       );
       expect(progressLine.left, 0, reason: '$size');
-      expect(progressLine.width, size.width, reason: '$size');
-      expect(progressLine.bottom, size.height, reason: '$size');
+      expect(progressLine.width, closeTo(size.width, .001), reason: '$size');
+      expect(progressLine.bottom, closeTo(size.height, .001), reason: '$size');
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
@@ -559,33 +1602,35 @@ void main() {
       fixture.player.showMiniGuide();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(size),
-          home: MediaQuery(
-            data: MediaQueryData(size: size),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
       expect(
-        tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
-        size.width,
+        _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).width,
+        closeTo(size.width, .001),
       );
       expect(fixture.player.miniGuideChannels, hasLength(5));
       expect(
         find.textContaining('Browse · Enter Tune · Esc Close'),
         findsOneWidget,
       );
-      final shelf = tester.getRect(find.byKey(const Key('mini-guide-shelf')));
+      final shelf = _drawnRect(
+        tester,
+        find.byKey(const Key('mini-guide-shelf')),
+      );
       expect(
         MediaQuery.sizeOf(
           tester.element(find.byKey(const Key('mini-guide-shelf'))),
         ),
-        size,
+        size / LineupCanvas.scaleFor(size),
       );
       for (final channel in fixture.player.miniGuideChannels) {
-        final row = tester.getRect(
+        final row = _drawnRect(
+          tester,
           find.byKey(Key('mini-guide-row-${channel.id}')),
         );
         expect(row.top, greaterThanOrEqualTo(shelf.top), reason: '$size');
@@ -600,21 +1645,32 @@ void main() {
         if (miniScroll.maxScrollExtent == 0) {
           expect(row.bottom, lessThanOrEqualTo(shelf.bottom), reason: '$size');
         }
-        if (LineupLayout.isCompactWidth(size.width) || size.height < 720) {
-          expect(row.height, greaterThan(48), reason: '$size');
+        if (LineupLayout.isCompactWidth(
+              (size / LineupCanvas.scaleFor(size)).width,
+            ) ||
+            (size / LineupCanvas.scaleFor(size)).height < 720) {
+          expect(
+            row.height,
+            greaterThan(48 * LineupCanvas.scaleFor(size)),
+            reason: '$size',
+          );
         } else {
           expect(
             row.height,
             closeTo(
-              (size.width >= 1920 && size.height >= 1080 ? 66 : 56) *
-                  LineupLayout.scaleFor(size),
+              ((size / LineupCanvas.scaleFor(size)).width >= 1920 &&
+                          (size / LineupCanvas.scaleFor(size)).height >= 1080
+                      ? 66
+                      : 56) *
+                  LineupCanvas.scaleFor(size),
               0.01,
             ),
             reason: '$size',
           );
         }
         for (final fact in ['current', 'next']) {
-          final factRect = tester.getRect(
+          final factRect = _drawnRect(
+            tester,
             find.byKey(Key('mini-guide-$fact-${channel.id}')),
           );
           expect(row.contains(factRect.topLeft), isTrue, reason: '$size');
@@ -658,18 +1714,17 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(size),
-          home: MediaQuery(
-            data: MediaQueryData(size: size),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(fixture.player.nextProgram, isNotNull, reason: '$size');
 
-      final surface = tester.getRect(
+      final surface = _drawnRect(
+        tester,
         find.byKey(const Key('player-osd-surface')),
       );
       expect(surface.width, size.width, reason: '$size');
@@ -683,16 +1738,20 @@ void main() {
           lessThan(size.height < 900 ? 0.30 : 0.26),
           reason: '$size',
         );
-        final timeline = tester.getRect(
+        final timeline = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-progress-block')),
         );
-        final controls = tester.getRect(
+        final controls = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-horizontal-layout')),
         );
-        final identity = tester.getRect(
+        final identity = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-identity')),
         );
-        final actions = tester.getRect(
+        final actions = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-action-groups')),
         );
         expect(identity.left, lessThan(actions.left), reason: '$size');
@@ -735,10 +1794,12 @@ void main() {
         expect(next.data, contains('Up next • $localizedStart •'));
         expect(next.maxLines, 1);
         expect(next.overflow, TextOverflow.ellipsis);
-        final timeline = tester.getRect(
+        final timeline = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-progress-block')),
         );
-        final nextRect = tester.getRect(
+        final nextRect = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-next')),
         );
         expect(
@@ -771,6 +1832,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(state),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -840,10 +1902,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -869,6 +1929,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () {},
@@ -939,12 +2000,13 @@ void main() {
         show();
         await tester.pumpWidget(
           MaterialApp(
-            home: MediaQuery(
-              data: MediaQueryData(
-                size: size,
-                textScaler: const TextScaler.linear(2),
+            builder: LineupCanvas.builder,
+            home: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(2)),
+                child: PlayerView(controller: fixture.player, openGuide: () {}),
               ),
-              child: PlayerView(controller: fixture.player, openGuide: () {}),
             ),
           ),
         );
@@ -974,10 +2036,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pumpAndSettle();
@@ -996,14 +2056,14 @@ void main() {
     final nowPlayingSemantics = tester.widget<Semantics>(
       find
           .ancestor(
-            of: find.byKey(const Key('player-now-playing-shelf')),
+            of: find.byKey(const Key('player-now-playing-details')),
             matching: find.byType(Semantics),
           )
           .first,
     );
     expect(
       nowPlayingSemantics.properties.label,
-      allOf(contains('H264'), isNot(contains('1920×1080'))),
+      allOf(contains('H.264'), isNot(contains('1920×1080'))),
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1041,6 +2101,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(position),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -1074,6 +2135,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1091,6 +2153,52 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets(
+    'chosen OSD logo height preserves width and small-window bounds',
+    (tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      for (final config in [
+        (
+          window: const Size(1920, 1080),
+          maximum: const Size(520, 104),
+          minimum: const Size(96, 28),
+        ),
+        (
+          window: const Size(1280, 720),
+          maximum: const Size(360, 104),
+          minimum: const Size(96, 28),
+        ),
+        (
+          window: const Size(800, 600),
+          maximum: const Size(360, 72),
+          minimum: const Size(96, 24),
+        ),
+      ]) {
+        await tester.binding.setSurfaceSize(config.window);
+        final fixture = _Fixture(PlayerState.playing, richProgram: true);
+        await fixture.guide.ensureCurrentProgram('channel');
+        fixture.player.showOsd();
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final logo = tester.widget<ClearLogoImage>(
+          find.descendant(
+            of: find.byKey(const Key('player-osd-identity')),
+            matching: find.byType(ClearLogoImage),
+          ),
+        );
+        expect(logo.maximumSize, config.maximum);
+        expect(logo.minimumVisibleSize, config.minimum);
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    },
+  );
 
   testWidgets('OSD uses official title artwork with a text fallback', (
     tester,
@@ -1132,6 +2240,7 @@ void main() {
       item.fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(item.logo),
           home: PlayerView(controller: item.fixture.player, openGuide: () {}),
         ),
@@ -1272,6 +2381,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(itemCase.item.id),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -1306,15 +2416,20 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pumpAndSettle();
 
-    final surface = tester.getSize(find.byKey(const Key('player-osd-surface')));
+    final surface = _drawnSize(
+      tester,
+      find.byKey(const Key('player-osd-surface')),
+    );
     expect(surface.width, 1920);
     expect(surface.height / 1080, lessThan(0.20));
-    final progressLine = tester.getRect(
+    final progressLine = _drawnRect(
+      tester,
       find.byKey(const Key('player-osd-progress-line')),
     );
     expect(progressLine.left, 0);
@@ -1339,15 +2454,18 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(size),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
-      final seekTarget = tester.getRect(
+      final seekTarget = _drawnRect(
+        tester,
         find.byKey(const Key('player-osd-progress-line')),
       );
-      final actions = tester.getRect(
+      final actions = _drawnRect(
+        tester,
         find.byKey(const Key('player-osd-action-groups')),
       );
       expect(seekTarget.overlaps(actions), isFalse, reason: '$size');
@@ -1374,6 +2492,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1381,7 +2500,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(
-      tester.getSize(find.byKey(const Key('player-osd-surface'))).width,
+      _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).width,
       1280,
     );
 
@@ -1389,7 +2508,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(
-      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+      _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).width,
       1280,
     );
     expect(tester.takeException(), isNull);
@@ -1397,16 +2516,20 @@ void main() {
     tester.view.physicalSize = const Size(3840, 2160);
     await tester.pump();
     expect(
-      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+      _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).width,
       1920,
     );
     expect(
-      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).height / 1080,
+      _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).height /
+          1080,
       lessThan(0.34),
     );
     for (final channel in fixture.player.miniGuideChannels) {
       expect(
-        tester.getSize(find.byKey(Key('mini-guide-row-${channel.id}'))).height,
+        _drawnSize(
+          tester,
+          find.byKey(Key('mini-guide-row-${channel.id}')),
+        ).height,
         66,
       );
     }
@@ -1422,6 +2545,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1490,7 +2614,7 @@ void main() {
       MaterialApp(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
+          child: LineupCanvas(child: child!),
         ),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -1532,6 +2656,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(
             controller: fixture.player,
             focusNode: rootFocus,
@@ -1592,6 +2717,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: rootFocus,
@@ -1634,6 +2760,123 @@ void main() {
     fixture.dispose();
   });
 
+  for (final keyboard in [false, true]) {
+    testWidgets(
+      '${keyboard ? 'keyboard' : 'mouse'} Sleep choice restores appropriate focus and timeout',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          overlayTimeout: const Duration(seconds: 1),
+        );
+        fixture.player.showOsd();
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        if (keyboard) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+        } else {
+          await tester.tap(
+            find.byKey(const Key('player-osd-sleep')),
+            kind: PointerDeviceKind.mouse,
+          );
+        }
+        await tester.pump();
+        if (keyboard) {
+          // Enter traversal before activating the preset with the keyboard.
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          // The preset is a ListTile, so focus its nearest Focus descendant.
+          final choiceContext = tester.element(find.text('30 minutes'));
+          Focus.of(choiceContext).requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        } else {
+          await tester.tap(
+            find.text('30 minutes'),
+            kind: PointerDeviceKind.mouse,
+          );
+        }
+        await tester.pump();
+        expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+        await tester.pump(const Duration(seconds: 2));
+        expect(
+          fixture.player.overlay,
+          keyboard ? PlayerOverlay.osd : PlayerOverlay.none,
+        );
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          keyboard ? 'Player sleep timer' : 'Player root',
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+
+    testWidgets(
+      '${keyboard ? 'keyboard' : 'mouse'} app menu dismissal restores appropriate Player focus and timeout',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          overlayTimeout: const Duration(seconds: 1),
+        );
+        fixture.lineup.stage = SetupStage.ready;
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: LineupShell(
+              player: fixture.native,
+              controller: fixture.lineup,
+              initialMediaPath: '/synthetic.mp4',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final player = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        player.showOsd();
+        await tester.pump(const Duration(milliseconds: 400));
+        if (keyboard) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          final menu = tester.widget<IconButton>(
+            find.byKey(const Key('player-app-menu')),
+          );
+          menu.focusNode!.requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        } else {
+          await tester.tap(
+            find.byKey(const Key('player-app-menu')),
+            kind: PointerDeviceKind.mouse,
+          );
+        }
+        await tester.pump();
+        expect(find.text('Plex account'), findsOneWidget);
+        if (keyboard) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        } else {
+          await tester.tapAt(const Offset(5, 5), kind: PointerDeviceKind.mouse);
+        }
+        await tester.pump();
+        expect(find.text('Plex account'), findsNothing);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          keyboard ? 'Player Lineup menu' : 'Player',
+        );
+        await tester.pump(const Duration(seconds: 5));
+        expect(
+          player.overlay,
+          keyboard ? PlayerOverlay.osd : PlayerOverlay.none,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
   testWidgets('pointer and root focus do not suspend a timed OSD', (
     tester,
   ) async {
@@ -1646,6 +2889,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: rootFocus,
@@ -1693,6 +2937,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1749,6 +2994,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1767,7 +3013,23 @@ void main() {
     expect(selected.selected, isTrue);
     expect(focused.shape, isNull);
     expect(selected.shape, isNull);
-    expect(focused.focusColor, isNot(selected.selectedTileColor));
+    final focusSurface = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('playback-track-audio-1')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container && widget.foregroundDecoration != null,
+            ),
+          )
+          .first,
+    );
+    final focusBorder =
+        (focusSurface.foregroundDecoration! as BoxDecoration).border! as Border;
+    expect(
+      focusBorder.top.color,
+      LineupTheme.of(tester.element(find.text('Stereo'))).focusBorder,
+    );
     expect(
       find.descendant(
         of: find.byKey(const Key('playback-track-audio-2')),
@@ -1777,6 +3039,10 @@ void main() {
       ),
       findsOneWidget,
     );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(fixture.native.selectedTracks, [(PlayerTrackType.audio, 1)]);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -1795,6 +3061,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1849,6 +3116,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1920,6 +3188,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1927,13 +3196,16 @@ void main() {
 
     expect(find.text('English — Original theatrical mix'), findsOneWidget);
     expect(find.text('Stereo • AAC'), findsOneWidget);
-    expect(find.text('español (Latinoamérica)'), findsOneWidget);
-    expect(find.text('5.1 surround • Dolby Digital Plus'), findsOneWidget);
+    expect(find.text('Español'), findsOneWidget);
+    expect(
+      find.text('Latinoamérica • 5.1 surround • Dolby Digital Plus'),
+      findsOneWidget,
+    );
 
     const selectedLabel =
         'Select Audio track: English — Original theatrical mix; Stereo; AAC.';
     const alternateLabel =
-        'Select Audio track: español (Latinoamérica); 5.1 surround; '
+        'Select Audio track: Español; Latinoamérica; 5.1 surround; '
         'Dolby Digital Plus.';
     final selectedFinder = find.bySemanticsLabel(selectedLabel);
     final alternateFinder = find.bySemanticsLabel(alternateLabel);
@@ -1994,6 +3266,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.subtitle);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2080,6 +3353,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2126,6 +3400,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.subtitle);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2177,10 +3452,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -2228,10 +3501,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -2275,10 +3546,8 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(1280, 720)),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
@@ -2343,28 +3612,31 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(800, 600)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
     final osdLabel = find.text('Audio • English — $longTitle');
     expect(osdLabel, findsOneWidget);
     final osdText = tester.widget<Text>(osdLabel);
-    expect(osdText.maxLines, 1);
-    expect(osdText.overflow, TextOverflow.ellipsis);
+    expect(osdText.maxLines, isNull);
+    expect(osdText.overflow, isNot(TextOverflow.ellipsis));
+    expect(
+      tester.renderObject<RenderParagraph>(osdLabel).didExceedMaxLines,
+      isFalse,
+    );
 
     await tester.binding.setSurfaceSize(const Size(3840, 2160));
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(
-            size: Size(3840, 2160),
-            textScaler: TextScaler.linear(2),
+        builder: LineupCanvas.builder,
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(2)),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       ),
     );
@@ -2409,6 +3681,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2451,6 +3724,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2530,6 +3804,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2572,6 +3847,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2588,7 +3864,7 @@ void main() {
     await tester.pump();
 
     final hint = find.textContaining('Browse · Enter Tune · Esc Close');
-    expect(tester.getRect(hint).bottom, lessThanOrEqualTo(240));
+    expect(_drawnRect(tester, hint).bottom, lessThanOrEqualTo(240));
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -2604,6 +3880,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2654,6 +3931,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2683,6 +3961,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2707,6 +3986,7 @@ void main() {
       fixture.player.showMiniGuide();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2768,6 +4048,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2780,12 +4061,16 @@ void main() {
       );
       final position = tester.state<ScrollableState>(scrollable).position;
       expect(position.maxScrollExtent, greaterThan(0));
-      final rail = tester.getRect(
+      final rail = _drawnRect(
+        tester,
         find.byKey(const Key('playback-options-rail')),
       );
       expect(rail.right, size.width);
       expect(rail.height, size.height);
-      expect(rail.width, size.width == 800 ? 320 : 400);
+      expect(
+        rail.width,
+        math.min(size.width * 0.4, 600 * LineupCanvas.scaleFor(size)),
+      );
       position.jumpTo(position.maxScrollExtent);
       await tester.pumpAndSettle();
       expect(find.text('Audio choice 256'), findsOneWidget);
@@ -2921,21 +4206,22 @@ void main() {
         fixture.player.showTracks(scenario.type);
         await tester.pumpWidget(
           MaterialApp(
-            home: MediaQuery(
-              data: const MediaQueryData(size: Size(1280, 720)),
-              child: PlayerView(controller: fixture.player, openGuide: () {}),
-            ),
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
         await tester.pumpAndSettle();
 
-        final rail = tester.getRect(
+        final rail = _drawnRect(
+          tester,
           find.byKey(const Key('playback-options-rail')),
         );
-        final list = tester.getRect(
+        final list = _drawnRect(
+          tester,
           find.byKey(const Key('playback-options-list')),
         );
-        final footer = tester.getRect(
+        final footer = _drawnRect(
+          tester,
           find.byKey(const Key('playback-options-footer')),
         );
         expect(rail.contains(footer.topLeft), isTrue);
@@ -2946,7 +4232,8 @@ void main() {
         expect(list.bottom, lessThan(footer.top));
 
         for (final track in scenario.tracks) {
-          final row = tester.getRect(
+          final row = _drawnRect(
+            tester,
             find.byKey(Key('playback-track-${scenario.type.name}-${track.id}')),
           );
           final visible = row.intersect(list);
@@ -2966,8 +4253,8 @@ void main() {
         final commentary = find.text('${prefix}commentary');
         expect(theatrical, findsOneWidget);
         expect(commentary, findsOneWidget);
-        expect(list.contains(tester.getRect(theatrical).center), isTrue);
-        expect(list.contains(tester.getRect(commentary).center), isTrue);
+        expect(list.contains(_drawnRect(tester, theatrical).center), isTrue);
+        expect(list.contains(_drawnRect(tester, commentary).center), isTrue);
         expect(Focus.of(tester.element(commentary)).hasFocus, isTrue);
         expect(tester.takeException(), isNull, reason: '${scenario.type}');
 
@@ -3003,6 +4290,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3011,7 +4299,10 @@ void main() {
     final selected = find.text('English — Subtitle track 24');
     final list = find.byKey(const Key('playback-options-list'));
     expect(Focus.of(tester.element(selected)).hasFocus, isTrue);
-    expect(tester.getRect(list).contains(tester.getCenter(selected)), isTrue);
+    expect(
+      _drawnRect(tester, list).contains(tester.getCenter(selected)),
+      isTrue,
+    );
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -3044,49 +4335,49 @@ void main() {
         viewport: Size(800, 600),
         dpr: 1.0,
         width: 320.0,
-        fade: 200 / 3,
+        fade: 44.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1280, 720),
         dpr: 1.0,
-        width: 400.0,
-        fade: 200 / 3,
+        width: 480.0,
+        fade: 44.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1920, 1080),
         dpr: 1.25,
         width: 600.0,
-        fade: 100.0,
+        fade: 55.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1360, 840),
         dpr: 1.0,
-        width: 425.0,
-        fade: 850 / 12,
+        width: 480.0,
+        fade: 44.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1600, 900),
         dpr: 1.0,
         width: 500.0,
-        fade: 250 / 3,
+        fade: 55 * 5 / 6,
         scale: 1.0,
       ),
       (
         viewport: Size(2560, 1440),
         dpr: 1.5,
         width: 800.0,
-        fade: 400 / 3,
+        fade: 55 * 4 / 3,
         scale: 4 / 3,
       ),
       (
         viewport: Size(3840, 2160),
         dpr: 2.0,
         width: 1200.0,
-        fade: 200.0,
+        fade: 110.0,
         scale: 2.0,
       ),
     ]) {
@@ -3096,31 +4387,36 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: MediaQueryData(
-              size: layout.viewport,
-              devicePixelRatio: layout.dpr,
-              textScaler: const TextScaler.linear(2),
+          builder: LineupCanvas.builder,
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                devicePixelRatio: layout.dpr,
+                textScaler: const TextScaler.linear(2),
+              ),
+              child: PlayerView(controller: fixture.player, openGuide: () {}),
             ),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      final rail = tester.getRect(
+      final rail = _drawnRect(
+        tester,
         find.byKey(const Key('playback-options-rail')),
       );
-      expect(
-        rail,
-        Rect.fromLTWH(
-          layout.viewport.width - layout.width,
-          0,
-          layout.width,
-          layout.viewport.height,
-        ),
+      final expectedRail = Rect.fromLTWH(
+        layout.viewport.width - layout.width,
+        0,
+        layout.width,
+        layout.viewport.height,
       );
-      final fade = tester.getRect(
+      expect(rail.left, closeTo(expectedRail.left, .001));
+      expect(rail.top, closeTo(expectedRail.top, .001));
+      expect(rail.width, closeTo(expectedRail.width, .001));
+      expect(rail.height, closeTo(expectedRail.height, .001));
+      final fade = _drawnRect(
+        tester,
         find.byKey(const Key('playback-options-fade')),
       );
       expect(fade.right, layout.viewport.width);
@@ -3133,9 +4429,10 @@ void main() {
                   .decoration!
               as BoxDecoration;
       final gradient = decoration.gradient! as LinearGradient;
-      expect(gradient.stops, const [0, 0.10, 0.22, 1]);
+      expect(gradient.stops![1], closeTo(layout.fade / fade.width, .001));
+      expect(gradient.stops![2], gradient.stops![1]);
       expect(gradient.colors.first.a, 0);
-      expect(gradient.colors.last.a, closeTo(0.82, 0.01));
+      expect(gradient.colors.last.a, closeTo(0.78, 0.01));
       expect(find.text('Audio'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
       expect(find.text('PLAYBACK OPTIONS'), findsNothing);
@@ -3166,18 +4463,20 @@ void main() {
             )
             .style
             ?.fontSize,
-        closeTo(16 * layout.scale, 0.01),
+        closeTo(16, 0.01),
       );
-      final label = tester.getRect(
+      final label = _drawnRect(
+        tester,
         find.text(
           'English — A long descriptive English surround audio track label',
         ),
       );
       expect(rail.overlaps(label), isTrue);
       expect(
-        tester
-            .getRect(find.byKey(const Key('playback-options-list')))
-            .contains(label.center),
+        _drawnRect(
+          tester,
+          find.byKey(const Key('playback-options-list')),
+        ).contains(label.center),
         isTrue,
       );
       expect(
@@ -3209,6 +4508,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3264,7 +4564,7 @@ void main() {
       MaterialApp(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
+          child: LineupCanvas(child: child!),
         ),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -3304,6 +4604,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3323,7 +4624,7 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets('focused Mini Guide uses the theme focused foreground', (
+  testWidgets('Mini Guide selection keeps its primary foreground', (
     tester,
   ) async {
     final fixture = _Fixture(PlayerState.playing);
@@ -3333,6 +4634,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         theme: LineupTheme.forName(LineupThemeName.directv),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -3340,8 +4642,18 @@ void main() {
     await tester.pump();
 
     expect(
-      tester.widget<Text>(find.text('Channel')).style?.color,
-      LineupTheme.of(tester.element(find.text('Channel'))).focusedText,
+      tester
+          .widget<Text>(
+            find
+                .descendant(
+                  of: find.byKey(const Key('mini-guide-channel-channel')),
+                  matching: find.byType(Text),
+                )
+                .first,
+          )
+          .style
+          ?.color,
+      LineupTheme.of(tester.element(find.text('Channel').first)).primaryText,
     );
     expect(find.bySemanticsLabel(RegExp(r'^Now watching$')), findsNothing);
 
@@ -3357,10 +4669,8 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -3372,55 +4682,62 @@ void main() {
     await _settleNowPlayingArtwork(tester);
 
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
-    expect(
-      find.byKey(const Key('player-now-playing-channel-bug')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
     expect(find.byKey(const Key('player-now-playing-channel')), findsNothing);
     expect(
-      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).width,
-      1180,
+      _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).width,
+      1280,
     );
     expect(
-      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).height,
-      lessThanOrEqualTo(380.01),
+      _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).height,
+      lessThan(720),
     );
     expect(
       MediaQuery.sizeOf(
         tester.element(find.byKey(const Key('player-now-playing-surface'))),
       ),
-      const Size(1280, 720),
+      const Size(1600, 900),
     );
     expect(fixture.lineup.artworkRequests, hasLength(2));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
     expect(find.byType(Image), findsNWidgets(2));
-    expect(find.text('S2 · E6 · 60 min'), findsOneWidget);
+    expect(
+      find.text('S2 E6 · 60 min · 2026 · Drama · Adventure'),
+      findsOneWidget,
+    );
     final title = tester.widget<Text>(
       find.byKey(const Key('player-now-playing-title')),
     );
-    expect(title.style?.fontSize, 24);
+    expect(title.style?.fontSize, 54);
     expect(title.style?.fontWeight, FontWeight.w600);
     expect(
       find.text('A synthetic synopsis for deterministic tests.'),
       findsOneWidget,
     );
     expect(find.text('TV-14'), findsOneWidget);
-    expect(
-      find.byKey(const Key('player-now-playing-channel-bug')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
     expect(find.bySemanticsLabel('Channel 7, Channel'), findsOneWidget);
     expect(find.bySemanticsLabel('7 • Channel'), findsNothing);
-    expect(find.text('Source • H264'), findsOneWidget);
+    expect(find.text('H.264'), findsOneWidget);
+    expect(
+      find.byKey(const Key('player-now-playing-runtime-facts')),
+      findsNothing,
+    );
     expect(
       find.bySemanticsLabel(RegExp(r'^Now playing\..*Program')),
       findsOneWidget,
     );
-    expect(
-      find.bySemanticsLabel(RegExp(r'10:00 / 1:00:00 playback')),
-      findsOneWidget,
-    );
+    expect(find.bySemanticsLabel('Playback progress'), findsOneWidget);
 
+    final progressSemantics = tester.widget<Semantics>(
+      find.descendant(
+        of: find.byKey(const Key('player-osd-progress-line')),
+        matching: find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == 'Playback progress',
+        ),
+      ),
+    );
+    expect(progressSemantics.properties.value, '10:00 of 1:00:00');
     fixture.player.showOsd();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1));
@@ -3435,7 +4752,7 @@ void main() {
     'Now Playing renders bounded cast portraits, fallbacks, names, and semantics',
     (tester) async {
       final cast = [
-        ..._fixtureCast.take(4),
+        ..._fixtureCast.take(3),
         ChannelCastMember(name: 'Alexander Maximilian Montgomery'),
         ..._fixtureCast.skip(5),
       ];
@@ -3452,10 +4769,8 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(1280, 720)),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
@@ -3468,14 +4783,17 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const Key('player-now-playing-cast-fallback-4')),
+        find.byKey(const Key('player-now-playing-cast-fallback-3')),
         findsOneWidget,
       );
       expect(
         find.byKey(const Key('player-now-playing-cast-more')),
-        findsOneWidget,
+        findsNothing,
       );
-      expect(find.text('+2'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('player-now-playing-cast-name-4')),
+        findsNothing,
+      );
       for (final member in cast.take(4)) {
         expect(find.text(member.name), findsOneWidget);
       }
@@ -3483,13 +4801,16 @@ void main() {
         find.byKey(const Key('player-now-playing-cast-names')),
         findsNothing,
       );
-      expect(find.text('Alexander M. Montgomery'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('player-now-playing-cast-name-3')),
+        findsOneWidget,
+      );
       expect(find.byTooltip('Alexander Maximilian Montgomery'), findsOneWidget);
       expect(
         find.bySemanticsLabel(RegExp('Cast:.*Alexander Maximilian Montgomery')),
         findsOneWidget,
       );
-      expect(fixture.lineup.artworkRequests, hasLength(6));
+      expect(fixture.lineup.artworkRequests, hasLength(5));
       expect(
         find.bySemanticsLabel(
           RegExp(
@@ -3505,6 +4826,49 @@ void main() {
     },
     semanticsEnabled: true,
   );
+
+  for (final config in [
+    (size: const Size(1920, 1080), dpr: 1.0),
+    (size: const Size(3840, 2160), dpr: 1.0),
+    (size: const Size(1536, 864), dpr: 1.25),
+  ]) {
+    testWidgets(
+      'portrait requests match painted pixels ${config.size}/${config.dpr}',
+      (tester) async {
+        tester.view
+          ..devicePixelRatio = config.dpr
+          ..physicalSize = config.size * config.dpr;
+        addTearDown(tester.view.reset);
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richItemOverride: _fixtureItem(
+            0,
+            rich: true,
+            duration: const Duration(hours: 1),
+            cast: _fixtureCast,
+          ),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        fixture.player.showNowPlaying();
+        await tester.pumpAndSettle();
+        final size = _drawnSize(
+          tester,
+          find.byKey(const Key('player-now-playing-cast-portrait-0')),
+        );
+        final request =
+            fixture.lineup.portraitSizes[_fixtureCast.first.portrait]!;
+        expect(request.width, (size.width * config.dpr).ceil());
+        expect(request.height, (size.height * config.dpr).ceil());
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
 
   testWidgets('failed cast portrait uses the neutral person fallback', (
     tester,
@@ -3526,6 +4890,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3547,6 +4912,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3573,10 +4939,12 @@ void main() {
         richProgram: true,
         shortPrograms: true,
         nativeDuration: Duration.zero,
+        dvrControlsEnabled: true,
         guideClock: () => now,
       );
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -3584,16 +4952,23 @@ void main() {
       fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
 
-      expect(find.text('30:00 / 1:00:00'), findsOneWidget);
+      expect(find.text('30:00 / 1:00:00 • 30m left'), findsOneWidget);
       expect(
         tester
             .widget<LinearProgressIndicator>(
-              find.byKey(const Key('player-now-playing-progress')),
+              find.descendant(
+                of: find.byKey(const Key('player-osd-progress-line')),
+                matching: find.byType(LinearProgressIndicator),
+              ),
             )
             .value,
         0.5,
       );
 
+      // Schedule fallback describes progress; it does not establish an
+      // observed native seek duration or enable a native seek command.
+      expect(tester.widget<Slider>(find.byType(Slider)).onChanged, isNull);
+      expect(fixture.native.transportCommands, 0);
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
@@ -3612,6 +4987,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3640,6 +5016,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -3683,6 +5060,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3701,7 +5079,7 @@ void main() {
     fixture.player.closeOverlay();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('player-now-playing-shelf')));
+    await tester.tap(find.byKey(const Key('player-now-playing-details')));
     expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
     await tester.tapAt(const Offset(799, 5));
     expect(fixture.player.overlay, PlayerOverlay.osd);
@@ -3718,6 +5096,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -3753,10 +5132,8 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(1280, 720)),
-            child: PlayerView(controller: disabled.player, openGuide: () {}),
-          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: disabled.player, openGuide: () {}),
         ),
       );
       await tester.pump();
@@ -3788,10 +5165,11 @@ void main() {
         cast: _fixtureCast.take(5).toList(growable: false),
       ),
     );
-    await tester.binding.setSurfaceSize(const Size(800, 600));
+    await tester.binding.setSurfaceSize(const Size(640, 480));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3800,7 +5178,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('player-now-playing-cast')), findsOneWidget);
-    expect(find.text('+1'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('player-now-playing-cast-name-3')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('player-now-playing-cast-name-4')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -3818,6 +5203,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3851,10 +5237,8 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -3904,10 +5288,8 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -3942,10 +5324,8 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(1280, 720)),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
@@ -4021,11 +5401,13 @@ void main() {
         Size(1920, 1080),
         Size(3840, 2160),
       ].indexed) {
-        final maxShelf = variant.maxShelves[index];
-        final scale = index == 4 ? 2.0 : 1.0;
+        final scale = LineupCanvas.scaleFor(viewport);
+        final canvas = viewport / scale;
         tester.view.physicalSize = viewport;
         await tester.pumpWidget(
           MaterialApp(
+            builder: LineupCanvas.builder,
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -4044,44 +5426,71 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        final shelfSize = tester.getSize(
-          find.byKey(const Key('player-now-playing-shelf')),
+        final shelfSize = _drawnSize(
+          tester,
+          find.byKey(const Key('player-osd-surface')),
         );
-        final posterSize = tester.getSize(
+        final posterSize = _drawnSize(
+          tester,
           find.byKey(const Key('player-now-playing-poster')),
         );
-        expect(shelfSize.width, closeTo(maxShelf.width, 0.01));
-        expect(shelfSize.height, lessThanOrEqualTo(maxShelf.height + 0.01));
-        expect(shelfSize.height, greaterThanOrEqualTo(190 * scale * 3 / 2));
+        expect(shelfSize.width, closeTo(viewport.width, .01));
+        expect(shelfSize.height, lessThan(viewport.height));
         expect(
           posterSize.width,
-          closeTo(
-            (maxShelf.height * 2 / 3).clamp(190 * scale, 374 * scale),
-            0.01,
-          ),
+          closeTo((canvas.height < 900 ? 160 : 240) * scale, .01),
         );
-        expect(posterSize.height, closeTo(shelfSize.height, scale + 0.01));
         expect(
-          tester
-              .getRect(find.byKey(const Key('player-now-playing-title')).last)
-              .top,
+          posterSize.height,
+          lessThanOrEqualTo(posterSize.width * 1.5 + .01),
+        );
+        expect(
+          _drawnRect(
+            tester,
+            find.byKey(const Key('player-osd-surface')),
+          ).bottom,
+          closeTo(viewport.height, .01),
+        );
+        expect(
+          _drawnRect(
+            tester,
+            find.byKey(const Key('player-now-playing-title')).last,
+          ).top,
           greaterThan(
-            tester
-                .getRect(find.byKey(const Key('player-now-playing-logo')))
-                .top,
+            _drawnRect(
+              tester,
+              find.byKey(const Key('player-now-playing-logo')),
+            ).top,
           ),
         );
         if (viewport == const Size(1920, 1080)) {
           final title = tester.widget<Text>(
             find.byKey(const Key('player-now-playing-title')).last,
           );
-          expect(title.style?.fontSize, 28);
+          expect(title.style?.fontSize, 54);
           expect(title.style?.fontWeight, FontWeight.w600);
         }
         expect(
           find.byKey(const Key('player-now-playing-cast')),
           variant.castPresent ? findsOneWidget : findsNothing,
         );
+        if (variant.castPresent) {
+          final name = find.byKey(const Key('player-now-playing-cast-name-0'));
+          final text = tester.widget<Text>(name);
+          final context = tester.element(name);
+          final measure = TextPainter(
+            text: TextSpan(text: text.data, style: text.style),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 2,
+          )..layout(maxWidth: tester.getSize(name).width);
+          expect(
+            tester.getSize(name).height,
+            greaterThanOrEqualTo(measure.height),
+            reason: 'Cast name must fit at $viewport',
+          );
+          measure.dispose();
+        }
         expect(tester.takeException(), isNull, reason: '$viewport');
       }
 
@@ -4090,20 +5499,19 @@ void main() {
         ..physicalSize = const Size(3840, 2160);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pumpAndSettle();
       await _settleNowPlayingArtwork(tester);
       expect(
-        tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).width,
-        variant.dpr2MaxShelf.width,
+        _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).width,
+        1920,
       );
       expect(
-        tester
-            .getSize(find.byKey(const Key('player-now-playing-shelf')))
-            .height,
-        lessThanOrEqualTo(variant.dpr2MaxShelf.height + 0.01),
+        _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).height,
+        lessThan(1080),
       );
       expect(
         find.byKey(const Key('player-now-playing-cast')),
@@ -4173,6 +5581,7 @@ void main() {
         tester.view.physicalSize = testCase.viewport;
         await tester.pumpWidget(
           MaterialApp(
+            builder: LineupCanvas.builder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -4189,14 +5598,14 @@ void main() {
           MediaQuery.sizeOf(
             tester.element(find.byKey(const Key('player-now-playing-surface'))),
           ),
-          testCase.viewport,
+          testCase.viewport / LineupCanvas.scaleFor(testCase.viewport),
         );
         expect(
           find.byKey(const Key('player-now-playing-logo')),
           testCase.logo ? findsOneWidget : findsNothing,
         );
         expect(
-          find.byKey(const Key('player-now-playing-progress')),
+          find.byKey(const Key('player-osd-progress-line')),
           findsOneWidget,
         );
         expect(
@@ -4218,84 +5627,148 @@ void main() {
     },
   );
 
-  testWidgets('Reduce Motion settles Now Playing in one pump', (tester) async {
-    final fixture = _Fixture(PlayerState.playing, richProgram: true);
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
+  testWidgets(
+    'Reduce Motion skips Now Playing animation while artwork resolves',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, richProgram: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: LineupCanvas(child: child!),
+          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    fixture.player.showNowPlaying();
-    await tester.pump();
+      fixture.player.showNowPlaying();
+      await tester.pump();
 
-    final switcher = tester.widget<AnimatedSwitcher>(
-      find.byType(AnimatedSwitcher),
-    );
-    expect(switcher.duration, Duration.zero);
-    expect(switcher.reverseDuration, Duration.zero);
-    expect(tester.hasRunningAnimations, isFalse);
-    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+      final switcher = tester.widget<AnimatedSwitcher>(
+        find.byType(AnimatedSwitcher),
+      );
+      expect(switcher.duration, Duration.zero);
+      expect(switcher.reverseDuration, Duration.zero);
+      // Completed artwork under the canvas layout scope needs one build frame,
+      // without advancing animation time.
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump();
+      }
+      expect(tester.hasRunningAnimations, isFalse);
+      expect(
+        find.byKey(const Key('player-now-playing-surface')),
+        findsOneWidget,
+      );
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 
-  testWidgets('Now Playing enters from the left and exits in 200ms', (
-    tester,
-  ) async {
-    final fixture = _Fixture(PlayerState.playing, richProgram: true);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
-
-    fixture.player.showNowPlaying();
-    await tester.pump();
-    var switcher = tester.widget<AnimatedSwitcher>(
-      find.byType(AnimatedSwitcher),
-    );
-    expect(switcher.duration, const Duration(milliseconds: 200));
-    expect(switcher.reverseDuration, const Duration(milliseconds: 200));
-    await tester.pump(const Duration(milliseconds: 100));
-    var slidePositions = tester
-        .widgetList<SlideTransition>(
-          find.ancestor(
-            of: find.byKey(const Key('player-now-playing-surface')),
-            matching: find.byType(SlideTransition),
+  testWidgets(
+    'retained OSD action focus suspends hide across expansion and collapse',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        overlayTimeout: const Duration(seconds: 1),
+      );
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(
+            controller: fixture.player,
+            openGuide: () {},
+            openMenu: (_, _) {},
           ),
-        )
-        .map((slide) => slide.position.value);
-    expect(slidePositions.any((position) => position.dx < 0), isTrue);
-    expect(slidePositions.every((position) => position.dy == 0), isTrue);
+        ),
+      );
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      final menu = tester.widget<IconButton>(
+        find.byKey(const Key('player-app-menu')),
+      );
+      menu.focusNode!.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+      await tester.pumpAndSettle();
+      expect(menu.focusNode!.hasFocus, isTrue);
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+      await tester.pumpAndSettle();
+      expect(menu.focusNode!.hasFocus, isTrue);
+      await tester.pump(const Duration(seconds: 2));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      menu.focusNode!.unfocus();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(fixture.player.overlay, PlayerOverlay.none);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 
-    await tester.pumpAndSettle();
-    fixture.player.closeOverlay();
-    await tester.pump();
-    switcher = tester.widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher));
-    expect(switcher.duration, const Duration(milliseconds: 200));
-    await tester.pump(const Duration(milliseconds: 100));
-    slidePositions = tester
-        .widgetList<SlideTransition>(
-          find.ancestor(
-            of: find.byKey(const Key('player-now-playing-surface')),
-            matching: find.byType(SlideTransition),
-          ),
-        )
-        .map((slide) => slide.position.value);
-    expect(slidePositions.any((position) => position.dx < 0), isTrue);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('player-now-playing-surface')), findsNothing);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
-  });
+  testWidgets(
+    'Now Playing expands the same bottom panel and collapses in 200ms',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1920, 1080));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final fixture = _Fixture(PlayerState.playing, richProgram: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      final collapsed = _drawnRect(
+        tester,
+        find.byKey(const Key('player-osd-surface')),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+      expect(find.byKey(const Key('player-osd-progress-line')), findsOneWidget);
+      await tester.pumpAndSettle();
+      final expanded = _drawnRect(
+        tester,
+        find.byKey(const Key('player-osd-surface')),
+      );
+      expect(expanded.top, lessThan(collapsed.top));
+      expect(expanded.bottom, collapsed.bottom);
+      expect(expanded.left, collapsed.left);
+      expect(
+        tester.widget<AnimatedSize>(find.byType(AnimatedSize)).duration,
+        const Duration(milliseconds: 200),
+      );
+      await tester.tap(find.byKey(const Key('player-now-playing-collapse')));
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(
+        _drawnRect(tester, find.byKey(const Key('player-osd-surface'))),
+        collapsed,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 }
 
 class _Fixture {
@@ -4448,6 +5921,7 @@ class _Lineup extends LineupController {
   }
 
   final artworkRequests = <Uri>[];
+  final portraitSizes = <Uri, ({int? width, int? height})>{};
   final bool failArtwork;
   final Uint8List? artworkBytes;
   final bool blockArtwork;
@@ -4458,8 +5932,11 @@ class _Lineup extends LineupController {
   int get contentGeneration => _contentGeneration;
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async {
+  Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     artworkRequests.add(path);
+    if (width != null || height != null) {
+      portraitSizes[path] = (width: width, height: height);
+    }
     if (failArtwork) return null;
     if (blockArtwork) {
       return (artworkCompletions[path] ??= Completer<Uint8List?>()).future;
@@ -4578,6 +6055,43 @@ Future<void> _settleNowPlayingArtwork(WidgetTester tester) async {
     );
     await tester.pump();
   }
+}
+
+Future<double> _paintedIconRight(WidgetTester tester, Finder icon) async {
+  final text = find.descendant(of: icon, matching: find.byType(RichText));
+  final paragraph = tester.renderObject<RenderParagraph>(text);
+  final painter = TextPainter(
+    text: paragraph.text,
+    textDirection: paragraph.textDirection,
+    textScaler: paragraph.textScaler,
+  )..layout(maxWidth: paragraph.size.width);
+  final recorder = ui.PictureRecorder();
+  painter.paint(Canvas(recorder), Offset.zero);
+  final picture = recorder.endRecording();
+  final image = await tester.runAsync(
+    () => picture.toImage(
+      paragraph.size.width.ceil(),
+      paragraph.size.height.ceil(),
+    ),
+  );
+  final pixels = await tester.runAsync(
+    () => image!.toByteData(format: ui.ImageByteFormat.rawRgba),
+  );
+  var right = -1;
+  for (var y = 0; y < image!.height; y++) {
+    for (var x = 0; x < image.width; x++) {
+      if (pixels!.getUint8((y * image.width + x) * 4 + 3) >= 32) {
+        right = math.max(right, x);
+      }
+    }
+  }
+  expect(right, greaterThanOrEqualTo(0));
+  final drawn = _drawnRect(tester, text);
+  final scale = drawn.width / paragraph.size.width;
+  image.dispose();
+  picture.dispose();
+  painter.dispose();
+  return drawn.left + (right + 1) * scale;
 }
 
 String _statusLabelForTest(PlayerState state) => switch (state) {
@@ -4739,3 +6253,14 @@ class _Credentials implements CredentialStore {
   @override
   Future<void> writeProfileToken(String profileId, String token) async {}
 }
+
+Rect _drawnRect(WidgetTester tester, Finder finder) {
+  final box = tester.renderObject<RenderBox>(finder);
+  return MatrixUtils.transformRect(
+    box.getTransformTo(null),
+    Offset.zero & box.size,
+  );
+}
+
+Size _drawnSize(WidgetTester tester, Finder finder) =>
+    _drawnRect(tester, finder).size;

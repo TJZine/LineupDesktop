@@ -74,7 +74,7 @@ class TestMessenger final : public flutter::BinaryMessenger {
       const auto* text = std::get_if<std::string>(&state->second);
       if (text && (*text == "stopped" || *text == "error")) {
         finished = true;
-        failed = *text == "error";
+        failed = failed || (*text == "error");
       }
     }
     const auto name = map->find(Value("name"));
@@ -105,10 +105,45 @@ class TestMessenger final : public flutter::BinaryMessenger {
   mutable bool failed = false;
   mutable bool progressed = false;
 };
+
+void SendTestEvent(TestMessenger& messenger, Map arguments) {
+  const auto message = flutter::StandardMethodCodec::GetInstance()
+                           .EncodeMethodCall(flutter::MethodCall<Value>(
+                               "event", std::make_unique<Value>(arguments)));
+  messenger.Send("lineup/native_player", message->data(), message->size());
+}
+
+// Exercise the actual decoder and latch with checks that remain active in
+// Release builds. These bounded event sequences do not simulate media output.
+bool TerminalStateContractHolds() {
+  TestMessenger stopped;
+  SendTestEvent(stopped, {{Value("state"), Value("stopped")}});
+  if (!stopped.finished || stopped.failed || stopped.progressed) return false;
+
+  TestMessenger rejected;
+  SendTestEvent(rejected, {{Value("state"), Value("error")}});
+  SendTestEvent(rejected, {{Value("state"), Value("stopped")}});
+  if (!rejected.finished || !rejected.failed || rejected.progressed) return false;
+
+  TestMessenger progressed_then_rejected;
+  SendTestEvent(progressed_then_rejected,
+                {{Value("name"), Value("time-pos")},
+                 {Value("value"), Value(1.0)}});
+  SendTestEvent(progressed_then_rejected,
+                {{Value("state"), Value("error")}});
+  SendTestEvent(progressed_then_rejected,
+                {{Value("state"), Value("stopped")}});
+  return progressed_then_rejected.finished && progressed_then_rejected.failed &&
+         progressed_then_rejected.progressed;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
   if (argc != 3 && argc != 4) return 2;
+  if (!TerminalStateContractHolds()) {
+    std::cout << "messenger_contract=failed\n";
+    return 1;
+  }
   test_ca = argv[1];
   const bool observe = argc == 4 && std::strcmp(argv[3], "observe") == 0;
   if (argc == 4 && !observe) rejected_option = argv[3];

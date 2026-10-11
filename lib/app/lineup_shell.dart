@@ -11,7 +11,6 @@ import '../guide/guide_view.dart';
 import '../playback/native_player.dart';
 import '../playback/player_coordinator.dart';
 import '../playback/player_view.dart';
-import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
@@ -19,6 +18,7 @@ import 'channel_setup_view.dart';
 import 'channels_view.dart';
 import 'diagnostics_view.dart';
 import 'lineup_controller.dart';
+import 'lineup_restore_view.dart';
 import 'onboarding_view.dart';
 
 class LineupShell extends StatefulWidget {
@@ -60,14 +60,18 @@ class _LineupShellState extends State<LineupShell> {
   );
   bool _selectionPending = false;
   bool _appMenuOpen = false;
+  bool _keyboardInput = false;
   Rect? _appMenuAnchor;
   FocusNode? _appMenuInvokerFocus;
+  bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
   bool _guideOpenedFromPlayer = false;
+  Object? _lastPlayerFacts;
   late SetupStage _lastStage = widget.controller.stage;
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
     _guide = GuideController(
       lineup: widget.controller,
       clock: widget.guideClock,
@@ -76,15 +80,37 @@ class _LineupShellState extends State<LineupShell> {
       player: widget.player,
       lineup: widget.controller,
       guide: _guide,
+      clock: widget.guideClock,
     );
     final initialMediaPath = widget.initialMediaPath;
     if (initialMediaPath != null) {
       unawaited(_player.loadInitialMedia(_mediaUri(initialMediaPath)));
     }
-    _player.addListener(_changed);
+    _lastPlayerFacts = _shellPlayerFacts;
+    _player.addListener(_playerChanged);
     if (_selectedIndex == 0) _player.showFullGuide();
     widget.controller.addListener(_changed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+  }
+
+  Object get _shellPlayerFacts => (
+    _player.hasPlaybackIntent,
+    _player.tuning,
+    _player.error,
+    _player.canRetry,
+    _player.status.state,
+    _player.status.message,
+    _player.currentChannel?.id,
+    _player.currentProgram?.scheduled.item.title,
+    // Only Diagnostics consumes telemetry at the shell boundary.
+    _selectedIndex == 3 ? _player.telemetry : null,
+  );
+
+  void _playerChanged() {
+    final facts = _shellPlayerFacts;
+    if (_lastPlayerFacts == facts) return;
+    _lastPlayerFacts = facts;
+    if (mounted) setState(() {});
   }
 
   void _changed() {
@@ -93,6 +119,14 @@ class _LineupShellState extends State<LineupShell> {
     final returnedToApp =
         _lastStage != SetupStage.ready && stage == SetupStage.ready;
     _lastStage = stage;
+    if (stage == SetupStage.welcome) _onboardingFromAccount = false;
+    if (_appMenuOpen &&
+        stage != SetupStage.ready &&
+        !_onboardingMenuAvailable) {
+      _appMenuOpen = false;
+      _appMenuAnchor = null;
+      _appMenuInvokerFocus = null;
+    }
     setState(() {});
     if (returnedToApp) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
@@ -101,8 +135,9 @@ class _LineupShellState extends State<LineupShell> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
     widget.controller.removeListener(_changed);
-    _player.removeListener(_changed);
+    _player.removeListener(_playerChanged);
     _player.dispose();
     _guide.dispose();
     _guideFocus.dispose();
@@ -119,11 +154,16 @@ class _LineupShellState extends State<LineupShell> {
 
   Future<void> _select(int index) async {
     if (_selectionPending) return;
+    if (widget.controller.stage != SetupStage.ready &&
+        !await _leaveOnboardingForRoute()) {
+      return;
+    }
     if (index == 4 && !_hasPlaybackSurface) {
       if (_appMenuOpen) _closeAppMenu();
       return;
     }
-    if (index == _selectedIndex) {
+    if (index == _selectedIndex &&
+        !(index == 1 && (_channelsKey.currentState?.studioOpen ?? false))) {
       if (_appMenuOpen) _closeAppMenu();
       return;
     }
@@ -136,10 +176,18 @@ class _LineupShellState extends State<LineupShell> {
       }
       if (!mounted) return;
       if (widget.controller.stage == SetupStage.ready) {
-        if (index == 2 && _selectedIndex != 2) {
+        if (index == 2 && _selectedIndex != 2 && _selectedIndex != 3) {
           _settingsReturnIndex = _selectedIndex;
-        } else if (index != 2 && _selectedIndex == 2) {
+        } else if (index != 2 && index != 3) {
           _settingsReturnIndex = null;
+        }
+        // Direct Diagnostics entry still has a real Settings origin.
+        if (index == 3 && _settingsReturnIndex == null) {
+          _settingsReturnIndex = _selectedIndex == 4
+              ? 4
+              : _selectedIndex == 1
+              ? 1
+              : 0;
         }
       }
       if (index == 0) {
@@ -162,6 +210,16 @@ class _LineupShellState extends State<LineupShell> {
 
   bool get _hasPlaybackSurface =>
       _player.hasPlaybackIntent || _player.error != null;
+
+  bool get _onboardingMenuAvailable {
+    final controller = widget.controller;
+    if (!_onboardingFromAccount || controller.busy) return false;
+    return switch (controller.stage) {
+      SetupStage.profiles => controller.profileSelectionCanCancel,
+      SetupStage.servers => controller.serverSelectionCanCancel,
+      _ => false,
+    };
+  }
 
   bool get _canShowNowPlaying =>
       _player.hasPlaybackIntent &&
@@ -210,8 +268,10 @@ class _LineupShellState extends State<LineupShell> {
     final renderObject = invokerContext.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) return;
     setState(() {
-      _appMenuAnchor =
-          renderObject.localToGlobal(Offset.zero) & renderObject.size;
+      _appMenuAnchor = MatrixUtils.transformRect(
+        renderObject.getTransformTo(context.findRenderObject()),
+        Offset.zero & renderObject.size,
+      );
       _appMenuInvokerFocus = invokerFocus;
       _appMenuOpen = true;
     });
@@ -239,6 +299,7 @@ class _LineupShellState extends State<LineupShell> {
 
   void _closeAppMenu({bool restoreInvoker = true}) {
     final invoker = _appMenuInvokerFocus;
+    final restoreControl = _selectedIndex != 4 || _keyboardInput;
     setState(() {
       _appMenuOpen = false;
       _appMenuAnchor = null;
@@ -246,7 +307,7 @@ class _LineupShellState extends State<LineupShell> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (restoreInvoker && invoker?.context != null) {
+      if (restoreInvoker && restoreControl && invoker?.context != null) {
         invoker!.requestFocus();
       } else {
         _restoreRouteFocus();
@@ -259,6 +320,33 @@ class _LineupShellState extends State<LineupShell> {
     await _select(2);
   }
 
+  void _openProfilePickerFromAccount() {
+    if (_selectionPending || widget.controller.busy) return;
+    _onboardingFromAccount = true;
+    widget.controller.showProfiles();
+  }
+
+  void _openServerPickerFromAccount() {
+    if (_selectionPending || widget.controller.busy) return;
+    _onboardingFromAccount = true;
+    widget.controller.showServers();
+  }
+
+  Future<bool> _leaveOnboardingForRoute() async {
+    final controller = widget.controller;
+    if (controller.busy) return false;
+    if (controller.stage == SetupStage.profiles &&
+        controller.profileSelectionCanCancel) {
+      controller.cancelProfileSelection();
+    } else if (controller.stage == SetupStage.servers &&
+        controller.serverSelectionCanCancel) {
+      controller.cancelServerSelection();
+    }
+    if (controller.stage != SetupStage.ready) return false;
+    _onboardingFromAccount = false;
+    return true;
+  }
+
   KeyEventResult _globalKey(FocusNode _, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
@@ -268,6 +356,15 @@ class _LineupShellState extends State<LineupShell> {
       return KeyEventResult.ignored;
     }
     final keyboard = HardwareKeyboard.instance;
+    if (_selectedIndex == 3 &&
+        !_appMenuOpen &&
+        (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.backspace ||
+            event.logicalKey == LogicalKeyboardKey.goBack)) {
+      _settingsCategory = SettingsCategory.support;
+      unawaited(_select(2));
+      return KeyEventResult.handled;
+    }
     if (_selectedIndex == 2 &&
         _settingsReturnIndex != null &&
         !_appMenuOpen &&
@@ -303,16 +400,27 @@ class _LineupShellState extends State<LineupShell> {
     return KeyEventResult.handled;
   }
 
-  Widget _withGlobalKeys(Widget child) =>
-      Focus(canRequestFocus: false, onKeyEvent: _globalKey, child: child);
+  bool _trackKeyboardInput(KeyEvent event) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      _keyboardInput = true;
+    }
+    return false;
+  }
+
+  Widget _withGlobalKeys(Widget child) => Listener(
+    onPointerDown: (_) => _keyboardInput = false,
+    child: Focus(canRequestFocus: false, onKeyEvent: _globalKey, child: child),
+  );
 
   Future<void> _completeSetup() async {
     widget.controller.completeChannelSetup();
+    _onboardingFromAccount = false;
     await _select(1);
   }
 
   Future<void> _completeSetupAndAdd() async {
     widget.controller.completeChannelSetup();
+    _onboardingFromAccount = false;
     await _select(1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _channelsKey.currentState?.openNew();
@@ -334,7 +442,7 @@ class _LineupShellState extends State<LineupShell> {
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel'),
               ),
-              FilledButton(
+              LineupDestructiveButton(
                 onPressed: () => Navigator.pop(context, true),
                 child: const Text('Sign out'),
               ),
@@ -373,20 +481,12 @@ class _LineupShellState extends State<LineupShell> {
     final anchor = _appMenuAnchor;
     if (anchor == null) return const SizedBox.shrink();
     final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final textTheme = Theme.of(context).textTheme;
-    final titleStyle = textTheme.titleLarge?.copyWith(
-      fontSize: (textTheme.titleLarge?.fontSize ?? 22) * scale,
+    final detailStyle = textTheme.bodyMedium?.copyWith(
+      color: roles.secondaryText,
     );
-    final labelStyle = textTheme.labelLarge?.copyWith(fontSize: 16 * scale);
-    final detailStyle = textTheme.bodySmall?.copyWith(fontSize: 14 * scale);
-    final menuShape = scale > 1
-        ? RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(roles.panelRadius * scale),
-            side: BorderSide(color: roles.subtleBorder, width: scale),
-          )
-        : null;
-    final profileName = widget.controller.profile?.name;
+    final profile = widget.controller.profile;
+    final profileName = profile?.name;
     final accountName = widget.controller.account?.name ?? 'Plex account';
     final serverName = widget.controller.server?.name ?? 'No server selected';
     return Stack(
@@ -398,7 +498,7 @@ class _LineupShellState extends State<LineupShell> {
           color: roles.scrim.withValues(alpha: 0.45),
         ),
         CustomSingleChildLayout(
-          delegate: _AnchoredMenuLayout(anchor, scale),
+          delegate: _AnchoredMenuLayout(anchor),
           child: FocusScope(
             node: _appMenuScope,
             autofocus: true,
@@ -416,45 +516,22 @@ class _LineupShellState extends State<LineupShell> {
               policy: WidgetOrderTraversalPolicy(),
               child: Card(
                 key: const Key('immersive-app-menu'),
+                color: roles.elevatedSurface,
                 margin: EdgeInsets.zero,
-                shape: menuShape,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.all(12 * scale),
+                  padding: EdgeInsets.all(12),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          12 * scale,
-                          4 * scale,
-                          4 * scale,
-                          8 * scale,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text('Lineup', style: titleStyle)),
-                            IconButton(
-                              constraints: BoxConstraints(
-                                minWidth: 48 * scale,
-                                minHeight: 48 * scale,
-                              ),
-                              padding: EdgeInsets.all(8 * scale),
-                              iconSize: 24 * scale,
-                              tooltip: 'Close Lineup menu',
-                              onPressed: _closeAppMenu,
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                        ),
-                      ),
                       _menuDestination(
                         index: 0,
                         label: 'Guide',
                         autofocus: true,
-                        labelStyle: labelStyle,
                         detailStyle: detailStyle,
-                        scale: scale,
                       ),
                       _menuDestination(
                         index: 4,
@@ -463,79 +540,68 @@ class _LineupShellState extends State<LineupShell> {
                         helper: hasPlaybackSurface
                             ? null
                             : 'Choose a channel in Guide',
-                        labelStyle: labelStyle,
                         detailStyle: detailStyle,
-                        scale: scale,
                       ),
                       if (_canShowNowPlaying)
-                        Tooltip(
-                          message: 'Program information (I)',
-                          child: TextButton(
-                            key: const Key('app-menu-now-playing'),
-                            style: TextButton.styleFrom(
-                              alignment: Alignment.centerLeft,
-                              minimumSize: Size(0, 48 * scale),
-                              padding: EdgeInsets.all(12 * scale),
-                              foregroundColor: roles.secondaryText,
-                              textStyle: labelStyle,
-                            ),
-                            onPressed: () => unawaited(_openNowPlaying()),
-                            child: const Text('Now Playing'),
+                        LineupNavigationRow(
+                          key: const Key('app-menu-now-playing'),
+                          selected: false,
+                          onPressed: () => unawaited(_openNowPlaying()),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Now Playing'),
+                              Text(
+                                _player.currentProgram!.scheduled.item.title,
+                                style: detailStyle,
+                              ),
+                            ],
                           ),
                         ),
                       _menuDestination(
                         index: 1,
                         label: 'Channels',
-                        labelStyle: labelStyle,
                         detailStyle: detailStyle,
-                        scale: scale,
                       ),
                       _menuDestination(
                         index: 2,
                         label: 'Settings',
-                        labelStyle: labelStyle,
                         detailStyle: detailStyle,
-                        scale: scale,
                       ),
-                      Divider(height: 24 * scale, thickness: scale),
+                      Divider(height: 24, thickness: 1.0),
                       Semantics(
-                        selected:
-                            _selectedIndex == 2 &&
-                            _settingsCategory == SettingsCategory.account,
-                        button: true,
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            alignment: Alignment.centerLeft,
-                            padding: EdgeInsets.all(12 * scale),
-                            foregroundColor:
-                                _selectedIndex == 2 &&
-                                    _settingsCategory ==
-                                        SettingsCategory.account
-                                ? roles.primaryText
-                                : roles.secondaryText,
-                            textStyle: labelStyle,
-                          ),
+                        label: 'Account',
+                        child: LineupNavigationRow(
+                          key: const Key('app-menu-account'),
+                          selected:
+                              _selectedIndex == 2 &&
+                              _settingsCategory == SettingsCategory.account,
                           onPressed: () => unawaited(_openAccount()),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              const Text('Account'),
-                              SizedBox(height: 4 * scale),
-                              Text(
-                                profileName == null
-                                    ? accountName
-                                    : '$profileName · $accountName',
-                                softWrap: true,
-                                style: detailStyle,
+                              LineupProfileAvatar(
+                                name: profileName ?? accountName,
+                                identity: profile?.id ?? 'account',
+                                size: 40,
+                                photo: profile?.thumb?.isAbsolute == true
+                                    ? NetworkImage(profile!.thumb.toString())
+                                    : null,
                               ),
-                              SizedBox(height: 3 * scale),
-                              Text(
-                                serverName,
-                                softWrap: true,
-                                style: detailStyle?.copyWith(
-                                  color: roles.secondaryText,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(profileName ?? accountName),
+                                    Text(serverName, style: detailStyle),
+                                    LineupConnectionStatus(
+                                      connection: widget.controller.connection,
+                                    ),
+                                  ],
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.chevron_right, size: 22),
                             ],
                           ),
                         ),
@@ -557,9 +623,7 @@ class _LineupShellState extends State<LineupShell> {
     bool enabled = true,
     bool autofocus = false,
     String? helper,
-    required TextStyle? labelStyle,
     required TextStyle? detailStyle,
-    required double scale,
   }) {
     final selected = _selectedIndex == index;
     final semanticLabel = [
@@ -574,20 +638,9 @@ class _LineupShellState extends State<LineupShell> {
       enabled: enabled,
       label: semanticLabel,
       onTap: enabled ? () => unawaited(_select(index)) : null,
-      child: TextButton(
+      child: LineupNavigationRow(
+        selected: selected,
         autofocus: autofocus,
-        style: TextButton.styleFrom(
-          alignment: Alignment.centerLeft,
-          minimumSize: Size(0, 48 * scale),
-          padding: EdgeInsets.all(12 * scale),
-          foregroundColor: selected
-              ? LineupTheme.of(context).primaryText
-              : LineupTheme.of(context).secondaryText,
-          backgroundColor: selected
-              ? LineupTheme.of(context).selectedSurface
-              : null,
-          textStyle: labelStyle,
-        ),
         onPressed: enabled ? () => unawaited(_select(index)) : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -602,15 +655,48 @@ class _LineupShellState extends State<LineupShell> {
 
   @override
   Widget build(BuildContext context) {
+    _lastPlayerFacts = _shellPlayerFacts;
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {
-      return controller.stage == SetupStage.channelSetup
+      final onboardingMenuAvailable = _onboardingMenuAvailable;
+      final onboarding = controller.restoringSavedLineup
+          ? LineupRestoreView(controller: controller)
+          : controller.stage == SetupStage.channelSetup
           ? UpstreamChannelSetupView(
               controller: controller,
+              onRequestLogout: _requestLogout,
               onViewLineup: _completeSetup,
               onAddCustomChannel: _completeSetupAndAdd,
             )
-          : UpstreamOnboardingView(controller: controller, onLogout: _logout);
+          : UpstreamOnboardingView(
+              controller: controller,
+              onLogout: _logout,
+              onRequestLogout: _requestLogout,
+              accountOrigin: _onboardingFromAccount,
+              onOpenMenu: onboardingMenuAvailable ? _openAppMenu : null,
+              menuFocusNode: onboardingMenuAvailable
+                  ? _settingsMenuFocus
+                  : null,
+            );
+      if (!_onboardingFromAccount ||
+          controller.stage == SetupStage.channelSetup) {
+        return onboarding;
+      }
+      return _withGlobalKeys(
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              ExcludeSemantics(
+                excluding: _appMenuOpen,
+                child: ExcludeFocus(excluding: _appMenuOpen, child: onboarding),
+              ),
+              if (_appMenuOpen) _immersiveAppMenu(_hasPlaybackSurface),
+            ],
+          ),
+        ),
+      );
     }
     final playerView = PlayerView(
       key: _playerKey,
@@ -652,12 +738,23 @@ class _LineupShellState extends State<LineupShell> {
             ),
       onOpenPlayer: guideHasPicture ? () => unawaited(_select(4)) : null,
       onTune: _tuneFromGuide,
+      onSetUpChannels: () => unawaited(controller.enterChannelSetup()),
+      showIdleArtwork:
+          _player.status.state == PlayerState.idle &&
+          !hasPlaybackSurface &&
+          !guidePlaybackUnavailable,
     );
     final settingsView = SettingsView(
       controller: controller,
       focusNode: _settingsFocus,
       menuFocusNode: _settingsMenuFocus,
       onOpenMenu: _openAppMenu,
+      backLabel:
+          '‹ Back to ${switch (_settingsReturnIndex) {
+            4 => "Player",
+            1 => "Channels",
+            _ => "Guide",
+          }}',
       onBack: _settingsReturnIndex == null
           ? null
           : () {
@@ -669,6 +766,8 @@ class _LineupShellState extends State<LineupShell> {
       onCategoryChanged: (category) => setState(() {
         _settingsCategory = category;
       }),
+      onSwitchProfile: _openProfilePickerFromAccount,
+      onSwitchServer: _openServerPickerFromAccount,
       onSignOut: _requestLogout,
       onOpenDiagnostics: () => unawaited(_select(3)),
     );
@@ -695,7 +794,10 @@ class _LineupShellState extends State<LineupShell> {
         focusNode: _diagnosticsFocus,
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
-        onBack: () => unawaited(_select(2)),
+        onBack: () {
+          _settingsCategory = SettingsCategory.support;
+          unawaited(_select(2));
+        },
       ),
       playerView,
     ];
@@ -741,18 +843,17 @@ class _LineupShellState extends State<LineupShell> {
 }
 
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
-  const _AnchoredMenuLayout(this.anchor, this.scale);
+  const _AnchoredMenuLayout(this.anchor);
 
   final Rect anchor;
-  final double scale;
 
-  double get _margin => 16 * scale;
-  double get _gap => 8 * scale;
+  double get _margin => 16;
+  double get _gap => 8;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
       BoxConstraints(
-        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0.0, 320 * scale),
+        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0.0, 320),
         maxHeight: (constraints.maxHeight - _margin * 2).clamp(
           0.0,
           double.infinity,
@@ -784,7 +885,7 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_AnchoredMenuLayout oldDelegate) =>
-      oldDelegate.anchor != anchor || oldDelegate.scale != scale;
+      oldDelegate.anchor != anchor;
 }
 
 Uri _mediaUri(String value) {
@@ -812,23 +913,29 @@ class SettingsView extends StatefulWidget {
     required this.controller,
     this.category = SettingsCategory.appearance,
     this.onCategoryChanged,
+    this.onSwitchProfile,
+    this.onSwitchServer,
     this.onSignOut,
     this.onOpenDiagnostics,
     this.focusNode,
     this.menuFocusNode,
     this.onOpenMenu,
     this.onBack,
+    this.backLabel = '‹ Back to Guide',
     super.key,
   });
   final LineupController controller;
   final SettingsCategory category;
   final ValueChanged<SettingsCategory>? onCategoryChanged;
+  final VoidCallback? onSwitchProfile;
+  final VoidCallback? onSwitchServer;
   final Future<void> Function()? onSignOut;
   final VoidCallback? onOpenDiagnostics;
   final FocusNode? focusNode;
   final FocusNode? menuFocusNode;
   final LineupMenuCallback? onOpenMenu;
   final VoidCallback? onBack;
+  final String backLabel;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -899,7 +1006,7 @@ class _SettingsViewState extends State<SettingsView> {
       largeFocusIndicators: _displaySettings.largeFocusIndicators,
     );
     final roles = settingsTheme.extension<LineupThemeRoles>()!;
-    return Theme(
+    return LineupFocusTheme(
       data: settingsTheme,
       child: Material(
         type: MaterialType.transparency,
@@ -909,68 +1016,60 @@ class _SettingsViewState extends State<SettingsView> {
             color: roles.deepBackground.withValues(alpha: 0.94),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final size = Size(constraints.maxWidth, constraints.maxHeight);
-                final layoutScale = LineupLayout.scaleFor(size);
-                final scale =
-                    layoutScale *
-                    (size.height / 1080).clamp(0.82, 1.0).toDouble();
                 final compact =
                     LineupLayout.isCompactWidth(constraints.maxWidth) ||
                     MediaQuery.textScalerOf(context).scale(1) >= 2;
-                final scaledTheme = Theme.of(context).copyWith(
-                  textTheme: Theme.of(context).textTheme
-                      .apply(fontSizeFactor: layoutScale),
-                );
-                return Theme(
-                  data: scaledTheme,
-                  child: DefaultTextStyle(
-                    style: scaledTheme.textTheme.bodyMedium!,
-                    child: Builder(
-                      builder: (context) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _settingsHeader(context, scale),
-                          Expanded(
-                            child: compact
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      _categoryRail(context, true, scale),
-                                      Expanded(
-                                        child: _detailPane(
-                                          context,
-                                          true,
-                                          scale,
+                final theme = Theme.of(context);
+                return DefaultTextStyle(
+                  style: theme.textTheme.bodyMedium!,
+                  child: Builder(
+                    builder: (context) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        LineupTopBar(
+                          menuKey: const Key('settings-app-menu'),
+                          onOpenMenu: widget.onOpenMenu,
+                          menuFocusNode: widget.menuFocusNode,
+                        ),
+                        Expanded(
+                          child: LineupContentWidth(
+                            vertical: 24,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _settingsHeader(context),
+                                const SizedBox(height: 24),
+                                Expanded(
+                                  child: compact
+                                      ? Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _categoryRail(context, true),
+                                            Expanded(
+                                              child: _detailPane(context, true),
+                                            ),
+                                          ],
+                                        )
+                                      : Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _categoryRail(context, false),
+                                            Expanded(
+                                              child: _detailPane(
+                                                context,
+                                                false,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ),
-                                    ],
-                                  )
-                                : Padding(
-                                    padding: EdgeInsets.fromLTRB(
-                                      48 * scale,
-                                      32 * scale,
-                                      48 * scale,
-                                      0,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        _categoryRail(context, false, scale),
-                                        Expanded(
-                                          child: _detailPane(
-                                            context,
-                                            false,
-                                            scale,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -982,95 +1081,35 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _settingsHeader(BuildContext context, double scale) => Container(
-    alignment: Alignment.center,
-    constraints: BoxConstraints(minHeight: 96 * scale),
-    margin: EdgeInsets.symmetric(horizontal: 48 * scale),
-    decoration: BoxDecoration(
-      border: Border(
-        bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
-      ),
-    ),
-    child: OverflowBar(
-      alignment: MainAxisAlignment.spaceBetween,
-      spacing: 12 * scale,
-      overflowSpacing: 8 * scale,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextButton.icon(
-              onPressed: widget.onBack,
-              icon: Icon(Icons.arrow_back, size: 18 * scale),
-              label: const Text('Back'),
-              style: TextButton.styleFrom(
-                foregroundColor: LineupTheme.of(context).secondaryText,
-                minimumSize: Size(0, 48 * scale),
-                padding: EdgeInsets.symmetric(
-                  horizontal: 4 * scale,
-                  vertical: 8 * scale,
-                ),
-                textStyle: Theme.of(context).textTheme.labelLarge
-                    ?.copyWith(fontSize: 18 * scale),
-              ),
-            ),
-            SizedBox(width: 12 * scale),
-            Text(
-              'Settings',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: LineupTheme.of(context).primaryText,
-                fontSize: 26 * scale,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+  Widget _settingsHeader(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (widget.onBack != null)
+        LineupInlineLink(
+          onPressed: widget.onBack,
+          child: Text(widget.backLabel),
         ),
-        if (widget.onOpenMenu != null && widget.menuFocusNode != null)
-          Builder(
-            builder: (buttonContext) => TextButton(
-              key: const Key('settings-app-menu'),
-              focusNode: widget.menuFocusNode,
-              onPressed: () =>
-                  widget.onOpenMenu!(buttonContext, widget.menuFocusNode!),
-              style: TextButton.styleFrom(
-                foregroundColor: LineupTheme.of(context).primaryText,
-                minimumSize: Size(0, 48 * scale),
-                padding: EdgeInsets.symmetric(
-                  horizontal: 4 * scale,
-                  vertical: 8 * scale,
-                ),
-                textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontSize: 20 * scale,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 1.5 * scale,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('LINEUP'),
-                  SizedBox(width: 12 * scale),
-                  Icon(Icons.menu, size: 18 * scale),
-                ],
-              ),
-            ),
-          ),
-      ],
-    ),
+      Text(
+        'Settings',
+        style: LineupTypography.pageTitle.copyWith(
+          color: LineupTheme.of(context).primaryText,
+        ),
+      ),
+    ],
   );
 
-  Widget _categoryRail(BuildContext context, bool compact, double scale) {
+  Widget _categoryRail(BuildContext context, bool compact) {
     final roles = LineupTheme.of(context);
     final content = Padding(
       padding: EdgeInsets.fromLTRB(
-        compact ? 20 * scale : 0,
-        compact ? 14 * scale : 8 * scale,
-        compact ? 20 * scale : 32 * scale,
-        compact ? 12 * scale : 0,
+        compact ? 20 : 0,
+        compact ? 14 : 8,
+        compact ? 20 : 32,
+        compact ? 12 : 0,
       ),
       child: compact
-          ? _categorySelector(context, true, scale)
-          : _categorySelector(context, false, scale),
+          ? _categorySelector(context, true)
+          : _categorySelector(context, false),
     );
     return DecoratedBox(
       key: const Key('settings-category-rail'),
@@ -1084,79 +1123,43 @@ class _SettingsViewState extends State<SettingsView> {
               : BorderSide.none,
         ),
       ),
-      child: compact ? content : SizedBox(width: 312 * scale, child: content),
+      child: compact ? content : SizedBox(width: 312, child: content),
     );
   }
 
-  Widget _detailPane(BuildContext context, bool compact, double scale) =>
-      Padding(
-        key: const Key('settings-detail-pane'),
-        padding: EdgeInsets.fromLTRB(
-          (compact ? 20 : 48) * scale,
-          (compact ? 20 : 8) * scale,
-          (compact ? 20 : 24) * scale,
-          (compact ? 20 : 24) * scale,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [Expanded(child: _categoryDetail(context))],
-        ),
-      );
+  Widget _detailPane(BuildContext context, bool compact) => Padding(
+    key: const Key('settings-detail-pane'),
+    padding: EdgeInsets.fromLTRB(
+      (compact ? 20 : 48),
+      (compact ? 20 : 8),
+      (compact ? 20 : 24),
+      (compact ? 20 : 24),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [Expanded(child: _categoryDetail(context))],
+    ),
+  );
 
-  Widget _categorySelector(BuildContext context, bool compact, double scale) {
-    final roles = LineupTheme.of(context);
+  Widget _categorySelector(BuildContext context, bool compact) {
     final controls = [
       for (final category in SettingsCategory.values)
         Padding(
-          padding: EdgeInsets.only(right: 10 * scale, bottom: 10 * scale),
-          child: Semantics(
+          padding: EdgeInsets.only(right: 10, bottom: 10),
+          child: LineupNavigationRow(
             selected: category == _category,
-            button: true,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: category == _category
-                    ? roles.selectedSurface
-                    : Colors.transparent,
-                border: Border(
-                  left: BorderSide(
-                    width: 2 * scale,
-                    color: category == _category
-                        ? roles.progressFill
-                        : Colors.transparent,
-                  ),
-                ),
-              ),
-              child: TextButton(
-                focusNode: category == _category ? widget.focusNode : null,
-                autofocus: category == _category && !_categoryFocusPlaced,
-                style: TextButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  foregroundColor: category == _category
-                      ? roles.primaryText
-                      : roles.secondaryText,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16 * scale,
-                    vertical: 18 * scale,
-                  ),
-                  minimumSize: Size(0, 0),
-                  textStyle: Theme.of(context).textTheme.labelLarge
-                      ?.copyWith(fontSize: 18 * scale),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(5 * scale),
-                  ),
-                ),
-                onPressed: () {
-                  setState(() => _localCategory = category);
-                  widget.onCategoryChanged?.call(category);
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && category == _category) {
-                      widget.focusNode?.requestFocus();
-                    }
-                  });
-                },
-                child: Text(_categoryLabel(category)),
-              ),
-            ),
+            focusNode: category == _category ? widget.focusNode : null,
+            autofocus: category == _category && !_categoryFocusPlaced,
+            onPressed: () {
+              setState(() => _localCategory = category);
+              widget.onCategoryChanged?.call(category);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && category == _category) {
+                  widget.focusNode?.requestFocus();
+                }
+              });
+            },
+            child: Text(_categoryLabel(category)),
           ),
         ),
     ];
@@ -1170,11 +1173,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _categoryDetail(BuildContext context) {
     final value = _displaySettings;
-    final size = MediaQuery.sizeOf(context);
-    final roles = LineupTheme.of(context);
-    final scale =
-        LineupLayout.scaleFor(size) *
-        (size.height / 1080).clamp(0.82, 1.0).toDouble();
+
     return ListView(
       children: [
         _SettingsSection(
@@ -1230,6 +1229,26 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
               ),
               _settingFeedback('preferClearLogos'),
+              _Dropdown<OverlayTransparency>(
+                'Player overlays',
+                'How much of the picture shows through Player controls and panels. More transparent can be harder to read on bright scenes.',
+                value.overlayTransparency,
+                OverlayTransparency.values,
+                (item) => item.label,
+                _pendingSettingKeys.contains('overlayTransparency')
+                    ? null
+                    : (item) => _update(
+                        'overlayTransparency',
+                        (current) =>
+                            current.copyWith(overlayTransparency: item),
+                      ),
+                choiceDescription: (item) => switch (item) {
+                  OverlayTransparency.moreTransparent => 'Lightest',
+                  OverlayTransparency.standard => 'Default',
+                  OverlayTransparency.reduced => 'Most solid, easiest to read',
+                },
+              ),
+              _settingFeedback('overlayTransparency'),
             ],
             SettingsCategory.guide => [
               _Dropdown<int>(
@@ -1242,6 +1261,11 @@ class _SettingsViewState extends State<SettingsView> {
                   3 => 'Wide (3 hours)',
                   _ => 'Extended ($item hours)',
                 },
+                choiceDescription: (item) => switch (item) {
+                  2 => 'Less schedule at once',
+                  3 => 'Balanced schedule at once',
+                  _ => 'More schedule at once',
+                },
                 _pendingSettingKeys.contains('guideHours')
                     ? null
                     : (item) => _update(
@@ -1251,6 +1275,22 @@ class _SettingsViewState extends State<SettingsView> {
                 first: true,
               ),
               _settingFeedback('guideHours'),
+              _SettingsSwitchTile(
+                title: const Text('Show channel sources'),
+                subtitle: const Text(
+                  "Show where each channel's programs come from under its name in the Guide.",
+                ),
+                value: value.guideShowChannelSources,
+                onChanged:
+                    _pendingSettingKeys.contains('guideShowChannelSources')
+                    ? null
+                    : (item) => _update(
+                        'guideShowChannelSources',
+                        (current) =>
+                            current.copyWith(guideShowChannelSources: item),
+                      ),
+              ),
+              _settingFeedback('guideShowChannelSources'),
               _SettingsSwitchTile(
                 title: const Text('Show now playing in Guide'),
                 subtitle: const Text(
@@ -1316,7 +1356,7 @@ class _SettingsViewState extends State<SettingsView> {
               _SettingsSwitchTile(
                 title: const Text('Large focus indicators'),
                 subtitle: const Text(
-                  'Use thicker outlines for keyboard and controller focus.',
+                  'Use thicker outlines when navigating with a keyboard or remote.',
                 ),
                 value: value.largeFocusIndicators,
                 onChanged: _pendingSettingKeys.contains('largeFocusIndicators')
@@ -1332,24 +1372,41 @@ class _SettingsViewState extends State<SettingsView> {
             SettingsCategory.account => [
               _SettingsRow(
                 label: const Text('Plex Home profile'),
-                helper: Text(
-                  widget.controller.profile?.name ??
-                      widget.controller.account?.name ??
-                      'Plex account',
+                helper: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    LineupProfileAvatar(
+                      name:
+                          widget.controller.profile?.name ??
+                          widget.controller.account?.name ??
+                          'Plex account',
+                      identity:
+                          widget.controller.profile?.id ??
+                          widget.controller.account?.id ??
+                          'account',
+                      photo:
+                          widget.controller.profile?.thumb?.isAbsolute == true
+                          ? NetworkImage(
+                              widget.controller.profile!.thumb.toString(),
+                            )
+                          : null,
+                      size: 48,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        widget.controller.profile?.name ??
+                            widget.controller.account?.name ??
+                            'Plex account',
+                      ),
+                    ),
+                  ],
                 ),
                 control: OutlinedButton(
                   onPressed: widget.controller.profiles.isEmpty
                       ? null
-                      : widget.controller.showProfiles,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48 * scale),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 16 * scale,
-                      vertical: 10 * scale,
-                    ),
-                    textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16 * scale),
-                  ),
+                      : widget.onSwitchProfile ??
+                            widget.controller.showProfiles,
                   child: const Text('Switch profile'),
                 ),
                 first: true,
@@ -1372,28 +1429,24 @@ class _SettingsViewState extends State<SettingsView> {
               _settingFeedback('profilePickerOnStartup'),
               _SettingsRow(
                 label: const Text('Plex Media Server'),
-                helper: Text(
-                  widget.controller.server == null
-                      ? 'No server selected'
-                      : widget.controller.connection == null
-                      ? widget.controller.server!.name
-                      : '${widget.controller.server!.name} • ${plexConnectionDescription(widget.controller.connection!)}',
-                ),
+                helper: widget.controller.server == null
+                    ? const Text('No server selected')
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(widget.controller.server!.name),
+                          LineupConnectionStatus(
+                            connection: widget.controller.connection,
+                          ),
+                        ],
+                      ),
                 control: OutlinedButton(
-                  onPressed: widget.controller.showServers,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48 * scale),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 16 * scale,
-                      vertical: 10 * scale,
-                    ),
-                    textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16 * scale),
-                  ),
+                  onPressed:
+                      widget.onSwitchServer ?? widget.controller.showServers,
                   child: const Text('Switch server'),
                 ),
               ),
-              SizedBox(height: 24 * scale),
+              SizedBox(height: 24),
               _SettingsRow(
                 label: const Text('Signed-in Plex account'),
                 helper: Text(widget.controller.account?.name ?? 'Plex account'),
@@ -1401,33 +1454,6 @@ class _SettingsViewState extends State<SettingsView> {
                   onPressed: widget.onSignOut == null
                       ? null
                       : () => unawaited(widget.onSignOut!()),
-                  style: ButtonStyle(
-                    foregroundColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.disabled)
-                          ? roles.mutedText
-                          : roles.secondaryText,
-                    ),
-                    side: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.focused)
-                          ? null
-                          : BorderSide(
-                              color: states.contains(WidgetState.disabled)
-                                  ? roles.subtleBorder.withValues(alpha: 0.6)
-                                  : roles.subtleBorder,
-                            ),
-                    ),
-                    minimumSize: WidgetStatePropertyAll(Size(0, 48 * scale)),
-                    padding: WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(
-                        horizontal: 16 * scale,
-                        vertical: 10 * scale,
-                      ),
-                    ),
-                    textStyle: WidgetStatePropertyAll(
-                      Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(fontSize: 16 * scale),
-                    ),
-                  ),
                   child: const Text('Sign out of Plex'),
                 ),
               ),
@@ -1455,15 +1481,6 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
                 control: OutlinedButton(
                   onPressed: widget.onOpenDiagnostics,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48 * scale),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 16 * scale,
-                      vertical: 10 * scale,
-                    ),
-                    textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16 * scale),
-                  ),
                   child: const Text('Open Diagnostics'),
                 ),
               ),
@@ -1475,14 +1492,10 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _settingFeedback(String keyName) {
-    final size = MediaQuery.sizeOf(context);
-    final scale =
-        LineupLayout.scaleFor(size) *
-        (size.height / 1080).clamp(0.82, 1.0).toDouble();
     final error = _errors[keyName];
     if (error != null) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(16 * scale, 0, 16 * scale, 8 * scale),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text(
           error,
           key: ValueKey('setting-error-$keyName'),
@@ -1492,7 +1505,7 @@ class _SettingsViewState extends State<SettingsView> {
     }
     if (_showSaving.contains(keyName)) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(16 * scale, 0, 16 * scale, 8 * scale),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text('Saving…'),
       );
     }
@@ -1574,12 +1587,8 @@ class _SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale =
-        LineupLayout.scaleFor(size) *
-        (size.height / 1080).clamp(0.82, 1.0).toDouble();
-    final theme = Theme.of(context);
     final roles = LineupTheme.of(context);
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1589,22 +1598,22 @@ class _SettingsSection extends StatelessWidget {
             title,
             style: theme.textTheme.headlineMedium?.copyWith(
               color: roles.primaryText,
-              fontSize: 32 * scale,
-              fontWeight: FontWeight.w500,
-              height: 1.2,
+              fontSize: 44,
+              fontWeight: FontWeight.w600,
+              height: 1.08,
             ),
           ),
         ),
-        SizedBox(height: 6 * scale),
+        SizedBox(height: 6),
         Text(
           description,
           style: theme.textTheme.bodyLarge?.copyWith(
             color: roles.secondaryText,
-            fontSize: 16 * scale,
+            fontSize: 18,
             height: 1.5,
           ),
         ),
-        SizedBox(height: 32 * scale),
+        SizedBox(height: 32),
         ...children,
       ],
     );
@@ -1627,13 +1636,10 @@ class _SettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final size = MediaQuery.sizeOf(context);
-      final scale =
-          LineupLayout.scaleFor(size) *
-          (size.height / 1080).clamp(0.82, 1.0).toDouble();
       final reflow =
-          constraints.maxWidth < 600 * scale ||
-          MediaQuery.textScalerOf(context).scale(1) >= 2;
+          constraints.maxWidth < 900 ||
+          MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+      final controlWidth = math.min(280.0, constraints.maxWidth);
       final theme = Theme.of(context);
       final roles = LineupTheme.of(context);
       final description = Column(
@@ -1642,17 +1648,17 @@ class _SettingsRow extends StatelessWidget {
           DefaultTextStyle.merge(
             style: theme.textTheme.titleMedium?.copyWith(
               color: roles.primaryText,
-              fontSize: 20 * scale,
+              fontSize: 18,
               fontWeight: FontWeight.w500,
               height: 1.2,
             ),
             child: label,
           ),
-          SizedBox(height: 6 * scale),
+          SizedBox(height: 6),
           DefaultTextStyle.merge(
             style: theme.textTheme.bodyLarge?.copyWith(
               color: roles.secondaryText,
-              fontSize: 16 * scale,
+              fontSize: 18,
               height: 1.5,
             ),
             child: helper,
@@ -1660,13 +1666,8 @@ class _SettingsRow extends StatelessWidget {
         ],
       );
       return Container(
-        constraints: BoxConstraints(minHeight: 132 * scale),
-        padding: EdgeInsets.fromLTRB(
-          0,
-          (first ? 16 : 28) * scale,
-          0,
-          28 * scale,
-        ),
+        constraints: BoxConstraints(minHeight: 132),
+        padding: EdgeInsets.fromLTRB(0, (first ? 16 : 28), 0, 28),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: roles.subtleBorder)),
         ),
@@ -1675,21 +1676,19 @@ class _SettingsRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   description,
-                  SizedBox(height: 16 * scale),
-                  Align(alignment: Alignment.centerLeft, child: control),
+                  SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(width: controlWidth, child: control),
+                  ),
                 ],
               )
             : Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(child: description),
-                  SizedBox(width: 32 * scale),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: constraints.maxWidth * 0.45,
-                    ),
-                    child: control,
-                  ),
+                  SizedBox(width: 32),
+                  SizedBox(width: controlWidth, child: control),
                 ],
               ),
       );
@@ -1719,19 +1718,17 @@ class _SettingsSwitchTile extends StatelessWidget {
       helper: subtitle,
       control: Builder(
         builder: (context) {
-          final size = MediaQuery.sizeOf(context);
-          final scale =
-              LineupLayout.scaleFor(size) *
-              (size.height / 1080).clamp(0.82, 1.0).toDouble();
-          final textScale = MediaQuery.textScalerOf(context).scale(1);
-          final controlScale = math.max(1.0, scale * math.max(1.0, textScale));
           return SizedBox(
-            width: 60 * controlScale,
-            height: 48 * controlScale,
-            child: Center(
-              child: Transform.scale(
-                scale: controlScale,
-                child: Switch(value: value, onChanged: onChanged),
+            height: 48,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                width: 56,
+                child: Switch(
+                  value: value,
+                  onChanged: onChanged,
+                  padding: EdgeInsets.zero,
+                ),
               ),
             ),
           );
@@ -1750,6 +1747,7 @@ class _Dropdown<T> extends StatelessWidget {
     this.values,
     this.display,
     this.changed, {
+    this.choiceDescription,
     this.first = false,
   });
   final String label;
@@ -1758,40 +1756,59 @@ class _Dropdown<T> extends StatelessWidget {
   final List<T> values;
   final String Function(T) display;
   final ValueChanged<T>? changed;
+  final String Function(T)? choiceDescription;
   final bool first;
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale =
-        LineupLayout.scaleFor(size) *
-        (size.height / 1080).clamp(0.82, 1.0).toDouble();
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final controlScale = math.max(1.0, scale * math.max(1.0, textScale));
     final theme = Theme.of(context);
+    final items = <DropdownMenuItem<T>>[];
+    final selectedItems = <Widget>[];
+    for (final item in values) {
+      final label = display(item);
+      items.add(
+        DropdownMenuItem(
+          value: item,
+          child: choiceDescription == null
+              ? Text(label)
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label),
+                    Text(
+                      choiceDescription!(item),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: LineupTheme.of(context).secondaryText,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      );
+      selectedItems.add(Text(label));
+    }
     return MergeSemantics(
       child: _SettingsRow(
         label: Text(label),
         helper: Text(description),
         control: SizedBox(
-          width: 248 * controlScale,
-          child: DropdownButtonFormField<T>(
-            key: ValueKey(value),
+          width: double.infinity,
+          child: lineupDropdownField<T>(
+            context: context,
+            key: ValueKey('settings-field-$label'),
             initialValue: value,
             isExpanded: true,
-            itemHeight: 48 * controlScale,
-            icon: Icon(Icons.arrow_drop_down, size: 20 * controlScale),
-            style: theme.textTheme.bodyLarge?.copyWith(fontSize: 16 * scale),
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 14 * controlScale,
-                vertical: 11 * controlScale,
-              ),
-            ),
-            items: [
-              for (final item in values)
-                DropdownMenuItem(value: item, child: Text(display(item))),
-            ],
+            itemHeight: null,
+            icon: const Icon(Icons.arrow_drop_down, size: 20),
+            style: theme.textTheme.bodyLarge?.copyWith(fontSize: 18),
+            decoration: InputDecoration(),
+            items: items,
+            selectedItemChildren: choiceDescription == null
+                ? null
+                : selectedItems,
             onChanged: changed == null
                 ? null
                 : (item) {

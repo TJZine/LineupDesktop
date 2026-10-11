@@ -11,8 +11,8 @@ void main() {
       (input: 'fre', primary: 'Français'),
       (input: 'dEu', primary: 'Deutsch'),
       (input: 'ger', primary: 'Deutsch'),
-      (input: 'es-419', primary: 'español (Latinoamérica)'),
-      (input: 'pt-BR', primary: 'Português (Brasil)'),
+      (input: 'es-419', primary: 'Español'),
+      (input: 'pt-BR', primary: 'Português'),
       (input: 'zh-Hans', primary: '简体中文'),
       (input: 'zh_Hant', primary: '繁體中文'),
       (input: 'en-unknown', primary: 'en-unknown'),
@@ -32,14 +32,67 @@ void main() {
     }
   });
 
-  test('normalizes only lookup casing and separators', () {
+  test('regions are secondary unless same-type regions differ', () {
+    final us = _track(language: 'en-US');
+    final uk = _track(id: 2, language: 'en-GB');
+    final single = formatPlayerTrackDisplay(us);
+    expect(single.primaryText, 'English');
+    expect(single.compactText, 'English');
+    expect(single.secondaryFacts, ['United States of America']);
+    final peers = [us, uk];
     expect(
-      formatPlayerTrackDisplay(_track(language: ' En_us ')).primaryText,
+      formatPlayerTrackDisplay(us, peers: peers).primaryText,
       'English (United States of America)',
     );
     expect(
+      formatPlayerTrackDisplay(uk, peers: peers).compactText,
+      'English (United Kingdom)',
+    );
+    expect(
+      formatPlayerTrackDisplay(
+        us,
+        peers: [
+          us,
+          _track(id: 3, type: PlayerTrackType.subtitle, language: 'en-GB'),
+        ],
+      ).compactText,
+      'English',
+    );
+    final untagged = _track(id: 4, language: 'en');
+    expect(
+      formatPlayerTrackDisplay(untagged, peers: [us, untagged]).primaryText,
+      'English',
+    );
+  });
+
+  test(
+    'video codec names are canonical and descriptions never enter chips',
+    () {
+      for (final entry in {
+        'hevc (HEVC (High Efficiency Video Coding))': 'HEVC',
+        'hevc': 'HEVC',
+        'h264': 'H.264',
+        'av1': 'AV1',
+        'mpeg2video': 'MPEG-2',
+        'vc1': 'VC-1',
+        'vp9': 'VP9',
+        'custom_codec (long description)': 'CUSTOM_CODEC',
+      }.entries) {
+        expect(formatPlayerVideoCodec(entry.key), entry.value);
+      }
+      expect(formatPlayerVideoCodec('   '), isNull);
+      expect(formatPlayerVideoCodec('(unknown description)'), isNull);
+    },
+  );
+
+  test('normalizes only lookup casing and separators', () {
+    expect(
+      formatPlayerTrackDisplay(_track(language: ' En_us ')).primaryText,
+      'English',
+    );
+    expect(
       formatPlayerTrackDisplay(_track(language: 'pt-br')).primaryText,
-      'Português (Brasil)',
+      'Português',
     );
     expect(
       formatPlayerTrackDisplay(_track(language: 'en-XX')).primaryText,
@@ -141,7 +194,7 @@ void main() {
       (layout: '5.1(side)', count: 6, fact: '5.1 surround'),
       (layout: 'unknown', count: 6, fact: '6 channels'),
       (layout: '7.1', count: 6, fact: '6 channels'),
-      (layout: null, count: 1, fact: '1 channels'),
+      (layout: null, count: 1, fact: '1 channel'),
       (layout: null, count: 0, fact: null),
       (layout: null, count: -1, fact: null),
       (layout: 'unknown', count: null, fact: null),
@@ -156,6 +209,13 @@ void main() {
           display.secondaryFacts,
           testCase.fact == null ? isEmpty : [testCase.fact],
         );
+        if (testCase.count == 1) {
+          expect(display.tooltipText, 'Audio track: Audio track 1; 1 channel');
+          expect(
+            display.semanticsText,
+            'Select Audio track: Audio track 1; 1 channel.',
+          );
+        }
       });
     }
 

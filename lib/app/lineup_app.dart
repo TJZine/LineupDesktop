@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../playback/native_player.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
+import '../ui/lineup_canvas.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
@@ -41,6 +42,7 @@ class _LineupStartupState extends State<LineupStartup> {
             LineupThemeName.emberSteel,
             largeFocusIndicators: false,
           ),
+          builder: LineupCanvas.builder,
           home: snapshot.hasError
               ? const _StartupFailureBody(requiredEngineFailure: false)
               : const _StartupProgress(),
@@ -98,32 +100,46 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   late final Future<void> _startup;
   late LineupSettings _settings;
   String? _startupRecoveryNotice;
+  bool _nativeInitialized = false;
+  bool _restoreStarted = false;
 
   @override
   void initState() {
     super.initState();
     _settings = widget.controller.settings;
     _startupRecoveryNotice = widget.controller.startupRecoveryNotice;
+    _restoreStarted = widget.controller.restoringSavedLineup;
     widget.controller.addListener(_changed);
     _startup = Future.wait([
-      widget.player.initialize(),
+      _initializePlayer(),
       widget.controller.initialize(),
-    ]);
+    ], eagerError: true);
+  }
+
+  Future<void> _initializePlayer() async {
+    await widget.player.initialize();
+    if (mounted) setState(() => _nativeInitialized = true);
   }
 
   void _changed() {
     final settings = widget.controller.settings;
     final startupRecoveryNotice = widget.controller.startupRecoveryNotice;
+    // Keep the shell mounted if Switch server cancels the initial restore
+    // while its obsolete asynchronous work is still unwinding.
+    final restoreStarted =
+        _restoreStarted || widget.controller.restoringSavedLineup;
     if (settings.theme == _settings.theme &&
         settings.largeFocusIndicators == _settings.largeFocusIndicators &&
         settings.reduceMotion == _settings.reduceMotion &&
-        startupRecoveryNotice == _startupRecoveryNotice) {
+        startupRecoveryNotice == _startupRecoveryNotice &&
+        restoreStarted == _restoreStarted) {
       return;
     }
     if (mounted) {
       setState(() {
         _settings = settings;
         _startupRecoveryNotice = startupRecoveryNotice;
+        _restoreStarted = restoreStarted;
       });
     }
   }
@@ -149,13 +165,8 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
       themeAnimationDuration: settings.reduceMotion
           ? Duration.zero
           : kThemeAnimationDuration,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          disableAnimations:
-              MediaQuery.disableAnimationsOf(context) || settings.reduceMotion,
-        ),
-        child: child!,
-      ),
+      builder: (context, child) =>
+          LineupCanvas(reduceMotion: settings.reduceMotion, child: child!),
       home: FutureBuilder<void>(
         future: _startup,
         builder: (context, snapshot) {
@@ -169,7 +180,8 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
                       error.failureCode == 'required_engine_unavailable'),
             );
           }
-          if (snapshot.connectionState != ConnectionState.done) {
+          if (snapshot.connectionState != ConnectionState.done &&
+              !(_nativeInitialized && _restoreStarted)) {
             return const _StartupProgress();
           }
           return Stack(

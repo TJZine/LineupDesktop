@@ -4,11 +4,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
@@ -19,6 +22,38 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('position-only player events do not rebuild the Guide route', (
+    tester,
+  ) async {
+    final controller = _FakeController()..stage = SetupStage.ready;
+    final player = _PositionEventPlayer();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LineupShell(player: player, controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final guide = tester.widget<GuideView>(find.byType(GuideView));
+    for (var step = 1; step <= 4; step++) {
+      player.emitPosition(Duration(milliseconds: step * 250));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        identical(tester.widget<GuideView>(find.byType(GuideView)), guide),
+        isTrue,
+      );
+    }
+    player.emitPosition(const Duration(seconds: 1), paused: true);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      identical(tester.widget<GuideView>(find.byType(GuideView)), guide),
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
+
   testWidgets(
     'startup mounts a progress surface while composition is pending',
     (tester) async {
@@ -45,7 +80,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Create a channel to build your Guide'), findsOneWidget);
+      expect(find.text('No channels yet'), findsOneWidget);
     },
   );
 
@@ -97,7 +132,7 @@ void main() {
 
     expect(
       MediaQuery.disableAnimationsOf(
-        tester.element(find.text('Create a channel to build your Guide')),
+        tester.element(find.text('No channels yet')),
       ),
       isTrue,
     );
@@ -271,7 +306,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Create a channel to build your Guide'), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
 
     await openDestination(tester, 'Settings');
 
@@ -513,21 +548,175 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Switch profile'), findsOneWidget);
     expect(find.text('Switch server'), findsOneWidget);
-    expect(
-      find.textContaining('Direct local • 18 ms measured'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Direct local · 18 ms'), findsOneWidget);
 
     await tester.tap(find.text('Switch server'));
     await tester.pumpAndSettle();
     expect(find.text('Choose a server'), findsOneWidget);
     expect(find.text('Living Room'), findsOneWidget);
-    expect(find.text('Back'), findsOneWidget);
+    expect(find.text('‹ Settings · Account'), findsOneWidget);
 
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pump();
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+
+    await tester.tap(find.text('‹ Settings · Account'));
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsWidgets);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+  });
+
+  testWidgets(
+    'Account profile transition hides the menu once cancellation is unsafe',
+    (tester) async {
+      final controller = _AccountProfileController()
+        ..stage = SetupStage.ready
+        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+        ..profile = const PlexHomeUser(
+          id: 'owner',
+          name: 'Owner',
+          protected: false,
+        )
+        ..profiles = const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+          PlexHomeUser(id: 'child', name: 'Child', protected: false),
+        ]
+        ..server = const PlexServer(
+          id: 'server',
+          name: 'Living Room',
+          connections: [],
+        );
+      await tester.pumpWidget(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      await openDestination(tester, 'Settings');
+      await tester.tap(find.text('Account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Switch profile'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Child'));
+      await tester.pumpAndSettle();
+
+      expect(controller.stage, SetupStage.servers);
+      expect(find.text('Choose a server'), findsOneWidget);
+      expect(find.byTooltip('Open Lineup menu'), findsNothing);
+    },
+  );
+
+  testWidgets('Account PIN menu route cancels the protected selection safely', (
+    tester,
+  ) async {
+    final controller = _AccountPinController()
+      ..stage = SetupStage.ready
+      ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+      ..profile = const PlexHomeUser(
+        id: 'owner',
+        name: 'Owner',
+        protected: false,
+      )
+      ..profiles = const [
+        PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+        PlexHomeUser(id: 'child', name: 'Child', protected: true),
+      ]
+      ..server = const PlexServer(
+        id: 'server',
+        name: 'Living Room',
+        connections: [],
+      );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Switch profile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Child'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('Guide').last);
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.ready);
+    expect(find.byType(GuideView), findsOneWidget);
+  });
+
+  testWidgets('Account PIN keeps its step and origin during a pending retry', (
+    tester,
+  ) async {
+    final controller = _RetryPinController()
+      ..stage = SetupStage.ready
+      ..server = const PlexServer(id: 'server', name: 'Server', connections: [])
+      ..profiles = const [
+        PlexHomeUser(id: 'child', name: 'Child', protected: true),
+      ];
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Switch profile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Child'));
+    await tester.pumpAndSettle();
+    final pinStep = tester.element(find.byKey(const Key('profile-pin-sheet')));
+    for (final digit in ['1', '2', '3', '4']) {
+      await tester.tap(find.bySemanticsLabel(digit));
+      await tester.pump();
+    }
+    expect(controller.busy, isTrue);
+    expect(
+      tester.element(find.byKey(const Key('profile-pin-sheet'))),
+      same(pinStep),
+    );
+    expect(find.bySemanticsLabel('Checking PIN'), findsOneWidget);
+    expect(find.byTooltip('Open Lineup menu'), findsNothing);
+    for (final key in [
+      LogicalKeyboardKey.escape,
+      LogicalKeyboardKey.backspace,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+      expect(controller.stage, SetupStage.profiles);
+      expect(controller.profileSelectionCanceled, isFalse);
+    }
+    controller.rejectFirstAttempt();
+    await tester.pumpAndSettle();
+    expect(
+      tester.element(find.byKey(const Key('profile-pin-sheet'))),
+      same(pinStep),
+    );
+    expect(find.byKey(const Key('profile-pin-error')), findsOneWidget);
+    expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
+
+    // Successful sign-out retires the picker origin. A fresh first-run PIN
+    // returns to Profiles rather than offering the old Account destination.
+    controller
+      ..stage = SetupStage.welcome
+      ..busy = false
+      ..error = null
+      ..profileSelectionCanCancel = false;
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    controller.stage = SetupStage.profiles;
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-card-child')));
+    await tester.pumpAndSettle();
+    expect(find.text('‹ Profiles'), findsOneWidget);
+    expect(find.text('‹ Settings · Account'), findsNothing);
   });
 
   testWidgets('Guide activation tunes and returns to the full player', (
@@ -867,14 +1056,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('PIN'), findsOneWidget);
+    expect(find.text('PIN'), findsNothing);
     expect(find.text('Admin'), findsOneWidget);
     expect(find.text('Restricted'), findsOneWidget);
-    expect(find.text('Active'), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp('.*PIN.*')), findsOneWidget);
+    expect(find.text('Current'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('.*lock.*', caseSensitive: false)),
+      findsOneWidget,
+    );
     expect(find.bySemanticsLabel(RegExp('.*Admin.*')), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp('.*Restricted.*')), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp('.*Active.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Current.*')), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     expect(controller.selectedProfile, standard);
   });
@@ -895,6 +1087,77 @@ void main() {
     expect(find.text('Active'), findsNothing);
   });
 
+  testWidgets('focused profile name reveals the full name without reflow', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [
+        PlexHomeUser(id: 'first', name: 'First', protected: false),
+        PlexHomeUser(
+          id: 'long',
+          name: 'A very long profile name that needs the focused treatment',
+          protected: false,
+        ),
+      ];
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('profile-name-full-first')), findsNothing);
+    expect(find.byKey(const ValueKey('profile-name-full-long')), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('profile-name-full-long')),
+      findsOneWidget,
+    );
+    final fullName = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const ValueKey('profile-name-full-long')),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(fullName.maxLines, isNull);
+    expect(fullName.style?.fontFamily, 'Inter');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unprotected profile failure remains visible in onboarding', (
+    tester,
+  ) async {
+    final controller = _FailingProfileController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [
+        PlexHomeUser(id: 'child', name: 'Child', protected: false),
+      ];
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Child'));
+    await tester.pump();
+    expect(find.text('Profile switch failed safely.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-feedback-slot')), findsOneWidget);
+  });
+
+  testWidgets('welcome link failure remains visible after start attempt', (
+    tester,
+  ) async {
+    final controller = _FailingLinkController();
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sign in to Plex'));
+    await tester.pump();
+    expect(find.text('Link start failed safely.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('welcome-feedback-slot')), findsOneWidget);
+  });
+
   testWidgets('onboarding rebuilds without a listening parent', (tester) async {
     final controller = _FakeController()
       ..stage = SetupStage.linking
@@ -906,6 +1169,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: UpstreamOnboardingView(
           controller: controller,
           onLogout: () async {},
@@ -937,6 +1201,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: UpstreamOnboardingView(
           controller: controller,
           onLogout: () async {},
@@ -960,6 +1225,7 @@ void main() {
 
     controller
       ..stage = SetupStage.linking
+      ..error = null
       ..activePin = PlexPin(
         id: 1,
         code: 'ABCD',
@@ -1028,6 +1294,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: UpstreamOnboardingView(
           controller: controller,
           onLogout: () async {},
@@ -1041,13 +1308,8 @@ void main() {
     expect(find.text('Direct local available'), findsNothing);
     expect(find.text('Direct remote available'), findsNothing);
     expect(find.text('Relay available'), findsNothing);
-    expect(
-      find.text(
-        'Current connection: Direct remote • 500 ms measured • Very slow',
-      ),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Current connection:'), findsOneWidget);
+    expect(find.text('Direct remote · Very slow · 500 ms'), findsOneWidget);
+    expect(find.textContaining('Current connection:'), findsNothing);
     expect(
       find.text('Lineup could not reach that Plex server. Try again.'),
       findsOneWidget,
@@ -1234,7 +1496,9 @@ void main() {
       'lineup-bootstrap-test',
     );
     addTearDown(() => directory.deleteSync(recursive: true));
-    final stateFile = File('${directory.path}/state.json');
+    final stateFile = File(
+      '${directory.path}${Platform.pathSeparator}state.json',
+    );
     stateFile.writeAsStringSync('{broken');
     final instant = DateTime.utc(2026, 8, 23);
     final quarantine = Directory(
@@ -1322,10 +1586,11 @@ void main() {
   testWidgets('makes a missing required Windows engine explicit', (
     tester,
   ) async {
+    final controller = _LoadingController()..restoringSavedLineup = true;
     await tester.pumpWidget(
       LineupBootstrap(
         player: _RequiredEngineFailingPlayer(),
-        controller: _FakeController(),
+        controller: controller,
       ),
     );
     await tester.pumpAndSettle();
@@ -1337,6 +1602,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
+    expect(find.byType(LineupShell), findsNothing);
+    controller.completeInitialization();
+    await tester.pumpAndSettle();
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
   });
 
   testWidgets('retains required-engine guidance through player errors', (
@@ -1431,6 +1700,52 @@ class _FakeController extends LineupController {
     mode: channel.playbackMode,
     seed: channel.shuffleSeed,
   );
+}
+
+class _FailingProfileController extends _FakeController {
+  @override
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    error = 'Profile switch failed safely.';
+    notifyListeners();
+    return false;
+  }
+}
+
+class _FailingLinkController extends _FakeController {
+  @override
+  Future<void> startLinking() async {
+    error = 'Link start failed safely.';
+    notifyListeners();
+  }
+}
+
+class _AccountProfileController extends _FakeController {
+  @override
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    selectedProfile = selected;
+    selectedPin = pin;
+    profile = selected;
+    server = null;
+    connection = null;
+    servers = const [
+      PlexServer(id: 'next-server', name: 'Next server', connections: []),
+    ];
+    profileSelectionCanCancel = false;
+    serverSelectionCanCancel = false;
+    stage = SetupStage.servers;
+    notifyListeners();
+    return true;
+  }
+}
+
+class _AccountPinController extends _FakeController {
+  @override
+  void cancelProfileSelection() {
+    super.cancelProfileSelection();
+    profileSelectionCanCancel = false;
+    stage = SetupStage.ready;
+    notifyListeners();
+  }
 }
 
 final _studioChannel = Channel(
@@ -1732,5 +2047,31 @@ class _TypedRequiredEngineFailingPlayer extends _FakePlayer {
       _requiredEngineNativeFailureMessage,
       failureCode: 'required_engine_unavailable',
     );
+  }
+}
+
+class _PositionEventPlayer extends _PlayingPlayer {
+  final _events = StreamController<PlayerEvent>.broadcast();
+  @override
+  Stream<PlayerEvent> get events => _events.stream;
+
+  void emitPosition(Duration position, {bool paused = false}) {
+    _events.add(
+      PlayerEvent(
+        status: paused
+            ? const PlayerStatus(state: PlayerState.paused, message: 'Paused')
+            : status,
+        position: position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: tracks,
+      ),
+    );
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _events.close();
+    await super.dispose();
   }
 }

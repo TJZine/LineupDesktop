@@ -37,6 +37,1456 @@ Future<void> _waitForTestState(
 }
 
 void main() {
+  test(
+    'malformed startup inventory leaves saved lineup intact and can retry',
+    () async {
+      final fixture = _reentryFixture();
+      final saved = fixture.store.state;
+      var malformed = true;
+      final inventory = PlexClient(
+        clientIdentifier: 'test',
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode(
+              malformed
+                  ? {
+                      'MediaContainer': {'size': 2},
+                    }
+                  : {
+                      'MediaContainer': {
+                        'size': 2,
+                        'Directory': [
+                          {'key': 'movies', 'title': 'Movies', 'type': 'movie'},
+                          {'key': 'tv', 'title': 'TV', 'type': 'show'},
+                        ],
+                      },
+                    },
+            ),
+            200,
+          ),
+        ),
+      );
+      addTearDown(inventory.close);
+      fixture.plex.librariesHandler = inventory.libraries;
+      await fixture.controller.initialize();
+
+      expect(fixture.controller.stage, SetupStage.servers);
+      expect(fixture.controller.error, isNotNull);
+      expect(fixture.store.state, same(saved));
+      expect(
+        fixture
+            .store
+            .state
+            .selectedLibraryIdsByProfileServer['owner']!['server'],
+        ['movies', 'tv'],
+      );
+      expect(
+        fixture
+            .store
+            .state
+            .channelsByProfileServer['owner']!['server']!
+            .single
+            .id,
+        'saved',
+      );
+
+      malformed = false;
+      await fixture.controller.selectServer(fixture.plex.serversResult.first);
+      expect(fixture.controller.error, isNull);
+      expect(fixture.controller.stage, SetupStage.ready);
+      expect(fixture.controller.selectedLibraryIds, {'movies', 'tv'});
+      expect(fixture.controller.channels.single.id, 'saved');
+      expect(fixture.plex.libraryTokens, everyElement('pms-token'));
+    },
+  );
+
+  test('malformed library success preserves restored runtime and durable selection', () async {
+    final fixture = _reentryFixture();
+    final controller = fixture.controller;
+    await controller.initialize();
+    final saved = fixture.store.state;
+    final libraries = controller.libraries;
+    final channels = controller.channels;
+    final media = controller.availableMedia;
+    final inventory = PlexClient(
+      clientIdentifier: 'test',
+      httpClient: MockClient((_) async => http.Response('{}', 200)),
+    );
+    addTearDown(inventory.close);
+    fixture.plex.librariesHandler = inventory.libraries;
+    controller.showServers();
+    await controller.selectServer(fixture.plex.serversResult.first);
+
+    expect(controller.error, isNotNull);
+    expect(controller.stage, SetupStage.servers);
+    expect(fixture.store.state, same(saved));
+    expect(controller.selectedLibraryIds, {'movies', 'tv'});
+    expect(controller.libraries, same(libraries));
+    expect(controller.channels, same(channels));
+    expect(controller.availableMedia, same(media));
+    expect(fixture.plex.libraryTokens.last, 'pms-token');
+  });
+
+  for (final empty in [true, false]) {
+    test(
+      'valid library inventory commits ${empty ? 'zero inventory' : 'removed library'} without deleting channels',
+      () async {
+        final fixture = _reentryFixture();
+        final controller = fixture.controller;
+        await controller.initialize();
+        final savedChannels =
+            fixture.store.state.channelsByProfileServer['owner']!['server']!;
+        final inventory = PlexClient(
+          clientIdentifier: 'test',
+          httpClient: MockClient(
+            (_) async => http.Response(
+              jsonEncode({
+                'MediaContainer': empty
+                    ? {'size': 0}
+                    : {
+                        'size': 1,
+                        'Directory': [
+                          {'key': 'movies', 'title': 'Movies', 'type': 'movie'},
+                        ],
+                      },
+              }),
+              200,
+            ),
+          ),
+        );
+        addTearDown(inventory.close);
+        fixture.plex.librariesHandler = inventory.libraries;
+        controller.showServers();
+        await controller.selectServer(fixture.plex.serversResult.first);
+
+        expect(controller.error, isNull);
+        expect(controller.selectedLibraryIds, empty ? isEmpty : {'movies'});
+        expect(
+          fixture
+              .store
+              .state
+              .selectedLibraryIdsByProfileServer['owner']!['server'],
+          empty ? isEmpty : ['movies'],
+        );
+        expect(
+          fixture.store.state.channelsByProfileServer['owner']!['server'],
+          savedChannels,
+        );
+        expect(controller.channels, savedChannels);
+      },
+    );
+  }
+
+  test(
+    'saved restore exposes phases and aggregate items until Ready',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      final plex = fixture.plex;
+      final started = Completer<void>();
+      final finish = Completer<void>();
+      plex.scanLibraryHandler =
+          (_, _, id, _, current, progress, cancelled) async {
+            final phase = plex.scanPhaseCallback!;
+            progress(const (
+              completedPages: 2,
+              completedItems: 10,
+              totalItems: 10,
+            ));
+            if (id == 'tv') {
+              started.complete();
+              await finish.future;
+              phase(PlexLibraryScanPhase.collections);
+              expect(
+                controller.libraryScanPhase,
+                PlexLibraryScanPhase.collections,
+              );
+              phase(PlexLibraryScanPhase.showGenres);
+              expect(
+                controller.libraryScanPhase,
+                PlexLibraryScanPhase.showGenres,
+              );
+              progress(const (
+                completedPages: 1,
+                completedItems: 1,
+                totalItems: 1,
+              ));
+              expect(controller.libraryScanFacts[id]!.completedItems, 10);
+            }
+            return PlexLibraryScan(items: [_scanMovie(id)]);
+          };
+      final initialize = controller.initialize();
+      await started.future;
+      expect(controller.restoringSavedLineup, isTrue);
+      expect(controller.canSwitchServer, isTrue);
+      expect(controller.libraryScanReadyIds, isEmpty);
+      expect(controller.libraryScanStatus, LibraryScanStatus.scanning);
+      expect(controller.libraryScanPhase, PlexLibraryScanPhase.items);
+      expect(controller.libraryScanCompletedItems, 20);
+      expect(controller.libraryScanTotalItems, 20);
+      finish.complete();
+      await initialize;
+      expect(controller.restoringSavedLineup, isFalse);
+      expect(controller.stage, SetupStage.ready);
+    },
+  );
+
+  for (final outcome in ['empty', 'unsupported', 'failure']) {
+    test('saved restore ends at the $outcome fallback', () async {
+      final fixture = _reentryFixture();
+      fixture.plex.scanLibraryHandler = (_, _, _, _, _, _, _) async {
+        if (outcome == 'failure') {
+          throw const PlexException('server-unreachable', 'Retry setup.');
+        }
+        return PlexLibraryScan(
+          items: outcome == 'empty'
+              ? []
+              : [
+                  const PlexMediaItem(
+                    id: 'unsupported',
+                    title: 'Unsupported',
+                    type: 'movie',
+                    duration: Duration.zero,
+                    libraryId: 'movies',
+                  ),
+                ],
+        );
+      };
+      await fixture.controller.initialize();
+      expect(fixture.controller.restoringSavedLineup, isFalse);
+      expect(
+        fixture.controller.stage,
+        outcome == 'failure' ? SetupStage.servers : SetupStage.channelSetup,
+      );
+    });
+  }
+
+  test('restored ready inventory commits on reentry without network', () async {
+    final fixture = _reentryFixture();
+    final controller = fixture.controller;
+    await controller.initialize();
+    expect(controller.stage, SetupStage.ready);
+    final channels = controller.channels
+        .map((channel) => channel.toJson())
+        .toList();
+    fixture.plex.scanLibraryHandler = (_, _, _, _, _, _, _) =>
+        throw StateError('unexpected network');
+    fixture.plex.playlistsHandler = (_, _) =>
+        throw StateError('unexpected network');
+    await controller.enterChannelSetup();
+    expect(
+      await controller.commitLibraryScan(controller.libraryScanReadyIds),
+      isTrue,
+    );
+    expect(
+      controller.channels.map((channel) => channel.toJson()).toList(),
+      channels,
+    );
+    expect(controller.selectedLibraryIds, {'movies', 'tv'});
+  });
+
+  test('committed subset saves exactly the subset and unscanned addition needs scanning', () async {
+    final fixture = _reentryFixture();
+    final controller = fixture.controller;
+    await controller.initialize();
+    final channels = controller.channels;
+    await controller.enterChannelSetup();
+    expect(await controller.commitLibraryScan({'movies', 'extra'}), isFalse);
+    expect(await controller.commitLibraryScan({'movies'}), isTrue);
+    expect(
+      fixture.store.state.selectedLibraryIdsByProfileServer['owner']!['server'],
+      ['movies'],
+    );
+    expect(
+      controller.channels.map((channel) => channel.toJson()),
+      channels.map((channel) => channel.toJson()),
+    );
+    expect(await controller.scanLibraries({'movies', 'extra'}), isTrue);
+    expect(await controller.commitLibraryScan({'movies', 'extra'}), isTrue);
+    expect(controller.selectedLibraryIds, {'movies', 'extra'});
+    expect(controller.libraryScanReadyIds, {'movies', 'extra'});
+  });
+
+  test(
+    'failed and cancelled rescans preserve previous readiness and saved lineup',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      await controller.initialize();
+      await controller.enterChannelSetup();
+      final disappeared = Channel.fromJson({
+        ..._channel('candidate').toJson(),
+        'builderKey': 'generated',
+        'source': const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            LibraryFilter.collection: ['Missing'],
+          },
+        ).toJson(),
+      });
+      expect(controller.isGeneratedSourceConfirmedGone(disappeared), isTrue);
+      final saved = fixture.store.state;
+      final media = controller.availableMedia;
+      fixture.plex.scanLibraryHandler = (_, _, _, _, _, _, _) async =>
+          throw const PlexException('server-unreachable', 'Retry setup.');
+      await controller.scanLibraries({'movies', 'tv'});
+      expect(controller.libraryScanReadyIds, {'movies', 'tv'});
+      expect(controller.isGeneratedSourceConfirmedGone(disappeared), isFalse);
+      expect(controller.availableMedia, same(media));
+      expect(fixture.store.state, same(saved));
+      final started = Completer<void>();
+      final finish = Completer<void>();
+      fixture.plex.scanLibraryHandler = (_, _, _, _, _, _, _) async {
+        if (!started.isCompleted) started.complete();
+        await finish.future;
+        return const PlexLibraryScan(items: []);
+      };
+      final scan = controller.scanLibraries({'movies', 'tv'});
+      await started.future;
+      controller.cancelLibraryScan();
+      finish.complete();
+      expect(await scan, isFalse);
+      expect(controller.libraryScanReadyIds, {'movies', 'tv'});
+      expect(controller.isGeneratedSourceConfirmedGone(disappeared), isFalse);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
+      expect(controller.isGeneratedSourceConfirmedGone(disappeared), isFalse);
+      fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, _) async =>
+          PlexLibraryScan(items: [_scanMovie(id)]);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
+      expect(controller.isGeneratedSourceConfirmedGone(disappeared), isTrue);
+    },
+  );
+
+  test(
+    'failed committed subset save preserves prior runtime and persistence',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      await controller.initialize();
+      await controller.enterChannelSetup();
+      final saved = fixture.store.state;
+      final media = controller.availableMedia;
+      final channels = controller.channels;
+      fixture.store.failNextSave = true;
+      expect(await controller.commitLibraryScan({'movies'}), isFalse);
+      expect(controller.selectedLibraryIds, {'movies', 'tv'});
+      expect(controller.availableMedia, same(media));
+      expect(controller.channels, same(channels));
+      expect(fixture.store.state, same(saved));
+    },
+  );
+
+  for (final failSave in [false, true]) {
+    test(
+      'server switch cannot cancel a started subset save (failure: $failSave)',
+      () async {
+        final fixture = _reentryFixture();
+        final store = _ControlledSaveStore(fixture.store.state);
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: fixture.plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        await controller.enterChannelSetup();
+        final before = store.state;
+        final mediaBefore = controller.availableMedia;
+        store.blockNext(fail: failSave);
+        final commit = controller.commitLibraryScan({'movies'});
+        await store.blockedSaveStarted.future;
+        expect(controller.canSwitchServer, isFalse);
+        expect(controller.busy, isTrue);
+        controller.showServers();
+        controller.cancelServerSelection();
+        expect(controller.stage, SetupStage.channelSetup);
+        expect(controller.busy, isTrue);
+        store.releaseBlockedSave();
+        expect(await commit, !failSave);
+        expect(controller.canSwitchServer, isTrue);
+        expect(
+          controller.selectedLibraryIds,
+          failSave ? {'movies', 'tv'} : {'movies'},
+        );
+        if (failSave) {
+          expect(store.state, same(before));
+          expect(controller.availableMedia, same(mediaBefore));
+        } else {
+          expect(
+            store.state.selectedLibraryIdsByProfileServer['owner']!['server'],
+            ['movies'],
+          );
+          expect(controller.availableMedia.map((item) => item.libraryId), [
+            'movies',
+          ]);
+        }
+        controller.showServers();
+        expect(controller.stage, SetupStage.servers);
+        controller.cancelServerSelection();
+        expect(controller.stage, SetupStage.channelSetup);
+        expect(controller.channelSetupCanCancel, isTrue);
+        expect(
+          controller.selectedLibraryIds,
+          failSave ? {'movies', 'tv'} : {'movies'},
+        );
+      },
+    );
+  }
+
+  for (final origin in ['restore', 'first setup', 'regeneration']) {
+    test(
+      'server switch invalidates late scans and cancellation returns to $origin',
+      () async {
+        final fixture = _reentryFixture(saved: origin != 'first setup');
+        final controller = fixture.controller;
+        if (origin != 'restore') await controller.initialize();
+        if (origin == 'regeneration') await controller.enterChannelSetup();
+        final started = Completer<void>();
+        final cancelled = Completer<void>();
+        final finish = Completer<void>();
+        fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, abort) async {
+          if (!started.isCompleted) started.complete();
+          abort?.then((_) {
+            if (!cancelled.isCompleted) cancelled.complete();
+          });
+          await finish.future;
+          return PlexLibraryScan(
+            items: [_scanMovie(id)],
+            collections: const PlexCollectionMembership(
+              failure: PlexCollectionFailure.memberLimitExceeded,
+            ),
+          );
+        };
+        final running = origin == 'restore'
+            ? controller.initialize()
+            : controller.scanLibraries({'movies', 'tv'});
+        await started.future;
+        final saved = fixture.store.state;
+        controller.showServers();
+        await cancelled.future;
+        expect(controller.stage, SetupStage.servers);
+        expect(controller.restoringSavedLineup, isFalse);
+        expect(controller.serverSelectionCanCancel, isTrue);
+        finish.complete();
+        await running;
+        expect(controller.stage, SetupStage.servers);
+        expect(fixture.store.state, same(saved));
+        expect(controller.collectionDiscoveryFailures, isEmpty);
+        expect(controller.collectionScaleRecovery({'movies', 'tv'}), isNull);
+        fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, _) async =>
+            PlexLibraryScan(items: [_scanMovie(id)]);
+        controller.cancelServerSelection();
+        if (origin == 'restore') {
+          await _waitForTestState(
+            () => !controller.busy && controller.stage == SetupStage.ready,
+            description: 'restarted restore',
+          );
+        } else {
+          expect(controller.stage, SetupStage.channelSetup);
+          expect(controller.channelSetupCanCancel, origin == 'regeneration');
+        }
+      },
+    );
+  }
+
+  for (final savedOther in [false, true]) {
+    test(
+      'choosing another server retires restore (saved selection: $savedOther)',
+      () async {
+        final fixture = _reentryFixture();
+        final controller = fixture.controller;
+        if (savedOther) {
+          fixture.store.state = PersistedState(
+            selectedServerByProfile: const {'owner': 'server'},
+            selectedLibraryIdsByProfileServer: const {
+              'owner': {
+                'server': ['movies', 'tv'],
+                'other': ['extra'],
+              },
+            },
+            channelsByProfileServer: {
+              'owner': {
+                'server': [_channel('saved')],
+                'other': [
+                  Channel.fromJson({
+                    ..._channel('other-saved').toJson(),
+                    'source': const LibrarySource(
+                      libraryId: 'extra',
+                      libraryType: PlexLibraryType.movie,
+                    ).toJson(),
+                  }),
+                ],
+              },
+            },
+          );
+        }
+        final started = Completer<void>();
+        final finish = Completer<void>();
+        fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, _) async {
+          if (id == 'extra') return PlexLibraryScan(items: [_scanMovie(id)]);
+          if (!started.isCompleted) started.complete();
+          await finish.future;
+          return PlexLibraryScan(items: [_scanMovie(id)]);
+        };
+        final initialize = controller.initialize();
+        await started.future;
+        controller.showServers();
+        await controller.selectServer(fixture.plex.serversResult.last);
+        expect(controller.server!.id, 'other');
+        expect(
+          controller.stage,
+          savedOther ? SetupStage.ready : SetupStage.channelSetup,
+        );
+        expect(controller.selectedLibraryIds, savedOther ? {'extra'} : isEmpty);
+        expect(
+          controller.channels.map((channel) => channel.id),
+          savedOther ? ['other-saved'] : isEmpty,
+        );
+        finish.complete();
+        await initialize;
+        expect(controller.server!.id, 'other');
+        expect(
+          controller.availableMedia.map((item) => item.libraryId),
+          savedOther ? ['extra'] : isEmpty,
+        );
+        expect(fixture.store.state.selectedServerByProfile['owner'], 'other');
+        expect(
+          fixture.store.state.channelsByProfileServer['owner']!['server'],
+          isNotEmpty,
+        );
+      },
+    );
+  }
+
+  for (final action in ['logout', 'profile']) {
+    test('$action during restore cannot publish late inventory', () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      final started = Completer<void>();
+      final finish = Completer<void>();
+      fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, _) async {
+        if (!started.isCompleted) started.complete();
+        await finish.future;
+        return PlexLibraryScan(items: [_scanMovie(id)]);
+      };
+      final initialize = controller.initialize();
+      await started.future;
+      if (action == 'logout') {
+        expect(await controller.logout(), isTrue);
+      } else {
+        final child = const PlexHomeUser(
+          id: 'child',
+          name: 'Child',
+          protected: false,
+        );
+        fixture.plex.homeUsersResult = [child];
+        await controller.selectProfile(child);
+      }
+      finish.complete();
+      await initialize;
+      expect(controller.restoringSavedLineup, isFalse);
+      expect(controller.availableMedia, isEmpty);
+      expect(controller.libraryScanReadyIds, isEmpty);
+      expect(
+        controller.stage,
+        action == 'logout' ? SetupStage.welcome : SetupStage.servers,
+      );
+    });
+  }
+
+  for (final failure in [
+    'used-title',
+    'unused-title',
+    'unavailable',
+    'mixed-used',
+    'listing-limit',
+    'member-limit',
+  ]) {
+    test('restored collection channel handles $failure membership', () async {
+      final selected = _server('server');
+      final source = LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.collection: ['Saved'],
+        },
+      );
+      final channel = Channel(
+        id: 'saved',
+        number: 1,
+        name: 'Saved',
+        source: failure == 'mixed-used'
+            ? MixedSource(sources: [source])
+            : source,
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1,
+      );
+      final store = _MemoryStore(
+        PersistedState(
+          settings: const LineupSettings(diagnosticsEnabled: true),
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [channel],
+            },
+          },
+        ),
+      );
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie])
+        ..collectionMembership = PlexCollectionMembership(
+          failedTitles: failure == 'unused-title' ? {'Other'} : {'Saved'},
+          failure: switch (failure) {
+            'unavailable' => PlexCollectionFailure.transient,
+            'listing-limit' => PlexCollectionFailure.listingLimitExceeded,
+            'member-limit' => PlexCollectionFailure.memberLimitExceeded,
+            _ => null,
+          },
+        );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      controller.diagnostics.enabled = true;
+      await controller.initialize();
+      expect(controller.restoringSavedLineup, isFalse);
+      if (failure == 'unused-title') {
+        expect(controller.stage, SetupStage.ready);
+        expect(controller.error, isNull);
+      } else {
+        expect(controller.stage, SetupStage.servers);
+        final scale = failure.endsWith('-limit');
+        expect(
+          controller.error,
+          contains(scale ? 'before rescanning' : 'Retry setup'),
+        );
+        if (scale) {
+          expect(controller.error, contains('100000'));
+          expect(
+            controller.error,
+            contains(
+              failure == 'listing-limit'
+                  ? 'listing records'
+                  : 'member occurrences',
+            ),
+          );
+        }
+        expect(
+          store.state.channelsByProfileServer['owner']!['server']!.single.id,
+          'saved',
+        );
+        expect(
+          controller.diagnostics.entries.any(
+            (entry) =>
+                entry.context['code'] ==
+                (scale
+                    ? 'collection-scale-exceeded'
+                    : 'collection-unavailable'),
+          ),
+          isTrue,
+        );
+        plex.collectionMembership = const PlexCollectionMembership();
+        await controller.selectServer(selected);
+        expect(controller.stage, SetupStage.ready);
+        expect(controller.collectionDiscoveryFailures, isEmpty);
+        expect(controller.error, isNull);
+      }
+      expect(
+        controller.diagnostics.entries
+            .expand((entry) => entry.context.values)
+            .whereType<String>(),
+        isNot(contains('Saved')),
+      );
+    });
+  }
+
+  test('library scans record launch and setup timing separately', () async {
+    final selected = _server('server');
+    const timing = (
+      items: Duration(milliseconds: 1500),
+      collections: Duration(milliseconds: 700),
+      showGenres: Duration.zero,
+      collectionTitles: 2,
+      collectionMembers: 9,
+      shows: 0,
+    );
+    final channel = Channel(
+      id: 'saved',
+      number: 1,
+      name: 'Saved',
+      source: const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      ),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: 1,
+    );
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..scanLibraryHandler = (_, _, _, _, _, _, _) async =>
+          PlexLibraryScan(items: [_playableMovie], timing: timing);
+    final controller = LineupController(
+      store: _MemoryStore(
+        PersistedState(
+          settings: const LineupSettings(diagnosticsEnabled: true),
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [channel],
+            },
+          },
+        ),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    // The persisted setting must enable recording before launch restoration.
+    await controller.initialize();
+    expect(controller.stage, SetupStage.ready);
+    expect(await controller.scanLibraries({'movies'}), isTrue);
+
+    final timings = controller.diagnostics.entries
+        .where((entry) => entry.message == 'Library scan timing')
+        .map((entry) => entry.context)
+        .toList();
+    expect(timings, [
+      for (final path in ['launch', 'setup'])
+        {
+          'scanPath': path,
+          'libraryType': 'movie',
+          'itemsMs': 1500,
+          'collectionsMs': 700,
+          'showGenresMs': 0,
+          'items': 1,
+          'collections': 2,
+          'members': 9,
+          'shows': 0,
+        },
+    ]);
+  });
+
+  for (final membershipUnavailable in [false, true]) {
+    test(
+      'explicit retry refreshes ready collection failure (unavailable=$membershipUnavailable) and retains untargeted inventory',
+      () async {
+        final selected = _server('server');
+        final calls = <String>[];
+        final retained = PlexMediaItem(
+          id: 'retained',
+          title: 'Retained',
+          type: 'movie',
+          duration: const Duration(minutes: 1),
+          libraryId: 'untargeted',
+          parts: [PlexMediaPart(path: '/retained')],
+          collections: const ['Retained'],
+        );
+        final recovered = PlexMediaItem(
+          id: 'recovered',
+          title: 'Recovered',
+          type: 'movie',
+          duration: const Duration(minutes: 1),
+          libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/recovered')],
+          collections: const ['Recovered'],
+        );
+        var retry = false;
+        final plex = _FakePlex()
+          ..serversResult = [selected]
+          ..connectionResult = selected.connections.single
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+            PlexLibrary(
+              id: 'untargeted',
+              title: 'Untargeted',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..scanLibraryHandler = (_, _, libraryId, _, _, _, _) async {
+            calls.add(libraryId);
+            if (libraryId == 'untargeted') {
+              return PlexLibraryScan(items: [retained]);
+            }
+            return retry
+                ? PlexLibraryScan(items: [recovered])
+                : PlexLibraryScan(
+                    items: [_playableMovie],
+                    collections: PlexCollectionMembership(
+                      failedTitles: membershipUnavailable ? {} : {'Recovered'},
+                      failure: membershipUnavailable
+                          ? PlexCollectionFailure.transient
+                          : null,
+                    ),
+                  );
+          };
+        final controller = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        const ids = {'movies', 'untargeted'};
+        expect(await controller.scanLibraries(ids), isTrue);
+        expect(controller.libraryScanReadyIds, ids);
+        if (membershipUnavailable) {
+          expect(controller.unavailableCollectionLibraryIds, {'movies'});
+        } else {
+          expect(controller.failedCollectionTitles['movies'], {'Recovered'});
+        }
+        retry = true;
+        expect(await controller.retryLibraryScan(ids, {'movies'}), isTrue);
+        expect(calls.where((id) => id == 'movies').length, 2);
+        expect(calls.where((id) => id == 'untargeted').length, 1);
+        expect(controller.failedCollectionTitles['movies'], isEmpty);
+        expect(controller.unavailableCollectionLibraryIds, isEmpty);
+        expect(controller.libraryScanReadyIds, ids);
+        expect(await controller.commitLibraryScan(ids), isTrue);
+        expect(controller.availableMedia.map((item) => item.id), [
+          'recovered',
+          'retained',
+        ]);
+        expect(controller.availableMedia.last, same(retained));
+        expect(controller.availableMedia.first.collections, ['Recovered']);
+      },
+    );
+  }
+
+  for (final required in [false, true]) {
+    for (final failure in [null, ...PlexCollectionFailure.values]) {
+      final unavailable = failure != null;
+      test(
+        'footer retry recovers collection enrichment (required=$required, failure=$failure)',
+        () async {
+          final selected = _server('server');
+          final calls = <String>[];
+          var failed = true;
+          final plex = _FakePlex()
+            ..serversResult = [selected]
+            ..librariesResult = const [
+              PlexLibrary(
+                id: 'movies',
+                title: 'Movies',
+                type: PlexLibraryType.movie,
+              ),
+              PlexLibrary(
+                id: 'untargeted',
+                title: 'Untargeted',
+                type: PlexLibraryType.movie,
+              ),
+            ]
+            ..scanLibraryHandler = (_, _, id, _, _, _, _) async {
+              calls.add(id);
+              return PlexLibraryScan(
+                items: [
+                  PlexMediaItem(
+                    id: id,
+                    title: id,
+                    type: 'movie',
+                    libraryId: id,
+                    duration: const Duration(minutes: 1),
+                    parts: [PlexMediaPart(path: '/parts/$id')],
+                    collections: failed ? [] : ['Saved'],
+                  ),
+                ],
+                collections: failed && id == 'movies'
+                    ? PlexCollectionMembership(
+                        failedTitles: unavailable ? {} : {'Saved'},
+                        failure: failure,
+                      )
+                    : const PlexCollectionMembership(),
+              );
+            };
+          final store = _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          );
+          final c = LineupController(
+            store: store,
+            credentials: _MemoryCredentials(accountToken: 'token'),
+            plex: plex,
+          );
+          addTearDown(c.dispose);
+          await c.initialize();
+          c.channels = [
+            Channel(
+              id: 'saved',
+              number: 1,
+              name: 'Saved',
+              source: MixedSource(
+                sources: [
+                  LibrarySource(
+                    libraryId: 'movies',
+                    libraryType: PlexLibraryType.movie,
+                    filters: required
+                        ? {
+                            LibraryFilter.collection: ['Saved'],
+                          }
+                        : {},
+                  ),
+                ],
+              ),
+              playbackMode: PlaybackMode.sequential,
+              anchor: DateTime.utc(2026),
+              shuffleSeed: 1,
+            ),
+          ];
+          const ids = {'movies', 'untargeted'};
+          expect(await c.scanLibraries(ids), isTrue);
+          expect(c.libraryScanReadyIds, ids);
+          expect(c.libraryScanRetryIds, {'movies'});
+          expect(c.libraryScanCommittableIds, required ? {'untargeted'} : ids);
+          final retained = c.libraryScanFacts['untargeted'];
+          expect(await c.commitLibraryScan(ids), !required);
+          if (required) {
+            expect(
+              c.error,
+              contains(
+                failure?.isScaleLimit == true
+                    ? 'before rescanning'
+                    : 'collection used',
+              ),
+            );
+            expect(c.channels.single.id, 'saved');
+            expect(
+              c.isGeneratedSourceConfirmedGone(c.channels.single),
+              isFalse,
+            );
+            expect(await c.commitLibraryScan({'untargeted'}), isTrue);
+          }
+          failed = false;
+          expect(await c.scanLibraries(ids, retryFailedOnly: true), isTrue);
+          expect(calls, ['movies', 'untargeted', 'movies']);
+          expect(c.libraryScanFacts['untargeted'], same(retained));
+          expect(c.libraryScanRetryIds, isEmpty);
+          expect(c.collectionDiscoveryFailures, isEmpty);
+          expect(c.collectionScaleRecovery(ids), isNull);
+          expect(c.libraryScanCommittableIds, ids);
+          expect(await c.commitLibraryScan(ids), isTrue);
+          expect(c.availableMedia.first.collections, ['Saved']);
+          expect(
+            store.state.selectedLibraryIdsByProfileServer['owner']!['server'],
+            ['movies', 'untargeted'],
+          );
+          expect(await c.scanLibraries(ids), isTrue);
+          expect(calls.where((id) => id == 'movies'), hasLength(3));
+          expect(calls.where((id) => id == 'untargeted'), hasLength(2));
+          expect(await c.commitLibraryScan(ids), isTrue);
+        },
+      );
+    }
+  }
+
+  for (final required in [false, true]) {
+    test(
+      'playlist failure blocks only a required source and retry retains library IO (required=$required)',
+      () async {
+        final selected = _server('server');
+        var failed = true;
+        final plex = _FakePlex()
+          ..serversResult = [selected]
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie])
+          ..playlistsHandler = (_, _) async => PlexPlaylistCatalog(
+            playlists: failed
+                ? []
+                : [
+                    PlexPlaylist(
+                      id: 'saved',
+                      title: 'Saved',
+                      items: [_playableMovie],
+                    ),
+                  ],
+            failedIds: failed ? {'saved'} : {},
+          );
+        final c = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
+        );
+        addTearDown(c.dispose);
+        await c.initialize();
+        c.channels = [
+          Channel(
+            id: 'saved',
+            number: 1,
+            name: 'Saved',
+            source: required
+                ? const MixedSource(sources: [PlaylistSource('saved')])
+                : const LibrarySource(
+                    libraryId: 'movies',
+                    libraryType: PlexLibraryType.movie,
+                  ),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 1,
+          ),
+        ];
+        expect(await c.scanLibraries({'movies'}), isTrue);
+        expect(c.libraryScanReadyIds, {'movies'});
+        expect(c.libraryScanCommittableIds, required ? isEmpty : {'movies'});
+        expect(await c.commitLibraryScan({'movies'}), !required);
+        failed = false;
+        expect(
+          await c.scanLibraries({'movies'}, retryFailedOnly: true),
+          isTrue,
+        );
+        expect(plex.itemTokens, hasLength(1));
+        expect(plex.playlistTokens, hasLength(2));
+        expect(c.libraryScanCommittableIds, {'movies'});
+        expect(await c.commitLibraryScan({'movies'}), isTrue);
+      },
+    );
+  }
+
+  for (final failure in [null, PlexCollectionFailure.memberLimitExceeded]) {
+    test(
+      'cancelled enrichment retry retains $failure and rejects late recovered membership',
+      () async {
+        final selected = _server('server');
+        final started = Completer<void>();
+        final gate = Completer<void>();
+        var retry = false;
+        final plex = _FakePlex()
+          ..serversResult = [selected]
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+            if (retry) {
+              started.complete();
+              await gate.future;
+            }
+            return PlexLibraryScan(
+              items: [_playableMovie],
+              collections: retry
+                  ? const PlexCollectionMembership()
+                  : PlexCollectionMembership(
+                      failedTitles: failure == null ? {'Saved'} : {},
+                      failure: failure,
+                    ),
+            );
+          };
+        final c = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
+        );
+        addTearDown(c.dispose);
+        await c.initialize();
+        c.channels = [
+          Channel(
+            id: 'saved',
+            number: 1,
+            name: 'Saved',
+            source: const LibrarySource(
+              libraryId: 'movies',
+              libraryType: PlexLibraryType.movie,
+              filters: {
+                LibraryFilter.collection: ['Saved'],
+              },
+            ),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 1,
+          ),
+        ];
+        expect(await c.scanLibraries({'movies'}), isTrue);
+        final fact = c.libraryScanFacts['movies'];
+        retry = true;
+        final scan = c.scanLibraries({'movies'}, retryFailedOnly: true);
+        await started.future;
+        expect(c.collectionScaleRecovery({'movies'}), isNull);
+        c.cancelLibraryScan();
+        expect(c.libraryScanReadyIds, {'movies'});
+        expect(c.libraryScanFacts['movies'], same(fact));
+        expect(
+          c.failedCollectionTitles['movies'],
+          failure == null ? {'Saved'} : isEmpty,
+        );
+        expect(
+          c.collectionDiscoveryFailures,
+          failure == null ? isEmpty : {'movies': failure},
+        );
+        expect(c.libraryScanCommittableIds, isEmpty);
+        gate.complete();
+        expect(await scan, isFalse);
+        expect(
+          c.failedCollectionTitles['movies'],
+          failure == null ? {'Saved'} : isEmpty,
+        );
+        expect(
+          c.collectionDiscoveryFailures,
+          failure == null ? isEmpty : {'movies': failure},
+        );
+        expect(await c.commitLibraryScan({'movies'}), isFalse);
+      },
+    );
+  }
+
+  test(
+    'failed enrichment retry keeps valid item facts and required failure guard',
+    () async {
+      final selected = _server('server');
+      var throwOnRetry = false;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+          if (throwOnRetry) throw const PlexException('offline', 'Try again');
+          return PlexLibraryScan(
+            items: [_playableMovie],
+            collections: const PlexCollectionMembership(
+              failedTitles: {'Saved'},
+            ),
+          );
+        };
+      final c = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(c.dispose);
+      await c.initialize();
+      c.channels = [
+        Channel(
+          id: 'saved',
+          number: 1,
+          name: 'Saved',
+          source: const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            filters: {
+              LibraryFilter.collection: ['Saved'],
+            },
+          ),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 1,
+        ),
+      ];
+      expect(await c.scanLibraries({'movies'}), isTrue);
+      final fact = c.libraryScanFacts['movies'];
+      throwOnRetry = true;
+      expect(await c.scanLibraries({'movies'}, retryFailedOnly: true), isTrue);
+      expect(c.error, 'Try again');
+      expect(c.libraryScanFacts['movies'], same(fact));
+      expect(c.libraryScanReadyIds, {'movies'});
+      expect(c.failedCollectionTitles['movies'], {'Saved'});
+      expect(c.libraryScanCommittableIds, isEmpty);
+      expect(await c.commitLibraryScan({'movies'}), isFalse);
+    },
+  );
+
+  for (final retirement in ['complete', 'cancel', 'server']) {
+    test(
+      'playlist phase follows completed libraries and retires on $retirement',
+      () async {
+        final selected = _server('server');
+        final other = _server('other');
+        final started = Completer<void>();
+        final gate = Completer<void>();
+        Future<void>? cancellation;
+        void Function(PlexPlaylistProgress)? report;
+        final plex = _FakePlex()
+          ..serversResult = [selected, other]
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie])
+          ..playlistProgressHandler = (_, _, _, cancelled, onProgress) async {
+            cancellation = cancelled;
+            report = onProgress;
+            started.complete();
+            await gate.future;
+            onProgress?.call(
+              const PlexPlaylistProgress(
+                completedPlaylists: 8,
+                totalPlaylists: 8,
+              ),
+            );
+            return const PlexPlaylistCatalog(playlists: [], failedIds: {});
+          };
+        final c = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
+        );
+        addTearDown(c.dispose);
+        await c.initialize();
+        final scan = c.scanLibraries({'movies'});
+        await started.future;
+        expect(
+          c.libraryScanFacts['movies']!.status,
+          LibraryScanStatus.complete,
+        );
+        expect(c.libraryScanStatus, LibraryScanStatus.scanning);
+        expect(c.playlistScanProgress!.totalPlaylists, isNull);
+        report!(
+          const PlexPlaylistProgress(completedPlaylists: 4, totalPlaylists: 8),
+        );
+        expect(c.playlistScanProgress!.completedPlaylists, 4);
+        expect(c.libraryScanCommittableIds, isEmpty);
+        if (retirement == 'cancel') c.cancelLibraryScan();
+        if (retirement == 'server') {
+          c.showServers();
+          await c.selectServer(other);
+        }
+        if (retirement != 'complete') {
+          await cancellation;
+          expect(c.playlistScanProgress, isNull);
+        }
+        gate.complete();
+        expect(await scan, retirement == 'complete');
+        expect(c.playlistScanProgress, isNull);
+        if (retirement == 'complete') {
+          expect(c.libraryScanCommittableIds, {'movies'});
+          expect(await c.commitLibraryScan({'movies'}), isTrue);
+        } else if (retirement == 'server') {
+          expect(c.server!.id, 'other');
+          expect(c.libraryScanReadyIds, isEmpty);
+          expect(c.availablePlaylists, isEmpty);
+        }
+      },
+    );
+  }
+
+  test(
+    'superseded annotated scan cannot publish inventory or failure metadata',
+    () async {
+      final selected = _server('server');
+      final started = Completer<void>();
+      final release = Completer<void>();
+      var calls = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+          if (++calls == 1) {
+            started.complete();
+            await release.future;
+            return PlexLibraryScan(
+              items: [_playableMovie],
+              collections: const PlexCollectionMembership(
+                failedTitles: {'Obsolete'},
+              ),
+            );
+          }
+          return const PlexLibraryScan(items: []);
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final oldScan = controller.scanLibraries({'movies'});
+      await started.future;
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      release.complete();
+      expect(await oldScan, isFalse);
+      expect(controller.availableMedia, isEmpty);
+      expect(controller.failedCollectionTitles['movies'], isEmpty);
+      expect(controller.libraryScanStatus, LibraryScanStatus.empty);
+    },
+  );
+
+  test('same-title Kometa recreation across scans preserves saved content and schedule', () async {
+    final selected = _server('server');
+    var key = 'old';
+    final inventory = PlexClient(
+      clientIdentifier: 'test',
+      httpClient: MockClient((request) async {
+        final rows = request.url.path.contains('/collections/')
+            ? [
+                {'ratingKey': 'movie'},
+              ]
+            : request.url.queryParameters['type'] == '18'
+            ? [
+                {'ratingKey': key, 'title': 'Saved'},
+              ]
+            : [
+                {
+                  'ratingKey': 'movie',
+                  'title': 'Movie',
+                  'type': 'movie',
+                  'duration': 60000,
+                  'Media': [
+                    {
+                      'Part': [
+                        {'key': '/movie'},
+                      ],
+                    },
+                  ],
+                },
+              ];
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'Metadata': rows,
+              'size': rows.length,
+              'totalSize': rows.length,
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(inventory.close);
+    final channel = Channel(
+      id: 'saved',
+      number: 1,
+      name: 'Saved',
+      source: const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.collection: ['Saved'],
+        },
+      ),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: 1,
+    );
+    final store = _MemoryStore(
+      PersistedState(
+        selectedServerByProfile: const {'owner': 'server'},
+        selectedLibraryIdsByProfileServer: const {
+          'owner': {
+            'server': ['movies'],
+          },
+        },
+        channelsByProfileServer: {
+          'owner': {
+            'server': [channel],
+          },
+        },
+      ),
+    );
+    final signatures = <List<Object?>>[];
+    for (final collectionKey in ['old', 'new']) {
+      key = collectionKey;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..scanLibraryHandler =
+            (server, token, id, type, current, progress, cancelled) =>
+                inventory.scanLibrary(
+                  server,
+                  token,
+                  id,
+                  type,
+                  isCurrent: current,
+                  onProgress: progress,
+                  cancelled: cancelled,
+                );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      await controller.initialize();
+      expect(controller.stage, SetupStage.ready);
+      final content = resolveContent(
+        channel.source,
+        controller.availableMedia,
+        controller.availablePlaylists,
+      );
+      final schedule = buildSchedule(
+        content,
+        mode: channel.playbackMode,
+        seed: channel.shuffleSeed,
+      );
+      signatures.add([
+        for (var i = 0; i < schedule.items.length; i++)
+          [schedule.items[i].id, schedule.offsets[i]],
+      ]);
+      expect(controller.channels.single.toJson(), channel.toJson());
+      controller.dispose();
+    }
+    expect(signatures.first, isNotEmpty);
+    expect(signatures.last, signatures.first);
+  });
+
   test('Plex PIN cancellation failure stays retryable even after local credentials clear', () async {
     final plex = _FakePlex()
       ..pinResult = PlexPin(
@@ -162,6 +1612,85 @@ void main() {
       'second',
     ]);
   });
+
+  test(
+    'row retry retains successful inventory and unrequested failures',
+    () async {
+      final selected = _server('server');
+      final calls = <String, int>{};
+      final failures = {'second', 'third'};
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(id: 'first', title: 'First', type: PlexLibraryType.movie),
+          PlexLibrary(
+            id: 'second',
+            title: 'Second',
+            type: PlexLibraryType.movie,
+          ),
+          PlexLibrary(id: 'third', title: 'Third', type: PlexLibraryType.movie),
+        ]
+        ..libraryItemsHandler = (_, _, id, _) async {
+          calls.update(id, (value) => value + 1, ifAbsent: () => 1);
+          if (failures.contains(id)) {
+            throw const PlexException('offline', 'Try again');
+          }
+          return [
+            PlexMediaItem(
+              id: id,
+              title: id,
+              type: 'movie',
+              duration: const Duration(minutes: 1),
+              libraryId: id,
+              parts: [PlexMediaPart(path: '/library/parts/$id')],
+            ),
+          ];
+        };
+      final store = _ControlledSaveStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      const inventory = {'first', 'second', 'third'};
+      expect(await controller.scanLibraries(inventory), isTrue);
+      final readyFact = controller.libraryScanFacts['first'];
+      final untouchedFailure = controller.libraryScanFacts['third'];
+      expect(await controller.commitLibraryScan({'first'}), isTrue);
+      failures.remove('second');
+      expect(await controller.retryLibraryScan(inventory, {'second'}), isTrue);
+      expect(calls, {'first': 1, 'second': 2, 'third': 1});
+      expect(controller.libraryScanFacts['first'], same(readyFact));
+      expect(controller.libraryScanFacts['third'], same(untouchedFailure));
+      expect(controller.libraryScanReadyIds, {'first', 'second'});
+      expect(controller.libraryScanRetryIds, {'third'});
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(controller.selectedLibraryIds, {'first'});
+      expect(await controller.commitLibraryScan(inventory), isFalse);
+      failures.clear();
+      expect(
+        await controller.scanLibraries(inventory, retryFailedOnly: true),
+        isTrue,
+      );
+      expect(calls, {'first': 1, 'second': 2, 'third': 2});
+      expect(await controller.commitLibraryScan(inventory), isTrue);
+      expect(controller.selectedLibraryIds, inventory);
+      expect(controller.availableMedia.map((item) => item.id), [
+        'first',
+        'second',
+        'third',
+      ]);
+      expect(
+        store.state.selectedLibraryIdsByProfileServer['owner']!['server'],
+        ['first', 'second', 'third'],
+      );
+    },
+  );
 
   test(
     'reviewed apply checks the full queued base but ignores tuning',
@@ -356,28 +1885,25 @@ void main() {
     },
   );
 
-  test(
-    'artworkForPath routes trusted metadata without PMS credentials',
-    () async {
-      final plex = _FakePlex();
-      final controller = LineupController(
-        store: _MemoryStore(const PersistedState()),
-        credentials: _MemoryCredentials(),
-        plex: plex,
-      );
-      addTearDown(controller.dispose);
-      await controller.initialize();
-      final uri = Uri.parse(
-        'https://metadata-static.plex.tv/f/people/avery-vale.jpg',
-      );
+  test('cast portraits require a selected authenticated server', () async {
+    final plex = _FakePlex();
+    final controller = LineupController(
+      store: _MemoryStore(const PersistedState()),
+      credentials: _MemoryCredentials(),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final uri = Uri.parse(
+      'https://metadata-static.plex.tv/f/people/avery-vale.jpg',
+    );
 
-      final bytes = await controller.artworkForPath(uri);
+    final bytes = await controller.artworkForPath(uri, width: 72, height: 72);
 
-      expect(bytes, [4, 5, 6]);
-      expect(plex.metadataArtworkUri, uri);
-      expect(plex.artworkToken, isNull);
-    },
-  );
+    expect(bytes, isNull);
+    expect(plex.artworkServer, isNull);
+    expect(plex.artworkToken, isNull);
+  });
 
   test('selected-server requests use only the PMS resource token', () async {
     const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
@@ -1281,6 +2807,203 @@ void main() {
   });
 
   test(
+    'generated block plans cannot persist policy-excluded content',
+    () async {
+      const library = PlexLibrary(
+        id: 'tv',
+        title: 'TV',
+        type: PlexLibraryType.show,
+      );
+      final specials = [
+        for (var i = 0; i < 5; i++)
+          PlexMediaItem(
+            id: 'special-$i',
+            title: 'Special $i',
+            type: 'episode',
+            duration: const Duration(minutes: 20),
+            libraryId: 'tv',
+            grandparentRatingKey: 'show',
+            grandparentTitle: 'Show',
+            seasonNumber: 0,
+            episodeNumber: i,
+            collections: const ['Collection'],
+            parts: [PlexMediaPart(path: '/parts/$i')],
+          ),
+      ];
+      for (final mode in ChannelBuildMode.values) {
+        final store = _CountingMemoryStore();
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(),
+          plex: _FakePlex(),
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        final custom = _channel('retained-off-air');
+        final original = [custom];
+        controller
+          ..profile = const PlexHomeUser(
+            id: 'owner',
+            name: 'Owner',
+            protected: false,
+          )
+          ..server = _server('server')
+          ..connection = _server('server').connections.single
+          ..availableMedia = specials
+          ..channels = original
+          ..currentChannelId = custom.id;
+        final proposals = buildChannelProposals(
+          libraries: const [library],
+          items: controller.playableInventory.media,
+          strategies: const {BuilderStrategy.collections},
+        );
+        final excluded = materializeChannelPlan(
+          proposals: proposals,
+          existing: original,
+          mode: mode,
+          seriesMode: PlaybackMode.block,
+          minimumItems: 5,
+        );
+        expect(excluded.channels, isEmpty, reason: mode.name);
+        final included = materializeChannelPlan(
+          proposals: proposals,
+          existing: original,
+          mode: mode,
+          seriesMode: PlaybackMode.block,
+          includeSpecials: true,
+          anchor: DateTime.utc(2026),
+        );
+        final unsafe = Channel.fromJson({
+          ...included.channels.single.toJson(),
+          'includeSpecials': false,
+        });
+        await expectLater(
+          controller.loadScheduleFor(unsafe),
+          _throwsScheduleFailure(ScheduleFailureReason.noContent),
+        );
+        final saved = store.state;
+        await expectLater(
+          controller.applyReviewedChannelPlan(
+            [unsafe],
+            mode: mode,
+            expectedBase: original,
+          ),
+          throwsFormatException,
+        );
+        expect(store.state, same(saved));
+        expect(store.saveCalls, 0);
+        expect(controller.channels, same(original));
+        expect(controller.currentChannelId, custom.id);
+
+        expect(
+          await controller.applyReviewedChannelPlan(
+            included.channels,
+            mode: mode,
+            expectedBase: original,
+          ),
+          ChannelPlanApplyResult.applied,
+        );
+        expect(store.saveCalls, 1);
+        expect(controller.channels.first, same(custom));
+        final generated = controller.channels.last;
+        final schedule = await controller.loadScheduleFor(generated);
+        expect(
+          schedule.items.map((item) => item.id).toSet(),
+          specials.map((item) => item.id).toSet(),
+        );
+        expect(
+          store.state.channelsByProfileServer['owner']!['server']!.last
+              .toJson(),
+          generated.toJson(),
+        );
+      }
+    },
+  );
+
+  test('mixed movie and episode generation schedules regular content with specials off', () async {
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final media = [
+      for (var i = 0; i < 5; i++)
+        PlexMediaItem(
+          id: 'special-$i',
+          title: 'Special',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'tv',
+          grandparentRatingKey: 'show',
+          seasonNumber: 0,
+          episodeNumber: i,
+          collections: const ['Collection'],
+          parts: [PlexMediaPart(path: '/parts/special-$i')],
+        ),
+      for (var i = 0; i < 5; i++)
+        PlexMediaItem(
+          id: 'regular-$i',
+          title: 'Regular',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'tv',
+          grandparentRatingKey: 'show',
+          seasonNumber: 1,
+          episodeNumber: i,
+          collections: const ['Collection'],
+          parts: [PlexMediaPart(path: '/parts/regular-$i')],
+        ),
+      PlexMediaItem(
+        id: 'movie',
+        title: 'Movie',
+        type: 'movie',
+        duration: const Duration(minutes: 90),
+        libraryId: 'movies',
+        collections: const ['Collection'],
+        parts: [PlexMediaPart(path: '/parts/movie')],
+      ),
+    ];
+    controller
+      ..connection = _server('server').connections.single
+      ..availableMedia = media;
+    final proposals = buildChannelProposals(
+      libraries: const [
+        PlexLibrary(id: 'tv', title: 'TV', type: PlexLibraryType.show),
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ],
+      items: controller.playableInventory.media,
+      strategies: const {BuilderStrategy.collections},
+      crossLibraryStrategies: const {BuilderStrategy.collections},
+    );
+    final plan = materializeChannelPlan(
+      proposals: proposals,
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      seriesMode: PlaybackMode.block,
+      minimumItems: 5,
+      anchor: DateTime.utc(2026),
+    );
+    expect(plan.channels.single.source, isA<MixedSource>());
+    expect(
+      await controller.applyReviewedChannelPlan(
+        plan.channels,
+        mode: ChannelBuildMode.replace,
+        expectedBase: const [],
+      ),
+      ChannelPlanApplyResult.applied,
+    );
+    final schedule = await controller.loadScheduleFor(
+      controller.channels.single,
+    );
+    expect(schedule.items.map((item) => item.id).toSet(), {
+      'movie',
+      for (var i = 0; i < 5; i++) 'regular-$i',
+    });
+  });
+
+  test(
     'descriptor-invalid generated plans preserve lineup in every build mode',
     () async {
       for (final mode in ChannelBuildMode.values) {
@@ -1455,6 +3178,265 @@ void main() {
 
       expect(controller.channels, [custom, generated]);
       expect(controller.currentChannelId, generated.id);
+    },
+  );
+
+  test(
+    'missing-source classification requires every complete dependency',
+    () async {
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie]);
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      const missing = LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.collection: ['Retired'],
+        },
+      );
+      Channel candidate(ContentSource source, {String? key = 'generated'}) =>
+          Channel(
+            id: 'candidate',
+            number: 90,
+            name: 'Candidate',
+            source: source,
+            playbackMode: PlaybackMode.shuffle,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 90,
+            builderKey: key,
+          );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isTrue,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(missing, key: null),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(const ManualSource([])),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(
+            const LibrarySource(
+              libraryId: 'unscanned',
+              libraryType: PlexLibraryType.movie,
+            ),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(
+            const MixedSource(
+              sources: [
+                missing,
+                LibrarySource(
+                  libraryId: 'unscanned',
+                  libraryType: PlexLibraryType.movie,
+                ),
+              ],
+            ),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(
+            const MixedSource(sources: [missing, PlaylistSource('gone')]),
+          ),
+        ),
+        isTrue,
+      );
+      plex.libraryItemsHandler = ((_, _, _, _) async => [
+        PlexMediaItem(
+          id: 'returned',
+          title: 'Returned',
+          type: 'movie',
+          libraryId: 'movies',
+          collections: ['Retired'],
+          duration: Duration(minutes: 30),
+          parts: [PlexMediaPart(path: '/parts/returned')],
+        ),
+      ]);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+      plex.libraryItemsHandler = ((_, _, _, _) async => [_playableMovie]);
+      plex.collectionMembership = const PlexCollectionMembership(
+        failedTitles: {'Retired'},
+      );
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+      plex.collectionMembership = const PlexCollectionMembership(
+        failure: PlexCollectionFailure.listingLimitExceeded,
+      );
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+      plex.collectionMembership = const PlexCollectionMembership();
+      plex.playlistsHandler = ((_, _) async =>
+          const PlexPlaylistCatalog(playlists: [], failedIds: {'gone'}));
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(controller.failedPlaylistIds, {'gone'});
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(
+            const MixedSource(sources: [missing, PlaylistSource('gone')]),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(const PlaylistSource('other')),
+        ),
+        isTrue,
+      );
+      plex.playlistsHandler = ((_, _) async =>
+          throw const PlexException('offline', 'Unavailable'));
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(controller.playlistCatalogUnavailable, isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(const PlaylistSource('gone')),
+        ),
+        isFalse,
+      );
+      plex.libraryItemsHandler = ((_, _, _, _) async =>
+          throw const PlexException('offline', 'Unavailable'));
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'missing-source removal commits atomically and rolls back a failed save',
+    () async {
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie]);
+      final store = _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
+      final missing = Channel(
+        id: 'missing',
+        number: 90,
+        name: 'Retired',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            LibraryFilter.collection: ['Retired'],
+          },
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 90,
+        builderKey: 'missing',
+      );
+      final custom = _channel('custom');
+      controller
+        ..channels = [custom, missing]
+        ..currentChannelId = missing.id;
+      expect(controller.isGeneratedSourceConfirmedGone(missing), isTrue);
+      final generation = controller.contentGeneration;
+      final saved = store.state;
+      store.failNextSave = true;
+      await expectLater(
+        controller.applyReviewedChannelPlan(
+          [_generatedChannel('new', 2)],
+          mode: ChannelBuildMode.merge,
+          expectedBase: controller.channels,
+          removeChannelIds: {'missing'},
+        ),
+        throwsStateError,
+      );
+      expect(controller.channels, [custom, missing]);
+      expect(controller.currentChannelId, missing.id);
+      expect(controller.contentGeneration, generation);
+      expect(store.state, same(saved));
+      expect(
+        await controller.applyReviewedChannelPlan(
+          [_generatedChannel('new', 2)],
+          mode: ChannelBuildMode.merge,
+          expectedBase: controller.channels,
+          removeChannelIds: {'missing'},
+        ),
+        ChannelPlanApplyResult.applied,
+      );
+      expect(controller.channels.map((channel) => channel.id), [
+        'custom',
+        'new',
+      ]);
+      expect(controller.contentGeneration, generation);
+      expect(controller.channelRevision('new'), greaterThan(0));
+      expect(
+        store.state.channelsByProfileServer['owner']!['server']!.map(
+          (channel) => channel.id,
+        ),
+        ['custom', 'new'],
+      );
     },
   );
 
@@ -4772,6 +6754,120 @@ void main() {
     expect(controller.server?.id, 'old');
   });
 
+  for (final origin in [
+    (
+      name: 'ready account',
+      stage: SetupStage.ready,
+      restoring: false,
+      canCancelSetup: false,
+    ),
+    (
+      name: 'first setup',
+      stage: SetupStage.channelSetup,
+      restoring: false,
+      canCancelSetup: false,
+    ),
+    (
+      name: 'regeneration',
+      stage: SetupStage.channelSetup,
+      restoring: false,
+      canCancelSetup: true,
+    ),
+    (
+      name: 'saved restore',
+      stage: SetupStage.channelSetup,
+      restoring: true,
+      canCancelSetup: false,
+    ),
+  ]) {
+    test(
+      'nested profile cancellation preserves the ${origin.name} server origin',
+      () {
+        final controller = _NoopRestoreController()
+          ..stage = origin.stage
+          ..server = _server('server')
+          ..connection = _server('server').connections.single
+          ..restoringSavedLineup = origin.restoring
+          ..channelSetupCanCancel = origin.canCancelSetup;
+        addTearDown(controller.dispose);
+
+        controller.showServers();
+        controller.showProfiles();
+
+        expect(controller.profileSelectionCanCancel, isTrue);
+        controller.cancelProfileSelection();
+        expect(controller.stage, SetupStage.servers);
+        expect(controller.serverSelectionCanCancel, isTrue);
+
+        controller.cancelServerSelection();
+        expect(controller.stage, origin.stage);
+        expect(controller.channelSetupCanCancel, origin.canCancelSetup);
+      },
+    );
+  }
+
+  test('nested profile cancellation does not require a current server', () {
+    final controller = _NoopRestoreController()
+      ..stage = SetupStage.ready
+      ..server = _server('server')
+      ..connection = _server('server').connections.single;
+    addTearDown(controller.dispose);
+
+    controller.showServers();
+    controller.server = null;
+    controller.showProfiles();
+
+    expect(controller.profileSelectionCanCancel, isTrue);
+    controller.cancelProfileSelection();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.serverSelectionCanCancel, isTrue);
+
+    controller.cancelServerSelection();
+    expect(controller.stage, SetupStage.ready);
+  });
+
+  test('initial server picker profile switch returns to Servers without outer cancel', () {
+    final controller = _NoopRestoreController()
+      ..stage = SetupStage.servers
+      ..server = null
+      ..serverSelectionCanCancel = false;
+    addTearDown(controller.dispose);
+
+    controller.showProfiles();
+    expect(controller.profileSelectionCanCancel, isTrue);
+    controller.cancelProfileSelection();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.serverSelectionCanCancel, isFalse);
+    controller.cancelServerSelection();
+    expect(controller.stage, SetupStage.servers);
+  });
+
+  test(
+    'successful nested profile selection retires the outer server origin',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+      const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+      fixture.plex.homeUsersResult = const [owner, child];
+      await controller.initialize();
+      controller
+        ..profile = owner
+        ..server = _server('server')
+        ..connection = _server('server').connections.single
+        ..stage = SetupStage.ready;
+
+      controller.showServers();
+      controller.showProfiles();
+      await controller.selectProfile(child);
+
+      expect(controller.profile?.id, 'child');
+      expect(controller.profileSelectionCanCancel, isFalse);
+      expect(controller.serverSelectionCanCancel, isFalse);
+      expect(controller.stage, SetupStage.servers);
+    },
+  );
+
   test(
     'profile cancellation is hidden before the save commit window',
     () async {
@@ -4937,6 +7033,182 @@ void main() {
     expect(store.state.settings.diagnosticsEnabled, isTrue);
     expect(store.state.settings.nowWatchingBanner, isFalse);
   });
+
+  for (final scenario in [
+    (kind: 'profile', saveFails: false, targetDiscovered: true),
+    (kind: 'profile', saveFails: true, targetDiscovered: true),
+    (kind: 'server', saveFails: false, targetDiscovered: true),
+    (kind: 'server', saveFails: true, targetDiscovered: true),
+    (kind: 'server', saveFails: false, targetDiscovered: false),
+  ]) {
+    final selectionKind = scenario.kind;
+    final saveFails = scenario.saveFails;
+    test(
+      '$selectionKind own selection save preserves old lifetime until ${saveFails ? 'failure' : 'commit'}${scenario.targetDiscovered ? '' : ' with target absent from refresh'}',
+      () async {
+        const owner = PlexHomeUser(
+          id: 'owner',
+          name: 'Owner',
+          protected: false,
+        );
+        const child = PlexHomeUser(
+          id: 'child',
+          name: 'Child',
+          protected: false,
+        );
+        final selected = _server('server');
+        final target = _server('target');
+        final existing = _channel('existing');
+        final targetChannel = _channel('target-channel');
+        final store = _ControlledSaveStore(
+          PersistedState(
+            profileId: owner.id,
+            selectedServerByProfile: {'owner': selected.id},
+            selectedLibraryIdsByProfileServer: {
+              'owner': {
+                target.id: ['movies'],
+              },
+            },
+            channelsByProfileServer: {
+              'owner': {
+                selected.id: [existing],
+                target.id: [targetChannel],
+              },
+            },
+            currentChannelByProfileServer: {
+              'owner': {selected.id: existing.id},
+            },
+          ),
+        );
+        final plex = _FakePlex()
+          ..homeUsersResult = const [owner]
+          ..serversResult = [selected, target]
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = (_, _, _, _) async => [_playableMovie];
+        final originalToken = plex.resourceToken;
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(accountToken: 'account-token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        controller
+          ..profiles = const [owner, child]
+          ..availableMedia = [_playableMovie]
+          ..stage = SetupStage.ready;
+        final playback = controller.playbackFor('movie');
+        final oldConnection = controller.connection;
+        if (selectionKind == 'profile') {
+          controller.showProfiles();
+        } else {
+          controller.showServers();
+        }
+        store.blockNext(fail: saveFails);
+        final selecting = selectionKind == 'profile'
+            ? controller.selectProfile(child).then<void>((_) {})
+            : controller.selectServer(target);
+        await store.blockedSaveStarted.future;
+
+        expect(controller.profile, owner);
+        expect(controller.server, selected);
+        expect(controller.connection, oldConnection);
+        expect(controller.channels.map((channel) => channel.toJson()), [
+          existing.toJson(),
+        ]);
+        expect(controller.currentChannelId, existing.id);
+        expect(store.state.profileId, owner.id);
+        expect(store.state.selectedServerByProfile[owner.id], selected.id);
+        expect(
+          selectionKind == 'profile'
+              ? controller.profileSelectionCanCancel
+              : controller.serverSelectionCanCancel,
+          isFalse,
+        );
+        plex.resourceToken = 'refreshed-pms-token';
+        if (!scenario.targetDiscovered) plex.serversResult = [selected];
+        expect(
+          (await playback.authorizationRecovery!()).plexToken,
+          plex.resourceToken,
+        );
+        final queuedMutation = controller.reorderChannels(
+          expectedLineup: [existing],
+          orderedChannelIds: [existing.id],
+        );
+        final mutationResult = saveFails
+            ? queuedMutation
+            : expectLater(queuedMutation, throwsStateError);
+        final savesBeforeRelease = store.saveCalls;
+        store.releaseBlockedSave();
+        await selecting;
+        await mutationResult;
+
+        if (saveFails) {
+          expect(controller.profile, owner);
+          expect(controller.server, selected);
+          expect(controller.channels.map((channel) => channel.toJson()), [
+            existing.toJson(),
+          ]);
+          expect(store.saveCalls, savesBeforeRelease + 1);
+          expect(
+            selectionKind == 'profile'
+                ? controller.profileSelectionCanCancel
+                : controller.serverSelectionCanCancel,
+            isTrue,
+          );
+          expect(
+            (await playback.authorizationRecovery!()).plexToken,
+            plex.resourceToken,
+          );
+        } else {
+          expect(store.saveCalls, savesBeforeRelease);
+          expect(
+            controller.profile,
+            selectionKind == 'profile' ? child : owner,
+          );
+          expect(
+            controller.server,
+            selectionKind == 'profile' ? isNull : target,
+          );
+          if (selectionKind == 'server') {
+            final expectedToken = scenario.targetDiscovered
+                ? plex.resourceToken
+                : originalToken;
+            expect(controller.connection, target.connections.single);
+            expect(controller.channels.single.id, targetChannel.id);
+            expect(controller.playbackFor('movie').plexToken, expectedToken);
+            expect(plex.itemTokens.last, expectedToken);
+            await controller.artworkForPath(Uri.parse('/selected-target-art'));
+            expect(plex.artworkToken, expectedToken);
+            expect(plex.artworkServer, target.connections.single.uri);
+          }
+          await expectLater(
+            playback.authorizationRecovery!(),
+            throwsA(isA<PlexException>()),
+          );
+          if (selectionKind == 'profile') {
+            await controller.selectProfile(owner);
+          } else {
+            await controller.selectServer(selected);
+          }
+          expect(controller.profile, owner);
+          expect(controller.server, selected);
+          final discoveries = plex.discoveredTokens.length;
+          await expectLater(
+            playback.authorizationRecovery!(),
+            throwsA(isA<PlexException>()),
+          );
+          expect(plex.discoveredTokens.length, discoveries);
+        }
+      },
+    );
+  }
 
   test('captured playback recovery survives discovery but rejects leave and return', () async {
     final selected = _server('server');
@@ -5318,6 +7590,56 @@ Channel _generatedChannel(String id, int number, {String? builderKey}) =>
       builderKey: builderKey ?? 'generated-$id',
     );
 
+({LineupController controller, _FakePlex plex, _MemoryStore store})
+_reentryFixture({bool saved = true}) {
+  final selected = _server('server');
+  final store = _MemoryStore(
+    PersistedState(
+      selectedServerByProfile: const {'owner': 'server'},
+      selectedLibraryIdsByProfileServer: saved
+          ? const {
+              'owner': {
+                'server': ['movies', 'tv'],
+              },
+            }
+          : const {},
+      channelsByProfileServer: saved
+          ? {
+              'owner': {
+                'server': [_channel('saved')],
+              },
+            }
+          : const {},
+    ),
+  );
+  final plex = _FakePlex()
+    ..serversResult = [selected, _server('other')]
+    ..connectionResult = selected.connections.single
+    ..librariesResult = const [
+      PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      PlexLibrary(id: 'tv', title: 'TV', type: PlexLibraryType.show),
+      PlexLibrary(id: 'extra', title: 'Extra', type: PlexLibraryType.movie),
+    ]
+    ..scanLibraryHandler = (_, _, id, _, _, _, _) async =>
+        PlexLibraryScan(items: [_scanMovie(id)]);
+  final controller = LineupController(
+    store: store,
+    credentials: _MemoryCredentials(accountToken: 'token'),
+    plex: plex,
+  );
+  addTearDown(controller.dispose);
+  return (controller: controller, plex: plex, store: store);
+}
+
+PlexMediaItem _scanMovie(String libraryId) => PlexMediaItem(
+  id: '$libraryId-item',
+  title: 'Item',
+  type: 'movie',
+  duration: const Duration(minutes: 1),
+  libraryId: libraryId,
+  parts: [PlexMediaPart(path: '/parts/item')],
+);
+
 class _MemoryStore implements AppStore {
   _MemoryStore([
     this.state = const PersistedState(),
@@ -5603,6 +7925,14 @@ class _FakePlex extends PlexClient {
     Future<void>?,
   )?
   playlistsScanHandler;
+  Future<PlexPlaylistCatalog> Function(
+    Uri,
+    String,
+    bool Function(),
+    Future<void>?,
+    void Function(PlexPlaylistProgress)?,
+  )?
+  playlistProgressHandler;
   Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
   Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
   List<PlexPlaybackPartDescriptor>? playbackDescriptorResult;
@@ -5628,7 +7958,6 @@ class _FakePlex extends PlexClient {
   Uri? artworkServer;
   Uri? artworkPath;
   String? artworkToken;
-  Uri? metadataArtworkUri;
 
   @override
   Future<PlexAccount> account(String token) {
@@ -5702,6 +8031,61 @@ class _FakePlex extends PlexClient {
     if (failure != null) throw failure;
   }
 
+  Future<PlexLibraryScan> Function(
+    Uri,
+    String,
+    String,
+    PlexLibraryType,
+    bool Function(),
+    void Function(PlexLibraryPageProgress),
+    Future<void>?,
+  )?
+  scanLibraryHandler;
+
+  void Function(PlexLibraryScanPhase)? scanPhaseCallback;
+
+  PlexCollectionMembership collectionMembership =
+      const PlexCollectionMembership();
+
+  @override
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    void Function(PlexLibraryScanPhase phase)? onPhase,
+    Future<void>? cancelled,
+  }) async {
+    onPhase?.call(PlexLibraryScanPhase.items);
+    scanPhaseCallback = onPhase;
+    final handler = scanLibraryHandler;
+    if (handler != null) {
+      return handler(
+        server,
+        token,
+        libraryId,
+        libraryType,
+        isCurrent,
+        onProgress,
+        cancelled,
+      );
+    }
+    return PlexLibraryScan(
+      items: await libraryItems(
+        server,
+        token,
+        libraryId,
+        libraryType,
+        isCurrent: isCurrent,
+        onProgress: onProgress,
+        cancelled: cancelled,
+      ),
+      collections: collectionMembership,
+    );
+  }
+
   @override
   Future<List<PlexMediaItem>> libraryItems(
     Uri server,
@@ -5739,8 +8123,13 @@ class _FakePlex extends PlexClient {
     String token, {
     required bool Function() isCurrent,
     Future<void>? cancelled,
+    void Function(PlexPlaylistProgress progress)? onProgress,
   }) async {
     playlistTokens.add(token);
+    final progressHandler = playlistProgressHandler;
+    if (progressHandler != null) {
+      return progressHandler(server, token, isCurrent, cancelled, onProgress);
+    }
     final scanHandler = playlistsScanHandler;
     if (scanHandler != null) {
       return scanHandler(server, token, isCurrent, cancelled);
@@ -5765,15 +8154,6 @@ class _FakePlex extends PlexClient {
   }
 
   @override
-  Future<Uint8List> metadataArtwork(
-    Uri uri, {
-    int maximumBytes = 4 * 1024 * 1024,
-  }) async {
-    metadataArtworkUri = uri;
-    return Uint8List.fromList([4, 5, 6]);
-  }
-
-  @override
   List<PlexPlaybackPartDescriptor> playbackDescriptor({
     required Uri server,
     required PlexMediaItem item,
@@ -5785,6 +8165,18 @@ class _FakePlex extends PlexClient {
 
   @override
   void close() {}
+}
+
+class _NoopRestoreController extends LineupController {
+  _NoopRestoreController()
+    : super(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+
+  @override
+  Future<void> selectServer(PlexServer selected) async {}
 }
 
 class _ThrowingPlaybackPlex extends _FakePlex {

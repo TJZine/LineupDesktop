@@ -4,6 +4,119 @@ import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  test(
+    'persisted collection filters resolve annotated TV and smart inventory',
+    () {
+      final inventory = [
+        PlexMediaItem(
+          id: 'episode',
+          title: 'Episode',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'tv',
+          parts: [PlexMediaPart(path: '/parts/episode')],
+          collections: const ['TV Collection'],
+        ),
+        PlexMediaItem(
+          id: 'smart-movie',
+          title: 'Movie',
+          type: 'movie',
+          duration: const Duration(minutes: 90),
+          libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie')],
+          collections: const ['Smart Collection'],
+        ),
+        PlexMediaItem(
+          id: 'other-library',
+          title: 'Other',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'other',
+          parts: [PlexMediaPart(path: '/parts/other')],
+          collections: const ['TV Collection'],
+        ),
+      ];
+      for (final scenario in [
+        ('tv', 'show', 'TV Collection', 'episode'),
+        ('movies', 'movie', 'Smart Collection', 'smart-movie'),
+      ]) {
+        final source = ContentSource.fromJson({
+          'type': 'library',
+          'libraryId': scenario.$1,
+          'libraryType': scenario.$2,
+          'includeWatched': true,
+          'filters': {
+            'collection': [scenario.$3],
+          },
+        });
+        expect(resolveContent(source, inventory).map((item) => item.id), [
+          scenario.$4,
+        ]);
+      }
+    },
+  );
+
+  test(
+    'multipart media identity is shared without losing source occurrences',
+    () {
+      final multipart = PlexMediaItem(
+        id: 'multipart',
+        title: 'Multipart',
+        type: 'movie',
+        duration: const Duration(minutes: 40),
+        libraryId: 'movies',
+        parts: [
+          PlexMediaPart(path: '/parts/first'),
+          PlexMediaPart(path: '/parts/second'),
+        ],
+      );
+      final other = PlexMediaItem(
+        id: 'other',
+        title: 'Other',
+        type: 'movie',
+        duration: const Duration(minutes: 17),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/parts/other')],
+      );
+      const library = LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      );
+      const playlist = PlaylistSource('playlist');
+      final media = [multipart, other, multipart];
+      final playlists = [
+        PlexPlaylist(
+          id: 'playlist',
+          title: 'Playlist',
+          items: [multipart, other, multipart],
+        ),
+      ];
+      final libraryItems = resolveContent(library, media, playlists);
+      expect(libraryItems.map((item) => item.id), ['multipart', 'other']);
+      expect(libraryItems.first.duration, const Duration(minutes: 40));
+      expect(
+        resolveContent(playlist, media, playlists).map((item) => item.id),
+        ['multipart', 'other', 'multipart'],
+      );
+      for (final interleave in [false, true]) {
+        final mixed = resolveContent(
+          MixedSource(sources: [library, playlist], interleave: interleave),
+          media,
+          playlists,
+        );
+        expect(mixed.where((item) => item.id == 'multipart'), hasLength(3));
+        expect(mixed.where((item) => item.id == 'other'), hasLength(2));
+        expect(
+          mixed.fold(
+            Duration.zero,
+            (duration, item) => duration + item.duration,
+          ),
+          const Duration(minutes: 154),
+        );
+      }
+    },
+  );
+
   test('decades use one canonical four-digit representation', () {
     expect(channelDecadeForYear(1981), '1980s');
     expect(channelDecadeForYear(1000), '1000s');
@@ -522,7 +635,7 @@ void main() {
           ),
           PlexCastMember(name: 'Mina Park'),
           PlexCastMember(
-            name: 'Unsafe Absolute',
+            name: 'External Portrait',
             role: 'Reporter',
             thumbPath: 'https://plex.invalid/library/metadata/2/thumb',
           ),
@@ -541,7 +654,7 @@ void main() {
             thumbPath: '/photo/:/transcode?url=private',
           ),
           PlexCastMember(
-            name: 'Unsafe File',
+            name: 'Other PMS Path',
             thumbPath: '/Users/private/cast.png',
           ),
         ],
@@ -554,19 +667,23 @@ void main() {
       item.cast.first.portrait,
       Uri.parse('/library/metadata/avery/thumb'),
     );
-    expect(item.cast[2].name, 'Unsafe Absolute');
+    expect(item.cast[2].name, 'External Portrait');
     expect(item.cast[2].role, 'Reporter');
     expect(item.cast[3].name, 'Unsafe Token');
     expect(item.cast[3].role, 'Dispatcher');
     expect(item.cast[4].name, 'Unsafe Fragment');
     expect(item.cast[4].role, 'Archivist');
-    expect(
-      item.cast.skip(1).map((member) => member.portrait),
-      everyElement(isNull),
-    );
+    expect(item.cast.skip(1).map((member) => member.portrait), [
+      null,
+      Uri.parse('https://plex.invalid/library/metadata/2/thumb'),
+      null,
+      null,
+      null,
+      Uri.parse('/Users/private/cast.png'),
+    ]);
   });
 
-  test('maps trusted Plex metadata cast portraits only for cast', () {
+  test('maps external sources only for cast transcoding', () {
     const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
     final item = channelItemFor(
       const PlexMediaItem(
@@ -588,7 +705,10 @@ void main() {
 
     expect(item.poster, isNull);
     expect(item.cast.first.portrait, Uri.parse(trusted));
-    expect(item.cast.last.portrait, isNull);
+    expect(
+      item.cast.last.portrait,
+      Uri.parse('https://metadata-static.plex.tv.evil.example/f/people/a.jpg'),
+    );
   });
 
   test('drops noncanonical artwork from manually supplied Plex models', () {
@@ -744,16 +864,27 @@ void main() {
     },
   );
 
+  test('content sources reject missing and unknown persisted values', () {
+    for (final invalid in [
+      {'type': 'playlist'},
+      {'type': 'future'},
+    ]) {
+      expect(() => ContentSource.fromJson(invalid), throwsFormatException);
+    }
+  });
+
   test('channel items reject mistyped persisted values', () {
-    expect(
-      () => ChannelItem.fromJson({
-        'id': 'item',
-        'title': 'Item',
-        'durationMs': 60000,
+    const canonical = {'id': 'item', 'title': 'Item', 'durationMs': 60000};
+    for (final invalid in [
+      {...canonical, 'durationMs': 60000.5},
+      {...canonical, 'summary': null},
+      {
+        ...canonical,
         'genres': ['Drama', 7],
-      }),
-      throwsFormatException,
-    );
+      },
+    ]) {
+      expect(() => ChannelItem.fromJson(invalid), throwsFormatException);
+    }
   });
 
   test('channels round-trip and reject unknown fields and enum values', () {
@@ -770,14 +901,15 @@ void main() {
     );
     expect(Channel.fromJson(channel.toJson()).toJson(), channel.toJson());
 
-    expect(
-      () => Channel.fromJson({...channel.toJson(), 'future': true}),
-      throwsFormatException,
-    );
-    expect(
-      () => Channel.fromJson({...channel.toJson(), 'playbackMode': 'future'}),
-      throwsFormatException,
-    );
+    final canonical = channel.toJson();
+    for (final invalid in [
+      {...canonical}..remove('anchor'),
+      {...canonical, 'future': true},
+      {...canonical, 'playbackMode': 'future'},
+      {...canonical, 'blockSize': null},
+    ]) {
+      expect(() => Channel.fromJson(invalid), throwsFormatException);
+    }
   });
 
   test('non-block channels normalize specials in persistence and identity', () {

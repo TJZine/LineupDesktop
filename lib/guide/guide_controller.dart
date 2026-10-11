@@ -120,6 +120,10 @@ class GuideController extends ChangeNotifier {
   final LinkedHashMap<String, GuideRowData> _rows = LinkedHashMap();
   final LinkedHashMap<String, ScheduleIndex> _schedules = LinkedHashMap();
   final LinkedHashMap<String, Future<Uint8List?>> _artwork = LinkedHashMap();
+  // Identity-only state survives projection eviction; payload caches stay bounded.
+  final Set<String> _failedChannelIds = {};
+  final Set<String> _retryingChannelIds = {};
+  final Map<String, int> _loadingGenerationByChannel = {};
   final Queue<Channel> _pendingExplicit = Queue();
   final Set<String> _explicitQueuedIds = {};
   final Queue<Channel> _pendingViewport = Queue();
@@ -137,6 +141,12 @@ class GuideController extends ChangeNotifier {
   late DateTime _focusTime;
   String? _focusedChannelId;
   String? _focusedProgramId;
+  bool _followingLive = true;
+  bool _inspectionActive = false;
+  // Retain one explicitly inspected airing for details after it leaves the
+  // projected window. Source invalidation and Now retire this snapshot.
+  GuideProgram? _inspectedProgram;
+  ({String channelId, DateTime time})? _pendingProgramFocus;
   String? _selectedChannelId;
   String? _selectedProgramId;
   String? _libraryFilterId;
@@ -164,6 +174,12 @@ class GuideController extends ChangeNotifier {
   String? get libraryFilterId => _libraryFilterId;
   String get searchQuery => _searchQuery;
   int get guideHours => _settings.guideHours;
+  bool get followingLive => _followingLive;
+  bool get nowOffScreen {
+    final current = now;
+    return current.isBefore(windowStart) || !current.isBefore(windowEnd);
+  }
+
   bool get canBrowseEarlier => _windowStart.isAfter(_liveBoundary);
   int get cachedRowCount => _rows.length;
   int get activeLoadCount => _activeLoads;
@@ -177,7 +193,14 @@ class GuideController extends ChangeNotifier {
   Channel? get focusedChannel => _channelById[_focusedChannelId];
 
   GuideRowData row(String channelId) =>
-      _rows[channelId] ?? const GuideRowData(state: GuideLoadState.loading);
+      _rows[channelId] ??
+      GuideRowData(
+        state: _retryingChannelIds.contains(channelId)
+            ? GuideLoadState.retrying
+            : _failedChannelIds.contains(channelId)
+            ? GuideLoadState.error
+            : GuideLoadState.loading,
+      );
 
   GuideProgram? get selectedProgram {
     final id = _selectedProgramId;
@@ -192,9 +215,14 @@ class GuideController extends ChangeNotifier {
     final id = _focusedProgramId;
     final channelId = _focusedChannelId;
     if (id == null || channelId == null) return null;
-    return row(channelId).programs
+    final visible = row(channelId).programs
         .where((program) => program.id == id)
         .firstOrNull;
+    if (visible != null) return visible;
+    final inspected = _inspectedProgram;
+    return inspected?.id == id && inspected?.channelId == channelId
+        ? inspected
+        : null;
   }
 
   GuideProgram? currentProgram(String channelId, [DateTime? at]) {
@@ -230,13 +258,15 @@ class GuideController extends ChangeNotifier {
     if (_schedules.containsKey(channelId)) return currentProgram(channelId);
     final existing = _rows[channelId];
     if (existing?.state == GuideLoadState.error) _rows.remove(channelId);
+    _failedChannelIds.remove(channelId);
     final generation = _generation;
     _request(channel, prioritize: true);
     final completer = Completer<void>();
     _rowWaiters.add(completer);
     void changed() {
-      final value = _rows[channelId];
-      if (value != null && !_isLoadInProgress(value.state)) {
+      final value = row(channelId);
+      if (_schedules.containsKey(channelId) ||
+          !_isLoadInProgress(value.state)) {
         if (!completer.isCompleted) completer.complete();
       } else if (generation != _generation ||
           !_channelById.containsKey(channelId)) {
@@ -280,12 +310,20 @@ class GuideController extends ChangeNotifier {
     return _artworkForPath(path, '${item.id}|${kind.name}|$path');
   }
 
-  Future<Uint8List?> artworkForPath(Uri path) {
+  Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) {
     if (_disposed || path.toString().isEmpty) return Future.value();
-    return _artworkForPath(path, 'path|$path');
+    final key = width == null && height == null
+        ? 'path|$path'
+        : 'path|${width}x$height|$path';
+    return _artworkForPath(path, key, width: width, height: height);
   }
 
-  Future<Uint8List?> _artworkForPath(Uri path, String key) {
+  Future<Uint8List?> _artworkForPath(
+    Uri path,
+    String key, {
+    int? width,
+    int? height,
+  }) {
     final existing = _artwork.remove(key);
     if (existing != null) {
       _artwork[key] = existing;
@@ -294,7 +332,16 @@ class GuideController extends ChangeNotifier {
     final completer = Completer<Uint8List?>();
     final loading = completer.future;
     _artwork[key] = loading;
-    _pendingArtwork.add(_ArtworkRequest(key, path, completer, _generation));
+    _pendingArtwork.add(
+      _ArtworkRequest(
+        key,
+        path,
+        completer,
+        _generation,
+        width: width,
+        height: height,
+      ),
+    );
     while (_artwork.length > maximumCachedArtworkEntries) {
       final evicted = _artwork.keys.first;
       _artwork.remove(evicted);
@@ -319,7 +366,11 @@ class GuideController extends ChangeNotifier {
       }
       _activeArtworkLoads++;
       lineup
-          .artworkForPath(request.path)
+          .artworkForPath(
+            request.path,
+            width: request.width,
+            height: request.height,
+          )
           .then<Uint8List?>((value) => value, onError: (_) => null)
           .then((value) {
             final cached = identical(
@@ -367,18 +418,39 @@ class GuideController extends ChangeNotifier {
   }
 
   Future<void> retry(String channelId) async {
-    if (_rows[channelId]?.state != GuideLoadState.error) return;
+    if (_disposed || !_failedChannelIds.contains(channelId)) return;
     final channel = _channelById[channelId];
     if (channel == null) return;
-    _rows[channelId] = const GuideRowData(state: GuideLoadState.retrying);
+    _failedChannelIds.remove(channelId);
+    _retryingChannelIds.add(channelId);
+    _putRow(channelId, const GuideRowData(state: GuideLoadState.retrying));
     notifyListeners();
     _request(channel, prioritize: true, retrying: true);
+  }
+
+  /// Retries the authoritative failed rows, including filtered and offscreen rows.
+  void retryFailedRows() {
+    if (_disposed) return;
+    final failed = _failedChannelIds
+        .map((id) => _channelById[id])
+        .nonNulls
+        .toList();
+    for (final channel in failed) {
+      _failedChannelIds.remove(channel.id);
+      _retryingChannelIds.add(channel.id);
+      _putRow(channel.id, const GuideRowData(state: GuideLoadState.retrying));
+      _request(channel, retrying: true, pump: false);
+    }
+    if (failed.isEmpty) return;
+    notifyListeners();
+    _pump();
   }
 
   void focusProgram(GuideProgram program) {
     _focusedChannelId = program.channelId;
     _focusedProgramId = program.id;
     _focusTime = _programFocusTime(program);
+    _retainInspection();
     notifyListeners();
   }
 
@@ -388,6 +460,7 @@ class GuideController extends ChangeNotifier {
     _selectedChannelId = program.channelId;
     _selectedProgramId = program.id;
     _focusTime = _programFocusTime(program);
+    _retainInspection();
     notifyListeners();
   }
 
@@ -411,8 +484,22 @@ class GuideController extends ChangeNotifier {
       0,
       visible.length - 1,
     );
+    final programIntent =
+        _focusedProgramId != null || _pendingProgramFocus != null;
+    _pendingProgramFocus = null;
     _focusedChannelId = visible[target].id;
+    if (_followingLive && !_inspectionActive) _focusTime = _clock();
     _selectAtFocusTime();
+    if (_inspectionActive) {
+      if (!programIntent) _focusedProgramId = null;
+      _inspectedProgram = focusedProgram;
+      if (programIntent && _focusedProgramId == null) {
+        _pendingProgramFocus = (
+          channelId: _focusedChannelId!,
+          time: _focusTime,
+        );
+      }
+    }
     notifyListeners();
   }
 
@@ -422,6 +509,10 @@ class GuideController extends ChangeNotifier {
   }
 
   void moveHorizontal(int offset) {
+    if (offset == 0) return;
+    _inspectionActive = false;
+    _inspectedProgram = null;
+    _pendingProgramFocus = null;
     final programs = _focusedChannelId == null
         ? const <GuideProgram>[]
         : row(_focusedChannelId!).programs;
@@ -430,11 +521,13 @@ class GuideController extends ChangeNotifier {
     );
     if (offset > 0 && current == -1 && programs.isNotEmpty) {
       _focusedProgramId = programs.first.id;
+      _retainInspection();
       notifyListeners();
       return;
     }
     if (offset < 0 && !canBrowseEarlier && current <= 0) {
       _focusedProgramId = null;
+      _retainInspection();
       notifyListeners();
       return;
     }
@@ -461,19 +554,41 @@ class GuideController extends ChangeNotifier {
       }
       _selectAtFocusTime();
     }
+    _retainInspection();
     notifyListeners();
   }
 
   void playToNow() {
+    _followingLive = true;
+    _inspectionActive = false;
+    _inspectedProgram = null;
+    _pendingProgramFocus = null;
     final now = _clock();
     _focusTime = now;
     _windowStart = _floorHalfHour(now);
     _reloadRows();
   }
 
+  /// Refresh from the existing presentation clock; only transitions reproject.
   void refreshForPresentation() {
+    if (_disposed || !_followingLive) return;
     final current = _clock();
-    if (!windowEnd.isAfter(current)) playToNow();
+    final target = _floorHalfHour(current);
+    if (!_inspectionActive) _focusTime = current;
+    if (target != _windowStart) {
+      _windowStart = target;
+      _reloadRows(preserveErrors: true);
+    } else if (!_inspectionActive) {
+      final previous = _focusedProgramId;
+      _selectAtFocusTime();
+      if (previous != _focusedProgramId) notifyListeners();
+    }
+  }
+
+  void _retainInspection() {
+    _pendingProgramFocus = null;
+    _inspectionActive = true;
+    _inspectedProgram = focusedProgram;
   }
 
   void moveWindow(int halfHours) {
@@ -487,6 +602,8 @@ class GuideController extends ChangeNotifier {
       }
       return;
     }
+    _pendingProgramFocus = null;
+    _followingLive = false;
     _windowStart = target;
     _reloadRows();
   }
@@ -501,17 +618,19 @@ class GuideController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setGuideHours(int hours) async {
+  Future<bool> setGuideHours(int hours) async {
     if (!LineupSettings.guideHoursOptions.contains(hours) ||
         hours == guideHours) {
-      return;
+      return true;
     }
     try {
       await lineup.updateSettings(
         (current) => current.copyWith(guideHours: hours),
       );
+      return true;
     } catch (_) {
       // LineupController owns rollback and persistence diagnostics.
+      return false;
     }
   }
 
@@ -580,8 +699,13 @@ class GuideController extends ChangeNotifier {
     bool retrying = false,
     bool pump = true,
   }) {
-    if (_disposed) return;
-    if (_rows.containsKey(channel.id) && !retrying) return;
+    if (_disposed || !_channelById.containsKey(channel.id)) return;
+    if (_loadingGenerationByChannel[channel.id] == _generation) return;
+    if (!retrying &&
+        (_rows.containsKey(channel.id) ||
+            _failedChannelIds.contains(channel.id))) {
+      return;
+    }
     final cachedSchedule = _schedules[channel.id];
     if (cachedSchedule != null) {
       _putRow(channel.id, _projectedRow(channel, cachedSchedule));
@@ -630,9 +754,15 @@ class GuideController extends ChangeNotifier {
       }
       final generation = _generation;
       _activeLoads++;
-      if (_rows[channel.id]?.state != GuideLoadState.retrying) {
-        _rows[channel.id] = const GuideRowData(state: GuideLoadState.loading);
-      }
+      _loadingGenerationByChannel[channel.id] = generation;
+      _putRow(
+        channel.id,
+        GuideRowData(
+          state: _retryingChannelIds.contains(channel.id)
+              ? GuideLoadState.retrying
+              : GuideLoadState.loading,
+        ),
+      );
       final cachedSchedule = _schedules.remove(channel.id);
       final loading = cachedSchedule == null
           ? _loadScheduleWithTimeout(channel)
@@ -646,13 +776,23 @@ class GuideController extends ChangeNotifier {
                   !_channelById.containsKey(channel.id)) {
                 return;
               }
+              _loadingGenerationByChannel.remove(channel.id);
+              _failedChannelIds.remove(channel.id);
+              _retryingChannelIds.remove(channel.id);
               _putSchedule(channel.id, schedule);
               _putRow(channel.id, _projectedRow(channel, schedule));
               _updateFocusAndSelection(channel.id);
               notifyListeners();
             },
             onError: (Object error) {
-              if (_disposed || generation != _generation) return;
+              if (_disposed ||
+                  generation != _generation ||
+                  !_channelById.containsKey(channel.id)) {
+                return;
+              }
+              _loadingGenerationByChannel.remove(channel.id);
+              _retryingChannelIds.remove(channel.id);
+              _failedChannelIds.add(channel.id);
               if (error is TimeoutException) {
                 lineup.diagnostics.add(
                   'guide',
@@ -741,7 +881,21 @@ class GuideController extends ChangeNotifier {
       );
 
   void _updateFocusAndSelection(String channelId) {
-    if (_focusedChannelId == channelId) _selectAtFocusTime();
+    final pending = _pendingProgramFocus;
+    if (pending?.channelId == channelId && _focusedChannelId == channelId) {
+      // Presentation may have moved beyond the retained time while loading.
+      // Resolve the intended airing from the schedule, not the new window.
+      final program = currentProgram(channelId, pending!.time);
+      if (program != null) {
+        _focusTime = pending.time;
+        _focusedProgramId = program.id;
+        _inspectedProgram = program;
+        _pendingProgramFocus = null;
+      }
+    }
+    if (_focusedChannelId == channelId && !_inspectionActive) {
+      _selectAtFocusTime();
+    }
     if (_selectedChannelId != channelId) return;
     final selectedId = _selectedProgramId;
     if (selectedId == null ||
@@ -751,16 +905,18 @@ class GuideController extends ChangeNotifier {
     }
   }
 
-  void _reprojectCachedRows() {
-    final loading = _rows.entries
+  void _reprojectCachedRows({bool preserveErrors = false}) {
+    final retained = _rows.entries
         .where(
           (entry) =>
-              _isLoadInProgress(entry.value.state) &&
+              (_isLoadInProgress(entry.value.state) ||
+                  (preserveErrors &&
+                      entry.value.state == GuideLoadState.error)) &&
               _channelById.containsKey(entry.key),
         )
         .toList(growable: false);
     _rows.clear();
-    for (final entry in loading) {
+    for (final entry in retained) {
       _rows[entry.key] = entry.value;
     }
     for (final entry in _schedules.entries) {
@@ -781,8 +937,15 @@ class GuideController extends ChangeNotifier {
     }
   }
 
-  void _reloadRows({bool clearSchedules = false}) {
+  void _reloadRows({bool clearSchedules = false, bool preserveErrors = false}) {
     if (clearSchedules) {
+      _inspectionActive = false;
+      _inspectedProgram = null;
+      _pendingProgramFocus = null;
+      _failedChannelIds.clear();
+      _retryingChannelIds.clear();
+      _loadingGenerationByChannel.clear();
+      if (_followingLive) _focusTime = _clock();
       _generation++;
       _pendingExplicit.clear();
       _explicitQueuedIds.clear();
@@ -791,7 +954,7 @@ class GuideController extends ChangeNotifier {
       _rows.clear();
       _schedules.clear();
     } else {
-      _reprojectCachedRows();
+      _reprojectCachedRows(preserveErrors: preserveErrors);
     }
     if (clearSchedules) _artwork.clear();
     if (clearSchedules) {
@@ -895,6 +1058,7 @@ class GuideController extends ChangeNotifier {
   }
 
   void _applyFilters() {
+    _pendingProgramFocus = null;
     _updateVisibleChannels();
     if (_visibleChannels.isEmpty) {
       _focusedChannelId = null;
@@ -920,7 +1084,10 @@ class GuideController extends ChangeNotifier {
       _focusedChannelId = _visibleChannels.first.id;
       _focusedProgramId = null;
     }
-    _selectAtFocusTime();
+    _inspectionActive =
+        _inspectedProgram?.id == _focusedProgramId &&
+        _inspectedProgram?.channelId == _focusedChannelId;
+    if (!_inspectionActive) _selectAtFocusTime();
     if (!_visibleIndexById.containsKey(_selectedChannelId)) {
       _selectedChannelId = null;
       _selectedProgramId = null;
@@ -931,6 +1098,10 @@ class GuideController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _pendingProgramFocus = null;
+    _failedChannelIds.clear();
+    _retryingChannelIds.clear();
+    _loadingGenerationByChannel.clear();
     lineup.removeListener(_reconcileLineup);
     _generation++;
     _pendingExplicit.clear();
@@ -965,12 +1136,21 @@ class _GuideLoadDeadline {
 }
 
 class _ArtworkRequest {
-  const _ArtworkRequest(this.key, this.path, this.completer, this.generation);
+  const _ArtworkRequest(
+    this.key,
+    this.path,
+    this.completer,
+    this.generation, {
+    this.width,
+    this.height,
+  });
 
   final String key;
   final Uri path;
   final Completer<Uint8List?> completer;
   final int generation;
+  final int? width;
+  final int? height;
 }
 
 bool _channelEquals(Channel left, Channel right) =>
@@ -1004,10 +1184,16 @@ bool _listEqualsBy<T>(List<T> left, List<T> right, bool Function(T, T) equals) {
 }
 
 DateTime _floorHalfHour(DateTime value) {
-  final minute = value.minute < 30 ? 0 : 30;
-  return value.isUtc
-      ? DateTime.utc(value.year, value.month, value.day, value.hour, minute)
-      : DateTime(value.year, value.month, value.day, value.hour, minute);
+  // Subtract elapsed time from the actual instant, retaining the timezone and
+  // the identity of either repeated local hour during a fall-back transition.
+  return value.subtract(
+    Duration(
+      minutes: value.minute % 30,
+      seconds: value.second,
+      milliseconds: value.millisecond,
+      microseconds: value.microsecond,
+    ),
+  );
 }
 
 int _distanceFrom(DateTime time, GuideProgram program) {

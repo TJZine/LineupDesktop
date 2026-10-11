@@ -92,8 +92,11 @@ A source that supplies only a count is labeled conservatively, such as
 The following decisions are fixed:
 
 - Use recognizable language self-names such as `Español`, `Français`, and
-  `Deutsch`, with a self-named regional qualifier when the supplied tag supports
-  one reliably.
+  `Deutsch`. The approved October 7 polish plan's P3 supersedes the original
+  always-regional primary label: show a supplied regional qualifier in primary
+  text only when it distinguishes same-language tracks of the same type with
+  differing supplied regions. Otherwise retain the region as a secondary fact
+  in the drawer. Compact OSD labels use the same policy.
 - Language leads when present. A meaningful native title is an editorial
   qualifier; it does not replace language.
 - Explicit accessibility and purpose facts outrank codec details.

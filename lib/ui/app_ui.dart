@@ -6,6 +6,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
+import 'lineup_focus.dart';
+
+export 'lineup_controls.dart';
+export 'lineup_focus.dart';
 
 typedef LineupMenuCallback = void Function(
   BuildContext invokerContext,
@@ -18,11 +22,121 @@ abstract final class LineupLayout {
 
   static bool isCompactWidth(double width) => width < compact;
 
-  static double scaleFor(Size size) =>
-      math.max(1.0, math.min(size.width / 1920, size.height / 1080));
+  static EdgeInsets pageInsets(Size size) =>
+      EdgeInsets.all((isCompactWidth(size.width) ? 20.0 : 32.0));
+}
 
-  static EdgeInsets pageInsets(Size size) => EdgeInsets.all(
-    (isCompactWidth(size.width) ? 20.0 : 32.0) * scaleFor(size),
+/// Shared shell geometry is expressed in canvas pixels; LineupCanvas scales it.
+class LineupTopBar extends StatelessWidget {
+  const LineupTopBar({
+    this.onOpenMenu,
+    this.menuFocusNode,
+    this.menuKey,
+    this.trailing,
+    this.inset = 48,
+    this.divider = true,
+    super.key,
+  });
+
+  final LineupMenuCallback? onOpenMenu;
+  final FocusNode? menuFocusNode;
+  final Key? menuKey;
+  final Widget? trailing;
+  final double inset;
+  final bool divider;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final roles = LineupTheme.of(context);
+      final menu = onOpenMenu != null && menuFocusNode != null;
+      final condensed = constraints.maxWidth < 900;
+      final lockup = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/branding/lineup-logo-mark.png',
+            width: 30,
+            height: 30,
+            excludeFromSemantics: true,
+          ),
+          if (!condensed) ...[
+            const SizedBox(width: 14),
+            Text(
+              'LINEUP',
+              style: TextStyle(
+                fontFamily: 'Arial',
+                fontSize: 22,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 3,
+                color: roles.primaryText,
+              ),
+            ),
+          ],
+          if (menu) ...[
+            const SizedBox(width: 14),
+            Icon(Icons.menu, size: 22, color: roles.primaryText),
+          ],
+        ],
+      );
+      return Container(
+        key: const ValueKey('lineup-top-bar'),
+        height: 80,
+        padding: EdgeInsets.symmetric(horizontal: inset),
+        decoration: BoxDecoration(
+          border: divider
+              ? Border(bottom: BorderSide(color: roles.subtleBorder))
+              : null,
+        ),
+        child: Row(
+          children: [
+            if (menu)
+              Builder(
+                builder: (invokerContext) => Tooltip(
+                  message: 'Open Lineup menu',
+                  child: TextButton(
+                    key: menuKey,
+                    focusNode: menuFocusNode,
+                    onPressed: () =>
+                        onOpenMenu!(invokerContext, menuFocusNode!),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    child: lockup,
+                  ),
+                ),
+              )
+            else
+              Semantics(label: 'Lineup', child: lockup),
+            const SizedBox(width: 20),
+            Expanded(child: trailing ?? const SizedBox.shrink()),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// The cap applies to content, with the bar retaining the full window width.
+class LineupContentWidth extends StatelessWidget {
+  const LineupContentWidth({
+    required this.child,
+    this.maxWidth = 1824,
+    this.vertical = 0,
+    super.key,
+  });
+  final Widget child;
+  final double maxWidth;
+  final double vertical;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.symmetric(horizontal: 48, vertical: vertical),
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: SizedBox(width: double.infinity, child: child),
+      ),
+    ),
   );
 }
 
@@ -35,13 +149,12 @@ class LineupNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.error;
     final radius = LineupTheme.of(context).panelRadius;
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Semantics(
       liveRegion: true,
       container: true,
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.all(14 * scale),
+        padding: EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(radius),
@@ -49,8 +162,8 @@ class LineupNotice extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.error_outline, color: color, size: 24 * scale),
-            SizedBox(width: 12 * scale),
+            Icon(Icons.error_outline, color: color, size: 24),
+            SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],
         ),
@@ -66,6 +179,8 @@ class LineupPage extends StatelessWidget {
     this.actions,
     this.titleWidget,
     this.traversalPolicy,
+    this.topBar,
+    this.showTitle = true,
     super.key,
   });
 
@@ -74,6 +189,8 @@ class LineupPage extends StatelessWidget {
   final Widget? actions;
   final Widget? titleWidget;
   final FocusTraversalPolicy? traversalPolicy;
+  final Widget? topBar;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) => FocusTraversalGroup(
@@ -82,57 +199,56 @@ class LineupPage extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = LineupLayout.isCompactWidth(constraints.maxWidth);
-          final size = Size(constraints.maxWidth, constraints.maxHeight);
-          final scale = LineupLayout.scaleFor(size);
-          return Theme(
-            data: Theme.of(context).copyWith(
-              textTheme: Theme.of(context).textTheme
-                  .apply(fontSizeFactor: scale),
-            ),
-            child: DefaultTextStyle(
-              style: Theme.of(context).textTheme.bodyMedium!
-                  .apply(fontSizeFactor: scale),
-              child: Padding(
-                padding: LineupLayout.pageInsets(size),
-                child: Column(
-                  key: const ValueKey('lineup-page-content'),
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (compact)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (titleWidget != null && actions != null) ...[
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: actions,
-                            ),
-                            const SizedBox(height: 16),
-                            titleWidget!,
-                          ] else ...[
-                            titleWidget ?? _PageTitle(title),
-                            if (actions != null) ...[
-                              const SizedBox(height: 16),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: actions,
-                              ),
+
+          return DefaultTextStyle(
+            style: Theme.of(context).textTheme.bodyMedium!,
+            child: Column(
+              children: [
+                ?topBar,
+                Expanded(
+                  child: LineupContentWidth(
+                    vertical: 24,
+                    child: Column(
+                      key: const ValueKey('lineup-page-content'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (showTitle && compact)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (titleWidget != null && actions != null) ...[
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: actions,
+                                ),
+                                const SizedBox(height: 16),
+                                titleWidget!,
+                              ] else ...[
+                                titleWidget ?? _PageTitle(title),
+                                if (actions != null) ...[
+                                  const SizedBox(height: 16),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: actions,
+                                  ),
+                                ],
+                              ],
                             ],
-                          ],
-                        ],
-                      )
-                    else
-                      Row(
-                        children: [
-                          Expanded(child: titleWidget ?? _PageTitle(title)),
-                          ?actions,
-                        ],
-                      ),
-                    SizedBox(height: 24 * scale),
-                    Expanded(child: child),
-                  ],
+                          )
+                        else if (showTitle)
+                          Row(
+                            children: [
+                              Expanded(child: titleWidget ?? _PageTitle(title)),
+                              ?actions,
+                            ],
+                          ),
+                        if (showTitle) SizedBox(height: 24),
+                        Expanded(child: child),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           );
         },
@@ -193,7 +309,6 @@ class LineupEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
       return SingleChildScrollView(
         child: ConstrainedBox(
           constraints: BoxConstraints(
@@ -204,16 +319,16 @@ class LineupEmptyState extends StatelessWidget {
           child: Center(
             child: Card(
               child: Padding(
-                padding: EdgeInsets.all(32 * scale),
+                padding: EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       icon,
-                      size: 48 * scale,
+                      size: 48,
                       color: Theme.of(context).colorScheme.primary,
                     ),
-                    SizedBox(height: 16 * scale),
+                    SizedBox(height: 16),
                     Semantics(
                       header: true,
                       child: Text(
@@ -222,12 +337,9 @@ class LineupEmptyState extends StatelessWidget {
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                     ),
-                    SizedBox(height: 8 * scale),
+                    SizedBox(height: 8),
                     Text(message, textAlign: TextAlign.center),
-                    if (action != null) ...[
-                      SizedBox(height: 24 * scale),
-                      action!,
-                    ],
+                    if (action != null) ...[SizedBox(height: 24), action!],
                   ],
                 ),
               ),
@@ -277,8 +389,12 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(focusRadius),
             border: Border.all(
-              color: _focused ? roles.focusBorder : Colors.transparent,
-              width: _focused ? roles.focusBorderWidth : 1,
+              color: LineupFocusScope.visible(context, _focused)
+                  ? roles.focusBorder
+                  : Colors.transparent,
+              width: LineupFocusScope.visible(context, _focused)
+                  ? roles.focusBorderWidth
+                  : 1,
             ),
           ),
           child: Card(
@@ -289,7 +405,7 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
                 color: widget.selected
                     ? roles.progressFill
                     : roles.subtleBorder,
-                width: widget.selected ? 2 : 1,
+                width: 1,
               ),
             ),
             child: InkWell(
@@ -324,9 +440,10 @@ Future<bool> confirmDestructiveAction(
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
+            style: LineupTheme.buttonStyle(
+              LineupTheme.of(context),
+              LineupButtonTier.destructive,
+              focusVisible: LineupFocusScope.visible(context),
             ),
             onPressed: () => Navigator.pop(context, true),
             child: Text(confirmLabel),
@@ -363,6 +480,7 @@ class ClearLogoImage extends StatefulWidget {
     this.excludeFromSemantics = false,
     this.maximumSize,
     this.minimumVisibleSize,
+    this.maximumVisibleHeight,
     super.key,
   });
 
@@ -373,6 +491,10 @@ class ClearLogoImage extends StatefulWidget {
   final bool excludeFromSemantics;
   final Size? maximumSize;
   final Size? minimumVisibleSize;
+
+  /// Optional cap on the actual alpha-bearing artwork after padding is cropped.
+  /// Existing consumers retain their original contain scale when omitted.
+  final double? maximumVisibleHeight;
 
   @override
   State<ClearLogoImage> createState() => _ClearLogoImageState();
@@ -429,7 +551,9 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
             ),
           );
           final minimum = widget.minimumVisibleSize;
-          if (minimum == null) return image();
+          if (minimum == null && widget.maximumVisibleHeight == null) {
+            return image();
+          }
           return FutureBuilder<Rect?>(
             future: _visibleFraction ??= _decodeVisibleFraction(widget.bytes),
             builder: (context, visible) {
@@ -438,17 +562,23 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
                   fraction == null) {
                 return widget.fallback;
               }
-              final fitted = applyBoxFit(
+              var fitted = applyBoxFit(
                 BoxFit.contain,
                 size,
                 constraints.biggest,
               ).destination;
-              if (fitted.width * fraction.width < minimum.width ||
-                  fitted.height * fraction.height < minimum.height) {
+              final visibleCap = widget.maximumVisibleHeight;
+              if (visibleCap != null &&
+                  fitted.height * fraction.height > visibleCap) {
+                fitted *= visibleCap / (fitted.height * fraction.height);
+              }
+              if (minimum != null &&
+                  (fitted.width * fraction.width < minimum.width ||
+                      fitted.height * fraction.height < minimum.height)) {
                 return widget.fallback;
               }
-              // Keep the original fit scale; remove padding without enlarging
-              // the artwork or moving the independent text fallback.
+              // Preserve the contain scale unless the caller caps visible ink;
+              // crop padding without enlarging the artwork or moving fallback.
               return SizedBox(
                 width: fitted.width * fraction.width,
                 height: fitted.height * fraction.height,

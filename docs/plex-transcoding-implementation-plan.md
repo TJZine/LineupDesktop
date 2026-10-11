@@ -131,12 +131,15 @@ behavior it is labelled an assumption until confirmed.
    **Output codec and HDR: decided 2026-10-03.**
    - Follow the server's own setting. Lineup's transcode target always declares
      both H.264 and HEVC.
-   - When the server has "Enable HEVC video Encoding" on (Plex Pass and
+   - The intended mapping is HEVC with HDR preserved when the server has
+     "Enable HEVC video Encoding" on (Plex Pass and
      hardware encoding;
      [Plex forum announcement](https://forums.plex.tv/t/hevc-encoding-forum-preview/888127)),
-     it sends HEVC and preserves HDR.
-   - Otherwise it sends H.264 and tone-maps to SDR itself.
-   - P0 observed both outcomes (question 9).
+     and H.264 with server-side tone mapping to SDR otherwise. This
+     preference-controlled mapping awaits the P0b preference reads and matched
+     decision-output observations; the approved policy remains unchanged.
+   - P0 observed HEVC/PQ HDR and H.264/SDR under different target profiles
+     (question 9), rather than isolating preference-controlled selection.
    - libmpv decodes either and tone-maps HDR locally for SDR displays. HDR
      presentation stays a physical acceptance item.
 4. **Track changes during a session.** In a session, the server chooses the
@@ -806,11 +809,13 @@ these no-timeline probes, so its LAN/remote classification and agreement with
 Lineup's `local=false` flag are **not measured**. Discovery provided no relay
 connection: relay is **not tested**, with no simulation.
 
-**Proposed Remote default: 720p · 4 Mbps.** Both tested tiers sustained
-playback; 4 Mbps is the conservative proposed ceiling for an unmeasured remote
-uplink and is not a Plex-official default claim. The maintainer must confirm
-the product choice. The non-local original-file HTTP 503 reinforces treating
-a Direct Play decision and successful original playback as distinct results.
+**Superseded P0 proposal: 720p · 4 Mbps.** Both tested tiers sustained
+playback; 4 Mbps was the conservative proposed ceiling for an unmeasured remote
+uplink and was not a Plex-official default claim. [Decision 2](#product-decisions)
+subsequently selected 720p · 2 Mbps; confirmation against a current official
+app remains required before P4. The non-local original-file HTTP 503 reinforces
+treating a Direct Play decision and successful original playback as distinct
+results.
 
 ### 13. Direct Play and reference restoration
 

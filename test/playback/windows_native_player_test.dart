@@ -77,6 +77,24 @@ void main() {
       await load;
     });
 
+    test('position events reuse the immutable track snapshot', () async {
+      final events = <PlayerEvent>[];
+      final subscription = player.events.listen(events.add);
+      addTearDown(subscription.cancel);
+      await snapshot([identity]);
+      final tracks = player.tracks;
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId,
+        'name': 'time-pos',
+        'value': 1.25,
+      });
+      expect(events, hasLength(2));
+      expect(identical(events.first.tracks, tracks), isTrue);
+      expect(identical(events.last.tracks, tracks), isTrue);
+      expect(() => tracks.clear(), throwsUnsupportedError);
+    });
+
     test('old fields do not fabricate new facts', () async {
       const oldFacts = {
         'title': 'Synthetic mix',
@@ -345,6 +363,78 @@ void main() {
       await player.dispose();
       await player.initialize();
       expect(calls.where((call) => call.method == 'initialize'), hasLength(2));
+    },
+  );
+
+  test('maps a correlated native ended state to PlayerState.ended', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    final events = <PlayerEvent>[];
+    final subscription = player.events.listen(events.add);
+    addTearDown(subscription.cancel);
+    await player.initialize();
+    final load = player.load(Uri.parse('file:///ended.mp4'), generation: 42);
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments!['loadId']! as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+    });
+    await load;
+
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'ended',
+      'message': 'Playback ended',
+    });
+
+    expect(player.status.state, PlayerState.ended);
+    expect(player.status.message, 'Playback ended');
+    expect(events.last.status.state, PlayerState.ended);
+    expect(events.last.generation, 42);
+  });
+
+  test(
+    'leaves stopped state unchanged for a correlated terminal event',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(Uri.parse('file:///stopped.mp4'));
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments!['loadId']! as int;
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+      });
+      await load;
+
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'stopped',
+        'message': 'Playback stopped',
+      });
+
+      expect(player.status.state, PlayerState.stopped);
+      expect(player.status.message, 'Playback stopped');
     },
   );
 
@@ -926,6 +1016,12 @@ void main() {
         'type': 'state',
         'loadId': firstId,
         'state': 'playing',
+      });
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': firstId,
+        'state': 'ended',
+        'message': 'Playback ended',
       });
       await _sendNativeEvent(messenger, {'type': 'state', 'state': 'playing'});
       expect(player.status.state, PlayerState.loading);
@@ -1558,13 +1654,21 @@ void main() {
       'state': 'playing',
     });
     await second;
-    await _sendNativeEvent(messenger, {
-      'type': 'property',
-      'loadId': secondId,
-      'name': 'pause',
-      'value': true,
-    });
+    // mpv does not repeat pause=true after FILE_LOADED.
     expect(player.status.state, PlayerState.paused);
+
+    // A subsequent native load resets pause and autoplays, even when there is
+    // no new pause property event before FILE_LOADED.
+    final third = player.load(Uri.parse('file:///third.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    final thirdId = calls.last.arguments!['loadId']! as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': thirdId,
+      'state': 'playing',
+    });
+    await third;
+    expect(player.status.state, PlayerState.playing);
   });
 
   test('rejects a second platform-channel owner', () async {

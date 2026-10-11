@@ -63,12 +63,15 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
     if (!mounted) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
-    final origin = box.localToGlobal(Offset.zero);
+    final bounds = MatrixUtils.transformRect(
+      box.getTransformTo(null),
+      Offset.zero & box.size,
+    );
     final rect = PlayerVideoRect(
-      left: origin.dx,
-      top: origin.dy,
-      width: box.size.width,
-      height: box.size.height,
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
       scale: MediaQuery.devicePixelRatioOf(context),
     );
     if (rect == _lastRect) return;

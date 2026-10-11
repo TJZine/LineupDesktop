@@ -76,23 +76,22 @@ class PlexConnection {
 
 enum PlexConnectionKind { directLocal, directRemote, relay }
 
-String plexConnectionDescription(PlexConnection connection) {
-  final type = plexConnectionKindLabel(plexConnectionKind(connection));
-  final latency = connection.latency;
-  final milliseconds = latency?.inMilliseconds;
-  final warning = milliseconds == null
-      ? null
-      : milliseconds >= 500
-      ? 'Very slow'
-      : milliseconds >= 100
-      ? 'Slow'
-      : null;
+String plexConnectionDescription(PlexConnection? connection) {
+  final latency = connection?.latency;
+  if (connection == null || latency == null) return 'Not measured yet';
+  final milliseconds = latency.inMilliseconds;
   return [
-    type,
+    plexConnectionKindLabel(plexConnectionKind(connection)),
     if (connection.relay) 'Limited',
-    if (milliseconds != null) '$milliseconds ms measured',
-    ?warning,
-  ].join(' • ');
+    if (milliseconds >= 500) 'Very slow',
+    '$milliseconds ms',
+  ].join(' · ');
+}
+
+bool plexConnectionHasWarning(PlexConnection? connection) {
+  final latency = connection?.latency;
+  return latency != null &&
+      (connection!.relay || latency.inMilliseconds >= 500);
 }
 
 PlexConnectionKind plexConnectionKind(PlexConnection connection) =>
@@ -138,6 +137,56 @@ class PlexPlaylistCatalog {
   final Set<String> failedIds;
 }
 
+/// Why all collection membership for a library is unavailable. Individual
+/// transient title failures remain in [PlexCollectionMembership.failedTitles].
+enum PlexCollectionFailure {
+  transient,
+  listingLimitExceeded,
+  memberLimitExceeded,
+  pagingLimitExceeded;
+
+  bool get isScaleLimit => this != transient;
+}
+
+/// Authoritative collection membership for one library. Failed titles have no
+/// published members, even when another collection has the same title.
+class PlexCollectionMembership {
+  const PlexCollectionMembership({
+    this.titlesByMember = const {},
+    this.failedTitles = const {},
+    this.failure,
+  });
+
+  final Map<String, Set<String>> titlesByMember;
+  final Set<String> failedTitles;
+  final PlexCollectionFailure? failure;
+  bool get unavailable => failure != null;
+}
+
+/// Phase durations and redacted counts for one successful library scan. Phases
+/// run sequentially, so [items] is the item-only baseline and the remaining
+/// phases are the time membership and show-genre enrichment add to it.
+typedef PlexLibraryScanTiming = ({
+  Duration items,
+  Duration collections,
+  Duration showGenres,
+  int collectionTitles,
+  int collectionMembers,
+  int shows,
+});
+
+class PlexLibraryScan {
+  const PlexLibraryScan({
+    required this.items,
+    this.collections = const PlexCollectionMembership(),
+    this.timing,
+  });
+
+  final List<PlexMediaItem> items;
+  final PlexCollectionMembership collections;
+  final PlexLibraryScanTiming? timing;
+}
+
 typedef PlexLibraryPageProgress = ({
   int completedPages,
   int completedItems,
@@ -169,6 +218,7 @@ class PlexMediaItem {
     this.libraryId,
     this.parentTitle,
     this.grandparentTitle,
+    this.parentRatingKey,
     this.grandparentRatingKey,
     this.thumbPath,
     this.grandparentThumbPath,
@@ -203,6 +253,7 @@ class PlexMediaItem {
   final String? libraryId;
   final String? parentTitle;
   final String? grandparentTitle;
+  final String? parentRatingKey;
   final String? grandparentRatingKey;
   final String? thumbPath;
   final String? grandparentThumbPath;
@@ -243,4 +294,18 @@ class PlexException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Item paging is followed by collection membership and (for TV) show genres.
+enum PlexLibraryScanPhase { items, collections, showGenres }
+
+/// Catalog discovery has an unknown total; contents settle in bounded batches.
+class PlexPlaylistProgress {
+  const PlexPlaylistProgress({
+    this.completedPlaylists = 0,
+    this.totalPlaylists,
+  });
+
+  final int completedPlaylists;
+  final int? totalPlaylists;
 }

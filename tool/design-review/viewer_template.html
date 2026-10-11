@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lineup Design Review</title>
+<style>
+  :root { --bg:#0d0c0a; --panel:#16140f; --line:#2b261e; --text:#f3e8d2; --muted:#978b76; --accent:#cc9f5b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.4 -apple-system, system-ui, sans-serif; display:grid; grid-template-columns:260px 1fr; height:100vh; }
+  nav { border-right:1px solid var(--line); overflow:auto; padding:12px 0; background:var(--panel); }
+  nav h2 { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:14px 16px 4px; }
+  nav button { display:block; width:100%; text-align:left; background:none; border:0; color:var(--text); padding:5px 16px; font:inherit; cursor:pointer; }
+  nav button:hover { background:#1f1b15; }
+  nav button.on { background:#2b2419; color:var(--accent); }
+  main { display:grid; grid-template-rows:auto 1fr; min-width:0; }
+  header { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); }
+  header .title { font-weight:600; margin-right:auto; }
+  .seg { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .seg button { background:none; border:0; border-right:1px solid var(--line); color:var(--muted); padding:5px 9px; font:inherit; cursor:pointer; }
+  .seg button:last-child { border-right:0; }
+  .seg button.on { background:#2b2419; color:var(--text); }
+  .seg button:disabled { opacity:.3; cursor:default; }
+  #stage { overflow:auto; padding:16px; }
+  .frame { position:relative; display:inline-block; background-size:cover; background-position:center; line-height:0; outline:1px solid var(--line); }
+  .frame.dark { background-image:url(frame-dark.png); }
+  .frame.bright { background-image:url(frame-bright.png); }
+  .frame.checker { background:repeating-conic-gradient(#555 0 25%, #888 0 50%) 0 0/24px 24px; }
+  .fit .frame img { max-width:calc(100vw - 300px); max-height:calc(100vh - 110px); }
+  .meta { color:var(--muted); margin:8px 0 0; }
+  kbd { border:1px solid var(--line); border-radius:3px; padding:0 4px; }
+</style>
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <header>
+    <span class="title" id="title"></span>
+    <div class="seg" id="res"></div>
+    <div class="seg" id="bg"></div>
+    <div class="seg" id="zoom"></div>
+  </header>
+  <div id="stage" class="fit"><div class="frame" id="frame"><img id="img" alt=""></div><p class="meta" id="meta"></p></div>
+</main>
+<script>
+const DATA = /*DATA*/;
+const state = { i: 0, config: '1920x1080', bg: 'dark', zoom: 'fit' };
+try { Object.assign(state, JSON.parse(localStorage.getItem('review') || '{}')); } catch {}
+const $ = id => document.getElementById(id);
+function seg(el, options, key) {
+  el.innerHTML = '';
+  for (const [value, label, disabled] of options) {
+    const b = document.createElement('button');
+    b.textContent = label; b.disabled = !!disabled;
+    b.className = state[key] === value ? 'on' : '';
+    b.onclick = () => { state[key] = value; render(); };
+    el.append(b);
+  }
+}
+function render() {
+  state.i = Math.max(0, Math.min(DATA.items.length - 1, state.i));
+  const item = DATA.items[state.i];
+  if (!item.configs.includes(state.config)) state.config = item.configs.includes('1920x1080') ? '1920x1080' : item.configs[0];
+  try { localStorage.setItem('review', JSON.stringify(state)); } catch {}
+  const nav = $('nav'); nav.innerHTML = ''; let family = '';
+  DATA.items.forEach((it, i) => {
+    if (it.family !== family) { family = it.family; const h = document.createElement('h2'); h.textContent = family; nav.append(h); }
+    const b = document.createElement('button');
+    b.textContent = it.name.replace('--', ' · '); b.className = i === state.i ? 'on' : '';
+    b.onclick = () => { state.i = i; render(); };
+    nav.append(b);
+    if (i === state.i) b.scrollIntoView({ block: 'nearest' });
+  });
+  seg($('res'), DATA.configs.map(c => [c, c, !item.configs.includes(c)]), 'config');
+  seg($('bg'), [['dark', 'Dark footage'], ['bright', 'Bright footage'], ['checker', 'Alpha']], 'bg');
+  seg($('zoom'), [['fit', 'Fit'], ['actual', '1:1']], 'zoom');
+  $('title').textContent = `${item.family} — ${item.name.replace('--', ' · ')}`;
+  $('frame').className = 'frame ' + state.bg;
+  $('stage').className = state.zoom === 'fit' ? 'fit' : '';
+  const src = `captures/${state.config}/${item.name}.png`;
+  $('img').src = src;
+  $('img').onload = e => { $('meta').textContent = `${src} · ${e.target.naturalWidth}×${e.target.naturalHeight}px`; };
+}
+document.addEventListener('keydown', e => {
+  const item = DATA.items[state.i];
+  if (e.key === 'ArrowDown' || e.key === 'j') state.i++;
+  else if (e.key === 'ArrowUp' || e.key === 'k') state.i--;
+  else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    const list = item.configs, at = list.indexOf(state.config);
+    state.config = list[(at + (e.key === 'ArrowRight' ? 1 : list.length - 1)) % list.length];
+  } else return;
+  e.preventDefault(); render();
+});
+render();
+</script>
+</body>
+</html>

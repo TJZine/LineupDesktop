@@ -168,6 +168,15 @@ macOS alpha checks when the Guide surface needs pixel verification:
 TZ=America/New_York flutter test test/app/guide_opacity_test.dart
 ```
 
+The named Guide Eastern-DST prerequisite test in
+[`test/guide/guide_controller_test.dart`](../test/guide/guide_controller_test.dart)
+must execute and pass when the machine's effective local offsets match its
+Eastern cases. It explicitly skips incompatible offsets so another host does
+not turn a portability limitation into a false failure; that skip is
+portability evidence only, not a timezone-independent suite result. The
+Windows OS timezone governs Windows behavior, and `TZ` alone cannot establish
+the canonical Windows result.
+
 The five screenshot goldens are optional local visual-review checks outside the
 default `test/` tree. They use Flutter's default exact comparator and remain
 useful for intentional visual changes; run them explicitly when reviewing a

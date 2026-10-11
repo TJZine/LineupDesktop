@@ -77,24 +77,26 @@ blanket decoration. Focus light and on-air coral retain separate meanings.
 
 ## Player: Protected Baseline
 
-The current production OSD and Now Playing shelf are authoritative layouts.
-The Cinema Continuity direction applies color roles only unless a later
-structural proposal is approved separately.
+The OSD and its expanded Now Playing state are the approved structural
+baseline. The October second pass in
+[the decision log](../docs/desktop-ui-second-pass.md) supersedes the earlier
+floating shelf, with matched real-Flutter renders approved before integration.
+Future changes preserve this baseline unless separately approved.
 
 Preserve:
 
-- OSD surface geometry, safe-area insets, vertical placement, identity block,
-  title/status hierarchy, action grouping and order, timing row, full-width
-  progress lane, channel bug, focus behavior, and auto-hide behavior.
-- Now Playing shelf width and height rules, poster split, information order,
-  badges, cast treatment, progress placement, channel bug, entry/exit motion,
-  and input behavior.
-- Existing Player radii and spacing, even where other Cinema surfaces adopt the
-  8px system radius.
-
-The approved Player treatment changes only warm-black scrims and surfaces,
-aged-paper text hierarchy, sepia borders/tracks, and projector-amber progress
-and interaction color.
+- The bottom OSD's safe-area insets, title/status hierarchy, five standard
+  actions and optional DVR controls, timing row, full-width progress lane,
+  channel bug, keyboard focus, and auto-hide behavior.
+- Now Playing expands the same bottom panel upward and shares its actions,
+  Up Next, timing and progress. Preserve its poster/text split, compact title
+  artwork, single metadata line, format chips, three-line synopsis, and at most
+  four cast members with roles in one row. Runtime decoder/dimension facts
+  belong in Diagnostics.
+- The shared themed overlay material, per-level transparency and feather only
+  beyond text; preserve spacing, scalable controls and Reduce Motion behavior.
+- `I` or `Down` expands Now Playing; `I`, `Enter`, Close or Back/Esc collapses it
+  to the OSD. Preserve artwork currentness and text/portrait fallbacks.
 
 Any future Player structure proposal requires matched before/after renders from
 the real Flutter widgets at 1280x720 and 1920x1080, using identical content,
@@ -111,9 +113,9 @@ onboarding/management/player-panel refinements. Use its
 [visual manifest](../docs/design/desktop-ui/README.md) for selected compositions and
 later prose refinements. These are approved designs, not implemented/validated claims.
 
-Cinema Continuity tokens remain authoritative. The protected OSD/Now Playing
-structural baseline above still applies; the small approved timer invocation and
-shared edge-blending principle do not authorize a broader Player redesign.
+Cinema Continuity tokens remain authoritative where the October second-pass
+decision log is silent. The protected Player baseline above reflects the
+separately approved expanded OSD; earlier shelf-specific rules are superseded.
 
 
 ## September 12 collaborative Diagnostics refinement

@@ -1,8 +1,9 @@
 # Guide Freshness and Collection Revalidation Investigation
 
-**Status:** Deferred investigation. Start after the current UI refresh lands and
-its Guide integration is stable. This is a bug report and investigation brief,
-not evidence that Desktop has the upstream defect or a pre-approved port.
+**Status (October 8, 2026):** Scenario A is resolved by canonical shuffle input
+with deterministic regression evidence. Scenario B, live-session collection
+refresh and live/physical observations remain deferred. The upstream references
+below describe investigation context, not a compatibility target.
 
 ## Why this matters
 
@@ -29,10 +30,10 @@ collection.
 
 ## Reported Desktop symptoms to investigate
 
-The following are hypotheses to reproduce, classify, or disprove on Desktop;
-they are not current product claims.
+Scenario A was confirmed by the October 7 review and resolved on October 8.
+Scenario B remains an investigation brief, not a current product claim.
 
-### A. Cold-start source-order drift
+### A. Cold-start source-order drift — resolved October 8, 2026
 
 1. Create a shuffled collection-derived channel with stable item identities and
    durations.
@@ -42,9 +43,48 @@ they are not current product claims.
 4. Compare the current program, its elapsed position, and a future Guide window
    at the same wall-clock time before and after restart.
 
-**Suspected impact:** the Guide appears to have shifted or becomes inconsistent
-with a viewer's expected channel rhythm. The existing deterministic seed alone
-does not protect against this if its input list is unstable.
+**Confirmed mechanism and correction:** at implementation starting SHA
+`4f89dcad5d94907226eb8dbf52054387eb483254`, legacy shuffle consumed the supplied
+list directly, and v2 shuffle retained that list as its cycle input. The new
+permutation regressions failed on that source. `buildSchedule` now copies and
+sorts shuffle input by `ChannelItem.id` before either legacy shuffle or v2 cycle
+shuffle; duration breaks ties between differing snapshots of the same identity.
+The generic seeded shuffle and sequential/block policies remain unchanged.
+
+**Identity and occurrence evidence:** PMS parsing uses the media `ratingKey` as
+`PlexMediaItem.id`, which `channelItemFor` carries unchanged. It identifies a
+whole program within the selected server, including all multipart parts. Library
+resolution already deduplicates inventory records by this ID. Playlists and
+mixed sources intentionally retain repeated occurrences of a media ID; sorting
+preserves every occurrence and its duration instead of manufacturing uniqueness
+by dropping repeats. Equal-ID/equal-duration occurrences are interchangeable for
+schedule timing. No new persisted identity or source shape is needed.
+
+**Accepted update behavior:** the user accepted a one-time schedule shift for
+existing shuffled channels on the first launch after this update, without a
+migration flag. Channel seeds and anchors remain unchanged. Already persisted
+legacy transition cycles keep their frozen order until their stored boundary;
+canonical shuffle applies to the subsequent cycles. Real membership or duration
+changes still change the schedule; this correction only removes response-order
+sensitivity for an unchanged set of occurrences and durations.
+
+**Actual portable evidence (October 8):**
+`TZ=America/New_York flutter test --no-pub test/channels/scheduler_test.dart test/channels/content_resolver_test.dart test/channels/schedule_worker_test.dart`
+passed **54 tests**, and `flutter analyze` reported no issues. The regressions
+cover all permutations of small fixtures across legacy/v2 shuffle, negative and
+far-future cycles, ordered IDs, offsets, current program/start/end/elapsed,
+windows spanning cycles, repeated IDs including differing durations, unchanged
+sequential/block ordering, membership and duration negative controls, unchanged
+seeds/anchors, and a deliberately noncanonical frozen transition cycle. Fresh
+reordered collection-library, playlist and mixed inventories also pass through
+the production isolate worker and the actual Guide controller's current-program
+and window projection using existing synthetic fixtures. Logs are in ignored
+`build/remediation-2026-10-08/P12/`.
+
+This is deterministic source-order continuity evidence. It does not establish
+actual Plex response permutation frequency, live refresh, automatic membership
+revalidation, native playback or physical Windows cold-start acceptance. H2 and
+the separately scoped physical session remain pending.
 
 ### B. Automated collection mutation/recreation
 
@@ -65,29 +105,53 @@ cause remain unproven until the Desktop path is observed.
 
 ## Current Desktop facts (inspect again before changing code)
 
+### October 7, 2026 collection inventory implementation
+
+Collection inventory now comes from Plex's collection listing and children
+endpoints, including smart collections and show/season members inherited by
+episodes. Scanned library items replace their Collection tags with this
+authoritative membership. Saved `LibrarySource` collection filters still identify
+titles within their library; no collection `ratingKey` is persisted and no
+migration is required. A collection deleted and recreated under the same title
+resolves after the next complete scan. A children 404 triggers one bounded re-list
+during that scan; confirmed deletion, per-title failure, and unavailable membership
+remain distinct. Synthetic transport and controller tests cover same-title
+recreation and saved schedule/content continuity. Live-session refresh,
+real membership-change policy and live Plex acceptance remain deferred.
+Source-order drift is resolved by the October 8 correction above.
+
+Channel Setup Update review distinguishes confirmed source absence from incomplete
+discovery. Only unmatched builder-owned channels whose every dependency has
+complete scan evidence and resolves to zero playable items are offered under
+**Source not found**. Keep is the default; removal is explicit and uses the
+existing atomic channel-save path. Failed collection titles, unavailable
+membership, failed/unavailable playlists, unscanned libraries, and incomplete
+`MixedSource` dependencies retain their channels. A source found by a newly
+settled retry cannot be removed using an older empty inventory. This foreground
+review adds neither live-session refresh nor collection rebinding.
+
 These observations are from the current source, not an assertion that they are
 sufficient or correct under the above scenarios.
 
 - Collection-generated channels are currently persisted as a `LibrarySource`
   with the collection's **name** in `filters['collection']`; Desktop does not
   currently persist an upstream-style collection key for this source. The
-  resolver matches that name against the `collections` tags carried by every
-  scanned media item. See [channel sources](../lib/channels/channel.dart) and
+  resolver matches that name against the authoritative `collections` membership
+  annotated onto scanned library items. See [channel sources](../lib/channels/channel.dart) and
   [content resolution](../lib/channels/content_resolver.dart).
 - At selected-server restoration, the controller reloads selected libraries
   before declaring the app ready when persisted channels exist. It then builds
   schedules from the newly loaded in-memory media/playlist inventory. See
   [server restoration](../lib/app/lineup_controller.dart) and
   [schedule worker](../lib/channels/schedule_worker.dart).
-- `buildSchedule` applies `seededShuffle` directly to the supplied content. It
-  does not first canonicalize by a stable media identity. This makes an
-  order-permutation reproduction plausible for `PlaybackMode.shuffle`; block
-  ordering also needs its own analysis because it groups and iterates the
-  supplied sequence. See [scheduler](../lib/channels/scheduler.dart).
+- `buildSchedule` canonicalizes shuffle occurrences by stable media ID and
+  duration before seeded ordering, including the v2 cycle input. Sequential and
+  block modes still consume their supplied order under their existing policies.
+  See [scheduler](../lib/channels/scheduler.dart).
 - The current collection filter is exact name matching. A recreated collection
   with the same name may therefore continue to work after a complete fresh
   inventory scan, unlike upstream's key-based failure. Conversely, a rename,
-  incomplete/stale tag inventory, different case, duplicate names, or a scan
+  incomplete inventory, different case, duplicate names, or a scan
   failure could behave differently. Do not assume either automatic recovery or
   a 404 failure without a Desktop reproduction.
 - Desktop's public model documents bounded startup/channel-setup scanning and
@@ -175,8 +239,8 @@ contracts rather than importing upstream cache machinery.
 
 | Question | Evidence required before design | Do not assume |
 | --- | --- | --- |
-| Does an identical item set in a different Plex order change a Desktop shuffled schedule? | A deterministic test and/or redacted cold-start reproduction that permutes only input order. | That the seeded PRNG alone provides continuity. |
-| Which stable identity is valid for all Desktop schedule inputs? | Source inspection plus duplicate/multipart/mixed-source tests. | That a display title or collection name is unique. |
+| Does an identical item set in a different Plex order change a Desktop shuffled schedule? | Confirmed before correction; October 8 permutation regressions now prove invariance. Live frequency/physical restart remain pending. | That the seeded PRNG alone provides continuity. |
+| Which stable identity is valid for all Desktop schedule inputs? | October 8 parser/resolver trace and multipart/playlist/mixed tests establish media ID, retaining intentional occurrences. | That a display title, collection name, or occurrence list is unique. |
 | Does a recreated same-name collection become unavailable on Desktop? | Controlled before/after inventory and resolver evidence. | Upstream's key-based 404 applies to Desktop. |
 | Does Desktop observe an automated collection change while it remains open? | A bounded live-session experiment and call-path trace. | Startup revalidation implies periodic refresh. |
 | Should real membership/duration changes retain today's schedule, shift predictably, or take effect at a boundary? | Product decision after measuring the viewer impact. | Response-order invariance solves actual content drift. |
@@ -184,7 +248,11 @@ contracts rather than importing upstream cache machinery.
 
 ## Required regression coverage if the investigation confirms work
 
-At a minimum, add focused Desktop tests for:
+Items 1–2 and the distinction between response-order drift and real changes in
+item 3 have deterministic regression coverage from the October 8 scenario-A
+correction. A new live membership-change policy remains deferred. Items 4–7 retain their separate startup/revalidation/source-repair
+scope; the correction does not claim new live-refresh behavior. Coverage to
+preserve or extend for future work:
 
 1. same IDs/durations with every meaningful input permutation preserve the
    shuffled schedule's ordered IDs, offsets, program-at-time, and Guide window;
@@ -221,9 +289,11 @@ collection names.
 
 ## Suggested handoff
 
-Assign one investigation task after the UI refresh: reproduce the two scenarios
-against the current Desktop source; trace the existing startup, inventory,
-schedule-worker, Guide-cache, and Player coordination paths; then return with
-evidence and a scoped proposal. The assignee should read this brief,
+For future collection-refresh work, investigate scenario B against the current
+Desktop source; trace startup, inventory, schedule-worker, Guide-cache and Player
+coordination paths, then return with evidence and a scoped proposal. Preserve
+scenario A's deterministic continuity regressions and accepted update behavior;
+collect its remaining live/physical observations separately. The assignee should
+read this brief,
 [Architecture](architecture.md), and the current source first. The upstream
 commits are context, not a substitute for inspecting Desktop.
