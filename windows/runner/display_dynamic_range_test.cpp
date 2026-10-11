@@ -245,6 +245,31 @@ void ExternalChanges() {
         "release does not reverse an already restored external state");
 }
 void RestoreFailureAndInheritance() {
+  Fixture queued;
+  queued.Request(1, true, DisplayState::hdr);
+  queued.restart = true;
+  queued.Request(2, false, DisplayState::unknown);
+  Check(queued.api.writes.size() == 1 && queued.engine.HasOwnership() &&
+            queued.guardian->disarms == 0,
+        "already queued same-target restart skips restoration");
+  queued.Request(3, true, DisplayState::hdr);
+  Check(queued.api.writes.size() == 1 && queued.guardian->arms == 1 &&
+            queued.guardian->last.original == DisplayState::sdr,
+        "queued restart inherits original and matching state without writes");
+  queued.restart = false;
+  queued.Request(4, false, DisplayState::unknown);
+  Check(queued.api.writes.size() == 2 && !queued.engine.HasOwnership() &&
+            queued.api.displays[1].state == DisplayState::sdr,
+        "queued restart eventually releases the inherited original");
+  Fixture moved;
+  moved.Request(1, true, DisplayState::hdr);
+  moved.restart = true;
+  moved.api.mapping = {b, nullptr};
+  moved.Request(2, false, DisplayState::unknown);
+  Check(moved.api.writes.size() == 2 &&
+            moved.api.displays[1].state == DisplayState::sdr,
+        "queued restart on another target does not skip old-target restore");
+
   Fixture failed;
   failed.Request(1, true, DisplayState::hdr);
   failed.api.accept = false;
@@ -261,10 +286,11 @@ void RestoreFailureAndInheritance() {
   // A start arrives while a restore is blocked in the Windows setter.
   inherit.api.on_set = [&inherit](auto, auto) { inherit.restart = true; };
   inherit.Request(2, false, DisplayState::unknown);
-  Check(inherit.engine.HasOwnership() && inherit.guardian->disarms == 0,
+  Check(inherit.api.writes.size() == 2 && inherit.engine.HasOwnership() &&
+            inherit.guardian->disarms == 0,
         "inflight restart retains original");
   inherit.Request(3, true, DisplayState::hdr);
-  Check(inherit.guardian->arms == 1 &&
+  Check(inherit.api.writes.size() == 3 && inherit.guardian->arms == 1 &&
             inherit.guardian->last.original == DisplayState::sdr,
         "restart inherits guardian and original");
   inherit.restart = false;

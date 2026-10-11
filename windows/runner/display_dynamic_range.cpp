@@ -411,6 +411,11 @@ void DisplayMatchingEngine::Release(Record& record) {
     record.owned = false;
     return;
   }
+  if (restart_pending_ && restart_pending_()) {
+    const auto mapping = api_.MapWindow(window_);
+    if (mapping.target && *mapping.target == own.target)
+      return;
+  }
   if (record.observed.state != own.original &&
       !Write(record, own.original, true))
     return;
