@@ -65,6 +65,28 @@ void main() {
     f.close();
   });
 
+  testWidgets('identical reports do not notify or disturb hold settlement', (
+    tester,
+  ) async {
+    final f = _Fixture();
+    f.start();
+    f.decode();
+    f.report();
+    final changed = f.changes;
+    f.report();
+    expect(f.changes, changed);
+    expect(f.policy.holdActive, isTrue);
+    f.report(outcome: DisplayMatchingOutcome.matched, wrote: true);
+    expect(f.changes, changed + 1);
+    await f.elapse(tester, const Duration(seconds: 1));
+    f.report(outcome: DisplayMatchingOutcome.matched, wrote: true);
+    expect(f.changes, changed + 1);
+    await f.elapse(tester, const Duration(milliseconds: 500));
+    expect(f.player.plays, 1);
+    expect(f.policy.holdActive, isFalse);
+    f.close();
+  });
+
   for (final exit in [
     'matched',
     'failed',
@@ -392,8 +414,15 @@ void main() {
 
 class _Fixture {
   _Fixture() {
-    policy = DisplayMatching(player: player, clock: () => now, changed: () {});
+    policy = DisplayMatching(
+      player: player,
+      clock: () => now,
+      changed: () {
+        changes++;
+      },
+    );
   }
+  int changes = 0;
   final player = _Player();
   late final DisplayMatching policy;
   DateTime now = DateTime.utc(2026);

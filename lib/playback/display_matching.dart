@@ -174,7 +174,7 @@ class DisplayMatching {
   }
 
   void receive(DisplayMatchingReport value) {
-    if (value.revision < report.revision) return;
+    if (value.revision < report.revision || value == report) return;
     report = value;
     if (value.revision >= _sessionRevision &&
         value.session != DisplayMatchingSessionState.active) {
