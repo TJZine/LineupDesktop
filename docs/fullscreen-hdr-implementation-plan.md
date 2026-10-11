@@ -141,8 +141,10 @@ uses the native player directly and never changes the overlay.
     revision.
   - If the user had already paused, never auto-resume.
 - **Decision point:** the first `video-params` with a non-null transfer for
-  the active load generation. If readiness reports no selected video track,
-  or none has arrived by the fallback time, treat the state as `unknown`.
+  the active load generation. After readiness, an actual track-list update for
+  that generation with no selected video track resolves `unknown`; a reset
+  empty snapshot at readiness is not evidence of audio-only media. If no
+  transfer has arrived by the fallback time, treat the state as `unknown`.
   - **Fallback time:** 2 seconds after the first position report at or past
     the load's start target, or after readiness when there is no target, and
     never later than 6 seconds after readiness.

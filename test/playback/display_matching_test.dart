@@ -115,7 +115,8 @@ void main() {
             ? null
             : const Duration(seconds: 20),
       );
-      f.policy.ready(1, noVideo: fallback == 'audio');
+      f.policy.ready(1);
+      if (fallback == 'audio') f.policy.tracksUpdated(1, noVideo: true);
       if (fallback == 'target reached') {
         f.policy.observe(
           1,
@@ -205,12 +206,29 @@ void main() {
     });
   }
 
+  testWidgets(
+    'readiness waits for video transfer or an actual no-video update',
+    (tester) async {
+      final f = _Fixture();
+      f.start();
+      f.policy.ready(1);
+      expect(f.policy.holdActive, isTrue);
+      expect(f.player.plays, 0);
+      f.policy.tracksUpdated(0, noVideo: true);
+      expect(f.policy.holdActive, isTrue);
+      f.policy.tracksUpdated(1, noVideo: true);
+      expect(f.policy.holdActive, isFalse);
+      expect(f.player.plays, 1);
+      f.close();
+    },
+  );
+
   testWidgets('late first transfer updates matching after hold fallback', (
     tester,
   ) async {
     final f = _Fixture();
     f.start();
-    f.policy.ready(1, noVideo: false);
+    f.policy.ready(1);
     await f.elapse(tester, const Duration(seconds: 2));
     expect(f.player.plays, 1);
     f.decode();

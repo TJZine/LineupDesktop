@@ -54,6 +54,56 @@ void main() {
     },
   );
 
+  for (final finish in ['settle', 'failed', 'deadline', 'no video']) {
+    testWidgets('readiness before track-list keeps display hold: $finish', (
+      tester,
+    ) async {
+      final f = _ContinuationFixture(player: _DisplayPlayer(deferTracks: true));
+      final p = f.player as _DisplayPlayer;
+      addTearDown(f.close);
+      await f.coordinator.toggleFullscreen();
+      await f.coordinator.loadInitialMedia(
+        Uri.parse('https://synthetic.test/local'),
+      );
+      expect(p.tracks, isEmpty);
+      expect(f.coordinator.displayHoldActive, isTrue);
+      expect(p.plays, 0);
+      if (finish == 'no video') {
+        p.emitStatus(
+          PlayerState.paused,
+          generation: p.loadGenerations.last,
+          tracksUpdated: true,
+        );
+        await tester.pump();
+        expect(p.requests.last.desired, DisplayMatchingState.unknown);
+      } else {
+        p.decode();
+        await tester.pump();
+        expect(p.requests.last.desired, DisplayMatchingState.hdr);
+        expect(f.coordinator.displayHoldActive, isTrue);
+        expect(p.plays, 0);
+        if (finish == 'settle') {
+          p.report(DisplayMatchingOutcome.matched, wrote: true);
+          await tester.pump();
+          f.now = f.now.add(const Duration(milliseconds: 1499));
+          await tester.pump(const Duration(milliseconds: 1499));
+          expect(p.plays, 0);
+          f.now = f.now.add(const Duration(milliseconds: 1));
+          await tester.pump(const Duration(milliseconds: 1));
+        } else if (finish == 'failed') {
+          p.report(DisplayMatchingOutcome.failed);
+          await tester.pump();
+        } else {
+          f.now = f.now.add(const Duration(seconds: 4));
+          await tester.pump(const Duration(seconds: 4));
+        }
+      }
+      expect(f.coordinator.displayHoldActive, isFalse);
+      expect(p.plays, 1);
+      f.coordinator.dispose();
+    });
+  }
+
   for (final trigger in [
     'fullscreen',
     'Guide close',
@@ -6543,7 +6593,11 @@ class _EventPlayer extends _Player {
     );
   }
 
-  void emitStatus(PlayerState state, {int? generation}) {
+  void emitStatus(
+    PlayerState state, {
+    int? generation,
+    bool tracksUpdated = false,
+  }) {
     _events.add(
       PlayerEvent(
         status: PlayerStatus(state: state, message: state.name),
@@ -6552,6 +6606,7 @@ class _EventPlayer extends _Player {
         telemetry: telemetry,
         tracks: tracks,
         generation: generation,
+        tracksUpdated: tracksUpdated,
       ),
     );
   }
@@ -6914,8 +6969,10 @@ class _DisplayPlayer extends _EventPlayer {
   _DisplayPlayer({
     this.audioOnly = false,
     this.failReplacementBeforeReady = false,
+    this.deferTracks = false,
   }) : super(sync: true);
   final bool audioOnly;
+  final bool deferTracks;
   final bool failReplacementBeforeReady;
   final pausedStarts = <bool>[];
   final requests = <DisplayMatchingRequest>[];
@@ -6953,7 +7010,7 @@ class _DisplayPlayer extends _EventPlayer {
     }
     position = Duration.zero;
     telemetry = const PlayerTelemetry();
-    tracks = audioOnly
+    tracks = (audioOnly || deferTracks)
         ? const []
         : const [
             PlayerTrack(id: 1, type: PlayerTrackType.video, selected: true),
@@ -6962,6 +7019,7 @@ class _DisplayPlayer extends _EventPlayer {
     emitStatus(
       startPaused ? PlayerState.paused : PlayerState.playing,
       generation: generation,
+      tracksUpdated: !deferTracks,
     );
   }
 

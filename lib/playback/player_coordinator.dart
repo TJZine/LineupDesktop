@@ -432,6 +432,14 @@ class PlayerCoordinator extends ChangeNotifier {
     _tracks = event.tracks;
     if (event.generation case final generation? when !terminal) {
       _displayMatching.observe(generation, event.telemetry, event.position);
+      if (event.tracksUpdated) {
+        _displayMatching.tracksUpdated(
+          generation,
+          noVideo: !event.tracks.any(
+            (track) => track.type == PlayerTrackType.video && track.selected,
+          ),
+        );
+      }
     }
     if (const {
       PlayerState.idle,
@@ -883,12 +891,7 @@ class PlayerCoordinator extends ChangeNotifier {
       load.readiness.then(
         (_) {
           if (!_ownsLoad(load)) return;
-          _displayMatching.ready(
-            load.generation,
-            noVideo: !player.tracks.any(
-              (track) => track.type == PlayerTrackType.video && track.selected,
-            ),
-          );
+          _displayMatching.ready(load.generation);
           if (displayHoldActive) notifyListeners();
         },
         onError: (Object _) {

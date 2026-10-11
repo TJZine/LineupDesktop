@@ -77,6 +77,43 @@ void main() {
       await load;
     });
 
+    test('only active valid track-list arrivals mark tracks updated', () async {
+      final events = <PlayerEvent>[];
+      final subscription = player.events.listen(events.add);
+      addTearDown(subscription.cancel);
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId,
+        'name': 'time-pos',
+        'value': 0,
+      });
+      expect(events.last.tracksUpdated, isFalse);
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId - 1,
+        'name': 'track-list',
+        'value': [],
+      });
+      expect(events, hasLength(1));
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId,
+        'name': 'track-list',
+        'value': null,
+      });
+      expect(events.last.tracksUpdated, isFalse);
+      await snapshot([]);
+      expect(events.last.tracksUpdated, isTrue);
+      expect(events.last.tracks, isEmpty);
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId,
+        'name': 'time-pos',
+        'value': 1,
+      });
+      expect(events.last.tracksUpdated, isFalse);
+    });
+
     test('position events reuse the immutable track snapshot', () async {
       final events = <PlayerEvent>[];
       final subscription = player.events.listen(events.add);

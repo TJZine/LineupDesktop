@@ -572,7 +572,7 @@ class WindowsNativePlayer implements NativePlayer {
       case 'video-target-params':
         _applyVideoTargetParameters(value);
     }
-    _emit();
+    _emit(tracksUpdated: name == 'track-list' && value is List);
   }
 
   Duration _durationFromSeconds(Object? value) {
@@ -829,7 +829,7 @@ class WindowsNativePlayer implements NativePlayer {
     _emit();
   }
 
-  void _emit() {
+  void _emit({bool tracksUpdated = false}) {
     if (_events.isClosed) return;
     _events.add(
       PlayerEvent(
@@ -838,6 +838,7 @@ class WindowsNativePlayer implements NativePlayer {
         duration: _duration,
         telemetry: _telemetry,
         tracks: _tracks,
+        tracksUpdated: tracksUpdated,
         generation: _activeGeneration,
       ),
     );

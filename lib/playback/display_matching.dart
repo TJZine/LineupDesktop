@@ -45,6 +45,7 @@ class DisplayMatching {
   int? _load;
   Duration? _target;
   DateTime? _ready;
+  bool? _noVideo;
   DateTime? _positionReached;
   bool _decided = false;
   // A fallback ends the hold, but does not discard a later first decoded fact.
@@ -108,6 +109,7 @@ class DisplayMatching {
     _load = generation;
     _target = target;
     _ready = null;
+    _noVideo = null;
     _positionReached = null;
     _decided = false;
     _transferKnown = false;
@@ -124,11 +126,19 @@ class DisplayMatching {
     return paused;
   }
 
-  void ready(int generation, {required bool noVideo}) {
+  void ready(int generation) {
     if (_load != generation) return;
     _ready ??= clock();
-    if (noVideo && !_decided) _decide(DisplayMatchingState.unknown);
+    if (_noVideo == true && !_decided) _decide(DisplayMatchingState.unknown);
     _schedule();
+  }
+
+  void tracksUpdated(int generation, {required bool noVideo}) {
+    if (_load != generation) return;
+    _noVideo = noVideo;
+    if (_ready != null && noVideo && !_decided) {
+      _decide(DisplayMatchingState.unknown);
+    }
   }
 
   void observe(int generation, PlayerTelemetry telemetry, Duration position) {

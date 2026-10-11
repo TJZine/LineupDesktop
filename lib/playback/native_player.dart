@@ -333,6 +333,7 @@ class PlayerEvent {
     required this.duration,
     required this.telemetry,
     required this.tracks,
+    this.tracksUpdated = false,
     this.generation,
   });
 
@@ -341,6 +342,10 @@ class PlayerEvent {
   final Duration duration;
   final PlayerTelemetry telemetry;
   final List<PlayerTrack> tracks;
+
+  /// A track-list property update arrived for this load, including an empty list.
+  /// Other events may carry the reset snapshot without establishing no video.
+  final bool tracksUpdated;
 
   /// Identifies the media load associated with this event.
   ///
