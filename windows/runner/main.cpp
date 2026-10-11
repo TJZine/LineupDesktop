@@ -3,10 +3,14 @@
 #include <windows.h>
 
 #include "flutter_window.h"
+#include "display_guardian.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  if (auto guardian = lineup::DispatchDisplayGuardian(command_line)) {
+    return *guardian;
+  }
   HANDLE instance_mutex = ::CreateMutexW(
       nullptr, TRUE, L"Local\\TJZine.LineupDesktop.Instance");
   if (instance_mutex == nullptr) {

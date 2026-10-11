@@ -1,4 +1,5 @@
 #include "native_player.h"
+#include "display_guardian.h"
 
 #include "track_list_encoder.h"
 
@@ -367,10 +368,10 @@ WindowsNativePlayer::WindowsNativePlayer(
       [this](const auto& call, auto result) {
         HandleMethodCall(call, std::move(result));
       });
-  // Unit 3 supplies the acknowledged guardian factory at this construction site.
+  // Display writes require acknowledgment from the per-target guardian.
   display_ = std::make_unique<lineup::DisplayDynamicRange>(
       top_level_window_, lineup::MakeDisplayConfigApi(),
-      lineup::UnavailableDisplayGuardian(),
+      lineup::MakeDisplayGuardianFactory(),
       [this](const auto& report) { QueueDisplayReport(report); },
       [this] { PostPlatformWakeup(); });
 }

@@ -15,6 +15,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "native_player.cpp"
   "display_dynamic_range.cpp"
+  "display_guardian.cpp"
   "track_list_encoder.cpp"
   "utils.cpp"
   "win32_window.cpp"
@@ -41,6 +42,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "shell32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 if(NOT DEFINED ENV{LINEUP_MPV_ROOT})
@@ -114,12 +116,13 @@ add_executable(authenticated_reference_test EXCLUDE_FROM_ALL
   "authenticated_reference_test.cpp"
   "track_list_encoder.cpp"
   "display_dynamic_range.cpp"
+  "display_guardian.cpp"
 )
 apply_standard_settings(authenticated_reference_test)
 target_compile_definitions(authenticated_reference_test PRIVATE "NOMINMAX")
 target_include_directories(authenticated_reference_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(authenticated_reference_test PRIVATE
-  flutter_wrapper_app "${LINEUP_MPV_LIBRARY}" "dwmapi.lib")
+  flutter_wrapper_app "${LINEUP_MPV_LIBRARY}" "dwmapi.lib" "shell32.lib")
 add_custom_command(TARGET authenticated_reference_test POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${LINEUP_MPV_DLL}" "$<TARGET_FILE_DIR:authenticated_reference_test>")
@@ -145,6 +148,17 @@ target_compile_definitions(display_dynamic_range_test PRIVATE "NOMINMAX")
 target_link_libraries(display_dynamic_range_test PRIVATE "user32.lib")
 add_test(NAME display_dynamic_range COMMAND display_dynamic_range_test)
 set_tests_properties(display_dynamic_range PROPERTIES TIMEOUT 30)
+
+add_executable(display_guardian_test EXCLUDE_FROM_ALL
+  "display_guardian.cpp"
+  "display_dynamic_range.cpp"
+  "display_guardian_test.cpp"
+)
+apply_standard_settings(display_guardian_test)
+target_compile_definitions(display_guardian_test PRIVATE "NOMINMAX")
+target_link_libraries(display_guardian_test PRIVATE "user32.lib" "shell32.lib")
+add_test(NAME display_guardian COMMAND display_guardian_test)
+set_tests_properties(display_guardian PROPERTIES TIMEOUT 30)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
