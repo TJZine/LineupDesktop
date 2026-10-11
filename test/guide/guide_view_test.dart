@@ -2929,6 +2929,338 @@ void main() {
     );
   }
 
+  for (final activation in [
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.space,
+    LogicalKeyboardKey.select,
+  ]) {
+    testWidgets('focused Guide controls own $activation without tuning', (
+      tester,
+    ) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final lineup = _Lineup(2)
+        ..settings = const LineupSettings(reduceMotion: true);
+      final now = DateTime.utc(2026, 10, 10, 12, 15);
+      final ready = Channel(
+        id: 'channel-0',
+        number: 1,
+        name: 'Channel 0',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'program-0',
+            title: 'Program 0',
+            duration: Duration(minutes: 30),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026, 10, 10, 12),
+        shuffleSeed: 0,
+      );
+      lineup.channels = [
+        ready,
+        Channel(
+          id: 'library-channel',
+          number: 2,
+          name: 'Library Channel',
+          source: const LibrarySource(
+            libraryId: 'library',
+            libraryType: PlexLibraryType.show,
+          ),
+          playbackMode: PlaybackMode.sequential,
+          anchor: ready.anchor,
+          shuffleSeed: 1,
+        ),
+      ];
+      var retries = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async {
+          if (channel.id == ready.id) return _schedule(ready);
+          retries++;
+          throw StateError('offline');
+        },
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      var menus = 0;
+      var closes = 0;
+      var tunes = 0;
+      var chords = 0;
+      final grid = FocusNode(debugLabel: 'test grid');
+      addTearDown(grid.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: Focus(
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  HardwareKeyboard.instance.isControlPressed &&
+                  event.logicalKey == LogicalKeyboardKey.keyG) {
+                chords++;
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: GuideView(
+              controller: guide,
+              focusNode: grid,
+              onClose: () => closes++,
+              onTune: (_) async => tunes++,
+              onOpenMenu: (_, _) => menus++,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(guide.focusedProgram, isNotNull);
+      Future<void> focus(Finder control) async {
+        final leaf = find
+            .descendant(
+              of: control,
+              matching: find.byWidgetPredicate(
+                (widget) => widget is Text || widget is Icon,
+              ),
+            )
+            .first;
+        Focus.of(tester.element(leaf)).requestFocus();
+        await tester.pump();
+        expect(grid.hasPrimaryFocus, isFalse);
+      }
+
+      final menu = find.byKey(const Key('guide-app-menu'));
+      await focus(menu);
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(menus, 1);
+      expect(tunes, 0);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(chords, 1);
+      expect(closes, 0);
+
+      await focus(find.byTooltip('Close Guide'));
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(closes, 1);
+      expect(tunes, 0);
+      guide.moveWindow(1);
+      await tester.pumpAndSettle();
+      expect(guide.followingLive, isFalse);
+      await focus(find.byKey(const Key('guide-now')));
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(guide.followingLive, isTrue);
+      expect(tunes, 0);
+
+      for (final picker in ['guide-hours', 'guide-library-picker']) {
+        final control = find.byKey(Key(picker));
+        // DropdownButton owns an internal focus node on its InkWell. Focus that
+        // actual trigger rather than a selected-item Text inside its stack.
+        final trigger = tester.widget<InkWell>(
+          find.descendant(of: control, matching: find.byType(InkWell)).first,
+        );
+        final triggerFocus = trigger.focusNode!;
+        triggerFocus.requestFocus();
+        await tester.pumpAndSettle();
+        expect(
+          triggerFocus.hasPrimaryFocus,
+          isTrue,
+          reason: '$picker owns focus',
+        );
+        await tester.sendKeyEvent(activation);
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(LineupDropdownMenuRow),
+          findsWidgets,
+          reason: '$picker must open via $activation',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(tunes, 0);
+        expect(closes, 1, reason: 'popup Escape dismisses only the popup');
+      }
+      final beforeRetry = retries;
+      await focus(find.widgetWithText(LineupInlineLink, 'Retry'));
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(retries, beforeRetry + 1);
+      expect(tunes, 0);
+
+      for (final key in [
+        LogicalKeyboardKey.f2,
+        LogicalKeyboardKey.escape,
+        LogicalKeyboardKey.keyG,
+        LogicalKeyboardKey.backspace,
+        LogicalKeyboardKey.goBack,
+      ]) {
+        await focus(menu);
+        final beforeClose = closes;
+        await tester.sendKeyEvent(
+          key,
+          // The simulator has no physical mapping for the remote Back key.
+          physicalKey: key == LogicalKeyboardKey.goBack
+              ? PhysicalKeyboardKey.escape
+              : null,
+        );
+        await tester.pump();
+        expect(closes, beforeClose + 1);
+        expect(tunes, 0);
+      }
+      final search = find.byKey(const Key('guide-channel-search'));
+      await tester.enterText(search, 'channel');
+      await tester.pump();
+      final beforeSearchEscape = closes;
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(guide.searchQuery, isEmpty);
+      expect(closes, beforeSearchEscape);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(closes, beforeSearchEscape);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+
+      // Pointer inspection stays local; keyboard focus belongs to the grid.
+      final program = guide.currentProgram(ready.id)!;
+      await tester.tap(find.byKey(ValueKey(program.id)));
+      await tester.pumpAndSettle();
+      expect(tunes, 0);
+      await focus(find.byKey(ValueKey(program.id)));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(guide.focusedChannelId, 'library-channel');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(guide.focusedChannelId, ready.id);
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(guide.focusedProgramId, program.id);
+      expect(tunes, 1);
+      await focus(
+        find
+            .ancestor(of: find.text(ready.name), matching: find.byType(InkWell))
+            .first,
+      );
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(guide.focusedChannelId, ready.id);
+      expect(tunes, 2);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(guide.focusedProgramId, isNot(program.id));
+      final upcoming = guide.focusedProgram!;
+      expect(upcoming.isCurrentAt(guide.now), isFalse);
+      await focus(find.byKey(ValueKey(upcoming.id)));
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(guide.selectedProgramId, upcoming.id);
+      expect(tunes, 2);
+      guide.playToNow();
+      await tester.pumpAndSettle();
+      grid.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(tunes, 3);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets(
+    'raw search editing survives row completion and unrelated notifications',
+    (tester) async {
+      final lineup = _Lineup(2)
+        ..settings = const LineupSettings(reduceMotion: true);
+      final pending = Completer<ScheduleIndex>();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) => channel.id == 'channel-0'
+            ? Future.value(_schedule(channel))
+            : pending.future,
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final search = find.byKey(const Key('guide-channel-search'));
+      await tester.enterText(search, 'channel ');
+      await tester.pump();
+      final editor = tester.widget<TextField>(search).controller!;
+      final trailing = editor.value;
+      expect(guide.searchQuery, 'channel');
+      pending.complete(_schedule(lineup.channels.last));
+      await tester.pumpAndSettle();
+      expect(editor.value, trailing);
+      expect(editor.text, 'channel ');
+      await tester.enterText(search, 'channel 1');
+      await tester.pump();
+      expect(guide.channels.single.id, 'channel-1');
+
+      // Editing values model an IME/caret update without platform IME acceptance.
+      const editing = TextEditingValue(
+        text: 'ChAnnel 0 ',
+        selection: TextSelection(baseOffset: 2, extentOffset: 5),
+        composing: TextRange(start: 0, end: 7),
+      );
+      tester.testTextInput.updateEditingValue(editing);
+      await tester.pump();
+      expect(editor.value, editing);
+      expect(guide.channels.single.id, 'channel-0');
+      guide.refreshForPresentation();
+      lineup.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(editor.value, editing);
+      guide.setSearchQuery(
+        'CHANNEL 0',
+      ); // Same normalized query remains a no-op.
+      await tester.pump();
+      expect(editor.value, editing);
+      guide.setSearchQuery('CHANNEL 1');
+      await tester.pump();
+      expect(
+        editor.value,
+        const TextEditingValue(
+          text: 'channel 1',
+          selection: TextSelection.collapsed(offset: 9),
+        ),
+      );
+      guide.setSearchQuery('');
+      await tester.pump();
+      expect(editor.text, isEmpty);
+      expect(guide.channels.length, 2);
+      await tester.enterText(search, '   ');
+      await tester.pump();
+      expect(guide.searchQuery, isEmpty);
+      expect(editor.text, '   ');
+      expect(await lineup.logout(), isTrue);
+      await tester.pumpAndSettle();
+      expect(
+        editor.text,
+        isEmpty,
+        reason: 'content reset clears even a normalized-empty raw edit',
+      );
+      expect(editor.value.composing, TextRange.empty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,
   ) async {

@@ -2,6 +2,66 @@ import 'dart:collection';
 
 import 'channel.dart';
 
+// DateTime supports +/- 100,000,000 days from the Unix epoch. Keep each
+// cycle within that representable magnitude, and check its actual projection
+// against both endpoints rather than imposing a product-specific media cap.
+const _maximumDateMicroseconds = 8640000000000000000;
+const _maximumInt = 9223372036854775807;
+
+Never _invalidDuration() => throw const ScheduleBuildException(
+  ScheduleFailureReason.invalidProgramDuration,
+);
+
+int _checkedTotal(int total, ChannelItem item) {
+  final duration = item.duration.inMicroseconds;
+  if (duration <= 0 || duration > _maximumDateMicroseconds - total) {
+    _invalidDuration();
+  }
+  return total + duration;
+}
+
+DateTime _dateOffset(DateTime date, int offset) {
+  final epoch = date.microsecondsSinceEpoch;
+  if (offset > 0
+      ? epoch > _maximumDateMicroseconds - offset
+      : epoch < -_maximumDateMicroseconds - offset) {
+    _invalidDuration();
+  }
+  return DateTime.fromMicrosecondsSinceEpoch(epoch + offset, isUtc: true);
+}
+
+({int loop, int position}) _cyclePosition(
+  DateTime time,
+  DateTime anchor,
+  int loopUs,
+) {
+  if (loopUs <= 0 || loopUs > _maximumDateMicroseconds) _invalidDuration();
+  final epoch = time.microsecondsSinceEpoch;
+  final origin = anchor.microsecondsSinceEpoch;
+  // DateTime's endpoints fit in an int, but their difference may not. Only
+  // that unusual boundary path needs arbitrary precision.
+  if ((origin < 0 && epoch > _maximumInt + origin) ||
+      (origin > 0 && epoch < -_maximumInt - 1 + origin)) {
+    final elapsed = BigInt.from(epoch) - BigInt.from(origin);
+    final divisor = BigInt.from(loopUs);
+    final position = elapsed % divisor;
+    final loop = (elapsed - position) ~/ divisor;
+    if (loop < BigInt.from(-_maximumInt - 1) ||
+        loop > BigInt.from(_maximumInt)) {
+      _invalidDuration();
+    }
+    return (loop: loop.toInt(), position: position.toInt());
+  }
+  final elapsed = epoch - origin;
+  final position = elapsed % loopUs;
+  // For negative elapsed, subtracting the positive remainder could underflow.
+  final quotient = elapsed ~/ loopUs;
+  return (
+    loop: elapsed < 0 && position != 0 ? quotient - 1 : quotient,
+    position: position,
+  );
+}
+
 enum ScheduleFailureReason {
   noContent,
   invalidProgramDuration,
@@ -23,7 +83,22 @@ class ScheduleIndex {
     required this.seed,
     required this.scheduleVersion,
     this.transition,
-  });
+  }) {
+    if (items.isEmpty) {
+      throw const ScheduleBuildException(ScheduleFailureReason.noContent);
+    }
+    if (offsets.length != items.length) _invalidDuration();
+    var total = 0;
+    for (var index = 0; index < items.length; index++) {
+      if (offsets[index].inMicroseconds != total) _invalidDuration();
+      total = _checkedTotal(total, items[index]);
+    }
+    if (loopDuration.inMicroseconds != total) _invalidDuration();
+    if (transition != null) {
+      if (transition!.legacyCycleItems.isEmpty) _invalidDuration();
+      _durationOf(transition!.legacyCycleItems);
+    }
+  }
 
   final List<ChannelItem> items;
   final List<Duration> offsets;
@@ -108,10 +183,8 @@ ScheduleIndex buildSchedule(
   if (content.isEmpty) {
     throw const ScheduleBuildException(ScheduleFailureReason.noContent);
   }
-  if (content.any((item) => item.duration <= Duration.zero)) {
-    throw const ScheduleBuildException(
-      ScheduleFailureReason.invalidProgramDuration,
-    );
+  for (final item in content) {
+    _checkedTotal(0, item);
   }
   final items = switch (mode) {
     PlaybackMode.sequential => List<ChannelItem>.of(content),
@@ -134,15 +207,15 @@ ScheduleIndex buildSchedule(
     throw const ScheduleBuildException(ScheduleFailureReason.noContent);
   }
   final offsets = <Duration>[];
-  var total = Duration.zero;
+  var total = 0;
   for (final item in items) {
-    offsets.add(total);
-    total += item.duration;
+    offsets.add(Duration(microseconds: total));
+    total = _checkedTotal(total, item);
   }
   return ScheduleIndex(
     items: List.unmodifiable(items),
     offsets: List.unmodifiable(offsets),
-    loopDuration: total,
+    loopDuration: Duration(microseconds: total),
     mode: mode,
     seed: seed,
     scheduleVersion: scheduleVersion,
@@ -177,8 +250,10 @@ Channel migrateLegacySchedule(
     includeSpecials: true,
   );
   final at = programAt(now, channel.anchor, legacy);
-  final boundary = channel.anchor.toUtc().add(
-    Duration(microseconds: (at.loop + 1) * legacy.loopDuration.inMicroseconds),
+  final boundary = _dateOffset(
+    at.start,
+    legacy.loopDuration.inMicroseconds -
+        legacy.offsets[at.index].inMicroseconds,
   );
   return Channel(
     id: channel.id,
@@ -215,13 +290,15 @@ ScheduledProgram programAt(
   }
   if (schedule.scheduleVersion >= 2 && schedule.mode == PlaybackMode.shuffle) {
     final origin = transition?.boundary ?? anchor.toUtc();
-    final elapsed = time.toUtc().difference(origin).inMicroseconds;
-    final loopUs = schedule.loopDuration.inMicroseconds;
-    final cycle = _floorDivision(elapsed, loopUs);
+    final cycle = _cyclePosition(
+      time,
+      origin,
+      schedule.loopDuration.inMicroseconds,
+    ).loop;
     final index = _shuffleCycle(schedule, cycle);
     return _programInCycle(
       time,
-      origin.add(Duration(microseconds: cycle * loopUs)),
+      origin,
       index,
       schedule.loopDuration,
       loop: cycle,
@@ -242,10 +319,9 @@ ScheduledProgram _programInCycle(
   Duration loopDuration, {
   int? loop,
 }) {
-  final elapsed = time.toUtc().difference(anchor.toUtc()).inMicroseconds;
-  final loopUs = loopDuration.inMicroseconds;
-  final position = ((elapsed % loopUs) + loopUs) % loopUs;
-  final resolvedLoop = loop ?? (elapsed - position) ~/ loopUs;
+  final resolved = _cyclePosition(time, anchor, loopDuration.inMicroseconds);
+  final position = resolved.position;
+  final resolvedLoop = loop ?? resolved.loop;
   var low = 0;
   var high = cycle.offsets.length - 1;
   while (low < high) {
@@ -256,18 +332,12 @@ ScheduledProgram _programInCycle(
       high = middle - 1;
     }
   }
-  final start = anchor.toUtc().add(
-    Duration(
-      microseconds:
-          (loop == null ? resolvedLoop * loopUs : 0) +
-          cycle.offsets[low].inMicroseconds,
-    ),
-  );
+  final start = _dateOffset(time, cycle.offsets[low].inMicroseconds - position);
   final item = cycle.items[low];
   return ScheduledProgram(
     item: item,
     start: start,
-    end: start.add(item.duration),
+    end: _dateOffset(start, item.duration.inMicroseconds),
     elapsed: Duration(
       microseconds: position - cycle.offsets[low].inMicroseconds,
     ),
@@ -276,20 +346,20 @@ ScheduledProgram _programInCycle(
   );
 }
 
-int _floorDivision(int value, int divisor) {
-  final remainder = ((value % divisor) + divisor) % divisor;
-  return (value - remainder) ~/ divisor;
+Duration _durationOf(List<ChannelItem> items) {
+  var total = 0;
+  for (final item in items) {
+    total = _checkedTotal(total, item);
+  }
+  return Duration(microseconds: total);
 }
-
-Duration _durationOf(List<ChannelItem> items) =>
-    items.fold(Duration.zero, (duration, item) => duration + item.duration);
 
 _CycleIndex _cycleIndex(List<ChannelItem> items) {
   final offsets = <Duration>[];
-  var total = Duration.zero;
+  var total = 0;
   for (final item in items) {
-    offsets.add(total);
-    total += item.duration;
+    offsets.add(Duration(microseconds: total));
+    total = _checkedTotal(total, item);
   }
   return _CycleIndex(items, List.unmodifiable(offsets));
 }

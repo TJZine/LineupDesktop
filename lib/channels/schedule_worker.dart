@@ -11,13 +11,22 @@ typedef ScheduleWorkerFactory = ScheduleWorker Function(
   List<PlexPlaylist> playlists,
 );
 
+typedef ScheduleWorkerSpawn = Future<Isolate> Function(
+  SendPort responses,
+  List<PlexMediaItem> media,
+  List<PlexPlaylist> playlists,
+);
+
 class ScheduleWorker {
-  ScheduleWorker(this.media, this.playlists);
+  ScheduleWorker(this.media, this.playlists, {ScheduleWorkerSpawn? spawn})
+    : _spawn = spawn ?? _spawnWorker;
 
   final List<PlexMediaItem> media;
   final List<PlexPlaylist> playlists;
+  final ScheduleWorkerSpawn _spawn;
   final Map<int, Completer<ScheduleIndex>> _pending = {};
   Future<SendPort>? _starting;
+  Completer<SendPort>? _startupReadiness;
   Isolate? _isolate;
   ReceivePort? _responses;
   SendPort? _requests;
@@ -26,7 +35,7 @@ class ScheduleWorker {
 
   Future<ScheduleIndex> build(Channel channel) async {
     if (_disposed) throw StateError('Schedule worker is disposed');
-    final port = await (_starting ??= _start());
+    final port = await (_starting ?? _start());
     if (_disposed) throw StateError('Schedule worker is disposed');
     if (!identical(_requests, port)) {
       throw StateError('Schedule worker is unavailable');
@@ -43,10 +52,26 @@ class ScheduleWorker {
     return completer.future;
   }
 
-  Future<SendPort> _start() async {
+  Future<SendPort> _start() {
     final ready = Completer<SendPort>();
     final responses = ReceivePort();
+    _starting = ready.future;
+    _startupReadiness = ready;
     _responses = responses;
+
+    void retire() {
+      if (!identical(_responses, responses)) return;
+      _isolate?.kill(priority: Isolate.immediate);
+      _isolate = null;
+      _requests = null;
+      _starting = null;
+      if (identical(_startupReadiness, ready)) {
+        _startupReadiness = null;
+      }
+      _responses = null;
+      responses.close();
+    }
+
     void fail(Object error, [StackTrace? stackTrace]) {
       if (!identical(_responses, responses)) return;
       if (!ready.isCompleted) ready.completeError(error, stackTrace);
@@ -56,12 +81,7 @@ class ScheduleWorker {
         }
       }
       _pending.clear();
-      _isolate?.kill(priority: Isolate.immediate);
-      _isolate = null;
-      _requests = null;
-      _starting = null;
-      _responses = null;
-      responses.close();
+      retire();
     }
 
     responses.listen((message) {
@@ -80,7 +100,12 @@ class ScheduleWorker {
       }
       if (message is SendPort) {
         _requests = message;
-        if (!ready.isCompleted) ready.complete(message);
+        if (!ready.isCompleted) {
+          ready.complete(message);
+          if (identical(_startupReadiness, ready)) {
+            _startupReadiness = null;
+          }
+        }
         return;
       }
       if (message is! List<Object?> ||
@@ -104,38 +129,47 @@ class ScheduleWorker {
         completer.complete(schedule);
       }
     });
-    late final Isolate isolate;
+
+    Future<Isolate> spawning;
     try {
-      isolate = await Isolate.spawn(
-        _run,
-        [responses.sendPort, media, playlists],
-        onExit: responses.sendPort,
-        onError: responses.sendPort,
-        errorsAreFatal: true,
-        debugName: 'Lineup schedule worker',
-      );
-    } catch (_) {
-      if (identical(_responses, responses)) {
-        _responses = null;
-        _isolate = null;
-        _requests = null;
-        _starting = null;
-        responses.close();
-      }
-      rethrow;
+      spawning = _spawn(responses.sendPort, media, playlists);
+    } catch (error, stackTrace) {
+      fail(error, stackTrace);
+      return ready.future;
     }
-    if (_disposed) {
-      isolate.kill(priority: Isolate.immediate);
-      if (!ready.isCompleted) {
-        ready.completeError(StateError('Schedule worker was disposed'));
-      }
-    } else if (!identical(_responses, responses)) {
-      isolate.kill(priority: Isolate.immediate);
-    } else {
-      _isolate = isolate;
-    }
+
+    unawaited(
+      spawning.then<void>(
+        (isolate) {
+          if (_disposed || !identical(_responses, responses)) {
+            isolate.kill(priority: Isolate.immediate);
+            if (_disposed && identical(_responses, responses)) {
+              fail(StateError('Schedule worker was disposed'));
+            }
+            return;
+          }
+          _isolate = isolate;
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          fail(error, stackTrace);
+        },
+      ),
+    );
     return ready.future;
   }
+
+  static Future<Isolate> _spawnWorker(
+    SendPort responses,
+    List<PlexMediaItem> media,
+    List<PlexPlaylist> playlists,
+  ) => Isolate.spawn(
+    _run,
+    [responses, media, playlists],
+    onExit: responses,
+    onError: responses,
+    errorsAreFatal: true,
+    debugName: 'Lineup schedule worker',
+  );
 
   static void _run(List<Object?> bootstrap) {
     final output = bootstrap[0] as SendPort;
@@ -169,6 +203,13 @@ class ScheduleWorker {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    final startupReadiness = _startupReadiness;
+    if (startupReadiness != null && !startupReadiness.isCompleted) {
+      startupReadiness.completeError(
+        StateError('Schedule worker was disposed'),
+      );
+    }
+    _startupReadiness = null;
     _isolate?.kill(priority: Isolate.immediate);
     _responses?.close();
     _isolate = null;

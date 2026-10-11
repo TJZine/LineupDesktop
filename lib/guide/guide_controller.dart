@@ -230,8 +230,13 @@ class GuideController extends ChangeNotifier {
     final schedule = _schedules[channelId];
     final channel = _channelById[channelId];
     if (schedule != null && channel != null) {
-      final scheduled = programAt(now, channel.anchor, schedule);
-      return GuideProgram(channelId: channelId, scheduled: scheduled);
+      try {
+        final scheduled = programAt(now, channel.anchor, schedule);
+        return GuideProgram(channelId: channelId, scheduled: scheduled);
+      } on ScheduleBuildException catch (error) {
+        _failProjection(channelId, error);
+        return null;
+      }
     }
     return row(channelId).programs
         .where((program) => program.isCurrentAt(now))
@@ -243,12 +248,17 @@ class GuideController extends ChangeNotifier {
     final schedule = _schedules[channelId];
     final channel = _channelById[channelId];
     if (current == null || schedule == null || channel == null) return null;
-    final scheduled = programAt(
-      current.scheduled.end,
-      channel.anchor,
-      schedule,
-    );
-    return GuideProgram(channelId: channelId, scheduled: scheduled);
+    try {
+      final scheduled = programAt(
+        current.scheduled.end,
+        channel.anchor,
+        schedule,
+      );
+      return GuideProgram(channelId: channelId, scheduled: scheduled);
+    } on ScheduleBuildException catch (error) {
+      _failProjection(channelId, error);
+      return null;
+    }
   }
 
   Future<GuideProgram?> ensureCurrentProgram(String channelId) async {
@@ -769,44 +779,41 @@ class GuideController extends ChangeNotifier {
           : Future<ScheduleIndex>.value(cachedSchedule);
       if (cachedSchedule != null) _schedules[channel.id] = cachedSchedule;
       loading
-          .then(
-            (schedule) {
-              if (_disposed ||
-                  generation != _generation ||
-                  !_channelById.containsKey(channel.id)) {
-                return;
-              }
-              _loadingGenerationByChannel.remove(channel.id);
-              _failedChannelIds.remove(channel.id);
-              _retryingChannelIds.remove(channel.id);
-              _putSchedule(channel.id, schedule);
-              _putRow(channel.id, _projectedRow(channel, schedule));
-              _updateFocusAndSelection(channel.id);
-              notifyListeners();
-            },
-            onError: (Object error) {
-              if (_disposed ||
-                  generation != _generation ||
-                  !_channelById.containsKey(channel.id)) {
-                return;
-              }
-              _loadingGenerationByChannel.remove(channel.id);
-              _retryingChannelIds.remove(channel.id);
-              _failedChannelIds.add(channel.id);
-              if (error is TimeoutException) {
-                lineup.diagnostics.add(
-                  'guide',
-                  'Guide schedule load timed out',
-                  {'code': 'timeout'},
-                );
-              }
-              _putRow(
-                channel.id,
-                GuideRowData(state: GuideLoadState.error, error: error),
-              );
-              notifyListeners();
-            },
-          )
+          .then<void>((schedule) {
+            if (_disposed ||
+                generation != _generation ||
+                !_channelById.containsKey(channel.id)) {
+              return;
+            }
+            _loadingGenerationByChannel.remove(channel.id);
+            _failedChannelIds.remove(channel.id);
+            _retryingChannelIds.remove(channel.id);
+            _putSchedule(channel.id, schedule);
+            _putRow(channel.id, _projectedRow(channel, schedule));
+            _updateFocusAndSelection(channel.id);
+            notifyListeners();
+          })
+          .catchError((Object error) {
+            if (_disposed ||
+                generation != _generation ||
+                !_channelById.containsKey(channel.id)) {
+              return;
+            }
+            _loadingGenerationByChannel.remove(channel.id);
+            _retryingChannelIds.remove(channel.id);
+            _schedules.remove(channel.id);
+            _failedChannelIds.add(channel.id);
+            if (error is TimeoutException) {
+              lineup.diagnostics.add('guide', 'Guide schedule load timed out', {
+                'code': 'timeout',
+              });
+            }
+            _putRow(
+              channel.id,
+              GuideRowData(state: GuideLoadState.error, error: error),
+            );
+            notifyListeners();
+          })
           .whenComplete(() {
             _activeLoads--;
             if (!_disposed) {
@@ -868,8 +875,16 @@ class GuideController extends ChangeNotifier {
     }
   }
 
-  GuideRowData _projectedRow(Channel channel, ScheduleIndex schedule) =>
-      GuideRowData(
+  void _failProjection(String channelId, Object error) {
+    _schedules.remove(channelId);
+    _retryingChannelIds.remove(channelId);
+    _failedChannelIds.add(channelId);
+    _putRow(channelId, GuideRowData(state: GuideLoadState.error, error: error));
+  }
+
+  GuideRowData _projectedRow(Channel channel, ScheduleIndex schedule) {
+    try {
+      return GuideRowData(
         state: GuideLoadState.ready,
         programs:
             scheduleWindow(_windowStart, windowEnd, channel.anchor, schedule)
@@ -879,6 +894,11 @@ class GuideController extends ChangeNotifier {
                 )
                 .toList(growable: false),
       );
+    } on ScheduleBuildException catch (error) {
+      _failProjection(channel.id, error);
+      return GuideRowData(state: GuideLoadState.error, error: error);
+    }
+  }
 
   void _updateFocusAndSelection(String channelId) {
     final pending = _pendingProgramFocus;
@@ -919,7 +939,7 @@ class GuideController extends ChangeNotifier {
     for (final entry in retained) {
       _rows[entry.key] = entry.value;
     }
-    for (final entry in _schedules.entries) {
+    for (final entry in _schedules.entries.toList(growable: false)) {
       final channel = _channelById[entry.key];
       if (channel != null) {
         _rows[entry.key] = _projectedRow(channel, entry.value);
@@ -932,7 +952,7 @@ class GuideController extends ChangeNotifier {
       );
       _rows.remove(evicted);
     }
-    for (final entry in _schedules.entries) {
+    for (final entry in _schedules.entries.toList(growable: false)) {
       if (_rows.containsKey(entry.key)) _updateFocusAndSelection(entry.key);
     }
   }

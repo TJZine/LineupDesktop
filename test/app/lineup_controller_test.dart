@@ -1952,7 +1952,7 @@ void main() {
     addTearDown(controller.dispose);
 
     await controller.initialize();
-    await controller.selectProfile(child);
+    expect(await controller.selectProfile(child), isTrue);
     controller.diagnostics.enabled = true;
     expect(await controller.scanLibraries({'movies'}), isTrue);
     expect(await controller.commitLibraryScan({'movies'}), isTrue);
@@ -6718,6 +6718,102 @@ void main() {
     expect(controller.server?.id, 'old');
     expect(plex.librariesCalls, 0);
   });
+
+  for (final failure in ['discovery', 'saved connection', 'profile save']) {
+    test('profile acceptance result distinguishes $failure', () async {
+      const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+      final selected = _server('server');
+      final store = _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'child': 'server'}),
+      );
+      final plex = _FakePlex()
+        ..homeUsersResult = const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+          child,
+        ]
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single;
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      if (failure == 'profile save') store.failNextSave = true;
+      if (failure == 'discovery') {
+        plex.discoverServersHandler = (_) async => throw const PlexException(
+          'server-unreachable',
+          'Discovery failed.',
+        );
+      }
+      if (failure == 'saved connection') {
+        plex.selectConnectionHandler = (_, _) async =>
+            throw const PlexException(
+              'server-unreachable',
+              'Connection failed.',
+            );
+      }
+      expect(
+        await controller.selectProfile(child, pin: '1234'),
+        failure != 'profile save',
+      );
+      expect(controller.busy, isFalse);
+      expect(controller.error, isNotNull);
+      expect(
+        controller.profile?.id,
+        failure == 'profile save' ? isNull : 'child',
+      );
+      expect(
+        store.state.profileId,
+        failure == 'profile save' ? isNull : 'child',
+      );
+      expect(
+        controller.stage,
+        failure == 'profile save' ? SetupStage.profiles : SetupStage.servers,
+      );
+    });
+  }
+
+  test(
+    'accepted profile discovery cannot replace a superseding profile',
+    () async {
+      const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+      const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+      final discovery = Completer<List<PlexServerAccess>>();
+      final store = _MemoryStore();
+      final plex = _FakePlex()..homeUsersResult = const [owner, child];
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      plex.discoverServersHandler = (token) =>
+          token == 'child-token' ? discovery.future : Future.value([]);
+      plex.switchHomeUserHandler = (_, id, _) async => '$id-token';
+      final selecting = controller.selectProfile(child, pin: '1234');
+      await _waitForTestState(
+        () => plex.discoveredTokens.contains('child-token'),
+        description: 'accepted child discovery',
+      );
+      expect(await controller.selectProfile(owner), isTrue);
+      discovery.complete([
+        PlexServerAccess(server: _server('stale'), token: 'stale-token'),
+      ]);
+      expect(
+        await selecting,
+        isTrue,
+        reason: 'the child was durably accepted before supersession',
+      );
+      expect(store.state.profileId, 'owner');
+      expect(controller.profile, owner);
+      expect(controller.servers, isEmpty);
+      expect(controller.busy, isFalse);
+      expect(controller.error, isNull);
+    },
+  );
 
   test('profile recovery cancellation rejects stale switch work', () async {
     final switched = Completer<String>();

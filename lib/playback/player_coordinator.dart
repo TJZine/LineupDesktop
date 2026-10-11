@@ -350,7 +350,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final playback = _activeLoad?.request ?? _activePlayback;
     if (playback != null &&
         _activePartIndex < playback.parts.length &&
-        _allPartDurationsKnown(playback)) {
+        _usesAggregateCoordinates(playback)) {
       final offset = _partOffset(_activePartIndex)!;
       _position = offset + event.position;
       _duration = _partDurations.values.fold(Duration.zero, (a, b) => a + b);
@@ -988,8 +988,11 @@ class PlayerCoordinator extends ChangeNotifier {
       identical(_activePlayback, recovery.rejected.request) &&
       _ownsLoad(recovery.replacement ?? recovery.rejected);
 
-  bool _allPartDurationsKnown(LineupPlaybackRequest request) =>
-      request.parts.length == _partDurations.length;
+  bool _usesAggregateCoordinates(LineupPlaybackRequest request) =>
+      request.parts.length == _partDurations.length &&
+      request.parts.asMap().keys.every(
+        (index) => _partDurations.containsKey(index),
+      );
 
   Duration? _partOffset(int partIndex) {
     var offset = Duration.zero;
@@ -1019,6 +1022,25 @@ class PlayerCoordinator extends ChangeNotifier {
       remaining -= duration;
     }
     return null;
+  }
+
+  (int, Duration)? _interactivePartForPosition(
+    LineupPlaybackRequest request,
+    Duration position,
+  ) {
+    if (_usesAggregateCoordinates(request)) {
+      return _partForPosition(request, position);
+    }
+    final load = _activeLoad;
+    if (load == null ||
+        load.request == null ||
+        load.tuneGeneration != _tuneGeneration) {
+      return null;
+    }
+    return (
+      load.partIndex,
+      position < Duration.zero ? Duration.zero : position,
+    );
   }
 
   Future<void> _advancePart(
@@ -1174,7 +1196,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final playback = _activePlayback;
     final target = playback == null
         ? null
-        : _partForPosition(playback, position);
+        : _interactivePartForPosition(playback, position);
     final load = _activeLoad;
     try {
       if (playback != null && target != null && load != null) {

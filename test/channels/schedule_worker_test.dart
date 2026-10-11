@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -137,6 +138,101 @@ void main() {
 
     expect(schedule.items.single.id, _mediaItem.id);
   });
+
+  test('simultaneous builds share startup readiness', () async {
+    final worker = ScheduleWorker([_mediaItem], const []);
+    addTearDown(worker.dispose);
+
+    final schedules = await Future.wait([
+      worker.build(_channel),
+      worker.build(_channel),
+    ]);
+
+    expect(schedules, hasLength(2));
+    expect(schedules[0].items.single.id, _mediaItem.id);
+    expect(schedules[1].items.single.id, _mediaItem.id);
+  });
+
+  test('dispose before spawn completion settles all waiters and kills late isolate', () async {
+    final exited = ReceivePort();
+    addTearDown(exited.close);
+    final spawnRelease = Completer<Isolate>();
+    SendPort? responses;
+    final worker = ScheduleWorker(
+      [_mediaItem],
+      const [],
+      spawn: (responsePort, _, _) {
+        responses = responsePort;
+        return spawnRelease.future;
+      },
+    );
+    addTearDown(worker.dispose);
+
+    final first = worker.build(_channel);
+    final second = worker.build(_channel);
+    worker.dispose();
+    worker.dispose();
+
+    await expectLater(first, throwsA(isA<StateError>()));
+    await expectLater(second, throwsA(isA<StateError>()));
+    expect(responses, isNotNull);
+    final responsePort = responses!;
+
+    final lateIsolate = await Isolate.spawn(
+      _idleWorker,
+      [responsePort],
+      onExit: exited.sendPort,
+      onError: responsePort,
+      errorsAreFatal: true,
+    );
+    addTearDown(() => lateIsolate.kill(priority: Isolate.immediate));
+    spawnRelease.complete(lateIsolate);
+
+    expect(await exited.first.timeout(const Duration(seconds: 1)), isNull);
+  });
+
+  test(
+    'dispose after spawn before handshake settles readiness and kills isolate',
+    () async {
+      final exited = ReceivePort();
+      addTearDown(exited.close);
+      final handshakeControl = ReceivePort();
+      addTearDown(handshakeControl.close);
+      final handshakeGate = handshakeControl.first.then((message) {
+        expect(message, isA<SendPort>());
+        return message as SendPort;
+      });
+      final spawned = Completer<void>();
+      final worker = ScheduleWorker(
+        [_mediaItem],
+        const [],
+        spawn: (responses, _, _) async {
+          final isolate = await Isolate.spawn(
+            _heldHandshakeWorker,
+            [responses, handshakeControl.sendPort],
+            onExit: exited.sendPort,
+            onError: responses,
+            errorsAreFatal: true,
+          );
+          spawned.complete();
+          return isolate;
+        },
+      );
+      addTearDown(worker.dispose);
+
+      final build = worker.build(_channel);
+      await spawned.future;
+      await handshakeGate.timeout(const Duration(seconds: 1));
+      // Let the completed spawn future run its production continuation so
+      // disposal exercises the stored isolate, not only late-spawn cleanup.
+      await Future<void>.delayed(Duration.zero);
+      worker.dispose();
+      worker.dispose();
+
+      await expectLater(build, throwsA(isA<StateError>()));
+      expect(await exited.first.timeout(const Duration(seconds: 1)), isNull);
+    },
+  );
 
   test('send failure does not retain the failed operation', () async {
     final unsendable = ReceivePort();
@@ -356,6 +452,23 @@ class _ExitingMediaItem extends PlexMediaItem {
 
   @override
   String? get libraryId => Isolate.exit();
+}
+
+void _idleWorker(List<Object?> bootstrap) {
+  final requests = ReceivePort();
+  requests.listen((_) {});
+}
+
+void _heldHandshakeWorker(List<Object?> bootstrap) {
+  final output = bootstrap[0] as SendPort;
+  final control = bootstrap[1] as SendPort;
+  final requests = ReceivePort();
+  final gate = ReceivePort();
+  control.send(gate.sendPort);
+  gate.listen((_) {
+    output.send(requests.sendPort);
+  });
+  requests.listen((_) {});
 }
 
 Object _scheduledIdentity(ScheduledProgram program) => (

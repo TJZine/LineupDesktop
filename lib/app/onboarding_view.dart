@@ -91,6 +91,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     setState(() {
       _linkingStopped = nextLinkingStopped;
       _busy = nextBusy;
+      // Profile acceptance changes stage before reconnecting a saved server.
+      // The old PIN submitter may already be unmounted when reconnect finishes.
+      if (controller.stage != SetupStage.profiles) _pinUser = null;
     });
     final target = retryNeedsFocus
         ? _linkActionFocus

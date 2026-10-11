@@ -519,6 +519,256 @@ void main() {
   });
 
   test(
+    'incomplete multipart timing keeps interactive seeks in the active part',
+    () async {
+      final fixture = _ContinuationFixture(
+        parts: [
+          LineupPlaybackPart(
+            uri: Uri.parse('https://media.test/part-1.mkv'),
+            duration: const Duration(seconds: 60),
+          ),
+          LineupPlaybackPart(uri: Uri.parse('https://media.test/part-2.mkv')),
+          LineupPlaybackPart(
+            uri: Uri.parse('https://media.test/part-3.mkv'),
+            duration: const Duration(seconds: 60),
+          ),
+        ],
+      );
+      addTearDown(fixture.close);
+
+      await fixture.coordinator.tune('channel-b');
+      fixture.endNaturally();
+      await pumpEventQueue(times: 5);
+      expect(fixture.player.loads, hasLength(2));
+
+      fixture.player.position = const Duration(seconds: 10);
+      fixture.player.duration = const Duration(seconds: 90);
+      fixture.player.emitStatus(
+        PlayerState.playing,
+        generation: fixture.player.loadGenerations.last,
+      );
+      await pumpEventQueue(times: 2);
+      expect(fixture.coordinator.position, const Duration(seconds: 10));
+      expect(fixture.coordinator.duration, const Duration(seconds: 90));
+
+      await fixture.coordinator.seekBy(const Duration(seconds: 30));
+      expect(fixture.player.loads, hasLength(2));
+      expect(fixture.player.seeks.last, const Duration(seconds: 40));
+
+      fixture.player.position = const Duration(seconds: 40);
+      fixture.player.emitStatus(
+        PlayerState.playing,
+        generation: fixture.player.loadGenerations.last,
+      );
+      await pumpEventQueue(times: 2);
+      await fixture.coordinator.seekBy(const Duration(seconds: -30));
+      expect(fixture.player.loads, hasLength(2));
+      expect(fixture.player.seeks.last, const Duration(seconds: 10));
+
+      await fixture.coordinator.seekTo(const Duration(seconds: 70));
+      expect(fixture.player.loads, hasLength(2));
+      expect(fixture.player.seeks.last, const Duration(seconds: 70));
+
+      fixture.player.position = const Duration(seconds: 90);
+      fixture.player.duration = const Duration(seconds: 90);
+      fixture.player.emitStatus(
+        PlayerState.ended,
+        generation: fixture.player.loadGenerations.last,
+      );
+      await pumpEventQueue(times: 5);
+      expect(fixture.player.loads, hasLength(3));
+
+      fixture.player.position = const Duration(seconds: 7);
+      fixture.player.duration = const Duration(seconds: 60);
+      fixture.player.emitStatus(
+        PlayerState.playing,
+        generation: fixture.player.loadGenerations.last,
+      );
+      await pumpEventQueue(times: 2);
+      expect(fixture.coordinator.position, const Duration(seconds: 157));
+      expect(fixture.coordinator.duration, const Duration(seconds: 210));
+    },
+  );
+
+  test(
+    'later multipart parts stay local when an earlier boundary is unknown',
+    () async {
+      final fixture = _ContinuationFixture(
+        parts: [
+          LineupPlaybackPart(uri: Uri.parse('https://media.test/part-1.mkv')),
+          LineupPlaybackPart(
+            uri: Uri.parse('https://media.test/part-2.mkv'),
+            duration: const Duration(seconds: 90),
+          ),
+          LineupPlaybackPart(
+            uri: Uri.parse('https://media.test/part-3.mkv'),
+            duration: const Duration(seconds: 60),
+          ),
+        ],
+      );
+      addTearDown(fixture.close);
+
+      await fixture.coordinator.tune('channel-b');
+      fixture.player.position = Duration.zero;
+      fixture.player.duration = Duration.zero;
+      fixture.player.emitStatus(
+        PlayerState.ended,
+        generation: fixture.player.loadGenerations.last,
+      );
+      await pumpEventQueue(times: 5);
+      expect(fixture.player.loads, hasLength(2));
+
+      fixture.player.position = const Duration(seconds: 10);
+      fixture.player.duration = const Duration(seconds: 90);
+      fixture.player.emitStatus(
+        PlayerState.playing,
+        generation: fixture.player.loadGenerations.last,
+      );
+      await pumpEventQueue(times: 2);
+      expect(fixture.coordinator.position, const Duration(seconds: 10));
+      expect(fixture.coordinator.duration, const Duration(seconds: 90));
+
+      await fixture.coordinator.seekBy(const Duration(seconds: 30));
+      expect(fixture.player.loads, hasLength(2));
+      expect(fixture.player.seeks.last, const Duration(seconds: 40));
+    },
+  );
+
+  test('complete multipart timing keeps aggregate seek coordinates', () async {
+    final fixture = _ContinuationFixture(
+      parts: _parts(
+        first: const Duration(seconds: 60),
+        second: const Duration(seconds: 90),
+      ),
+    );
+    addTearDown(fixture.close);
+
+    await fixture.coordinator.tune('channel-b');
+    fixture.endNaturally();
+    await pumpEventQueue(times: 5);
+    fixture.player.position = const Duration(seconds: 10);
+    fixture.player.duration = const Duration(seconds: 90);
+    fixture.player.emitStatus(
+      PlayerState.playing,
+      generation: fixture.player.loadGenerations.last,
+    );
+    await pumpEventQueue(times: 2);
+
+    expect(fixture.coordinator.position, const Duration(seconds: 70));
+    expect(fixture.coordinator.duration, const Duration(seconds: 150));
+    await fixture.coordinator.seekBy(const Duration(seconds: 30));
+    expect(fixture.player.loads, hasLength(2));
+    expect(fixture.player.seeks.last, const Duration(seconds: 40));
+
+    await fixture.coordinator.seekTo(const Duration(seconds: 30));
+    await pumpEventQueue(times: 2);
+    expect(fixture.player.loads, hasLength(3));
+    expect(fixture.player.loads.last.path, '/part-1.mkv');
+    expect(fixture.player.seeks.last, const Duration(seconds: 30));
+  });
+
+  test(
+    'incomplete multipart pending readiness keeps only the latest local target',
+    () async {
+      final player = _BlockingSecondLoadPlayer();
+      final fixture = _ContinuationFixture(
+        player: player,
+        parts: _parts(first: const Duration(seconds: 60), second: null),
+      );
+      addTearDown(fixture.close);
+
+      await fixture.coordinator.tune('channel-b');
+      fixture.endNaturally();
+      await player.secondLoadStarted.future;
+
+      final first = fixture.coordinator.seekTo(const Duration(seconds: 20));
+      final latest = fixture.coordinator.seekTo(const Duration(seconds: 40));
+      player.releaseSecondLoad.complete();
+      await Future.wait([first, latest]);
+
+      expect(fixture.player.loads.map((uri) => uri.path), [
+        '/part-1.mkv',
+        '/part-2.mkv',
+      ]);
+      expect(fixture.player.seeks, [const Duration(seconds: 40)]);
+    },
+  );
+
+  test(
+    'incomplete multipart local targets survive authorization replacement',
+    () async {
+      final player = _BlockingFailingPartAuthorizationRetryPlayer(fail: false);
+      final fixture = _ContinuationFixture(
+        player: player,
+        recoverAuthorization: true,
+        parts: _parts(first: const Duration(seconds: 60), second: null),
+      );
+      addTearDown(fixture.close);
+
+      await fixture.coordinator.tune('channel-b');
+      fixture.endNaturally();
+      await player.retryLoadStarted.future;
+
+      final first = fixture.coordinator.seekTo(const Duration(seconds: 20));
+      final latest = fixture.coordinator.seekTo(const Duration(seconds: 40));
+      player.releaseRetryLoad.complete();
+      await Future.wait([first, latest]);
+
+      expect(fixture.player.loads.map((uri) => uri.path), [
+        '/part-1.mkv',
+        '/part-2.mkv',
+        '/part-2.mkv',
+      ]);
+      expect(fixture.player.loadPlexTokens, [
+        'test-token-1',
+        'test-token-1',
+        'test-token-2',
+      ]);
+      expect(fixture.player.seeks, [const Duration(seconds: 40)]);
+      expect(fixture.coordinator.error, isNull);
+
+      await fixture.coordinator.seekTo(const Duration(seconds: 10));
+      expect(fixture.player.loads, hasLength(3));
+      expect(fixture.player.seeks, [
+        const Duration(seconds: 40),
+        const Duration(seconds: 10),
+      ]);
+    },
+  );
+
+  for (final action in ['tune', 'stop']) {
+    test('incomplete multipart continuation is stale after $action', () async {
+      final player = _BlockingSecondLoadPlayer();
+      final fixture = _ContinuationFixture(
+        player: player,
+        parts: _parts(first: const Duration(seconds: 60), second: null),
+      );
+      addTearDown(fixture.close);
+
+      await fixture.coordinator.tune('channel-b');
+      fixture.endNaturally();
+      await player.secondLoadStarted.future;
+      final staleGeneration = player.loadGenerations.last;
+      final replacement = action == 'tune'
+          ? fixture.coordinator.tune('channel-0')
+          : fixture.coordinator.stop();
+      player.releaseSecondLoad.complete();
+      await replacement;
+      await pumpEventQueue(times: 8);
+
+      player.emitStatus(PlayerState.ended, generation: staleGeneration);
+      await pumpEventQueue(times: 2);
+      expect(fixture.player.loads, hasLength(action == 'tune' ? 3 : 2));
+      expect(fixture.coordinator.error, isNull);
+      expect(fixture.coordinator.hasPlaybackIntent, action == 'tune');
+      expect(
+        fixture.lineup.currentChannelId,
+        action == 'tune' ? 'channel-0' : 'channel-b',
+      );
+    });
+  }
+
+  test(
     'active final-part stopped retires loaded info without continuation',
     () async {
       final fixture = _ContinuationFixture();
@@ -5456,9 +5706,15 @@ class _ContinuationStatePlayer extends _EventPlayer {
 }
 
 class _ContinuationFixture {
-  _ContinuationFixture({List<LineupPlaybackPart>? parts, _EventPlayer? player})
-    : lineup = _TestLineup(playbackParts: parts),
-      player = player ?? _EventPlayer() {
+  _ContinuationFixture({
+    List<LineupPlaybackPart>? parts,
+    _EventPlayer? player,
+    bool recoverAuthorization = false,
+  }) : lineup = _TestLineup(
+         playbackParts: parts,
+         recoverAuthorization: recoverAuthorization,
+       ),
+       player = player ?? _EventPlayer() {
     lineup.replaceChannels([
       for (final channel in lineup.channels)
         Channel(

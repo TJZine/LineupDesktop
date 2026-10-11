@@ -683,12 +683,15 @@ class LineupController extends ChangeNotifier {
     _ => 'Lineup could not complete Plex sign-in. Request a new code and try again.',
   };
 
-  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) {
+  /// Returns whether the profile was durably accepted, independently of any
+  /// subsequent server discovery or saved-server reconnect outcome.
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
     final operation = _invalidateOperation();
     _invalidatePmsRefresh();
     _serverTargetId = null;
     _pinTimer?.cancel();
-    return _run(
+    var accepted = false;
+    await _run(
       () async {
         final accountToken = _accountToken;
         if (accountToken == null) {
@@ -727,6 +730,7 @@ class LineupController extends ChangeNotifier {
           _pmsToken = null;
           _invalidatePmsRefresh();
           server = null;
+          servers = const [];
           connection = null;
           serverSelectionCanCancel = false;
           _serverPickerOrigin = null;
@@ -738,18 +742,22 @@ class LineupController extends ChangeNotifier {
           currentChannelId = null;
           _resetLibraryScan();
           _contentGeneration++;
+          accepted = true;
+          stage = SetupStage.servers;
           notifyListeners();
         });
-        if (!_isCurrent(operation)) return;
-        await _discover(operation);
-        if (operation == _epoch) {
-          profileSelectionCanCancel = false;
-          _profilePickerOrigin = null;
-        }
       },
       operation: operation,
       fallbackStage: SetupStage.profiles,
     );
+    if (accepted && _isCurrent(operation)) {
+      await _run(
+        () => _discover(operation),
+        operation: operation,
+        fallbackStage: SetupStage.servers,
+      );
+    }
+    return accepted;
   }
 
   Future<void> _discover(int operation, {bool reconnectSaved = true}) async {

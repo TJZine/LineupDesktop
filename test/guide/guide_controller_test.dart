@@ -13,6 +13,91 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test('successful load with failed projection owns error, evicts cache, and retries', () async {
+    final lineup = _TestLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    var fail = true;
+    var requests = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        requests++;
+        if (!fail) return _schedule(channel);
+        return buildSchedule(
+          [
+            const ChannelItem(
+              id: 'long',
+              title: 'Long',
+              duration: Duration(microseconds: 8640000000000000000),
+            ),
+          ],
+          mode: PlaybackMode.sequential,
+          seed: 1,
+        );
+      },
+    );
+    addTearDown(guide.dispose);
+    final id = lineup.channels.single.id;
+    guide.requestChannels(lineup.channels);
+    await _settle();
+    expect(guide.row(id).state, GuideLoadState.error);
+    expect(guide.row(id).error, isA<ScheduleBuildException>());
+    expect(guide.activeLoadCount, 0);
+    expect(guide.currentProgram(id), isNull);
+    fail = false;
+    await guide.retry(id);
+    await _settle();
+    expect(requests, 2);
+    expect(guide.row(id).state, GuideLoadState.ready);
+    expect(guide.currentProgram(id), isNotNull);
+  });
+
+  test('cached Guide projection failure during later presentation evicts and retries', () async {
+    final lineup = _TestLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    var now = DateTime.utc(2026, 1, 1);
+    final boundary = now.add(const Duration(days: 1));
+    var requests = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async {
+        requests++;
+        return buildSchedule(
+          [
+            const ChannelItem(
+              id: 'long',
+              title: 'Long',
+              duration: Duration(microseconds: 8640000000000000000),
+            ),
+          ],
+          mode: PlaybackMode.sequential,
+          seed: 1,
+          transition: ScheduleTransition(
+            boundary: boundary,
+            legacyCycleItems: _schedule(channel).items,
+          ),
+        );
+      },
+    );
+    addTearDown(guide.dispose);
+    final id = lineup.channels.single.id;
+    guide.requestChannels(lineup.channels);
+    await _settle();
+    expect(guide.row(id).state, GuideLoadState.ready);
+    now = boundary;
+    guide.refreshForPresentation();
+    expect(guide.row(id).state, GuideLoadState.error);
+    expect(guide.row(id).error, isA<ScheduleBuildException>());
+    expect(guide.currentProgram(id), isNull);
+    now = boundary.subtract(const Duration(days: 1));
+    guide.playToNow();
+    await guide.retry(id);
+    await _settle();
+    expect(requests, 2);
+    expect(guide.row(id).state, GuideLoadState.ready);
+  });
+
   test(
     'bulk retry includes offscreen failures and preserves concurrency bound',
     () async {

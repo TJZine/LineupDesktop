@@ -72,7 +72,7 @@ class TestMessenger final : public flutter::BinaryMessenger {
     const auto state = map->find(Value("state"));
     if (state != map->end()) {
       const auto* text = std::get_if<std::string>(&state->second);
-      if (text && (*text == "stopped" || *text == "error")) {
+      if (text && (*text == "ended" || *text == "stopped" || *text == "error")) {
         finished = true;
         failed = failed || (*text == "error");
       }
@@ -116,6 +116,31 @@ void SendTestEvent(TestMessenger& messenger, Map arguments) {
 // Exercise the actual decoder and latch with checks that remain active in
 // Release builds. These bounded event sequences do not simulate media output.
 bool TerminalStateContractHolds() {
+  TestMessenger ended;
+  SendTestEvent(ended, {{Value("state"), Value("ended")}});
+  if (!ended.finished || ended.failed || ended.progressed) return false;
+
+  TestMessenger progressed_then_ended;
+  SendTestEvent(progressed_then_ended,
+                {{Value("name"), Value("time-pos")},
+                 {Value("value"), Value(1.0)}});
+  // Progress alone must not end observation before a later rejection arrives.
+  if (progressed_then_ended.finished || progressed_then_ended.failed ||
+      !progressed_then_ended.progressed) return false;
+  SendTestEvent(progressed_then_ended,
+                {{Value("state"), Value("ended")}});
+  if (!progressed_then_ended.finished || progressed_then_ended.failed ||
+      !progressed_then_ended.progressed) return false;
+  SendTestEvent(progressed_then_ended,
+                {{Value("state"), Value("error")}});
+  if (!progressed_then_ended.failed) return false;
+
+  TestMessenger rejected_then_ended;
+  SendTestEvent(rejected_then_ended, {{Value("state"), Value("error")}});
+  SendTestEvent(rejected_then_ended, {{Value("state"), Value("ended")}});
+  if (!rejected_then_ended.finished || !rejected_then_ended.failed ||
+      rejected_then_ended.progressed) return false;
+
   TestMessenger stopped;
   SendTestEvent(stopped, {{Value("state"), Value("stopped")}});
   if (!stopped.finished || stopped.failed || stopped.progressed) return false;

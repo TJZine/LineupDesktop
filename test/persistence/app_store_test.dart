@@ -8,6 +8,40 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
   test(
+    'raw persisted durations are checked before microsecond multiplication',
+    () {
+      Map<String, Object?> item(int milliseconds) => {
+        'id': 'raw',
+        'title': 'Raw',
+        'durationMs': milliseconds,
+      };
+      expect(
+        ChannelItem.fromJson(item(1800000)).duration,
+        const Duration(minutes: 30),
+      );
+      const maximumMilliseconds = 9223372036854775;
+      expect(
+        ChannelItem.fromJson(item(maximumMilliseconds)).duration.inMicroseconds,
+        9223372036854775000,
+      );
+      for (final milliseconds in [
+        0,
+        -1,
+        maximumMilliseconds + 1,
+        18446744073709552,
+        -18446744073709551,
+      ]) {
+        expect(
+          () => ChannelItem.fromJson(item(milliseconds)),
+          throwsFormatException,
+          reason:
+              'raw milliseconds $milliseconds must not wrap into valid media',
+        );
+      }
+    },
+  );
+
+  test(
     'pre-source-setting file loads saves and reloads without quarantine',
     () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -740,6 +774,23 @@ void main() {
 
   for (final corruptState in <String, String>{
     'malformed JSON': '{broken',
+    for (final durationMs in [18446744073709552, -18446744073709551])
+      'overflow duration $durationMs JSON': _encodedState(
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {
+              'server': [
+                _channelJson()
+                  ..['source'] = {
+                    'type': 'manual',
+                    'items': [
+                      {'id': 'raw', 'title': 'Raw', 'durationMs': durationMs},
+                    ],
+                  },
+              ],
+            },
+          },
+      ),
     'schema-invalid JSON': '{"selectedServerByProfile":[]}',
     'invalid settings JSON': _encodedState(
       _canonicalJson()

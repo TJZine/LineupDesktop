@@ -15,6 +15,155 @@ import '../support/ui_fixture.dart';
 
 void main() {
   testWidgets(
+    'successful Air Check load with failed projection offers a recovering retry',
+    (tester) async {
+      final controller = _AirController();
+      addTearDown(controller.dispose);
+      var validity = ChannelAirCheckValidity.valid;
+      controller.scheduleOverride = buildSchedule(
+        [
+          const ChannelItem(
+            id: 'long',
+            title: 'Long',
+            duration: Duration(microseconds: 8640000000000000000),
+          ),
+        ],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+      );
+      final channel = _channel(items: [_item('one')]);
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          channel,
+          onValidityChanged: (value) => validity = value,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Retry Air Check'), findsOneWidget);
+      expect(validity, ChannelAirCheckValidity.unknown);
+      controller.scheduleOverride = null;
+      await tester.tap(find.text('Retry Air Check'));
+      await tester.pumpAndSettle();
+      expect(controller.requests, 2);
+      expect(find.text('One'), findsWidgets);
+      expect(find.text('Retry Air Check'), findsNothing);
+      expect(validity, ChannelAirCheckValidity.valid);
+    },
+  );
+
+  testWidgets(
+    'later Air Check transition failure retires the cached preview and retries',
+    (tester) async {
+      final controller = _AirController();
+      addTearDown(controller.dispose);
+      var now = DateTime.utc(2026, 1, 1, 0, 10);
+      final boundary = now.add(const Duration(days: 1));
+      controller.scheduleOverride = buildSchedule(
+        [
+          const ChannelItem(
+            id: 'long',
+            title: 'Long',
+            duration: Duration(microseconds: 8640000000000000000),
+          ),
+        ],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+        transition: ScheduleTransition(
+          boundary: boundary,
+          legacyCycleItems: [_item('one')],
+        ),
+      );
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          _channel(items: [_item('one')]),
+          clock: () => now,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('One'), findsWidgets);
+      now = boundary;
+      await tester.pump(const Duration(seconds: 30));
+      expect(tester.takeException(), isNull);
+      expect(find.text('Retry Air Check'), findsOneWidget);
+      expect(find.text('One'), findsNothing);
+      controller.scheduleOverride = null;
+      await tester.tap(find.text('Retry Air Check'));
+      await tester.pumpAndSettle();
+      expect(controller.requests, 2);
+      expect(find.text('One'), findsWidgets);
+      expect(find.text('Retry Air Check'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'deferred comparison failure cannot retire a newer retry request',
+    (tester) async {
+      final controller = _AirController(controlled: true);
+      addTearDown(controller.dispose);
+      var now = DateTime.utc(2026, 1, 1, 0, 10);
+      final boundary = now.add(const Duration(days: 1));
+      final original = _channel(items: [_item('one')]);
+      final draft = _channel(items: [_item('two')]);
+      controller.scheduleOverride = buildSchedule(
+        [
+          const ChannelItem(
+            id: 'long',
+            title: 'Long',
+            duration: Duration(microseconds: 8640000000000000000),
+          ),
+        ],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+        transition: ScheduleTransition(
+          boundary: boundary,
+          legacyCycleItems: [_item('one')],
+        ),
+      );
+      Widget surface() => _airCheck(
+        controller,
+        draft,
+        originalChannel: original,
+        clock: () => now,
+      );
+      await tester.pumpWidget(surface());
+      // Baseline has a future invalid projection; the draft itself is normal.
+      controller.scheduleOverride = null;
+      controller.completeNext();
+      await tester.pump();
+      controller.completeNext();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Two'), findsWidgets);
+
+      now = boundary;
+      // Register ahead of the comparison callback created by this build.
+      // A retry can advance the request before that deferred error publishes.
+      final dynamic state = tester.state(find.byType(ChannelAirCheck));
+      WidgetsBinding.instance.addPostFrameCallback((_) => state.retry());
+      await tester.pumpWidget(surface());
+      // Restore the clock so the following build sees a valid baseline, while
+      // the already deferred failure still carries the old request version.
+      now = boundary.subtract(const Duration(days: 1));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Two'), findsWidgets);
+      expect(find.text('Retry Air Check'), findsNothing);
+      expect(controller.requests, 2);
+      await tester.pump(
+        channelAirCheckDebounce + const Duration(milliseconds: 1),
+      );
+      controller.completeNext();
+      await tester.pump();
+      expect(controller.requests, 3);
+      expect(find.text('Two'), findsWidgets);
+      expect(find.text('Retry Air Check'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'sequential Air Check exposes authoritative facts, selection, and clock rollover',
     (tester) async {
       var now = DateTime.utc(2026, 1, 1, 0, 29, 59);
@@ -1232,6 +1381,7 @@ class _AirController extends FixtureController {
   int requests = 0;
   int generation = 0;
   Object? nextFailure;
+  ScheduleIndex? scheduleOverride;
 
   @override
   int get contentGeneration => generation;
@@ -1249,12 +1399,14 @@ class _AirController extends FixtureController {
         const ScheduleBuildException(ScheduleFailureReason.noContent),
       );
     }
-    final schedule = buildSchedule(
-      source.items,
-      mode: channel.playbackMode,
-      seed: channel.shuffleSeed,
-      blockSize: channel.blockSize ?? 3,
-    );
+    final schedule =
+        scheduleOverride ??
+        buildSchedule(
+          source.items,
+          mode: channel.playbackMode,
+          seed: channel.shuffleSeed,
+          blockSize: channel.blockSize ?? 3,
+        );
     if (!controlled) return Future.value(schedule);
     final completer = Completer<ScheduleIndex>();
     _pending.add((completer, schedule));

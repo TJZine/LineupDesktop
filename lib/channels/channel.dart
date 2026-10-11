@@ -255,14 +255,18 @@ class ChannelItem {
           'seriesId',
         },
       );
-      final duration = Duration(milliseconds: _integer(json['durationMs']));
-      if (duration <= Duration.zero) {
+      final durationMs = _integer(json['durationMs']);
+      // Duration stores signed 64-bit microseconds on the desktop runtime.
+      // Validate before multiplication so malformed persisted milliseconds
+      // cannot wrap into a positive, silently shortened program.
+      const maximumDurationMilliseconds = 9223372036854775807 ~/ 1000;
+      if (durationMs <= 0 || durationMs > maximumDurationMilliseconds) {
         throw const FormatException('Invalid item duration');
       }
       return ChannelItem(
         id: _string(json['id']),
         title: _string(json['title']),
-        duration: duration,
+        duration: Duration(milliseconds: durationMs),
         showTitle: _optionalString(json, 'showTitle'),
         showThumb: _optionalArtworkPath(json, 'showThumb'),
         poster: _optionalArtworkUri(json, 'poster'),

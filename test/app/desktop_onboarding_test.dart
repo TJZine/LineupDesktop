@@ -4,6 +4,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
+import 'package:lineup_desktop/app/lineup_shell.dart';
+import 'package:lineup_desktop/app/lineup_restore_view.dart';
+import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/persistence/app_store.dart';
+import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
@@ -15,6 +21,171 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final failure in [
+    'connection',
+    'libraries',
+    'server save',
+    'discovery',
+    'wrong PIN',
+    'profile save',
+    'none',
+    'saved success',
+    'restore',
+  ]) {
+    testWidgets('real shell protected profile recovery: $failure', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final saved = ![
+        'none',
+        'wrong PIN',
+        'profile save',
+        'discovery',
+      ].contains(failure);
+      final store = _ProfileRecoveryStore(failure)
+        ..state = PersistedState(
+          settings: const LineupSettings(reduceMotion: true),
+          selectedServerByProfile: saved
+              ? const {'protected': 'server'}
+              : const {},
+          selectedLibraryIdsByProfileServer: failure == 'restore'
+              ? const {
+                  'protected': {
+                    'server': ['movies'],
+                  },
+                }
+              : const {},
+          channelsByProfileServer: failure == 'restore'
+              ? {
+                  'protected': {
+                    'server': [
+                      Channel(
+                        id: 'saved',
+                        number: 1,
+                        name: 'Saved channel',
+                        source: const LibrarySource(
+                          libraryId: 'movies',
+                          libraryType: PlexLibraryType.movie,
+                        ),
+                        playbackMode: PlaybackMode.sequential,
+                        anchor: DateTime.utc(2026),
+                        shuffleSeed: 1,
+                      ),
+                    ],
+                  },
+                }
+              : const {},
+        );
+      final plex = _ProfileRecoveryPlex(failure);
+      final controller = LineupController(
+        store: store,
+        credentials: _ProfileRecoveryCredentials(),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(controller.stage, SetupStage.profiles);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: LineupShell(controller: controller, player: FixturePlayer()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('profile-card-protected')));
+      await tester.pumpAndSettle();
+      for (final key in [
+        LogicalKeyboardKey.digit1,
+        LogicalKeyboardKey.digit2,
+        LogicalKeyboardKey.digit3,
+        LogicalKeyboardKey.digit4,
+      ]) {
+        await tester.sendKeyEvent(key);
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(plex.submittedPins, ['1234']);
+      if ([
+        'connection',
+        'libraries',
+        'server save',
+        'discovery',
+      ].contains(failure)) {
+        expect(controller.profile?.id, 'protected');
+        expect(store.state.profileId, 'protected');
+        expect(controller.busy, isTrue);
+        expect(controller.stage, SetupStage.servers);
+        expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
+        if (failure == 'server save') {
+          expect(store.serverSaveStarted, isTrue);
+          store.gate.completeError(StateError('synthetic save failure'));
+        } else {
+          expect(plex.gatedRequestStarted, isTrue);
+          plex.gate.completeError(
+            const PlexException(
+              'server-unreachable',
+              'Synthetic server unavailable.',
+            ),
+          );
+        }
+        await tester.pumpAndSettle();
+        expect(controller.busy, isFalse);
+        expect(controller.error, isNotNull);
+        expect(controller.stage, SetupStage.servers);
+        expect(controller.server, isNull);
+        expect(store.state.profileId, 'protected');
+        expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
+        if (failure != 'discovery') {
+          expect(find.text('Synthetic server'), findsWidgets);
+        }
+        expect(find.text('Refresh servers'), findsOneWidget);
+      } else if (['wrong PIN', 'profile save'].contains(failure)) {
+        await tester.pumpAndSettle();
+        expect(controller.profile, isNull);
+        expect(store.state.profileId, isNull);
+        expect(controller.stage, SetupStage.profiles);
+        expect(controller.busy, isFalse);
+        expect(controller.error, isNotNull);
+        expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('profile-card-protected')),
+          findsOneWidget,
+        );
+      } else if (failure == 'restore') {
+        expect(controller.server?.id, 'server');
+        expect(store.state.profileId, 'protected');
+        expect(controller.restoringSavedLineup, isTrue);
+        expect(find.byType(LineupRestoreView), findsOneWidget);
+        expect(find.byType(UpstreamOnboardingView), findsNothing);
+        plex.scanGate.complete(const PlexLibraryScan(items: []));
+        await tester.pumpAndSettle();
+        expect(controller.busy, isFalse);
+        expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
+      } else {
+        await tester.pumpAndSettle();
+        expect(store.state.profileId, 'protected');
+        expect(controller.busy, isFalse);
+        expect(controller.error, isNull);
+        expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
+        expect(
+          controller.stage,
+          failure == 'none' ? SetupStage.servers : SetupStage.channelSetup,
+        );
+        if (failure == 'none') {
+          expect(find.text('Synthetic server'), findsWidgets);
+        } else {
+          expect(find.byType(UpstreamOnboardingView), findsNothing);
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('single-profile server picker exposes quiet Sign out', (
     tester,
   ) async {
@@ -1070,4 +1241,133 @@ class _ServerController extends FixtureController {
     error = 'Fresh discovery failed.';
     notifyListeners();
   }
+}
+
+class _ProfileRecoveryCredentials implements CredentialStore {
+  @override
+  Future<String?> readAccountToken() async => 'synthetic-account';
+  @override
+  Future<String?> readProfileToken(String id) async => null;
+  @override
+  Future<void> writeAccountToken(String token) async {}
+  @override
+  Future<void> writeProfileToken(String id, String token) async {}
+  @override
+  Future<void> clear() async {}
+}
+
+class _ProfileRecoveryStore extends FixtureStore {
+  _ProfileRecoveryStore(this.failure);
+  final String failure;
+  final gate = Completer<void>();
+  bool serverSaveStarted = false;
+  @override
+  Future<void> save(PersistedState value) async {
+    if (failure == 'profile save') {
+      throw StateError('synthetic profile save failure');
+    }
+    if (failure == 'server save' &&
+        value.selectedServerByProfile['protected'] != null &&
+        state.profileId == 'protected') {
+      serverSaveStarted = true;
+      await gate.future;
+    }
+    await super.save(value);
+  }
+}
+
+class _ProfileRecoveryPlex extends PlexClient {
+  _ProfileRecoveryPlex(this.failure)
+    : super(
+        clientIdentifier: 'synthetic-client',
+        httpClient: MockClient(
+          (_) async => throw StateError('unexpected HTTP'),
+        ),
+      );
+  final String failure;
+  final gate = Completer<void>();
+  final scanGate = Completer<PlexLibraryScan>();
+  final submittedPins = <String?>[];
+  bool gatedRequestStarted = false;
+  @override
+  Future<PlexAccount> account(String token) async => const PlexAccount(
+    id: 'owner',
+    name: 'Owner',
+    email: 'synthetic@example.invalid',
+  );
+  @override
+  Future<List<PlexHomeUser>> homeUsers(String token) async => const [
+    PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+    PlexHomeUser(id: 'protected', name: 'Protected', protected: true),
+  ];
+  @override
+  Future<String> switchHomeUser(String token, String id, String? pin) async {
+    submittedPins.add(pin);
+    if (failure == 'wrong PIN') {
+      throw const PlexException('pin-invalid', 'Incorrect PIN. Try again.');
+    }
+    return 'synthetic-profile';
+  }
+
+  Future<void> _waitAt(String boundary) async {
+    if (failure != boundary) return;
+    gatedRequestStarted = true;
+    await gate.future;
+  }
+
+  @override
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
+    await _waitAt('discovery');
+    return [
+      PlexServerAccess(
+        server: const PlexServer(
+          id: 'server',
+          name: 'Synthetic server',
+          connections: [],
+        ),
+        token: 'synthetic-pms',
+      ),
+    ];
+  }
+
+  @override
+  Future<PlexConnection> selectConnection(
+    PlexServer server,
+    String token,
+  ) async {
+    await _waitAt('connection');
+    return PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: true,
+      relay: false,
+    );
+  }
+
+  @override
+  Future<List<PlexLibrary>> libraries(Uri server, String token) async {
+    await _waitAt('libraries');
+    return const [
+      PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+    ];
+  }
+
+  @override
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    void Function(PlexLibraryScanPhase phase)? onPhase,
+    Future<void>? cancelled,
+  }) => scanGate.future;
+  @override
+  Future<PlexPlaylistCatalog> playlists(
+    Uri server,
+    String token, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+    void Function(PlexPlaylistProgress)? onProgress,
+  }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
 }

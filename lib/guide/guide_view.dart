@@ -293,6 +293,9 @@ class _GuideViewState extends State<GuideView>
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
   final _searchController = TextEditingController();
+  late String _observedSearchQuery;
+  late int _searchContentGeneration;
+  bool _publishingSearchEdit = false;
   late final AnimationController _activityPulse;
   ScrollController? _scroll;
   Timer? _clockTimer;
@@ -308,6 +311,8 @@ class _GuideViewState extends State<GuideView>
     WidgetsBinding.instance.addObserver(this);
     _lastFocusedChannelId = widget.controller.focusedChannelId;
     _searchController.text = widget.controller.searchQuery;
+    _observedSearchQuery = widget.controller.searchQuery;
+    _searchContentGeneration = widget.controller.lineup.contentGeneration;
     _searchController.addListener(_searchChanged);
     _activityPulse = AnimationController(
       vsync: this,
@@ -353,7 +358,12 @@ class _GuideViewState extends State<GuideView>
   }
 
   void _searchChanged() {
-    widget.controller.setSearchQuery(_searchController.text);
+    _publishingSearchEdit = true;
+    try {
+      widget.controller.setSearchQuery(_searchController.text);
+    } finally {
+      _publishingSearchEdit = false;
+    }
   }
 
   KeyEventResult _searchKey(FocusNode node, KeyEvent event) {
@@ -426,7 +436,16 @@ class _GuideViewState extends State<GuideView>
   void _changed() {
     if (!mounted) return;
     final searchQuery = widget.controller.searchQuery;
-    if (_searchController.text != searchQuery) {
+    final contentGeneration = widget.controller.lineup.contentGeneration;
+    final externalSearchChange =
+        !_publishingSearchEdit &&
+        (searchQuery != _observedSearchQuery ||
+            contentGeneration != _searchContentGeneration);
+    _observedSearchQuery = searchQuery;
+    _searchContentGeneration = contentGeneration;
+    // The editor owns raw text, selection and composing state. Normalized
+    // matching and unrelated schedule notifications must not rewrite an edit.
+    if (externalSearchChange) {
       _searchController.value = TextEditingValue(
         text: searchQuery,
         selection: TextSelection.collapsed(offset: searchQuery.length),
@@ -507,34 +526,45 @@ class _GuideViewState extends State<GuideView>
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-    if (_retryFocus.hasFocus) {
-      if (key == LogicalKeyboardKey.enter ||
-          key == LogicalKeyboardKey.numpadEnter ||
-          key == LogicalKeyboardKey.space ||
-          key == LogicalKeyboardKey.select) {
-        widget.controller.retryFailedRows();
-        (widget.focusNode ?? _guideFocus).requestFocus();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowUp ||
-          key == LogicalKeyboardKey.arrowDown) {
-        (widget.focusNode ?? _guideFocus).requestFocus();
-      }
-    }
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
         keyboard.isControlPressed ||
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
-    // EditableText handles text input after focus-key dispatch. Do not let
-    // unmodified editor keys invoke the ancestor's grid shortcuts.
-    if (_searchFocus.hasFocus && !commandModified) {
-      return KeyEventResult.ignored;
-    }
     if (key == LogicalKeyboardKey.keyF &&
         (keyboard.isControlPressed || keyboard.isMetaPressed)) {
       _searchFocus.requestFocus();
-    } else if (key == LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.handled;
+    }
+    // Search consumes its own Escape and keeps unmodified editing keys local.
+    if (_searchFocus.hasFocus && !commandModified) {
+      return KeyEventResult.ignored;
+    }
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.backspace ||
+        key == LogicalKeyboardKey.goBack ||
+        (key == LogicalKeyboardKey.keyG && !commandModified) ||
+        key == LogicalKeyboardKey.f2) {
+      widget.onClose();
+      return KeyEventResult.handled;
+    }
+    // Toolbar and recovery controls retain their own activation Actions.
+    // Cell subtrees dispatch through _gridKey before reaching this ancestor.
+    if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
+    return _gridKey(node, event);
+  }
+
+  KeyEventResult _gridKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    final keyboard = HardwareKeyboard.instance;
+    final commandModified =
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isAltPressed;
+    if (key == LogicalKeyboardKey.arrowUp) {
       widget.controller.moveVertical(-1);
     } else if (key == LogicalKeyboardKey.arrowDown) {
       widget.controller.moveVertical(1);
@@ -560,20 +590,10 @@ class _GuideViewState extends State<GuideView>
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.space ||
         key == LogicalKeyboardKey.select) {
-      if (_setupFocus.hasFocus) {
-        widget.onSetUpChannels?.call();
-        return KeyEventResult.handled;
-      }
       final selected = widget.controller.selectFocusedProgram();
       if (selected?.isCurrentAt(widget.controller.now) == true) {
         unawaited(widget.onTune(selected!.channelId));
       }
-    } else if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.backspace ||
-        key == LogicalKeyboardKey.goBack ||
-        (key == LogicalKeyboardKey.keyG && !commandModified) ||
-        key == LogicalKeyboardKey.f2) {
-      widget.onClose();
     } else {
       return KeyEventResult.ignored;
     }
@@ -722,6 +742,7 @@ class _GuideViewState extends State<GuideView>
                                   onTune: widget.onTune,
                                   now: now,
                                   activityPulse: _activityPulse,
+                                  onGridKey: _gridKey,
                                 ),
                               ),
                       ),
@@ -758,10 +779,17 @@ class _GuideViewState extends State<GuideView>
                                   return KeyEventResult.handled;
                                 }
                                 if (event.logicalKey ==
-                                    LogicalKeyboardKey.select) {
-                                  widget.controller.retryFailedRows();
+                                        LogicalKeyboardKey.arrowUp ||
+                                    event.logicalKey ==
+                                        LogicalKeyboardKey.arrowDown) {
                                   (widget.focusNode ?? _guideFocus)
                                       .requestFocus();
+                                  widget.controller.moveVertical(
+                                    event.logicalKey ==
+                                            LogicalKeyboardKey.arrowUp
+                                        ? -1
+                                        : 1,
+                                  );
                                   return KeyEventResult.handled;
                                 }
                                 return KeyEventResult.ignored;
@@ -1696,6 +1724,7 @@ class _GuideRow extends StatelessWidget {
     required this.onTune,
     required this.now,
     required this.activityPulse,
+    required this.onGridKey,
   });
   final Channel channel;
   final GuideController controller;
@@ -1706,6 +1735,7 @@ class _GuideRow extends StatelessWidget {
   final Future<void> Function(String channelId) onTune;
   final DateTime now;
   final Animation<double> activityPulse;
+  final FocusOnKeyEventCallback onGridKey;
 
   @override
   Widget build(BuildContext context) {
@@ -1750,143 +1780,153 @@ class _GuideRow extends StatelessWidget {
             selected: selectedChannel,
             focused: focusedChannel,
             onTap: focusCurrentProgram,
-            child: InkWell(
-              excludeFromSemantics: true,
-              onTap: focusCurrentProgram,
-              child: AnimatedContainer(
-                duration: controller.lineup.settings.reduceMotion
-                    ? Duration.zero
-                    : const Duration(milliseconds: 90),
-                width: railWidth,
-                padding: EdgeInsets.symmetric(
-                  horizontal: _guideEdgeContentInset,
-                ),
-                decoration: BoxDecoration(
-                  color: focusChannelRail ? focusFill : roles.primarySurface,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: LineupTheme.of(context).subtleBorder,
+            child: Focus(
+              canRequestFocus: false,
+              onKeyEvent: onGridKey,
+              child: InkWell(
+                excludeFromSemantics: true,
+                onFocusChange: (focused) {
+                  if (focused) focusCurrentProgram();
+                },
+                onTap: focusCurrentProgram,
+                child: AnimatedContainer(
+                  duration: controller.lineup.settings.reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 90),
+                  width: railWidth,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _guideEdgeContentInset,
+                  ),
+                  decoration: BoxDecoration(
+                    color: focusChannelRail ? focusFill : roles.primarySurface,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: LineupTheme.of(context).subtleBorder,
+                      ),
                     ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: railWidth < 180 ? 40 : 48,
-                      child: Text(
-                        '${channel.number}',
-                        style: TextStyle(
-                          color: focusChannelRail
-                              ? roles.focusedText
-                              : roles.secondaryText,
-                          fontSize: (showProvenance ? 28 : 22),
-                          fontWeight: FontWeight.w500,
-                          fontFeatures: const [ui.FontFeature.tabularFigures()],
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: railWidth < 180 ? 40 : 48,
+                        child: Text(
+                          '${channel.number}',
+                          style: TextStyle(
+                            color: focusChannelRail
+                                ? roles.focusedText
+                                : roles.secondaryText,
+                            fontSize: (showProvenance ? 28 : 22),
+                            fontWeight: FontWeight.w500,
+                            fontFeatures: const [
+                              ui.FontFeature.tabularFigures(),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final nameStyle = DefaultTextStyle.of(context).style
-                              .copyWith(
-                                fontSize: 18,
-                                color: focusChannelRail
-                                    ? roles.focusedText
-                                    : roles.primaryText,
-                                fontWeight: FontWeight.w500,
-                              );
-                          final painter = TextPainter(
-                            text: TextSpan(
-                              text: channel.name,
-                              style: nameStyle,
-                            ),
-                            textDirection: Directionality.of(context),
-                            textScaler: MediaQuery.textScalerOf(context),
-                          )..layout(maxWidth: constraints.maxWidth);
-                          final lineHeight = painter
-                              .computeLineMetrics()
-                              .first
-                              .height;
-                          final supportStyle = DefaultTextStyle.of(context)
-                              .style
-                              .copyWith(
-                                fontSize: (showProvenance ? 16 : 14),
-                                color: roles.mutedText,
-                              );
-                          final supportHeight = _textHeight(
-                            supportStyle,
-                            MediaQuery.textScalerOf(context),
-                            Directionality.of(context),
-                          );
-                          final supportLabel = tunedChannel
-                              ? 'Watching'
-                              : _channelProvenance(controller, channel);
-                          final availableLines =
-                              ((constraints.maxHeight -
-                                          ((tunedChannel || showSource)
-                                              ? supportHeight
-                                              : 0)) /
-                                      lineHeight)
-                                  .floor()
-                                  .clamp(1, 1000);
-                          final nameHeight = painter.height.ceilToDouble();
-                          painter.dispose();
-                          final showSupport =
-                              (tunedChannel || showSource) &&
-                              nameHeight + supportHeight <=
-                                  constraints.maxHeight;
-                          return Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Tooltip(
-                                message: channel.name,
-                                child: Text(
-                                  channel.name,
-                                  softWrap: true,
-                                  maxLines: availableLines,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: nameStyle,
-                                ),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final nameStyle = DefaultTextStyle.of(context).style
+                                .copyWith(
+                                  fontSize: 18,
+                                  color: focusChannelRail
+                                      ? roles.focusedText
+                                      : roles.primaryText,
+                                  fontWeight: FontWeight.w500,
+                                );
+                            final painter = TextPainter(
+                              text: TextSpan(
+                                text: channel.name,
+                                style: nameStyle,
                               ),
-                              if (showSupport)
-                                tunedChannel
-                                    ? ExcludeSemantics(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.max,
-                                          children: [
-                                            Icon(
-                                              Icons.play_arrow_rounded,
-                                              size: 14,
-                                              color: roles.secondaryText,
-                                            ),
-                                            SizedBox(width: 4),
-                                            Flexible(
-                                              child: Text(
-                                                supportLabel,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: supportStyle.copyWith(
-                                                  color: roles.secondaryText,
+                              textDirection: Directionality.of(context),
+                              textScaler: MediaQuery.textScalerOf(context),
+                            )..layout(maxWidth: constraints.maxWidth);
+                            final lineHeight = painter
+                                .computeLineMetrics()
+                                .first
+                                .height;
+                            final supportStyle = DefaultTextStyle.of(context)
+                                .style
+                                .copyWith(
+                                  fontSize: (showProvenance ? 16 : 14),
+                                  color: roles.mutedText,
+                                );
+                            final supportHeight = _textHeight(
+                              supportStyle,
+                              MediaQuery.textScalerOf(context),
+                              Directionality.of(context),
+                            );
+                            final supportLabel = tunedChannel
+                                ? 'Watching'
+                                : _channelProvenance(controller, channel);
+                            final availableLines =
+                                ((constraints.maxHeight -
+                                            ((tunedChannel || showSource)
+                                                ? supportHeight
+                                                : 0)) /
+                                        lineHeight)
+                                    .floor()
+                                    .clamp(1, 1000);
+                            final nameHeight = painter.height.ceilToDouble();
+                            painter.dispose();
+                            final showSupport =
+                                (tunedChannel || showSource) &&
+                                nameHeight + supportHeight <=
+                                    constraints.maxHeight;
+                            return Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Tooltip(
+                                  message: channel.name,
+                                  child: Text(
+                                    channel.name,
+                                    softWrap: true,
+                                    maxLines: availableLines,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: nameStyle,
+                                  ),
+                                ),
+                                if (showSupport)
+                                  tunedChannel
+                                      ? ExcludeSemantics(
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.max,
+                                            children: [
+                                              Icon(
+                                                Icons.play_arrow_rounded,
+                                                size: 14,
+                                                color: roles.secondaryText,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  supportLabel,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: supportStyle.copyWith(
+                                                    color: roles.secondaryText,
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
+                                        )
+                                      : Text(
+                                          supportLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: supportStyle,
                                         ),
-                                      )
-                                    : Text(
-                                        supportLabel,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: supportStyle,
-                                      ),
-                            ],
-                          );
-                        },
+                              ],
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1902,6 +1942,7 @@ class _GuideRow extends StatelessWidget {
                     onTune: onTune,
                     now: now,
                     activityPulse: activityPulse,
+                    onGridKey: onGridKey,
                   ),
           ),
         ],
@@ -1918,6 +1959,7 @@ class _Programs extends StatelessWidget {
     required this.onTune,
     required this.now,
     required this.activityPulse,
+    required this.onGridKey,
   });
   final Channel channel;
   final GuideRowData data;
@@ -1925,6 +1967,7 @@ class _Programs extends StatelessWidget {
   final Future<void> Function(String channelId) onTune;
   final DateTime now;
   final Animation<double> activityPulse;
+  final FocusOnKeyEventCallback onGridKey;
 
   @override
   Widget build(BuildContext context) {
@@ -1960,56 +2003,60 @@ class _Programs extends StatelessWidget {
         child: Text('No programs scheduled in this time range'),
       );
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return ClipRect(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              for (final program in data.programs)
-                _programCell(program, constraints.maxWidth, now),
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: 14,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          LineupTheme.of(context).deepBackground
-                              .withValues(alpha: 0.7),
-                          Colors.transparent,
-                        ],
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: onGridKey,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return ClipRect(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                for (final program in data.programs)
+                  _programCell(program, constraints.maxWidth, now),
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 14,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            LineupTheme.of(context).deepBackground
+                                .withValues(alpha: 0.7),
+                            Colors.transparent,
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              Positioned(
-                right: 0,
-                top: 0,
-                bottom: 0,
-                width: 14,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          LineupTheme.of(context).deepBackground
-                              .withValues(alpha: 0.7),
-                        ],
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 14,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.transparent,
+                            LineupTheme.of(context).deepBackground
+                                .withValues(alpha: 0.7),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -2233,6 +2280,9 @@ class _ProgramCellState extends State<_ProgramCell> {
             child: InkWell(
               excludeFromSemantics: true,
               onTap: widget.onTap,
+              onFocusChange: (focused) {
+                if (focused) widget.onTap();
+              },
               onDoubleTap: widget.onDoubleTap,
               child: AnimatedContainer(
                 duration: widget.reduceMotion
