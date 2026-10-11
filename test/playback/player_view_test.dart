@@ -6152,9 +6152,19 @@ class _Native implements NativePlayer {
   @override
   Stream<PlayerEvent> get events => _events.stream;
   @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.initial();
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
+  @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     loadCalls++;
     if (failLoad) throw StateError('synthetic load failure');
     if (blockLoad) {
@@ -6162,6 +6172,9 @@ class _Native implements NativePlayer {
       await _loadCompletion.future;
     }
   }
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   void completeLoad() {
     if (!_loadCompletion.isCompleted) _loadCompletion.complete();

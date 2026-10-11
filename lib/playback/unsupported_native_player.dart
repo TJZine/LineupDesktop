@@ -26,7 +26,14 @@ class UnsupportedNativePlayer implements NativePlayer {
   List<PlayerTrack> get tracks => const [];
 
   @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.unavailable();
+
+  @override
   Stream<PlayerEvent> get events => const Stream.empty();
+
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
 
   @override
   Future<void> initialize() async {}
@@ -36,8 +43,15 @@ class UnsupportedNativePlayer implements NativePlayer {
   );
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async =>
-      _unavailable();
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async => _unavailable();
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   @override
   Future<void> play() async => _unavailable();

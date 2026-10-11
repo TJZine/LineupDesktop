@@ -5690,7 +5690,12 @@ class _ContinuationStatePlayer extends _EventPlayer {
   }
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length != 2) return;
     for (final state in [
@@ -5999,13 +6004,26 @@ class _Player implements NativePlayer {
   @override
   Stream<PlayerEvent> get events => const Stream.empty();
   @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.initial();
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
+  @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     loads.add(media);
     loadPlexTokens.add(plexToken);
     loadGenerations.add(generation);
   }
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   @override
   Future<void> play() async {
@@ -6047,7 +6065,12 @@ mixin _BlocksFirstLoad on _Player {
   final releaseFirstLoad = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length == 1) {
       firstLoadStarted.complete();
@@ -6091,7 +6114,12 @@ class _BlockingStopEventPlayer extends _EventPlayer {
   final releaseStop = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     emitStatus(PlayerState.playing, generation: generation);
   }
@@ -6116,7 +6144,12 @@ class _PreemptibleLoadPlayer extends _EventPlayer {
   bool loadSettled = false;
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     calls.add('load');
     if (loads.length != 1) return;
@@ -6144,7 +6177,12 @@ class _PreemptibleLoadPlayer extends _EventPlayer {
 
 class _LoadFailurePlayer extends _Player {
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     throw StateError('load failed after dispatch');
   }
@@ -6226,7 +6264,12 @@ class _EventPlayer extends _Player {
 
 class _SecondLoadFailurePlayer extends _EventPlayer {
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length == 2) throw StateError('part transition failed');
   }
@@ -6245,7 +6288,12 @@ class _BlockingSecondLoadPlayer extends _EventPlayer {
   final releaseSecondLoad = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length != 2) return;
     secondLoadStarted.complete();
@@ -6258,7 +6306,12 @@ class _BlockingFailingSecondLoadPlayer extends _EventPlayer {
   final releaseSecondLoad = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length != 2) return;
     secondLoadStarted.complete();
@@ -6279,7 +6332,12 @@ class _SynchronousAuthorizationPlayer extends _EventPlayer {
   final int? httpStatus;
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length > failures) return;
     emitError(
@@ -6296,7 +6354,12 @@ class _AsyncInitialAuthorizationPlayer extends _EventPlayer {
   _AsyncInitialAuthorizationPlayer() : super(sync: false);
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length != 1) return;
     emitError(
@@ -6313,7 +6376,12 @@ class _SuccessfulPartAuthorizationPlayer extends _EventPlayer {
   _SuccessfulPartAuthorizationPlayer({super.sync = true});
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length != 2) return;
     position = const Duration(minutes: 7);
@@ -6340,7 +6408,12 @@ class _PartAuthorizationFailurePlayer extends _EventPlayer {
   _PartAuthorizationFailurePlayer() : super(sync: true);
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length != 2) return;
     emitError(
@@ -6356,7 +6429,12 @@ class _PartAuthorizationFailurePlayer extends _EventPlayer {
 class _FailingPartAuthorizationRetryPlayer
     extends _PartAuthorizationFailurePlayer {
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length == 3) throw StateError('authorization retry failed');
   }
@@ -6370,7 +6448,12 @@ class _BlockingFailingPartAuthorizationRetryPlayer
   final releaseRetryLoad = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length != 3) return;
     retryLoadStarted.complete();

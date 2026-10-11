@@ -329,6 +329,17 @@ void main() {
       await _sendNativeEvent(messenger, {
         'type': 'property',
         'loadId': loadId,
+        'name': 'video-target-params',
+        'value': {
+          'gamma': '  PQ ',
+          'primaries': 'BT.2020',
+          'pixelformat': 'RGBA16F',
+          'unlisted': 'ignored',
+        },
+      });
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId,
         'name': 'track-list',
         'value': [
           {
@@ -357,6 +368,9 @@ void main() {
       expect(player.telemetry.videoOutput, 'gpu-next');
       expect(player.telemetry.hardwareDecoder, 'd3d11va');
       expect(player.telemetry.isHdr, isTrue);
+      expect(player.telemetry.targetGamma, 'pq');
+      expect(player.telemetry.targetPrimaries, 'bt.2020');
+      expect(player.telemetry.targetPixelFormat, 'rgba16f');
       expect(player.tracks.single.codec, 'h264');
       expect(player.tracks.single.selected, isTrue);
 
@@ -365,6 +379,154 @@ void main() {
       expect(calls.where((call) => call.method == 'initialize'), hasLength(2));
     },
   );
+
+  test(
+    'encodes startPaused and keeps raw playing readiness separate',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(
+        Uri.parse('file:///paused.mp4'),
+        generation: 8,
+        startPaused: true,
+      );
+      await Future<void>.delayed(Duration.zero);
+      final loadCall = calls.singleWhere((call) => call.method == 'load');
+      final loadId = loadCall.arguments!['loadId']! as int;
+      expect(loadCall.arguments!['startPaused'], isTrue);
+
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+      });
+      await load;
+
+      expect(player.status.state, PlayerState.paused);
+      expect(player.status.message, 'Paused');
+    },
+  );
+
+  test(
+    'routes valid player-scoped display reports and rejects stale data',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      final reports = <DisplayMatchingReport>[];
+      final subscription = player.displayReports.listen(reports.add);
+      addTearDown(subscription.cancel);
+      await player.initialize();
+      await player.setDisplayMatching(
+        const DisplayMatchingRequest(
+          revision: 4,
+          session: true,
+          desired: DisplayMatchingState.hdr,
+        ),
+      );
+
+      expect(
+        calls
+            .singleWhere((call) => call.method == 'setDisplayMatching')
+            .arguments,
+        {'revision': 4, 'session': true, 'desired': 'hdr'},
+      );
+      await _sendNativeEvent(messenger, {
+        'type': 'display',
+        'loadId': -1,
+        'revision': 4,
+        'session': 'active',
+        'observed': 'hdr',
+        'outcome': 'matched',
+        'wrote': true,
+        'owned': true,
+        'reason': null,
+        'route': 'hdr_state',
+        'activeColorMode': 'hdr',
+      });
+      expect(reports, hasLength(1));
+      expect(player.displayReport.session, DisplayMatchingSessionState.active);
+      expect(player.displayReport.observed, DisplayMatchingState.hdr);
+      expect(player.displayReport.activeColorMode, DisplayActiveColorMode.hdr);
+
+      await _sendNativeEvent(messenger, {
+        'type': 'display',
+        'revision': 3,
+        'session': 'active',
+        'observed': 'sdr',
+        'outcome': 'matched',
+        'wrote': false,
+        'owned': false,
+        'reason': null,
+        'route': 'hdr_state',
+      });
+      await _sendNativeEvent(messenger, {
+        'type': 'display',
+        'revision': 4,
+        'session': 'not-a-session',
+        'observed': 'sdr',
+        'outcome': 'matched',
+        'wrote': false,
+        'owned': false,
+        'reason': null,
+        'route': 'hdr_state',
+      });
+      expect(reports, hasLength(1));
+    },
+  );
+
+  test('resets the display revision across initialize', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    await player.setDisplayMatching(
+      const DisplayMatchingRequest(
+        revision: 8,
+        session: true,
+        desired: DisplayMatchingState.sdr,
+      ),
+    );
+    await player.dispose();
+    await player.initialize();
+    await player.setDisplayMatching(
+      const DisplayMatchingRequest(
+        revision: 1,
+        session: false,
+        desired: DisplayMatchingState.unknown,
+      ),
+    );
+
+    expect(
+      calls.where((call) => call.method == 'setDisplayMatching'),
+      hasLength(2),
+    );
+    expect(calls.last.arguments, {
+      'revision': 1,
+      'session': false,
+      'desired': 'unknown',
+    });
+  });
 
   test('maps a correlated native ended state to PlayerState.ended', () async {
     final calls = <MethodCall>[];

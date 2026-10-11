@@ -34,6 +34,7 @@ class LineupSettings {
     this.guideInfoBackgroundMode = GuideInfoBackgroundMode.bleed,
     this.preferClearLogos = true,
     this.dvrControlsEnabled = false,
+    this.matchDisplayHdr = true,
     this.nowWatchingBanner = true,
     this.osdAutoHideSeconds = 4,
     this.reduceMotion = false,
@@ -49,6 +50,7 @@ class LineupSettings {
   final GuideInfoBackgroundMode guideInfoBackgroundMode;
   final bool preferClearLogos;
   final bool dvrControlsEnabled;
+  final bool matchDisplayHdr;
   final bool nowWatchingBanner;
   final int osdAutoHideSeconds;
   final bool reduceMotion;
@@ -64,6 +66,7 @@ class LineupSettings {
     GuideInfoBackgroundMode? guideInfoBackgroundMode,
     bool? preferClearLogos,
     bool? dvrControlsEnabled,
+    bool? matchDisplayHdr,
     bool? nowWatchingBanner,
     int? osdAutoHideSeconds,
     bool? reduceMotion,
@@ -80,6 +83,7 @@ class LineupSettings {
         guideInfoBackgroundMode ?? this.guideInfoBackgroundMode,
     preferClearLogos: preferClearLogos ?? this.preferClearLogos,
     dvrControlsEnabled: dvrControlsEnabled ?? this.dvrControlsEnabled,
+    matchDisplayHdr: matchDisplayHdr ?? this.matchDisplayHdr,
     nowWatchingBanner: nowWatchingBanner ?? this.nowWatchingBanner,
     osdAutoHideSeconds: osdAutoHideSeconds ?? this.osdAutoHideSeconds,
     reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -97,6 +101,7 @@ class LineupSettings {
     'guideInfoBackgroundMode': guideInfoBackgroundMode.name,
     'preferClearLogos': preferClearLogos,
     'dvrControlsEnabled': dvrControlsEnabled,
+    'matchDisplayHdr': matchDisplayHdr,
     'nowWatchingBanner': nowWatchingBanner,
     'osdAutoHideSeconds': osdAutoHideSeconds,
     // Retain the legacy canonical key so existing settings continue to load.
@@ -127,6 +132,7 @@ class LineupSettings {
       'guideInfoBackgroundMode',
       'preferClearLogos',
       'dvrControlsEnabled',
+      'matchDisplayHdr',
       'libraryTabsEnabled',
       'nowWatchingBanner',
       'osdAutoHideSeconds',
@@ -146,6 +152,7 @@ class LineupSettings {
     final requiredFields = fields.difference({
       'overlayTransparency',
       'dvrControlsEnabled',
+      'matchDisplayHdr',
       'guideShowChannelSources',
       ...retiredFields,
     });
@@ -237,6 +244,7 @@ class LineupSettings {
         'dvrControlsEnabled',
         fallback: false,
       ),
+      matchDisplayHdr: optionalBoolean('matchDisplayHdr', fallback: true),
       nowWatchingBanner: boolean('nowWatchingBanner'),
       osdAutoHideSeconds: option(
         'osdAutoHideSeconds',

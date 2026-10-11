@@ -1336,6 +1336,20 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
               ),
               _settingFeedback('dvrControlsEnabled'),
+              _SettingsSwitchTile(
+                title: const Text('Match display HDR in fullscreen'),
+                subtitle: const Text(
+                  'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+                ),
+                value: value.matchDisplayHdr,
+                onChanged: _pendingSettingKeys.contains('matchDisplayHdr')
+                    ? null
+                    : (item) => _update(
+                        'matchDisplayHdr',
+                        (current) => current.copyWith(matchDisplayHdr: item),
+                      ),
+              ),
+              _settingFeedback('matchDisplayHdr'),
             ],
             SettingsCategory.accessibility => [
               _SettingsSwitchTile(

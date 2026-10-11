@@ -79,6 +79,7 @@ void main() {
       profilePickerOnStartup: true,
       diagnosticsEnabled: true,
       dvrControlsEnabled: true,
+      matchDisplayHdr: false,
       guideShowChannelSources: true,
     );
     expect(
@@ -121,6 +122,8 @@ void main() {
   test('retains DVR and audio compatibility contracts', () {
     final old = const LineupSettings().toJson()..remove('dvrControlsEnabled');
     expect(LineupSettings.fromJson(old).dvrControlsEnabled, isFalse);
+    final hdrOld = const LineupSettings().toJson()..remove('matchDisplayHdr');
+    expect(LineupSettings.fromJson(hdrOld).matchDisplayHdr, isTrue);
     final audio = const LineupSettings().toJson()
       ..['audioSetupComplete'] = false;
     expect(

@@ -5167,7 +5167,12 @@ class _AgreementPlayer extends FixturePlayer {
   Uri? loaded;
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     loaded = media;
     await super.load(media, plexToken: plexToken, generation: generation);
   }
@@ -5395,7 +5400,12 @@ class _DelayedStudioPlayer extends FixturePlayer {
   final release = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     started.complete();
     await release.future;

@@ -110,14 +110,27 @@ class FixturePlayer implements NativePlayer {
   @override
   List<PlayerTrack> get tracks => _tracks;
   @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.initial();
+  @override
   Stream<PlayerEvent> get events => _events.stream;
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     this.generation = generation ?? this.generation + 1;
     emit(const PlayerStatus(state: PlayerState.loading, message: 'Loading'));
   }
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   @override
   Future<void> pause() async {}
