@@ -413,7 +413,14 @@ void DisplayMatchingEngine::Poll(bool remap) {
   if (request_.session && (remap || !active_)) {
     const auto mapping = api_.MapWindow(window_);
     if (!mapping.target || !active_ || !(*mapping.target == *active_)) {
-      session_ = "inactive";
+      Record* retiring = active_ ? Find(*active_) : nullptr;
+      // The same Dart revision can span a native target change. Publish the
+      // session edge before restoration or starting the incoming target, so
+      // the coordinator can distinguish it from ordinary active polling.
+      if (active_) {
+        session_ = "inactive";
+        Report(retiring, "idle", false);
+      }
       active_.reset();
       // The incoming target may already be owned from a disappearance or a
       // failed release. It must inherit its record, not restore and recapture.

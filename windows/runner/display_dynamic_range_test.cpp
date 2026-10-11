@@ -258,6 +258,61 @@ void TargetLossAndChange() {
             moved.Last().route == DisplayRoute::advanced_color,
         "target move releases old starts new");
 }
+void TargetSessionReportEdges() {
+  constexpr int64_t revision = 7;
+  for (bool owned : {false, true}) {
+    Fixture moved;
+    moved.Request(revision, true,
+                  owned ? DisplayState::hdr : DisplayState::sdr);
+    Check(moved.engine.HasOwnership() == owned, "target edge ownership setup");
+    moved.reports.clear();
+    moved.engine.Poll(true);
+    for (const auto& report : moved.reports) {
+      Check(report.revision == revision && !Text(report.session, "inactive"),
+            "same-target polling does not retire session");
+    }
+    moved.reports.clear();
+    moved.api.mapping = {b, nullptr};
+    moved.api.on_set = [&moved](auto, auto) {
+      Check(!moved.reports.empty() &&
+                Text(moved.reports.front().session, "inactive"),
+            "inactive edge precedes target restoration and new-target writes");
+    };
+    moved.engine.Poll(true);
+    Check(!moved.reports.empty() &&
+              Text(moved.reports.front().session, "inactive") &&
+              Text(moved.reports.back().session, "active"),
+          "capable target remap publishes ordered inactive then active");
+    bool saw_active = false;
+    for (const auto& report : moved.reports) {
+      Check(report.revision == revision,
+            "target remap retains request revision");
+      if (Text(report.session, "active")) saw_active = true;
+      Check(!saw_active || !Text(report.session, "inactive"),
+            "retirement reports precede all new-session active reports");
+    }
+
+    Fixture lost;
+    lost.Request(revision, true, owned ? DisplayState::hdr : DisplayState::sdr);
+    lost.reports.clear();
+    lost.api.mapping = {};
+    lost.api.displays[1].state = DisplayState::unknown;
+    lost.engine.Poll(true);
+    Check(!lost.reports.empty() &&
+              Text(lost.reports.front().session, "inactive") &&
+              Text(lost.reports.back().session, "unavailable"),
+          "target disappearance publishes ordered inactive then unavailable");
+    for (const auto& report : lost.reports)
+      Check(report.revision == revision,
+            "disappearance retains request revision");
+    // Repeated failure to map has no further target/session to retire.
+    lost.reports.clear();
+    lost.engine.Poll(true);
+    for (const auto& report : lost.reports)
+      Check(!Text(report.session, "inactive"),
+            "missing target does not repeat retirement edge");
+  }
+}
 void AvailabilityAndRoutes() {
   Fixture ambiguous;
   ambiguous.api.mapping = {std::nullopt, "ambiguous_target"};
@@ -411,6 +466,7 @@ int main() {
     ExternalChanges();
     RestoreFailureAndInheritance();
     TargetLossAndChange();
+    TargetSessionReportEdges();
     AvailabilityAndRoutes();
     GuardianGates();
     WorkerOrderingAndIsolation(false);
