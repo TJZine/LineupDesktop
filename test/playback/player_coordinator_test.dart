@@ -17,6 +17,309 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets(
+    'display hold local load projects busy without changing overlay or status',
+    (tester) async {
+      final f = _ContinuationFixture(player: _DisplayPlayer());
+      final p = f.player as _DisplayPlayer;
+      addTearDown(f.close);
+      await f.coordinator.toggleFullscreen();
+      await f.coordinator.loadInitialMedia(
+        Uri.parse('https://synthetic.test/local'),
+      );
+      expect(p.pausedStarts, [true]);
+      expect(f.coordinator.displayHoldActive, isTrue);
+      expect(f.coordinator.status.state, PlayerState.paused);
+      f.coordinator.showMiniGuide();
+      final presentation = f.coordinator.overlayPresentationGeneration;
+      p.decode();
+      await tester.pump();
+      p.report(DisplayMatchingOutcome.pending);
+      await tester.pump();
+      f.now = f.now.add(const Duration(seconds: 2));
+      await tester.pump(const Duration(seconds: 2));
+      expect(f.coordinator.busyLabel, 'Starting playback…');
+      p.report(DisplayMatchingOutcome.matched, wrote: true);
+      await tester.pump();
+      f.now = f.now.add(const Duration(milliseconds: 1500));
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(p.plays, 1);
+      expect(f.coordinator.displayHoldActive, isFalse);
+      expect(f.coordinator.overlay, PlayerOverlay.miniGuide);
+      expect(f.coordinator.overlayPresentationGeneration, presentation);
+      expect(
+        f.coordinator.diagnosticPlaybackSnapshot.displayReport,
+        p.displayReport,
+      );
+    },
+  );
+
+  for (final trigger in [
+    'fullscreen',
+    'Guide close',
+    'Player destination',
+    'setting',
+  ]) {
+    testWidgets('post-load $trigger pauses only for the new desired change', (
+      tester,
+    ) async {
+      final f = _ContinuationFixture(player: _DisplayPlayer());
+      final p = f.player as _DisplayPlayer;
+      addTearDown(f.close);
+      if (trigger == 'Guide close') f.coordinator.showFullGuide();
+      if (trigger == 'Player destination') {
+        f.coordinator.setPlayerDestinationVisible(false);
+      }
+      if (trigger == 'setting') {
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(matchDisplayHdr: false),
+        );
+      }
+      if (trigger != 'fullscreen') await f.coordinator.toggleFullscreen();
+      await f.coordinator.loadInitialMedia(
+        Uri.parse('https://synthetic.test/local'),
+      );
+      expect(p.pausedStarts, [false]);
+      p.decode();
+      await tester.pump();
+      if (trigger == 'fullscreen') await f.coordinator.toggleFullscreen();
+      if (trigger == 'Guide close') f.coordinator.closeOverlay();
+      if (trigger == 'Player destination') {
+        f.coordinator.setPlayerDestinationVisible(true);
+      }
+      if (trigger == 'setting') {
+        f.lineup.setSettings(f.lineup.settings.copyWith(matchDisplayHdr: true));
+      }
+      expect(p.pauses, 0);
+      p.report(DisplayMatchingOutcome.pending);
+      await tester.pump();
+      expect(p.pauses, 1);
+      p.report(DisplayMatchingOutcome.matched);
+      await tester.pump();
+      expect(p.plays, 1);
+      f.coordinator.dispose();
+    });
+  }
+
+  testWidgets('continuation holds preserve presentation and carry lateness', (
+    tester,
+  ) async {
+    final f = _ContinuationFixture(player: _DisplayPlayer());
+    final p = f.player as _DisplayPlayer;
+    addTearDown(f.close);
+    await f.coordinator.toggleFullscreen();
+    await f.coordinator.tune('channel-b');
+    p.decode();
+    await tester.pump();
+    p.report(DisplayMatchingOutcome.matched);
+    await tester.pump();
+    f.coordinator.showFullGuide();
+    final presentation = f.coordinator.overlayPresentationGeneration;
+    f.now = f.now.add(const Duration(seconds: 120));
+    f.endNaturally();
+    await tester.pump();
+    expect(p.pausedStarts, [true, true]);
+    expect(f.coordinator.currentProgram!.scheduled.item.id, 'short-1');
+    expect(f.coordinator.displayHoldActive, isTrue);
+    expect(f.coordinator.overlay, PlayerOverlay.fullGuide);
+    p.decode();
+    await tester.pump();
+    p.report(DisplayMatchingOutcome.matched, wrote: true);
+    await tester.pump();
+    f.now = f.now.add(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(f.coordinator.overlayPresentationGeneration, presentation);
+    expect(p.plays, 2);
+    f.now = f.now.add(const Duration(seconds: 118));
+    f.endNaturally();
+    await tester.pump();
+    expect(f.coordinator.currentProgram!.scheduled.item.id, 'short-2');
+    expect(p.seeks, isEmpty);
+    expect(p.pausedStarts, [true, true, true]);
+    f.coordinator.dispose();
+  });
+
+  for (final path in [
+    'part',
+    'recovery',
+    'audio',
+    'Stop',
+    'error',
+    'scope',
+    'sleep',
+    'tune',
+    'dispose',
+  ]) {
+    testWidgets('active display session $path path', (tester) async {
+      final p = _DisplayPlayer(audioOnly: path == 'audio');
+      final lineup = _TestLineup(
+        recoverAuthorization: path == 'recovery',
+        playbackParts: path == 'part'
+            ? [
+                LineupPlaybackPart(
+                  uri: Uri.parse('https://synthetic.test/part1'),
+                  duration: const Duration(hours: 2),
+                ),
+                LineupPlaybackPart(
+                  uri: Uri.parse('https://synthetic.test/part2'),
+                  duration: const Duration(hours: 2),
+                ),
+              ]
+            : null,
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final c = PlayerCoordinator(player: p, lineup: lineup, guide: guide);
+      addTearDown(c.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      addTearDown(p.close);
+      await c.toggleFullscreen();
+      await c.tune('channel-b');
+      if (path == 'audio') {
+        expect(p.pausedStarts, [true]);
+        expect(p.plays, 1);
+        expect(c.displayHoldActive, isFalse);
+        c.dispose();
+        return;
+      }
+      if (path == 'Stop') await c.stop();
+      if (path == 'sleep') {
+        c.setSleepTimer(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+      }
+      if (path == 'tune') await c.tune('channel-0');
+      if (path == 'dispose') c.dispose();
+      if (path == 'scope') lineup.changeContentScope();
+      if (path == 'error') p.emitError(generation: p.loadGenerations.last);
+      if (path == 'part') {
+        p.decode();
+        await tester.pump();
+        p.report(DisplayMatchingOutcome.matched);
+        await tester.pump();
+        p.position = const Duration(hours: 2);
+        p.duration = const Duration(hours: 2);
+        p.emitStatus(PlayerState.ended, generation: p.loadGenerations.last);
+      }
+      if (path == 'recovery') {
+        p.emitError(
+          generation: p.loadGenerations.last,
+          failureCode: 'http_error',
+          httpStatus: 401,
+        );
+      }
+      await tester.pump();
+      if (path == 'part' || path == 'recovery' || path == 'tune') {
+        expect(p.pausedStarts, [true, true]);
+        expect(c.displayHoldActive, isTrue);
+        if (path == 'tune') expect(p.plays, 0);
+      } else {
+        expect(c.displayHoldActive, isFalse);
+        expect(p.plays, 0);
+        expect(p.requests.last.session, isFalse);
+      }
+      c.dispose();
+    });
+  }
+
+  testWidgets(
+    'authorization error cancels rejected hold while recovery waits',
+    (tester) async {
+      final p = _DisplayPlayer();
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        blockAuthorizationRecovery: true,
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final c = PlayerCoordinator(player: p, lineup: lineup, guide: guide);
+      addTearDown(c.dispose);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(p.close);
+      await c.toggleFullscreen();
+      await c.tune('channel-b');
+      p.decode();
+      await tester.pump();
+      p.emitError(
+        generation: p.loadGenerations.last,
+        failureCode: 'http_error',
+        httpStatus: 401,
+      );
+      await tester.pump();
+      expect(c.displayHoldActive, isFalse);
+      await tester.pump(const Duration(seconds: 5));
+      expect(p.plays, 0);
+      expect(p.loads, hasLength(1));
+      lineup.finishRecovery.complete();
+      await tester.pump();
+      expect(p.pausedStarts, [true, true]);
+      expect(c.displayHoldActive, isTrue);
+      c.dispose();
+    },
+  );
+
+  testWidgets('replacement error before readiness cancels its paused hold', (
+    tester,
+  ) async {
+    final p = _DisplayPlayer(failReplacementBeforeReady: true);
+    final lineup = _TestLineup(recoverAuthorization: true);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final c = PlayerCoordinator(player: p, lineup: lineup, guide: guide);
+    addTearDown(c.dispose);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(p.close);
+    await c.toggleFullscreen();
+    await c.tune('channel-b');
+    p.emitError(
+      generation: p.loadGenerations.last,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await tester.pump();
+    expect(p.pausedStarts, [true, true]);
+    expect(c.displayHoldActive, isFalse);
+    await tester.pump(const Duration(seconds: 6));
+    expect(p.plays, 0);
+    expect(c.overlay, PlayerOverlay.error);
+    c.dispose();
+  });
+
+  for (final action in ['Play', 'Pause']) {
+    testWidgets('user $action during coordinator hold cancels automatic play', (
+      tester,
+    ) async {
+      final f = _ContinuationFixture(player: _DisplayPlayer());
+      final p = f.player as _DisplayPlayer;
+      addTearDown(f.close);
+      await f.coordinator.toggleFullscreen();
+      await f.coordinator.loadInitialMedia(
+        Uri.parse('https://synthetic.test/local'),
+      );
+      p.decode();
+      await tester.pump();
+      if (action == 'Play') {
+        await f.coordinator.play();
+      } else {
+        await f.coordinator.pause();
+      }
+      p.report(DisplayMatchingOutcome.matched, wrote: true);
+      f.now = f.now.add(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 5));
+      expect(f.coordinator.displayHoldActive, isFalse);
+      expect(p.plays, action == 'Play' ? 1 : 0);
+      f.coordinator.dispose();
+    });
+  }
+
   for (final firstReady in [PlayerState.ready, PlayerState.playing]) {
     for (final overlay in [
       PlayerOverlay.none,
@@ -6606,3 +6909,107 @@ Future<void> _nativeEvent(Map<String, Object?> event) =>
           ),
           null,
         );
+
+class _DisplayPlayer extends _EventPlayer {
+  _DisplayPlayer({
+    this.audioOnly = false,
+    this.failReplacementBeforeReady = false,
+  }) : super(sync: true);
+  final bool audioOnly;
+  final bool failReplacementBeforeReady;
+  final pausedStarts = <bool>[];
+  final requests = <DisplayMatchingRequest>[];
+  final _reports = StreamController<DisplayMatchingReport>.broadcast(
+    sync: true,
+  );
+  DisplayMatchingReport _report = const DisplayMatchingReport.initial();
+  int pauses = 0;
+  @override
+  DisplayMatchingReport get displayReport => _report;
+  @override
+  Stream<DisplayMatchingReport> get displayReports => _reports.stream;
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {
+    requests.add(request);
+  }
+
+  @override
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+    );
+    pausedStarts.add(startPaused);
+    if (failReplacementBeforeReady && loads.length == 2) {
+      emitError(generation: generation, failureCode: 'mpv_error');
+      throw const PlayerUnavailable('Synthetic replacement error');
+    }
+    position = Duration.zero;
+    telemetry = const PlayerTelemetry();
+    tracks = audioOnly
+        ? const []
+        : const [
+            PlayerTrack(id: 1, type: PlayerTrackType.video, selected: true),
+          ];
+    emitStatus(PlayerState.loading, generation: generation);
+    emitStatus(
+      startPaused ? PlayerState.paused : PlayerState.playing,
+      generation: generation,
+    );
+  }
+
+  void decode() {
+    telemetry = const PlayerTelemetry(
+      gamma: 'pq',
+      targetGamma: 'pq',
+      targetPrimaries: 'bt.2020',
+      targetPixelFormat: 'rgb10a2',
+    );
+    emitStatus(
+      pausedStarts.last ? PlayerState.paused : PlayerState.playing,
+      generation: loadGenerations.last,
+    );
+  }
+
+  void report(DisplayMatchingOutcome outcome, {bool wrote = false}) {
+    _report = DisplayMatchingReport(
+      revision: requests.last.revision,
+      session: DisplayMatchingSessionState.active,
+      observed: outcome == DisplayMatchingOutcome.matched
+          ? DisplayMatchingState.hdr
+          : DisplayMatchingState.sdr,
+      outcome: outcome,
+      wrote: wrote,
+      owned: wrote,
+      reason: null,
+      route: DisplayMatchingRoute.advancedColor,
+      activeColorMode: null,
+    );
+    _reports.add(_report);
+  }
+
+  @override
+  Future<void> pause() async {
+    pauses++;
+    emitStatus(PlayerState.paused, generation: loadGenerations.last);
+  }
+
+  @override
+  Future<void> play() async {
+    await super.play();
+    emitStatus(PlayerState.playing, generation: loadGenerations.last);
+  }
+
+  @override
+  Future<void> close() async {
+    await _reports.close();
+    await super.close();
+  }
+}

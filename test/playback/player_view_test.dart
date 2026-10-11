@@ -39,6 +39,118 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  for (final overlay in [PlayerOverlay.osd, PlayerOverlay.nowPlaying]) {
+    testWidgets('display hold projects preparing and loading in $overlay', (
+      tester,
+    ) async {
+      final f = _Fixture(
+        PlayerState.paused,
+        dvrControlsEnabled: true,
+        richProgram: true,
+        nativeTelemetry: const PlayerTelemetry(gamma: 'pq'),
+        tracks: const [
+          PlayerTrack(id: 1, type: PlayerTrackType.video, selected: true),
+        ],
+      );
+      await f.guide.ensureCurrentProgram('channel');
+      await f.player.toggleFullscreen();
+      await f.player.loadInitialMedia(
+        Uri.parse('https://synthetic.test/local'),
+      );
+      expect(f.player.displayHoldActive, isTrue);
+      if (overlay == PlayerOverlay.nowPlaying) f.player.showNowPlaying();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            largeFocusIndicators: false,
+          ),
+          home: PlayerView(controller: f.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      expect(f.player.displayHoldActive, isTrue);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'Preparing playback',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Loading'), findsWidgets);
+      expect(find.text('Paused'), findsNothing);
+      expect(find.byTooltip('Play'), findsNothing);
+      expect(find.byTooltip('Pause'), findsOneWidget);
+      expect(find.byIcon(Icons.play_arrow), findsNothing);
+      expect(f.player.status.state, PlayerState.paused);
+      expect(f.player.overlay, overlay);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('Starting playback…'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.dispose();
+    });
+  }
+
+  testWidgets(
+    'shell Diagnostics reacts to display reports without media events',
+    (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final f = _Fixture(PlayerState.playing);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            largeFocusIndicators: false,
+          ),
+          home: LineupShell(
+            player: f.native,
+            controller: f.lineup,
+            initialMediaPath: 'https://synthetic.test/local',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Lineup menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Support'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Open Diagnostics'));
+      await tester.tap(find.text('Open Diagnostics'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Technical details'));
+      await tester.tap(find.text('Technical details'));
+      await tester.pumpAndSettle();
+      f.native.emitDisplay(
+        const DisplayMatchingReport(
+          revision: 1,
+          session: DisplayMatchingSessionState.active,
+          observed: DisplayMatchingState.hdr,
+          outcome: DisplayMatchingOutcome.matched,
+          wrote: true,
+          owned: true,
+          reason: null,
+          route: DisplayMatchingRoute.advancedColor,
+          activeColorMode: null,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('hdr · advancedColor'), findsOneWidget);
+      expect(find.textContaining('revision=1'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.dispose();
+      await f.native.dispose();
+    },
+  );
+
   testWidgets(
     'paused Mini Guide clock refreshes without player events and stops in background',
     (tester) async {
@@ -6154,8 +6266,10 @@ class _Native implements NativePlayer {
   @override
   DisplayMatchingReport get displayReport =>
       const DisplayMatchingReport.initial();
+  final _displayReports = StreamController<DisplayMatchingReport>.broadcast();
   @override
-  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
+  Stream<DisplayMatchingReport> get displayReports => _displayReports.stream;
+  void emitDisplay(DisplayMatchingReport report) => _displayReports.add(report);
   @override
   Future<void> initialize() async {}
   @override
@@ -6170,6 +6284,21 @@ class _Native implements NativePlayer {
     if (blockLoad) {
       if (!loadStarted.isCompleted) loadStarted.complete();
       await _loadCompletion.future;
+    }
+    if (startPaused) {
+      _events.add(
+        PlayerEvent(
+          status: const PlayerStatus(
+            state: PlayerState.paused,
+            message: 'Paused',
+          ),
+          position: position,
+          duration: duration,
+          telemetry: telemetry,
+          tracks: tracks,
+          generation: generation,
+        ),
+      );
     }
   }
 
@@ -6241,7 +6370,10 @@ class _Native implements NativePlayer {
   }
 
   @override
-  Future<void> dispose() => _events.close();
+  Future<void> dispose() async {
+    await _events.close();
+    await _displayReports.close();
+  }
 }
 
 class _Store implements AppStore {
