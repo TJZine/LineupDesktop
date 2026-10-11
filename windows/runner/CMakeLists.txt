@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(runner LANGUAGES CXX)
+if(NOT CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION OR
+    CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS "10.0.26100.0")
+  message(FATAL_ERROR "Lineup HDR matching requires Windows SDK 10.0.26100.0 or newer.")
+endif()
 
 # Define the application target. To change its name, change BINARY_NAME in the
 # top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
@@ -10,6 +14,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "native_player.cpp"
+  "display_dynamic_range.cpp"
   "track_list_encoder.cpp"
   "utils.cpp"
   "win32_window.cpp"
@@ -108,6 +113,7 @@ add_test(NAME track_list_encoder COMMAND track_list_encoder_test)
 add_executable(authenticated_reference_test EXCLUDE_FROM_ALL
   "authenticated_reference_test.cpp"
   "track_list_encoder.cpp"
+  "display_dynamic_range.cpp"
 )
 apply_standard_settings(authenticated_reference_test)
 target_compile_definitions(authenticated_reference_test PRIVATE "NOMINMAX")
@@ -129,6 +135,16 @@ add_test(NAME authenticated_reference
     --harness "$<TARGET_FILE:authenticated_reference_test>"
     --dll "${LINEUP_MPV_DLL}")
 set_tests_properties(authenticated_reference PROPERTIES TIMEOUT 180)
+
+add_executable(display_dynamic_range_test EXCLUDE_FROM_ALL
+  "display_dynamic_range.cpp"
+  "display_dynamic_range_test.cpp"
+)
+apply_standard_settings(display_dynamic_range_test)
+target_compile_definitions(display_dynamic_range_test PRIVATE "NOMINMAX")
+target_link_libraries(display_dynamic_range_test PRIVATE "user32.lib")
+add_test(NAME display_dynamic_range COMMAND display_dynamic_range_test)
+set_tests_properties(display_dynamic_range PROPERTIES TIMEOUT 30)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

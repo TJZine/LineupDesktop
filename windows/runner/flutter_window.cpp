@@ -55,7 +55,12 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
-  if (native_player_ && native_player_->HandleWindowMessage(message)) {
+  if (message == WM_QUERYENDSESSION) return TRUE;
+  if (message == WM_ENDSESSION && wparam == TRUE && native_player_) {
+    native_player_->EndWindowsSession();
+    return 0;
+  }
+  if (native_player_ && native_player_->HandleWindowMessage(message, wparam)) {
     if (native_player_->TakeWindowCloseReady()) {
       ::DestroyWindow(hwnd);
     }
