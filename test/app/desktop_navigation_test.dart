@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
@@ -17,6 +18,101 @@ const _firstRunProfileCases = [
 ];
 
 void main() {
+  const routeChords = [
+    (LogicalKeyboardKey.digit1, 'Guide'),
+    (LogicalKeyboardKey.digit2, 'Channels'),
+    (LogicalKeyboardKey.digit3, 'Settings'),
+    (LogicalKeyboardKey.digit4, 'Diagnostics'),
+    (LogicalKeyboardKey.digit5, 'Player'),
+    (LogicalKeyboardKey.keyG, 'Guide'),
+    (LogicalKeyboardKey.keyP, 'Player'),
+    (LogicalKeyboardKey.comma, 'Settings'),
+  ];
+
+  for (final origin in ['Guide', 'Player']) {
+    for (final (key, destination) in routeChords) {
+      testWidgets('Ctrl+$key reaches $destination from $origin', (
+        tester,
+      ) async {
+        final fixture = UiFixture(
+          player: FixturePlayer()
+            ..emit(
+              const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+            ),
+        )..controller.stage = SetupStage.ready;
+        await tester.pumpWidget(fixture.build());
+        await tester.pumpAndSettle();
+        if (origin == 'Player') await _routeShortcut(tester, 4);
+
+        await _routeChord(tester, key);
+        _expectDestination(destination);
+      });
+    }
+  }
+
+  testWidgets(
+    'route chords from a focused Studio field retain the leave guard',
+    (tester) async {
+      final fixture = UiFixture(
+        player: FixturePlayer()
+          ..emit(
+            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+          ),
+      )..controller.stage = SetupStage.ready;
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+
+      for (final (key, destination) in routeChords) {
+        await _routeShortcut(tester, 1);
+        await tester.tap(find.text('Create a custom channel'));
+        await tester.pumpAndSettle();
+        final name = find.byKey(const Key('studio-name'));
+        await tester.enterText(name, 'Retained draft');
+        await _routeChord(tester, key);
+        expect(find.text('Discard changes?'), findsOneWidget);
+        await tester.tap(find.text('Keep editing'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextFormField>(name).controller!.text,
+          'Retained draft',
+        );
+
+        await tester.tap(name);
+        await _routeChord(tester, key);
+        expect(find.text('Discard changes?'), findsOneWidget);
+        await tester.tap(find.text('Discard changes'));
+        await tester.pumpAndSettle();
+        expect(name, findsNothing);
+        _expectDestination(destination);
+      }
+    },
+  );
+
+  testWidgets('focused Guide search keeps local keys and passes route chords', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      player: FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
+    )..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    final search = find.byKey(const Key('guide-channel-search'));
+    await tester.tap(search);
+    for (final key in [
+      LogicalKeyboardKey.keyG,
+      LogicalKeyboardKey.keyP,
+      LogicalKeyboardKey.digit5,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+      _expectDestination('Guide');
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+    }
+    await _routeChord(tester, LogicalKeyboardKey.keyP);
+    _expectDestination('Player');
+  });
+
   testWidgets('empty Guide Set up channels enters existing cancellable setup', (
     tester,
   ) async {
@@ -597,8 +693,24 @@ Future<void> _routeShortcut(WidgetTester tester, int index) async {
     LogicalKeyboardKey.digit4,
     LogicalKeyboardKey.digit5,
   ];
+  await _routeChord(tester, keys[index]);
+}
+
+Future<void> _routeChord(WidgetTester tester, LogicalKeyboardKey key) async {
   await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-  await tester.sendKeyEvent(keys[index]);
+  await tester.sendKeyEvent(key);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
   await tester.pumpAndSettle();
+}
+
+void _expectDestination(String destination) {
+  final finder = switch (destination) {
+    'Guide' => find.byKey(const Key('classic-guide')),
+    'Channels' => find.byKey(const Key('channels-app-menu')),
+    'Settings' => find.byKey(const Key('settings-app-menu')),
+    'Diagnostics' => find.byKey(const Key('diagnostics-app-menu')),
+    'Player' => find.byType(PlayerView),
+    _ => throw ArgumentError.value(destination),
+  };
+  expect(finder, findsOneWidget);
 }

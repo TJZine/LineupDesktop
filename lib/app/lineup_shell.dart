@@ -19,6 +19,7 @@ import 'channels_view.dart';
 import 'diagnostics_view.dart';
 import 'lineup_controller.dart';
 import 'lineup_restore_view.dart';
+import 'navigation_shortcuts.dart';
 import 'onboarding_view.dart';
 
 class LineupShell extends StatefulWidget {
@@ -384,17 +385,7 @@ class _LineupShellState extends State<LineupShell> {
       unawaited(_select(2));
       return KeyEventResult.handled;
     }
-    if (!keyboard.isControlPressed) {
-      return KeyEventResult.ignored;
-    }
-    final index = switch (event.logicalKey) {
-      LogicalKeyboardKey.digit1 || LogicalKeyboardKey.keyG => 0,
-      LogicalKeyboardKey.digit2 => 1,
-      LogicalKeyboardKey.digit3 || LogicalKeyboardKey.comma => 2,
-      LogicalKeyboardKey.digit4 => 3,
-      LogicalKeyboardKey.digit5 || LogicalKeyboardKey.keyP => 4,
-      _ => null,
-    };
+    final index = navigationShortcutIndex(event.logicalKey);
     if (index == null) return KeyEventResult.ignored;
     unawaited(_select(index));
     return KeyEventResult.handled;

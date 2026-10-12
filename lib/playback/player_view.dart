@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
 import '../guide/guide_controller.dart';
 import '../guide/focused_ticker.dart';
@@ -186,17 +187,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       return KeyEventResult.ignored;
     }
     // Shell route shortcuts must reach the shared navigation/leave guard.
-    if (HardwareKeyboard.instance.isControlPressed &&
-        const [
-          LogicalKeyboardKey.digit1,
-          LogicalKeyboardKey.digit2,
-          LogicalKeyboardKey.digit3,
-          LogicalKeyboardKey.digit4,
-          LogicalKeyboardKey.digit5,
-          LogicalKeyboardKey.keyG,
-          LogicalKeyboardKey.keyP,
-          LogicalKeyboardKey.comma,
-        ].contains(event.logicalKey)) {
+    if (navigationShortcutIndex(event.logicalKey) != null) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;

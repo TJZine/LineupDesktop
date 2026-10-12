@@ -975,6 +975,74 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('Player propagates Ctrl route repeats and keeps local keys', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    final propagated = <KeyEvent>[];
+    var guideOpens = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: Focus(
+          onKeyEvent: (_, event) {
+            if (event.logicalKey == LogicalKeyboardKey.digit1 &&
+                (event is KeyDownEvent || event is KeyRepeatEvent)) {
+              propagated.add(event);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: PlayerView(
+            controller: fixture.player,
+            openGuide: () => guideOpens++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Existing Ctrl chords accept additional modifiers, including repeats.
+    for (final modifier in [
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.shiftLeft,
+      LogicalKeyboardKey.altLeft,
+      LogicalKeyboardKey.metaLeft,
+    ]) {
+      await tester.sendKeyDownEvent(modifier);
+    }
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.digit1);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.digit1);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.digit1);
+    expect(propagated, hasLength(2));
+    expect(propagated.first, isA<KeyDownEvent>());
+    expect(propagated.last, isA<KeyRepeatEvent>());
+    expect(fixture.player.overlay, PlayerOverlay.none);
+    for (final modifier in [
+      LogicalKeyboardKey.metaLeft,
+      LogicalKeyboardKey.altLeft,
+      LogicalKeyboardKey.shiftLeft,
+      LogicalKeyboardKey.controlLeft,
+    ]) {
+      await tester.sendKeyUpEvent(modifier);
+    }
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    expect(fixture.player.overlay, PlayerOverlay.channelNumber);
+    expect(fixture.player.channelNumberLabel, startsWith('1'));
+    expect(propagated, hasLength(2));
+    fixture.player.closeOverlay();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    expect(fixture.player.overlay, PlayerOverlay.none);
+    expect(guideOpens, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    expect(fixture.player.overlay, PlayerOverlay.fullGuide);
+    expect(guideOpens, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('edge-triggered player shortcuts ignore repeat events', (
     tester,
   ) async {
