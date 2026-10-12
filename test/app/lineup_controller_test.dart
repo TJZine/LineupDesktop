@@ -11,6 +11,8 @@ import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/diagnostics/diagnostics.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -2284,11 +2286,26 @@ void main() {
       );
       addTearDown(controller.dispose);
       await controller.initialize();
+      controller.diagnostics.enabled = true;
       await controller.selectServer(_server('missing'));
 
       expect(controller.server, isNull);
       expect(controller.error, 'Plex server authorization is unavailable.');
       expect(plex.selectedTokens, isEmpty);
+      final report = controller.diagnostics.buildSupportReport(
+        controller.diagnostics.snapshot(
+          reportTime: DateTime.utc(2026, 10, 12),
+          timeZone: 'UTC',
+          appVersion: '1',
+          appBuild: '1',
+          platform: 'windows',
+          plexServerSelected: false,
+          plexConnectionVerified: false,
+          playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+        ),
+      );
+      expect(report, contains('code=authorization-unavailable'));
+      expect(report, isNot(contains('cloud-token-sentinel')));
     },
   );
 
@@ -5036,51 +5053,90 @@ void main() {
     poll.complete(null);
   });
 
-  test(
-    'PIN polling failure stops safely without scheduling another poll',
-    () async {
-      final plex = _FakePlex()
-        ..pinResult = PlexPin(
-          id: 6,
-          code: 'EFGH',
-          expiresAt: DateTime.now().add(const Duration(minutes: 1)),
-        )
-        ..pollHandler = (_) async =>
-            throw const PlexException('poll-failed', 'opaque-secret-sentinel');
-      final controller = LineupController(
-        store: _MemoryStore(),
-        credentials: _MemoryCredentials(),
-        plex: plex,
-        pinPollInterval: const Duration(milliseconds: 1),
-      )..diagnostics.enabled = true;
-      addTearDown(controller.dispose);
+  for (final failure in const {
+    'network-timeout': 'network-timeout',
+    'network-unavailable': 'network-unavailable',
+    'server-unreachable': 'network-unavailable',
+    'offline': 'network-unavailable',
+    'rate-limited': 'rate-limited',
+    'auth-invalid': 'auth-denied',
+    'access-denied': 'auth-denied',
+    'parse-error': 'response-unavailable',
+    'resource-not-found': 'response-unavailable',
+    'poll-failed': 'unexpected',
+    'safe-looking-private-sentinel': 'unexpected',
+  }.entries) {
+    test(
+      'PIN polling ${failure.key} stops safely and exports ${failure.value}',
+      () async {
+        final plex = _FakePlex()
+          ..pinResult = PlexPin(
+            id: 6,
+            code: 'EFGH',
+            expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+          )
+          ..pollHandler = (_) async =>
+              throw PlexException(failure.key, 'opaque-secret-sentinel');
+        final controller = LineupController(
+          store: _MemoryStore(),
+          credentials: _MemoryCredentials(),
+          plex: plex,
+          pinPollInterval: const Duration(milliseconds: 1),
+        )..diagnostics.enabled = true;
+        addTearDown(controller.dispose);
 
-      await controller.startLinking();
-      await _waitForTestState(
-        () => controller.activePin == null,
-        description: 'PIN poll failure',
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        await controller.startLinking();
+        await _waitForTestState(
+          () => controller.activePin == null,
+          description: 'PIN poll failure',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(plex.pollCalls, 1);
-      expect(plex.cancelPinCalls, 1);
-      expect(controller.error, contains('could not complete Plex sign-in'));
-      expect(controller.error, isNot(contains('opaque-secret-sentinel')));
-      expect(controller.diagnostics.entries.single.message, 'PIN poll failed');
-      expect(controller.diagnostics.entries.single.context, {
-        'code': 'unexpected',
-      });
-      expect(
-        '${controller.diagnostics.entries.single.message}'
-        '${controller.diagnostics.entries.single.context}',
-        isNot(contains('opaque-secret-sentinel')),
-      );
+        expect(plex.pollCalls, 1);
+        expect(plex.cancelPinCalls, 1);
+        expect(controller.error, isNotNull);
+        if (failure.value == 'unexpected') {
+          expect(controller.error, contains('could not complete Plex sign-in'));
+        }
+        expect(controller.error, isNot(contains('opaque-secret-sentinel')));
+        expect(
+          controller.diagnostics.entries.single.message,
+          'PIN poll failed',
+        );
+        expect(controller.diagnostics.entries.single.context, {
+          'code': failure.value,
+        });
+        expect(
+          '${controller.diagnostics.entries.single.message}'
+          '${controller.diagnostics.entries.single.context}',
+          isNot(contains('opaque-secret-sentinel')),
+        );
 
-      await controller.startLinking();
-      expect(plex.createPinCalls, 2);
-      expect(controller.activePin, isNotNull);
-    },
-  );
+        final report = controller.diagnostics.buildSupportReport(
+          controller.diagnostics.snapshot(
+            reportTime: DateTime.utc(2026, 10, 12),
+            timeZone: 'UTC',
+            appVersion: '1',
+            appBuild: '1',
+            platform: 'windows',
+            plexServerSelected: false,
+            plexConnectionVerified: false,
+            playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+          ),
+        );
+        expect(
+          report,
+          contains('plex-auth: PIN poll failed (code=${failure.value})'),
+        );
+        expect(report, isNot(contains('opaque-secret-sentinel')));
+        expect(report, isNot(contains('safe-looking-private-sentinel')));
+
+        await controller.startLinking();
+        expect(plex.createPinCalls, 2);
+        expect(controller.activePin, isNotNull);
+      },
+    );
+  }
 
   for (final failurePoint in ['account', 'home']) {
     test(

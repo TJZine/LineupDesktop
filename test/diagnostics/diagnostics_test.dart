@@ -3,6 +3,153 @@ import 'package:lineup_desktop/diagnostics/diagnostics.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 
 void main() {
+  String reportFor(
+    Diagnostics diagnostics, {
+    String appBuild = '1',
+    String appVersion = '1.0.0',
+  }) => diagnostics.buildSupportReport(
+    diagnostics.snapshot(
+      reportTime: DateTime.utc(2026, 10, 12),
+      timeZone: 'UTC',
+      appVersion: appVersion,
+      appBuild: appBuild,
+      platform: 'windows',
+      plexServerSelected: false,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+    ),
+  );
+
+  test('release wrapper build identity has its own bounded grammar', () {
+    final diagnostics = Diagnostics();
+    const commit = 'e83778169ea6e00217140981213425c3ecae5358';
+    for (final build in ['42@$commit', '42', 'dev-local', 'Unavailable']) {
+      expect(reportFor(diagnostics, appBuild: build), contains('($build)'));
+    }
+    for (final build in [
+      '42@${commit.substring(1)}',
+      '42@${commit}a',
+      '42@${'g' * 40}',
+      '${'1' * 21}@$commit',
+      'dev@$commit',
+      '42@$commit\nprivate',
+      'private@example.com',
+      'https://private.example/?token=secret',
+      '/Users/private/title.mkv',
+      'token=secret',
+      'x' * 65,
+    ]) {
+      final report = reportFor(diagnostics, appBuild: build);
+      expect(report, contains('App: 1.0.0 (Unavailable)'), reason: build);
+      expect(report, isNot(contains(build)), reason: build);
+    }
+    expect(
+      reportFor(diagnostics, appVersion: '42@$commit'),
+      contains('App: Unavailable (1)'),
+    );
+  });
+
+  test(
+    'fixed failure categories export but unknown and sensitive values do not',
+    () {
+      final diagnostics = Diagnostics()..enabled = true;
+      const categories = [
+        'network-timeout',
+        'network-unavailable',
+        'rate-limited',
+        'auth-denied',
+        'response-unavailable',
+        'command_error',
+        'network_error',
+        'audio_decode_error',
+        'video_decode_error',
+        'audio_output_error',
+        'video_output_error',
+        'source_open_error',
+        'container_error',
+        'correlation_error',
+        'event_queue_overflow',
+        'mpv_error',
+        'required_engine_unavailable',
+        'initialize_failed',
+        'dispose_in_progress',
+        'not_initialized',
+        'invalid_argument',
+        'insecure_media_uri',
+        'window_error',
+        'native_command_error',
+        'native_playback_error',
+        'native_error',
+        'premature_end',
+        'stop_timeout',
+        'stop_failed',
+        'auth-required',
+        'auth-invalid',
+        'access-denied',
+        'incorrect-pin',
+        'unsupported',
+        'playback-unavailable',
+        'authorization-unavailable',
+        'invalid-library',
+        'playlist-unavailable',
+        'collection-unavailable',
+        'collection-scale-exceeded',
+        'response-too-large',
+        'library-page-invalid',
+        'library-page-too-large',
+        'library-page-not-progressing',
+        'library-scale-exceeded',
+        'playlist-page-invalid',
+        'playlist-page-too-large',
+        'playlist-page-not-progressing',
+        'playlist-scale-exceeded',
+      ];
+      for (final category in categories) {
+        diagnostics.add('playback', 'Playback request failed', {
+          'code': category,
+        });
+      }
+      for (final category in [
+        'safe-looking-private-sentinel',
+        'https://private.example/?token=secret',
+        '/Users/private/title.mkv',
+        'Bearer private-secret',
+        'x' * 65,
+      ]) {
+        // Construct external snapshots directly as well: export must not rely
+        // on the recording sanitizer having run first.
+        final snapshot = DiagnosticSupportSnapshot(
+          reportTime: DateTime.utc(2026, 10, 12),
+          timeZone: 'UTC',
+          appVersion: '1',
+          appBuild: '1',
+          platform: 'windows',
+          recordingEnabled: true,
+          plexServerSelected: false,
+          plexConnectionVerified: false,
+          playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+          events: [
+            DiagnosticEntry(
+              DateTime.utc(2026),
+              'playback',
+              'Native playback failed',
+              {'failureCode': category},
+            ),
+          ],
+        );
+        expect(Diagnostics.failureCategory(category), isNull);
+        expect(
+          diagnostics.buildSupportReport(snapshot),
+          isNot(contains(category)),
+        );
+      }
+      final report = reportFor(diagnostics);
+      for (final category in categories) {
+        expect(report, contains('code=$category)'));
+      }
+    },
+  );
+
   test('redacts tokens, URLs, credentials, and paths before storage', () {
     final diagnostics = Diagnostics();
     diagnostics.enabled = true;

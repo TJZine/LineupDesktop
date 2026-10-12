@@ -1233,7 +1233,7 @@ void main() {
     },
   );
 
-  for (final failure in ['timeout', 'command_error']) {
+  for (final failure in ['timeout', 'command_error', 'private-native-code']) {
     test(
       'native $failure retains cleanup through failed stop and logout',
       () async {
@@ -1246,7 +1246,7 @@ void main() {
           return null;
         });
         addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-        final lineup = _LogoutLineup();
+        final lineup = _LogoutLineup()..diagnostics.enabled = true;
         final guide = GuideController(
           lineup: lineup,
           loadSchedule: (channel) async => _schedule(channel),
@@ -1271,7 +1271,7 @@ void main() {
         final loadId = calls
             .firstWhere((call) => call.method == 'load')
             .arguments['loadId'];
-        if (failure == 'command_error') {
+        if (failure != 'timeout') {
           await _nativeEvent({
             'type': 'state',
             'loadId': loadId,
@@ -1282,8 +1282,18 @@ void main() {
             'type': 'state',
             'loadId': loadId,
             'state': 'error',
-            'failureCode': 'command_error',
+            'failureCode': failure,
           });
+        }
+        if (failure != 'timeout') {
+          await pumpEventQueue(times: 2);
+          final category = failure == 'command_error'
+              ? failure
+              : 'native_error';
+          expect(coordinator.status.failureCode, category);
+          final report = _supportReport(lineup, coordinator);
+          expect(report, contains('failureCode=$category'));
+          expect(report, isNot(contains('private-native-code')));
         }
         while (!calls.any((call) => call.method == 'stop')) {
           await Future<void>.delayed(const Duration(milliseconds: 1));
@@ -1931,45 +1941,63 @@ void main() {
       'operation': 'audio_track',
       'code': 'command_error',
     });
+    final report = lineup.diagnostics.buildSupportReport(
+      lineup.diagnostics.snapshot(
+        reportTime: DateTime.utc(2026, 10, 12),
+        timeZone: 'UTC',
+        appVersion: '1',
+        appBuild: '42@e83778169ea6e00217140981213425c3ecae5358',
+        platform: 'windows',
+        plexServerSelected: false,
+        plexConnectionVerified: false,
+        playback: coordinator.diagnosticPlaybackSnapshot,
+      ),
+    );
+    expect(report, contains('operation=audio_track, code=command_error'));
   });
 
-  test('native control failures publish safe nonblocking notices', () async {
-    final lineup = _TestLineup()..diagnostics.enabled = true;
-    final guide = GuideController(
-      lineup: lineup,
-      loadSchedule: (channel) async => _schedule(channel),
-    );
-    final player = _FailingControlPlayer();
-    final coordinator = PlayerCoordinator(
-      player: player,
-      lineup: lineup,
-      guide: guide,
-    );
-    addTearDown(lineup.dispose);
-    addTearDown(guide.dispose);
-    addTearDown(coordinator.dispose);
+  for (final failure in const {
+    'command_queue_full': 'command_queue_full',
+    'safe-looking-private-sentinel': 'unexpected',
+  }.entries) {
+    test('native control ${failure.key} publishes safe notices', () async {
+      final lineup = _TestLineup()..diagnostics.enabled = true;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _FailingControlPlayer(failureCode: failure.key);
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
-    await coordinator.play();
-    await coordinator.pause();
-    await coordinator.seekTo(const Duration(seconds: 12));
-    await coordinator.selectTrack(PlayerTrackType.audio, 2);
-    await coordinator.toggleFullscreen();
+      await coordinator.play();
+      await coordinator.pause();
+      await coordinator.seekTo(const Duration(seconds: 12));
+      await coordinator.selectTrack(PlayerTrackType.audio, 2);
+      await coordinator.toggleFullscreen();
 
-    expect(
-      coordinator.notice,
-      'Playback controls are temporarily unavailable. Try again.',
-    );
-    expect(coordinator.error, isNull);
-    expect(coordinator.overlay, isNot(PlayerOverlay.error));
-    expect(coordinator.canRetry, isFalse);
-    expect(lineup.diagnostics.entries.map((entry) => entry.context), [
-      {'operation': 'play', 'code': 'command_queue_full'},
-      {'operation': 'pause', 'code': 'command_queue_full'},
-      {'operation': 'seek', 'code': 'command_queue_full'},
-      {'operation': 'audio_track', 'code': 'command_queue_full'},
-      {'operation': 'fullscreen', 'code': 'command_queue_full'},
-    ]);
-  });
+      expect(
+        coordinator.notice,
+        'Playback controls are temporarily unavailable. Try again.',
+      );
+      expect(coordinator.error, isNull);
+      expect(coordinator.overlay, isNot(PlayerOverlay.error));
+      expect(coordinator.canRetry, isFalse);
+      expect(lineup.diagnostics.entries.map((entry) => entry.context), [
+        {'operation': 'play', 'code': failure.value},
+        {'operation': 'pause', 'code': failure.value},
+        {'operation': 'seek', 'code': failure.value},
+        {'operation': 'audio_track', 'code': failure.value},
+        {'operation': 'fullscreen', 'code': failure.value},
+      ]);
+    });
+  }
 
   test('stale control failure cannot replace a scope reset', () async {
     final lineup = _TestLineup()..diagnostics.enabled = true;
@@ -3754,6 +3782,36 @@ void main() {
     },
   );
 
+  test(
+    'missing playback session preserves its category in the report',
+    () async {
+      final lineup = _TestLineup(useRealPlaybackRequest: true)
+        ..diagnostics.enabled = true;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final coordinator = PlayerCoordinator(
+        player: _Player(),
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      expect(await coordinator.tune('channel-b'), isFalse);
+      expect(
+        lineup.diagnostics.entries.single.context['code'],
+        'playback-unavailable',
+      );
+      expect(
+        _supportReport(lineup, coordinator),
+        contains('code=playback-unavailable'),
+      );
+    },
+  );
+
   test('synchronous authorization recovery failure is terminal', () async {
     final lineup = _TestLineup(
       recoverAuthorization: true,
@@ -3795,46 +3853,65 @@ void main() {
     );
   });
 
-  test('failed authorization recovery future is terminal', () async {
-    final lineup = _TestLineup(
-      recoverAuthorization: true,
-      failAuthorizationRecovery: true,
-    );
-    final guide = GuideController(
-      lineup: lineup,
-      loadSchedule: (channel) async => _schedule(channel),
-    )..requestViewport(0, 2);
-    await Future<void>.delayed(Duration.zero);
-    final player = _EventPlayer();
-    final coordinator = PlayerCoordinator(
-      player: player,
-      lineup: lineup,
-      guide: guide,
-    );
-    addTearDown(player.close);
-    addTearDown(lineup.dispose);
-    addTearDown(guide.dispose);
-    addTearDown(coordinator.dispose);
+  for (final domainFailure in [false, true]) {
+    test(
+      'failed authorization recovery is terminal (domain=$domainFailure)',
+      () async {
+        final lineup = _TestLineup(
+          recoverAuthorization: true,
+          failAuthorizationRecovery: true,
+          authorizationRecoveryFailure: domainFailure
+              ? const PlexException(
+                  'authorization-unavailable',
+                  'Plex server authorization is unavailable.',
+                )
+              : null,
+        )..diagnostics.enabled = true;
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        )..requestViewport(0, 2);
+        await Future<void>.delayed(Duration.zero);
+        final player = _EventPlayer();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(player.close);
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
 
-    await coordinator.tune('channel-b');
-    player.emitError(
-      recoverable: true,
-      generation: player.loadGenerations.single,
-      failureCode: 'http_error',
-      httpStatus: 401,
-    );
-    await pumpEventQueue(times: 5);
+        await coordinator.tune('channel-b');
+        player.emitError(
+          recoverable: true,
+          generation: player.loadGenerations.single,
+          failureCode: 'http_error',
+          httpStatus: 401,
+        );
+        await pumpEventQueue(times: 5);
 
-    expect(lineup.recoveryCalls, 1);
-    expect(player.loads, hasLength(1));
-    expect(player.stops, 1);
-    expect(coordinator.canRetry, isTrue);
-    expect(coordinator.overlay, PlayerOverlay.error);
-    expect(
-      coordinator.error,
-      'Playback could not start. Retry or choose another channel.',
+        expect(lineup.recoveryCalls, 1);
+        expect(player.loads, hasLength(1));
+        expect(player.stops, 1);
+        expect(coordinator.canRetry, isTrue);
+        expect(coordinator.overlay, PlayerOverlay.error);
+        expect(
+          coordinator.error,
+          domainFailure
+              ? 'Plex server authorization is unavailable.'
+              : 'Playback could not start. Retry or choose another channel.',
+        );
+        if (domainFailure) {
+          expect(
+            _supportReport(lineup, coordinator),
+            contains('code=authorization-unavailable'),
+          );
+        }
+      },
     );
-  });
+  }
 
   test(
     'a second native authorization failure is terminal without a loop',
@@ -5813,6 +5890,8 @@ class _TestLineup extends LineupController {
     this.blockAuthorizationRecovery = false,
     this.throwAuthorizationRecoverySynchronously = false,
     this.failAuthorizationRecovery = false,
+    this.authorizationRecoveryFailure,
+    this.useRealPlaybackRequest = false,
     this.playbackParts,
   }) : super(
          store: _MemoryStore(),
@@ -5849,6 +5928,8 @@ class _TestLineup extends LineupController {
   final bool blockAuthorizationRecovery;
   final bool throwAuthorizationRecoverySynchronously;
   final bool failAuthorizationRecovery;
+  final Object? authorizationRecoveryFailure;
+  final bool useRealPlaybackRequest;
   final List<LineupPlaybackPart>? playbackParts;
   int playbackRequests = 0;
   String? lastPlaybackItemId;
@@ -5884,6 +5965,7 @@ class _TestLineup extends LineupController {
   LineupPlaybackRequest playbackFor(String itemId) {
     playbackRequests++;
     lastPlaybackItemId = itemId;
+    if (useRealPlaybackRequest) return super.playbackFor(itemId);
     if (failSecondPlaybackRequest && playbackRequests == 2) {
       throw StateError('Replacement playback request is unavailable.');
     }
@@ -5917,7 +5999,10 @@ class _TestLineup extends LineupController {
         throw StateError('authorization recovery failed synchronously');
       }
       if (failAuthorizationRecovery) {
-        return Future.error(StateError('authorization recovery failed'));
+        return Future.error(
+          authorizationRecoveryFailure ??
+              StateError('authorization recovery failed'),
+        );
       }
       return completeRecovery();
     }
@@ -6425,10 +6510,13 @@ class _BlockingControlPlayer extends _EventPlayer {
 }
 
 class _FailingControlPlayer extends _Player {
-  static const _failure = PlayerUnavailable(
-    'opaque native control detail',
-    failureCode: 'command_queue_full',
-  );
+  _FailingControlPlayer({String failureCode = 'command_queue_full'})
+    : _failure = PlayerUnavailable(
+        'opaque native control detail',
+        failureCode: failureCode,
+      );
+
+  final PlayerUnavailable _failure;
 
   @override
   Future<void> play() async => throw _failure;
@@ -6513,6 +6601,20 @@ class _Credentials implements CredentialStore {
   @override
   Future<void> writeProfileToken(String profileId, String token) async {}
 }
+
+String _supportReport(LineupController lineup, PlayerCoordinator coordinator) =>
+    lineup.diagnostics.buildSupportReport(
+      lineup.diagnostics.snapshot(
+        reportTime: DateTime.utc(2026, 10, 12),
+        timeZone: 'UTC',
+        appVersion: '1',
+        appBuild: '1',
+        platform: 'windows',
+        plexServerSelected: false,
+        plexConnectionVerified: false,
+        playback: coordinator.diagnosticPlaybackSnapshot,
+      ),
+    );
 
 Future<void> _nativeEvent(Map<String, Object?> event) =>
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

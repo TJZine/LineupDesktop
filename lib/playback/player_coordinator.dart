@@ -1881,9 +1881,7 @@ class PlayerCoordinator extends ChangeNotifier {
       PlayerUnavailable(:final failureCode) => failureCode,
       _ => 'unexpected',
     };
-    final code = RegExp(r'^[a-z][a-z0-9_-]{0,63}$').hasMatch(rawCode)
-        ? rawCode
-        : 'unexpected';
+    final code = Diagnostics.failureCategory(rawCode) ?? 'unexpected';
     lineup.diagnostics.add('playback', 'Playback request failed', {
       if (operation != 'request') 'operation': operation,
       'code': code,

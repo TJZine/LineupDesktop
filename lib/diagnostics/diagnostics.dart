@@ -143,7 +143,7 @@ class Diagnostics extends ChangeNotifier {
       'Lineup Desktop support report',
       'Report time: ${snapshot.reportTime.toIso8601String()}',
       'Time zone: ${_safeTimeZone(snapshot.timeZone)}',
-      'App: ${_safeFact(snapshot.appVersion)} (${_safeFact(snapshot.appBuild)})',
+      'App: ${_safeFact(snapshot.appVersion)} (${_safeBuild(snapshot.appBuild)})',
       'Platform: ${_safeFact(snapshot.platform)}',
       'Diagnostic recording: ${snapshot.recordingEnabled ? 'On' : 'Off'}',
       'Playback state: ${snapshot.playback.state.name}',
@@ -247,6 +247,20 @@ class Diagnostics extends ChangeNotifier {
 
   static String _safeFact(String value) =>
       _safeToken.hasMatch(value) ? value : 'Unavailable';
+  // Release wrappers emit a numeric build followed by the full Git commit.
+  // Keep this grammar separate: @ is not safe in arbitrary diagnostic facts.
+  static final _releaseBuild = RegExp(r'^[0-9]{1,20}@[a-fA-F0-9]{40}$');
+
+  static String _safeBuild(String value) =>
+      _safeToken.hasMatch(value) || _releaseBuild.hasMatch(value)
+      ? value
+      : 'Unavailable';
+
+  /// Exportable categories are fixed producer outcomes, never upstream text.
+  /// Producers retain domain normalization; unknown failures use unexpected.
+  static String? failureCategory(String value) =>
+      _recognized(_failureCategories, value);
+
   static String _safeTimeZone(String value) =>
       RegExp(r'^[A-Za-z0-9 _+:/.-]{1,64}$').hasMatch(value)
       ? value
@@ -283,8 +297,7 @@ class Diagnostics extends ChangeNotifier {
     'scanPath' when value is String => _recognized(_scanPaths, value),
     'libraryType' when value is String => _recognized(_libraryTypes, value),
     'operation' when value is String => _recognized(_operations, value),
-    'code' ||
-    'failureCode' when value is String => _recognized(_failureCodes, value),
+    'code' || 'failureCode' when value is String => failureCategory(value),
     'container' when value is String => _recognized(_containers, value),
     'videoCodec' when value is String => _recognized(_videoCodecs, value),
     'audioCodec' when value is String => _recognized(_audioCodecs, value),
@@ -327,10 +340,62 @@ class Diagnostics extends ChangeNotifier {
     'scope_cleanup',
     'request',
   };
-  static const _failureCodes = {
+  static const _failureCategories = {
     'unexpected',
     'offline',
     'http_error',
+    // Normalized sign-in outcomes from LineupController.
+    'network-timeout',
+    'network-unavailable',
+    'rate-limited',
+    'auth-denied',
+    'response-unavailable',
+    // Fixed Plex domain failures used by application and playback producers.
+    'auth-required',
+    'auth-invalid',
+    'access-denied',
+    'incorrect-pin',
+    'unsupported',
+    'playback-unavailable',
+    'authorization-unavailable',
+    'invalid-library',
+    'playlist-unavailable',
+    'collection-unavailable',
+    'collection-scale-exceeded',
+    'response-too-large',
+    'library-page-invalid',
+    'library-page-too-large',
+    'library-page-not-progressing',
+    'library-scale-exceeded',
+    'playlist-page-invalid',
+    'playlist-page-too-large',
+    'playlist-page-not-progressing',
+    'playlist-scale-exceeded',
+    // Normalized native playback/command outcomes and Dart lifetime failures.
+    'network_error',
+    'audio_decode_error',
+    'video_decode_error',
+    'audio_output_error',
+    'video_output_error',
+    'source_open_error',
+    'container_error',
+    'correlation_error',
+    'command_error',
+    'event_queue_overflow',
+    'mpv_error',
+    'required_engine_unavailable',
+    'initialize_failed',
+    'dispose_in_progress',
+    'not_initialized',
+    'invalid_argument',
+    'insecure_media_uri',
+    'window_error',
+    'native_command_error',
+    'native_playback_error',
+    'native_error',
+    'premature_end',
+    'stop_timeout',
+    'stop_failed',
     'player_unavailable',
     'command_queue_full',
     'wait_timeout',

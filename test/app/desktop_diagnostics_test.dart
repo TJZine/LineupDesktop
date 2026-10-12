@@ -61,7 +61,16 @@ void main() {
         );
       addTearDown(controller.dispose);
       controller.diagnostics.enabled = true;
-      controller.diagnostics.add('plex-auth', 'PIN cancellation failed');
+      controller.diagnostics.add('plex-auth', 'PIN cancellation failed', {
+        'code': 'auth-denied',
+      });
+      controller.diagnostics.add('playback', 'Playback request failed', {
+        'operation': 'audio_track',
+        'code': 'command_error',
+      });
+      controller.diagnostics.add('playback', 'Native playback failed', {
+        'failureCode': 'safe-looking-private-sentinel',
+      });
       controller.diagnostics.add(
         'plex-library',
         'Some collections could not be loaded',
@@ -109,7 +118,12 @@ void main() {
       expect(find.text('Report copied'), findsOneWidget);
       expect(copied, contains('Playback state: stopped'));
       expect(copied, contains('Playback method: Unknown'));
-      expect(copied, contains('plex-auth: PIN cancellation failed'));
+      expect(
+        copied,
+        contains('plex-auth: PIN cancellation failed (code=auth-denied)'),
+      );
+      expect(copied, contains('operation=audio_track, code=command_error'));
+      expect(copied, isNot(contains('safe-looking-private-sentinel')));
       expect(
         copied,
         contains(
