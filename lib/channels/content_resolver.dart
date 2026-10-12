@@ -1,10 +1,8 @@
 import '../plex/plex_models.dart';
 import 'channel.dart';
+import 'library_facets.dart';
 
-String? channelDecadeForYear(int? year) {
-  if (year == null || year < 1000 || year > 9999) return null;
-  return '${year ~/ 10 * 10}s';
-}
+export 'library_facets.dart' show channelDecadeForYear, matchesLibraryFacets;
 
 List<ChannelItem> resolveContent(
   ContentSource source,
@@ -39,46 +37,11 @@ List<ChannelItem> resolveContent(
 List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
   var items = media.where((item) => item.libraryId == source.libraryId);
   if (!source.includeWatched) items = items.where((item) => !item.viewed);
-  for (final filter in source.filters.entries) {
-    if (filter.value.isEmpty) continue;
-    items = switch (filter.key) {
-      LibraryFilter.genre => items.where(
-        (item) => item.genres.any(filter.value.contains),
-      ),
-      LibraryFilter.collection => items.where(
-        (item) => item.collections.any(filter.value.contains),
-      ),
-      LibraryFilter.studio => items.where(
-        (item) => filter.value.contains(item.studio),
-      ),
-      LibraryFilter.actor => items.where(
-        (item) => item.actors.any(
-          (actor) => filter.value.any(
-            (value) =>
-                canonicalFilterIdentity(LibraryFilter.actor, actor) ==
-                canonicalFilterIdentity(LibraryFilter.actor, value),
-          ),
-        ),
-      ),
-      LibraryFilter.director => items.where(
-        (item) => item.directors.any(
-          (director) => filter.value.any(
-            (value) =>
-                canonicalFilterIdentity(LibraryFilter.director, director) ==
-                canonicalFilterIdentity(LibraryFilter.director, value),
-          ),
-        ),
-      ),
-      LibraryFilter.decade
-          when filter.value.every(RegExp(r'^\d{3}0s$').hasMatch) =>
-        items.where(
-          (item) => filter.value.contains(channelDecadeForYear(item.year)),
-        ),
-      LibraryFilter.decade => throw const FormatException(
-        'Unsupported content filter',
-      ),
-    };
+  final decades = source.filters[LibraryFilter.decade] ?? const <String>[];
+  if (!decades.every(RegExp(r'^\d{3}0s$').hasMatch)) {
+    throw const FormatException('Unsupported content filter');
   }
+  items = items.where((item) => matchesLibraryFacets(item, source.filters));
   final unique = <String, PlexMediaItem>{};
   for (final item in items.where((item) => item.isPlayable)) {
     unique.putIfAbsent(item.id, () => item);
