@@ -13,6 +13,8 @@ import '../plex/plex_client.dart';
 import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
 
+part 'library_scan_state.dart';
+
 enum SetupStage { welcome, linking, profiles, servers, channelSetup, ready }
 
 enum ChannelPlanApplyResult { applied, stale }
@@ -35,25 +37,6 @@ class ChannelStateConflictException extends FormatException {
     : super('The lineup changed. Review the current channels and try again.');
 }
 
-typedef _LibraryScanResult = ({
-  Set<String> failedPlaylistIds,
-  Map<String, Set<String>> failedCollectionTitles,
-  Map<String, PlexCollectionFailure> collectionDiscoveryFailures,
-  List<PlexMediaItem> media,
-  List<PlexPlaylist> playlists,
-  LibraryScanStatus status,
-});
-
-enum LibraryScanStatus {
-  idle,
-  scanning,
-  complete,
-  empty,
-  unsupported,
-  transientFailure,
-  cancelled,
-}
-
 Iterable<String> _playlistIds(ContentSource source) sync* {
   if (source case PlaylistSource(:final playlistId)) {
     yield playlistId;
@@ -62,23 +45,6 @@ Iterable<String> _playlistIds(ContentSource source) sync* {
       yield* _playlistIds(nested);
     }
   }
-}
-
-@immutable
-class LibraryScanFact {
-  const LibraryScanFact({
-    required this.status,
-    this.phase = PlexLibraryScanPhase.items,
-    this.completedPages = 0,
-    this.completedItems = 0,
-    this.totalItems,
-  });
-
-  final LibraryScanStatus status;
-  final PlexLibraryScanPhase phase;
-  final int completedPages;
-  final int completedItems;
-  final int? totalItems;
 }
 
 class LineupPlaybackRequest {
@@ -182,13 +148,17 @@ class LineupController extends ChangeNotifier {
   _PickerOrigin? _profilePickerOrigin;
   _PickerOrigin? _serverPickerOrigin;
   bool secureCancellationRequired = false;
-  LibraryScanStatus libraryScanStatus = LibraryScanStatus.idle;
-  int libraryScanCompletedPages = 0;
-  int libraryScanCompletedItems = 0;
-  int? libraryScanTotalItems;
-  Map<String, LibraryScanFact> _libraryScanFacts = const {};
-  PlexPlaylistProgress? _playlistScanProgress;
-  PlexPlaylistProgress? get playlistScanProgress => _playlistScanProgress;
+  final _LibraryScanState _scan = _LibraryScanState();
+  LibraryScanStatus get libraryScanStatus => _scan.status;
+  set libraryScanStatus(LibraryScanStatus value) => _scan.status = value;
+  int get libraryScanCompletedPages => _scan.completedPages;
+  int get libraryScanCompletedItems => _scan.completedItems;
+  int? get libraryScanTotalItems => _scan.totalItems;
+  // Kept for existing fixture consumers until the committed-state API migration.
+  set libraryScanCompletedPages(int value) => _scan.fixturePages = value;
+  set libraryScanCompletedItems(int value) => _scan.fixtureItems = value;
+  set libraryScanTotalItems(int? value) => _scan.fixtureTotal = (value,);
+  PlexPlaylistProgress? get playlistScanProgress => _scan.playlistProgress;
   String? error;
   // Request cancellation is independent of the retained playback/content scope.
   int _epoch = 0;
@@ -199,23 +169,15 @@ class LineupController extends ChangeNotifier {
   int _mutationEligibility = 0;
   Future<PlexConnection>? _playbackRefresh;
   int? _playbackRefreshScope;
-  Completer<void>? _scanCancelled;
-  void Function()? _retainScanReadiness;
-  final Map<String, List<PlexMediaItem>> _scanResults = {};
-  final Map<String, Set<String>> _failedCollectionTitles = {};
-  final Map<String, PlexCollectionFailure> _collectionDiscoveryFailures = {};
   Set<String> get _unavailableCollectionLibraryIds =>
-      _collectionDiscoveryFailures.keys.toSet();
-  bool _playlistCatalogUnavailable = true;
-  Set<String> _failedPlaylistIds = const {};
-
-  bool get playlistCatalogUnavailable => _playlistCatalogUnavailable;
-  Set<String> get failedPlaylistIds => _failedPlaylistIds;
+      _scan.collectionDiscoveryFailures.keys.toSet();
+  bool get playlistCatalogUnavailable => _scan.catalogUnavailable;
+  Set<String> get failedPlaylistIds => _scan.failedPlaylistIds;
 
   /// Absence is meaningful only after every dependency was scanned completely.
   bool isGeneratedSourceConfirmedGone(Channel channel) {
     if (channel.builderKey == null ||
-        _scanDiscoveryObsolete ||
+        _scan.discoveryObsolete ||
         libraryScanStatus == LibraryScanStatus.scanning ||
         libraryScanStatus == LibraryScanStatus.cancelled ||
         !_sourceDiscoveryComplete(channel.source)) {
@@ -223,7 +185,7 @@ class LineupController extends ChangeNotifier {
     }
     // A retry may have settled before its inventory could be committed. Never
     // infer absence from the previous inventory when the new scan found items.
-    final pending = _pendingScan;
+    final pending = _scan.readiness;
     if (pending != null &&
         resolveContent(
           channel.source,
@@ -266,11 +228,11 @@ class LineupController extends ChangeNotifier {
   };
 
   Map<String, Set<String>> get failedCollectionTitles =>
-      Map.unmodifiable(_failedCollectionTitles);
+      _scan.failedCollectionTitles;
   Set<String> get unavailableCollectionLibraryIds =>
       Set.unmodifiable(collectionDiscoveryFailures.keys);
   Map<String, PlexCollectionFailure> get collectionDiscoveryFailures =>
-      Map.unmodifiable(_collectionDiscoveryFailures);
+      _scan.collectionDiscoveryFailures;
 
   /// Scale exhaustion requires a changed inventory before another scan helps.
   String? collectionScaleRecovery(Set<String> libraryIds) =>
@@ -304,44 +266,10 @@ class LineupController extends ChangeNotifier {
         'Reduce the collection inventory in Plex before rescanning. Saved channels are preserved.';
   }
 
-  Set<String> _scanIds = const {};
-  ({String? profileId, String serverId})? _scanScope;
-  _LibraryScanResult? _pendingScan;
-  // Completed inventory belongs to the content lifetime, not a picker request.
-  int? _pendingScanScope;
-  Object? _lastScanFailure;
-  // Retained readiness can be committed after a failed refresh, but cannot
-  // prove that a source disappeared during that unverified refresh.
-  bool _scanDiscoveryObsolete = false;
-
   /// Items take precedence while any library is paging (or waiting to page).
-  PlexLibraryScanPhase get libraryScanPhase {
-    final active = _libraryScanFacts.values.where(
-      (fact) =>
-          fact.status == LibraryScanStatus.scanning ||
-          fact.status == LibraryScanStatus.idle,
-    );
-    if (active.isEmpty) {
-      return _libraryScanFacts.isEmpty
-          ? PlexLibraryScanPhase.items
-          : _libraryScanFacts.values.last.phase;
-    }
-    if (active.any((fact) => fact.phase == PlexLibraryScanPhase.items)) {
-      return PlexLibraryScanPhase.items;
-    }
-    return active.first.phase;
-  }
+  PlexLibraryScanPhase get libraryScanPhase => _scan.phase;
 
-  Set<String> get libraryScanReadyIds =>
-      _pendingScan == null || _pendingScanScope != _mutationScope
-      ? const {}
-      : Set.unmodifiable(
-          _libraryScanFacts.entries
-              .where(
-                (entry) => entry.value.status == LibraryScanStatus.complete,
-              )
-              .map((entry) => entry.key),
-        );
+  Set<String> get libraryScanReadyIds => _scan.readyIds(_mutationScope);
 
   /// Item readiness is retained independently of required-source availability.
   /// Use the same facts as the commit guards when offering a ready subset.
@@ -358,20 +286,7 @@ class LineupController extends ChangeNotifier {
     return Set.unmodifiable(libraryScanReadyIds.difference(blocked));
   }
 
-  Set<String> get libraryScanRetryIds => Set.unmodifiable(
-    _libraryScanFacts.entries
-        .where(
-          (entry) =>
-              const {
-                LibraryScanStatus.transientFailure,
-                LibraryScanStatus.cancelled,
-                LibraryScanStatus.idle,
-              }.contains(entry.value.status) ||
-              _unavailableCollectionLibraryIds.contains(entry.key) ||
-              (_failedCollectionTitles[entry.key]?.isNotEmpty ?? false),
-        )
-        .map((entry) => entry.key),
-  );
+  Set<String> get libraryScanRetryIds => _scan.retryIds;
   String? get savedServerId =>
       _persisted.selectedServerByProfile[profile?.id ?? account?.id];
   String? _accountToken;
@@ -424,7 +339,7 @@ class LineupController extends ChangeNotifier {
     );
   }
 
-  Map<String, LibraryScanFact> get libraryScanFacts => _libraryScanFacts;
+  Map<String, LibraryScanFact> get libraryScanFacts => _scan.facts;
 
   Future<void> initialize() async {
     _retireScope();
@@ -440,7 +355,7 @@ class LineupController extends ChangeNotifier {
     channels = const [];
     currentChannelId = null;
     selectedLibraryIds = const {};
-    _resetLibraryScan();
+    _resetSetupDiscovery();
     final token = await credentials.readAccountToken();
     if (!_isCurrent(operation)) return;
     if (token == null) {
@@ -740,7 +655,7 @@ class LineupController extends ChangeNotifier {
           availablePlaylists = const [];
           channels = const [];
           currentChannelId = null;
-          _resetLibraryScan();
+          _resetSetupDiscovery();
           _contentGeneration++;
           accepted = true;
           stage = SetupStage.servers;
@@ -890,7 +805,7 @@ class LineupController extends ChangeNotifier {
           currentChannelId = nextCurrent;
           stage = SetupStage.channelSetup;
           channelSetupCanCancel = false;
-          _resetLibraryScan();
+          _resetSetupDiscovery();
           restoringSavedLineup =
               nextLibraryIds.isNotEmpty && nextChannels.isNotEmpty;
           _contentGeneration++;
@@ -907,8 +822,7 @@ class LineupController extends ChangeNotifier {
           availablePlaylists = loaded.playlists;
           await _migrateLegacySchedules(operation);
           if (!_isCurrent(operation)) return;
-          _pendingScan = loaded;
-          _pendingScanScope = _mutationScope;
+          _scan.stage(loaded, _mutationScope);
           restoringSavedLineup = false;
           stage = libraryScanStatus == LibraryScanStatus.complete
               ? SetupStage.ready
@@ -937,57 +851,8 @@ class LineupController extends ChangeNotifier {
     Set<String>? retryLibraryIds,
   }) async {
     if (libraryScanStatus == LibraryScanStatus.scanning) cancelLibraryScan();
-    final previous = _pendingScan;
-    final previousScope = _pendingScanScope;
-    final previousIds = _scanIds;
-    final previousScanScope = _scanScope;
-    final previousFacts = _libraryScanFacts;
-    final previousResults = Map<String, List<PlexMediaItem>>.of(_scanResults);
-    final previousCollections = Map<String, Set<String>>.of(
-      _failedCollectionTitles,
-    );
-    final previousUnavailable = Map<String, PlexCollectionFailure>.of(
-      _collectionDiscoveryFailures,
-    );
-    final previousCatalogUnavailable = _playlistCatalogUnavailable;
-    final previousFailedPlaylists = _failedPlaylistIds;
-    void retainPreviousReadiness({bool afterInterruption = false}) {
-      if (previous == null ||
-          previousScope != _mutationScope ||
-          (!afterInterruption &&
-              (retryFailedOnly || retryLibraryIds != null)) ||
-          !previousFacts.values.any(
-            (fact) => fact.status == LibraryScanStatus.complete,
-          )) {
-        return;
-      }
-      _scanDiscoveryObsolete = true;
-      _pendingScan = previous;
-      _pendingScanScope = previousScope;
-      _scanIds = previousIds;
-      _scanScope = previousScanScope;
-      _libraryScanFacts = previousFacts;
-      _scanResults
-        ..clear()
-        ..addAll(previousResults);
-      _failedCollectionTitles
-        ..clear()
-        ..addAll(previousCollections);
-      _collectionDiscoveryFailures
-        ..clear()
-        ..addAll(previousUnavailable);
-      _playlistCatalogUnavailable = previousCatalogUnavailable;
-      _failedPlaylistIds = previousFailedPlaylists;
-      libraryScanStatus = previous.status;
-      _updateLibraryScanAggregates();
-    }
-
     final operation = _invalidateOperation();
-    _retainScanReadiness = () =>
-        retainPreviousReadiness(afterInterruption: true);
-    _pendingScan = null;
-    _pendingScanScope = null;
-    _lastScanFailure = null;
+    _scan.beginRefresh(retry: retryFailedOnly || retryLibraryIds != null);
     return _run(
       () async {
         final allowed = libraries.map((library) => library.id).toSet();
@@ -996,8 +861,7 @@ class LineupController extends ChangeNotifier {
             (retryLibraryIds != null &&
                 (retryLibraryIds.isEmpty ||
                     !ids.containsAll(retryLibraryIds)))) {
-          retainPreviousReadiness();
-          _retainScanReadiness = null;
+          _scan.finishRefresh(_mutationScope, failed: true);
           throw const PlexException(
             'invalid-library',
             'Select one or more libraries from the current server.',
@@ -1014,20 +878,17 @@ class LineupController extends ChangeNotifier {
           );
         } catch (_) {
           if (_isCurrent(operation)) {
-            retainPreviousReadiness(afterInterruption: true);
-            _retainScanReadiness = null;
+            _scan.interruptRefresh(_mutationScope);
           }
           rethrow;
         }
         if (!_isCurrent(operation)) return;
-        _pendingScan = result;
-        _pendingScanScope = _mutationScope;
-        libraryScanStatus = result.status;
-        if (result.status == LibraryScanStatus.transientFailure) {
-          retainPreviousReadiness();
-        }
-        _retainScanReadiness = null;
-        if (_lastScanFailure case final failure?) {
+        _scan.stage(result, _mutationScope);
+        _scan.finishRefresh(
+          _mutationScope,
+          failed: result.status == LibraryScanStatus.transientFailure,
+        );
+        if (_scan.failure case final failure?) {
           error = failure is PlexException
               ? failure.message
               : 'Lineup could not complete that request.';
@@ -1047,18 +908,18 @@ class LineupController extends ChangeNotifier {
   Future<bool> _commitScannedLibraries(Set<String> ids) async {
     final operation = _epoch;
     final scope = _mutationScope;
-    final pending = _pendingScan;
+    final pending = _scan.readiness;
     if (pending == null ||
-        _pendingScanScope != _mutationScope ||
+        _scan.readinessScope != _mutationScope ||
         ids.isEmpty ||
-        !_scanIds.containsAll(ids) ||
+        !_scan.ids.containsAll(ids) ||
         !libraryScanReadyIds.containsAll(ids)) {
       return false;
     }
     return _run(
       () => _queueStateOperation(operation, () async {
-        if (_pendingScanScope != _mutationScope ||
-            !identical(_pendingScan, pending)) {
+        if (_scan.readinessScope != _mutationScope ||
+            !identical(_scan.readiness, pending)) {
           return;
         }
         _requireAvailablePlaylists(pending.failedPlaylistIds);
@@ -1066,7 +927,9 @@ class LineupController extends ChangeNotifier {
         final media = List<PlexMediaItem>.unmodifiable([
           for (final library in libraries)
             if (ids.contains(library.id))
-              ...?_scanResults[library.id]?.where((item) => item.isPlayable),
+              ...?_scan.rows[library.id]?.items?.where(
+                (item) => item.isPlayable,
+              ),
         ]);
         final inventory = _buildPlayableInventory(media, pending.playlists);
         final migrated = _migratedLegacyChannels(
@@ -1082,30 +945,13 @@ class LineupController extends ChangeNotifier {
         availableMedia = media;
         availablePlaylists = pending.playlists;
         channels = migrated;
-        libraryScanStatus = _committedLibraryScanStatus(ids);
+        libraryScanStatus = _scan.statusFor(ids);
         _contentGeneration++;
         notifyListeners();
       }),
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
     );
-  }
-
-  LibraryScanStatus _committedLibraryScanStatus(Set<String> ids) {
-    final statuses = ids
-        .map((id) => _libraryScanFacts[id]?.status)
-        .whereType<LibraryScanStatus>()
-        .toSet();
-    if (statuses.contains(LibraryScanStatus.transientFailure)) {
-      return LibraryScanStatus.transientFailure;
-    }
-    if (statuses.contains(LibraryScanStatus.complete)) {
-      return LibraryScanStatus.complete;
-    }
-    if (statuses.contains(LibraryScanStatus.unsupported)) {
-      return LibraryScanStatus.unsupported;
-    }
-    return LibraryScanStatus.empty;
   }
 
   Future<_LibraryScanResult> _loadLibraries(
@@ -1119,52 +965,19 @@ class LineupController extends ChangeNotifier {
     if (selectedServer == null || connection == null) {
       throw const PlexException('server-unreachable', 'Select a server first.');
     }
-    final cancelled = Completer<void>();
-    _scanCancelled = cancelled;
-    final scope = (
-      profileId: profile?.id ?? account?.id,
-      serverId: selectedServer.id,
+    final cancelled = _scan.startIo();
+    final retainedIds = _scan.prepare(
+      ids,
+      (profileId: profile?.id ?? account?.id, serverId: selectedServer.id),
+      _mutationScope,
+      retryFailedOnly: retryFailedOnly,
+      retryLibraryIds: retryLibraryIds,
     );
-    final retain =
-        (retryFailedOnly || retryLibraryIds != null) &&
-        _scanScope == scope &&
-        setEquals(_scanIds, ids);
-    if (!retain) {
-      _scanResults.clear();
-      _failedCollectionTitles.clear();
-      _collectionDiscoveryFailures.clear();
-    }
-    _scanDiscoveryObsolete = false;
-    final retainedFacts = _libraryScanFacts;
-    // Explicit row retries take precedence over a cached item result: optional
-    // collection enrichment can fail while that result remains ready.
-    bool retainLibrary(String id) =>
-        retain &&
-        (retryLibraryIds != null
-            ? !retryLibraryIds.contains(id)
-            : _scanResults.containsKey(id) &&
-                  !_unavailableCollectionLibraryIds.contains(id) &&
-                  !(_failedCollectionTitles[id]?.isNotEmpty ?? false));
-    _scanIds = Set.unmodifiable(ids);
-    _scanScope = scope;
-    _libraryScanFacts = Map.unmodifiable({
-      for (final id in ids)
-        id: retainLibrary(id)
-            ? _libraryScanFacts[id]!
-            : const LibraryScanFact(status: LibraryScanStatus.idle),
-    });
-    _playlistCatalogUnavailable = true;
-    _failedPlaylistIds = const {};
-    libraryScanStatus = LibraryScanStatus.scanning;
-    _updateLibraryScanAggregates();
     notifyListeners();
     try {
       final selected = libraries
           .where((library) => ids.contains(library.id))
           .toList(growable: false);
-      final results = [
-        for (final library in selected) _scanResults[library.id],
-      ];
       var nextLibrary = 0;
       Object? firstFailure;
       StackTrace? firstFailureStack;
@@ -1173,13 +986,10 @@ class LineupController extends ChangeNotifier {
           final index = nextLibrary++;
           if (index >= selected.length) return;
           final library = selected[index];
-          if (retainLibrary(library.id)) {
+          if (retainedIds.contains(library.id)) {
             continue;
           }
-          _setLibraryScanFact(
-            library.id,
-            const LibraryScanFact(status: LibraryScanStatus.scanning),
-          );
+          _scan.startLibrary(library.id);
           notifyListeners();
           try {
             final scanned = await _withPmsAuthorization(
@@ -1194,43 +1004,12 @@ class LineupController extends ChangeNotifier {
                 cancelled: cancelled.future,
                 onPhase: (phase) {
                   if (!_isCurrent(operation)) return;
-                  final current = _libraryScanFacts[library.id]!;
-                  _setLibraryScanFact(
-                    library.id,
-                    LibraryScanFact(
-                      status: LibraryScanStatus.scanning,
-                      phase: phase,
-                      completedPages: current.completedPages,
-                      completedItems: current.completedItems,
-                      totalItems: current.totalItems,
-                    ),
-                  );
+                  _scan.setPhase(library.id, phase);
                   notifyListeners();
                 },
                 onProgress: (progress) {
                   if (!_isCurrent(operation)) return;
-                  final current = _libraryScanFacts[library.id]!;
-                  _setLibraryScanFact(
-                    library.id,
-                    LibraryScanFact(
-                      status: LibraryScanStatus.scanning,
-                      phase: current.phase,
-                      completedPages:
-                          progress.completedPages > current.completedPages
-                          ? progress.completedPages
-                          : current.completedPages,
-                      completedItems:
-                          progress.completedItems > current.completedItems
-                          ? progress.completedItems
-                          : current.completedItems,
-                      totalItems:
-                          progress.totalItems != null &&
-                              (current.totalItems == null ||
-                                  progress.totalItems! > current.totalItems!)
-                          ? progress.totalItems
-                          : current.totalItems,
-                    ),
-                  );
+                  _scan.reportProgress(library.id, progress);
                   notifyListeners();
                 },
               ),
@@ -1252,52 +1031,11 @@ class LineupController extends ChangeNotifier {
                 'shows': timing.shows,
               });
             }
-            _failedCollectionTitles[library.id] =
-                scanned.collections.failedTitles;
-            if (scanned.collections.failure case final failure?) {
-              _collectionDiscoveryFailures[library.id] = failure;
-            } else {
-              _collectionDiscoveryFailures.remove(library.id);
-            }
-            results[index] = items;
-            _scanResults[library.id] = List.unmodifiable(items);
-            final current = _libraryScanFacts[library.id]!;
-            final playable = items.where((item) => item.isPlayable).length;
-            _setLibraryScanFact(
-              library.id,
-              LibraryScanFact(
-                status: items.isEmpty
-                    ? LibraryScanStatus.empty
-                    : playable == 0
-                    ? LibraryScanStatus.unsupported
-                    : LibraryScanStatus.complete,
-                phase: current.phase,
-                completedPages: current.completedPages,
-                completedItems: items.length > current.completedItems
-                    ? items.length
-                    : current.completedItems,
-                totalItems: current.totalItems,
-              ),
-            );
+            _scan.completeLibrary(library.id, scanned);
             notifyListeners();
           } catch (exception, stack) {
             if (!_isCurrent(operation)) return;
-            final current = _libraryScanFacts[library.id]!;
-            if (retain && _scanResults.containsKey(library.id)) {
-              _scanDiscoveryObsolete = true;
-            }
-            _setLibraryScanFact(
-              library.id,
-              retain && _scanResults.containsKey(library.id)
-                  ? retainedFacts[library.id]!
-                  : LibraryScanFact(
-                      status: LibraryScanStatus.transientFailure,
-                      phase: current.phase,
-                      completedPages: current.completedPages,
-                      completedItems: current.completedItems,
-                      totalItems: current.totalItems,
-                    ),
-            );
+            _scan.failLibrary(library.id);
             firstFailure ??= exception;
             firstFailureStack ??= stack;
             notifyListeners();
@@ -1308,7 +1046,7 @@ class LineupController extends ChangeNotifier {
       await Future.wait(
         List.generate(selected.length.clamp(0, 4), (_) => loadNext()),
       );
-      if (_isCurrent(operation)) _lastScanFailure = firstFailure;
+      if (_isCurrent(operation)) _scan.failure = firstFailure;
       if (firstFailure != null && !settleFailures) {
         Error.throwWithStackTrace(firstFailure!, firstFailureStack!);
       }
@@ -1322,11 +1060,12 @@ class LineupController extends ChangeNotifier {
           status: LibraryScanStatus.cancelled,
         );
       }
-      final items = results
+      final items = selected
+          .map((library) => _scan.rows[library.id]?.items)
           .whereType<List<PlexMediaItem>>()
           .expand((items) => items)
           .toList();
-      _playlistScanProgress = const PlexPlaylistProgress();
+      _scan.playlistProgress = const PlexPlaylistProgress();
       notifyListeners();
       PlexPlaylistCatalog catalog;
       var catalogUnavailable = false;
@@ -1341,7 +1080,7 @@ class LineupController extends ChangeNotifier {
             cancelled: cancelled.future,
             onProgress: (progress) {
               if (!_isCurrent(operation)) return;
-              _playlistScanProgress = progress;
+              _scan.playlistProgress = progress;
               notifyListeners();
             },
           ),
@@ -1374,9 +1113,8 @@ class LineupController extends ChangeNotifier {
           status: LibraryScanStatus.cancelled,
         );
       }
-      _playlistScanProgress = null;
-      _playlistCatalogUnavailable = catalogUnavailable;
-      _failedPlaylistIds = Set.unmodifiable(catalog.failedIds);
+      _scan.playlistProgress = null;
+      _scan.completeCatalog(catalog, unavailable: catalogUnavailable);
       if (catalog.failedIds.isNotEmpty) {
         diagnostics.add('plex-library', 'Some playlists could not be loaded', {
           'count': catalog.failedIds.length,
@@ -1384,7 +1122,7 @@ class LineupController extends ChangeNotifier {
       }
       final failedTitleCount = ids.fold<int>(
         0,
-        (count, id) => count + (_failedCollectionTitles[id]?.length ?? 0),
+        (count, id) => count + (_scan.failedCollectionTitles[id]?.length ?? 0),
       );
       final unavailableCount = _unavailableCollectionLibraryIds
           .intersection(ids)
@@ -1402,35 +1140,7 @@ class LineupController extends ChangeNotifier {
         });
       }
       final playable = items.where((item) => item.isPlayable).toList();
-      final status =
-          _libraryScanFacts.values.any(
-            (fact) => const {
-              LibraryScanStatus.transientFailure,
-              LibraryScanStatus.cancelled,
-              LibraryScanStatus.idle,
-            }.contains(fact.status),
-          )
-          ? LibraryScanStatus.transientFailure
-          : items.isEmpty
-          ? LibraryScanStatus.empty
-          : playable.isEmpty
-          ? LibraryScanStatus.unsupported
-          : LibraryScanStatus.complete;
-      return (
-        failedCollectionTitles: Map<String, Set<String>>.unmodifiable({
-          for (final id in ids)
-            if (_failedCollectionTitles[id]?.isNotEmpty ?? false)
-              id: _failedCollectionTitles[id]!,
-        }),
-        collectionDiscoveryFailures:
-            Map<String, PlexCollectionFailure>.unmodifiable({
-              for (final id in ids) id: ?_collectionDiscoveryFailures[id],
-            }),
-        failedPlaylistIds: Set<String>.unmodifiable(catalog.failedIds),
-        media: List<PlexMediaItem>.unmodifiable(playable),
-        playlists: List<PlexPlaylist>.unmodifiable(catalog.playlists),
-        status: status,
-      );
+      return _scan.result(playable, catalog.playlists);
     } catch (_) {
       if (_isCurrent(operation)) {
         libraryScanStatus = LibraryScanStatus.transientFailure;
@@ -1438,11 +1148,7 @@ class LineupController extends ChangeNotifier {
       }
       rethrow;
     } finally {
-      if (!cancelled.isCompleted) cancelled.complete();
-      if (identical(_scanCancelled, cancelled)) {
-        _scanCancelled = null;
-        _playlistScanProgress = null;
-      }
+      _scan.finishIo(cancelled);
     }
   }
 
@@ -1452,22 +1158,7 @@ class LineupController extends ChangeNotifier {
     _busyOperation = null;
     busy = false;
     error = null;
-    libraryScanStatus = LibraryScanStatus.cancelled;
-    _libraryScanFacts = Map.unmodifiable({
-      for (final entry in _libraryScanFacts.entries)
-        entry.key: entry.value.status == LibraryScanStatus.scanning
-            ? LibraryScanFact(
-                status: LibraryScanStatus.cancelled,
-                phase: entry.value.phase,
-                completedPages: entry.value.completedPages,
-                completedItems: entry.value.completedItems,
-                totalItems: entry.value.totalItems,
-              )
-            : entry.value,
-    });
-    _retainScanReadiness?.call();
-    _retainScanReadiness = null;
-    _updateLibraryScanAggregates();
+    _scan.cancel(_mutationScope);
     notifyListeners();
   }
 
@@ -2394,7 +2085,7 @@ class LineupController extends ChangeNotifier {
       _serverTargetId = null;
       _invalidatePmsRefresh();
       secureCancellationRequired = false;
-      _resetLibraryScan();
+      _resetSetupDiscovery();
       _contentGeneration++;
       stage = SetupStage.welcome;
       error = null;
@@ -2586,7 +2277,7 @@ class LineupController extends ChangeNotifier {
     selectedLibraryIds = const {};
     availableMedia = const [];
     availablePlaylists = const [];
-    _resetLibraryScan();
+    _resetSetupDiscovery();
     channels = const [];
     currentChannelId = null;
     _scheduleWorker?.dispose();
@@ -2596,52 +2287,11 @@ class LineupController extends ChangeNotifier {
     _contentGeneration++;
   }
 
-  void _resetLibraryScan() {
+  void _resetSetupDiscovery() {
     restoringSavedLineup = false;
     _profilePickerOrigin = null;
     _serverPickerOrigin = null;
-    _retainScanReadiness = null;
-    _lastScanFailure = null;
-    _scanDiscoveryObsolete = false;
-    _playlistCatalogUnavailable = true;
-    _playlistScanProgress = null;
-    _failedPlaylistIds = const {};
-    _scanResults.clear();
-    _failedCollectionTitles.clear();
-    _collectionDiscoveryFailures.clear();
-    _scanIds = const {};
-    _scanScope = null;
-    _pendingScan = null;
-    _pendingScanScope = null;
-    libraryScanStatus = LibraryScanStatus.idle;
-    libraryScanCompletedPages = 0;
-    libraryScanCompletedItems = 0;
-    libraryScanTotalItems = null;
-    _libraryScanFacts = const {};
-  }
-
-  void _setLibraryScanFact(String id, LibraryScanFact fact) {
-    _libraryScanFacts = Map.unmodifiable({..._libraryScanFacts, id: fact});
-    _updateLibraryScanAggregates();
-  }
-
-  void _updateLibraryScanAggregates() {
-    libraryScanCompletedPages = _libraryScanFacts.values.fold(
-      0,
-      (total, fact) => total + fact.completedPages,
-    );
-    libraryScanCompletedItems = _libraryScanFacts.values.fold(
-      0,
-      (total, fact) => total + fact.completedItems,
-    );
-    libraryScanTotalItems =
-        _libraryScanFacts.isNotEmpty &&
-            _libraryScanFacts.values.every((fact) => fact.totalItems != null)
-        ? _libraryScanFacts.values.fold<int>(
-            0,
-            (total, fact) => total + fact.totalItems!,
-          )
-        : null;
+    _scan.reset();
   }
 
   Future<T> _withPmsAuthorization<T>(
@@ -2826,10 +2476,7 @@ class LineupController extends ChangeNotifier {
 
   int _invalidateOperation() {
     restoringSavedLineup = false;
-    _playlistScanProgress = null;
-    final cancelled = _scanCancelled;
-    _scanCancelled = null;
-    if (cancelled != null && !cancelled.isCompleted) cancelled.complete();
+    _scan.cancelIo();
     return ++_epoch;
   }
 

@@ -287,6 +287,71 @@ void main() {
     expect(controller.selectedLibraryIds, {'movies', 'tv'});
   });
 
+  for (final restoreFails in [false, true]) {
+    test(
+      'returning to server A rejects old readiness and late scan (restore fails: $restoreFails)',
+      () async {
+        final fixture = _reentryFixture();
+        final controller = fixture.controller;
+        await controller.initialize();
+        await controller.enterChannelSetup();
+        final started = Completer<void>();
+        final release = Completer<void>();
+        var oldAttempt = true;
+        fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, _) async {
+          if (oldAttempt) {
+            if (!started.isCompleted) started.complete();
+            await release.future;
+            return PlexLibraryScan(items: [_scanMovie(id)]);
+          }
+          if (restoreFails) {
+            throw const PlexException('offline', 'Try again');
+          }
+          return PlexLibraryScan(
+            items: [
+              PlexMediaItem(
+                id: '$id-replacement',
+                title: 'Replacement',
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                libraryId: id,
+                parts: [PlexMediaPart(path: '/parts/replacement')],
+              ),
+            ],
+          );
+        };
+        final abandoned = controller.scanLibraries({'movies', 'tv'});
+        await started.future;
+        controller.showServers();
+        await controller.selectServer(fixture.plex.serversResult.last);
+        expect(controller.server!.id, 'other');
+        expect(controller.libraryScanReadyIds, isEmpty);
+        oldAttempt = false;
+        await controller.selectServer(fixture.plex.serversResult.first);
+        expect(controller.server!.id, 'server');
+        expect(
+          controller.libraryScanReadyIds,
+          restoreFails ? isEmpty : {'movies', 'tv'},
+        );
+        final facts = controller.libraryScanFacts;
+        release.complete();
+        expect(await abandoned, isFalse);
+        expect(controller.libraryScanFacts, facts);
+        expect(
+          controller.libraryScanReadyIds,
+          restoreFails ? isEmpty : {'movies', 'tv'},
+        );
+        if (restoreFails) {
+          expect(await controller.commitLibraryScan({'movies'}), isFalse);
+          expect(controller.availableMedia, isEmpty);
+        } else {
+          expect(await controller.commitLibraryScan({'movies'}), isTrue);
+          expect(controller.availableMedia.single.id, 'movies-replacement');
+        }
+      },
+    );
+  }
+
   test('committed subset saves exactly the subset and unscanned addition needs scanning', () async {
     final fixture = _reentryFixture();
     final controller = fixture.controller;
