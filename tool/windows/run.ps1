@@ -9,32 +9,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
-$repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+. (Join-Path $PSScriptRoot 'build-inputs.ps1')
+$repository = Get-LineupRepository
 $metadataPath = Join-Path $repository 'tool/windows/build-metadata.psd1'
 
 if (-not $IsWindows -and $env:OS -ne 'Windows_NT') {
   throw 'run.ps1 must be run on Windows.'
-}
-
-function Resolve-RequiredPath {
-  param(
-    [Parameter(Mandatory)] [AllowEmptyString()] [string] $Path,
-    [Parameter(Mandatory)] [string] $Name,
-    [Parameter(Mandatory)] [ValidateSet('Container', 'Leaf')] [string] $PathType
-  )
-
-  if ([string]::IsNullOrWhiteSpace($Path)) {
-    throw "$Name must be a nonblank path."
-  }
-  try {
-    $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
-  } catch {
-    throw "$Name does not exist: $Path"
-  }
-  if (-not (Test-Path -LiteralPath $resolved -PathType $PathType)) {
-    throw "$Name must be a $($PathType.ToLowerInvariant()): $resolved"
-  }
-  [IO.Path]::GetFullPath($resolved)
 }
 
 function Get-GitValue {
@@ -137,48 +117,6 @@ function Assert-PinnedFlutterCheckout {
   }
 }
 
-function Invoke-NativeChecked {
-  param(
-    [Parameter(Mandatory)] [string] $FilePath,
-    [Parameter(Mandatory)] [string[]] $Arguments,
-    [Parameter(Mandatory)] [string] $FailureMessage
-  )
-
-  $nativePreference = $PSNativeCommandUseErrorActionPreference
-  $PSNativeCommandUseErrorActionPreference = $false
-  try {
-    & $FilePath @Arguments
-    $exitCode = $LASTEXITCODE
-  } finally {
-    $PSNativeCommandUseErrorActionPreference = $nativePreference
-  }
-  if ($exitCode) { throw "$FailureMessage Exit code $exitCode." }
-}
-
-function Get-FlutterArguments {
-  param(
-    [Parameter(Mandatory)] [string] $EngineSource,
-    [Parameter(Mandatory)] [System.Collections.IDictionary] $BoundParameters,
-    [AllowEmptyString()] [string] $MediaPath
-  )
-
-  $arguments = @(
-    'run'
-    '-d'
-    'windows'
-    '--local-engine=host_debug'
-    '--local-engine-host=host_debug'
-    "--local-engine-src-path=$EngineSource"
-  )
-  if ($BoundParameters.ContainsKey('MediaPath')) {
-    if ([string]::IsNullOrWhiteSpace($MediaPath)) {
-      throw 'MediaPath must be a nonblank path when supplied.'
-    }
-    $arguments += "--dart-entrypoint-args=--media=$MediaPath"
-  }
-  $arguments
-}
-
 Assert-CommittedInput 'tool/windows/build-metadata.psd1'
 $metadata = Import-PowerShellDataFile -LiteralPath $metadataPath
 $patchRelativePath = $metadata.FlutterEnginePatchPath
@@ -195,17 +133,12 @@ if (-not (Test-Path -LiteralPath $patchPath -PathType Leaf) -or
   throw 'Flutter engine patch does not match the pinned SHA-256.'
 }
 
-$engineSource = Resolve-RequiredPath $EngineSource 'EngineSource' 'Container'
-$mpvRoot = Resolve-RequiredPath $MpvRoot 'MpvRoot' 'Container'
-if ($PSBoundParameters.ContainsKey('MediaPath')) {
-  if ([string]::IsNullOrWhiteSpace($MediaPath)) {
-    throw 'MediaPath must be a nonblank path when supplied.'
-  }
-  $MediaPath = Resolve-RequiredPath $MediaPath 'MediaPath' 'Leaf'
-}
-
-$flutterRoot = Split-Path -Parent (Split-Path -Parent $engineSource)
-$flutter = Join-Path $flutterRoot 'bin/flutter.bat'
+$launchInput = Get-LineupLaunchInput -EngineSource $EngineSource -MpvRoot $MpvRoot `
+  -BoundParameters $PSBoundParameters -MediaPath $MediaPath
+$engineSource = $launchInput.EngineSource
+$mpvRoot = $launchInput.MpvRoot
+$flutterRoot = $launchInput.FlutterRoot
+$flutter = $launchInput.Flutter
 if (-not (Test-Path -LiteralPath $flutter -PathType Leaf)) {
   throw 'EngineSource must be the engine/src directory below the pinned Flutter checkout.'
 }
@@ -226,7 +159,7 @@ foreach ($relative in @(
   }
 }
 
-$engineOutput = Join-Path $engineSource 'out/host_debug'
+$engineOutput = $launchInput.EngineOutput
 $buildNinja = Join-Path $engineOutput 'build.ninja'
 if (-not (Test-Path -LiteralPath $buildNinja -PathType Leaf)) {
   throw 'Configure the pinned host_debug engine first; see docs/DEVELOPMENT.md#patched-engine-provisioning. The launcher does not run GN or provision engine sources.'
@@ -240,48 +173,4 @@ if (-not $ninjaCommand) {
 }
 $ninja = $ninjaCommand.Source
 
-$flutterArguments = Get-FlutterArguments -EngineSource $engineSource `
-  -BoundParameters $PSBoundParameters -MediaPath $MediaPath
-
-$previousMpv = Get-Item -LiteralPath 'Env:LINEUP_MPV_ROOT' -ErrorAction SilentlyContinue
-$hadMpv = $null -ne $previousMpv
-$previousMpvValue = if ($hadMpv) { $previousMpv.Value } else { $null }
-$locationPushed = $false
-$flutterExitCode = 0
-try {
-  Push-Location -LiteralPath $repository
-  $locationPushed = $true
-  $env:LINEUP_MPV_ROOT = $mpvRoot
-
-  $flutterWindowsCache = Join-Path $flutterRoot 'bin/cache/artifacts/engine/windows-x64'
-  if (-not (Test-Path -LiteralPath $flutterWindowsCache -PathType Container)) {
-    Write-Host 'Pinned Flutter Windows artifacts are not cached; preparing them with the pinned flutter.bat.'
-    Invoke-NativeChecked -FilePath $flutter -Arguments @('precache', '--windows') `
-      -FailureMessage 'Pinned Flutter SDK cache preparation failed.'
-  }
-
-  Write-Host "Refreshing pinned host_debug engine output with $ninja."
-  Invoke-NativeChecked -FilePath $ninja -Arguments @('-C', $engineOutput) `
-    -FailureMessage 'Pinned host_debug engine build failed.'
-
-  $nativePreference = $PSNativeCommandUseErrorActionPreference
-  $PSNativeCommandUseErrorActionPreference = $false
-  try {
-    & $flutter @flutterArguments
-    $flutterExitCode = $LASTEXITCODE
-  } finally {
-    $PSNativeCommandUseErrorActionPreference = $nativePreference
-  }
-  if ($flutterExitCode) {
-    [Console]::Error.WriteLine("flutter run failed with exit code $flutterExitCode.")
-  }
-} finally {
-  if ($locationPushed) { Pop-Location }
-  if ($hadMpv) {
-    $env:LINEUP_MPV_ROOT = $previousMpvValue
-  } else {
-    Remove-Item -LiteralPath 'Env:LINEUP_MPV_ROOT' -ErrorAction SilentlyContinue
-  }
-}
-
-if ($flutterExitCode) { exit $flutterExitCode }
+Invoke-LineupLaunch -Launch $launchInput -Ninja $ninja

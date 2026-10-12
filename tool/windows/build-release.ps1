@@ -7,9 +7,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
-$repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 . (Join-Path $PSScriptRoot 'build-inputs.ps1')
+$repository = Get-LineupRepository
+$metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 $patchRelativePath = $metadata.FlutterEnginePatchPath
 if ($patchRelativePath -notmatch '^[A-Za-z0-9._/-]+$' -or
   [IO.Path]::IsPathRooted($patchRelativePath) -or
@@ -103,24 +103,18 @@ if (Test-SourceDirty $repository) {
   throw 'Refusing to create release provenance from a dirty Lineup source tree.'
 }
 Assert-NoTrackedSymlinks -Repository $repository
-$sourceCommit = Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')
-$pubspecVersion = Get-PubspecVersion -Path (Join-Path $repository 'pubspec.yaml')
-$lineupVersion = $pubspecVersion.Name
-$lineupBuild = "$($pubspecVersion.Build)@$sourceCommit"
-
-$EngineSource = (Resolve-Path -LiteralPath $EngineSource).Path
-$flutterRoot = Split-Path -Parent (Split-Path -Parent $EngineSource)
+$releaseInput = Get-LineupReleaseInput -EngineSource $EngineSource
+$sourceCommit = $releaseInput.SourceCommit
+$EngineSource = $releaseInput.EngineSource
+$flutterRoot = $releaseInput.FlutterRoot
 if (-not (Test-Path -LiteralPath (Join-Path $flutterRoot 'bin/flutter.bat') -PathType Leaf)) {
   throw 'EngineSource must be the engine/src directory below the pinned Flutter checkout.'
 }
 Assert-PinnedFlutterCheckout $flutterRoot
-$flutter = Join-Path $flutterRoot 'bin/flutter.bat'
+$flutter = $releaseInput.Flutter
 Set-Location $flutterRoot
-& {
-  $PSNativeCommandUseErrorActionPreference = $false
-  & $flutter precache --windows
-  if ($LASTEXITCODE) { throw 'Pinned Flutter SDK cache preparation failed.' }
-}
+Invoke-NativeChecked -FilePath $flutter -Arguments @('precache', '--windows') `
+  -FailureMessage 'Pinned Flutter SDK cache preparation failed.'
 Assert-PinnedFlutterCheckout $flutterRoot
 
 $engineOutput = Join-Path $EngineSource 'out/host_release'
@@ -147,18 +141,7 @@ if (Test-Path -LiteralPath $buildMarkerPath -PathType Leaf) {
   Remove-Item -LiteralPath $buildMarkerPath
 }
 Set-Location $repository
-$flutterBuildArguments = @(
-  '--local-engine=host_release'
-  '--local-engine-host=host_release'
-  "--local-engine-src-path=$EngineSource"
-  "--dart-define=LINEUP_VERSION=$lineupVersion"
-  "--dart-define=LINEUP_BUILD=$lineupBuild"
-)
-& {
-  $PSNativeCommandUseErrorActionPreference = $false
-  & $flutter build windows @flutterBuildArguments
-  if ($LASTEXITCODE) { throw 'Flutter Windows release build failed.' }
-}
+Invoke-LineupReleaseBuild -Release $releaseInput
 
 if ((Test-SourceDirty $repository) -or
   (Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')) -ne $sourceCommit) {
