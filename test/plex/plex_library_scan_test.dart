@@ -255,6 +255,32 @@ void main() {
     );
   }
 
+  for (final complete in [true, false]) {
+    test('oversized children use retained total when terminal count is omitted '
+        '(${complete ? "complete" : "incomplete"})', () async {
+      final starts = <int>[];
+      final client = _client((request) async {
+        if (request.url.path.contains('/sections/')) {
+          return _page([_collection('1', 'Title')], total: 1);
+        }
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        starts.add(start);
+        if (start == 0) {
+          return _page([_member('prefix')], total: complete ? 102 : 103);
+        }
+        return _page(List.generate(101, (i) => _member('$i')), offset: start);
+      });
+      final result = await _membership(client);
+      expect(starts, [0, 1]);
+      expect(result.unavailable, isFalse);
+      expect(result.failedTitles, complete ? isEmpty : {'Title'});
+      expect(result.titlesByMember.length, complete ? 102 : 0);
+      expect(result.titlesByMember.containsKey('prefix'), complete);
+    });
+  }
+
   for (final state in [
     'recreated',
     'gone',
@@ -374,6 +400,12 @@ void main() {
   for (final badPage in [
     {'Metadata': [], 'size': 0, 'totalSize': 1},
     {'Metadata': [], 'size': -1},
+    {'Metadata': [], 'size': 'NaN'},
+    {'Metadata': [], 'offset': 'Infinity'},
+    {'Metadata': [], 'totalSize': 1.5},
+    {'Metadata': [], 'totalSize': 9007199254740992},
+    {'totalSize': 1},
+    {'totalSize': 100001},
     {'Metadata': [], 'size': 1},
     {'Metadata': [], 'offset': 1, 'size': 0},
     {'Metadata': {}, 'size': 0},
@@ -396,6 +428,24 @@ void main() {
       expect(result.titlesByMember, isEmpty);
     });
   }
+  test('explicit zero metadata size permits omitted collection rows', () async {
+    var requests = 0;
+    final client = _client((_) async {
+      requests++;
+      return http.Response(
+        jsonEncode({
+          'MediaContainer': {'size': '0', 'totalSize': '0'},
+        }),
+        200,
+      );
+    });
+    final result = await _membership(client);
+    expect(requests, 1);
+    expect(result.unavailable, isFalse);
+    expect(result.failedTitles, isEmpty);
+    expect(result.titlesByMember, isEmpty);
+  });
+
   test('listing transport failure is transient', () async {
     final result = await _membership(
       _client((_) async => http.Response('', 500)),
