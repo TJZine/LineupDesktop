@@ -24,14 +24,17 @@ void main() {
   test(
     'source summaries retain titles, filters, manual counts, and mix shape',
     () {
-      final controller = FixtureController()
-        ..libraries = const [
-          PlexLibrary(
-            id: 'shows',
-            title: 'TV Shows',
-            type: PlexLibraryType.show,
-          ),
-        ];
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          libraries: const [
+            PlexLibrary(
+              id: 'shows',
+              title: 'TV Shows',
+              type: PlexLibraryType.show,
+            ),
+          ],
+        ),
+      );
       addTearDown(controller.dispose);
       expect(
         channelSourceLabel(
@@ -83,9 +86,12 @@ void main() {
       mode: PlaybackMode.block,
       blockSize: 4,
     );
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.ready
-      ..controller.channels = [custom, generated];
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [custom, generated],
+      ),
+    );
     addTearDown(fixture.controller.dispose);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
@@ -145,22 +151,27 @@ void main() {
   });
 
   testWidgets('saved Studio restores focus to its lineup row', (tester) async {
-    final fixture = UiFixture(controller: _ShellTuneController())
-      ..controller.stage = SetupStage.ready
-      ..controller.channels = [
-        _channel(
-          id: 'custom',
-          number: 4,
-          name: 'Custom',
-          source: ManualSource([
-            ChannelItem(
-              id: 'program',
-              title: 'Program',
-              duration: const Duration(hours: 1),
+    final fixture = UiFixture(
+      controller: _ShellTuneController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel(
+              id: 'custom',
+              number: 4,
+              name: 'Custom',
+              source: ManualSource([
+                ChannelItem(
+                  id: 'program',
+                  title: 'Program',
+                  duration: const Duration(hours: 1),
+                ),
+              ]),
             ),
-          ]),
+          ],
         ),
-      ];
+      ),
+    );
     addTearDown(fixture.controller.dispose);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
@@ -192,9 +203,12 @@ void main() {
       mode: PlaybackMode.shuffle,
       blockSize: 11,
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..availablePlaylists = [_playlist('playlist-7')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availablePlaylists: [_playlist('playlist-7')],
+      ),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -225,8 +239,8 @@ void main() {
       blockSize: 5,
     );
     controller
-      ..channels = [custom]
-      ..availablePlaylists = [_playlist('custom-playlist')]
+      ..fixtureActor.publishInventory(playlists: [_playlist('custom-playlist')])
+      ..fixtureActor.replaceChannels([custom])
       ..saved = null;
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: custom),
@@ -246,8 +260,10 @@ void main() {
     expect(controller.saved!.shuffleSeed, custom.shuffleSeed);
     expect(controller.expectedBase?.toJson(), custom.toJson());
 
-    controller.channels = [original];
-    controller.availablePlaylists = [_playlist('playlist-7')];
+    controller.fixtureActor.replaceChannels([original]);
+    controller.fixtureActor.publishInventory(
+      playlists: [_playlist('playlist-7')],
+    );
     controller.saved = null;
     await tester.pumpWidget(
       _studio(
@@ -279,16 +295,19 @@ void main() {
   testWidgets('all occupied numbers produce an explicit unsaveable draft', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        for (var number = 1; number <= 1000; number++)
-          _channel(
-            id: 'channel-$number',
-            number: number,
-            name: 'Channel $number',
-          ),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          for (var number = 1; number <= 1000; number++)
+            _channel(
+              id: 'channel-$number',
+              number: number,
+              name: 'Channel $number',
+            ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pump();
@@ -337,7 +356,9 @@ void main() {
           blockSize: number == 500 ? 13 : null,
         ),
     ];
-    final controller = FixtureController()..channels = channels;
+    final controller = FixtureController(
+      scenario: LineupScenario(channels: channels),
+    );
     addTearDown(controller.dispose);
     final original = channels[499];
 
@@ -374,17 +395,20 @@ void main() {
   testWidgets(
     'identity validation names conflicts and focuses the first error',
     (tester) async {
-      final controller = FixtureController()
-        ..channels = [_channel(id: 'taken', number: 7, name: 'The Seven')]
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ]
-        ..selectedLibraryIds = {'movies'}
-        ..availableMedia = [_media('valid', libraryId: 'movies')];
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          channels: [_channel(id: 'taken', number: 7, name: 'The Seven')],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [_media('valid', libraryId: 'movies')],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.createCustom),
@@ -418,9 +442,12 @@ void main() {
       name: 'Original',
       source: const PlaylistSource('playlist'),
     );
-    final controller = _FailingSaveController()
-      ..channels = [original]
-      ..availablePlaylists = [_playlist('playlist')];
+    final controller = _FailingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availablePlaylists: [_playlist('playlist')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -456,9 +483,12 @@ void main() {
       name: 'Original',
       source: const PlaylistSource('playlist'),
     );
-    final controller = _BlockingSaveController()
-      ..channels = [original]
-      ..availablePlaylists = [_playlist('playlist')];
+    final controller = _BlockingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availablePlaylists: [_playlist('playlist')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -500,12 +530,19 @@ void main() {
   testWidgets('successful save becomes clean and failed tune stays in Studio', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [_media('movie', libraryId: 'movies')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [_media('movie', libraryId: 'movies')],
+      ),
+    );
     var tuneCalls = 0;
     addTearDown(controller.dispose);
     await tester.pumpWidget(
@@ -651,9 +688,12 @@ void main() {
       name: 'Blocking tune',
       source: ManualSource([_itemForHealth(1)]),
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..availableMedia = [_media('program-1')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [_media('program-1')],
+      ),
+    );
     final release = Completer<bool>();
     var calls = 0;
     addTearDown(controller.dispose);
@@ -710,23 +750,26 @@ void main() {
       duration: const Duration(hours: 24),
       parts: [PlexMediaPart(path: '/program')],
     );
-    final controller = _ShellTuneController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        _channel(
-          id: 'custom',
-          number: 3,
-          name: 'Custom',
-          source: const ManualSource([
-            ChannelItem(
-              id: 'program',
-              title: 'Program',
-              duration: Duration(hours: 24),
-            ),
-          ]),
-        ),
-      ]
-      ..availableMedia = [item];
+    final controller = _ShellTuneController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel(
+            id: 'custom',
+            number: 3,
+            name: 'Custom',
+            source: const ManualSource([
+              ChannelItem(
+                id: 'program',
+                title: 'Program',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+          ),
+        ],
+        availableMedia: [item],
+      ),
+    );
     final player = FixturePlayer();
     final fixture = UiFixture(controller: controller, player: player);
     addTearDown(controller.dispose);
@@ -750,17 +793,20 @@ void main() {
     testWidgets('late Studio Tune respects newer $destination route', (
       tester,
     ) async {
-      final controller = _ShellTuneController()
-        ..stage = SetupStage.ready
-        ..channels = [
-          _channel(
-            id: 'custom',
-            number: 3,
-            name: 'Custom',
-            source: ManualSource([_itemForHealth(1)]),
-          ),
-        ]
-        ..availableMedia = [_media('program-1')];
+      final controller = _ShellTuneController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel(
+              id: 'custom',
+              number: 3,
+              name: 'Custom',
+              source: ManualSource([_itemForHealth(1)]),
+            ),
+          ],
+          availableMedia: [_media('program-1')],
+        ),
+      );
       final player = _DelayedStudioPlayer();
       addTearDown(controller.dispose);
       await tester.pumpWidget(
@@ -804,9 +850,9 @@ void main() {
       name: 'Agreement',
       source: ManualSource([_itemForHealth(1), _itemForHealth(2)]),
     );
-    final controller = _AgreementController()
-      ..stage = SetupStage.ready
-      ..channels = [channel];
+    final controller = _AgreementController(
+      scenario: LineupScenario(stage: SetupStage.ready, channels: [channel]),
+    );
     final player = _AgreementPlayer();
     final fixture = UiFixture(
       controller: controller,
@@ -893,9 +939,12 @@ void main() {
         name: 'External',
         source: const PlaylistSource('playlist'),
       );
-      final controller = _ExpectedBaseController()
-        ..channels = [original]
-        ..availablePlaylists = [_playlist('playlist')];
+      final controller = _ExpectedBaseController(
+        scenario: LineupScenario(
+          channels: [original],
+          availablePlaylists: [_playlist('playlist')],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -903,7 +952,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('studio-name')), 'Mine');
       await tester.pump();
-      controller.channels = [changed];
+      controller.fixtureActor.replaceChannels([changed]);
       tester
           .widget<FilledButton>(
             find.widgetWithText(FilledButton, 'Save changes'),
@@ -945,7 +994,7 @@ void main() {
         name: 'External again',
         source: const PlaylistSource('playlist'),
       );
-      controller.channels = [changedAgain];
+      controller.fixtureActor.replaceChannels([changedAgain]);
       await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
 
@@ -954,14 +1003,14 @@ void main() {
       );
       await tester.tap(find.text('Replace saved version with my draft…'));
       await tester.pumpAndSettle();
-      controller.channels = [
+      controller.fixtureActor.replaceChannels([
         _channel(
           id: 'custom',
           number: 3,
           name: 'Intervening',
           source: const PlaylistSource('playlist'),
         ),
-      ];
+      ]);
       await tester.tap(find.text('Replace saved version'));
       await tester.pumpAndSettle();
       expect(controller.channels.single.name, 'Intervening');
@@ -978,7 +1027,7 @@ void main() {
 
       await tester.enterText(find.byKey(const Key('studio-name')), 'Again');
       await tester.pump();
-      controller.channels = const [];
+      controller.fixtureActor.replaceChannels(const []);
       tester
           .widget<FilledButton>(
             find.widgetWithText(FilledButton, 'Save changes'),
@@ -1017,13 +1066,16 @@ void main() {
       mode: PlaybackMode.block,
       blockSize: 4,
     );
-    final controller = _ExpectedBaseController()
-      ..channels = [original]
-      ..availablePlaylists = [
-        _playlist('original'),
-        _playlist('draft'),
-        _playlist('external'),
-      ];
+    final controller = _ExpectedBaseController(
+      scenario: LineupScenario(
+        channels: [original],
+        availablePlaylists: [
+          _playlist('original'),
+          _playlist('draft'),
+          _playlist('external'),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -1032,7 +1084,7 @@ void main() {
 
     await _chooseDropdown(tester, 'studio-playlist', 'Playlist draft');
     await _chooseDropdown(tester, 'studio-block-size', '5');
-    controller.channels = [external];
+    controller.fixtureActor.replaceChannels([external]);
     await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
@@ -1083,22 +1135,29 @@ void main() {
   testWidgets('offers three source choices and retains inactive drafts', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-        PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
-      ]
-      ..selectedLibraryIds = {'movies', 'shows'}
-      ..availableMedia = [
-        _media('movie', libraryId: 'movies'),
-        _media(
-          'episode',
-          libraryId: 'shows',
-          type: 'episode',
-          showTitle: 'Show',
-        ),
-      ]
-      ..availablePlaylists = [_playlist('favorites'), _playlist('later')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+          PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+        ],
+        selectedLibraryIds: {'movies', 'shows'},
+        availableMedia: [
+          _media('movie', libraryId: 'movies'),
+          _media(
+            'episode',
+            libraryId: 'shows',
+            type: 'episode',
+            showTitle: 'Show',
+          ),
+        ],
+        availablePlaylists: [_playlist('favorites'), _playlist('later')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -1160,21 +1219,24 @@ void main() {
         name: 'Playlist channel',
         source: const PlaylistSource('favorites'),
       );
-      final controller = _RecordingSaveController()
-        ..channels = [original]
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ]
-        ..selectedLibraryIds = {'movies'}
-        ..availableMedia = [
-          _media('drama', libraryId: 'movies', genres: ['Drama']),
-          _media('comedy', libraryId: 'movies', genres: ['Comedy']),
-        ]
-        ..availablePlaylists = [_playlist('favorites'), _playlist('later')];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [
+            _media('drama', libraryId: 'movies', genres: ['Drama']),
+            _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+          ],
+          availablePlaylists: [_playlist('favorites'), _playlist('later')],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -1275,13 +1337,20 @@ void main() {
       name: 'Mixed',
       source: source,
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [_media('movie', libraryId: 'movies')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [_media('movie', libraryId: 'movies')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -1322,7 +1391,9 @@ void main() {
         name: 'Mixed off air',
         source: source,
       );
-      final controller = _RecordingSaveController()..channels = [original];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(channels: [original]),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -1349,8 +1420,9 @@ void main() {
   testWidgets('playlist editor saves the selected live playlist', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..availablePlaylists = [_playlist('playlist')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(availablePlaylists: [_playlist('playlist')]),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -1375,18 +1447,21 @@ void main() {
     (tester) async {
       final key = GlobalKey<ChannelStudioViewState>();
       final original = _channel(id: 'revert', number: 7, name: 'Revert');
-      final controller = FixtureController()
-        ..channels = [original]
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ]
-        ..selectedLibraryIds = {'movies'}
-        ..availableMedia = [_media('movie', libraryId: 'movies')]
-        ..availablePlaylists = [_playlist('playlist')];
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [_media('movie', libraryId: 'movies')],
+          availablePlaylists: [_playlist('playlist')],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         MaterialApp(
@@ -1444,9 +1519,12 @@ void main() {
         ),
       ]),
     );
-    final controller = FixtureController()
-      ..channels = [original]
-      ..availableMedia = [_media('item', title: 'First live title')];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [_media('item', title: 'First live title')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -1484,7 +1562,9 @@ void main() {
     await tester.pump();
     expect(key.currentState!.dirty, isFalse);
 
-    controller.availableMedia = [_media('item', title: 'Refreshed title')];
+    controller.fixtureActor.publishInventory(
+      media: [_media('item', title: 'Refreshed title')],
+    );
     await tester.enterText(find.byKey(const Key('studio-name')), 'Changed');
     expect(key.currentState!.dirty, isTrue);
     await tester.enterText(find.byKey(const Key('studio-name')), 'Metadata');
@@ -1514,13 +1594,20 @@ void main() {
         ],
       ),
     );
-    final controller = FixtureController()
-      ..channels = [original]
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..libraryScanStatus = LibraryScanStatus.scanning;
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        channels: [original],
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        libraryScanStatus: LibraryScanStatus.scanning,
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -1544,7 +1631,7 @@ void main() {
       LibraryScanStatus.cancelled,
       LibraryScanStatus.transientFailure,
     ]) {
-      controller.libraryScanStatus = state;
+      controller.fixtureActor.reportScan(status: state);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
       );
@@ -1581,9 +1668,11 @@ void main() {
       ),
     );
     controller
-      ..channels = [unsupported]
-      ..availableMedia = [_media('movie', libraryId: 'movies')]
-      ..libraryScanStatus = LibraryScanStatus.idle;
+      ..fixtureActor.reportScan(status: LibraryScanStatus.idle)
+      ..fixtureActor.publishInventory(
+        media: [_media('movie', libraryId: 'movies')],
+      )
+      ..fixtureActor.replaceChannels([unsupported]);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: unsupported),
     );
@@ -1608,10 +1697,10 @@ void main() {
       ),
     );
     controller
-      ..channels = [emptyPlaylist]
-      ..availablePlaylists = const [
-        PlexPlaylist(id: 'empty', title: 'Empty', items: []),
-      ];
+      ..fixtureActor.publishInventory(
+        playlists: const [PlexPlaylist(id: 'empty', title: 'Empty', items: [])],
+      )
+      ..fixtureActor.replaceChannels([emptyPlaylist]);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: emptyPlaylist),
     );
@@ -1625,8 +1714,9 @@ void main() {
   testWidgets('mini-marathons require grouping and expose sizes 2 through 5', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..availableMedia = [_media('movie')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(availableMedia: [_media('movie')]),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -1655,15 +1745,17 @@ void main() {
       findsOneWidget,
     );
 
-    controller.availableMedia = [
-      for (final show in ['a', 'b'])
-        for (var episode = 1; episode <= 5; episode++)
-          _media(
-            '$show$episode',
-            type: 'episode',
-            showThumb: '/library/metadata/$show/thumb',
-          ),
-    ];
+    controller.fixtureActor.publishInventory(
+      media: [
+        for (final show in ['a', 'b'])
+          for (var episode = 1; episode <= 5; episode++)
+            _media(
+              '$show$episode',
+              type: 'episode',
+              showThumb: '/library/metadata/$show/thumb',
+            ),
+      ],
+    );
     const expectedOrders = {
       2: ['a1', 'a2', 'b1', 'b2', 'a3', 'a4', 'b3', 'b4', 'a5', 'b5'],
       3: ['a1', 'a2', 'a3', 'b1', 'b2', 'b3', 'a4', 'a5', 'b4', 'b5'],
@@ -1680,7 +1772,7 @@ void main() {
           controller.availableMedia.map(channelItemFor).toList(),
         ),
       );
-      controller.channels = [original];
+      controller.fixtureActor.replaceChannels([original]);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
       );
@@ -1747,13 +1839,20 @@ void main() {
         mode: PlaybackMode.block,
         blockSize: 2,
       );
-      final controller = _RecordingSaveController()
-        ..channels = [original]
-        ..libraries = const [
-          PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
-        ]
-        ..selectedLibraryIds = {'shows'}
-        ..availableMedia = specials;
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'shows',
+              title: 'Shows',
+              type: PlexLibraryType.show,
+            ),
+          ],
+          selectedLibraryIds: {'shows'},
+          availableMedia: specials,
+        ),
+      );
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
@@ -1791,14 +1890,12 @@ void main() {
     (tester) async {
       final controller = _RecordingSaveController();
       addTearDown(controller.dispose);
-
       Future<bool?> miniEnabled(
         Channel channel,
         List<PlexMediaItem> media,
       ) async {
-        controller
-          ..channels = [channel]
-          ..availableMedia = media;
+        controller.fixtureActor.replaceChannels([channel]);
+        controller.fixtureActor.publishInventory(media: media);
         await tester.pumpWidget(
           _studio(controller, ChannelStudioMode.editCustom, channel: channel),
         );
@@ -1860,15 +1957,17 @@ void main() {
       );
 
       controller
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ]
-        ..selectedLibraryIds = {'movies'}
-        ..libraryScanStatus = LibraryScanStatus.scanning;
+        ..fixtureActor.discoverLibraries(
+          const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+        )
+        ..fixtureActor.reportScan(status: LibraryScanStatus.scanning);
       final loading = _channel(
         id: 'loading-library',
         number: 4,
@@ -1906,9 +2005,12 @@ void main() {
         name: 'Retained',
         source: const PlaylistSource('gone'),
       );
-      final controller = FixtureController()
-        ..channels = [retained]
-        ..libraryScanStatus = LibraryScanStatus.transientFailure;
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          channels: [retained],
+          libraryScanStatus: LibraryScanStatus.transientFailure,
+        ),
+      );
       var left = 0;
       addTearDown(controller.dispose);
       await tester.pumpWidget(
@@ -1950,27 +2052,34 @@ void main() {
       name: 'Filtered',
       source: source,
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [
-        _media(
-          'comedy',
-          title: 'Fresh comedy',
-          libraryId: 'movies',
-          genres: ['Comedy'],
-        ),
-        _media(
-          'watched-comedy',
-          title: 'Watched comedy',
-          libraryId: 'movies',
-          genres: ['Comedy'],
-          viewed: true,
-        ),
-      ];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          _media(
+            'comedy',
+            title: 'Fresh comedy',
+            libraryId: 'movies',
+            genres: ['Comedy'],
+          ),
+          _media(
+            'watched-comedy',
+            title: 'Watched comedy',
+            libraryId: 'movies',
+            genres: ['Comedy'],
+            viewed: true,
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -2026,17 +2135,20 @@ void main() {
         shuffleSeed: 12,
         scheduleTransition: transition,
       );
-      final controller = _RecordingSaveController()
-        ..channels = [original]
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ]
-        ..selectedLibraryIds = {'movies'}
-        ..availableMedia = [_media('movie', libraryId: 'movies')];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [_media('movie', libraryId: 'movies')],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -2094,18 +2206,21 @@ void main() {
         actors: const ['Example Person'],
         directors: const ['Director Name'],
       );
-      final controller = _RecordingSaveController()
-        ..channels = [original]
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ]
-        ..selectedLibraryIds = {'movies'}
-        ..availableMedia = [media]
-        ..libraryScanStatus = LibraryScanStatus.complete;
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [media],
+          libraryScanStatus: LibraryScanStatus.complete,
+        ),
+      );
       addTearDown(controller.dispose);
 
       expect(resolveContent(original.source, [media]), hasLength(1));
@@ -2160,10 +2275,14 @@ void main() {
         shuffleSeed: 15,
         scheduleTransition: transition,
       );
-      final controller = _RealSaveController()
-        ..channels = [original]
-        ..availableMedia = [media];
+      final controller = _RealSaveController(
+        scenario: LineupScenario(channels: [original], availableMedia: [media]),
+      );
       addTearDown(controller.dispose);
+      final committedTransition =
+          controller.channels.single.scheduleTransition!;
+      expect(identical(committedTransition, transition), isFalse);
+      expect(committedTransition.toJson(), transition.toJson());
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
       );
@@ -2175,22 +2294,28 @@ void main() {
       await _settleAirCheck(tester);
       await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
-      expect(controller.channels.single.scheduleTransition, same(transition));
+      expect(
+        controller.channels.single.scheduleTransition,
+        same(committedTransition),
+      );
 
       await tester.enterText(find.byKey(const Key('studio-name')), 'Second');
       await _settleAirCheck(tester);
       await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
       expect(controller.channels.single.name, 'Second');
-      expect(controller.channels.single.scheduleTransition, same(transition));
+      expect(
+        controller.channels.single.scheduleTransition,
+        same(committedTransition),
+      );
       expect(find.text('Use saved version…'), findsNothing);
 
-      controller.channels = [
+      controller.fixtureActor.replaceChannels([
         Channel.fromJson({
           ...controller.channels.single.toJson(),
           'name': 'External edit',
         }),
-      ];
+      ]);
       controller.notifyListeners();
       await tester.enterText(find.byKey(const Key('studio-name')), 'Third');
       await _settleAirCheck(tester);
@@ -2216,13 +2341,20 @@ void main() {
       source: source,
       mode: PlaybackMode.shuffle,
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [_media('movie', libraryId: 'movies')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [_media('movie', libraryId: 'movies')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.duplicateCustom, channel: original),
@@ -2240,15 +2372,26 @@ void main() {
   testWidgets('filter editor renders a bounded deterministic match sample', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [
-        for (var index = 0; index < 7; index++)
-          _media('sample-$index', title: 'Sample $index', libraryId: 'movies'),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          for (var index = 0; index < 7; index++)
+            _media(
+              'sample-$index',
+              title: 'Sample $index',
+              libraryId: 'movies',
+            ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -2264,14 +2407,21 @@ void main() {
   testWidgets('missing live sources and zero matches remain actionable', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [
-        _media('drama', libraryId: 'movies', genres: ['Drama']),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          _media('drama', libraryId: 'movies', genres: ['Drama']),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     for (final channel in [
       _channel(
@@ -2302,7 +2452,7 @@ void main() {
         ),
       ),
     ]) {
-      controller.channels = [channel];
+      controller.fixtureActor.replaceChannels([channel]);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: channel),
       );
@@ -2337,7 +2487,9 @@ void main() {
         ),
       ]),
     );
-    final controller = FixtureController()..channels = [retained];
+    final controller = FixtureController(
+      scenario: LineupScenario(channels: [retained]),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -2350,10 +2502,16 @@ void main() {
     );
     expect(find.text('Unavailable — retained until removed'), findsOneWidget);
 
-    controller
-      ..libraryScanStatus = LibraryScanStatus.scanning
-      ..libraryScanCompletedItems = 4
-      ..libraryScanTotalItems = 10;
+    controller.fixtureActor.reportScan(
+      status: LibraryScanStatus.scanning,
+      facts: {
+        'fixture': LibraryScanFact(
+          status: LibraryScanStatus.scanning,
+          completedItems: 4,
+          totalItems: 10,
+        ),
+      },
+    );
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: retained),
     );
@@ -2368,13 +2526,13 @@ void main() {
       LibraryScanStatus.cancelled,
       LibraryScanStatus.transientFailure,
     ]) {
-      controller.libraryScanStatus = LibraryScanStatus.scanning;
+      controller.fixtureActor.reportScan(status: LibraryScanStatus.scanning);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: retained),
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('studio-inventory-status')), findsOneWidget);
-      controller.libraryScanStatus = state;
+      controller.fixtureActor.reportScan(status: state);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: retained),
       );
@@ -2407,22 +2565,25 @@ void main() {
         ),
       ]),
     );
-    final controller = FixtureController()
-      ..channels = [original]
-      ..libraries = const [
-        PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
-      ]
-      ..selectedLibraryIds = {'shows'}
-      ..availableMedia = [
-        _media(
-          'episode',
-          title: 'Pilot',
-          libraryId: 'shows',
-          type: 'episode',
-          showTitle: 'Alpha Show',
-          genres: ['Comedy'],
-        ),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        channels: [original],
+        libraries: const [
+          PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+        ],
+        selectedLibraryIds: {'shows'},
+        availableMedia: [
+          _media(
+            'episode',
+            title: 'Pilot',
+            libraryId: 'shows',
+            type: 'episode',
+            showTitle: 'Alpha Show',
+            genres: ['Comedy'],
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -2476,8 +2637,11 @@ void main() {
   testWidgets('selection captures metadata across inventory loss', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..availableMedia = [_media('chosen', title: 'Fresh title')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        availableMedia: [_media('chosen', title: 'Fresh title')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -2487,7 +2651,7 @@ void main() {
         .widget<ListTile>(find.byKey(const Key('studio-result-chosen')))
         .onTap!();
     await tester.pump();
-    controller.availableMedia = const [];
+    controller.fixtureActor.publishInventory(media: const []);
     await tester.enterText(find.byKey(const Key('studio-search')), 'reload');
     await tester.pump();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Captured');
@@ -2502,8 +2666,11 @@ void main() {
   testWidgets(
     'rendered callbacks refresh inventory before selection and save across inventory changes',
     (tester) async {
-      final selectionController = FixtureController()
-        ..availableMedia = [_media('candidate-a', title: 'Candidate A')];
+      final selectionController = FixtureController(
+        scenario: LineupScenario(
+          availableMedia: [_media('candidate-a', title: 'Candidate A')],
+        ),
+      );
       addTearDown(selectionController.dispose);
       await tester.pumpWidget(
         _studio(selectionController, ChannelStudioMode.createCustom),
@@ -2514,12 +2681,16 @@ void main() {
           .onTap!;
 
       selectionController
-        ..connection = PlexConnection(
-          uri: Uri.parse('https://replacement.invalid'),
-          local: true,
-          relay: false,
+        ..fixtureActor.publishInventory(
+          media: [_media('candidate-b', title: 'Candidate B')],
         )
-        ..availableMedia = [_media('candidate-b', title: 'Candidate B')]
+        ..fixtureActor.replaceConnection(
+          PlexConnection(
+            uri: Uri.parse('https://replacement.invalid'),
+            local: true,
+            relay: false,
+          ),
+        )
         ..notifyListeners();
       renderedSelection();
       await tester.pump();
@@ -2542,9 +2713,12 @@ void main() {
         name: 'Save refresh',
         source: const ManualSource([retained]),
       );
-      final saveController = _RealSaveController()
-        ..channels = [original]
-        ..availableMedia = [_media('retained', title: 'Stale projection')];
+      final saveController = _RealSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          availableMedia: [_media('retained', title: 'Stale projection')],
+        ),
+      );
       addTearDown(saveController.dispose);
       await tester.pumpWidget(
         _studio(
@@ -2567,12 +2741,14 @@ void main() {
           .onPressed!;
 
       saveController
-        ..connection = PlexConnection(
-          uri: Uri.parse('https://empty.invalid'),
-          local: true,
-          relay: false,
+        ..fixtureActor.publishInventory(media: const [])
+        ..fixtureActor.replaceConnection(
+          PlexConnection(
+            uri: Uri.parse('https://empty.invalid'),
+            local: true,
+            relay: false,
+          ),
         )
-        ..availableMedia = const []
         ..notifyListeners();
       renderedSave();
       await tester.pump();
@@ -2607,9 +2783,12 @@ void main() {
         name: 'Generation save',
         source: ManualSource([_itemForHealth(1)]),
       );
-      final controller = _RecordingSaveController()
-        ..channels = [original]
-        ..availableMedia = [_media('program-1', title: 'First metadata')];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          availableMedia: [_media('program-1', title: 'First metadata')],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -2626,13 +2805,15 @@ void main() {
           )
           .onPressed!;
 
-      controller.availableMedia = [
-        _media(
-          'program-1',
-          title: 'Replacement metadata',
-          duration: const Duration(minutes: 45),
-        ),
-      ];
+      controller.fixtureActor.publishInventory(
+        media: [
+          _media(
+            'program-1',
+            title: 'Replacement metadata',
+            duration: const Duration(minutes: 45),
+          ),
+        ],
+      );
       controller.generation++;
       controller.notifyListeners();
       renderedSave();
@@ -2658,15 +2839,18 @@ void main() {
   testWidgets('duplicate IDs render once and save media-first metadata', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..availableMedia = [_media('shared', title: 'Library winner')]
-      ..availablePlaylists = [
-        PlexPlaylist(
-          id: 'playlist',
-          title: 'Playlist',
-          items: [_media('shared', title: 'Playlist duplicate')],
-        ),
-      ];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        availableMedia: [_media('shared', title: 'Library winner')],
+        availablePlaylists: [
+          PlexPlaylist(
+            id: 'playlist',
+            title: 'Playlist',
+            items: [_media('shared', title: 'Playlist duplicate')],
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -2702,48 +2886,51 @@ void main() {
         PlexMediaPart(path: '/two', duration: const Duration(minutes: 1)),
       ],
     );
-    final controller = FixtureController()
-      ..availableMedia = [
-        valid,
-        _media('shared', title: 'Media winner'),
-        const PlexMediaItem(
-          id: 'no-parts',
-          title: 'No parts',
-          type: 'movie',
-          duration: Duration(minutes: 1),
-        ),
-        PlexMediaItem(
-          id: 'zero',
-          title: 'Zero',
-          type: 'movie',
-          duration: Duration.zero,
-          parts: [PlexMediaPart(path: '/zero')],
-        ),
-        PlexMediaItem(
-          id: 'empty-path',
-          title: 'Empty path',
-          type: 'movie',
-          duration: const Duration(minutes: 1),
-          parts: [PlexMediaPart(path: '')],
-        ),
-        PlexMediaItem(
-          id: 'hostile',
-          title: 'Hostile',
-          type: 'movie',
-          duration: const Duration(minutes: 1),
-          parts: [
-            PlexMediaPart(path: '/safe'),
-            PlexMediaPart(path: 'https://hostile.invalid/later'),
-          ],
-        ),
-      ]
-      ..availablePlaylists = [
-        PlexPlaylist(
-          id: 'playlist',
-          title: 'Playlist',
-          items: [_media('shared', title: 'Playlist duplicate')],
-        ),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        availableMedia: [
+          valid,
+          _media('shared', title: 'Media winner'),
+          const PlexMediaItem(
+            id: 'no-parts',
+            title: 'No parts',
+            type: 'movie',
+            duration: Duration(minutes: 1),
+          ),
+          PlexMediaItem(
+            id: 'zero',
+            title: 'Zero',
+            type: 'movie',
+            duration: Duration.zero,
+            parts: [PlexMediaPart(path: '/zero')],
+          ),
+          PlexMediaItem(
+            id: 'empty-path',
+            title: 'Empty path',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            parts: [PlexMediaPart(path: '')],
+          ),
+          PlexMediaItem(
+            id: 'hostile',
+            title: 'Hostile',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            parts: [
+              PlexMediaPart(path: '/safe'),
+              PlexMediaPart(path: 'https://hostile.invalid/later'),
+            ],
+          ),
+        ],
+        availablePlaylists: [
+          PlexPlaylist(
+            id: 'playlist',
+            title: 'Playlist',
+            items: [_media('shared', title: 'Playlist duplicate')],
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -2760,7 +2947,7 @@ void main() {
       expect(find.byKey(Key('studio-result-$id')), findsNothing);
     }
 
-    controller.connection = null;
+    controller.fixtureActor.replaceConnection(null);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
     );
@@ -2789,9 +2976,12 @@ void main() {
         ),
       ]),
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..availableMedia = [_media('available', title: 'Fresh title')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [_media('available', title: 'Fresh title')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -2844,7 +3034,9 @@ void main() {
         name: 'Repeated manual',
         source: const ManualSource([first, second, third]),
       );
-      final controller = _RecordingSaveController()..channels = [original];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(channels: [original]),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(
@@ -3028,7 +3220,7 @@ void main() {
       ]);
 
       controller
-        ..channels = [saved]
+        ..fixtureActor.replaceChannels([saved])
         ..saved = null;
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: saved),
@@ -3065,7 +3257,9 @@ void main() {
         name: 'Same occurrences',
         source: const ManualSource([item, item]),
       );
-      final controller = _RecordingSaveController()..channels = [original];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(channels: [original]),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -3198,15 +3392,18 @@ void main() {
       name: 'Refresh occurrences',
       source: const ManualSource([stored, stored]),
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..availableMedia = [
-        _media(
-          'repeat-refresh',
-          title: 'Fresh title',
-          duration: const Duration(minutes: 45),
-        ),
-      ];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [
+          _media(
+            'repeat-refresh',
+            title: 'Fresh title',
+            duration: const Duration(minutes: 45),
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -3244,7 +3441,7 @@ void main() {
       ['Fresh title', 'Fresh title'],
     );
 
-    controller.availableMedia = [];
+    controller.fixtureActor.publishInventory(media: []);
     controller.generation++;
     controller.saved = null;
     await tester.enterText(
@@ -3309,7 +3506,9 @@ void main() {
       name: 'External occurrences',
       source: const ManualSource([newItem, newItem]),
     );
-    final controller = _ExpectedBaseController()..channels = [original];
+    final controller = _ExpectedBaseController(
+      scenario: LineupScenario(channels: [original]),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -3334,7 +3533,7 @@ void main() {
         )
         .focusNode!;
 
-    controller.channels = [external];
+    controller.fixtureActor.replaceChannels([external]);
     await tester.enterText(find.byKey(const Key('studio-name')), 'My conflict');
     await _settleAirCheck(tester);
     await tester.tap(find.text('Save changes'));
@@ -3383,12 +3582,19 @@ void main() {
     tester,
   ) async {
     final now = DateTime.utc(2026, 8, 27, 13, 45);
-    final controller = _RecordingSaveController()
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [_media('movie', libraryId: 'movies')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [_media('movie', libraryId: 'movies')],
+      ),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -3406,7 +3612,7 @@ void main() {
     expect(first.anchor, now);
 
     controller
-      ..channels = [first]
+      ..fixtureActor.replaceChannels([first])
       ..saved = null;
     await tester.pumpWidget(
       _studio(
@@ -3430,8 +3636,9 @@ void main() {
     (tester) async {
       var now = DateTime.utc(2026, 8, 27, 9);
       final validAt = now.add(const Duration(hours: 4));
-      final controller = _RecordingSaveController()
-        ..availableMedia = [_media('movie')];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(availableMedia: [_media('movie')]),
+      );
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
@@ -3461,7 +3668,7 @@ void main() {
       expect(saved.shuffleSeed, previewed.shuffleSeed);
 
       controller
-        ..channels = [saved]
+        ..fixtureActor.replaceChannels([saved])
         ..saved = null;
       now = validAt.add(const Duration(days: 3));
       await tester.pumpWidget(
@@ -3486,8 +3693,11 @@ void main() {
     tester,
   ) async {
     final now = DateTime.utc(2026, 8, 27, 14);
-    final controller = _ControlledStudioController()
-      ..availableMedia = [_media('first'), _media('second')];
+    final controller = _ControlledStudioController(
+      scenario: LineupScenario(
+        availableMedia: [_media('first'), _media('second')],
+      ),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -3552,8 +3762,11 @@ void main() {
     'stale retained-off-air Air Check cannot commit a changed draft identity',
     (tester) async {
       final now = DateTime.utc(2026, 8, 27, 15);
-      final controller = _ControlledStudioController()
-        ..availableMedia = [_media('first'), _media('second')];
+      final controller = _ControlledStudioController(
+        scenario: LineupScenario(
+          availableMedia: [_media('first'), _media('second')],
+        ),
+      );
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
@@ -3624,12 +3837,15 @@ void main() {
         name: 'Large rundown',
         source: ManualSource(retained),
       );
-      final controller = _CountingInventoryController()
-        ..channels = [original]
-        ..availableMedia = List.generate(
-          1199,
-          (index) => _media('selected-${index + 1}'),
-        );
+      final controller = _CountingInventoryController(
+        scenario: LineupScenario(
+          channels: [original],
+          availableMedia: List.generate(
+            1199,
+            (index) => _media('selected-${index + 1}'),
+          ),
+        ),
+      );
       addTearDown(controller.dispose);
       controller.playableInventoryReads = 0;
 
@@ -3678,17 +3894,20 @@ void main() {
   testWidgets('Channels schedule health remains lazy for 1000 rows', (
     tester,
   ) async {
-    final controller = _HealthController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        for (var index = 1; index <= 1000; index++)
-          _channel(
-            id: 'health-$index',
-            number: index,
-            name: 'Health $index',
-            source: ManualSource([_itemForHealth(index)]),
-          ),
-      ];
+    final controller = _HealthController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          for (var index = 1; index <= 1000; index++)
+            _channel(
+              id: 'health-$index',
+              number: index,
+              name: 'Health $index',
+              source: ManualSource([_itemForHealth(index)]),
+            ),
+        ],
+      ),
+    );
     final fixture = UiFixture(controller: controller);
     addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
@@ -3705,20 +3924,28 @@ void main() {
     tester,
   ) async {
     final channel = _CountingHealthChannel();
-    final controller = _HealthController()
-      ..stage = SetupStage.ready
-      ..channels = [channel];
+    final controller = _HealthController(
+      scenario: LineupScenario(stage: SetupStage.ready, channels: [channel]),
+    );
+    final observed = controller.channels.single as _CountingHealthChannel;
+    expect(identical(observed, channel), isFalse);
+    final mutableInput = (channel.source as ManualSource).items;
+    final publishedItems = (observed.source as ManualSource).items;
+    mutableInput.clear();
+    expect(publishedItems, hasLength(1));
+    expect(() => publishedItems.clear(), throwsUnsupportedError);
     final fixture = UiFixture(controller: controller);
+    addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
     await openDestination(tester, 'Channels');
     await tester.pumpAndSettle();
 
-    channel.serializations = 0;
+    observed.serializations = 0;
     controller.notifyListeners();
     await tester.pump();
 
-    expect(channel.serializations, 0);
+    expect(observed.serializations, 0);
   });
 
   testWidgets('Channels health follows stable channel revisions', (
@@ -3730,9 +3957,9 @@ void main() {
       name: 'Stable Health',
       source: ManualSource([_itemForHealth(1)]),
     );
-    final controller = _HealthController()
-      ..stage = SetupStage.ready
-      ..channels = [original];
+    final controller = _HealthController(
+      scenario: LineupScenario(stage: SetupStage.ready, channels: [original]),
+    );
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
@@ -3768,17 +3995,20 @@ void main() {
     tester.view.physicalSize = const Size(1200, 5000);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    final controller = _ControlledHealthController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        for (var index = 1; index <= 1000; index++)
-          _channel(
-            id: 'viewport-$index',
-            number: index,
-            name: 'Viewport $index',
-            source: ManualSource([_itemForHealth(index)]),
-          ),
-      ];
+    final controller = _ControlledHealthController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          for (var index = 1; index <= 1000; index++)
+            _channel(
+              id: 'viewport-$index',
+              number: index,
+              name: 'Viewport $index',
+              source: ManualSource([_itemForHealth(index)]),
+            ),
+        ],
+      ),
+    );
     final fixture = UiFixture(controller: controller);
     addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
@@ -3820,17 +4050,20 @@ void main() {
   testWidgets('Channels health supersedes stale work and recovers issues', (
     tester,
   ) async {
-    final controller = _ControlledHealthController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        for (var index = 1; index <= 2; index++)
-          _channel(
-            id: 'controlled-$index',
-            number: index,
-            name: 'Controlled $index',
-            source: ManualSource([_itemForHealth(index)]),
-          ),
-      ];
+    final controller = _ControlledHealthController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          for (var index = 1; index <= 2; index++)
+            _channel(
+              id: 'controlled-$index',
+              number: index,
+              name: 'Controlled $index',
+              source: ManualSource([_itemForHealth(index)]),
+            ),
+        ],
+      ),
+    );
     final fixture = UiFixture(controller: controller);
     addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
@@ -3869,7 +4102,7 @@ void main() {
     controller.complete('controlled-2');
     controller.complete('controlled-1');
     await tester.pump();
-    controller.channels = [
+    controller.fixtureActor.replaceChannels([
       ...controller.channels,
       for (var index = 3; index <= 4; index++)
         _channel(
@@ -3878,7 +4111,7 @@ void main() {
           name: 'Controlled $index',
           source: ManualSource([_itemForHealth(index)]),
         ),
-    ];
+    ]);
     controller.generation++;
     controller.notifyListeners();
     await tester.pump();
@@ -3950,7 +4183,8 @@ void main() {
     );
     final controller = _ScheduleFailureController(
       StateError('Schedule worker is unavailable'),
-    )..channels = [original];
+      scenario: LineupScenario(channels: [original]),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -3977,12 +4211,15 @@ void main() {
       name: 'Comparison failure',
       source: ManualSource([_itemForHealth(1), _itemForHealth(2)]),
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..availableMedia = [
-        _media('program-1', title: 'Program 1'),
-        _media('program-2', title: 'Program 2'),
-      ];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [
+          _media('program-1', title: 'Program 1'),
+          _media('program-2', title: 'Program 2'),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -4039,12 +4276,15 @@ void main() {
       name: 'Off-air repair',
       source: ManualSource([_itemForHealth(1), _itemForHealth(2)]),
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..availableMedia = [
-        _media('program-1', title: 'Program 1'),
-        _media('program-2', title: 'Program 2'),
-      ];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [
+          _media('program-1', title: 'Program 1'),
+          _media('program-2', title: 'Program 2'),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -4089,11 +4329,11 @@ void main() {
       name: 'Retained off air',
       source: ManualSource([_itemForHealth(1)]),
     );
-    final controller = _RecordingSaveController()
-      ..scheduleFailure = const ScheduleBuildException(
-        ScheduleFailureReason.noContent,
-      )
-      ..channels = [original];
+    final controller =
+        _RecordingSaveController(scenario: LineupScenario(channels: [original]))
+          ..scheduleFailure = const ScheduleBuildException(
+            ScheduleFailureReason.noContent,
+          );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -4133,12 +4373,15 @@ void main() {
       name: 'Warning baseline',
       source: ManualSource([_itemForHealth(1), _itemForHealth(2)]),
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original]
-      ..availableMedia = [
-        _media('program-1', title: 'Program 1'),
-        _media('program-2', title: 'Program 2'),
-      ];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [
+          _media('program-1', title: 'Program 1'),
+          _media('program-2', title: 'Program 2'),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -4178,8 +4421,9 @@ void main() {
   testWidgets('Studio reflows across the locked viewport and DPR matrix', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..availableMedia = [_media('one'), _media('two')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(availableMedia: [_media('one'), _media('two')]),
+    );
     addTearDown(controller.dispose);
     for (final size in const [
       Size(800, 600),
@@ -4276,9 +4520,12 @@ void main() {
       ..physicalSize = const Size(800, 600);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    final controller = _RecordingSaveController()
-      ..availableMedia = [_media('one'), _media('two')]
-      ..libraryScanStatus = LibraryScanStatus.transientFailure;
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        availableMedia: [_media('one'), _media('two')],
+        libraryScanStatus: LibraryScanStatus.transientFailure,
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(
@@ -4331,16 +4578,19 @@ void main() {
         name: 'Artwork channel',
         source: ManualSource([item]),
       );
-      final controller = _ArtworkController()
-        ..channels = [channel]
-        ..availableMedia = [
-          _media(
-            'artwork-program',
-            title: 'Artwork program',
-            duration: const Duration(hours: 1),
-            thumbPath: '/library/metadata/1/thumb',
-          ),
-        ];
+      final controller = _ArtworkController(
+        scenario: LineupScenario(
+          channels: [channel],
+          availableMedia: [
+            _media(
+              'artwork-program',
+              title: 'Artwork program',
+              duration: const Duration(hours: 1),
+              thumbPath: '/library/metadata/1/thumb',
+            ),
+          ],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(
@@ -4387,9 +4637,12 @@ void main() {
       name: 'Second playlist channel',
       source: const PlaylistSource('shared'),
     );
-    final controller = _RecordingSaveController()
-      ..channels = [original, other]
-      ..availablePlaylists = [_playlist('shared')];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original, other],
+        availablePlaylists: [_playlist('shared')],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -4409,18 +4662,21 @@ void main() {
     'Hand-picked bulk addition keeps selection order and supports undo',
     (tester) async {
       final studioKey = GlobalKey<ChannelStudioViewState>();
-      final controller = _RecordingSaveController()
-        ..availableMedia = [
-          _media('one', title: 'One'),
-          _media(
-            'two',
-            title: 'Two',
-            type: 'episode',
-            showTitle: 'Show',
-            seasonNumber: 2,
-            episodeNumber: 7,
-          ),
-        ];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          availableMedia: [
+            _media('one', title: 'One'),
+            _media(
+              'two',
+              title: 'Two',
+              type: 'episode',
+              showTitle: 'Show',
+              seasonNumber: 2,
+              episodeNumber: 7,
+            ),
+          ],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(
@@ -4447,16 +4703,18 @@ void main() {
             .onPressed,
         isNull,
       );
-      controller.availableMedia = [
-        _media(
-          'two',
-          title: 'Two',
-          type: 'episode',
-          showTitle: 'Show',
-          seasonNumber: 2,
-          episodeNumber: 7,
-        ),
-      ];
+      controller.fixtureActor.publishInventory(
+        media: [
+          _media(
+            'two',
+            title: 'Two',
+            type: 'episode',
+            showTitle: 'Show',
+            seasonNumber: 2,
+            episodeNumber: 7,
+          ),
+        ],
+      );
       await tester.pumpWidget(
         _studio(
           controller,
@@ -4465,7 +4723,7 @@ void main() {
         ),
       );
       expect(find.textContaining('1 unavailable'), findsOneWidget);
-      controller.availableMedia = const [];
+      controller.fixtureActor.publishInventory(media: const []);
       await tester.pumpWidget(
         _studio(
           controller,
@@ -4515,27 +4773,34 @@ void main() {
   testWidgets('collection facet excludes playlist-only stale tags', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [
-        _media(
-          'member',
-          libraryId: 'movies',
-          collections: ['Library collection'],
-        ),
-      ]
-      ..availablePlaylists = [
-        PlexPlaylist(
-          id: 'playlist',
-          title: 'Playlist',
-          items: [
-            _media('playlist-only', collections: ['Stale playlist tag']),
-          ],
-        ),
-      ];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          _media(
+            'member',
+            libraryId: 'movies',
+            collections: ['Library collection'],
+          ),
+        ],
+        availablePlaylists: [
+          PlexPlaylist(
+            id: 'playlist',
+            title: 'Playlist',
+            items: [
+              _media('playlist-only', collections: ['Stale playlist tag']),
+            ],
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -4553,15 +4818,22 @@ void main() {
   testWidgets('Library filter picker keeps pending values local until Done', (
     tester,
   ) async {
-    final controller = _RecordingSaveController()
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = {'movies'}
-      ..availableMedia = [
-        _media('drama', libraryId: 'movies', genres: ['Drama']),
-        _media('comedy', libraryId: 'movies', genres: ['Comedy']),
-      ];
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          _media('drama', libraryId: 'movies', genres: ['Drama']),
+          _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.createCustom),
@@ -4627,12 +4899,15 @@ void main() {
           ChannelItem(id: 'one', title: 'One', duration: Duration(minutes: 30)),
         ]),
       );
-      final controller = _RecordingSaveController()
-        ..channels = [original]
-        ..availableMedia = [
-          _media('one', genres: ['Drama']),
-          _media('two', genres: ['Comedy']),
-        ];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          availableMedia: [
+            _media('one', genres: ['Drama']),
+            _media('two', genres: ['Comedy']),
+          ],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -4715,13 +4990,16 @@ void main() {
     'Browse filters apply OR within and AND across without editing the draft',
     (tester) async {
       final key = GlobalKey<ChannelStudioViewState>();
-      final controller = _RecordingSaveController()
-        ..availableMedia = [
-          _media('comedy', genres: ['Comedy'], studio: 'Studio A'),
-          _media('drama', genres: ['Drama'], studio: 'Studio A'),
-          _media('other-studio', genres: ['Comedy'], studio: 'Studio B'),
-          _media('other-genre', genres: ['Family'], studio: 'Studio A'),
-        ];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          availableMedia: [
+            _media('comedy', genres: ['Comedy'], studio: 'Studio A'),
+            _media('drama', genres: ['Drama'], studio: 'Studio A'),
+            _media('other-studio', genres: ['Comedy'], studio: 'Studio B'),
+            _media('other-genre', genres: ['Family'], studio: 'Studio A'),
+          ],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.createCustom, studioKey: key),
@@ -4756,8 +5034,11 @@ void main() {
   testWidgets(
     'Studio consumes every theme with motion and large focus settings',
     (tester) async {
-      final controller = _RecordingSaveController()
-        ..availableMedia = [_media('one'), _media('two')];
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          availableMedia: [_media('one'), _media('two')],
+        ),
+      );
       addTearDown(controller.dispose);
       for (final name in LineupThemeName.values) {
         final theme = LineupTheme.forName(name, largeFocusIndicators: true);
@@ -4973,6 +5254,8 @@ Channel _channel({
 );
 
 class _ArtworkController extends _RecordingSaveController {
+  _ArtworkController({super.scenario});
+
   @override
   Future<Uint8List?> artworkForPath(
     Uri path, {
@@ -4986,6 +5269,8 @@ class _ArtworkController extends _RecordingSaveController {
 }
 
 class _FailingSaveController extends FixtureController {
+  _FailingSaveController({super.scenario});
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
       _testSchedule(channel, this);
@@ -4998,6 +5283,8 @@ class _FailingSaveController extends FixtureController {
 }
 
 class _BlockingSaveController extends FixtureController {
+  _BlockingSaveController({super.scenario});
+
   final release = Completer<void>();
   Channel? attempted;
 
@@ -5017,6 +5304,8 @@ class _BlockingSaveController extends FixtureController {
 }
 
 class _RecordingSaveController extends FixtureController {
+  _RecordingSaveController({super.scenario});
+
   Channel? saved;
   Channel? expectedBase;
   Channel? loaded;
@@ -5050,6 +5339,8 @@ class _RecordingSaveController extends FixtureController {
 }
 
 class _ControlledStudioController extends FixtureController {
+  _ControlledStudioController({super.scenario});
+
   final pending = <_StudioScheduleCall>[];
   Channel? saved;
 
@@ -5096,12 +5387,16 @@ class _StudioScheduleCall {
 }
 
 class _RealSaveController extends FixtureController {
+  _RealSaveController({super.scenario});
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
       _testSchedule(channel, this);
 }
 
 class _CountingInventoryController extends _RecordingSaveController {
+  _CountingInventoryController({super.scenario});
+
   int playableInventoryReads = 0;
 
   @override
@@ -5117,6 +5412,8 @@ class _CountingInventoryController extends _RecordingSaveController {
 }
 
 class _ShellTuneController extends FixtureController {
+  _ShellTuneController({super.scenario});
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
     (channel.source as ManualSource).items,
@@ -5135,6 +5432,8 @@ class _ShellTuneController extends FixtureController {
 }
 
 class _AgreementController extends FixtureController {
+  _AgreementController({super.scenario});
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
     (channel.source as ManualSource).items,
@@ -5148,7 +5447,7 @@ class _AgreementController extends FixtureController {
     Channel channel, {
     required Channel? expectedBase,
   }) async {
-    channels = [channel];
+    fixtureActor.replaceChannels([channel]);
     notifyListeners();
     return channel;
   }
@@ -5174,6 +5473,8 @@ class _AgreementPlayer extends FixturePlayer {
 }
 
 class _ExpectedBaseController extends FixtureController {
+  _ExpectedBaseController({super.scenario});
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
       _testSchedule(channel, this);
@@ -5189,13 +5490,15 @@ class _ExpectedBaseController extends FixtureController {
         !canonicalChannelValueEquals(current.toJson(), expectedBase.toJson())) {
       throw const FormatException('Channel has changed');
     }
-    channels = [channel];
+    fixtureActor.replaceChannels([channel]);
     notifyListeners();
     return channel;
   }
 }
 
 class _HealthController extends FixtureController {
+  _HealthController({super.scenario});
+
   int requests = 0;
 
   @override
@@ -5212,7 +5515,8 @@ class _HealthController extends FixtureController {
 
 class _CountingHealthChannel extends Channel {
   _CountingHealthChannel()
-    : super(
+    : _publishedSnapshot = false,
+      super(
         id: 'counting-health',
         number: 1,
         name: 'Counting Health',
@@ -5221,6 +5525,30 @@ class _CountingHealthChannel extends Channel {
         anchor: DateTime.utc(2026),
         shuffleSeed: 1,
       );
+
+  _CountingHealthChannel._snapshot(Channel frozen)
+    : _publishedSnapshot = true,
+      super(
+        id: frozen.id,
+        number: frozen.number,
+        name: frozen.name,
+        source: frozen.source,
+        playbackMode: frozen.playbackMode,
+        anchor: frozen.anchor,
+        shuffleSeed: frozen.shuffleSeed,
+        blockSize: frozen.blockSize,
+        builderKey: frozen.builderKey,
+        includeSpecials: frozen.includeSpecials,
+        scheduleVersion: frozen.scheduleVersion,
+        scheduleTransition: frozen.scheduleTransition,
+      );
+
+  final bool _publishedSnapshot;
+
+  @override
+  Channel immutableCopy() => _publishedSnapshot
+      ? this
+      : _CountingHealthChannel._snapshot(super.immutableCopy());
 
   int serializations = 0;
 
@@ -5232,7 +5560,7 @@ class _CountingHealthChannel extends Channel {
 }
 
 class _ScheduleFailureController extends FixtureController {
-  _ScheduleFailureController(this.failure);
+  _ScheduleFailureController(this.failure, {super.scenario});
 
   final Object failure;
 
@@ -5242,6 +5570,8 @@ class _ScheduleFailureController extends FixtureController {
 }
 
 class _ControlledHealthController extends FixtureController {
+  _ControlledHealthController({super.scenario});
+
   final pending = <_HealthCall>[];
   final _activeById = <String, int>{};
   int generation = 0;

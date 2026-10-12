@@ -1416,7 +1416,18 @@ void main() {
       final lineup = _TestLineup(count: 1);
       final original = lineup.channels.single;
       lineup
-        ..channels = [
+        ..fixtureActor.publishInventory(
+          media: [
+            PlexMediaItem(
+              id: 'current',
+              title: 'Current title',
+              type: 'movie',
+              duration: const Duration(hours: 24),
+              parts: [PlexMediaPart(path: '/current')],
+            ),
+          ],
+        )
+        ..fixtureActor.replaceChannels([
           Channel(
             id: original.id,
             number: original.number,
@@ -1437,21 +1448,14 @@ void main() {
             anchor: DateTime.now().subtract(const Duration(hours: 1)),
             shuffleSeed: 1,
           ),
-        ]
-        ..connection = PlexConnection(
-          uri: Uri.parse('https://player.example:32400'),
-          local: true,
-          relay: false,
-        )
-        ..availableMedia = [
-          PlexMediaItem(
-            id: 'current',
-            title: 'Current title',
-            type: 'movie',
-            duration: const Duration(hours: 24),
-            parts: [PlexMediaPart(path: '/current')],
+        ])
+        ..fixtureActor.replaceConnection(
+          PlexConnection(
+            uri: Uri.parse('https://player.example:32400'),
+            local: true,
+            relay: false,
           ),
-        ];
+        );
       final guide = GuideController(lineup: lineup)..requestViewport(0, 1);
       final player = _Player();
       final coordinator = PlayerCoordinator(
@@ -3189,7 +3193,9 @@ void main() {
     tester,
   ) async {
     final lineup = _TestLineup();
-    lineup.settings = lineup.settings.copyWith(osdAutoHideSeconds: 2);
+    lineup.fixtureActor.publishSettings(
+      lineup.settings.copyWith(osdAutoHideSeconds: 2),
+    );
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -5883,6 +5889,7 @@ List<LineupPlaybackPart> _parts({Duration? first, Duration? second}) => [
 
 class _TestLineup extends LineupController {
   _TestLineup({
+    LineupScenario? scenario,
     int count = 2,
     this.failSecondPlaybackRequest = false,
     this.recoverAuthorization = false,
@@ -5900,7 +5907,7 @@ class _TestLineup extends LineupController {
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
        ) {
-    channels = List.generate(count, (index) {
+    final initialChannels = List.generate(count, (index) {
       final id = index == 1 ? 'channel-b' : 'channel-$index';
       return Channel(
         id: id,
@@ -5918,8 +5925,16 @@ class _TestLineup extends LineupController {
         shuffleSeed: index,
       );
     });
-    currentChannelId = channels.first.id;
-    stage = SetupStage.ready;
+
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(
+          channels: initialChannels,
+          currentChannelId: initialChannels.first.id,
+          stage: SetupStage.ready,
+        ),
+      ),
+    );
   }
 
   final bool failSecondPlaybackRequest;
@@ -5947,17 +5962,17 @@ class _TestLineup extends LineupController {
   }
 
   void replaceChannels(List<Channel> value) {
-    channels = List.unmodifiable(value);
+    fixtureActor.replaceChannels(List.unmodifiable(value));
     notifyListeners();
   }
 
   void setSettings(LineupSettings value) {
-    settings = value;
+    fixtureActor.publishSettings(value);
     notifyListeners();
   }
 
   void clearCurrentChannel() {
-    currentChannelId = null;
+    fixtureActor.selectChannel(null);
     notifyListeners();
   }
 
@@ -6016,7 +6031,7 @@ class _TestLineup extends LineupController {
 
   @override
   Future<void> setCurrentChannel(String? id) async {
-    currentChannelId = id;
+    fixtureActor.selectChannel(id);
     notifyListeners();
   }
 }
@@ -6048,7 +6063,7 @@ class _BlockingLineup extends _TestLineup {
 
   @override
   Future<void> setCurrentChannel(String? id) async {
-    currentChannelId = id;
+    fixtureActor.selectChannel(id);
     notifyListeners();
     if (!_blocked) {
       _blocked = true;

@@ -1,3 +1,5 @@
+import 'package:lineup_desktop/app/lineup_controller.dart';
+
 import 'dart:async';
 import 'dart:ui' show SemanticsAction;
 
@@ -996,8 +998,9 @@ void main() {
   testWidgets(
     'partially playable mixed source reports every nested retained occurrence',
     (tester) async {
-      final controller = _MixedAirController()
-        ..availableMedia = [_playableMedia('live')];
+      final controller = _MixedAirController(
+        scenario: LineupScenario(availableMedia: [_playableMedia('live')]),
+      );
       addTearDown(controller.dispose);
       final channel = Channel.fromJson({
         ..._channel(items: [_item('live')]).toJson(),
@@ -1374,7 +1377,7 @@ String _formatted(DateTime value, {bool always24 = false}) =>
     );
 
 class _AirController extends FixtureController {
-  _AirController({this.controlled = false});
+  _AirController({super.scenario, this.controlled = false});
 
   final bool controlled;
   final _pending = <(Completer<ScheduleIndex>, ScheduleIndex)>[];
@@ -1424,6 +1427,7 @@ class _AirController extends FixtureController {
 }
 
 class _MixedAirController extends _AirController {
+  _MixedAirController({super.scenario});
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
     [_item('live')],

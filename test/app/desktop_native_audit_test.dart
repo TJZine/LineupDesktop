@@ -34,10 +34,13 @@ void main() {
       tester,
     ) async {
       _setViewport(tester, const Size(1280, 720));
-      final controller = _AuditController()
-        ..stage = SetupStage.ready
-        ..channels = [_channel]
-        ..currentChannelId = _channel.id;
+      final controller = _AuditController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [_channel],
+          currentChannelId: _channel.id,
+        ),
+      );
       final player = _CountingPlayer()
         ..emit(
           const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
@@ -98,7 +101,9 @@ void main() {
       'Now Playing is absent without program metadata (playback: $hasPlayback)',
       (tester) async {
         _setViewport(tester, const Size(1280, 720));
-        final controller = _AuditController()..stage = SetupStage.ready;
+        final controller = _AuditController(
+          scenario: LineupScenario(stage: SetupStage.ready),
+        );
         final player = _CountingPlayer();
         if (hasPlayback) {
           player.emit(
@@ -131,15 +136,18 @@ void main() {
       tester,
     ) async {
       _setViewport(tester, size);
-      final controller = _AuditController()
-        ..stage = SetupStage.channelSetup
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ];
+      final controller = _AuditController(
+        scenario: LineupScenario(
+          stage: SetupStage.channelSetup,
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+        ),
+      );
       await tester.pumpWidget(UiFixture(controller: controller).build());
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
@@ -180,6 +188,8 @@ void _setViewport(WidgetTester tester, Size size) {
 }
 
 class _AuditController extends FixtureController {
+  _AuditController({super.scenario});
+
   Set<String> _readyIds = const {};
   Map<String, LibraryScanFact> _facts = const {};
 
@@ -199,18 +209,20 @@ class _AuditController extends FixtureController {
     Set<String> ids, {
     bool retryFailedOnly = false,
   }) async {
-    availableMedia = [
-      for (var index = 0; index < 12; index++)
-        PlexMediaItem(
-          id: 'movie-$index',
-          title: 'Movie $index',
-          type: 'movie',
-          duration: const Duration(minutes: 90),
-          libraryId: 'movies',
-          parts: [PlexMediaPart(path: '/parts/movie-$index')],
-          genres: const ['Drama'],
-        ),
-    ];
+    fixtureActor.publishInventory(
+      media: [
+        for (var index = 0; index < 12; index++)
+          PlexMediaItem(
+            id: 'movie-$index',
+            title: 'Movie $index',
+            type: 'movie',
+            duration: const Duration(minutes: 90),
+            libraryId: 'movies',
+            parts: [PlexMediaPart(path: '/parts/movie-$index')],
+            genres: const ['Drama'],
+          ),
+      ],
+    );
     _readyIds = Set.unmodifiable(ids);
     _facts = {
       for (final id in ids)
@@ -221,14 +233,16 @@ class _AuditController extends FixtureController {
           totalItems: 12,
         ),
     };
-    libraryScanStatus = LibraryScanStatus.complete;
+    fixtureActor.reportScan(status: LibraryScanStatus.complete);
     notifyListeners();
     return true;
   }
 
   @override
   Future<bool> commitLibraryScan(Set<String> readyIds) async {
-    selectedLibraryIds = Set.unmodifiable(readyIds);
+    fixtureActor.publishInventory(
+      selectedLibraryIds: Set.unmodifiable(readyIds),
+    );
     return true;
   }
 }

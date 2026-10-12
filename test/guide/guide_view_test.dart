@@ -380,10 +380,14 @@ void main() {
           'A signal arrives.',
           List.filled(80, 'A signal reaches the crew.').join(' '),
         ]) {
-          final lineup = _Lineup(1)
-            ..settings = const LineupSettings(preferClearLogos: false);
+          final lineup = _Lineup(
+            1,
+            scenario: LineupScenario(
+              settings: const LineupSettings(preferClearLogos: false),
+            ),
+          );
           final channel = lineup.channels.single;
-          lineup.channels = [
+          lineup.fixtureActor.replaceChannels([
             Channel(
               id: channel.id,
               number: 1,
@@ -406,7 +410,7 @@ void main() {
               anchor: channel.anchor,
               shuffleSeed: 1,
             ),
-          ];
+          ]);
           final guide = GuideController(
             lineup: lineup,
             loadSchedule: (c) async => _schedule(c),
@@ -517,10 +521,15 @@ void main() {
         ..physicalSize = const Size(1920, 1080);
       addTearDown(tester.view.reset);
       final start = DateTime.utc(2026, 1, 15, 3, 12);
-      final lineup = _Lineup(1, anchor: start)
-        ..settings = const LineupSettings(preferClearLogos: false);
+      final lineup = _Lineup(
+        1,
+        anchor: start,
+        scenario: LineupScenario(
+          settings: const LineupSettings(preferClearLogos: false),
+        ),
+      );
       final channel = lineup.channels.single;
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: channel.id,
           number: 2,
@@ -540,7 +549,7 @@ void main() {
           anchor: start,
           shuffleSeed: 1,
         ),
-      ];
+      ]);
       final guide = GuideController(
         lineup: lineup,
         clock: () => start.add(const Duration(minutes: 5)),
@@ -613,13 +622,18 @@ void main() {
       addTearDown(tester.view.reset);
       final start = DateTime.utc(2026, 1, 15, 3, 12);
       var now = start.add(const Duration(minutes: 5));
-      final lineup = _Lineup(1, anchor: start)
-        ..settings = const LineupSettings(
-          preferClearLogos: false,
-          reduceMotion: true,
-        );
+      final lineup = _Lineup(
+        1,
+        anchor: start,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            preferClearLogos: false,
+            reduceMotion: true,
+          ),
+        ),
+      );
       final old = lineup.channels.single;
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: old.id,
           number: 2,
@@ -639,7 +653,7 @@ void main() {
           anchor: start,
           shuffleSeed: 1,
         ),
-      ];
+      ]);
       final guide = GuideController(
         lineup: lineup,
         clock: () => now,
@@ -724,8 +738,12 @@ void main() {
         ..devicePixelRatio = 1
         ..physicalSize = const Size(1920, 1080);
       addTearDown(tester.view.reset);
-      final lineup = _Lineup(1)
-        ..settings = const LineupSettings(reduceMotion: true);
+      final lineup = _Lineup(
+        1,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (c) async => _schedule(c),
@@ -768,13 +786,17 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final lineup = _Lineup(1)
-        ..settings = const LineupSettings(
-          preferClearLogos: false,
-          largeFocusIndicators: true,
-        );
+      final lineup = _Lineup(
+        1,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            preferClearLogos: false,
+            largeFocusIndicators: true,
+          ),
+        ),
+      );
       final channel = lineup.channels.single;
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: channel.id,
           number: 1,
@@ -797,7 +819,7 @@ void main() {
           anchor: channel.anchor,
           shuffleSeed: 1,
         ),
-      ];
+      ]);
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
@@ -907,8 +929,12 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
-        final lineup = _Lineup(12)
-          ..settings = const LineupSettings(reduceMotion: true);
+        final lineup = _Lineup(
+          12,
+          scenario: LineupScenario(
+            settings: const LineupSettings(reduceMotion: true),
+          ),
+        );
         addTearDown(lineup.dispose);
         final attempts = <String, int>{};
         final guide = GuideController(
@@ -1072,18 +1098,19 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final pending = <String, Completer<Uint8List?>>{};
-      final lineup =
-          _Lineup(
-              2,
-              artworkLoader: (path) =>
-                  (pending[path.path] = Completer<Uint8List?>()).future,
-            )
-            ..settings = const LineupSettings(
-              guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
-              preferClearLogos: false,
-              reduceMotion: true,
-            );
-      lineup.channels = [
+      final lineup = _Lineup(
+        2,
+        artworkLoader: (path) =>
+            (pending[path.path] = Completer<Uint8List?>()).future,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+            preferClearLogos: false,
+            reduceMotion: true,
+          ),
+        ),
+      );
+      lineup.fixtureActor.replaceChannels([
         for (var i = 0; i < 2; i++)
           Channel(
             id: 'channel-$i',
@@ -1101,7 +1128,7 @@ void main() {
             anchor: DateTime.now().subtract(const Duration(hours: 1)),
             shuffleSeed: i,
           ),
-      ];
+      ]);
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
@@ -1241,7 +1268,10 @@ void main() {
   });
 
   testWidgets('non-positive timeline slots render safely', (tester) async {
-    final lineup = _Lineup(1)..settings = const LineupSettings(guideHours: 0);
+    final lineup = _Lineup(
+      1,
+      scenario: LineupScenario(settings: const LineupSettings(guideHours: 0)),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -1271,8 +1301,12 @@ void main() {
     tester,
   ) async {
     final now = DateTime.utc(2026, 1, 1, 12, 17);
-    final lineup = _Lineup(1)
-      ..settings = const LineupSettings(dvrControlsEnabled: false);
+    final lineup = _Lineup(
+      1,
+      scenario: LineupScenario(
+        settings: const LineupSettings(dvrControlsEnabled: false),
+      ),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -1416,9 +1450,13 @@ void main() {
     tester,
   ) async {
     final now = DateTime.utc(2026, 1, 1, 12, 15);
-    final lineup = _Lineup(1000)
-      ..settings = const LineupSettings(guideHours: 4, reduceMotion: true);
-    lineup.channels = [
+    final lineup = _Lineup(
+      1000,
+      scenario: LineupScenario(
+        settings: const LineupSettings(guideHours: 4, reduceMotion: true),
+      ),
+    );
+    lineup.fixtureActor.replaceChannels([
       for (var index = 0; index < 1000; index++)
         Channel(
           id: 'channel-$index',
@@ -1436,7 +1474,7 @@ void main() {
           anchor: now.subtract(const Duration(minutes: 15)),
           shuffleSeed: index,
         ),
-    ];
+    ]);
     addTearDown(lineup.dispose);
     final loadedChannelIds = <String>[];
     final guide = GuideController(
@@ -1528,7 +1566,7 @@ void main() {
     final now = DateTime.utc(2026, 1, 1, 12, 45);
     final lineup = _Lineup(1);
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'semantic-channel',
         number: 1,
@@ -1554,8 +1592,8 @@ void main() {
         anchor: DateTime.utc(2026, 1, 1, 12, 30),
         shuffleSeed: 1,
       ),
-    ];
-    lineup.currentChannelId = 'semantic-channel';
+    ]);
+    lineup.fixtureActor.selectChannel('semantic-channel');
     var fail = true;
     var tunes = 0;
     final guide = GuideController(
@@ -1826,7 +1864,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final lineup = _Lineup(1, artworkBytes: _tinyPng);
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'channel',
         number: 7,
@@ -1855,7 +1893,7 @@ void main() {
         anchor: DateTime.now().subtract(const Duration(hours: 1)),
         shuffleSeed: 7,
       ),
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -1916,13 +1954,18 @@ void main() {
     'Guide details keep loading, retry, and error scoped to focused channel',
     (tester) async {
       final now = DateTime.utc(2026, 1, 1, 12, 30);
-      final lineup = _Lineup(2, artworkBytes: _tinyPng)
-        ..settings = const LineupSettings(
-          guideHours: 4,
-          reduceMotion: true,
-          guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
-        );
-      lineup.channels = [
+      final lineup = _Lineup(
+        2,
+        artworkBytes: _tinyPng,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            guideHours: 4,
+            reduceMotion: true,
+            guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+          ),
+        ),
+      );
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: 'channel-a',
           number: 1,
@@ -1955,8 +1998,8 @@ void main() {
           anchor: now,
           shuffleSeed: 2,
         ),
-      ];
-      lineup.currentChannelId = 'channel-a';
+      ]);
+      lineup.fixtureActor.selectChannel('channel-a');
       addTearDown(lineup.dispose);
       final firstLoad = Completer<ScheduleIndex>();
       final retryLoad = Completer<ScheduleIndex>();
@@ -2060,8 +2103,12 @@ void main() {
   testWidgets('Guide details identify a focused ready row with no programs', (
     tester,
   ) async {
-    final lineup = _Lineup(2)
-      ..settings = const LineupSettings(guideHours: 0, reduceMotion: true);
+    final lineup = _Lineup(
+      2,
+      scenario: LineupScenario(
+        settings: const LineupSettings(guideHours: 0, reduceMotion: true),
+      ),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -2098,7 +2145,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final lineup = _Lineup(2);
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'without-artwork',
         number: 1,
@@ -2130,7 +2177,7 @@ void main() {
         anchor: DateTime.now().subtract(const Duration(hours: 1)),
         shuffleSeed: 2,
       ),
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -2174,7 +2221,7 @@ void main() {
   testWidgets('Guide omits incomplete episode coordinates', (tester) async {
     final lineup = _Lineup(1);
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       for (final (index, item) in [
         const ChannelItem(
           id: 'season-only',
@@ -2200,7 +2247,7 @@ void main() {
           anchor: DateTime.now().subtract(const Duration(hours: 1)),
           shuffleSeed: index + 1,
         ),
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -2232,12 +2279,17 @@ void main() {
       ..physicalSize = const Size(1600, 900);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final lineup = _Lineup(1, artworkBytes: _wideLogoPng)
-      ..settings = const LineupSettings(
-        guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
-      );
+    final lineup = _Lineup(
+      1,
+      artworkBytes: _wideLogoPng,
+      scenario: LineupScenario(
+        settings: const LineupSettings(
+          guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+        ),
+      ),
+    );
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'channel',
         number: 7,
@@ -2257,7 +2309,7 @@ void main() {
         anchor: DateTime.now().subtract(const Duration(hours: 1)),
         shuffleSeed: 7,
       ),
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -2310,7 +2362,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final lineup = _Lineup(1, artworkBytes: bytes);
       addTearDown(lineup.dispose);
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: 'channel',
           number: 7,
@@ -2329,7 +2381,7 @@ void main() {
           anchor: DateTime.now().subtract(const Duration(hours: 1)),
           shuffleSeed: 7,
         ),
-      ];
+      ]);
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
@@ -2524,8 +2576,13 @@ void main() {
       'Guide hours failure retains $restoredHours hours and Retry saves the choice',
       (tester) async {
         final store = _RetryStore();
-        final lineup = _Lineup(1, store: store)
-          ..settings = LineupSettings(guideHours: restoredHours);
+        final lineup = _Lineup(
+          1,
+          store: store,
+          scenario: LineupScenario(
+            settings: LineupSettings(guideHours: restoredHours),
+          ),
+        );
         store.saved = PersistedState(settings: lineup.settings);
         final guide = GuideController(
           lineup: lineup,
@@ -2941,8 +2998,12 @@ void main() {
         ..devicePixelRatio = 1
         ..physicalSize = const Size(1920, 1080);
       addTearDown(tester.view.reset);
-      final lineup = _Lineup(2)
-        ..settings = const LineupSettings(reduceMotion: true);
+      final lineup = _Lineup(
+        2,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
       final now = DateTime.utc(2026, 10, 10, 12, 15);
       final ready = Channel(
         id: 'channel-0',
@@ -2959,7 +3020,7 @@ void main() {
         anchor: DateTime.utc(2026, 10, 10, 12),
         shuffleSeed: 0,
       );
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         ready,
         Channel(
           id: 'library-channel',
@@ -2973,7 +3034,7 @@ void main() {
           anchor: ready.anchor,
           shuffleSeed: 1,
         ),
-      ];
+      ]);
       var retries = 0;
       final guide = GuideController(
         lineup: lineup,
@@ -3176,8 +3237,12 @@ void main() {
   testWidgets(
     'raw search editing survives row completion and unrelated notifications',
     (tester) async {
-      final lineup = _Lineup(2)
-        ..settings = const LineupSettings(reduceMotion: true);
+      final lineup = _Lineup(
+        2,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
       final pending = Completer<ScheduleIndex>();
       final guide = GuideController(
         lineup: lineup,
@@ -3473,7 +3538,7 @@ void main() {
     const libraryId =
         'International television documentaries and limited series archive';
     final lineup = _Lineup(2);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'library-channel',
         number: 17,
@@ -3487,7 +3552,7 @@ void main() {
         shuffleSeed: 1,
       ),
       lineup.channels.last,
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -3532,8 +3597,12 @@ void main() {
   testWidgets(
     'standard resolutions and enlarged text do not clip Guide controls',
     (tester) async {
-      final lineup = _Lineup(20)
-        ..settings = const LineupSettings(reduceMotion: true);
+      final lineup = _Lineup(
+        20,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
@@ -3580,7 +3649,10 @@ void main() {
   testWidgets('Now Playing context remains stable while Guide focus moves', (
     tester,
   ) async {
-    final lineup = _Lineup(2)..currentChannelId = 'channel-0';
+    final lineup = _Lineup(
+      2,
+      scenario: LineupScenario(currentChannelId: 'channel-0'),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -3633,7 +3705,10 @@ void main() {
   testWidgets('Now Playing context setting updates its Guide consumer', (
     tester,
   ) async {
-    final lineup = _Lineup(2)..currentChannelId = 'channel-0';
+    final lineup = _Lineup(
+      2,
+      scenario: LineupScenario(currentChannelId: 'channel-0'),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -3654,7 +3729,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('guide-now-playing-context')), findsOneWidget);
 
-    lineup.settings = lineup.settings.copyWith(nowWatchingBanner: false);
+    lineup.fixtureActor.publishSettings(
+      lineup.settings.copyWith(nowWatchingBanner: false),
+    );
     lineup.notifyListeners();
     await tester.pump();
     expect(find.byKey(const Key('guide-now-playing-context')), findsNothing);
@@ -3722,8 +3799,12 @@ void main() {
   testWidgets('focused row survives row-height resize and route recreation', (
     tester,
   ) async {
-    final lineup = _Lineup(100)
-      ..settings = const LineupSettings(reduceMotion: true);
+    final lineup = _Lineup(
+      100,
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -3790,8 +3871,12 @@ void main() {
   });
 
   testWidgets('focus fully reveals a trailing partial row', (tester) async {
-    final lineup = _Lineup(100)
-      ..settings = const LineupSettings(reduceMotion: true);
+    final lineup = _Lineup(
+      100,
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -3870,6 +3955,7 @@ String _testTime(DateTime value) =>
 class _Lineup extends LineupController {
   _Lineup(
     int count, {
+    LineupScenario? scenario,
     this.artworkBytes,
     this.artworkLoader,
     DateTime? anchor,
@@ -3881,7 +3967,7 @@ class _Lineup extends LineupController {
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
        ) {
-    channels = List.generate(
+    final initialChannels = List.generate(
       count,
       (index) => Channel(
         id: 'channel-$index',
@@ -3899,7 +3985,12 @@ class _Lineup extends LineupController {
         shuffleSeed: index,
       ),
     );
-    stage = SetupStage.ready;
+
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(channels: initialChannels, stage: SetupStage.ready),
+      ),
+    );
   }
 
   final Uint8List? artworkBytes;

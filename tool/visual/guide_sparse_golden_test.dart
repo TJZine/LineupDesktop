@@ -140,12 +140,15 @@ List<Channel> _channels(bool rich) => [
 ];
 
 class _ComparisonController extends FixtureController {
-  _ComparisonController(List<Channel> fixtureChannels) {
-    stage = SetupStage.ready;
-    settings = const LineupSettings(reduceMotion: true);
-    channels = fixtureChannels;
-    currentChannelId = fixtureChannels[1].id;
-  }
+  _ComparisonController(List<Channel> fixtureChannels)
+    : super(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          settings: const LineupSettings(reduceMotion: true),
+          channels: fixtureChannels,
+          currentChannelId: fixtureChannels[1].id,
+        ),
+      );
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(

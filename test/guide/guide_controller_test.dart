@@ -236,8 +236,10 @@ void main() {
 
   test('live clock advances current focus and window without repeated schedule work', () async {
     var now = DateTime(2026, 8, 13, 23, 47);
-    final lineup = _TestLineup(_channels(2))
-      ..settings = const LineupSettings(guideHours: 2);
+    final lineup = _TestLineup(
+      _channels(2),
+      scenario: LineupScenario(settings: const LineupSettings(guideHours: 2)),
+    );
     final loads = <String, int>{};
     final guide = GuideController(
       lineup: lineup,
@@ -391,7 +393,10 @@ void main() {
 
   test('pending inspected navigation recovers the retained airing after clock rollover', () async {
     var now = DateTime(2026, 8, 13, 12, 17);
-    final lineup = _TestLineup(_channels(2))..currentChannelId = 'channel-0';
+    final lineup = _TestLineup(
+      _channels(2),
+      scenario: LineupScenario(currentChannelId: 'channel-0'),
+    );
     final target = Completer<ScheduleIndex>();
     final guide = GuideController(
       lineup: lineup,
@@ -1201,32 +1206,33 @@ void main() {
       shuffleSeed: 1,
     );
     var workerCreations = 0;
-    final lineup =
-        _TestLineup(
-            [channel],
-            scheduleWorkerFactory: (media, playlists) {
-              workerCreations++;
-              return ScheduleWorker(media, playlists);
-            },
-          )
-          ..availableMedia = List.unmodifiable(
-            List.generate(
-              2000,
-              (index) => PlexMediaItem(
-                id: 'item-$index',
-                title: 'Item $index',
-                type: 'movie',
-                duration: const Duration(minutes: 30),
-                libraryId: 'library',
-                parts: [PlexMediaPart(path: '/library/parts/item-$index')],
-              ),
+    final lineup = _TestLineup(
+      [channel],
+      scheduleWorkerFactory: (media, playlists) {
+        workerCreations++;
+        return ScheduleWorker(media, playlists);
+      },
+      scenario: LineupScenario(
+        availableMedia: List.unmodifiable(
+          List.generate(
+            2000,
+            (index) => PlexMediaItem(
+              id: 'item-$index',
+              title: 'Item $index',
+              type: 'movie',
+              duration: const Duration(minutes: 30),
+              libraryId: 'library',
+              parts: [PlexMediaPart(path: '/library/parts/item-$index')],
             ),
-          )
-          ..connection = PlexConnection(
-            uri: Uri.parse('https://guide.example:32400'),
-            local: true,
-            relay: false,
-          );
+          ),
+        ),
+        connection: PlexConnection(
+          uri: Uri.parse('https://guide.example:32400'),
+          local: true,
+          relay: false,
+        ),
+      ),
+    );
     addTearDown(lineup.dispose);
 
     final first = await lineup.loadScheduleFor(channel);
@@ -1261,21 +1267,25 @@ void main() {
         anchor: DateTime.utc(2026, 8, 13, 12),
         shuffleSeed: 1,
       );
-      final lineup = _TestLineup([channel])
-        ..connection = PlexConnection(
-          uri: Uri.parse('https://guide.example:32400'),
-          local: true,
-          relay: false,
-        )
-        ..availableMedia = [
-          PlexMediaItem(
-            id: 'current',
-            title: 'Current title',
-            type: 'movie',
-            duration: const Duration(hours: 1),
-            parts: [PlexMediaPart(path: '/current')],
+      final lineup = _TestLineup(
+        [channel],
+        scenario: LineupScenario(
+          connection: PlexConnection(
+            uri: Uri.parse('https://guide.example:32400'),
+            local: true,
+            relay: false,
           ),
-        ];
+          availableMedia: [
+            PlexMediaItem(
+              id: 'current',
+              title: 'Current title',
+              type: 'movie',
+              duration: const Duration(hours: 1),
+              parts: [PlexMediaPart(path: '/current')],
+            ),
+          ],
+        ),
+      );
       final guide = GuideController(
         lineup: lineup,
         clock: () => DateTime.utc(2026, 8, 13, 12, 15),
@@ -1767,8 +1777,10 @@ void main() {
         anchor: anchor,
         shuffleSeed: 1,
       );
-      final lineup = _TestLineup([channel])
-        ..settings = const LineupSettings(guideHours: 4);
+      final lineup = _TestLineup(
+        [channel],
+        scenario: LineupScenario(settings: const LineupSettings(guideHours: 4)),
+      );
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => buildSchedule(
@@ -1884,8 +1896,10 @@ void main() {
     'browsed window stays preserved even after its visible range elapses',
     () {
       var now = DateTime(2026, 8, 13, 12, 47);
-      final lineup = _TestLineup(_channels(1))
-        ..settings = const LineupSettings(guideHours: 2);
+      final lineup = _TestLineup(
+        _channels(1),
+        scenario: LineupScenario(settings: const LineupSettings(guideHours: 2)),
+      );
       final guide = GuideController(lineup: lineup, clock: () => now);
 
       expect(guide.windowStart, DateTime(2026, 8, 13, 12, 30));
@@ -2104,6 +2118,7 @@ Future<void> _settle() => Future<void>.delayed(Duration.zero);
 class _TestLineup extends LineupController {
   _TestLineup(
     List<Channel> value, {
+    LineupScenario? scenario,
     AppStore? store,
     super.scheduleWorkerFactory,
   }) : super(
@@ -2113,35 +2128,43 @@ class _TestLineup extends LineupController {
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
        ) {
-    connection = PlexConnection(
-      uri: Uri.parse('https://synthetic.invalid'),
-      local: true,
-      relay: false,
-    );
-    availableMedia = [
-      for (var index = 0; index < 3; index++)
-        PlexMediaItem(
-          id: 'library-$index-item',
-          title: 'Library $index item',
-          type: 'movie',
-          duration: const Duration(minutes: 30),
-          libraryId: 'library-$index',
-          parts: [PlexMediaPart(path: '/library-$index-item')],
+    final initialChannels = value;
+
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(
+          connection: PlexConnection(
+            uri: Uri.parse('https://synthetic.invalid'),
+            local: true,
+            relay: false,
+          ),
+          availableMedia: [
+            for (var index = 0; index < 3; index++)
+              PlexMediaItem(
+                id: 'library-$index-item',
+                title: 'Library $index item',
+                type: 'movie',
+                duration: const Duration(minutes: 30),
+                libraryId: 'library-$index',
+                parts: [PlexMediaPart(path: '/library-$index-item')],
+              ),
+            for (final channel in value)
+              if (channel.source case ManualSource(:final items))
+                for (final item in items)
+                  PlexMediaItem(
+                    id: item.id,
+                    title: item.title,
+                    type: 'movie',
+                    duration: item.duration,
+                    parts: [PlexMediaPart(path: '/${item.id}')],
+                  ),
+          ],
+          channels: initialChannels,
+          stage: SetupStage.ready,
+          settings: const LineupSettings(guideHours: 4),
         ),
-      for (final channel in value)
-        if (channel.source case ManualSource(:final items))
-          for (final item in items)
-            PlexMediaItem(
-              id: item.id,
-              title: item.title,
-              type: 'movie',
-              duration: item.duration,
-              parts: [PlexMediaPart(path: '/${item.id}')],
-            ),
-    ];
-    channels = value;
-    stage = SetupStage.ready;
-    settings = const LineupSettings(guideHours: 4);
+      ),
+    );
   }
 
   int _testContentGeneration = 0;
@@ -2155,12 +2178,12 @@ class _TestLineup extends LineupController {
   }
 
   void setChannels(List<Channel> value) {
-    channels = List.unmodifiable(value);
+    fixtureActor.replaceChannels(List.unmodifiable(value));
     notifyListeners();
   }
 
   void setSettings(LineupSettings value) {
-    settings = value;
+    fixtureActor.publishSettings(value);
     notifyListeners();
   }
 }

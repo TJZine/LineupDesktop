@@ -52,8 +52,18 @@ class PlexServer {
     required this.name,
     required this.connections,
     this.owned = false,
-  });
+  }) : _frozen = false;
 
+  PlexServer._immutable(PlexServer original)
+    : _frozen = true,
+      id = original.id,
+      name = original.name,
+      connections = List.unmodifiable(original.connections),
+      owned = original.owned;
+
+  PlexServer immutableCopy() => _frozen ? this : PlexServer._immutable(this);
+
+  final bool _frozen;
   final String id;
   final String name;
   final List<PlexConnection> connections;
@@ -124,8 +134,20 @@ class PlexPlaylist {
     required this.id,
     required this.title,
     required this.items,
-  });
+  }) : _frozen = false;
 
+  PlexPlaylist._immutable(PlexPlaylist original)
+    : _frozen = true,
+      id = original.id,
+      title = original.title,
+      items = List.unmodifiable(
+        original.items.map((item) => item.immutableCopy()),
+      );
+
+  PlexPlaylist immutableCopy() =>
+      _frozen ? this : PlexPlaylist._immutable(this);
+
+  final bool _frozen;
   final String id;
   final String title;
   final List<PlexMediaItem> items;
@@ -244,8 +266,48 @@ class PlexMediaItem {
     this.audioChannels,
     this.addedAt,
     this.viewed = false,
-  });
+  }) : _frozen = false;
 
+  PlexMediaItem._immutable(PlexMediaItem original)
+    : _frozen = true,
+      id = original.id,
+      title = original.title,
+      type = original.type,
+      duration = original.duration,
+      libraryId = original.libraryId,
+      parentTitle = original.parentTitle,
+      grandparentTitle = original.grandparentTitle,
+      parentRatingKey = original.parentRatingKey,
+      grandparentRatingKey = original.grandparentRatingKey,
+      thumbPath = original.thumbPath,
+      grandparentThumbPath = original.grandparentThumbPath,
+      artPath = original.artPath,
+      clearLogoPath = original.clearLogoPath,
+      parts = List.unmodifiable(original.parts),
+      container = original.container,
+      videoCodec = original.videoCodec,
+      audioCodec = original.audioCodec,
+      dynamicRange = original.dynamicRange,
+      genres = List.unmodifiable(original.genres),
+      collections = List.unmodifiable(original.collections),
+      directors = List.unmodifiable(original.directors),
+      actors = List.unmodifiable(original.actors),
+      cast = List.unmodifiable(original.cast),
+      studio = original.studio,
+      year = original.year,
+      summary = original.summary,
+      contentRating = original.contentRating,
+      seasonNumber = original.seasonNumber,
+      episodeNumber = original.episodeNumber,
+      videoResolution = original.videoResolution,
+      audioChannels = original.audioChannels,
+      addedAt = original.addedAt,
+      viewed = original.viewed;
+
+  PlexMediaItem immutableCopy() =>
+      _frozen ? this : PlexMediaItem._immutable(this);
+
+  final bool _frozen;
   final String id;
   final String title;
   final String type;

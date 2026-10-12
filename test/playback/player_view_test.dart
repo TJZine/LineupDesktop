@@ -132,8 +132,8 @@ void main() {
       final fixture = _Fixture(PlayerState.stopped);
       var closed = false;
       for (final level in OverlayTransparency.values) {
-        fixture.lineup.settings = fixture.lineup.settings.copyWith(
-          overlayTransparency: level,
+        fixture.lineup.fixtureActor.publishSettings(
+          fixture.lineup.settings.copyWith(overlayTransparency: level),
         );
         fixture.lineup.notifyListeners();
         await tester.pumpWidget(
@@ -199,8 +199,8 @@ void main() {
           find.byKey(const Key('player-osd-title')),
         );
         for (final level in OverlayTransparency.values) {
-          fixture.lineup.settings = fixture.lineup.settings.copyWith(
-            overlayTransparency: level,
+          fixture.lineup.fixtureActor.publishSettings(
+            fixture.lineup.settings.copyWith(overlayTransparency: level),
           );
           fixture.lineup.notifyListeners();
           await tester.pumpAndSettle();
@@ -669,8 +669,8 @@ void main() {
       await tester.sendEventToBinding(
         PointerHoverEvent(position: const Offset(8, 8)),
       );
-      fixture.lineup.settings = fixture.lineup.settings.copyWith(
-        osdAutoHideSeconds: 2,
+      fixture.lineup.fixtureActor.publishSettings(
+        fixture.lineup.settings.copyWith(osdAutoHideSeconds: 2),
       );
       fixture.lineup.notifyListeners();
       await tester.pump(const Duration(seconds: 3));
@@ -2890,7 +2890,9 @@ void main() {
           PlayerState.playing,
           overlayTimeout: const Duration(seconds: 1),
         );
-        fixture.lineup.stage = SetupStage.ready;
+        fixture.lineup.fixtureActor.present(
+          LineupPresentation(stage: SetupStage.ready),
+        );
         await tester.pumpWidget(
           MaterialApp(
             builder: LineupCanvas.builder,
@@ -4696,8 +4698,8 @@ void main() {
     tester,
   ) async {
     final fixture = _Fixture(PlayerState.playing);
-    fixture.lineup.settings = const LineupSettings(
-      theme: LineupThemeName.directv,
+    fixture.lineup.fixtureActor.publishSettings(
+      const LineupSettings(theme: LineupThemeName.directv),
     );
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
@@ -5925,6 +5927,7 @@ class _Fixture {
 class _Lineup extends LineupController {
   _Lineup(
     int channelCount, {
+    LineupScenario? scenario,
     bool richProgram = false,
     bool preferClearLogos = true,
     bool dvrControlsEnabled = false,
@@ -5942,7 +5945,7 @@ class _Lineup extends LineupController {
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
        ) {
-    channels = List.generate(
+    final initialChannels = List.generate(
       channelCount,
       (index) => Channel(
         id: index == 0 ? 'channel' : 'channel-$index',
@@ -5980,12 +5983,20 @@ class _Lineup extends LineupController {
       ),
       growable: false,
     );
-    currentChannelId = 'channel';
-    settings = LineupSettings(
-      preferClearLogos: preferClearLogos,
-      dvrControlsEnabled: dvrControlsEnabled,
+
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(
+          channels: initialChannels,
+          currentChannelId: initialChannels.firstOrNull?.id,
+          settings: LineupSettings(
+            preferClearLogos: preferClearLogos,
+            dvrControlsEnabled: dvrControlsEnabled,
+          ),
+          stage: SetupStage.ready,
+        ),
+      ),
     );
-    stage = SetupStage.ready;
   }
 
   final artworkRequests = <Uri>[];
@@ -6015,7 +6026,7 @@ class _Lineup extends LineupController {
 
   void replaceArtwork(String tag, {bool bumpGeneration = false}) {
     final channel = channels.first;
-    channels = [
+    fixtureActor.replaceChannels([
       Channel(
         id: channel.id,
         number: channel.number,
@@ -6032,7 +6043,7 @@ class _Lineup extends LineupController {
         anchor: channel.anchor,
         shuffleSeed: channel.shuffleSeed,
       ),
-    ];
+    ]);
     if (bumpGeneration) _contentGeneration++;
     notifyListeners();
   }

@@ -110,12 +110,6 @@ class _LibraryScanState {
   Set<String> failedPlaylistIds = const {};
   PlexPlaylistProgress? playlistProgress;
 
-  // Temporary compatibility for existing widget fixture consumers. Production
-  // counts are derived from rows; M06 removes these fixture write entry points.
-  int? fixturePages;
-  int? fixtureItems;
-  (int?,)? fixtureTotal;
-
   Set<String> get ids => Set.unmodifiable(rows.keys);
   _LibraryScanResult? get readiness => _ready?.result;
   int? get readinessScope => _ready?.contentScope;
@@ -148,13 +142,10 @@ class _LibraryScanState {
         );
 
   int get completedPages =>
-      fixturePages ??
       rows.values.fold(0, (total, row) => total + row.fact.completedPages);
   int get completedItems =>
-      fixtureItems ??
       rows.values.fold(0, (total, row) => total + row.fact.completedItems);
   int? get totalItems {
-    if (fixtureTotal case (final value,)) return value;
     if (rows.isEmpty || rows.values.any((row) => row.fact.totalItems == null)) {
       return null;
     }
@@ -180,6 +171,24 @@ class _LibraryScanState {
       return PlexLibraryScanPhase.items;
     }
     return active.first.fact.phase;
+  }
+
+  void installScenario(
+    Map<String, LibraryScanFact> facts,
+    LibraryScanStatus value,
+    int contentScope,
+    String? profileId,
+    String? serverId,
+  ) {
+    rows = Map.unmodifiable({
+      for (final entry in facts.entries)
+        entry.key: _LibraryScanRow(fact: entry.value),
+    });
+    scope = serverId == null
+        ? null
+        : (profileId: profileId, serverId: serverId);
+    _rowContentScope = contentScope;
+    status = value;
   }
 
   void beginRefresh({required bool retry}) {
@@ -226,9 +235,6 @@ class _LibraryScanState {
     discoveryObsolete = false;
     catalogUnavailable = true;
     failedPlaylistIds = const {};
-    fixturePages = null;
-    fixtureItems = null;
-    fixtureTotal = null;
     status = LibraryScanStatus.scanning;
     return retainedIds;
   }
@@ -297,7 +303,7 @@ class _LibraryScanState {
       ...rows,
       id: _LibraryScanRow(
         fact: fact,
-        items: List.unmodifiable(items),
+        items: List.unmodifiable(items.map((item) => item.immutableCopy())),
         failedTitles: Set.unmodifiable(scan.collections.failedTitles),
         discoveryFailure: scan.collections.failure,
       ),
@@ -357,8 +363,10 @@ class _LibraryScanState {
     }),
     collectionDiscoveryFailures: collectionDiscoveryFailures,
     failedPlaylistIds: failedPlaylistIds,
-    media: List.unmodifiable(media),
-    playlists: List.unmodifiable(playlists),
+    media: List.unmodifiable(media.map((item) => item.immutableCopy())),
+    playlists: List.unmodifiable(
+      playlists.map((playlist) => playlist.immutableCopy()),
+    ),
     status:
         rows.values.any(
           (row) => const {
@@ -466,8 +474,5 @@ class _LibraryScanState {
     catalogUnavailable = true;
     failedPlaylistIds = const {};
     status = LibraryScanStatus.idle;
-    fixturePages = null;
-    fixtureItems = null;
-    fixtureTotal = null;
   }
 }

@@ -174,9 +174,10 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = FixtureController(store: _FailNextSaveStore())
-      ..stage = SetupStage.ready
-      ..channels = [_channel];
+    final controller = FixtureController(
+      store: _FailNextSaveStore(),
+      scenario: LineupScenario(stage: SetupStage.ready, channels: [_channel]),
+    );
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
@@ -206,12 +207,19 @@ void main() {
   testWidgets('manual channels hide the inapplicable watched-items control', (
     tester,
   ) async {
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.ready
-      ..controller.libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..controller.selectedLibraryIds = const {'movies'};
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: const {'movies'},
+      ),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
@@ -244,12 +252,19 @@ void main() {
   testWidgets('channel editor reports a library removed while it is open', (
     tester,
   ) async {
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.ready
-      ..controller.libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..controller.selectedLibraryIds = const {'movies'};
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: const {'movies'},
+      ),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
@@ -257,9 +272,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Movies');
 
-    fixture.controller
-      ..libraries = const []
-      ..selectedLibraryIds = const {};
+    fixture.controller.fixtureActor.discoverLibraries(
+      const [],
+      selectedLibraryIds: const {},
+    );
     await tester.tap(find.text('Save channel'));
     await tester.pumpAndSettle();
 
@@ -269,7 +285,9 @@ void main() {
   testWidgets('Studio recovery honors keep editing and confirmed discard', (
     tester,
   ) async {
-    final controller = _CountingSetupController()..stage = SetupStage.ready;
+    final controller = _CountingSetupController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pump();
     await tester.pump();
@@ -324,20 +342,23 @@ void main() {
       anchor: DateTime.utc(2026),
       shuffleSeed: 8,
     );
-    final controller = FixtureController()
-      ..stage = SetupStage.ready
-      ..channels = [channel]
-      ..availableMedia = [
-        PlexMediaItem(
-          id: 'available',
-          title: 'Available program',
-          type: 'movie',
-          duration: const Duration(minutes: 30),
-          libraryId: 'movies',
-          parts: [PlexMediaPart(path: '/parts/available')],
-          addedAt: DateTime.utc(2026),
-        ),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [channel],
+        availableMedia: [
+          PlexMediaItem(
+            id: 'available',
+            title: 'Available program',
+            type: 'movie',
+            duration: const Duration(minutes: 30),
+            libraryId: 'movies',
+            parts: [PlexMediaPart(path: '/parts/available')],
+            addedAt: DateTime.utc(2026),
+          ),
+        ],
+      ),
+    );
 
     addTearDown(controller.dispose);
     await tester.pumpWidget(
@@ -434,23 +455,26 @@ void main() {
         blockSize: testCase.initialBlockSize,
         builderKey: 'builder:${testCase.name}',
       );
-      final controller = _ReviewStudioController()
-        ..stage = SetupStage.ready
-        ..connection = _studioConnection
-        ..channels = [original]
-        ..availableMedia = [_studioMovie, _studioEpisode]
-        ..availablePlaylists = [
-          PlexPlaylist(
-            id: 'playlist-1',
-            title: 'Playlist 1',
-            items: [_studioMovie],
-          ),
-          PlexPlaylist(
-            id: 'playlist-2',
-            title: 'Playlist 2',
-            items: [_studioEpisode],
-          ),
-        ];
+      final controller = _ReviewStudioController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          connection: _studioConnection,
+          channels: [original],
+          availableMedia: [_studioMovie, _studioEpisode],
+          availablePlaylists: [
+            PlexPlaylist(
+              id: 'playlist-1',
+              title: 'Playlist 1',
+              items: [_studioMovie],
+            ),
+            PlexPlaylist(
+              id: 'playlist-2',
+              title: 'Playlist 2',
+              items: [_studioEpisode],
+            ),
+          ],
+        ),
+      );
       addTearDown(controller.dispose);
 
       await _openChannelEditor(tester, controller, original);
@@ -510,12 +534,19 @@ void main() {
       ),
       const ManualSource([item]),
     ];
-    final controller = FixtureController()
-      ..stage = SetupStage.ready
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..selectedLibraryIds = const {'movies'};
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: const {'movies'},
+      ),
+    );
     addTearDown(controller.dispose);
 
     for (var index = 0; index < cases.length; index++) {
@@ -561,17 +592,21 @@ void main() {
       shuffleSeed: 12,
       builderKey: 'playlist:playlist-1',
     );
-    final controller = _ReviewStudioController(store: _FailNextSaveStore())
-      ..stage = SetupStage.ready
-      ..connection = _studioConnection
-      ..channels = [original]
-      ..availablePlaylists = [
-        PlexPlaylist(
-          id: 'playlist-1',
-          title: 'Playlist 1',
-          items: [_studioMovie],
-        ),
-      ];
+    final controller = _ReviewStudioController(
+      store: _FailNextSaveStore(),
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        connection: _studioConnection,
+        channels: [original],
+        availablePlaylists: [
+          PlexPlaylist(
+            id: 'playlist-1',
+            title: 'Playlist 1',
+            items: [_studioMovie],
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
 
     await _openChannelEditor(tester, controller, original);
@@ -611,7 +646,9 @@ void main() {
   testWidgets('settings dropdowns stay disabled until persistence completes', (
     tester,
   ) async {
-    final controller = _SettingsFixtureController()..stage = SetupStage.ready;
+    final controller = _SettingsFixtureController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
@@ -650,9 +687,12 @@ void main() {
     tester,
   ) async {
     const profile = PlexHomeUser(id: 'child', name: 'Child', protected: true);
-    final controller = _ProfileFixtureController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [profile];
+    final controller = _ProfileFixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [profile],
+      ),
+    );
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Child'));
@@ -673,11 +713,18 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = _InvalidChannelSetupController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
+    final controller = _InvalidChannelSetupController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -709,11 +756,18 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = _PlaylistOnlyChannelSetupController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
+    final controller = _PlaylistOnlyChannelSetupController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -743,11 +797,18 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = _PendingChannelSetupController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
+    final controller = _PendingChannelSetupController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -819,16 +880,19 @@ void main() {
         ..devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final controller = FixtureController()
-        ..stage = SetupStage.channelSetup
-        ..libraries = List.generate(
-          30,
-          (index) => PlexLibrary(
-            id: 'library-$index',
-            title: 'Library $index',
-            type: PlexLibraryType.movie,
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          stage: SetupStage.channelSetup,
+          libraries: List.generate(
+            30,
+            (index) => PlexLibrary(
+              id: 'library-$index',
+              title: 'Library $index',
+              type: PlexLibraryType.movie,
+            ),
           ),
-        );
+        ),
+      );
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
@@ -857,7 +921,9 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(700, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = FixtureController()..stage = SetupStage.ready;
+    final controller = FixtureController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     final outsideFocus = FocusNode(debugLabel: 'Outside Settings');
     addTearDown(controller.dispose);
     addTearDown(outsideFocus.dispose);
@@ -964,6 +1030,8 @@ final _studioEpisode = PlexMediaItem(
 );
 
 class _CountingSetupController extends FixtureController {
+  _CountingSetupController({super.scenario});
+
   var setupEntries = 0;
 
   @override
@@ -974,7 +1042,7 @@ class _CountingSetupController extends FixtureController {
 }
 
 class _ReviewStudioController extends FixtureController {
-  _ReviewStudioController({super.store});
+  _ReviewStudioController({super.scenario, super.store});
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
@@ -999,6 +1067,8 @@ class _FailNextSaveStore extends FixtureStore {
 }
 
 class _SettingsFixtureController extends FixtureController {
+  _SettingsFixtureController({super.scenario});
+
   final _update = Completer<void>();
 
   @override
@@ -1010,12 +1080,16 @@ class _SettingsFixtureController extends FixtureController {
 }
 
 class _ProfileFixtureController extends FixtureController {
+  _ProfileFixtureController({super.scenario});
+
   @override
   Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async =>
       true;
 }
 
 abstract class _SetupScanFixtureController extends FixtureController {
+  _SetupScanFixtureController({super.scenario});
+
   @override
   bool get playlistCatalogUnavailable => false;
   Set<String> _readyIds = const {};
@@ -1046,14 +1120,16 @@ abstract class _SetupScanFixtureController extends FixtureController {
           totalItems: 6,
         ),
     };
-    libraryScanStatus = LibraryScanStatus.complete;
+    fixtureActor.reportScan(status: LibraryScanStatus.complete);
     notifyListeners();
     return true;
   }
 
   @override
   Future<bool> commitLibraryScan(Set<String> readyIds) async {
-    selectedLibraryIds = Set.unmodifiable(readyIds);
+    fixtureActor.publishInventory(
+      selectedLibraryIds: Set.unmodifiable(readyIds),
+    );
     return true;
   }
 
@@ -1061,29 +1137,31 @@ abstract class _SetupScanFixtureController extends FixtureController {
 }
 
 class _MediaChannelSetupController extends _SetupScanFixtureController {
-  _MediaChannelSetupController({this.includeGenre = true});
+  _MediaChannelSetupController({super.scenario, this.includeGenre = true});
 
   final bool includeGenre;
 
   @override
   void installInventory(Set<String> ids) {
-    availableMedia = [
-      for (var index = 0; index < 6; index++)
-        PlexMediaItem(
-          id: 'movie-$index',
-          title: 'Movie $index',
-          type: 'movie',
-          duration: const Duration(minutes: 90),
-          libraryId: 'movies',
-          parts: [PlexMediaPart(path: '/parts/movie-$index')],
-          genres: includeGenre ? const ['Drama'] : const [],
-        ),
-    ];
+    fixtureActor.publishInventory(
+      media: [
+        for (var index = 0; index < 6; index++)
+          PlexMediaItem(
+            id: 'movie-$index',
+            title: 'Movie $index',
+            type: 'movie',
+            duration: const Duration(minutes: 90),
+            libraryId: 'movies',
+            parts: [PlexMediaPart(path: '/parts/movie-$index')],
+            genres: includeGenre ? const ['Drama'] : const [],
+          ),
+      ],
+    );
   }
 }
 
 class _PendingChannelSetupController extends _MediaChannelSetupController {
-  _PendingChannelSetupController() : super(includeGenre: false);
+  _PendingChannelSetupController({super.scenario}) : super(includeGenre: false);
 
   final _apply = Completer<void>();
 
@@ -1095,12 +1173,14 @@ class _PendingChannelSetupController extends _MediaChannelSetupController {
     Set<String> removeChannelIds = const {},
   }) async {
     await _apply.future;
-    channels = composeChannelPlan(
-      existing: channels
-          .where((channel) => !removeChannelIds.contains(channel.id))
-          .toList(),
-      planned: planned,
-      mode: mode,
+    fixtureActor.replaceChannels(
+      composeChannelPlan(
+        existing: channels
+            .where((channel) => !removeChannelIds.contains(channel.id))
+            .toList(),
+        planned: planned,
+        mode: mode,
+      ),
     );
     return ChannelPlanApplyResult.applied;
   }
@@ -1109,23 +1189,29 @@ class _PendingChannelSetupController extends _MediaChannelSetupController {
 }
 
 class _InvalidChannelSetupController extends _SetupScanFixtureController {
+  _InvalidChannelSetupController({super.scenario});
+
   @override
   void installInventory(Set<String> ids) {
-    availableMedia = [
-      for (var index = 0; index < 6; index++)
-        PlexMediaItem(
-          id: 'invalid-$index',
-          title: 'Invalid $index',
-          type: 'movie',
-          duration: const Duration(minutes: 90),
-          libraryId: 'movies',
-          genres: const ['Drama'],
-        ),
-    ];
+    fixtureActor.publishInventory(
+      media: [
+        for (var index = 0; index < 6; index++)
+          PlexMediaItem(
+            id: 'invalid-$index',
+            title: 'Invalid $index',
+            type: 'movie',
+            duration: const Duration(minutes: 90),
+            libraryId: 'movies',
+            genres: const ['Drama'],
+          ),
+      ],
+    );
   }
 }
 
 class _PlaylistOnlyChannelSetupController extends _SetupScanFixtureController {
+  _PlaylistOnlyChannelSetupController({super.scenario});
+
   @override
   void installInventory(Set<String> ids) {
     final items = [
@@ -1138,14 +1224,16 @@ class _PlaylistOnlyChannelSetupController extends _SetupScanFixtureController {
           parts: [PlexMediaPart(path: '/playlist-item-$index')],
         ),
     ];
-    availablePlaylists = [
-      PlexPlaylist(id: 'primary', title: 'Primary', items: items),
-      PlexPlaylist(
-        id: 'shared',
-        title: 'Shared',
-        items: items.take(5).toList(),
-      ),
-    ];
+    fixtureActor.publishInventory(
+      playlists: [
+        PlexPlaylist(id: 'primary', title: 'Primary', items: items),
+        PlexPlaylist(
+          id: 'shared',
+          title: 'Shared',
+          items: items.take(5).toList(),
+        ),
+      ],
+    );
   }
 }
 

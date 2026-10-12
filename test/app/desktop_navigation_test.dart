@@ -39,7 +39,8 @@ void main() {
             ..emit(
               const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
             ),
-        )..controller.stage = SetupStage.ready;
+          scenario: LineupScenario(stage: SetupStage.ready),
+        );
         await tester.pumpWidget(fixture.build());
         await tester.pumpAndSettle();
         if (origin == 'Player') await _routeShortcut(tester, 4);
@@ -58,7 +59,8 @@ void main() {
           ..emit(
             const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
           ),
-      )..controller.stage = SetupStage.ready;
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
 
@@ -94,7 +96,8 @@ void main() {
     final fixture = UiFixture(
       player: FixturePlayer()
         ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
-    )..controller.stage = SetupStage.ready;
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     final search = find.byKey(const Key('guide-channel-search'));
@@ -116,7 +119,9 @@ void main() {
   testWidgets('empty Guide Set up channels enters existing cancellable setup', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     expect(find.text('No channels yet'), findsOneWidget);
@@ -129,7 +134,9 @@ void main() {
   testWidgets('ready-state updates keep the open Lineup menu and focus', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Open Lineup menu'));
@@ -151,7 +158,9 @@ void main() {
       tester.view.physicalSize = window * 1.5;
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(tester.view.resetPhysicalSize);
-      final fixture = UiFixture()..controller.stage = SetupStage.ready;
+      final fixture = UiFixture(
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       final invoker = find.byKey(const Key('guide-app-menu'));
@@ -198,7 +207,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -244,7 +255,9 @@ void main() {
   testWidgets(
     'menu order, same-route dismissal, and outside click are stable',
     (tester) async {
-      final fixture = UiFixture()..controller.stage = SetupStage.ready;
+      final fixture = UiFixture(
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('guide-app-menu')));
@@ -273,7 +286,9 @@ void main() {
   testWidgets('Settings retains category and returns to its origin', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -298,7 +313,8 @@ void main() {
           ..emit(
             const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
           ),
-      )..controller.stage = SetupStage.ready;
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       if (index != 0) await _routeShortcut(tester, index);
@@ -331,7 +347,9 @@ void main() {
   testWidgets(
     'Channels menu and shortcut leave Studio through the dirty guard',
     (tester) async {
-      final fixture = UiFixture()..controller.stage = SetupStage.ready;
+      final fixture = UiFixture(
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
@@ -361,7 +379,9 @@ void main() {
   testWidgets('Diagnostics shortcut Back returns through Support to Channels', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await _routeShortcut(tester, 1);
@@ -383,7 +403,9 @@ void main() {
       ..physicalSize = const Size(640, 480);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     expect(find.text('LINEUP'), findsNothing);
@@ -392,7 +414,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
-    final onboarding = UiFixture()..controller.stage = SetupStage.servers;
+    final onboarding = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.servers),
+    );
     await tester.pumpWidget(onboarding.build());
     await tester.pumpAndSettle();
     expect(find.byType(LineupTopBar), findsOneWidget);
@@ -409,7 +433,9 @@ void main() {
       ..physicalSize = const Size(3440, 1440);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
@@ -432,24 +458,27 @@ void main() {
   testWidgets(
     'Account menu wraps names and uses measured status without a heading',
     (tester) async {
-      final fixture = UiFixture()..controller.stage = SetupStage.ready;
-      fixture.controller
-        ..profile = const PlexHomeUser(
-          id: 'guest',
-          name: 'A long synthetic profile name',
-          protected: false,
-        )
-        ..server = const PlexServer(
-          id: 'server',
-          name: 'A long synthetic server name',
-          connections: [],
-        )
-        ..connection = PlexConnection(
-          uri: Uri.parse('https://synthetic.invalid'),
-          local: true,
-          relay: false,
-          latency: const Duration(milliseconds: 126),
-        );
+      final fixture = UiFixture(
+        scenario: LineupScenario(
+          profile: const PlexHomeUser(
+            id: 'guest',
+            name: 'A long synthetic profile name',
+            protected: false,
+          ),
+          server: const PlexServer(
+            id: 'server',
+            name: 'A long synthetic server name',
+            connections: [],
+          ),
+          connection: PlexConnection(
+            uri: Uri.parse('https://synthetic.invalid'),
+            local: true,
+            relay: false,
+            latency: const Duration(milliseconds: 126),
+          ),
+        ).withDefaults(LineupScenario(stage: SetupStage.ready)),
+      );
+      addTearDown(fixture.controller.dispose);
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('guide-app-menu')));
@@ -469,7 +498,9 @@ void main() {
   testWidgets('Account sign out confirms first and reports owner failure', (
     tester,
   ) async {
-    final controller = _LogoutController()..stage = SetupStage.ready;
+    final controller = _LogoutController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
 
@@ -508,9 +539,13 @@ void main() {
     tester,
   ) async {
     for (final testCase in _firstRunProfileCases) {
-      final controller = _FirstRunLogoutController(failFirst: true)
-        ..stage = SetupStage.servers
-        ..profiles = testCase.profiles;
+      final controller = _FirstRunLogoutController(
+        failFirst: true,
+        scenario: LineupScenario(
+          stage: SetupStage.servers,
+          profiles: testCase.profiles,
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(UiFixture(controller: controller).build());
       await tester.pumpAndSettle();
@@ -554,15 +589,19 @@ void main() {
     tester,
   ) async {
     for (final testCase in _firstRunProfileCases) {
-      final controller = _FirstRunLogoutController(failFirst: true)
-        ..stage = SetupStage.channelSetup
-        ..profiles = testCase.profiles
-        ..server = const PlexServer(
-          id: 'server',
-          name: 'Synthetic server',
-          connections: [],
-        )
-        ..libraries = const [];
+      final controller = _FirstRunLogoutController(
+        failFirst: true,
+        scenario: LineupScenario(
+          stage: SetupStage.channelSetup,
+          profiles: testCase.profiles,
+          server: const PlexServer(
+            id: 'server',
+            name: 'Synthetic server',
+            connections: [],
+          ),
+          libraries: const [],
+        ),
+      );
       addTearDown(controller.dispose);
       await tester.pumpWidget(UiFixture(controller: controller).build());
       await tester.pumpAndSettle();
@@ -611,8 +650,10 @@ void main() {
     tester,
   ) async {
     final player = FixturePlayer();
-    final fixture = UiFixture(player: player)
-      ..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      player: player,
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -625,8 +666,10 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     final readyPlayer = FixturePlayer()
       ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
-    final readyFixture = UiFixture(player: readyPlayer)
-      ..controller.stage = SetupStage.ready;
+    final readyFixture = UiFixture(
+      player: readyPlayer,
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(readyFixture.build());
     await tester.pumpAndSettle();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -639,7 +682,9 @@ void main() {
   testWidgets('Backspace remains editing in an empty text field', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
@@ -657,18 +702,22 @@ void main() {
 }
 
 class _LogoutController extends FixtureController {
+  _LogoutController({super.scenario});
+
   int logoutCalls = 0;
 
   @override
   Future<bool> logout() async {
     logoutCalls++;
-    error = 'Credential cleanup failed.';
+    fixtureActor.present(
+      LineupPresentation(error: ('Credential cleanup failed.',)),
+    );
     return false;
   }
 }
 
 class _FirstRunLogoutController extends FixtureController {
-  _FirstRunLogoutController({this.failFirst = false});
+  _FirstRunLogoutController({super.scenario, this.failFirst = false});
 
   bool failFirst;
   int logoutCalls = 0;
@@ -677,7 +726,9 @@ class _FirstRunLogoutController extends FixtureController {
   Future<bool> logout() async {
     logoutCalls++;
     if (failFirst && logoutCalls == 1) {
-      error = 'Credential cleanup failed.';
+      fixtureActor.present(
+        LineupPresentation(error: ('Credential cleanup failed.',)),
+      );
       notifyListeners();
       return false;
     }

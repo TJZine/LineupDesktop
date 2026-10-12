@@ -175,8 +175,9 @@ class ChannelItem {
     this.cast = const [],
     this.mediaKind = ChannelMediaKind.unknown,
     this.seriesId,
-  });
+  }) : _frozen = false;
 
+  final bool _frozen;
   final String id;
   final String title;
   final Duration duration;
@@ -201,6 +202,33 @@ class ChannelItem {
   final ChannelMediaKind mediaKind;
   final String? seriesId;
 
+  ChannelItem._immutable(ChannelItem original)
+    : _frozen = true,
+      id = original.id,
+      title = original.title,
+      duration = original.duration,
+      showTitle = original.showTitle,
+      showThumb = original.showThumb,
+      poster = original.poster,
+      backdrop = original.backdrop,
+      clearLogo = original.clearLogo,
+      summary = original.summary,
+      contentRating = original.contentRating,
+      genres = List.unmodifiable(original.genres),
+      year = original.year,
+      seasonNumber = original.seasonNumber,
+      episodeNumber = original.episodeNumber,
+      resolution = original.resolution,
+      videoCodec = original.videoCodec,
+      audioCodec = original.audioCodec,
+      audioChannels = original.audioChannels,
+      dynamicRange = original.dynamicRange,
+      cast = List.unmodifiable(original.cast),
+      mediaKind = original.mediaKind,
+      seriesId = original.seriesId;
+
+  ChannelItem immutableCopy() => _frozen ? this : ChannelItem._immutable(this);
+
   Map<String, Object?> toJson() => {
     'id': id,
     'title': title,
@@ -212,7 +240,7 @@ class ChannelItem {
     'clearLogo': ?canonicalPlexArtworkPath(clearLogo)?.toString(),
     if (summary != null) 'summary': summary,
     if (contentRating != null) 'contentRating': contentRating,
-    if (genres.isNotEmpty) 'genres': genres,
+    if (genres.isNotEmpty) 'genres': List<String>.of(genres, growable: false),
     if (year != null) 'year': year,
     if (seasonNumber != null) 'seasonNumber': seasonNumber,
     if (episodeNumber != null) 'episodeNumber': episodeNumber,
@@ -302,10 +330,21 @@ class ChannelItem {
 }
 
 class ScheduleTransition {
+  final bool _frozen;
   const ScheduleTransition({
     required this.boundary,
     required this.legacyCycleItems,
-  });
+  }) : _frozen = false;
+
+  ScheduleTransition._immutable(ScheduleTransition original)
+    : _frozen = true,
+      boundary = original.boundary,
+      legacyCycleItems = List.unmodifiable(
+        original.legacyCycleItems.map((item) => item.immutableCopy()),
+      );
+
+  ScheduleTransition immutableCopy() =>
+      _frozen ? this : ScheduleTransition._immutable(this);
 
   final DateTime boundary;
   final List<ChannelItem> legacyCycleItems;
@@ -470,8 +509,10 @@ class Channel {
     bool includeSpecials = false,
     this.scheduleVersion = currentScheduleVersion,
     this.scheduleTransition,
-  }) : includeSpecials = playbackMode == PlaybackMode.block && includeSpecials;
+  }) : _frozen = false,
+       includeSpecials = playbackMode == PlaybackMode.block && includeSpecials;
 
+  final bool _frozen;
   final String id;
   final int number;
   final String name;
@@ -521,6 +562,23 @@ class Channel {
       throw const FormatException('Invalid schedule transition');
     }
   }
+
+  Channel._immutable(Channel original)
+    : _frozen = true,
+      id = original.id,
+      number = original.number,
+      name = original.name,
+      source = immutableContentSource(original.source),
+      playbackMode = original.playbackMode,
+      anchor = original.anchor,
+      shuffleSeed = original.shuffleSeed,
+      blockSize = original.blockSize,
+      builderKey = original.builderKey,
+      includeSpecials = original.includeSpecials,
+      scheduleVersion = original.scheduleVersion,
+      scheduleTransition = original.scheduleTransition?.immutableCopy();
+
+  Channel immutableCopy() => _frozen ? this : Channel._immutable(this);
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -828,3 +886,25 @@ void _validateSource(ContentSource source, int depth) {
       }
   }
 }
+
+/// Detaches nested aliases when programming enters committed controller state.
+ContentSource immutableContentSource(ContentSource source) => switch (source) {
+  LibrarySource() => LibrarySource(
+    libraryId: source.libraryId,
+    libraryType: source.libraryType,
+    includeWatched: source.includeWatched,
+    filters: Map.unmodifiable({
+      for (final entry in source.filters.entries)
+        entry.key: List<String>.unmodifiable(entry.value),
+    }),
+    order: source.order,
+  ),
+  ManualSource() => ManualSource(
+    List.unmodifiable(source.items.map((item) => item.immutableCopy())),
+  ),
+  MixedSource() => MixedSource(
+    sources: List.unmodifiable(source.sources.map(immutableContentSource)),
+    interleave: source.interleave,
+  ),
+  PlaylistSource() => source,
+};

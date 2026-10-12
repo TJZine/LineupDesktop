@@ -1,3 +1,5 @@
+import '../support/committed_state_matchers.dart';
+
 import 'dart:async';
 
 import 'dart:ui' show CheckedState;
@@ -20,7 +22,9 @@ import '../support/golden_test_support.dart';
 
 void main() {
   testWidgets('empty library recovery exposes quiet Sign out', (tester) async {
-    final controller = _SetupController()..libraries = const [];
+    final controller = _SetupController(
+      scenario: LineupScenario(libraries: const []),
+    );
     addTearDown(controller.dispose);
     var signOutCalls = 0;
     Widget buildSetup() => MaterialApp(
@@ -46,11 +50,11 @@ void main() {
     final signOut = find.widgetWithText(TextButton, 'Sign out');
     expect(signOut, findsOneWidget);
     expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
-    controller.busy = true;
+    controller.fixtureActor.present(LineupPresentation(busy: true));
     controller.notifyListeners();
     await pumpSetup();
     expect(tester.widget<TextButton>(signOut).onPressed, isNull);
-    controller.busy = false;
+    controller.fixtureActor.present(LineupPresentation(busy: false));
     controller.notifyListeners();
     await pumpSetup();
     expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
@@ -365,7 +369,7 @@ void main() {
       await _advanceToReview(tester);
       await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
       await tester.pumpAndSettle();
-      expect(controller.channels, contains(_missingChannel));
+      expect(controller.channels, contains(channelValue(_missingChannel)));
       expect(controller.applyCalls, 1);
     },
   );
@@ -639,7 +643,7 @@ void main() {
                 for (final id in ['movies', 'shows', 'archive'])
                   id: const LibraryScanFact(status: LibraryScanStatus.complete),
               }
-              ..libraryScanStatus = LibraryScanStatus.complete;
+              ..fixtureActor.reportScan(status: LibraryScanStatus.complete);
         addTearDown(c.dispose);
         await _pump(tester, c);
         expect(
@@ -696,7 +700,7 @@ void main() {
               for (final id in ['movies', 'shows', 'archive'])
                 id: const LibraryScanFact(status: LibraryScanStatus.complete),
             }
-            ..libraryScanStatus = LibraryScanStatus.complete;
+            ..fixtureActor.reportScan(status: LibraryScanStatus.complete);
       addTearDown(c.dispose);
       await _pump(tester, c);
       expect(
@@ -1561,6 +1565,7 @@ void main() {
     final original = [_generated('retired', 40, builderKey: 'retired')];
     final controller = _SetupController(channels: original, failApply: true);
     addTearDown(controller.dispose);
+    final committedBefore = controller.channels;
     await _pump(tester, controller);
     await _advanceToReview(tester);
 
@@ -1574,7 +1579,7 @@ void main() {
     expect(find.text('Your existing lineup hasn’t changed.'), findsOneWidget);
     expect(find.text('Your setup choices are still here.'), findsOneWidget);
     expect(find.text('The lineup could not be saved.'), findsOneWidget);
-    expect(controller.channels, same(original));
+    expect(controller.channels, same(committedBefore));
 
     await tester.tap(find.text('Back to review'));
     await tester.pumpAndSettle();
@@ -1771,6 +1776,7 @@ Finder _setupField<T>(String label) => find.descendant(
 
 class _SetupController extends FixtureController {
   _SetupController({
+    LineupScenario? scenario,
     this.mixedScan = false,
     this.blockScan = false,
     this.staleOnce = false,
@@ -1782,12 +1788,17 @@ class _SetupController extends FixtureController {
     List<Channel> channels = const [],
     List<PlexMediaItem>? media,
     List<PlexPlaylist> playlists = const [],
-  }) {
-    libraries = _libraries;
-    this.channels = channels;
+  }) : super(
+         scenario: (scenario ?? const LineupScenario()).withDefaults(
+           LineupScenario(
+             libraries: _libraries,
+             channels: channels,
+             availableMedia: media ?? _media,
+             availablePlaylists: playlists,
+           ),
+         ),
+       ) {
     _fixtureMedia = media ?? _media;
-    availableMedia = _fixtureMedia;
-    availablePlaylists = playlists;
   }
 
   late final List<PlexMediaItem> _fixtureMedia;
@@ -1856,7 +1867,7 @@ class _SetupController extends FixtureController {
       playlistFailures = {};
     }
     if (blockScan) {
-      libraryScanStatus = LibraryScanStatus.scanning;
+      fixtureActor.reportScan(status: LibraryScanStatus.scanning);
       ready = {ids.first};
       facts = {
         for (final id in ids)
@@ -1888,7 +1899,7 @@ class _SetupController extends FixtureController {
           totalItems: 6,
         ),
       };
-      libraryScanStatus = LibraryScanStatus.transientFailure;
+      fixtureActor.reportScan(status: LibraryScanStatus.transientFailure);
     } else {
       ready = Set.unmodifiable(ids);
       retry = const {};
@@ -1901,7 +1912,7 @@ class _SetupController extends FixtureController {
             totalItems: 6,
           ),
       };
-      libraryScanStatus = LibraryScanStatus.complete;
+      fixtureActor.reportScan(status: LibraryScanStatus.complete);
     }
     notifyListeners();
     return true;
@@ -1911,7 +1922,7 @@ class _SetupController extends FixtureController {
   void cancelLibraryScan() {
     // An interrupted initial scan has no staged result to commit.
     ready = const {};
-    libraryScanStatus = LibraryScanStatus.cancelled;
+    fixtureActor.reportScan(status: LibraryScanStatus.cancelled);
     facts = {
       for (final entry in facts.entries)
         entry.key: entry.value.status == LibraryScanStatus.complete
@@ -1925,10 +1936,12 @@ class _SetupController extends FixtureController {
   @override
   Future<bool> commitLibraryScan(Set<String> readyIds) async {
     committedIds = Set.unmodifiable(readyIds);
-    selectedLibraryIds = committedIds;
-    availableMedia = _fixtureMedia
-        .where((item) => readyIds.contains(item.libraryId))
-        .toList();
+    fixtureActor.publishInventory(selectedLibraryIds: committedIds);
+    fixtureActor.publishInventory(
+      media: _fixtureMedia
+          .where((item) => readyIds.contains(item.libraryId))
+          .toList(),
+    );
     return true;
   }
 
@@ -1943,12 +1956,14 @@ class _SetupController extends FixtureController {
     if (applyGate != null) await applyGate!.future;
     if (failApply) throw StateError('synthetic apply failure');
     if (staleOnce && applyCalls == 1) return ChannelPlanApplyResult.stale;
-    channels = composeChannelPlan(
-      existing: channels
-          .where((channel) => !removeChannelIds.contains(channel.id))
-          .toList(),
-      planned: planned,
-      mode: mode,
+    fixtureActor.replaceChannels(
+      composeChannelPlan(
+        existing: channels
+            .where((channel) => !removeChannelIds.contains(channel.id))
+            .toList(),
+        planned: planned,
+        mode: mode,
+      ),
     );
     return ChannelPlanApplyResult.applied;
   }

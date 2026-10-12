@@ -109,11 +109,14 @@ class _VisualFixture {
       anchor: DateTime.utc(2026, 9, 22),
       shuffleSeed: 7,
     );
-    lineup = FixtureController()
-      ..stage = SetupStage.ready
-      ..channels = [channel]
-      ..currentChannelId = channel.id
-      ..settings = const LineupSettings(reduceMotion: true);
+    lineup = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [channel],
+        currentChannelId: channel.id,
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     player = FixturePlayer()
       ..emit(
         const PlayerStatus(state: PlayerState.paused, message: 'Paused'),

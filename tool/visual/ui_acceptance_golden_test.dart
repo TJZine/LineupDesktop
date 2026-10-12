@@ -65,19 +65,17 @@ void main() {
   });
 
   testWidgets('player Now Playing at 1920x1080', (tester) async {
-    final fixture =
-        _readyFixture(
-            useWordmarkArtwork: true,
-            playerState: const PlayerStatus(
-              state: PlayerState.playing,
-              message: 'Playing',
-            ),
-          )
-          ..controller.channels = _richPlayerChannels
-          ..controller.settings = const LineupSettings(
-            guideHours: 4,
-            reduceMotion: true,
-          );
+    final fixture = _readyFixture(
+      useWordmarkArtwork: true,
+      playerState: const PlayerStatus(
+        state: PlayerState.playing,
+        message: 'Playing',
+      ),
+      scenario: LineupScenario(
+        channels: _richPlayerChannels,
+        settings: const LineupSettings(guideHours: 4, reduceMotion: true),
+      ),
+    );
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
     await openDestination(tester, 'Player');
     final context = tester.element(find.byKey(_goldenKey));
@@ -148,6 +146,7 @@ Future<void> _match(
 }
 
 UiFixture _readyFixture({
+  LineupScenario? scenario,
   PlayerStatus? playerState,
   bool useWordmarkArtwork = false,
 }) {
@@ -171,11 +170,15 @@ UiFixture _readyFixture({
             ),
     );
   }
-  final controller = _VisualController()
-    ..stage = SetupStage.ready
-    ..channels = _channels
-    ..currentChannelId = _channels[1].id
-    ..useWordmarkArtwork = useWordmarkArtwork;
+  final controller = _VisualController(
+    scenario: (scenario ?? const LineupScenario()).withDefaults(
+      LineupScenario(
+        stage: SetupStage.ready,
+        channels: _channels,
+        currentChannelId: _channels[1].id,
+      ),
+    ),
+  )..useWordmarkArtwork = useWordmarkArtwork;
   return UiFixture(
     controller: controller,
     player: player,
@@ -184,6 +187,8 @@ UiFixture _readyFixture({
 }
 
 class _VisualController extends FixtureController {
+  _VisualController({super.scenario});
+
   bool useWordmarkArtwork = false;
 
   @override

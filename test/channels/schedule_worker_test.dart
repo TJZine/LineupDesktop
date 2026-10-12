@@ -1,3 +1,5 @@
+import 'package:lineup_desktop/app/lineup_controller.dart';
+
 import 'dart:async';
 import 'dart:isolate';
 
@@ -63,16 +65,19 @@ void main() {
             2 => [...values.skip(1), values.first],
             _ => [...values.skip(2), ...values.take(2)],
           };
-          final lineup = FixtureController()
-            ..channels = [Channel.fromJson(channel.toJson())]
-            ..availableMedia = reorder(media)
-            ..availablePlaylists = [
-              PlexPlaylist(
-                id: 'playlist',
-                title: 'Playlist',
-                items: reorder(occurrences),
-              ),
-            ];
+          final lineup = FixtureController(
+            scenario: LineupScenario(
+              channels: [Channel.fromJson(channel.toJson())],
+              availableMedia: reorder(media),
+              availablePlaylists: [
+                PlexPlaylist(
+                  id: 'playlist',
+                  title: 'Playlist',
+                  items: reorder(occurrences),
+                ),
+              ],
+            ),
+          );
           final guide = GuideController(lineup: lineup, clock: () => now);
           try {
             final schedule = await lineup.loadScheduleFor(

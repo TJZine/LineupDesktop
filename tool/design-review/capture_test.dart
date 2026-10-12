@@ -1,3 +1,4 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
 // Local design-review capture harness. Not part of the project test suite.
 // Run: TZ=America/New_York flutter test --no-pub tool/design-review/capture_test.dart
 // Optional: --name '<scene> @ <config>' to narrow.
@@ -69,34 +70,45 @@ final Map<String, Scene> _scenes = {
   'onboarding': (tester, shot) async {
     await _pump(
       tester,
-      (UiFixture()..controller.stage = SetupStage.welcome).build(),
+      (UiFixture(scenario: LineupScenario(stage: SetupStage.welcome))).build(),
     );
     await shot('welcome');
   },
   'linking': (tester, shot) async {
-    final f = UiFixture()
-      ..controller.stage = SetupStage.linking
-      ..controller.activePin = PlexPin(
-        id: 7,
-        code: 'ABCD',
-        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
-      );
+    final f = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 7,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+        ),
+      ),
+    );
     await _pump(tester, f.build());
     await shot('code');
-    f.controller.activePin = PlexPin(
-      id: 7,
-      code: 'ABCD',
-      expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
+    f.controller.fixtureActor.present(
+      LineupPresentation(
+        pin: (
+          PlexPin(
+            id: 7,
+            code: 'ABCD',
+            expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
+          ),
+        ),
+      ),
     );
     f.controller.notifyListeners();
     await _settle(tester);
     await shot('expired');
   },
   'linking-failure': (tester, shot) async {
-    final f = UiFixture()
-      ..controller.stage = SetupStage.linking
-      ..controller.error =
-          'Lineup could not connect to Plex. Check your connection and request a new code.';
+    final f = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        error: 'Lineup could not connect to Plex. Check your connection and request a new code.',
+      ),
+    );
     await _pump(tester, f.build());
     await shot('failure');
   },
@@ -110,12 +122,17 @@ final Map<String, Scene> _scenes = {
     await shot('focused-name');
   },
   'profile-pin': (tester, shot) async {
-    final f = UiFixture(controller: _RejectedPinController())
-      ..controller.stage = SetupStage.profiles
-      ..controller.profiles = const [
-        PlexHomeUser(id: 'protected', name: 'Taylor', protected: true),
-        PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
-      ];
+    final f = UiFixture(
+      controller: _RejectedPinController(
+        scenario: LineupScenario(
+          stage: SetupStage.profiles,
+          profiles: const [
+            PlexHomeUser(id: 'protected', name: 'Taylor', protected: true),
+            PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+          ],
+        ),
+      ),
+    );
     await _pump(tester, f.build());
     await _tap(tester, find.text('Taylor'));
     await shot('pin');
@@ -136,12 +153,15 @@ final Map<String, Scene> _scenes = {
     await shot('selection');
   },
   'account-pickers': (tester, shot) async {
-    final f = _serverFixture()
-      ..controller.stage = SetupStage.ready
-      ..controller.profiles = const [
-        PlexHomeUser(id: 'protected', name: 'Taylor', protected: true),
-        PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
-      ];
+    final f = _serverFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        profiles: const [
+          PlexHomeUser(id: 'protected', name: 'Taylor', protected: true),
+          PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+        ],
+      ),
+    );
     await _pump(tester, f.build());
     await _tap(tester, find.byTooltip('Open Lineup menu'));
     await _tap(tester, find.byKey(const Key('app-menu-account')));
@@ -196,26 +216,33 @@ final Map<String, Scene> _scenes = {
     await shot('first-time');
   },
   'setup-review-removals': (tester, shot) async {
-    final controller = _VisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..channels = [
-        Channel(
-          id: 'retro-detectives',
-          number: 42,
-          name: 'Retro Detectives',
-          source: const LibrarySource(
-            libraryId: 'movies',
-            libraryType: PlexLibraryType.movie,
+    final controller = _VisualController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
           ),
-          playbackMode: PlaybackMode.shuffle,
-          anchor: DateTime.utc(2026, 1, 15),
-          shuffleSeed: 42,
-          builderKey: 'synthetic:retro-detectives',
-        ),
-      ];
+        ],
+        channels: [
+          Channel(
+            id: 'retro-detectives',
+            number: 42,
+            name: 'Retro Detectives',
+            source: const LibrarySource(
+              libraryId: 'movies',
+              libraryType: PlexLibraryType.movie,
+            ),
+            playbackMode: PlaybackMode.shuffle,
+            anchor: DateTime.utc(2026, 1, 15),
+            shuffleSeed: 42,
+            builderKey: 'synthetic:retro-detectives',
+          ),
+        ],
+      ),
+    );
     await _pump(
       tester,
       _noTicker(
@@ -246,11 +273,18 @@ final Map<String, Scene> _scenes = {
     await shot('replace-roster');
   },
   'setup-apply': (tester, shot) async {
-    final controller = _PendingVisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
+    final controller = _PendingVisualController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
     await _pump(
       tester,
       UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
@@ -269,12 +303,15 @@ final Map<String, Scene> _scenes = {
 
   // ── Guide ──
   'guide': (tester, shot) async {
-    final f = _readyFixture()
-      ..controller.settings = const LineupSettings(reduceMotion: true);
+    final f = _readyFixture(
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, f.build());
     await shot('no-playback');
-    f.controller.settings = f.controller.settings.copyWith(
-      guideShowChannelSources: true,
+    f.controller.fixtureActor.publishSettings(
+      f.controller.settings.copyWith(guideShowChannelSources: true),
     );
     f.controller.notifyListeners();
     await _settle(tester);
@@ -293,14 +330,21 @@ final Map<String, Scene> _scenes = {
         state: PlayerState.ready,
         message: 'Synthetic',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, f.build());
     await shot('pip');
   },
   'guide-rich': (tester, shot) async {
-    final f = _readyFixture(useWordmarkArtwork: true)
-      ..controller.channels = _richPlayerChannels
-      ..controller.settings = const LineupSettings(reduceMotion: true);
+    final f = _readyFixture(
+      useWordmarkArtwork: true,
+      scenario: LineupScenario(
+        channels: _richPlayerChannels,
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, f.build());
     await _precacheNowPlaying(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -311,11 +355,14 @@ final Map<String, Scene> _scenes = {
     await shot('details-reachable');
   },
   'guide-loading': (tester, shot) async {
-    final controller = _PendingScheduleController()
-      ..stage = SetupStage.ready
-      ..channels = _channels
-      ..currentChannelId = _channels[1].id
-      ..settings = const LineupSettings(reduceMotion: true);
+    final controller = _PendingScheduleController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: _channels,
+        currentChannelId: _channels[1].id,
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(
       tester,
       UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
@@ -325,10 +372,10 @@ final Map<String, Scene> _scenes = {
   'guide-error': (tester, shot) async {
     final controller = _FailingScheduleController()
       ..recoverFirstOnRetry = true
-      ..stage = SetupStage.ready
-      ..channels = _channels
-      ..currentChannelId = _channels[1].id
-      ..settings = const LineupSettings(reduceMotion: true);
+      ..fixtureActor.present(LineupPresentation(stage: SetupStage.ready))
+      ..fixtureActor.replaceChannels(_channels)
+      ..fixtureActor.selectChannel(_channels[1].id)
+      ..fixtureActor.publishSettings(const LineupSettings(reduceMotion: true));
     await _pump(
       tester,
       UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
@@ -341,10 +388,13 @@ final Map<String, Scene> _scenes = {
     await shot('partial-retry');
   },
   'guide-empty': (tester, shot) async {
-    final controller = _VisualController()
-      ..stage = SetupStage.ready
-      ..channels = const []
-      ..settings = const LineupSettings(reduceMotion: true);
+    final controller = _VisualController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: const [],
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(
       tester,
       UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
@@ -431,7 +481,10 @@ final Map<String, Scene> _scenes = {
             hearingImpaired: i == 3,
           ),
       ],
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, f.build());
     await _open(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
@@ -452,7 +505,10 @@ final Map<String, Scene> _scenes = {
         state: PlayerState.playing,
         message: 'Playing',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, f.build());
     await _open(tester, 'Player');
     tester
@@ -475,7 +531,10 @@ final Map<String, Scene> _scenes = {
         state: PlayerState.buffering,
         message: 'Buffering',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, f.build());
     await _open(tester, 'Player');
     await _playerMaterialShots(tester, shot, f, 'buffering');
@@ -485,7 +544,10 @@ final Map<String, Scene> _scenes = {
         state: PlayerState.paused,
         message: 'Paused',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, failed.build());
     await _open(tester, 'Player');
     failed.player.emit(
@@ -503,7 +565,10 @@ final Map<String, Scene> _scenes = {
         state: PlayerState.loading,
         message: 'Loading',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     loading.player.emit(
       const PlayerStatus(state: PlayerState.loading, message: 'Loading'),
       position: Duration.zero,
@@ -519,7 +584,10 @@ final Map<String, Scene> _scenes = {
         state: PlayerState.paused,
         message: 'Paused',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, unavailable.build());
     await _open(tester, 'Player');
     unavailable.player.emit(
@@ -553,7 +621,10 @@ final Map<String, Scene> _scenes = {
         state: PlayerState.playing,
         message: 'Playing',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, f.build());
     await _open(tester, 'Player');
     final coordinator = tester
@@ -693,7 +764,10 @@ final Map<String, Scene> _scenes = {
         state: PlayerState.playing,
         message: 'Playing',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, f.build());
     await _open(tester, 'Settings');
     await shot('appearance');
@@ -739,7 +813,10 @@ final Map<String, Scene> _scenes = {
           state: PlayerState.paused,
           message: 'Paused',
         ),
-      )..controller.settings = LineupSettings(theme: theme, reduceMotion: true);
+        scenario: LineupScenario(
+          settings: LineupSettings(theme: theme, reduceMotion: true),
+        ),
+      );
       await _pump(tester, fixture().build());
       await shot('guide-pip');
       await _open(tester, 'Channels');
@@ -942,20 +1019,18 @@ Future<void> _nowPlayingScene(
   Shot shot, {
   required bool clearLogo,
 }) async {
-  final f =
-      _readyFixture(
-          useWordmarkArtwork: true,
-          omitClearLogoArtwork: !clearLogo,
-          playerState: const PlayerStatus(
-            state: PlayerState.playing,
-            message: 'Playing',
-          ),
-        )
-        ..controller.channels = _richPlayerChannels
-        ..controller.settings = const LineupSettings(
-          guideHours: 4,
-          reduceMotion: true,
-        );
+  final f = _readyFixture(
+    useWordmarkArtwork: true,
+    omitClearLogoArtwork: !clearLogo,
+    playerState: const PlayerStatus(
+      state: PlayerState.playing,
+      message: 'Playing',
+    ),
+    scenario: LineupScenario(
+      channels: _richPlayerChannels,
+      settings: const LineupSettings(guideHours: 4, reduceMotion: true),
+    ),
+  );
   await _pump(tester, f.build());
   await _open(tester, 'Player');
   await _precacheNowPlaying(tester);
@@ -1041,14 +1116,16 @@ Future<void> _playerMaterialShots(
     OverlayTransparency.moreTransparent,
     OverlayTransparency.reduced,
   ]) {
-    fixture.controller.settings = original.copyWith(overlayTransparency: level);
+    fixture.controller.fixtureActor.publishSettings(
+      original.copyWith(overlayTransparency: level),
+    );
     fixture.controller.notifyListeners();
     if (originalOverlay == PlayerOverlay.osd) coordinator.showOsd();
     await beforeEach?.call();
     await _settle(tester);
     await shot('$state-${level.storageKey}');
   }
-  fixture.controller.settings = original;
+  fixture.controller.fixtureActor.publishSettings(original);
   fixture.controller.notifyListeners();
   await tester.pump();
 }
@@ -1104,42 +1181,50 @@ Future<void> _precacheNowPlaying(WidgetTester tester) async {
   });
 }
 
-UiFixture _profileSelectionFixture() => UiFixture()
-  ..controller.stage = SetupStage.profiles
-  ..controller.profile = const PlexHomeUser(
-    id: 'adult',
-    name: 'Alex',
-    protected: false,
-    admin: true,
-  )
-  ..controller.profiles = const [
-    PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
-    PlexHomeUser(
-      id: 'child',
-      name: 'Family',
-      protected: true,
-      restricted: true,
-    ),
-    PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
-    PlexHomeUser(
-      id: 'movies',
-      name: 'A deliberately long synthetic profile name',
+UiFixture _profileSelectionFixture() => UiFixture(
+  scenario: LineupScenario(
+    stage: SetupStage.profiles,
+    profile: const PlexHomeUser(
+      id: 'adult',
+      name: 'Alex',
       protected: false,
-      restricted: true,
+      admin: true,
     ),
-    PlexHomeUser(id: 'kids', name: 'Kids', protected: false, restricted: true),
-    PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
-    PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
-    PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
-    PlexHomeUser(
-      id: 'visitor',
-      name: 'Visitor',
-      protected: false,
-      restricted: true,
-    ),
-  ];
+    profiles: const [
+      PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
+      PlexHomeUser(
+        id: 'child',
+        name: 'Family',
+        protected: true,
+        restricted: true,
+      ),
+      PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+      PlexHomeUser(
+        id: 'movies',
+        name: 'A deliberately long synthetic profile name',
+        protected: false,
+        restricted: true,
+      ),
+      PlexHomeUser(
+        id: 'kids',
+        name: 'Kids',
+        protected: false,
+        restricted: true,
+      ),
+      PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
+      PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
+      PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
+      PlexHomeUser(
+        id: 'visitor',
+        name: 'Visitor',
+        protected: false,
+        restricted: true,
+      ),
+    ],
+  ),
+);
 
-UiFixture _serverFixture() {
+UiFixture _serverFixture({LineupScenario? scenario}) {
   final selected = PlexServer(
     id: 'studio',
     name: 'Studio Server',
@@ -1162,92 +1247,118 @@ UiFixture _serverFixture() {
       ),
     ],
   );
-  return UiFixture()
-    ..controller.stage = SetupStage.servers
-    ..controller.server = selected
-    ..controller.connection = PlexConnection(
-      uri: Uri.parse('https://selected.synthetic.invalid'),
-      local: true,
-      relay: false,
-      latency: const Duration(milliseconds: 126),
-    )
-    ..controller.servers = [
-      selected,
-      PlexServer(
-        id: 'shared',
-        name: 'Family Server',
-        connections: [
-          PlexConnection(
-            uri: Uri.parse('https://shared.synthetic.invalid'),
-            local: false,
-            relay: false,
+  return UiFixture(
+    scenario: (scenario ?? const LineupScenario()).withDefaults(
+      LineupScenario(
+        stage: SetupStage.servers,
+        server: selected,
+        connection: PlexConnection(
+          uri: Uri.parse('https://selected.synthetic.invalid'),
+          local: true,
+          relay: false,
+          latency: const Duration(milliseconds: 126),
+        ),
+        servers: [
+          selected,
+          PlexServer(
+            id: 'shared',
+            name: 'Family Server',
+            connections: [
+              PlexConnection(
+                uri: Uri.parse('https://shared.synthetic.invalid'),
+                local: false,
+                relay: false,
+              ),
+            ],
           ),
         ],
       ),
-    ];
+    ),
+  );
 }
 
 UiFixture _setupFixture() {
-  final controller = _VisualController()
-    ..stage = SetupStage.channelSetup
-    ..libraries = const [
-      PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-    ];
+  final controller = _VisualController(
+    scenario: LineupScenario(
+      stage: SetupStage.channelSetup,
+      libraries: const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ],
+    ),
+  );
   return UiFixture(controller: controller, guideClock: () => _fixedNow);
 }
 
 UiFixture _libraryOutcomeFixture() {
-  final controller = _VisualController()
-    ..stage = SetupStage.channelSetup
-    ..libraries = const [
-      PlexLibrary(
-        id: 'movies',
-        title: 'Feature Films',
-        type: PlexLibraryType.movie,
-      ),
-      PlexLibrary(id: 'shows', title: 'Series', type: PlexLibraryType.show),
-      PlexLibrary(id: 'archive', title: 'Archive', type: PlexLibraryType.movie),
-      PlexLibrary(
-        id: 'imports',
-        title: 'Recent Imports',
-        type: PlexLibraryType.movie,
-      ),
-    ]
-    ..selectedLibraryIds = const {'movies', 'shows', 'archive', 'imports'}
-    ..libraryScanStatus = LibraryScanStatus.transientFailure
-    ..libraryScanCompletedPages = 8
-    ..libraryScanCompletedItems = 83
-    ..libraryScanTotalItems = 112
-    ..error = 'Plex could not complete the library scan.'
-    ..scanFacts = const {
-      'movies': LibraryScanFact(
-        status: LibraryScanStatus.complete,
-        completedPages: 4,
-        completedItems: 72,
-        totalItems: 72,
-      ),
-      'shows': LibraryScanFact(
-        status: LibraryScanStatus.unsupported,
-        completedPages: 2,
-        completedItems: 8,
-        totalItems: 8,
-      ),
-      'archive': LibraryScanFact(
-        status: LibraryScanStatus.empty,
-        completedPages: 1,
-        totalItems: 0,
-      ),
-      'imports': LibraryScanFact(
-        status: LibraryScanStatus.transientFailure,
-        completedPages: 1,
-        completedItems: 3,
-        totalItems: 32,
-      ),
-    };
+  final controller =
+      _VisualController(
+          scenario: LineupScenario(
+            stage: SetupStage.channelSetup,
+            libraries: const [
+              PlexLibrary(
+                id: 'movies',
+                title: 'Feature Films',
+                type: PlexLibraryType.movie,
+              ),
+              PlexLibrary(
+                id: 'shows',
+                title: 'Series',
+                type: PlexLibraryType.show,
+              ),
+              PlexLibrary(
+                id: 'archive',
+                title: 'Archive',
+                type: PlexLibraryType.movie,
+              ),
+              PlexLibrary(
+                id: 'imports',
+                title: 'Recent Imports',
+                type: PlexLibraryType.movie,
+              ),
+            ],
+            selectedLibraryIds: const {'movies', 'shows', 'archive', 'imports'},
+            libraryScanStatus: LibraryScanStatus.transientFailure,
+            error: 'Plex could not complete the library scan.',
+            scanFacts: {
+              'movies': LibraryScanFact(
+                status: LibraryScanStatus.transientFailure,
+                completedPages: 8,
+                completedItems: 83,
+                totalItems: 112,
+              ),
+            },
+          ),
+        )
+        ..scanFacts = const {
+          'movies': LibraryScanFact(
+            status: LibraryScanStatus.complete,
+            completedPages: 4,
+            completedItems: 72,
+            totalItems: 72,
+          ),
+          'shows': LibraryScanFact(
+            status: LibraryScanStatus.unsupported,
+            completedPages: 2,
+            completedItems: 8,
+            totalItems: 8,
+          ),
+          'archive': LibraryScanFact(
+            status: LibraryScanStatus.empty,
+            completedPages: 1,
+            totalItems: 0,
+          ),
+          'imports': LibraryScanFact(
+            status: LibraryScanStatus.transientFailure,
+            completedPages: 1,
+            completedItems: 3,
+            totalItems: 32,
+          ),
+        };
   return UiFixture(controller: controller, guideClock: () => _fixedNow);
 }
 
 UiFixture _readyFixture({
+  LineupScenario? scenario,
   PlayerStatus? playerState,
   List<PlayerTrack>? tracks,
   bool useWordmarkArtwork = false,
@@ -1290,12 +1401,18 @@ UiFixture _readyFixture({
           ],
     );
   }
-  final controller = _VisualController()
-    ..useWordmarkArtwork = useWordmarkArtwork
-    ..omitClearLogoArtwork = omitClearLogoArtwork
-    ..stage = SetupStage.ready
-    ..channels = _channels
-    ..currentChannelId = _channels[1].id;
+  final controller =
+      _VisualController(
+          scenario: (scenario ?? const LineupScenario()).withDefaults(
+            LineupScenario(
+              stage: SetupStage.ready,
+              channels: _channels,
+              currentChannelId: _channels[1].id,
+            ),
+          ),
+        )
+        ..useWordmarkArtwork = useWordmarkArtwork
+        ..omitClearLogoArtwork = omitClearLogoArtwork;
   return UiFixture(
     controller: controller,
     player: player,
@@ -1303,7 +1420,7 @@ UiFixture _readyFixture({
   );
 }
 
-UiFixture _channelManagementFixture() {
+UiFixture _channelManagementFixture({LineupScenario? scenario}) {
   const programs = [
     ChannelItem(
       id: 'cartoon-one',
@@ -1339,68 +1456,81 @@ UiFixture _channelManagementFixture() {
     anchor: DateTime.utc(2026, 1, 15, 3),
     shuffleSeed: 42,
   );
-  final controller = _VisualController()
-    ..stage = SetupStage.ready
-    ..libraries = const [
-      PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-    ]
-    ..selectedLibraryIds = {'movies'}
-    ..libraryScanStatus = LibraryScanStatus.complete
-    ..channels = [
-      base,
-      for (var i = 1; i < 4; i++)
-        Channel(
-          id: 'audit-$i',
-          number: 42 + i,
-          name: [
-            'Evening Cinema',
-            'Documentary and Discovery',
-            'Weekend Stories',
-          ][i - 1],
-          source: base.source,
-          playbackMode: base.playbackMode,
-          anchor: base.anchor,
-          shuffleSeed: i,
-        ),
-    ]
-    ..availableMedia = [
-      for (final program in programs)
-        PlexMediaItem(
-          id: program.id,
-          title: program.title,
-          type: 'episode',
-          duration: program.duration,
-          grandparentTitle: program.showTitle,
-          seasonNumber: 1,
-          episodeNumber: programs.indexOf(program) + 1,
-          parts: [PlexMediaPart(path: '/synthetic/${program.id}')],
-        ),
-      for (final genre in [
-        'Adventure',
-        'Animation',
-        'Comedy',
-        'Drama',
-        'Fantasy',
-        'Mystery',
-      ])
-        PlexMediaItem(
-          id: 'audit-$genre',
-          title: '$genre feature',
-          type: 'movie',
-          duration: const Duration(minutes: 90),
-          libraryId: 'movies',
-          year: genre == 'Drama' ? 2010 : 2026,
-          genres: [genre],
-          parts: [PlexMediaPart(path: '/synthetic/audit-$genre')],
-        ),
-    ];
+  final controller = _VisualController(
+    scenario: (scenario ?? const LineupScenario()).withDefaults(
+      LineupScenario(
+        stage: SetupStage.ready,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        libraryScanStatus: LibraryScanStatus.complete,
+        channels: [
+          base,
+          for (var i = 1; i < 4; i++)
+            Channel(
+              id: 'audit-$i',
+              number: 42 + i,
+              name: [
+                'Evening Cinema',
+                'Documentary and Discovery',
+                'Weekend Stories',
+              ][i - 1],
+              source: base.source,
+              playbackMode: base.playbackMode,
+              anchor: base.anchor,
+              shuffleSeed: i,
+            ),
+        ],
+        availableMedia: [
+          for (final program in programs)
+            PlexMediaItem(
+              id: program.id,
+              title: program.title,
+              type: 'episode',
+              duration: program.duration,
+              grandparentTitle: program.showTitle,
+              seasonNumber: 1,
+              episodeNumber: programs.indexOf(program) + 1,
+              parts: [PlexMediaPart(path: '/synthetic/${program.id}')],
+            ),
+          for (final genre in [
+            'Adventure',
+            'Animation',
+            'Comedy',
+            'Drama',
+            'Fantasy',
+            'Mystery',
+          ])
+            PlexMediaItem(
+              id: 'audit-$genre',
+              title: '$genre feature',
+              type: 'movie',
+              duration: const Duration(minutes: 90),
+              libraryId: 'movies',
+              year: genre == 'Drama' ? 2010 : 2026,
+              genres: [genre],
+              parts: [PlexMediaPart(path: '/synthetic/audit-$genre')],
+            ),
+        ],
+      ),
+    ),
+  );
   return UiFixture(controller: controller, guideClock: () => _fixedNow);
 }
 
 class _RejectedPinController extends FixtureController {
+  _RejectedPinController({super.scenario});
+
   @override
   Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
-    error = 'That Plex Home PIN was not accepted.';
+    fixtureActor.present(
+      LineupPresentation(error: ('That Plex Home PIN was not accepted.',)),
+    );
     notifyListeners();
     return false;
   }
@@ -1422,6 +1552,8 @@ class _CaptureDiagnostics extends Diagnostics {
 }
 
 class _VisualController extends FixtureController {
+  _VisualController({super.scenario});
+
   final _captureDiagnostics = _CaptureDiagnostics();
 
   @override
@@ -1509,10 +1641,11 @@ class _VisualController extends FixtureController {
           totalItems: 12,
         ),
     };
-    libraryScanStatus = LibraryScanStatus.complete;
-    libraryScanCompletedPages = 1;
-    libraryScanCompletedItems = 12;
-    libraryScanTotalItems = 12;
+    fixtureActor.reportScan(
+      status: LibraryScanStatus.complete,
+      facts: scanFacts,
+    );
+
     notifyListeners();
     return true;
   }
@@ -1525,8 +1658,10 @@ class _VisualController extends FixtureController {
         !_scannedLibraryIds.containsAll(readyIds)) {
       return false;
     }
-    selectedLibraryIds = Set.unmodifiable(readyIds);
-    availableMedia = List.unmodifiable(scanned);
+    fixtureActor.publishInventory(
+      selectedLibraryIds: Set.unmodifiable(readyIds),
+    );
+    fixtureActor.publishInventory(media: List.unmodifiable(scanned));
     notifyListeners();
     return true;
   }
@@ -1539,6 +1674,8 @@ class _VisualController extends FixtureController {
 }
 
 class _PendingVisualController extends _VisualController {
+  _PendingVisualController({super.scenario});
+
   final _apply = Completer<void>();
 
   @override
@@ -1561,12 +1698,16 @@ class _PendingVisualController extends _VisualController {
 }
 
 class _PendingScheduleController extends _VisualController {
+  _PendingScheduleController({super.scenario});
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) =>
       Completer<ScheduleIndex>().future;
 }
 
 class _FailingScheduleController extends _VisualController {
+  _FailingScheduleController();
+
   bool recoverFirstOnRetry = false;
   final _attempts = <String, int>{};
 

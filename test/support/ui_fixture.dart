@@ -16,9 +16,11 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 class UiFixture {
   UiFixture({
     FixtureController? controller,
+    LineupScenario? scenario,
     FixturePlayer? player,
     this.guideClock,
-  }) : controller = controller ?? FixtureController(),
+  }) : assert(controller == null || scenario == null),
+       controller = controller ?? FixtureController(scenario: scenario),
        player = player ?? FixturePlayer();
 
   final FixtureController controller;
@@ -33,11 +35,17 @@ class UiFixture {
 }
 
 class FixtureController extends LineupController {
-  FixtureController({FixtureStore? store, bool restoreOnInitialize = false})
-    : this._(store ?? FixtureStore(), restoreOnInitialize);
+  FixtureController({
+    FixtureStore? store,
+    bool restoreOnInitialize = false,
+    LineupScenario? scenario,
+  }) : this._(store ?? FixtureStore(), restoreOnInitialize, scenario);
 
-  FixtureController._(FixtureStore store, this.restoreOnInitialize)
-    : fixtureStore = store,
+  FixtureController._(
+    FixtureStore store,
+    this.restoreOnInitialize,
+    LineupScenario? scenario,
+  ) : fixtureStore = store,
       super(
         store: store,
         credentials: _MemoryCredentials(),
@@ -48,10 +56,16 @@ class FixtureController extends LineupController {
           ),
         ),
       ) {
-    connection = PlexConnection(
-      uri: Uri.parse('https://synthetic.invalid'),
-      local: true,
-      relay: false,
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(
+          connection: PlexConnection(
+            uri: Uri.parse('https://synthetic.invalid'),
+            local: true,
+            relay: false,
+          ),
+        ),
+      ),
     );
   }
 

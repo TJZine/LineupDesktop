@@ -15,7 +15,9 @@ void main() {
       ..physicalSize = const Size(1280, 720);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -84,7 +86,9 @@ void main() {
       ..physicalSize = const Size(3840, 2160);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -101,9 +105,9 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.ready
-      ..controller.channels = [_channel()];
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready, channels: [_channel()]),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pump();
     await tester.pump();
@@ -134,9 +138,9 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.ready
-      ..controller.channels = [_channel()];
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready, channels: [_channel()]),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pump();
     await tester.pump();
@@ -147,7 +151,7 @@ void main() {
     await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
     fixture.controller
-      ..channels = const []
+      ..fixtureActor.replaceChannels(const [])
       ..notifyListeners();
     await tester.pump();
     await tester.pump();

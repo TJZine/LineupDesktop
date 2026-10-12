@@ -1,3 +1,4 @@
+import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,12 +54,15 @@ void main() {
   testWidgets(
     'copy failure retains context and retry produces an allowlisted snapshot',
     (tester) async {
-      final controller = FixtureController()
-        ..server = const PlexServer(
-          id: 'synthetic',
-          name: 'Private Server Sentinel',
-          connections: [],
-        );
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          server: const PlexServer(
+            id: 'synthetic',
+            name: 'Private Server Sentinel',
+            connections: [],
+          ),
+        ),
+      );
       addTearDown(controller.dispose);
       controller.diagnostics.enabled = true;
       controller.diagnostics.add('plex-auth', 'PIN cancellation failed', {

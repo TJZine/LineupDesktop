@@ -189,11 +189,14 @@ void main() {
   testWidgets('single-profile server picker exposes quiet Sign out', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..stage = SetupStage.servers
-      ..profiles = const [
-        PlexHomeUser(id: 'one', name: 'One', protected: false),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        profiles: const [
+          PlexHomeUser(id: 'one', name: 'One', protected: false),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -212,11 +215,11 @@ void main() {
     final signOut = find.widgetWithText(TextButton, 'Sign out');
     expect(signOut, findsOneWidget);
     expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
-    controller.busy = true;
+    controller.fixtureActor.present(LineupPresentation(busy: true));
     controller.notifyListeners();
     await tester.pump();
     expect(tester.widget<TextButton>(signOut).onPressed, isNull);
-    controller.busy = false;
+    controller.fixtureActor.present(LineupPresentation(busy: false));
     controller.notifyListeners();
     await tester.pump();
     expect(tester.widget<TextButton>(signOut).onPressed, isNotNull);
@@ -237,23 +240,26 @@ void main() {
           SetupStage.profiles,
           SetupStage.servers,
         ]) {
-          final controller = FixtureController()
-            ..settings = const LineupSettings(reduceMotion: true)
-            ..stage = stage
-            ..profiles = const [
-              PlexHomeUser(
-                id: 'guest',
-                name: 'Synthetic guest profile',
-                protected: false,
-              ),
-            ]
-            ..servers = const [
-              PlexServer(
-                id: 'server',
-                name: 'Synthetic local server',
-                connections: [],
-              ),
-            ];
+          final controller = FixtureController(
+            scenario: LineupScenario(
+              settings: const LineupSettings(reduceMotion: true),
+              stage: stage,
+              profiles: const [
+                PlexHomeUser(
+                  id: 'guest',
+                  name: 'Synthetic guest profile',
+                  protected: false,
+                ),
+              ],
+              servers: const [
+                PlexServer(
+                  id: 'server',
+                  name: 'Synthetic local server',
+                  connections: [],
+                ),
+              ],
+            ),
+          );
           await tester.pumpWidget(
             MaterialApp(
               builder: LineupCanvas.builder,
@@ -291,7 +297,9 @@ void main() {
       SetupStage.servers,
       SetupStage.welcome,
     ]) {
-      final controller = FixtureController()..stage = stage;
+      final controller = FixtureController(
+        scenario: LineupScenario(stage: stage),
+      );
       await tester.pumpWidget(
         MaterialApp(
           builder: LineupCanvas.builder,
@@ -359,11 +367,14 @@ void main() {
       name: 'Other viewer',
       protected: false,
     );
-    final controller = FixtureController()
-      ..stage = SetupStage.profiles
-      ..profile = active
-      ..profiles = const [active, other]
-      ..profileSelectionCanCancel = true;
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: const [active, other],
+        profileSelectionOrigin: SetupStage.ready,
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller);
     for (final (name, selected) in [
@@ -388,11 +399,14 @@ void main() {
   testWidgets('profile card clamp accepts a sub-pixel width constraint', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [
-        PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -433,13 +447,16 @@ void main() {
   testWidgets('explicit browser failure retains complete code and QR', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..stage = SetupStage.linking
-      ..activePin = PlexPin(
-        id: 7,
-        code: 'ABCDEF',
-        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
-      );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 7,
+          code: 'ABCDEF',
+          expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
     var calls = 0;
     await show(
@@ -465,20 +482,29 @@ void main() {
     tester,
   ) async {
     final pending = Completer<void>();
-    final controller = FixtureController()
-      ..stage = SetupStage.linking
-      ..activePin = PlexPin(
-        id: 1,
-        code: 'FIRST',
-        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
-      );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'FIRST',
+          expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller, browser: () => pending.future);
     await tester.tap(find.text('Open browser'));
-    controller.activePin = PlexPin(
-      id: 2,
-      code: 'SECOND',
-      expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+    controller.fixtureActor.present(
+      LineupPresentation(
+        pin: (
+          PlexPin(
+            id: 2,
+            code: 'SECOND',
+            expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+          ),
+        ),
+      ),
     );
     pending.completeError(StateError('Obsolete launcher failure'));
     await tester.pump();
@@ -491,13 +517,16 @@ void main() {
     (tester) async {
       final first = Completer<void>();
       final second = Completer<void>();
-      final controller = FixtureController()
-        ..stage = SetupStage.linking
-        ..activePin = PlexPin(
-          id: 1,
-          code: 'FIRST',
-          expiresAt: DateTime.now().add(const Duration(minutes: 4)),
-        );
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          stage: SetupStage.linking,
+          activePin: PlexPin(
+            id: 1,
+            code: 'FIRST',
+            expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+          ),
+        ),
+      );
       addTearDown(controller.dispose);
       var calls = 0;
       await show(
@@ -506,10 +535,16 @@ void main() {
         browser: () => ++calls == 1 ? first.future : second.future,
       );
       await tester.tap(find.text('Open browser'));
-      controller.activePin = PlexPin(
-        id: 2,
-        code: 'SECOND',
-        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+      controller.fixtureActor.present(
+        LineupPresentation(
+          pin: (
+            PlexPin(
+              id: 2,
+              code: 'SECOND',
+              expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+            ),
+          ),
+        ),
       );
       controller.notifyListeners();
       await tester.pump();
@@ -537,13 +572,16 @@ void main() {
   testWidgets('expired code cannot launch and is replaced only explicitly', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..stage = SetupStage.linking
-      ..activePin = PlexPin(
-        id: 1,
-        code: 'EXPIRED',
-        expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
-      );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'EXPIRED',
+          expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller);
     expect(find.text('Open browser'), findsNothing);
@@ -559,13 +597,16 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = FixtureController()
-      ..stage = SetupStage.linking
-      ..activePin = PlexPin(
-        id: 1,
-        code: 'ACTIVE',
-        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
-      );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'ACTIVE',
+          expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller, textScale: 1.75);
 
@@ -578,12 +619,18 @@ void main() {
     ];
 
     controller
-      ..activePin = PlexPin(
-        id: 2,
-        code: 'EXPIRED',
-        expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
+      ..fixtureActor.present(
+        LineupPresentation(
+          pin: (
+            PlexPin(
+              id: 2,
+              code: 'EXPIRED',
+              expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
+            ),
+          ),
+        ),
       )
-      ..error = null;
+      ..fixtureActor.present(LineupPresentation(error: (null,)));
     controller.notifyListeners();
     await tester.pump();
     final expiredState = [
@@ -594,12 +641,20 @@ void main() {
     ];
 
     controller
-      ..activePin = PlexPin(
-        id: 3,
-        code: 'FAILED',
-        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+      ..fixtureActor.present(
+        LineupPresentation(
+          pin: (
+            PlexPin(
+              id: 3,
+              code: 'FAILED',
+              expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+            ),
+          ),
+        ),
       )
-      ..error = 'Synthetic safe Plex failure.';
+      ..fixtureActor.present(
+        LineupPresentation(error: ('Synthetic safe Plex failure.',)),
+      );
     controller.notifyListeners();
     await tester.pump();
     final failureState = [
@@ -638,11 +693,14 @@ void main() {
   testWidgets('PIN fourth digit submits; empty Backspace retains dialog', (
     tester,
   ) async {
-    final controller = _PinController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [
-        PlexHomeUser(id: 'profile', name: 'Test Profile', protected: true),
-      ];
+    final controller = _PinController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'profile', name: 'Test Profile', protected: true),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller);
     await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
@@ -672,9 +730,12 @@ void main() {
       name: 'Test server',
       connections: [],
     );
-    final controller = _ServerController()
-      ..stage = SetupStage.servers
-      ..servers = const [server];
+    final controller = _ServerController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        servers: const [server],
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller);
 
@@ -720,14 +781,16 @@ void main() {
       name: 'Test server',
       connections: [],
     );
-    final controller = _ServerController()
-      ..stage = SetupStage.servers
-      ..servers = const [server]
-      ..profiles = const [
-        PlexHomeUser(id: 'one', name: 'One', protected: false),
-        PlexHomeUser(id: 'two', name: 'Two', protected: false),
-      ]
-      ..failSelection = true;
+    final controller = _ServerController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        servers: const [server],
+        profiles: const [
+          PlexHomeUser(id: 'one', name: 'One', protected: false),
+          PlexHomeUser(id: 'two', name: 'Two', protected: false),
+        ],
+      ),
+    )..failSelection = true;
     addTearDown(controller.dispose);
     await show(tester, controller);
 
@@ -769,16 +832,19 @@ void main() {
         ),
       ],
     );
-    final controller = _ServerController()
-      ..stage = SetupStage.servers
-      ..servers = [current, other]
-      ..server = current
-      ..connection = PlexConnection(
-        uri: Uri.parse('https://current.invalid'),
-        local: true,
-        relay: false,
-      )
-      ..serverSelectionCanCancel = true;
+    final controller = _ServerController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        servers: [current, other],
+        server: current,
+        connection: PlexConnection(
+          uri: Uri.parse('https://current.invalid'),
+          local: true,
+          relay: false,
+        ),
+        serverSelectionOrigin: SetupStage.ready,
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller, accountOrigin: true);
 
@@ -817,16 +883,19 @@ void main() {
       name: 'Current server',
       connections: const [],
     );
-    final controller = _ServerController()
-      ..stage = SetupStage.servers
-      ..servers = [current]
-      ..server = current
-      ..connection = PlexConnection(
-        uri: Uri.parse('https://current.invalid'),
-        local: true,
-        relay: false,
-        latency: const Duration(milliseconds: 126),
-      );
+    final controller = _ServerController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        servers: [current],
+        server: current,
+        connection: PlexConnection(
+          uri: Uri.parse('https://current.invalid'),
+          local: true,
+          relay: false,
+          latency: const Duration(milliseconds: 126),
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller);
 
@@ -880,18 +949,21 @@ void main() {
           name: 'Profile',
           protected: false,
         );
-        final controller = _ServerController()
-          ..stage = origin.stage
-          ..server = server
-          ..connection = PlexConnection(
-            uri: Uri.parse('https://server.invalid'),
-            local: true,
-            relay: false,
-          )
-          ..servers = const [server]
-          ..profiles = const [profile]
-          ..restoringSavedLineup = origin.restoring
-          ..channelSetupCanCancel = origin.canCancelSetup;
+        final controller = _ServerController(
+          scenario: LineupScenario(
+            stage: origin.stage,
+            server: server,
+            connection: PlexConnection(
+              uri: Uri.parse('https://server.invalid'),
+              local: true,
+              relay: false,
+            ),
+            servers: const [server],
+            profiles: const [profile],
+            restoringSavedLineup: origin.restoring,
+            channelSetupCanCancel: origin.canCancelSetup,
+          ),
+        );
         addTearDown(controller.dispose);
 
         controller.showServers();
@@ -919,10 +991,14 @@ void main() {
         // Re-enter the same nested picker to cover profile Escape and the
         // subsequent server Back path independently.
         controller
-          ..stage = origin.stage
-          ..server = server
-          ..restoringSavedLineup = origin.restoring
-          ..channelSetupCanCancel = origin.canCancelSetup;
+          ..fixtureActor.serverSelected(server)
+          ..fixtureActor.present(LineupPresentation(stage: origin.stage))
+          ..fixtureActor.present(
+            LineupPresentation(restoring: origin.restoring),
+          )
+          ..fixtureActor.present(
+            LineupPresentation(canCancelSetup: origin.canCancelSetup),
+          );
         controller.showServers();
         controller.showProfiles();
         await tester.pumpAndSettle();
@@ -955,16 +1031,19 @@ void main() {
         name: 'Protected profile',
         protected: true,
       );
-      final controller = _ServerController()
-        ..stage = SetupStage.ready
-        ..server = server
-        ..connection = PlexConnection(
-          uri: Uri.parse('https://server.invalid'),
-          local: true,
-          relay: false,
-        )
-        ..servers = const [server]
-        ..profiles = const [profile];
+      final controller = _ServerController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          server: server,
+          connection: PlexConnection(
+            uri: Uri.parse('https://server.invalid'),
+            local: true,
+            relay: false,
+          ),
+          servers: const [server],
+          profiles: const [profile],
+        ),
+      );
       addTearDown(controller.dispose);
 
       controller.showServers();
@@ -1001,23 +1080,26 @@ void main() {
   testWidgets(
     'nested origin remains cancellable when its server is unavailable',
     (tester) async {
-      final controller = _ServerController()
-        ..stage = SetupStage.ready
-        ..server = const PlexServer(
-          id: 'server',
-          name: 'Server',
-          connections: [],
-        )
-        ..servers = const [
-          PlexServer(id: 'server', name: 'Server', connections: []),
-        ]
-        ..profiles = const [
-          PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
-        ];
+      final controller = _ServerController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          server: const PlexServer(
+            id: 'server',
+            name: 'Server',
+            connections: [],
+          ),
+          servers: const [
+            PlexServer(id: 'server', name: 'Server', connections: []),
+          ],
+          profiles: const [
+            PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
+          ],
+        ),
+      );
       addTearDown(controller.dispose);
 
       controller.showServers();
-      controller.server = null;
+      controller.fixtureActor.serverSelected(null);
       controller.showProfiles();
       await show(tester, controller, accountOrigin: true);
       await tester.pumpAndSettle();
@@ -1035,11 +1117,14 @@ void main() {
   testWidgets('initial profile selection remains uncancellable', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [
-        PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
-      ];
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller);
     await tester.pumpAndSettle();
@@ -1056,14 +1141,17 @@ void main() {
   testWidgets(
     'initial server picker Switch profile returns to Servers but Servers stays uncancellable',
     (tester) async {
-      final controller = FixtureController()
-        ..stage = SetupStage.servers
-        ..server = null
-        ..serverSelectionCanCancel = false
-        ..profiles = const [
-          PlexHomeUser(id: 'one', name: 'One', protected: false),
-          PlexHomeUser(id: 'two', name: 'Two', protected: false),
-        ];
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          stage: SetupStage.servers,
+          server: null,
+          serverSelectionOrigin: null,
+          profiles: const [
+            PlexHomeUser(id: 'one', name: 'One', protected: false),
+            PlexHomeUser(id: 'two', name: 'Two', protected: false),
+          ],
+        ),
+      );
       addTearDown(controller.dispose);
       await show(tester, controller);
       await tester.pumpAndSettle();
@@ -1108,11 +1196,13 @@ void main() {
         name: 'Other server',
         connections: const [],
       );
-      final controller = _ServerController()
-        ..stage = SetupStage.servers
-        ..servers = [current, other]
-        ..server = current
-        ..promoteSelection = true;
+      final controller = _ServerController(
+        scenario: LineupScenario(
+          stage: SetupStage.servers,
+          servers: [current, other],
+          server: current,
+        ),
+      )..promoteSelection = true;
       addTearDown(controller.dispose);
       await show(tester, controller);
 
@@ -1164,17 +1254,17 @@ void main() {
         name: 'Current server',
         connections: const [],
       );
-      controller.server = current;
+      controller.fixtureActor.serverSelected(current);
       expect(controller.continueCurrentServer(), isFalse);
 
       controller
-        ..stage = SetupStage.servers
-        ..busy = true;
+        ..fixtureActor.present(LineupPresentation(stage: SetupStage.servers))
+        ..fixtureActor.present(LineupPresentation(busy: true));
       expect(controller.continueCurrentServer(), isFalse);
 
       controller
-        ..busy = false
-        ..server = null;
+        ..fixtureActor.serverSelected(null)
+        ..fixtureActor.present(LineupPresentation(busy: false));
       expect(controller.continueCurrentServer(), isFalse);
     },
   );
@@ -1182,13 +1272,20 @@ void main() {
   testWidgets('account-origin PIN back returns directly to Account', (
     tester,
   ) async {
-    final controller = _PinController()
-      ..stage = SetupStage.profiles
-      ..server = const PlexServer(id: 'server', name: 'Server', connections: [])
-      ..profileSelectionCanCancel = true
-      ..profiles = const [
-        PlexHomeUser(id: 'profile', name: 'Protected profile', protected: true),
-      ];
+    final controller = _PinController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        server: const PlexServer(id: 'server', name: 'Server', connections: []),
+        profileSelectionOrigin: SetupStage.ready,
+        profiles: const [
+          PlexHomeUser(
+            id: 'profile',
+            name: 'Protected profile',
+            protected: true,
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await show(tester, controller, accountOrigin: true);
     await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
@@ -1203,16 +1300,22 @@ void main() {
 }
 
 class _PinController extends FixtureController {
+  _PinController({super.scenario});
+
   final submitted = <String>[];
   @override
   Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
     submitted.add(pin ?? '');
-    error = 'Incorrect PIN. Try again.';
+    fixtureActor.present(
+      LineupPresentation(error: ('Incorrect PIN. Try again.',)),
+    );
     return false;
   }
 }
 
 class _ServerController extends FixtureController {
+  _ServerController({super.scenario});
+
   Completer<void>? pendingSelection;
   bool failSelection = false;
   bool promoteSelection = false;
@@ -1222,7 +1325,7 @@ class _ServerController extends FixtureController {
   Future<void> selectServer(PlexServer server) async {
     selectCalls++;
     if (promoteSelection) {
-      this.server = server;
+      fixtureActor.serverSelected(server);
       notifyListeners();
     }
     final pending = pendingSelection;
@@ -1231,14 +1334,18 @@ class _ServerController extends FixtureController {
       pendingSelection = null;
     }
     if (failSelection) {
-      error = 'Server selection failed.';
+      fixtureActor.present(
+        LineupPresentation(error: ('Server selection failed.',)),
+      );
       notifyListeners();
     }
   }
 
   @override
   Future<void> refreshServers() async {
-    error = 'Fresh discovery failed.';
+    fixtureActor.present(
+      LineupPresentation(error: ('Fresh discovery failed.',)),
+    );
     notifyListeners();
   }
 }

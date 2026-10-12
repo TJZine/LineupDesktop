@@ -1,3 +1,5 @@
+import 'package:lineup_desktop/app/lineup_controller.dart';
+
 import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
@@ -117,34 +119,37 @@ void main() {
   testWidgets('Settings categories and theme control remain accessible', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..account = const PlexAccount(
-        id: 'account',
-        name: _longAccountName,
-        email: 'synthetic@example.invalid',
-      )
-      ..profile = const PlexHomeUser(
-        id: 'profile',
-        name: _longProfileName,
-        protected: false,
-      )
-      ..server = PlexServer(
-        id: 'server',
-        name: _longServerName,
-        owned: true,
-        connections: [
-          PlexConnection(
-            uri: Uri.parse('https://synthetic.invalid:32400'),
-            local: false,
-            relay: false,
-          ),
-        ],
-      )
-      ..connection = PlexConnection(
-        uri: Uri.parse('https://synthetic.invalid:32400'),
-        local: false,
-        relay: false,
-      );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        account: const PlexAccount(
+          id: 'account',
+          name: _longAccountName,
+          email: 'synthetic@example.invalid',
+        ),
+        profile: const PlexHomeUser(
+          id: 'profile',
+          name: _longProfileName,
+          protected: false,
+        ),
+        server: PlexServer(
+          id: 'server',
+          name: _longServerName,
+          owned: true,
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://synthetic.invalid:32400'),
+              local: false,
+              relay: false,
+            ),
+          ],
+        ),
+        connection: PlexConnection(
+          uri: Uri.parse('https://synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
 
     await _showSettings(tester, controller);
@@ -226,22 +231,25 @@ void main() {
   testWidgets('settings controls share one right edge across categories', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..account = const PlexAccount(
-        id: 'account',
-        name: _longAccountName,
-        email: 'synthetic@example.invalid',
-      )
-      ..profile = const PlexHomeUser(
-        id: 'profile',
-        name: _longProfileName,
-        protected: false,
-      )
-      ..server = const PlexServer(
-        id: 'server',
-        name: _longServerName,
-        connections: [],
-      );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        account: const PlexAccount(
+          id: 'account',
+          name: _longAccountName,
+          email: 'synthetic@example.invalid',
+        ),
+        profile: const PlexHomeUser(
+          id: 'profile',
+          name: _longProfileName,
+          protected: false,
+        ),
+        server: const PlexServer(
+          id: 'server',
+          name: _longServerName,
+          connections: [],
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
 
     await _showSettings(tester, controller);
