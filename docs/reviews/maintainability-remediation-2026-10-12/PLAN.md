@@ -1,6 +1,6 @@
 # Maintainability remediation plan
 
-Date: October 12, 2026. Status: implementation authorized; package acceptance is recorded in EXECUTION.md.
+Date: October 12, 2026. Status: all nine source packages implemented, independently reviewed and committed; available-host integration accepted. Windows acceptance and inherited visual-baseline drift are recorded in EXECUTION.md.
 
 ## Scope and authority
 
@@ -107,6 +107,8 @@ Replace manual parallel field lists with a coherent snapshot/transition API; der
 
 Verify controller scan/restore/source-gone/cancellation/partial-ready/persistence cases, setup/onboarding callers, and cancellation transport controls. Explicitly test late completion across scope changes, failed refresh retaining readiness but not absence proof, retry selection, save failure and commit ordering. Run broad controller/widget evidence on a stable package. Rollback complete owner/callers atomically; no data or credential migration.
 
+Independent plan review clarification: preserve content-lifetime identity on staged readiness, including A-to-B-to-A rejection; setup re-entry may commit completed readiness without IO. Required enrichment retries remain possible when item facts are complete. Preserve cancelled enrichment failure guards, precise ready-subset save/rollback, and picker prohibition during a started subset commit. Include initialize/profile/server/clear/logout reset callers in the promised field/transition map; picker origin and restoring state stay outside a scan-only owner.
+
 ## M06 — Valid fixtures and committed-state API
 
 Own production controller committed/session-state API and all necessary existing fixture/test consumers, plus test support. Start after M04/M05/M08 and any overlapping writer stop; no concurrent affected source/test mutations.
@@ -117,6 +119,10 @@ The worker must map every direct assignment and distinguish initial scenario set
 
 Verify affected widget/controller/Guide/playback suites and the full portable suite on final stable inputs. Add only necessary seed-contract controls comparing generation/revision/origin/scope to the real operation path. Review checks that getters are not backed by mutable externally exposed collections and that repeated seeding cannot silently bypass active lifetime/cancellation. Rollback production API and all migrated callers together. This is the highest Dart integration-risk package; source-only review is insufficient.
 
+Independent plan review clarification: prefer one-shot fixture installation on a fresh inactive controller; later external edits are transitions, not re-seeds resetting live counters or credentials. Initial restore can legitimately have revision zero. Freeze/detach nested input/output aliases at the actual install/publication boundary, retaining stable getter identities: source filter lists/manual or mixed sources, legacy transition items, playlist items, media parts/facets. Necessary narrow immutability helpers in channel.dart/plex_models.dart and their tests are within M06 ownership; preserve supported constructors/data shapes and avoid per-getter cloning or a generic model framework. Compare to the corresponding real operation, not invented universal counter rules.
+
+Implementation review refinement: recursively capture reviewed plan and expected-base/lineup values before enqueue, not only direct save proposals. Close seed eligibility synchronously for first logout and schedule work. Synthetic scope events must cancel/invalidate real request lifetimes coherently or reject them while work/started setup commits are active; content/auth retirement alone cannot prevent late scan publication. Capture factories must actually honor scenario overrides. Performance instrumentation must observe the published immutable value, with a reversible serialization regression proving the existing health test still fails for its intended cause. Input detachment changes which object an identity test captures; retain exact published-snapshot rollback/retry proof and actual controlled IO/credential/save boundaries.
+
 ## M07 — Release policy observes contracts
 
 Own Windows run/build-release/build-inputs/verify-release-policy helpers, focused policy fixtures and DEVELOPMENT release recipe if needed. M01 must finish first. No package format, trust-anchor, runtime/engine revision, license, signing, or external CI settings changes.
@@ -124,6 +130,8 @@ Own Windows run/build-release/build-inputs/verify-release-policy helpers, focuse
 Expose/reuse small side-effect-free release/launch input contracts for argument generation, version/build identity and path resolution. Have policy checks execute those contracts with known-good and deliberate bad inputs, preserving safe array invocation and failure propagation. Retire incidental variable-name/quote/call-shape requirements only where their meaningful obligation is covered. Preserve exact revision/hash trust anchors, parser validation, no shell interpolation, independent runtime integrity pins, tracked symlink/reparse/dirty-source/stale-marker/artifact/license tamper rejection and stock-engine vs patched-engine distinction.
 
 An equivalent local variable/helper rename should not require policy changes, but a real unsafe argument/identity/path must still fail. No tests that merely assert changed source spelling. Reuse current PowerShell checks and rejection fixtures. Obtain a usable PowerShell 7.4+ runtime locally if safely available without system-wide changes; if absent, finish implementation/source review and record exact unexecuted checks rather than substitute a textual simulator. Windows package/launch tests remain separate. Rollback helper and policy callers together; no package publication.
+
+Implementation review refinement: an initial AST-based replacement passed wrong pubspec/variable source-root association and missing launcher-exit forwarding while rejecting equivalent named path syntax. The repair must use a smaller actual production provenance/invocation seam and executable controls; do not turn this task into a general data-flow interpreter. Source identity and pubspec association are one obligation; canonical launcher failure forwarding is distinct from a checked helper used only by Ninja/precache. Preserve both before retiring their prior gates.
 
 ## M08 — Navigation shortcut recognition
 
@@ -144,6 +152,12 @@ Tests must drive actual production correlation/queue/lifecycle code, not a paral
 Required proof obligations: replacement loads with stale START/END/property/error events; pending-load FIFO and playlist/redirect IDs; stop command acceptance vs observed idle completion and retry; track result correlation across retirement; stale-generation drain; event pressure with critical acknowledgments; normal asynchronous dispose/recreate and window-close completion before messenger/window retirement. Include positive and negative sequences. Preserve encoder and authenticated-reference controls.
 
 Compile/run any portable actual-owner tests on this host; native Windows sources still require exact-toolchain build and CTest. Record executable target and commands for Windows, exact source/runtime identities, and affected physical tune/track/window/close scenarios. Mac-host portability tests do not establish Windows media or normal platform shutdown. Do not mark that gate passed without observation. Rollback production owner and tests/wiring atomically; no binary distribution.
+
+Independent plan review clarification: event-pressure proof must cover property and all-non-property queues, documenting the existing critical-event/eviction behavior. A Windows lifecycle test issues real async dispose, pumps the actual production platform message, observes teardown/join/FinishDispose before result success, then reinitializes and exercises close readiness. Portable Boolean lifecycle models and copied runner ordering do not prove FlutterWindow messenger/window lifetime. Preserve actual runner integration/physical acceptance as an explicit separate gate.
+
+Runner-test integration decision: the controller adds one retained test-only Dart entry point in lib/main.dart that renders an empty widget. The C++ test selects it through the pinned DartProject entry-point API while using the real assembled assets/FlutterWindow/messenger. Default product main is unchanged; tests avoid initializing user state/credentials. This small seam avoids a parallel asset-build framework and does not substitute blank-widget runner evidence for physical media/UI acceptance. Include this file in M09 review/commit and final Dart analysis.
+
+Implementation review refinement: the raw event harness also needs parser/queue/RunCommand load acceptance before projecting those events. Directly seeding the extracted correlation owner is useful component proof but cannot detect a broken producer handoff. Distinct load/playlist IDs, successful query and query-failure FIFO outcomes, replacement and load-command failure must enter that actual production path through a bounded test-only DLL-result seam where needed.
 
 ## Verification and review gates
 
