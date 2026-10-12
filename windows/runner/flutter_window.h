@@ -24,6 +24,8 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  friend struct RunnerLifecycleTestAccess;
+
   // The project to run.
   flutter::DartProject project_;
 

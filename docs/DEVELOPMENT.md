@@ -93,6 +93,48 @@ cmake --build .\build\windows\x64 --config Release --target track_list_encoder_t
 ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
 ```
 
+Three additional opt-in targets cover native correlation and shutdown:
+
+- `native_playback_state_test` exercises the actual worker-owned correlation
+  state, including replacement, redirects, retirement, and observed idle.
+- `native_player_contract_test` drives the production parser, command queue,
+  load-to-state handoff, event projection, and real libmpv worker through a
+  bounded HWND/message pump. Test-local DLL responses make selected load
+  command/query outcomes deterministic; lifecycle scenarios use the real DLL.
+- `runner_lifecycle_test` uses the actual `FlutterWindow`, engine, and messenger
+  against installed candidate assets. A retained blank-widget Dart entry point
+  avoids opening user state or credentials through the application bootstrap.
+
+All are `EXCLUDE_FROM_ALL`. Build/install the candidate with the pinned patched
+engine and prepared libmpv first, then build the targets and run their CTests:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target native_playback_state_test native_player_contract_test runner_lifecycle_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^(native_playback_state|native_player_contract|runner_lifecycle)$' --output-on-failure --timeout 60
+```
+
+Record the exact candidate commit, installed asset identity, prepared/copied DLL
+hashes, and patched-engine identity. The runner test's data path is the built
+application's installed `data` directory. Stock-engine compilation does not
+provide the runner test's required composition marker. Keep encoder and
+authenticated-reference checks as distinct obligations.
+
+The state component is also portable with a C++17 compiler:
+
+```sh
+clang++ -std=c++17 -Wall -Wextra -Werror -pedantic windows/runner/native_playback_state_test.cpp -o /tmp/lineup-native-playback-state-test
+/tmp/lineup-native-playback-state-test
+```
+
+Portable state proof does not compile or execute the Windows parser/runner.
+Blank-widget runner proof does not establish physical media, HDR, composition,
+input, or package acceptance. Queue pressure preferentially removes property
+events; an all-non-property saturated queue can evict an old acknowledgment,
+so existing timeout/retry behavior remains necessary. Use the affected
+[physical acceptance](windows-native-validation.md) scenarios for rapid tune
+replacement, track confirmation, stop/retry, disposal/recreation, and window
+close while work is pending.
+
 The gated `authenticated_reference_test` target compiles the production native
 player and drives its existing method channel against the exact prepared DLL.
 It is `EXCLUDE_FROM_ALL`, with no CI gate change. Python 3, an FFmpeg executable

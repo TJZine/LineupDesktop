@@ -130,5 +130,60 @@ add_test(NAME authenticated_reference
     --dll "${LINEUP_MPV_DLL}")
 set_tests_properties(authenticated_reference PROPERTIES TIMEOUT 180)
 
+# Portable actual worker-state transitions; no Flutter, HWND or DLL required.
+add_executable(native_playback_state_test EXCLUDE_FROM_ALL
+  "native_playback_state_test.cpp"
+)
+apply_standard_settings(native_playback_state_test)
+add_test(NAME native_playback_state COMMAND native_playback_state_test)
+
+# Actual parser/queue/correlation projection, pinned DLL worker and HWND pump.
+# The test compiles native_player.cpp as the authenticated-reference target does,
+# observing real teardown and deliberately rejecting one stop DLL call.
+add_executable(native_player_contract_test EXCLUDE_FROM_ALL
+  "native_player_contract_test.cpp"
+  "track_list_encoder.cpp"
+)
+apply_standard_settings(native_player_contract_test)
+target_compile_definitions(native_player_contract_test PRIVATE "NOMINMAX")
+target_include_directories(native_player_contract_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
+target_link_libraries(native_player_contract_test PRIVATE
+  flutter_wrapper_app "${LINEUP_MPV_LIBRARY}" "dwmapi.lib" "ole32.lib")
+add_custom_command(TARGET native_player_contract_test POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${LINEUP_MPV_DLL}" "$<TARGET_FILE_DIR:native_player_contract_test>")
+add_test(NAME native_player_contract COMMAND native_player_contract_test)
+set_tests_properties(native_player_contract PROPERTIES TIMEOUT 45)
+
+# Real FlutterWindow/engine/messenger lifetime. Build/install the candidate first
+# with the retained nativeRunnerLifecycleTestMain Dart entrypoint. This target
+# uses the installed assets but never runs Lineup account/store initialization.
+add_executable(runner_lifecycle_test EXCLUDE_FROM_ALL
+  "runner_lifecycle_test.cpp"
+  "flutter_window.cpp"
+  "native_player.cpp"
+  "track_list_encoder.cpp"
+  "win32_window.cpp"
+  "utils.cpp"
+  "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
+)
+apply_standard_settings(runner_lifecycle_test)
+target_compile_definitions(runner_lifecycle_test PRIVATE "NOMINMAX")
+target_include_directories(runner_lifecycle_test PRIVATE
+  "${CMAKE_SOURCE_DIR}" "${LINEUP_MPV_INCLUDE_DIR}")
+# RegisterPlugins is the actual runner registrant. CMake resolves this generated
+# plugin target after generated_plugins.cmake is included by the parent.
+target_link_libraries(runner_lifecycle_test PRIVATE
+  flutter flutter_wrapper_app flutter_secure_storage_windows_plugin
+  "${LINEUP_MPV_LIBRARY}" "dwmapi.lib" "ole32.lib")
+add_dependencies(runner_lifecycle_test flutter_assemble)
+add_custom_command(TARGET runner_lifecycle_test POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${LINEUP_MPV_DLL}" "$<TARGET_FILE_DIR:runner_lifecycle_test>")
+add_test(NAME runner_lifecycle
+  COMMAND runner_lifecycle_test "$<TARGET_FILE_DIR:${BINARY_NAME}>/data")
+set_tests_properties(runner_lifecycle PROPERTIES TIMEOUT 45
+  WORKING_DIRECTORY "$<TARGET_FILE_DIR:${BINARY_NAME}>")
+
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
