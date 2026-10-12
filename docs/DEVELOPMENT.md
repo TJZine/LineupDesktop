@@ -142,7 +142,7 @@ flutter doctor -v
 
 ```sh
 flutter pub get
-dart format --output=none --set-exit-if-changed .
+dart tool/format.dart --check
 flutter analyze
 TZ=America/New_York flutter test
 ```
@@ -154,7 +154,12 @@ $env:TZ = 'America/New_York'
 flutter test
 ```
 
-Use `dart format <changed-paths>` when formatting is needed. The timezone above
+The [formatter](../tool/format.dart) uses tracked and non-ignored untracked Dart
+files from Git, including new source in `lib`, `test`, `tool`, and `test_driver`.
+Ignored build output and deleted files are excluded. `--check` reports formatting
+differences without writing files; use `dart tool/format.dart` to format all these
+inputs or `dart format <changed-paths>` to format an edit. Git and the selected
+Dart SDK must be available; run from within the checkout. The timezone above
 is canonical for localized schedule goldens. On Windows, Dart uses the Windows
 system timezone; `$env:TZ` alone does not select it. Run the portable Windows
 tests in the machine's configured timezone, or set the OS timezone to Eastern

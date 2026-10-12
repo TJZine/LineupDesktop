@@ -171,12 +171,15 @@ Portable commands, selected according to the changed area:
 
 ```sh
 flutter pub get
-dart format --output=none --set-exit-if-changed .
+dart tool/format.dart --check
 flutter analyze
 TZ=America/New_York flutter test
 ```
 
-Use `dart format <changed-paths>` to format an edit and select affected test
+The [canonical formatter](../tool/format.dart) checks tracked and non-ignored new
+Dart files, including `lib`, `test`, `tool`, and `test_driver`. Ignored build output
+is excluded. Use `dart tool/format.dart` to format those inputs, or
+`dart format <changed-paths>` to format an edit, and select affected test
 files while iterating. Run the applicable full acceptance checks once before
 completion when required. Reuse results until changed code, fixtures,
 dependencies, build settings, or relevant environment invalidate them.
