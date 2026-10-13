@@ -428,6 +428,68 @@ void AvailabilityAndRoutes() {
             legacy.Last().wrote,
         "legacy route");
 }
+void UnavailableTargetRecovery() {
+  const DisplayObservation unavailable[] = {
+      {},
+      {DisplayState::sdr, DisplayRoute::hdr_state, false, "sdr"},
+      {DisplayState::unknown, DisplayRoute::hdr_state, true, "unknown"}};
+  for (const auto& observation : unavailable) {
+    for (bool remap : {false, true}) {
+      Fixture f;
+      f.api.displays[1] = observation;
+      f.Request(1, true, DisplayState::hdr);
+      Check(Text(f.Last().session, "unavailable") && f.api.writes.empty(),
+            "unavailable target starts without ownership");
+      const int queries = f.api.queries;
+      f.api.displays[1] =
+          {DisplayState::sdr, DisplayRoute::hdr_state, true, "sdr"};
+      f.engine.Poll(false);
+      f.engine.Poll(true);
+      f.Request(2, true, DisplayState::hdr);
+      Check(f.api.queries == queries && f.api.writes.empty(),
+            "ordinary polling, movement and revisions do not retry availability");
+      if (remap)
+        f.engine.Process({2, true, DisplayState::hdr}, true, true);
+      else
+        f.engine.Poll(false, true);
+      Check(Text(f.Last().session, "active") &&
+                Text(f.Last().outcome, "matched") &&
+                f.Last().revision == 2 && f.api.writes.size() == 1 &&
+                f.guardian->arms == 1 &&
+                f.guardian->last.original == DisplayState::sdr,
+            "display/settings notice recovers the same target and captures once");
+      f.engine.Poll(false);
+      Check(f.api.writes.size() == 1, "recovered match does not repeat writes");
+      f.Request(3, false, DisplayState::unknown);
+      Check(f.api.displays[1].state == DisplayState::sdr &&
+                !f.engine.HasOwnership(),
+            "recovered session restores its captured original");
+    }
+  }
+  Fixture still_unavailable;
+  still_unavailable.api.displays[1] = {};
+  still_unavailable.Request(1, true, DisplayState::hdr);
+  still_unavailable.engine.Poll(false, true);
+  const int queries = still_unavailable.api.queries;
+  still_unavailable.engine.Poll(false);
+  Check(Text(still_unavailable.Last().session, "unavailable") &&
+            still_unavailable.api.queries == queries &&
+            still_unavailable.api.writes.empty(),
+        "unsuccessful availability retry does not enable polling retries");
+  still_unavailable.Request(2, false, DisplayState::unknown);
+  still_unavailable.engine.Poll(true, true);
+  Check(Text(still_unavailable.Last().session, "inactive"),
+        "notice does not start an ended session");
+  Fixture suspended;
+  suspended.Request(1, true, DisplayState::hdr);
+  suspended.api.displays[1].state = DisplayState::sdr;
+  suspended.engine.Poll(false);
+  suspended.engine.Poll(false, true);
+  suspended.engine.Poll(true, true);
+  Check(Text(suspended.Last().session, "suspended") &&
+            suspended.api.writes.size() == 1 && !suspended.engine.HasOwnership(),
+        "availability retry never overrides an external user change");
+}
 void GuardianGates() {
   Fixture arm;
   arm.guardian->arm = false;
@@ -544,6 +606,7 @@ int main() {
     TargetLossAndChange();
     TargetSessionReportEdges();
     AvailabilityAndRoutes();
+    UnavailableTargetRecovery();
     GuardianGates();
     WorkerOrderingAndIsolation(false);
     WorkerOrderingAndIsolation(true);

@@ -459,7 +459,13 @@ void DisplayMatchingEngine::Poll(bool remap, bool retry) {
       return;
     }
   }
-  if (request_.session && session_ == std::string("active")) Reconcile();
+  // Capability/state may recover without the target identity changing.
+  // Retry only on display/settings notices; never revive external suspension.
+  if (request_.session && retry && session_ == std::string("unavailable")) {
+    Start();
+  } else if (request_.session && session_ == std::string("active")) {
+    Reconcile();
+  }
   for (auto& record : records_) {
     if (record->owned && (!active_ || !(record->ownership.target == *active_)))
       Release(*record);
