@@ -1,10 +1,10 @@
 # Fullscreen HDR Presentation Specification
 
-**Status:** Planned native-media work. Windows 10 discovery is complete, and
-the existing composition passed; see the
+**Status:** Implemented, October 11, 2026; integrated physical acceptance is
+pending. Windows 10 discovery is complete, and the existing composition passed; see the
 [discovery result](fullscreen-hdr-discovery-plan.md#discovery-result-october-9-2026).
-Production implementation awaits its implementation plan and the desktop UI
-second pass settling the Player surfaces.
+The [implementation plan](fullscreen-hdr-implementation-plan.md) owns the
+approved session, restoration, hold, guardian, and Diagnostics contracts.
 
 ## Goal
 
@@ -19,9 +19,11 @@ Plex transcode policy. It applies to local and Plex media that reaches libmpv.
 
 - Entering fullscreen with HDR material on a capable output activates correct
   HDR presentation automatically.
-- Replacing that program with SDR material, leaving fullscreen, moving to an
-  incapable display, stopping playback, or closing the app restores correct SDR
-  presentation without a manual Windows Settings round trip.
+- Replacing that program with SDR material selects SDR while matching remains
+  active, even if Windows HDR was originally on. Leaving fullscreen, moving to
+  another display, stopping playback, or closing the app releases the old target
+  and restores the state Lineup found, unless an external change relinquished
+  ownership. Original-state restoration can therefore restore HDR.
 - The transition preserves one current player, correct video geometry, input,
   focus, and the intended fullscreen experience. It may not leave black video,
   stale frames/audio, a stranded display mode, or an orphaned process.
@@ -36,8 +38,9 @@ Plex transcode policy. It applies to local and Plex media that reaches libmpv.
 Lineup currently uses a borderless top-level fullscreen window and embeds
 libmpv's `gpu-next` D3D11 output in a child host. Flutter stays above that host
 through the repository-patched DirectComposition engine. The native player
-sets `vo=gpu-next`, `gpu-api=d3d11`, `gpu-context=d3d11`, and `hwdec=auto`, but
-does not own an explicit HDR/SDR presentation-mode transition.
+sets `vo=gpu-next`, `gpu-api=d3d11`, `gpu-context=d3d11`, and `hwdec=auto`, and
+owns HDR/SDR display matching through the native DisplayConfig controller.
+libmpv adapts to the display state without additional output options or refresh.
 
 The system's global HDR preference belongs to the user. The feature must avoid
 making that preference a manual per-program prerequisite or leaving it changed
@@ -45,31 +48,28 @@ after Lineup exits. The implementation route must use supported Windows/DXGI
 and libmpv behavior; it must not depend on registry writes, Settings UI
 automation, undocumented controls, or a driver-specific workaround.
 
-The critical design constraint is composition. Exclusive native presentation
-may be needed to provide automatic HDR behavior independently of desktop HDR,
-but it can conflict with the DirectComposition path that currently puts Flutter
-OSD, overlays, focus, and accessibility above video. A final design must either
-preserve those contracts or deliberately define and approve the fullscreen
-alternative; it may not silently regress them.
+The approved design preserves this composition. It uses supported DisplayConfig
+APIs on a dedicated native worker, with a guardian confirmed armed before any
+write. Dart owns session eligibility and bounded playback holds; holds use the
+existing preparing/loading presentation without changing overlay policy.
 
 ## Feasibility gate
 
-Before implementation, prove the behavior on the Windows 10 22H2 HDR test
-machine with known SDR and HDR10 material, following the
-[discovery plan](fullscreen-hdr-discovery-plan.md). It evaluates the current
+The completed Windows 10 22H2 discovery with known SDR and HDR10 material,
+recorded in the [discovery plan](fullscreen-hdr-discovery-plan.md), evaluated the current
 composited D3D11/libmpv path first: its negotiated colorspace and HDR output
 when fullscreen, its behavior across manual and programmatic Windows HDR
 transitions, and the resulting overlay, focus, video stacking, and normal
 restoration behavior.
 
-An application-managed or exclusive fullscreen presentation path is evaluated
-only if that discovery escalates an evidence-backed renderer/composition
-blocker; it is not a parallel comparison.
+Discovery established that the current renderer/composition can be retained.
+It does not establish acceptance of the integrated matching implementation.
 
 Windows 10 evidence covers only the legacy DisplayConfig advanced-color route.
 Windows 11 24H2 and later separate HDR from automatic color management and need
-their own route verification on Windows 11 hardware. Until then, no Windows 11
-support claim may be made.
+their own route verification on Windows 11 hardware. Both OS versions are enabled;
+the reported capability chooses the new HDR-state route or legacy advanced-color
+route. Windows 11 remains unverified until the borrowed machine is tested.
 
 Record source and output colorspace, bit depth, monitor/driver details,
 fullscreen state, and visual observations. Do not infer output HDR from Plex
@@ -77,18 +77,17 @@ metadata or source transfer characteristics alone. Plex HTPC may be used as a
 behavioral benchmark only after its observed transitions are captured; it is
 not an implementation dependency or source reference.
 
-If no supported path satisfies the contract with the protected Player
-composition, stop at the gate and bring the evidence and alternatives back for
-product/design direction rather than weakening the requirement silently.
+Any integrated physical failure that prevents this protected composition or
+restoration contract needs evidence and adjudication before a support claim.
 
 ## Ownership
 
-- **Flutter/Dart:** fullscreen intent, Player state, user-visible availability
-  and fallback messaging, input/focus, overlays, accessibility, and telemetry
-  projection.
-- **Windows native player:** output-capability detection, libmpv output
-  configuration, presentation-mode lifecycle, monitor transitions, display
-  restoration, and bounded native telemetry.
+- **Flutter/Dart:** fullscreen intent, session eligibility, first decoded transfer
+  decision, hold sequencing, Player state, input/focus, overlays, accessibility,
+  and normalized Diagnostics projection. No new matching-failure Player notice.
+- **Windows native player:** output-capability detection, target mapping,
+  display writes, per-target ownership/restoration, guardian lifecycle, monitor
+  transitions, and bounded native telemetry.
 - **libmpv:** decode, HDR/SDR color processing, tone mapping when required, and
   source/output facts.
 

@@ -313,6 +313,39 @@ not require browser codec allowlists, subtitle burn-in modes, or audio
 passthrough. No finite matrix establishes “all formats”; preserve wording tied
 to the pinned runtime and exact representative evidence.
 
+### Fullscreen HDR physical rows
+
+For the [integrated HDR implementation](fullscreen-hdr-implementation-plan.md),
+the operator runs these rows as part of the final full-app test. Record the
+exact candidate, original Windows HDR state, source transfer, normalized
+Diagnostics, observed TV output/blanking/audio, and input/focus behavior. These
+rows are pending; fake tests and compilation do not mark them passed.
+
+| ID | Scenario | Required observation | Result |
+| --- | --- | --- | --- |
+| MATCH-1 | HDR10 fullscreen entry from SDR | HDR selected; bounded first-frame hold; correct TV picture and overlays | |
+| MATCH-2 | HDR→SDR and SDR→HDR scheduled boundaries | Correct state, observed blanking and hold, audio recovery, continuation lateness carried | |
+| MATCH-3 | HDR→HDR boundary | No display write/blanking; playback continues after its hold | |
+| MATCH-4 | Windows HDR originally on, then SDR playback | SDR selected in session; original HDR restored on release | |
+| RESTORE-1 | Leave fullscreen, Stop, and normal app close | Each conditionally restores original state while release does not pause playback | |
+| RESTORE-2 | Error→Retry; leave→re-enter fullscreen | Original state survives ownership inheritance and eventual release | |
+| EXTERNAL-1 | Manually turn HDR off mid-session | Matching suspends; manual state is respected and not restored over | |
+| GUARDIAN-1 | End only the main Lineup PID during owned playback | Guardian conditionally restores original state; do not end its process tree | |
+| INSTANCE-1 | Second launch, including with media arguments | Existing window restored/focused; arguments ignored; one main instance | |
+| CONTENT-1 | Dolby Vision and available HLG/HDR10+ samples | Actual HDR10 output/fallback recorded; profile 7 base-layer and static HDR10 limits respected | |
+| UI-1 | Full Guide inside session; OSD/Now Playing/focus/remote/keyboard across transitions | Session survives Guide; existing preparing/loading hold presentation; no Paused/Play projection caused by hold; composition/input intact | |
+| TARGET-1 | Move fullscreen playback to another connected display | Old original state restored; new target/session correctly evaluated and held if needed | |
+| TARGET-2 | Power TV off/on while owned | Ownership retained by target identity; restore or inheritance when it returns | |
+| DIAG-1 | Diagnostics and support report | Windows display/HDR matching/Renderer output rows update independently; normalized values and approved sentence | |
+| WIN11-1 | Borrowed Windows 11 machine | Capability-selected route, user-HDR ownership versus activeColorMode, transitions/restoration/guardian/UI observed | |
+| PACKAGE-HDR-1 | Exact portable package | Repeat core matching, restoration, guardian, instance, content and UI rows outside developer tree before a release claim | |
+
+For GUARDIAN-1, the operator uses Task Manager **Details > End task** on the
+main window's PID, or `taskkill /PID <pid>` without `/T`. Ending the guardian
+together with the app, power loss, OS crash, or interrupted shutdown is outside
+the recovery guarantee. Agents do not run these physical rows without the
+operator's task authorization.
+
 ## 8. Portable package acceptance
 
 From a clean worktree and configured `host_release` engine build directory:

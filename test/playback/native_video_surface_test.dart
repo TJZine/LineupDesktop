@@ -131,12 +131,25 @@ class _RecordingPlayer implements NativePlayer {
 
   @override
   Stream<PlayerEvent> get events => const Stream.empty();
+  @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.initial();
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
 
   @override
   Future<void> initialize() async {}
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {}
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {}
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   @override
   Future<void> play() async {}

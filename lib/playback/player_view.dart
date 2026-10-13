@@ -616,7 +616,10 @@ class PlayerSurface extends StatelessWidget {
     final unsupported = state == PlayerState.unsupported;
     final hasError = controller.error != null;
     final preparing =
-        !hasError && (state == PlayerState.loading || controller.tuning);
+        !hasError &&
+        (controller.displayHoldActive ||
+            state == PlayerState.loading ||
+            controller.tuning);
     final roles = LineupTheme.of(context);
     final unavailable =
         hasError ||
@@ -800,7 +803,9 @@ class _Osd extends StatelessWidget {
       ),
       IconButton(
         style: actionStyle,
-        tooltip: controller.status.state == PlayerState.playing
+        tooltip:
+            (controller.displayHoldActive ||
+                controller.status.state == PlayerState.playing)
             ? 'Pause'
             : 'Play',
         onPressed: unsupported
@@ -812,7 +817,8 @@ class _Osd extends StatelessWidget {
         padding: null,
         iconSize: 36,
         icon: Icon(
-          controller.status.state == PlayerState.playing
+          (controller.displayHoldActive ||
+                  controller.status.state == PlayerState.playing)
               ? Icons.pause
               : Icons.play_arrow,
         ),
@@ -953,7 +959,11 @@ class _Osd extends StatelessWidget {
     final episodeFacts = item == null ? null : _osdEpisodeFacts(item);
     final statusFacts = [
       episodeFacts,
-      _statusLabel(controller.status.state),
+      _statusLabel(
+        controller.displayHoldActive
+            ? PlayerState.loading
+            : controller.status.state,
+      ),
     ].nonNulls.toList(growable: false);
     final identity = Column(
       key: const Key('player-osd-identity'),
@@ -1220,11 +1230,14 @@ class _Osd extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    controller.status.state ==
-                                            PlayerState.playing
+                                    (!controller.displayHoldActive &&
+                                            controller.status.state ==
+                                                PlayerState.playing)
                                         ? 'Playing'
                                         : _statusLabel(
-                                                controller.status.state,
+                                                controller.displayHoldActive
+                                                    ? PlayerState.loading
+                                                    : controller.status.state,
                                               ) ??
                                               'Ready',
                                     style: osdSecondaryStyle,
@@ -1236,9 +1249,15 @@ class _Osd extends StatelessWidget {
                             )
                           else ...[
                             Text(
-                              controller.status.state == PlayerState.playing
+                              (!controller.displayHoldActive &&
+                                      controller.status.state ==
+                                          PlayerState.playing)
                                   ? 'Playing'
-                                  : _statusLabel(controller.status.state) ??
+                                  : _statusLabel(
+                                          controller.displayHoldActive
+                                              ? PlayerState.loading
+                                              : controller.status.state,
+                                        ) ??
                                         'Ready',
                               style: osdSecondaryStyle,
                             ),

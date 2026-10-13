@@ -116,6 +116,33 @@ void main() {
     expect(store.state.settings.guideShowChannelSources, isTrue);
   });
 
+  testWidgets('fullscreen HDR switch follows DVR playback controls', (
+    tester,
+  ) async {
+    final controller = FixtureController();
+    addTearDown(controller.dispose);
+    await _showSettings(tester, controller);
+    await _openCategory(tester, SettingsCategory.playback);
+
+    final title = find.text('Match display HDR in fullscreen');
+    final toggle = find.byType(Switch).last;
+    await tester.ensureVisible(title);
+    await tester.pumpAndSettle();
+    expect(title, findsOneWidget);
+    expect(
+      find.text(
+        'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(controller.settings.matchDisplayHdr, isFalse);
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+  });
+
   testWidgets('Settings categories and theme control remain accessible', (
     tester,
   ) async {

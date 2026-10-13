@@ -150,6 +150,58 @@ void main() {
     },
   );
 
+  test('display and renderer support facts are normalized independently', () {
+    final d = Diagnostics();
+    final snapshot = d.snapshot(
+      reportTime: DateTime.utc(2026),
+      timeZone: 'Eastern Standard Time',
+      appVersion: '1.0',
+      appBuild: '1',
+      platform: 'windows',
+      plexServerSelected: false,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(
+        state: PlayerState.paused,
+        displayReport: DisplayMatchingReport(
+          revision: 7,
+          session: DisplayMatchingSessionState.active,
+          observed: DisplayMatchingState.hdr,
+          outcome: DisplayMatchingOutcome.matched,
+          wrote: true,
+          owned: true,
+          reason: null,
+          route: DisplayMatchingRoute.hdrState,
+          activeColorMode: DisplayActiveColorMode.hdr,
+        ),
+        receivedTelemetry: PlayerTelemetry(
+          targetGamma: 'gamma2.2',
+          targetPrimaries: 'bt.709',
+          targetPixelFormat: 'rgb10a2',
+        ),
+      ),
+    );
+    final report = d.buildSupportReport(snapshot);
+    expect(report, contains('Windows display: hdr · hdrState · hdr'));
+    expect(
+      report,
+      contains(
+        'HDR matching: active · matched · revision=7 · wrote=true · owned=true',
+      ),
+    );
+    expect(report, contains('Renderer output: gamma2.2 · bt.709 · rgb10a2'));
+    expect(
+      Diagnostics.rendererOutputFact(
+        const PlayerTelemetry(
+          targetGamma: 'private-sentinel',
+          targetPrimaries: 'private-sentinel',
+          targetPixelFormat: 'private-sentinel',
+        ),
+      ),
+      isNot(contains('private-sentinel')),
+    );
+    d.dispose();
+  });
+
   test('redacts tokens, URLs, credentials, and paths before storage', () {
     final diagnostics = Diagnostics();
     diagnostics.enabled = true;

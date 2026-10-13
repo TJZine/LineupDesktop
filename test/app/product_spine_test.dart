@@ -451,17 +451,30 @@ class _ProductPlayer implements NativePlayer {
   List<PlayerTrack> get tracks => _tracks;
   @override
   Stream<PlayerEvent> get events => _events.stream;
+  @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.initial();
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
 
   @override
   Future<void> initialize() async {}
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     this.generation = generation ?? this.generation + 1;
     loadedUri = media;
     loadedPlexToken = plexToken;
     eventLog.add('player:load');
   }
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   void emit(
     PlayerState state, {

@@ -182,16 +182,24 @@ Consequences:
 
 - Windows 10 discovery proves only the legacy route.
 - The implementation selects a route from the capability actually observed on
-  the machine, not from an OS-version comparison, so a Windows 11 route can be
-  added without redesign.
-- Until Windows 11 evidence exists, matching must not be offered or described
-  as supported on Windows 11.
-- The app's Windows SDK is not pinned (the patched engine uses
-  `10.0.22621.0`). Record the SDK used for each build. Do not rely on headers
-  for the newer values; a later implementation either pins a sufficient SDK or
-  owns the required definitions.
+  the machine, not from an OS-version comparison. The later approved
+  [implementation plan](fullscreen-hdr-implementation-plan.md#decisions) enables
+  both Windows 10 and Windows 11 routes; Windows 11 remains unverified until
+  tested on the borrowed machine. This supersedes discovery's earlier proposal
+  to withhold matching on Windows 11, without changing the dated observations.
+- The implementation now requires application Windows SDK `10.0.26100.0` or
+  newer; the patched engine retains its separate `10.0.22621.0` requirement.
+  Record the SDK used for each build. Newer DisplayConfig declarations are
+  enabled only in their shared API translation unit, and runtime capabilities
+  choose the route.
 
 ### Product questions for the implementation plan
+
+The questions below are historical discovery inputs. The
+[approved implementation decisions](fullscreen-hdr-implementation-plan.md#decisions)
+settle them: bounded holds with carried lateness, SDR matching even when HDR was
+originally on, PQ/HLG eligibility with documented HDR10 fallbacks, both OS routes
+enabled with Windows 11 unverified, and one instance per Windows user session.
 
 Discovery measurements inform these questions; they do not block discovery.
 

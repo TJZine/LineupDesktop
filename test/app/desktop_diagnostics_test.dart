@@ -49,6 +49,15 @@ void main() {
     await tester.tap(find.text('Technical details'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    for (final row in ['Windows display', 'HDR matching', 'Renderer output']) {
+      expect(find.text(row), findsOneWidget);
+    }
+    expect(
+      find.text(
+        "Display state is reported by Windows; it does not verify the TV's picture.",
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

@@ -6,6 +6,7 @@
 #include <flutter/method_channel.h>
 #include <mpv/client.h>
 #include <windows.h>
+#include "display_dynamic_range.h"
 
 #include <atomic>
 #include <cstdint>
@@ -32,7 +33,8 @@ class WindowsNativePlayer {
   WindowsNativePlayer(const WindowsNativePlayer&) = delete;
   WindowsNativePlayer& operator=(const WindowsNativePlayer&) = delete;
 
-  bool HandleWindowMessage(UINT message);
+  bool HandleWindowMessage(UINT message, WPARAM wparam = 0);
+  void EndWindowsSession();
   bool BeginWindowClose();
   bool TakeWindowCloseReady();
   void SetParentMinimized(bool minimized);
@@ -68,6 +70,7 @@ class WindowsNativePlayer {
     int64_t load_id;
     std::string uri;
     PlexHeader plex_header;
+    bool start_paused = false;
   };
   struct PlayCommand {};
   struct PauseCommand {};
@@ -117,11 +120,14 @@ class WindowsNativePlayer {
   void DrainEvents();
   flutter::EncodableValue EncodeTrackList(const mpv_node& node) const;
   flutter::EncodableValue EncodeVideoParameters(const mpv_node& node) const;
+  flutter::EncodableValue EncodeVideoTargetParameters(const mpv_node& node) const;
+  void QueueDisplayReport(const lineup::DisplayReport& report);
 
   HWND top_level_window_;
   HWND flutter_view_;
   HWND video_host_ = nullptr;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
+  std::unique_ptr<lineup::DisplayDynamicRange> display_;
   mpv_handle* mpv_ = nullptr;
   std::thread event_thread_;
   std::atomic<bool> accepting_commands_{false};
@@ -142,6 +148,7 @@ class WindowsNativePlayer {
   bool disposed_ = true;
   bool window_close_requested_ = false;
   bool window_close_ready_ = false;
+  bool display_close_timeout_ = false;
   RECT video_rect_{};
   bool video_rect_set_ = false;
   bool parent_minimized_ = false;

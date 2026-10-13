@@ -83,6 +83,7 @@ class _LineupShellState extends State<LineupShell> {
       guide: _guide,
       clock: widget.guideClock,
     );
+    _player.setPlayerDestinationVisible(_selectedIndex == 4);
     final initialMediaPath = widget.initialMediaPath;
     if (initialMediaPath != null) {
       unawaited(_player.loadInitialMedia(_mediaUri(initialMediaPath)));
@@ -105,6 +106,7 @@ class _LineupShellState extends State<LineupShell> {
     _player.currentProgram?.scheduled.item.title,
     // Only Diagnostics consumes telemetry at the shell boundary.
     _selectedIndex == 3 ? _player.telemetry : null,
+    _selectedIndex == 3 ? _player.displayReport : null,
   );
 
   void _playerChanged() {
@@ -199,6 +201,7 @@ class _LineupShellState extends State<LineupShell> {
       }
       setState(() {
         _selectedIndex = index;
+        _player.setPlayerDestinationVisible(index == 4);
         _appMenuOpen = false;
         _appMenuAnchor = null;
         _appMenuInvokerFocus = null;
@@ -1327,6 +1330,20 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
               ),
               _settingFeedback('dvrControlsEnabled'),
+              _SettingsSwitchTile(
+                title: const Text('Match display HDR in fullscreen'),
+                subtitle: const Text(
+                  'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+                ),
+                value: value.matchDisplayHdr,
+                onChanged: _pendingSettingKeys.contains('matchDisplayHdr')
+                    ? null
+                    : (item) => _update(
+                        'matchDisplayHdr',
+                        (current) => current.copyWith(matchDisplayHdr: item),
+                      ),
+              ),
+              _settingFeedback('matchDisplayHdr'),
             ],
             SettingsCategory.accessibility => [
               _SettingsSwitchTile(

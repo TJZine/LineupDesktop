@@ -1,6 +1,8 @@
 # Fullscreen HDR Implementation Plan
 
-**Status:** Reviewed and ready for dispatch once the user confirms the UI items below, October 10, 2026. It implements the
+**Status:** Units 1–5 implemented, integrated, and deterministically verified on
+October 11, 2026. Physical
+Windows 10, Windows 11, and portable-package acceptance remain pending. It implements the
 [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) using the
 [Windows 10 discovery result](fullscreen-hdr-discovery-plan.md#discovery-result-october-9-2026).
 The user approved the product decisions below. Two rounds of independent
@@ -20,10 +22,9 @@ test; this plan lists those rows but schedules no separate run.
 | Instances | One Lineup instance per Windows user session. A second launch brings the existing window forward and exits. |
 | Crash protection | A guardian process restores the display if Lineup exits abnormally while owning a changed display state. If the guardian cannot be confirmed armed, Lineup does not change the display. |
 
-### Confirm before dispatch
+### Confirmed UI decisions
 
-These are visible UI decisions. Unit 4a needs item 1 confirmed; Unit 4b
-needs items 2 and 3.
+The user confirmed all three items before dispatch; they are implemented.
 
 1. **Setting:** a Playback settings switch, **Match display HDR in
    fullscreen**, after **DVR playback controls**. Default **on**. Subtitle:
@@ -140,8 +141,10 @@ uses the native player directly and never changes the overlay.
     revision.
   - If the user had already paused, never auto-resume.
 - **Decision point:** the first `video-params` with a non-null transfer for
-  the active load generation. If readiness reports no selected video track,
-  or none has arrived by the fallback time, treat the state as `unknown`.
+  the active load generation. After readiness, an actual track-list update for
+  that generation with no selected video track resolves `unknown`; a reset
+  empty snapshot at readiness is not evidence of audio-only media. If no
+  transfer has arrived by the fallback time, treat the state as `unknown`.
   - **Fallback time:** 2 seconds after the first position report at or past
     the load's start target, or after readiness when there is no target, and
     never later than 6 seconds after readiness.
@@ -449,6 +452,88 @@ the Windows machine; a unit run elsewhere reports them as outstanding.
 - **Integration:** the orchestrator integrates 2, 3, 4a, and 4b together.
   Unit 4b alone would start loads paused against a native side that ignores
   the flag.
+
+### Integration record (October 11, 2026)
+
+The controller integrated the disjoint shared-checkout units on
+`codex/desktop-ui-second-pass`, based on `e8377816`, which contains the requested
+`4fb7758034f4f47290fae13a4ea8275860ba1284`. No push or merge was performed.
+
+| Unit | Commit | Outcome |
+| --- | --- | --- |
+| 1 | `48758671` | Single-instance focus/exit behavior |
+| 2 | `cd628bd3`, `c6794519` | Display controller/load flag/renderer telemetry; target-session report edge correction |
+| 3 | `57a9e762` | Same-executable guardian and protocol tests |
+| 4a | `183c6bd1`, `5d7d27e2` | Dart transport, compatible default-on setting, implementers/tests; legacy persistence expectations retain the new default |
+| 4b | `d91d0f74` | Session/hold policy, Player projection, Diagnostics/support report |
+| 5 | Documentation commit following this record | Current contracts, development commands and pending physical rows |
+
+Unit 4b escalated a source-contract conflict: a capable native remap originally
+restarted its target session without reporting an end, and the player-scoped
+event has no target identity. The accepted correction emits an ordered
+`inactive` report before the new `active`/`unavailable` report at the same Dart
+revision. Dart treats that edge as a new post-load session hold; ordinary
+same-target polls do not rearm it. Native and Dart regressions cover this seam.
+No product contract remains unresolved.
+
+Existing test changes preserve their prior behavior assertions. Unit 4a updates
+all `NativePlayer` fakes and derived load overrides for the transport contract,
+adds setting round-trip/missing-key and UI-row assertions, and updates two
+legacy persistence expected maps to include `matchDisplayHdr: true` while
+preserving their original input bytes and no-quarantine checks. Unit 4b extends
+coordinator and Player-view fixtures to observe correlated paused starts/display
+reports, adds session/hold/continuation/recovery/retirement regressions and
+preparing/loading UI assertions, and adds Diagnostics view/support-report
+normalization checks. No existing test was removed or weakened. Existing native
+test sources are unchanged; the authenticated-reference target links the new
+production controller/guardian translation units.
+
+### Changed files by unit
+
+Paths below are relative to the repository root. Shared files appear under each
+unit whose commit changed them.
+
+| Unit | Files |
+| --- | --- |
+| 1 | `windows/runner/main.cpp` |
+| 2 | `windows/runner/display_dynamic_range.{h,cpp}`, `display_dynamic_range_test.cpp`, `CMakeLists.txt`, `native_player.{h,cpp}`, `flutter_window.cpp` (all under `windows/runner/`) |
+| 3 | `windows/runner/display_guardian.{h,cpp}`, `display_guardian_test.cpp`, `main.cpp`, `native_player.cpp`, `CMakeLists.txt` (all under `windows/runner/`) |
+| 4a | `lib/playback/{native_player,windows_native_player,unsupported_native_player}.dart`, `lib/settings/lineup_settings.dart`, `lib/app/lineup_shell.dart`; `test_driver/ui_harness.dart`, `test/support/ui_fixture.dart`; `test/app/{product_spine,lineup_app,channel_studio_view,desktop_native_audit,desktop_settings}_test.dart`, `test/playback/{player_view,native_video_surface,player_coordinator,windows_native_player}_test.dart`, `test/settings/lineup_settings_test.dart`, `test/persistence/app_store_test.dart` |
+| 4b | `lib/playback/{display_matching,player_coordinator,player_view}.dart`, `lib/app/{lineup_shell,diagnostics_view}.dart`, `lib/diagnostics/diagnostics.dart`; `test/playback/{display_matching,player_coordinator,player_view}_test.dart`, `test/app/desktop_diagnostics_test.dart`, `test/diagnostics/diagnostics_test.dart` |
+| 5 | `docs/{fullscreen-hdr-spec,architecture,user-guide,windows-native-validation,DEVELOPMENT,fullscreen-hdr-discovery-plan,fullscreen-hdr-implementation-plan}.md` |
+
+### Final deterministic verification
+
+Application source candidate: `5d7d27e2b25a1676bf0b3257973721866f699700`, with
+only the seven Unit 5 documents changing afterwards. Those documentation edits
+do not change the checked Dart/native inputs. Machine: Windows 10 Home
+`10.0.19045`; Flutter `3.47.6` at
+`5fc346839b5d0eef006ed8404392afb4dfae428d`, Dart `3.13.5`; application Windows
+SDK `10.0.26100.0`, MSVC `19.44.35228`; prepared pinned libmpv runtime unchanged.
+Ignored logs are under `build/fullscreen-hdr-verification/`.
+
+| Check | Observed output |
+| --- | --- |
+| `dart format --output=none --set-exit-if-changed .` | Exit 0; 92 files, 0 changed |
+| `flutter analyze` | Exit 0; No issues found (3.7 seconds) |
+| `TZ=America/New_York flutter test` (PowerShell process environment equivalent) | Exit 0; 1,458 passed, one existing Eastern DST fold prerequisite skipped (40 seconds) |
+| Supplementary full `flutter test`, Windows Eastern timezone with process `TZ` unset | Exit 0; 1,459 passed, no skips (39 seconds); Eastern DST fold prerequisite executed and passed |
+| Application compile check, `flutter build windows` | Exit 0; built `build/windows/x64/runner/Release/lineup_desktop.exe` (38.7 seconds); stock-engine compile/link evidence only |
+| Build all four opt-in CTest targets | Exit 0 |
+| CTest Release, all targets | 4/4 passed, zero failures, 9.45 seconds total: encoder 0.07, authenticated reference 9.07, controller 0.05, guardian 0.24 seconds |
+| SDK rejection probe (Unit 2) | SDK `10.0.22621.0` configure rejected with the clear minimum-SDK error |
+| Documentation | `git diff --check` passed; local link paths exist |
+
+The Windows OS timezone was already Eastern Standard Time and was not changed.
+A local Dart probe established that setting the POSIX `TZ` name on this Windows
+runtime produces offsets 0/+1, while unsetting it produces the required -5/-4
+offsets. Both requested-command and canonical-Windows results are retained;
+the corrected Windows recipe is in [Development](DEVELOPMENT.md#portable-commands).
+macOS-only alpha tests are excluded on this host. No Windows HDR setting was
+changed, no process was killed, and no physical rows were run. The
+[physical matrix](windows-native-validation.md#fullscreen-hdr-physical-rows)
+remains pending for the user's final full-app test, including Windows 11 and
+the portable package.
 
 ## Evidence
 

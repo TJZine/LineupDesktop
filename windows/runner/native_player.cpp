@@ -1,4 +1,5 @@
 #include "native_player.h"
+#include "display_guardian.h"
 
 #include "track_list_encoder.h"
 
@@ -40,6 +41,7 @@ enum PropertyId : uint64_t {
   kCurrentVideoOutput,
   kHardwareDecoder,
   kVideoParameters,
+  kVideoTargetParameters,
 };
 
 const flutter::EncodableMap* AsMap(const flutter::EncodableValue* value) {
@@ -358,9 +360,17 @@ WindowsNativePlayer::WindowsNativePlayer(
       [this](const auto& call, auto result) {
         HandleMethodCall(call, std::move(result));
       });
+  // Display writes require acknowledgment from the per-target guardian.
+  display_ = std::make_unique<lineup::DisplayDynamicRange>(
+      top_level_window_, lineup::MakeDisplayConfigApi(),
+      lineup::MakeDisplayGuardianFactory(),
+      [this](const auto& report) { QueueDisplayReport(report); },
+      [this] { PostPlatformWakeup(); });
 }
 
 WindowsNativePlayer::~WindowsNativePlayer() {
+  display_.reset();
+  ::KillTimer(top_level_window_, kPlatformEventMessage);
   channel_->SetMethodCallHandler(nullptr);
   if (!disposed_) {
     BeginAsyncDispose();
@@ -384,6 +394,15 @@ void WindowsNativePlayer::HandleMethodCall(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   const std::string& method = call.method_name();
   if (method == "initialize") {
+    display_->ResetRevision();
+    {
+      std::lock_guard lock(event_mutex_);
+      events_.erase(std::remove_if(events_.begin(), events_.end(), [](const auto& event) {
+        const auto* type = Find(event.value, "type");
+        const auto* text = type ? std::get_if<std::string>(type) : nullptr;
+        return text && *text == "display";
+      }), events_.end());
+    }
     std::string error;
     std::string error_code;
     if (!Initialize(error, error_code)) {
@@ -416,7 +435,24 @@ void WindowsNativePlayer::HandleMethodCall(
   }
 
   const auto* arguments = AsMap(call.arguments());
-  if (method == "load") {
+  if (method == "setDisplayMatching") {
+    const auto revision = arguments ? AsInt(Find(*arguments, "revision")) : std::nullopt;
+    const auto* session_value = arguments ? Find(*arguments, "session") : nullptr;
+    const auto* session = session_value ? std::get_if<bool>(session_value) : nullptr;
+    const auto* desired_value = arguments ? Find(*arguments, "desired") : nullptr;
+    const auto* desired = desired_value ? std::get_if<std::string>(desired_value) : nullptr;
+    if (!revision || *revision < 0 || !session || !desired ||
+        (*desired != "hdr" && *desired != "sdr" && *desired != "unknown")) {
+      result->Error("invalid_argument", "A valid display matching request is required.");
+      return;
+    }
+    const auto state = *desired == "hdr" ? lineup::DisplayState::hdr :
+        *desired == "sdr" ? lineup::DisplayState::sdr : lineup::DisplayState::unknown;
+    if (!display_->Submit({*revision, *session, state})) {
+      result->Error("invalid_argument", "Display revision must strictly increase.");
+      return;
+    }
+  } else if (method == "load") {
     const auto* uri_value = arguments ? Find(*arguments, "uri") : nullptr;
     const auto* uri = uri_value ? std::get_if<std::string>(uri_value) : nullptr;
     const auto load_id =
@@ -446,6 +482,15 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
     LoadCommand command{*load_id, *uri, {}};
+    const auto* paused_value = Find(*arguments, "startPaused");
+    if (paused_value) {
+      const auto* paused = std::get_if<bool>(paused_value);
+      if (!paused) {
+        result->Error("invalid_argument", "startPaused must be a boolean.");
+        return;
+      }
+      command.start_paused = *paused;
+    }
     if (plex_token) {
       command.plex_header = PlexHeader(*plex_token);
     }
@@ -633,6 +678,7 @@ bool WindowsNativePlayer::Initialize(std::string& error,
       {kCurrentVideoOutput, "current-vo", MPV_FORMAT_STRING},
       {kHardwareDecoder, "hwdec-current", MPV_FORMAT_STRING},
       {kVideoParameters, "video-params", MPV_FORMAT_NODE},
+      {kVideoTargetParameters, "video-target-params", MPV_FORMAT_NODE},
   };
   for (const auto& observation : observations) {
     const int observe_status = mpv_observe_property(
@@ -660,6 +706,7 @@ bool WindowsNativePlayer::Initialize(std::string& error,
 }
 
 void WindowsNativePlayer::BeginAsyncDispose() {
+  if (display_) display_->EndSession();
   if (disposed_ || shutdown_started_) {
     return;
   }
@@ -864,7 +911,7 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
   std::visit([&](auto& payload) {
     using Payload = std::decay_t<decltype(payload)>;
     if constexpr (std::is_same_v<Payload, LoadCommand>) {
-      int paused = 0;
+      int paused = payload.start_paused ? 1 : 0;
       status = mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
       if (status >= 0) {
         if (payload.plex_header.empty()) {
@@ -1132,7 +1179,9 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
             const auto& node = *static_cast<mpv_node*>(property->data);
             value = event.reply_userdata == kTrackList
                         ? EncodeTrackList(node)
-                        : EncodeVideoParameters(node);
+                        : event.reply_userdata == kVideoTargetParameters
+                              ? EncodeVideoTargetParameters(node)
+                              : EncodeVideoParameters(node);
             break;
           }
           default:
@@ -1244,8 +1293,20 @@ void WindowsNativePlayer::DrainEvents() {
   }
 }
 
-bool WindowsNativePlayer::HandleWindowMessage(UINT message) {
-  if (message != kPlatformEventMessage) {
+bool WindowsNativePlayer::HandleWindowMessage(UINT message, WPARAM wparam) {
+  if (message == WM_DISPLAYCHANGE || message == WM_MOVE ||
+      message == WM_WINDOWPOSCHANGED || message == WM_SETTINGCHANGE) {
+    display_->Notify(message != WM_SETTINGCHANGE,
+                     message == WM_DISPLAYCHANGE ||
+                         message == WM_SETTINGCHANGE);
+    return false;
+  }
+  const bool close_timer = message == WM_TIMER && wparam == kPlatformEventMessage;
+  if (close_timer) {
+    display_close_timeout_ = true;
+    ::KillTimer(top_level_window_, kPlatformEventMessage);
+  }
+  if (message != kPlatformEventMessage && !close_timer) {
     return false;
   }
   DrainEvents();
@@ -1261,20 +1322,46 @@ bool WindowsNativePlayer::HandleWindowMessage(UINT message) {
       dispose_result_->Success();
       dispose_result_.reset();
     }
-    if (window_close_requested_) {
-      window_close_ready_ = true;
-    }
+  }
+  if (window_close_requested_ && disposed_ &&
+      (display_->ReleaseComplete() || display_close_timeout_)) {
+    window_close_ready_ = true;
+    ::KillTimer(top_level_window_, kPlatformEventMessage);
   }
   return true;
 }
 
 bool WindowsNativePlayer::BeginWindowClose() {
-  if (disposed_) {
+  display_->EndSession();
+  if (disposed_ && display_->ReleaseComplete()) {
     return true;
   }
   window_close_requested_ = true;
+  display_close_timeout_ = false;
+  ::SetTimer(top_level_window_, kPlatformEventMessage, 3000, nullptr);
+  if (disposed_) PostPlatformWakeup();
   BeginAsyncDispose();
   return false;
+}
+
+void WindowsNativePlayer::EndWindowsSession() {
+  display_->EndSessionAndWait(std::chrono::seconds(2));
+}
+
+void WindowsNativePlayer::QueueDisplayReport(const lineup::DisplayReport& report) {
+  using Value = flutter::EncodableValue;
+  QueueEvent(generation_.load(), {
+      {Value("type"), Value("display")},
+      {Value("revision"), Value(report.revision)},
+      {Value("session"), Value(report.session)},
+      {Value("observed"), Value(lineup::DisplayStateName(report.observed))},
+      {Value("outcome"), Value(report.outcome)},
+      {Value("wrote"), Value(report.wrote)},
+      {Value("owned"), Value(report.owned)},
+      {Value("reason"), report.reason ? Value(report.reason) : Value()},
+      {Value("route"), Value(lineup::DisplayRouteName(report.route))},
+      {Value("activeColorMode"), Value(report.active_color_mode)},
+  });
 }
 
 bool WindowsNativePlayer::TakeWindowCloseReady() {
@@ -1304,6 +1391,28 @@ flutter::EncodableValue WindowsNativePlayer::EncodeVideoParameters(
                           "primaries", "gamma", "colormatrix", "sig-peak"}) {
     parameters[flutter::EncodableValue(key)] =
         EncodeWhitelistedNode(FindNode(node, key), remaining_bytes);
+  }
+  return flutter::EncodableValue(parameters);
+}
+
+flutter::EncodableValue WindowsNativePlayer::EncodeVideoTargetParameters(
+    const mpv_node& node) const {
+  flutter::EncodableMap parameters;
+  for (const char* key : {"gamma", "primaries", "pixelformat"}) {
+    const mpv_node* value = FindNode(node, key);
+    std::string normalized;
+    if (value && value->format == MPV_FORMAT_STRING && value->u.string) {
+      normalized = BoundedUtf8(value->u.string, 64);
+      std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+          [](unsigned char byte) { return static_cast<char>(std::tolower(byte)); });
+      if (normalized.empty() || !std::all_of(normalized.begin(), normalized.end(),
+          [](unsigned char byte) {
+            return (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+                   byte == '-' || byte == '_' || byte == '.';
+          })) normalized.clear();
+    }
+    parameters[flutter::EncodableValue(key)] = normalized.empty()
+        ? flutter::EncodableValue() : flutter::EncodableValue(normalized);
   }
   return flutter::EncodableValue(parameters);
 }

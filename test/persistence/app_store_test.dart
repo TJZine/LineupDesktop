@@ -71,11 +71,13 @@ void main() {
       final loaded = await store.load();
       expect(loaded.recoveredCorruptState, isFalse);
       expect(loaded.state.settings.guideShowChannelSources, isFalse);
+      expect(loaded.state.settings.matchDisplayHdr, isTrue);
       final expected = Map<String, Object?>.from(old)
         ..['settings'] = {
           ...old['settings'] as Map,
           'guideShowChannelSources': false,
           'overlayTransparency': 'standard',
+          'matchDisplayHdr': true,
         };
       expect(loaded.state.toJson(), expected);
       await store.save(loaded.state);
@@ -132,10 +134,12 @@ void main() {
         loaded.state.settings.overlayTransparency,
         OverlayTransparency.standard,
       );
+      expect(loaded.state.settings.matchDisplayHdr, isTrue);
       final expected = Map<String, Object?>.from(old)
         ..['settings'] = {
           ...old['settings'] as Map,
           'overlayTransparency': 'standard',
+          'matchDisplayHdr': true,
         };
       expect(loaded.state.toJson(), expected);
       await store.save(loaded.state);

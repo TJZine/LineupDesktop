@@ -19,11 +19,13 @@ class PlaybackDiagnosticSnapshot {
     required this.state,
     this.method = DiagnosticPlaybackMethod.unknown,
     this.receivedTelemetry,
+    this.displayReport = const DisplayMatchingReport.initial(),
   });
 
   final PlayerState state;
   final DiagnosticPlaybackMethod method;
   final PlayerTelemetry? receivedTelemetry;
+  final DisplayMatchingReport displayReport;
 }
 
 @immutable
@@ -148,6 +150,10 @@ class Diagnostics extends ChangeNotifier {
       'Diagnostic recording: ${snapshot.recordingEnabled ? 'On' : 'Off'}',
       'Playback state: ${snapshot.playback.state.name}',
       'Playback method: ${_methodLabel(snapshot.playback.method)}',
+      'Windows display: ${windowsDisplayFact(snapshot.playback.displayReport)}',
+      'HDR matching: ${hdrMatchingFact(snapshot.playback.displayReport)}',
+      'Renderer output: ${rendererOutputFact(telemetry)}',
+      "Display state is reported by Windows; it does not verify the TV's picture.",
       'Plex server selected: ${snapshot.plexServerSelected ? 'Yes' : 'No'}',
       'Plex connection verified: ${snapshot.plexConnectionVerified ? 'Yes' : 'No'}',
       if (telemetry?.width case final width? when width > 0)
@@ -190,6 +196,22 @@ class Diagnostics extends ChangeNotifier {
     }
     return '${lines.join('\n')}\n';
   }
+
+  static String windowsDisplayFact(DisplayMatchingReport report) =>
+      '${report.observed.name} · ${report.route.name}'
+      '${report.activeColorMode == null ? '' : ' · ${report.activeColorMode!.name}'}';
+
+  static String hdrMatchingFact(DisplayMatchingReport report) =>
+      '${report.session.name} · ${report.outcome.name} · revision=${report.revision} · '
+      'wrote=${report.wrote} · owned=${report.owned}'
+      '${report.reason == null ? '' : ' · ${report.reason!.name}'}';
+
+  static String rendererOutputFact(PlayerTelemetry? telemetry) => [
+    _recognized(_rendererTransfers, telemetry?.targetGamma) ?? 'Unavailable',
+    _recognized(_primaries, telemetry?.targetPrimaries) ?? 'Unavailable',
+    _recognized(_rendererFormats, telemetry?.targetPixelFormat) ??
+        'Unavailable',
+  ].join(' · ');
 
   static String redact(String input) => input
       .replaceAllMapped(
@@ -433,6 +455,27 @@ class Diagnostics extends ChangeNotifier {
     'rgb24',
     'rgba',
     'bgra',
+  };
+  static const _rendererTransfers = {
+    ..._dynamicRanges,
+    'bt.1886',
+    'bt.709',
+    'srgb',
+    'linear',
+    'gamma1.8',
+    'gamma2.0',
+    'gamma2.2',
+    'gamma2.4',
+    'gamma2.6',
+    'gamma2.8',
+  };
+  static const _rendererFormats = {
+    ..._pixelFormats,
+    'rgb10a2',
+    'rgba16hf',
+    'rgba16f',
+    'rgb0',
+    'bgr0',
   };
   static const _primaries = {
     'bt.601-525',

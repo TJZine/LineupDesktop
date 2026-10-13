@@ -167,6 +167,22 @@ negative comparison locally, remove only the two reference-hardening options,
 rebuild the same test target, observe containment failure, then restore them and
 rebuild. Do not distribute or commit that unhardened configuration.
 
+The opt-in `display_dynamic_range_test` and `display_guardian_test` targets use
+fake DisplayConfig/guardian/clock inputs and protocol pipe fixtures. They do not
+change Windows HDR or establish physical display behavior. After the application
+compile check has configured the Windows build, build and run all native targets:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test authenticated_reference_test display_dynamic_range_test display_guardian_test
+ctest --test-dir .\build\windows\x64 -C Release --output-on-failure --timeout 180
+```
+
+The encoder/authenticated targets depend on Flutter-generated native inputs;
+serialize these builds with Flutter checks and other shared-build writers.
+The authenticated target retains the FFmpeg, OpenSSL, Python and pinned-runtime
+prerequisites above. See the [HDR plan's evidence](fullscreen-hdr-implementation-plan.md#evidence)
+for the controller and guardian contracts covered by their fake tests.
+
 ## Portable commands
 
 Flutter SDK `3.47.6` (revision
@@ -201,11 +217,25 @@ files from Git, including new source in `lib`, `test`, `tool`, and `test_driver`
 Ignored build output and deleted files are excluded. `--check` reports formatting
 differences without writing files; use `dart tool/format.dart` to format all these
 inputs or `dart format <changed-paths>` to format an edit. Git and the selected
-Dart SDK must be available; run from within the checkout. The timezone above
-is canonical for localized schedule goldens. On Windows, Dart uses the Windows
-system timezone; `$env:TZ` alone does not select it. Run the portable Windows
-tests in the machine's configured timezone, or set the OS timezone to Eastern
-Standard Time before treating localized schedule assertions as canonical. The
+Dart SDK must be available; run from within the checkout.
+
+The timezone above is canonical for localized schedule goldens on POSIX hosts.
+On Windows, use the machine's configured Eastern Standard Time with the process
+`TZ` variable unset:
+
+```powershell
+Remove-Item Env:TZ -ErrorAction SilentlyContinue
+flutter test
+```
+
+The Windows Dart 3.13.5 runtime can interpret `TZ=America/New_York` as an
+incorrect base offset while retaining Windows' Eastern timezone name/DST shift;
+the October 11 HDR verification observed offsets 0/+1 instead of -5/-4.
+The explicit POSIX-style plan command is still reported separately when requested.
+Check effective local offsets; do not infer correctness from the timezone name.
+If the machine is not configured for Eastern time, report that prerequisite
+or have its operator configure it before claiming canonical schedule evidence.
+The
 full suite on Linux/Windows excludes the required alpha suite marked
 `@TestOn('mac-os')`; the optional visual checks are outside the default `test/`
 tree. A portable pass there is not macOS visual evidence. Run the required
@@ -221,8 +251,8 @@ must execute and pass when the machine's effective local offsets match its
 Eastern cases. It explicitly skips incompatible offsets so another host does
 not turn a portability limitation into a false failure; that skip is
 portability evidence only, not a timezone-independent suite result. The
-Windows OS timezone governs Windows behavior, and `TZ` alone cannot establish
-the canonical Windows result.
+Windows OS timezone with process `TZ` unset governs the canonical Windows
+result; `TZ=America/New_York` cannot establish it.
 
 The five screenshot goldens are optional local visual-review checks outside the
 default `test/` tree. They use Flutter's default exact comparator and remain
@@ -281,8 +311,15 @@ flutter build macos
 ### Application compile check
 
 Use the pinned Flutter SDK, Git, PowerShell 7.4+ (`pwsh`), Visual Studio Build
-Tools 2022 with Desktop C++ and a Windows SDK, and 7-Zip. Prepare the ignored
-x86-64 LGPL libmpv directory before configuring the application:
+Tools 2022 with Desktop C++ and a Windows SDK, and 7-Zip.
+
+Windows application builds require SDK **10.0.26100.0 or newer**; CMake rejects
+an older selected SDK with a configure error. The shared DisplayConfig API
+translation unit enables newer declarations locally, with runtime capability
+detection preserving Windows 10 execution. The patched engine's separately
+pinned SDK below is unchanged.
+
+Prepare the ignored x86-64 LGPL libmpv directory before configuring the application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
@@ -357,6 +394,13 @@ remain current. Select the resulting engine explicitly; do not replace a stock
 Flutter SDK cache.
 
 ### Development launcher
+
+Only one Lineup instance runs per Windows user session. A second application
+launch, including a second `flutter run`, brings the existing window forward and
+exits successfully; its arguments (including `--media`) are ignored. Close the
+existing app normally before launching a different development candidate.
+Guardian mode dispatch occurs before instance enforcement and initializes no
+Flutter engine or window.
 
 After the one-time prerequisites and patched `host_debug` setup above, the
 small PowerShell launcher reuses those exact local-engine outputs. Configure

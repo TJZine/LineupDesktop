@@ -441,6 +441,19 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               ],
             ),
             SizedBox(height: 20),
+            _technicalFact(
+              'Windows display',
+              Diagnostics.windowsDisplayFact(snapshot.playback.displayReport),
+            ),
+            _technicalFact(
+              'HDR matching',
+              Diagnostics.hdrMatchingFact(snapshot.playback.displayReport),
+            ),
+            _technicalFact(
+              'Renderer output',
+              Diagnostics.rendererOutputFact(telemetry),
+            ),
+            SizedBox(height: 20),
             Text.rich(
               TextSpan(
                 children: [
@@ -458,7 +471,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             ),
             SizedBox(height: 16),
             Text(
-              'Media signal values do not verify display HDR output.',
+              "Display state is reported by Windows; it does not verify the TV's picture.",
               style: TextStyle(
                 color: LineupTheme.of(context).secondaryText,
                 fontSize: 14,

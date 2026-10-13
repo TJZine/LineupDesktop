@@ -251,7 +251,12 @@ class _CountingPlayer extends FixturePlayer {
   final List<String> commands = [];
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     commands.add('load');
     await super.load(media, plexToken: plexToken, generation: generation);
   }
