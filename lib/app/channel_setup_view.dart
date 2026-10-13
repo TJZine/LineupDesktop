@@ -8,6 +8,7 @@ import '../channels/channel_builder.dart';
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import 'channel_setup_projection.dart';
 import 'form_error.dart';
 import 'lineup_controller.dart';
 import 'lineup_restore_view.dart';
@@ -120,28 +121,23 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     super.dispose();
   }
 
-  List<ChannelProposal> get _proposals {
+  final _projection = ChannelSetupProjection();
+
+  List<ChannelProposal> _buildProposals() {
     final inventory = widget.controller.playableInventory;
-    return buildChannelProposals(
-      libraries: widget.controller.libraries
-          .where((library) => _selectedLibraries.contains(library.id))
-          .toList(),
+    return _projection.proposals(
+      libraries: widget.controller.libraries,
+      selectedLibraries: _selectedLibraries,
       items: inventory.media,
       playlists: inventory.playlists,
       strategies: _strategies,
       strategyOrder: _sourceOrder,
       crossLibraryStrategies: _grouped,
       minimumItems: _minimum,
-      maximumChannels: null,
     );
   }
 
-  ChannelPlanAllocation _allocate(
-    List<Channel> existing, {
-    List<ChannelProposal>? proposals,
-  }) => materializeChannelPlan(
-    proposals: proposals ?? _proposals,
-    existing: existing,
+  ChannelSetupAllocationOptions get _allocationOptions => (
     mode: _mode,
     seriesMode: _playback,
     seriesBlockSize: _blockSize,
@@ -151,11 +147,20 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     includeSpecials: _includeSpecials,
     minimumItems: _minimum,
     maximumChannels: _maximum,
+  );
+
+  ChannelPlanAllocation _allocate(
+    List<Channel> existing, {
+    List<ChannelProposal>? proposals,
+  }) => ChannelSetupProjection.allocate(
+    proposals ?? _buildProposals(),
+    existing: existing,
+    options: _allocationOptions,
     anchor: DateTime.now().toUtc(),
   );
 
   ChannelPlanAllocation _allocateReview(List<Channel> existing) {
-    final proposals = _proposals;
+    final proposals = _buildProposals();
     _removeSourceIds.clear();
     _reviewStrategyBySource.clear();
     for (final proposal in proposals) {
@@ -960,7 +965,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _configureStep() {
-    final allocation = _allocate(widget.controller.channels);
+    _buildProposals();
+    final allocation = _projection.configure(
+      existing: widget.controller.channels,
+      options: _allocationOptions,
+    );
 
     final roles = LineupTheme.of(context);
 
@@ -1360,23 +1369,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final discoveryFailure = _discoveryFailure(strategy);
     final eligible = enabled
         ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
-        : _allocate(
-                widget.controller.channels,
-                proposals: buildChannelProposals(
-                  libraries: widget.controller.libraries
-                      .where(
-                        (library) => _selectedLibraries.contains(library.id),
-                      )
-                      .toList(),
-                  items: widget.controller.playableInventory.media,
-                  playlists: widget.controller.playableInventory.playlists,
-                  strategies: {strategy},
-                  crossLibraryStrategies: _grouped,
-                  minimumItems: _minimum,
-                  maximumChannels: null,
-                ),
-              ).eligibleOriginalsByStrategy[strategy] ??
-              0;
+        : _projection.disabledEligibility(strategy);
     final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
     final channels = enabled
         ? allocation.allocatedChannelsByStrategy[strategy] ?? 0
