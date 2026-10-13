@@ -121,8 +121,9 @@ class PlayerTrackDisplayProjection {
     final current = tracks.iterator;
     for (final previous in _tracks) {
       if (!current.moveNext() ||
-          _displayInputs(previous) != _displayInputs(current.current))
+          _displayInputs(previous) != _displayInputs(current.current)) {
         return false;
+      }
     }
     return !current.moveNext();
   }
@@ -131,8 +132,9 @@ class PlayerTrackDisplayProjection {
     final index = _tracks.indexWhere(
       (entry) => entry.type == track.type && entry.id == track.id,
     );
-    if (index < 0)
+    if (index < 0) {
       throw ArgumentError.value(track.id, 'track', 'Not in this snapshot');
+    }
     return _displays[index];
   }
 }
