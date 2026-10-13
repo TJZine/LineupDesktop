@@ -1,0 +1,11 @@
+{
+  "host": "local",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "review_timezone": "America/New_York",
+  "flutter_path": "/Users/tristan/.cache/lineup-flutter/3.47.6/flutter",
+  "flutter_revision": "5fc346839b5d0eef006ed8404392afb4dfae428d",
+  "dart": "3.13.5",
+  "package_config_sha256": "0b2747b10786ce5760a215e252dade85ec23b914b899e6221a219728b1b6ab4c",
+  "powershell": "not found on PATH",
+  "probe_root": "build/review-probes/2026-10-10-4fb77580/orchestrator-run"
+}

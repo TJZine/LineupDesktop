@@ -1,0 +1,53 @@
+{
+  "checked_at_utc": "2026-10-10T23:58:31.503558+00:00",
+  "head": "4fb7758034f4f47290fae13a4ea8275860ba1284",
+  "branch": "codex/desktop-ui-second-pass",
+  "tracked_files_compared": 424,
+  "tracked_inputs_changed": [],
+  "package_config_sha256": "0b2747b10786ce5760a215e252dade85ec23b914b899e6221a219728b1b6ab4c",
+  "package_config_unchanged": true,
+  "final_status": " M docs/reviews/comprehensive-review-2026-10-07/REMEDIATION.md\n M docs/reviews/comprehensive-review-2026-10-07/REPORT.md\n?? .claude/launch.json\n?? docs/comprehensive-review-prompt.md\n?? docs/design/desktop-ui/review-packets/lineup-1080p-cbf3dbd5/\n?? docs/reviews/comprehensive-review-2026-10-10/\n?? docs/reviews/test-slimming-2026-10-02/\n?? tool/windows/__pycache__/\n",
+  "allowed_new_review_directory": "docs/reviews/comprehensive-review-2026-10-10",
+  "probe_directory": "build/review-probes/2026-10-10-4fb77580/orchestrator-run",
+  "product_permanent_test_config_writes": false,
+  "artifact_verification": {
+    "local_links_checked": 117,
+    "missing_local_links": [],
+    "finding_ids": [
+      "F-001",
+      "F-002",
+      "F-003",
+      "F-004",
+      "F-005",
+      "F-006",
+      "F-007",
+      "F-008"
+    ],
+    "package_ids": [
+      "P-001",
+      "P-002",
+      "P-003",
+      "P-004",
+      "P-005",
+      "P-006",
+      "P-007"
+    ],
+    "windows_observation_ids": [
+      "W-001",
+      "W-002",
+      "W-003",
+      "W-004",
+      "W-005",
+      "W-006",
+      "W-007",
+      "W-008",
+      "W-009",
+      "W-010",
+      "W-011",
+      "W-012",
+      "W-013"
+    ],
+    "tracked_diff_check_exit": 0,
+    "all_assigned_reviews_collected": true
+  }
+}
