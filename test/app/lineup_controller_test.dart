@@ -5806,6 +5806,39 @@ void main() {
     expect(controller.busy, isFalse);
   });
 
+  test(
+    'a stale Home success cannot repopulate profiles after logout',
+    () async {
+      final homeUsers = Completer<List<PlexHomeUser>>();
+      final plex = _FakePlex()..homeUsersHandler = (_) => homeUsers.future;
+      final store = _MemoryStore(const PersistedState(profileId: 'owner'));
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+
+      final initialization = controller.initialize();
+      await _waitForTestState(
+        () => plex.homeUsersTokens.isNotEmpty,
+        description: 'deferred Home profile request',
+      );
+
+      expect(await controller.logout(), isTrue);
+      homeUsers.complete(const [
+        PlexHomeUser(id: 'stale', name: 'Stale', protected: false),
+      ]);
+      await initialization;
+
+      expect(controller.account, isNull);
+      expect(controller.profiles, isEmpty);
+      expect(controller.profile, isNull);
+      expect(controller.stage, SetupStage.welcome);
+      expect(store.state.profileId, 'owner');
+    },
+  );
+
   test('PIN polling never overlaps slow transport calls', () async {
     final poll = Completer<String?>();
     final plex = _FakePlex()

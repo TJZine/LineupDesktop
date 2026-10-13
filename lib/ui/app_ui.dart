@@ -611,10 +611,19 @@ Future<Size?> _decodeImageSize(
   late final ImageStreamListener listener;
   listener = ImageStreamListener(
     (info, _) {
-      completer.complete(
-        Size(info.image.width.toDouble(), info.image.height.toDouble()),
+      final size = Size(
+        info.image.width.toDouble(),
+        info.image.height.toDouble(),
       );
-      stream.removeListener(listener);
+      try {
+        completer.complete(size);
+      } finally {
+        try {
+          info.dispose();
+        } finally {
+          stream.removeListener(listener);
+        }
+      }
     },
     onError: (_, _) {
       completer.complete();

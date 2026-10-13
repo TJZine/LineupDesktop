@@ -496,8 +496,9 @@ class LineupController extends ChangeNotifier {
         if (operation != _epoch) return;
         _account = restoredAccount;
         _accountToken = token;
-        _publishProfiles = await plex.homeUsers(token);
-        if (operation != _epoch) return;
+        final homeUsers = await plex.homeUsers(token);
+        if (!_isCurrent(operation)) return;
+        _publishProfiles = homeUsers;
         if (settings.profilePickerOnStartup && profiles.length > 1) {
           _stage = SetupStage.profiles;
           return;
