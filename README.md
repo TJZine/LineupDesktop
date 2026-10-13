@@ -79,7 +79,7 @@ native player on Windows. Start with [Development](docs/DEVELOPMENT.md).
 
 ```sh
 flutter pub get
-dart format --output=none --set-exit-if-changed .
+dart tool/format.dart --check
 flutter analyze
 TZ=America/New_York flutter test # canonical full suite on macOS/Linux
 ```
