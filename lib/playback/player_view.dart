@@ -37,6 +37,7 @@ class PlayerView extends StatefulWidget {
 }
 
 class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
+  final _trackDisplays = PlayerTrackDisplayCache();
   late PlayerOverlay _renderedOverlay;
   late int _bottomPanelGeneration;
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
@@ -549,6 +550,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                         },
                         child: switch (overlay) {
                           PlayerOverlay.osd || PlayerOverlay.nowPlaying => _Osd(
+                            trackDisplays: _trackDisplays,
                             detailsExpanded:
                                 overlay == PlayerOverlay.nowPlaying,
                             controller: controller,
@@ -564,10 +566,12 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                             openGuide: widget.openGuide,
                           ),
                           PlayerOverlay.audioTracks => _Tracks(
+                            trackDisplays: _trackDisplays,
                             controller: controller,
                             type: PlayerTrackType.audio,
                           ),
                           PlayerOverlay.subtitleTracks => _Tracks(
+                            trackDisplays: _trackDisplays,
                             controller: controller,
                             type: PlayerTrackType.subtitle,
                           ),
@@ -717,6 +721,7 @@ class _BottomPanelExpansion extends StatelessWidget {
 
 class _Osd extends StatelessWidget {
   const _Osd({
+    required this.trackDisplays,
     required this.controller,
     required this.menuFocus,
     required this.sleepFocus,
@@ -726,6 +731,7 @@ class _Osd extends StatelessWidget {
     this.detailsExpanded = false,
   });
   final bool detailsExpanded;
+  final PlayerTrackDisplayCache trackDisplays;
   final PlayerCoordinator controller;
   final LineupMenuCallback? openMenu;
   final FocusNode menuFocus;
@@ -735,6 +741,7 @@ class _Osd extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displays = trackDisplays.forTracks(controller.tracks);
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
     final horizontalInset = (size.width * 0.05).clamp(24.0, 96.0).toDouble();
@@ -834,7 +841,7 @@ class _Osd extends StatelessWidget {
         .firstOrNull;
     final audioDisplay = selectedAudio == null
         ? null
-        : formatPlayerTrackDisplay(selectedAudio, peers: controller.tracks);
+        : displays.displayFor(selectedAudio);
     final audioLabel = audioDisplay == null || audioDisplay.compactText == null
         ? 'Audio'
         : 'Audio • ${audioDisplay.compactText}';
@@ -843,7 +850,7 @@ class _Osd extends StatelessWidget {
         (audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable');
     final subtitlesDisplay = selectedSubtitles == null
         ? null
-        : formatPlayerTrackDisplay(selectedSubtitles, peers: controller.tracks);
+        : displays.displayFor(selectedSubtitles);
     final subtitlesLabel = subtitlesDisplay == null
         ? '${expanded ? 'Subtitles' : 'Subs'} • Off'
         : subtitlesDisplay.compactText == null
@@ -2878,7 +2885,12 @@ class _SleepTimerPicker extends StatelessWidget {
 }
 
 class _Tracks extends StatefulWidget {
-  const _Tracks({required this.controller, required this.type});
+  const _Tracks({
+    required this.controller,
+    required this.type,
+    required this.trackDisplays,
+  });
+  final PlayerTrackDisplayCache trackDisplays;
   final PlayerCoordinator controller;
   final PlayerTrackType type;
 
@@ -2915,6 +2927,7 @@ class _TracksState extends State<_Tracks> {
 
   @override
   Widget build(BuildContext context) {
+    final displays = widget.trackDisplays.forTracks(widget.controller.tracks);
     final tracks = widget.controller.tracks
         .where((track) => track.type == widget.type)
         .toList();
@@ -3062,10 +3075,7 @@ class _TracksState extends State<_Tracks> {
                                                   : track!.selected;
                                               final display = track == null
                                                   ? null
-                                                  : formatPlayerTrackDisplay(
-                                                      track,
-                                                      peers: tracks,
-                                                    );
+                                                  : displays.displayFor(track);
                                               final title = off
                                                   ? 'Off'
                                                   : display!.primaryText;

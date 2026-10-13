@@ -3550,6 +3550,66 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('OSD reads fresh selection from a display-equivalent snapshot', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          language: 'en',
+          title: 'Original',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          language: 'en',
+          title: 'Restored',
+        ),
+      ],
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Audio • English — Original'), findsOneWidget);
+    fixture.native.emitTracks(const [
+      PlayerTrack(
+        id: 1,
+        type: PlayerTrackType.audio,
+        selected: false,
+        language: 'en',
+        title: 'Original',
+      ),
+      PlayerTrack(
+        id: 2,
+        type: PlayerTrackType.audio,
+        selected: true,
+        language: 'en',
+        title: 'Restored',
+      ),
+    ]);
+    await tester.pump();
+    expect(fixture.player.tracks.singleWhere((track) => track.selected).id, 2);
+    // The asynchronous native event schedules the OSD rebuild for the next frame.
+    await tester.pump();
+    expect(find.text('Audio • English — Restored'), findsOneWidget);
+    expect(find.byTooltip('Audio track: English — Restored'), findsOneWidget);
+    expect(fixture.native.selectedTracks, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('OSD keeps the bare category when no track field is meaningful', (
     tester,
   ) async {

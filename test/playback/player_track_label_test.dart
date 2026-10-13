@@ -3,6 +3,113 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_track_label.dart';
 
 void main() {
+  test(
+    'snapshot projection preserves every display field across mixed peers',
+    () {
+      final tracks = [
+        _track(id: 1, language: 'en-US', title: 'Original', codec: 'aac'),
+        _track(id: 2, language: 'en-GB', title: 'Restored', commentary: true),
+        _track(id: 3, language: 'en-US', title: 'Original', codec: 'aac'),
+        _track(
+          id: 4,
+          type: PlayerTrackType.subtitle,
+          language: 'en-US',
+          forced: true,
+        ),
+        _track(
+          id: 5,
+          type: PlayerTrackType.subtitle,
+          language: 'en-US',
+          hearingImpaired: true,
+        ),
+        _track(
+          id: 6,
+          type: PlayerTrackType.subtitle,
+          title: 'Festival edition',
+          external: true,
+        ),
+        _track(id: 7),
+      ];
+      final projection = PlayerTrackDisplayProjection(tracks);
+      for (final track in tracks) {
+        final individual = formatPlayerTrackDisplay(track, peers: tracks);
+        final prepared = projection.displayFor(track);
+        expect(_fields(prepared), _fields(individual));
+      }
+    },
+  );
+
+  test('view cache reuses display objects for selection-only snapshots', () {
+    final cache = PlayerTrackDisplayCache();
+    final first = _track(language: 'en-US', title: 'Original', codec: 'aac');
+    final projection = cache.forTracks([first]);
+    final selected = _track(
+      language: 'en-US',
+      title: 'Original',
+      codec: 'aac',
+      selected: true,
+    );
+    final refreshed = cache.forTracks([selected]);
+    expect(refreshed, same(projection));
+    expect(refreshed.displayFor(selected), same(projection.displayFor(first)));
+    expect(cache.forTracks([selected]), same(projection));
+  });
+
+  test('every display input and peer order invalidates the snapshot', () {
+    final original = _track();
+    final changes = [
+      _track(id: 2),
+      _track(type: PlayerTrackType.subtitle),
+      _track(title: 'Original'),
+      _track(language: 'en'),
+      _track(codec: 'aac'),
+      _track(channelCount: 2),
+      _track(channelLayout: 'stereo'),
+      _track(forced: true),
+      _track(external: true),
+      _track(hearingImpaired: true),
+      _track(visualImpaired: true),
+      _track(commentary: true),
+    ];
+    for (final changed in changes) {
+      final cache = PlayerTrackDisplayCache();
+      final before = cache.forTracks([original]);
+      expect(cache.forTracks([changed]), isNot(same(before)));
+    }
+    final cache = PlayerTrackDisplayCache();
+    final peer = _track(id: 2);
+    final before = cache.forTracks([original, peer]);
+    expect(cache.forTracks([peer, original]), isNot(same(before)));
+    final reordered = cache.forTracks([peer, original]);
+    expect(cache.forTracks([peer]), isNot(same(reordered)));
+    final removed = cache.forTracks([peer]);
+    expect(cache.forTracks([]), isNot(same(removed)));
+  });
+
+  test(
+    'regional peer replacement refreshes compact and drawer labels together',
+    () {
+      final cache = PlayerTrackDisplayCache();
+      final us = _track(id: 1, language: 'en-US', title: 'Original');
+      final sameRegion = _track(id: 2, language: 'en-US', title: 'Restored');
+      final first = cache.forTracks([us, sameRegion]);
+      expect(first.displayFor(us).compactText, 'English — Original');
+      final second = cache.forTracks([
+        us,
+        _track(id: 2, language: 'en-GB', title: 'Restored'),
+      ]);
+      expect(second, isNot(same(first)));
+      expect(
+        second.displayFor(us).primaryText,
+        'English (United States of America) — Original',
+      );
+      expect(
+        second.displayFor(us).compactText,
+        'English (United States of America)',
+      );
+    },
+  );
+
   group('formatPlayerTrackDisplay language resolution', () {
     const cases = <({String input, String? primary})>[
       (input: 'en', primary: 'English'),
@@ -455,6 +562,7 @@ void main() {
 
 PlayerTrack _track({
   int id = 1,
+  bool selected = false,
   PlayerTrackType type = PlayerTrackType.audio,
   String? title,
   String? language,
@@ -469,7 +577,7 @@ PlayerTrack _track({
 }) => PlayerTrack(
   id: id,
   type: type,
-  selected: false,
+  selected: selected,
   title: title,
   language: language,
   codec: codec,
@@ -481,3 +589,11 @@ PlayerTrack _track({
   visualImpaired: visualImpaired,
   commentary: commentary,
 );
+
+List<Object?> _fields(PlayerTrackDisplay display) => [
+  display.primaryText,
+  display.secondaryFacts,
+  display.compactText,
+  display.tooltipText,
+  display.semanticsText,
+];
