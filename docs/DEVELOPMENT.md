@@ -167,10 +167,38 @@ negative comparison locally, remove only the two reference-hardening options,
 rebuild the same test target, observe containment failure, then restore them and
 rebuild. Do not distribute or commit that unhardened configuration.
 
-The opt-in `display_dynamic_range_test` and `display_guardian_test` targets use
-fake DisplayConfig/guardian/clock inputs and protocol pipe fixtures. They do not
-change Windows HDR or establish physical display behavior. After the application
-compile check has configured the Windows build, build and run all native targets:
+The opt-in `display_dynamic_range_test` uses fake DisplayConfig/guardian/clock
+inputs, including failed-admission report and shutdown checks.
+`display_guardian_test` retains protocol/pipe fixtures and also launches real
+Win32 predecessor, guardian and successor processes against isolated journals
+and controlled display effects. Event barriers pause recovery before gate
+acquisition and observe blocked production admission. Cases cover both desired
+states, original HDR, timeout, multiple retained targets, clean disarm, helper
+loss, failed/unknown recovery, late-write liability, external changes, stale
+guardian identities, abandoned gates, corruption and unmutated orphan cleanup.
+Its negative control bypasses admission to demonstrate premature original
+capture; it does not reproduce the complete wrong-restoration chain.
+The process fixture exercises production admission, display worker and guardian
+recovery, with a controlled successor guardian link and a test protocol client.
+It does not test the production `WindowsGuardianLink` launcher or `wWinMain`
+window-focus path. Neither target changes Windows HDR or establishes physical
+display behavior. After configuration, build the affected targets explicitly:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target display_dynamic_range_test display_guardian_test native_player_contract_test runner_lifecycle_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^(display_dynamic_range|display_guardian|native_player_contract|runner_lifecycle)$' --output-on-failure --timeout 60
+```
+
+Install the pinned patched-engine candidate and prepared runtime before
+runner-lifecycle execution as described above. The guardian CTest has a
+60-second budget for process startup and its deliberately unresolved admission
+cases. Synchronous Windows display/storage calls have no general OS timeout
+guarantee; explicit coordination waits are bounded and run on native workers.
+Unknown or failed recovery after helper loss intentionally retains its journal
+record and disables successor matching; restarting does not erase that liability.
+Power loss, OS crash and interrupted shutdown remain physical limits.
+
+To include the separate encoder/authenticated-reference obligations:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test authenticated_reference_test display_dynamic_range_test display_guardian_test

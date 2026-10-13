@@ -165,6 +165,38 @@ void main() {
     });
   }
 
+  for (final userPaused in [false, true]) {
+    testWidgets('admission failure releases hold, userPaused=$userPaused', (
+      tester,
+    ) async {
+      final f = _Fixture();
+      addTearDown(f.close);
+      f.start();
+      f.decode();
+      final revision = f.policy.revision;
+      f.policy.receive(
+        DisplayMatchingReport.unavailable(
+          revision: revision - 1,
+          reason: DisplayMatchingReason.guardianUnavailable,
+        ),
+      );
+      expect(f.policy.holdActive, isTrue);
+      expect(f.player.plays, 0);
+      if (userPaused) f.policy.userPause();
+      final failure = DisplayMatchingReport.unavailable(
+        revision: revision,
+        reason: DisplayMatchingReason.guardianUnavailable,
+      );
+      f.policy.receive(failure);
+      expect(f.policy.holdActive, isFalse);
+      expect(f.player.plays, userPaused ? 0 : 1);
+      f.policy.receive(failure);
+      await f.elapse(tester, const Duration(seconds: 6));
+      expect(f.player.plays, userPaused ? 0 : 1);
+      expect(f.policy.beginLoad(2, null), isFalse);
+    });
+  }
+
   for (final action in ['play', 'pause', 'supersede']) {
     testWidgets('$action cancels automatic resume', (tester) async {
       final f = _Fixture();

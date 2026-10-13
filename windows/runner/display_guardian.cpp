@@ -59,22 +59,37 @@ PipeRead ReadRecord(HANDLE pipe, T &record, size_t &received) {
 }
 class WindowsGuardianLink final : public DisplayGuardianLink {
 public:
+  explicit WindowsGuardianLink(
+      std::shared_ptr<DisplayRecoveryCoordinator> recovery)
+      : recovery_(std::move(recovery)) {}
   bool Arm(const DisplayOwnership &ownership) override {
     if (started_ || lost_)
       return false;
     const ULONGLONG deadline = GetTickCount64() + 2000;
     started_ = true;
     ownership_ = ownership;
-    if (!Launch())
+    if (!recovery_ || !recovery_->Register(ownership, identity_))
       return Fail();
-    return Send(GuardianKind::arm, ownership, deadline);
+    if (!Launch() || !Send(GuardianKind::arm, ownership, deadline)) {
+      // No attempted state or Set yet: this unmutated registration is safe.
+      recovery_->Resolve(identity_);
+      return Fail();
+    }
+    return true;
   }
   bool Update(const DisplayOwnership &ownership) override {
-    return Send(GuardianKind::update, ownership);
+    // Durable intent precedes the helper acknowledgment and every Set.
+    return recovery_->Update(identity_, ownership) &&
+           Send(GuardianKind::update, ownership);
   }
   bool Disarm() override {
-    if (!Send(GuardianKind::disarm, ownership_))
+    // Callers disarm only after verified restoration/external relinquishment.
+    // A dead helper does not prevent explicit safe resolution. Its delayed
+    // recovery checks this identity under the same gate and becomes a no-op.
+    if (!recovery_->Resolve(identity_))
       return false;
+    if (IsAlive())
+      Send(GuardianKind::disarm, ownership_);
     disarmed_ = true;
     commands_.Reset();
     acknowledgments_.Reset();
@@ -83,6 +98,10 @@ public:
   bool IsAlive() override {
     return !lost_ && !disarmed_ && process_.Get() &&
            WaitForSingleObject(process_.Get(), 0) == WAIT_TIMEOUT;
+  }
+
+  bool Execute(const std::function<bool()> &action) override {
+    return recovery_->Execute(identity_, action);
   }
 
 private:
@@ -154,7 +173,7 @@ private:
       return Fail();
     if (!IsAlive() || sequence_ == UINT32_MAX)
       return Fail();
-    auto record = MakeGuardianRecord(kind, ++sequence_, ownership);
+    auto record = MakeGuardianRecord(kind, ++sequence_, ownership, identity_);
     if (!WriteRecord(commands_.Get(), record))
       return Fail();
     GuardianAck ack{};
@@ -181,12 +200,16 @@ private:
   }
   Handle commands_, acknowledgments_, process_;
   DisplayOwnership ownership_;
+  std::shared_ptr<DisplayRecoveryCoordinator> recovery_;
+  RecoveryIdentity identity_;
   uint32_t sequence_ = 0;
   bool started_ = false, lost_ = false, disarmed_ = false;
 };
 } // namespace
 int RunDisplayGuardian(HANDLE commands, HANDLE acknowledgments, HANDLE parent,
-                       DisplayConfigApi &api) {
+                       DisplayConfigApi &api,
+                       std::shared_ptr<DisplayRecoveryCoordinator> recovery,
+                       std::function<void()> before_recovery) {
   Handle command_owner(commands), ack_owner(acknowledgments),
       parent_owner(parent);
   GuardianSession session;
@@ -207,6 +230,14 @@ int RunDisplayGuardian(HANDLE commands, HANDLE acknowledgments, HANDLE parent,
       auto ack = session.Accept(record);
       if (!ack)
         break;
+      // The parent has durably recorded arm/update before sending. A disarm
+      // may already have removed it; stale guardians never resurrect a hold.
+      if (recovery &&
+          record.kind != static_cast<uint32_t>(GuardianKind::disarm) &&
+          !recovery->Contains(session.Identity(), *session.Ownership())) {
+        session.Malformed();
+        break;
+      }
       received = 0;
       if (!WriteRecord(acknowledgments, *ack)) {
         recover = true;
@@ -235,20 +266,19 @@ int RunDisplayGuardian(HANDLE commands, HANDLE acknowledgments, HANDLE parent,
     }
   }
   if (recover && !session.Finished()) {
-    Handle mutex(CreateMutexW(
-        nullptr, FALSE, L"Local\\TJZine.LineupDesktop.DisplayGuardianRestore"));
-    if (mutex.Get()) {
-      DWORD result = WaitForSingleObject(mutex.Get(), 3000);
-      if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED) {
-        session.ParentLost(api);
-        ReleaseMutex(mutex.Get());
-      }
-    }
+    if (before_recovery)
+      before_recovery();
+    const bool safe = recovery ? recovery->Recover(session.Identity(), api)
+                               : session.ParentLost(api);
+    if (!safe)
+      return EXIT_FAILURE;
   }
+
   return 0;
 }
 GuardianRecord MakeGuardianRecord(GuardianKind kind, uint32_t sequence,
-                                  const DisplayOwnership &ownership) {
+                                  const DisplayOwnership &ownership,
+                                  RecoveryIdentity identity) {
   GuardianRecord record;
   record.sequence = sequence;
   record.kind = static_cast<uint32_t>(kind);
@@ -259,16 +289,18 @@ GuardianRecord MakeGuardianRecord(GuardianKind kind, uint32_t sequence,
   record.original = static_cast<uint32_t>(ownership.original);
   record.verified = static_cast<uint32_t>(ownership.verified);
   record.attempted = static_cast<uint32_t>(ownership.attempted);
+  record.identity = identity;
   return record;
 }
 bool ValidGuardianAck(const GuardianAck &ack, uint32_t sequence) {
-  return ack.magic == GuardianAck{}.magic && ack.version == 1 &&
-         ack.sequence == sequence;
+  return ack.magic == GuardianAck{}.magic &&
+         ack.version == GuardianAck{}.version && ack.sequence == sequence;
 }
 std::optional<GuardianAck>
 GuardianSession::Accept(const GuardianRecord &record) {
   if (Finished() || recovered_ || sequence_ == UINT32_MAX ||
-      record.magic != GuardianRecord{}.magic || record.version != 1 ||
+      record.magic != GuardianRecord{}.magic ||
+      record.version != GuardianRecord{}.version ||
       record.sequence != sequence_ + 1 || record.kind < 1 || record.kind > 3 ||
       (record.route != static_cast<uint32_t>(DisplayRoute::hdr_state) &&
        record.route != static_cast<uint32_t>(DisplayRoute::advanced_color)) ||
@@ -288,11 +320,13 @@ GuardianSession::Accept(const GuardianRecord &record) {
       (ownership_ && (record.kind == static_cast<uint32_t>(GuardianKind::arm) ||
                       !(ownership.target == ownership_->target) ||
                       ownership.route != ownership_->route ||
-                      ownership.original != ownership_->original))) {
+                      ownership.original != ownership_->original ||
+                      !(record.identity == identity_)))) {
     Malformed();
     return std::nullopt;
   }
   ownership_ = ownership;
+  identity_ = record.identity;
   sequence_ = record.sequence;
   disarmed_ = record.kind == static_cast<uint32_t>(GuardianKind::disarm);
   GuardianAck ack;
@@ -300,22 +334,18 @@ GuardianSession::Accept(const GuardianRecord &record) {
   return ack;
 }
 void GuardianSession::Malformed() { invalid_ = true; }
-void GuardianSession::ParentLost(DisplayConfigApi &api) {
+bool GuardianSession::ParentLost(DisplayConfigApi &api) {
   if (Finished() || recovered_ || !ownership_)
-    return;
+    return false;
   recovered_ = true;
-  const auto &own = *ownership_;
-  const auto observed = api.Query(own.target, own.route);
-  if (observed.state == DisplayState::unknown ||
-      observed.state == own.original ||
-      (observed.state != own.verified && observed.state != own.attempted))
-    return;
-  api.Set(own.target, own.route, own.original);
-  api.Query(own.target,
-            own.route); // Exactly one verification, including rejected sets.
+  return RestoreDisplayOwnership(*ownership_, api);
 }
-DisplayGuardianFactory MakeDisplayGuardianFactory() {
-  return [] { return std::make_unique<WindowsGuardianLink>(); };
+DisplayGuardianFactory MakeDisplayGuardianFactory(
+    std::shared_ptr<DisplayRecoveryCoordinator> recovery) {
+  return [recovery = std::move(recovery)] {
+    return std::make_unique<WindowsGuardianLink>(
+        recovery ? recovery : ProductionDisplayRecovery());
+  };
 }
 std::optional<int> DispatchDisplayGuardian(const wchar_t *command_line) {
   int count = 0;
@@ -348,6 +378,7 @@ std::optional<int> DispatchDisplayGuardian(const wchar_t *command_line) {
       WaitForSingleObject(handles[2], 0) == WAIT_FAILED)
     return EXIT_FAILURE;
   auto api = MakeDisplayConfigApi();
-  return RunDisplayGuardian(handles[0], handles[1], handles[2], *api);
+  return RunDisplayGuardian(handles[0], handles[1], handles[2], *api,
+                            ProductionDisplayRecovery());
 }
 } // namespace lineup

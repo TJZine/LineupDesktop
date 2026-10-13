@@ -526,6 +526,59 @@ void main() {
     },
   );
 
+  test('admission fallback is typed, current and player scoped', () async {
+    messenger.setMockMethodCallHandler(channel, (_) async => null);
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    final reports = <DisplayMatchingReport>[];
+    final subscription = player.displayReports.listen(reports.add);
+    addTearDown(subscription.cancel);
+    await player.initialize();
+    await player.setDisplayMatching(
+      const DisplayMatchingRequest(
+        revision: 5,
+        session: true,
+        desired: DisplayMatchingState.hdr,
+      ),
+    );
+    const fallback = <String, Object?>{
+      'type': 'display',
+      'loadId': -1,
+      'revision': 5,
+      'session': 'unavailable',
+      'observed': 'unknown',
+      'outcome': 'failed',
+      'wrote': false,
+      'owned': false,
+      'reason': 'guardian_unavailable',
+      'route': 'none',
+      'activeColorMode': 'unknown',
+    };
+    await _sendNativeEvent(messenger, {...fallback, 'revision': 4});
+    await _sendNativeEvent(messenger, {...fallback, 'revision': 6});
+    await _sendNativeEvent(messenger, {
+      ...fallback,
+      'reason': 'unknown_recovery_reason',
+    });
+    expect(reports, isEmpty);
+    await _sendNativeEvent(messenger, fallback);
+    expect(reports, hasLength(1));
+    expect(
+      player.displayReport.session,
+      DisplayMatchingSessionState.unavailable,
+    );
+    expect(player.displayReport.outcome, DisplayMatchingOutcome.failed);
+    expect(
+      player.displayReport.reason,
+      DisplayMatchingReason.guardianUnavailable,
+    );
+    expect(player.displayReport.wrote, isFalse);
+    expect(player.displayReport.owned, isFalse);
+    expect(player.displayReport.route, DisplayMatchingRoute.none);
+    expect(player.status.state, isNot(PlayerState.error));
+  });
+
   test('resets the display revision across initialize', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {

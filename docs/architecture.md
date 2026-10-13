@@ -106,9 +106,27 @@ sequenced records are acknowledged; a confirmed arm and attempted-state update
 precede a display write. On parent loss it conditionally restores a state matching
 Lineup's last attempted or verified write. Startup dispatch precedes COM/Flutter
 and the per-user-session instance mutex; a second ordinary launch focuses the
-existing window and ignores its arguments. The guardian restore mutex is held
-only while restoring, and the controller waits for it once at startup on its
-worker. See the [HDR implementation contracts](fullscreen-hdr-implementation-plan.md).
+existing window and ignores its arguments.
+
+`display_recovery.*` owns native process admission through a bounded, versioned
+user/logon-session recovery journal and cross-process gate. Before capture or
+matching writes, the display worker waits at most three seconds for explicit
+safe resolution of every predecessor target. Journal registration and recorded
+attempts precede mutation; guardian protection is acknowledged. Multiple
+per-target guardians coexist, with the gate held for journal/recovery operations
+rather than their lifetimes. Failed release, target loss, and uncertain helper
+termination retain records. Resolved record identities prohibit delayed guardian
+writes. An unowned/abandoned mutex or process exit cannot prove restoration.
+The only no-query orphan cleanup requires both mutation fields to be unknown
+and proof that the exact owning process generation has ended: no write could
+have preceded recorded intent. Attempted/verified records are never cleared by
+that rule.
+Journal corruption or admission timeout disables matching for that process,
+including player recreation and hot restart, while current-revision typed
+`unavailable`/`failed` reports with `guardian_unavailable` release Dart holds.
+Playback and bounded close remain usable; there is no new Player failure notice.
+Coordination and storage run on native workers, and acknowledgment waits do not
+hold the gate. See the [HDR implementation contracts](fullscreen-hdr-implementation-plan.md).
 
 Normal shutdown is asynchronous: stop accepting commands and invalidate the
 native generation, let the worker destroy libmpv, then handle its platform

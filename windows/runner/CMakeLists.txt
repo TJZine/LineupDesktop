@@ -14,6 +14,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "native_player.cpp"
+  "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_guardian.cpp"
   "track_list_encoder.cpp"
@@ -115,6 +116,7 @@ add_test(NAME track_list_encoder COMMAND track_list_encoder_test)
 add_executable(authenticated_reference_test EXCLUDE_FROM_ALL
   "authenticated_reference_test.cpp"
   "track_list_encoder.cpp"
+  "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_guardian.cpp"
 )
@@ -152,6 +154,7 @@ add_test(NAME native_playback_state COMMAND native_playback_state_test)
 add_executable(native_player_contract_test EXCLUDE_FROM_ALL
   "native_player_contract_test.cpp"
   "track_list_encoder.cpp"
+  "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_guardian.cpp"
 )
@@ -177,6 +180,7 @@ add_executable(runner_lifecycle_test EXCLUDE_FROM_ALL
   "win32_window.cpp"
   "utils.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
+  "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_guardian.cpp"
 )
@@ -199,6 +203,7 @@ set_tests_properties(runner_lifecycle PROPERTIES TIMEOUT 45
   WORKING_DIRECTORY "$<TARGET_FILE_DIR:${BINARY_NAME}>")
 
 add_executable(display_dynamic_range_test EXCLUDE_FROM_ALL
+  "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_dynamic_range_test.cpp"
 )
@@ -210,14 +215,22 @@ set_tests_properties(display_dynamic_range PROPERTIES TIMEOUT 30)
 
 add_executable(display_guardian_test EXCLUDE_FROM_ALL
   "display_guardian.cpp"
+  "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_guardian_test.cpp"
+  "display_admission_process_test.cpp"
 )
 apply_standard_settings(display_guardian_test)
 target_compile_definitions(display_guardian_test PRIVATE "NOMINMAX")
 target_link_libraries(display_guardian_test PRIVATE "user32.lib" "shell32.lib")
 add_test(NAME display_guardian COMMAND display_guardian_test)
-set_tests_properties(display_guardian PROPERTIES TIMEOUT 30)
+set_tests_properties(display_guardian PROPERTIES TIMEOUT 60)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# User/logon-scoped recovery journal and gate identity.
+foreach(target ${BINARY_NAME} authenticated_reference_test native_player_contract_test
+    runner_lifecycle_test display_dynamic_range_test display_guardian_test)
+  target_link_libraries(${target} PRIVATE "advapi32.lib" "shell32.lib")
+endforeach()

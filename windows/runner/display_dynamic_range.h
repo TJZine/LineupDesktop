@@ -50,7 +50,6 @@ class DisplayConfigApi {
                                    DisplayRoute route) = 0;
   virtual bool Set(DisplayTarget target, DisplayRoute route,
                    DisplayState state) = 0;
-  virtual bool WaitForStartupRestore() = 0;
 };
 std::unique_ptr<DisplayConfigApi> MakeDisplayConfigApi();
 
@@ -62,7 +61,8 @@ struct DisplayOwnership {
   DisplayState attempted = DisplayState::unknown;
 };
 // One link per owned target. Each operation includes an acknowledgment and
-// bounded IPC wait; Arm must return within two seconds. Disarm is acknowledged.
+// bounded IPC wait; Arm must return within two seconds. Durable safe resolution
+// makes disarm authoritative even when the helper acknowledgment is lost.
 class DisplayGuardianLink {
  public:
   virtual ~DisplayGuardianLink() = default;
@@ -70,6 +70,7 @@ class DisplayGuardianLink {
   virtual bool Update(const DisplayOwnership& ownership) = 0;
   virtual bool Disarm() = 0;
   virtual bool IsAlive() = 0;
+  virtual bool Execute(const std::function<bool()>& action) = 0;
 };
 using DisplayGuardianFactory =
     std::function<std::unique_ptr<DisplayGuardianLink>()>;
@@ -155,7 +156,8 @@ class DisplayDynamicRange {
                       DisplayGuardianFactory guardian,
                       DisplayMatchingEngine::Reporter reporter,
                       std::function<void()> wakeup,
-                      std::unique_ptr<DisplayClock> clock = MakeDisplayClock());
+                      std::unique_ptr<DisplayClock> clock = MakeDisplayClock(),
+                      std::function<bool()> admission = {});
   ~DisplayDynamicRange();
   bool Submit(DisplayRequest request);
   void ResetRevision();
@@ -172,6 +174,7 @@ class DisplayDynamicRange {
   DisplayMatchingEngine::Reporter reporter_;
   std::function<void()> wakeup_;
   std::unique_ptr<DisplayClock> clock_;
+  std::function<bool()> admission_;
   std::mutex mutex_;
   std::condition_variable changed_;
   struct Pending {

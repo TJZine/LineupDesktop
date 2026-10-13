@@ -48,6 +48,7 @@ struct FakeGuardian : DisplayGuardianLink {
     return facts->disarm;
   }
   bool IsAlive() override { return facts->alive; }
+  bool Execute(const std::function<bool()>& action) override { return action(); }
 };
 struct FakeApi : DisplayConfigApi {
   DisplayMapping mapping{a, nullptr};
@@ -76,11 +77,6 @@ struct FakeApi : DisplayConfigApi {
     if (accept && apply) displays[target.id].state = state;
     if (on_set) on_set(target, state);
     return accept;
-  }
-  bool WaitForStartupRestore() override {
-    ++startup;
-    threads.push_back(std::this_thread::get_id());
-    return true;
   }
 };
 struct Fixture {
@@ -500,7 +496,7 @@ void GuardianGates() {
   Fixture update;
   update.guardian->update = false;
   update.Request(1, true, DisplayState::hdr);
-  Check(update.api.writes.empty() &&
+  Check(update.api.writes.empty() && update.guardian->disarms == 1 &&
             Text(update.Last().reason, "guardian_unavailable"),
         "update gate");
   Fixture lost;
@@ -524,6 +520,57 @@ void GuardianGates() {
   acknowledgment.Request(2, true, DisplayState::sdr);
   Check(acknowledgment.api.writes.size() == 1,
         "post-write acknowledgment loss blocks future matching writes");
+}
+void WorkerAdmissionFailure() {
+  auto api = std::make_unique<FakeApi>();
+  auto* facts = api.get();
+  auto guardian = std::make_shared<GuardianFacts>();
+  std::mutex mutex;
+  std::condition_variable changed;
+  std::vector<DisplayReport> reports;
+  int admissions = 0;
+  DisplayDynamicRange worker(
+      nullptr, std::move(api),
+      [guardian] { return std::make_unique<FakeGuardian>(guardian); },
+      [&](const auto& report) {
+        std::lock_guard lock(mutex);
+        reports.push_back(report);
+        changed.notify_all();
+      },
+      [] {}, std::make_unique<FakeClock>(),
+      [&] {
+        ++admissions;
+        return false;
+      });
+  auto unavailable = [&](int64_t revision) {
+    Check(worker.Submit({revision, true, DisplayState::hdr}),
+          "unavailable submit");
+    std::unique_lock lock(mutex);
+    Check(changed.wait_for(lock, std::chrono::seconds(3),
+                           [&] {
+                             return !reports.empty() &&
+                                    reports.back().revision == revision &&
+                                    Text(reports.back().session, "unavailable");
+                           }),
+          "bounded unavailable report");
+    const auto& report = reports.back();
+    Check(Text(report.outcome, "failed") &&
+              Text(report.reason, "guardian_unavailable") && !report.wrote &&
+              !report.owned,
+          "failed admission reports current revision without ownership");
+  };
+  unavailable(1);
+  worker.Notify(true, true);
+  unavailable(2);
+  worker.EndSessionAndWait(std::chrono::seconds(3));
+  Check(worker.ReleaseComplete(), "failed admission release remains usable");
+  worker.ResetRevision();
+  unavailable(1);
+  worker.EndSessionAndWait(std::chrono::seconds(3));
+  Check(admissions == 1 && facts->threads.empty() && facts->writes.empty() &&
+            guardian->arms == 0,
+        "failure is latched across notices and hot restart without display "
+        "capture");
 }
 void WorkerOrderingAndIsolation(bool remap) {
   auto api = std::make_unique<FakeApi>();
@@ -555,7 +602,11 @@ void WorkerOrderingAndIsolation(bool remap) {
           reports.push_back(report);
           changed.notify_all();
         },
-        [] {}, std::make_unique<FakeClock>());
+        [] {}, std::make_unique<FakeClock>(),
+        [&] {
+          ++facts->startup;
+          return true;
+        });
     controller = &worker;
     Check(worker.Submit({1, true, DisplayState::hdr}),
           "initial worker request");
@@ -608,6 +659,7 @@ int main() {
     AvailabilityAndRoutes();
     UnavailableTargetRecovery();
     GuardianGates();
+    WorkerAdmissionFailure();
     WorkerOrderingAndIsolation(false);
     WorkerOrderingAndIsolation(true);
     std::cout

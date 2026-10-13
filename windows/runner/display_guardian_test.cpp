@@ -24,9 +24,7 @@ struct FakeApi final : DisplayConfigApi {
   DisplayMapping MapWindow(HWND) override {
     throw std::runtime_error("mapping forbidden");
   }
-  bool WaitForStartupRestore() override {
-    throw std::runtime_error("startup wait forbidden");
-  }
+
   DisplayObservation Query(DisplayTarget target, DisplayRoute route) override {
     Check(target == owned.target, "query exact target");
     Check(route == owned.route, "query captured route");
@@ -52,7 +50,7 @@ void RestoreCases() {
     GuardianSession session;
     Check(session.Accept(Arm()).has_value(), "arm ack");
     FakeApi api;
-    session.ParentLost(api);
+    Check(session.ParentLost(api), "verified restoration is safe");
     Check(api.writes == 1 && api.queries == 2 &&
               api.requested == owned.original,
           "loss restores and verifies once");
@@ -77,9 +75,21 @@ void RestoreCases() {
         "verified arm");
   FakeApi failed;
   failed.accept = false;
-  verified.ParentLost(failed);
+  Check(!verified.ParentLost(failed), "failed verification remains unresolved");
   Check(failed.writes == 1 && failed.queries == 2,
         "rejected restore verifies once");
+}
+void UnverifiedOriginalRemainsUnresolved() {
+  GuardianSession session;
+  auto pending = owned;
+  pending.verified = DisplayState::unknown;
+  Check(session.Accept(MakeGuardianRecord(GuardianKind::arm, 1, pending))
+            .has_value(),
+        "arm pending transition");
+  FakeApi api;
+  api.observed = DisplayState::sdr;
+  Check(!session.ParentLost(api) && api.writes == 0 && api.queries == 1,
+        "observing original cannot settle a potentially late attempted write");
 }
 void NoActionCases() {
   for (DisplayState state : {DisplayState::sdr, DisplayState::unknown}) {
@@ -116,7 +126,7 @@ void NoActionCases() {
   Check(after.queries == 0, "loss before arm has no target");
 }
 void ValidationCases() {
-  for (int corruption = 0; corruption < 14; ++corruption) {
+  for (int corruption = 0; corruption < 18; ++corruption) {
     GuardianSession session;
     Check(session.Accept(Arm()).has_value(), "valid initial arm");
     auto record = MakeGuardianRecord(GuardianKind::update, 2, owned);
@@ -125,7 +135,7 @@ void ValidationCases() {
       record.magic = 0;
       break;
     case 1:
-      record.version = 2;
+      record.version = 3;
       break;
     case 2:
       record.sequence = 1;
@@ -163,6 +173,18 @@ void ValidationCases() {
     case 13:
       record.route = static_cast<uint32_t>(DisplayRoute::advanced_color);
       break;
+    case 14:
+      ++record.identity.owner_pid;
+      break;
+    case 15:
+      ++record.identity.owner_created_low;
+      break;
+    case 16:
+      ++record.identity.owner_created_high;
+      break;
+    case 17:
+      ++record.identity.record_id;
+      break;
     }
     Check(!session.Accept(record) && session.Finished(),
           "malformed record rejected");
@@ -195,9 +217,9 @@ void AcknowledgmentCases() {
   ack = session.Accept(MakeGuardianRecord(GuardianKind::update, 2, update));
   Check(ack && ValidGuardianAck(*ack, 2), "update sequence acknowledged");
   Check(!ValidGuardianAck(*ack, 1), "stale ack rejected");
-  ack->version = 2;
+  ack->version = 3;
   Check(!ValidGuardianAck(*ack, 2), "wrong ack version rejected");
-  ack->version = 1;
+  ack->version = 2;
   ack->magic = 0;
   Check(!ValidGuardianAck(*ack, 2), "wrong ack magic rejected");
   FakeApi api;
@@ -311,13 +333,19 @@ void PipeLoopCases() {
   }
 }
 } // namespace
-int main() {
+std::optional<int> DispatchDisplayAdmissionTestChild(int argc, char **argv);
+void RunDisplayAdmissionProcessTests();
+int main(int argc, char **argv) {
   try {
+    if (auto child = DispatchDisplayAdmissionTestChild(argc, argv))
+      return *child;
     RestoreCases();
     NoActionCases();
+    UnverifiedOriginalRemainsUnresolved();
     ValidationCases();
     AcknowledgmentCases();
     PipeLoopCases();
+    RunDisplayAdmissionProcessTests();
     std::cout << "Guardian protocol and conditional recovery passed (fake "
                  "DisplayConfig).\n";
     return EXIT_SUCCESS;

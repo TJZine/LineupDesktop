@@ -276,13 +276,37 @@ Add a native display controller owned by `WindowsNativePlayer`, in new files
     as Windows saved it.
 - **Hot restart:** `initialize` resets the expected Dart revision, since the
   native player survives a Dart hot restart (`native_player.cpp:559-561`).
-- **Relaunch after a crash:** a guardian holds the mutex
-  `Local\TJZine.LineupDesktop.DisplayGuardianRestore` only while it is
-  performing a restore.
-  - Once at instance startup, before any session, the controller's worker
-    thread (never the platform thread) waits up to 3 seconds for that mutex,
-    so a fresh launch doesn't capture mid-restore.
-  - On timeout it proceeds and records a normalized diagnostic.
+- **Relaunch after a crash:** the native process lifecycle owns admission,
+  independently of the ordinary single-instance window guard.
+  - Before original-state capture or matching writes, the display worker
+    waits at most 3 seconds for explicit resolution of **every** predecessor
+    target in the native recovery journal. An unowned or abandoned mutex,
+    helper exit, or broken pipe does not establish restoration success.
+  - A bounded, versioned journal scoped to the user/logon session records
+    target identity, captured route/original, and attempted/verified writes.
+    Registration and attempted-state recording must succeed before mutation;
+    the guardian acknowledges protection before the first write.
+    A registration with no attempted or verified state can be retired without
+    display access only after the exact parent generation is proven dead.
+    This covers a crash before helper launch; PID reuse is checked using
+    creation time, and access/query uncertainty retains the record.
+  - The cross-process gate serializes journal transitions and conditional
+    recovery, rather than being held by each guardian for its whole lifetime.
+    Multiple retained targets coexist. Stale guardians cannot restore a
+    record that has already been safely resolved.
+  - Failed restoration, target loss, and corrupt/unavailable coordination
+    remain unresolved. Recovery explicitly distinguishes safe resolution
+    from uncertainty. The journal retains uncertainty after helper handles
+    have closed; it is native recovery data, not a preference or media log.
+  - Timeout or uncertainty disables matching for the process lifetime.
+    Current-revision reports use `session=unavailable`, `outcome=failed`,
+    `reason=guardian_unavailable`, `wrote=false`, and `owned=false`.
+    Playback and bounded shutdown remain usable. Display/settings notices,
+    player recreation, and Dart hot restart cannot bypass failed admission.
+  - Admission waits and journal operations run off the platform thread.
+    IPC acknowledgment waits do not hold the cross-process gate.
+    The journal is checksummed and bounded to 32 outstanding target records;
+    exhaustion or invalid data fails closed without evicting a retained target.
 
 ### Dart ↔ native messages
 
@@ -338,8 +362,8 @@ package gains no files.
   - The guardian initializes no Flutter engine and creates no window.
   - `flutter_windows.dll` and `libmpv-2.dll` are still mapped because they are
     imported statically. This is acceptable because they sit beside the exe.
-  - It holds `Local\TJZine.LineupDesktop.DisplayGuardianRestore` only while
-    restoring.
+  - It participates in the native recovery journal and cross-process gate;
+    it does not own an exclusive global mutex for its lifetime.
   - It uses the same real `DisplayConfigApi` and route detection as the
     controller.
 - **Launch:**
@@ -352,8 +376,9 @@ package gains no files.
   - Arguments are the handle values.
 - **Protocol:** fixed-size, versioned binary records with a sequence number.
   - Kinds are `arm`, `update`, and `disarm`.
-  - Fields are target adapter LUID and target ID, original state, last
-    verified written state, and in-flight target state (or none).
+  - Fields identify the owning process generation and recovery record, target
+    adapter LUID and target ID, original state, last verified written state,
+    and in-flight target state (or none).
   - The guardian acknowledges each record. The parent treats a missing `arm`
     acknowledgment within 2 seconds as `guardian_unavailable`.
   - A later write or acknowledgment failure means the guardian is lost: make
@@ -361,13 +386,18 @@ package gains no files.
 - **Trigger:** broken pipe or end-of-file without a prior `disarm`, or the
   parent handle signaled.
 - **Action:**
-  1. Query the target.
-  2. If the observed state differs from the original state **and** equals the
+  1. Acquire the recovery gate and validate the exact journal record. An
+     already resolved record causes no display write.
+  2. Query the target using its captured route.
+  3. If the observed state differs from the original state **and** equals the
      last verified write or the attempted (in-flight) state, write the
      original state and verify it once.
-  3. Otherwise do nothing.
-  4. Exit.
-  Malformed or out-of-order records end the guardian without changes.
+  4. Resolve only an explicitly safe result. Unknown/failed restoration
+     retains the record and prevents successor matching. An external state
+     is respected without writing over it.
+  5. Release the gate and exit; helper exit itself is not a success signal.
+  Malformed or out-of-order records end the guardian without display changes
+  and do not erase unresolved journal records.
 - **Lifetime:** one guardian per owned target. It is disarmed after verified
   release or on suspension.
 - **Known limits:** power loss, an OS crash, a shutdown that cuts the
@@ -504,6 +534,10 @@ unit whose commit changed them.
 
 ### Final deterministic verification
 
+The October 11 results below remain historical evidence for their named
+candidate. The October 13 admission correction changes native lifecycle and
+test inputs; it does not inherit those native passes or close physical rows.
+
 Application source candidate: `5d7d27e2b25a1676bf0b3257973721866f699700`, with
 only the seven Unit 5 documents changing afterwards. Those documentation edits
 do not change the checked Dart/native inputs. Machine: Windows 10 Home
@@ -536,6 +570,47 @@ remains pending for the user's final full-app test, including Windows 11 and
 the portable package.
 
 ## Evidence
+
+### Admission correction verification (October 13, 2026)
+
+Local correction based on PR #44 head
+`d0c49b9e1368b5a8e409f561197bab2975e4d2a9`, base
+`97f56df4e8b6a5e337534a83c57a15c12173b797`. The exact correction commit is
+recorded in Git; the following results apply to its unchanged Dart/native
+policy inputs. Host: macOS ARM64, pinned Flutter `3.47.6` at
+`5fc346839b5d0eef006ed8404392afb4dfae428d`.
+
+- `flutter pub get`: passed.
+- `dart tool/format.dart --check`: passed, 104 files, no changes.
+- `flutter analyze`: passed, no issues.
+- Focused Eastern-time display-matching, Windows-adapter and coordinator
+  tests: 296 passed.
+- `TZ=America/New_York flutter test --reporter failures-only`: 1,562 passed.
+- Apple Clang `21.0.0`, C++17, `-Wall -Wextra -Werror`, AddressSanitizer and
+  UndefinedBehaviorSanitizer: the existing controller/worker fake suite,
+  including failed-admission reports, retry/hot-restart latching and bounded
+  release, passed in a temporary portable harness. The real Win32 API class
+  was replaced by an inert adapter and Win32 types/Sleep were shimmed;
+  production admission was excluded and test callbacks supplied admission.
+  This is policy/worker evidence, **not** Windows compilation, journal/IPC
+  execution or process-admission proof.
+- Focused independent source review and `git diff --check`: completed; the
+  corrected deadline calculation, known-unmutated orphan cleanup and shared
+  conditional-restoration policy received a follow-up review.
+
+The new deterministic Win32 process fixture is wired into the opt-in
+`display_guardian` CTest. Native compilation and all four affected Windows
+CTests remain **unrun** because this host lacks the Windows SDK/runtime.
+Use the [affected-target commands and prerequisites](DEVELOPMENT.md#current-test-tiers-and-gaps),
+then complete the physical Windows 10/11 and exact-package rows. The new fixture
+uses real processes and production admission/recovery with controlled display
+effects and a controlled successor guardian link. Its negative control detects
+premature capture, not the entire historical wrong-restoration chain. Source
+review and portable policy results do not mark that fixture or physical rows
+passed. Earlier CI/package and Windows results retain their original candidate
+identities and do not validate this correction.
+
+### Original implementation evidence
 
 **Native controller CTest, fake API, fake guardian, fake clock (Unit 2):**
 - Original-state capture; no write when the display already matches.

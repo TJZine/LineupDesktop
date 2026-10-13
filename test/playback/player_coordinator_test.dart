@@ -54,6 +54,45 @@ void main() {
     },
   );
 
+  for (final userPaused in [false, true]) {
+    testWidgets('admission fallback preserves playback intent: $userPaused', (
+      tester,
+    ) async {
+      final f = _ContinuationFixture(player: _DisplayPlayer());
+      final p = f.player as _DisplayPlayer;
+      addTearDown(f.close);
+      await f.coordinator.toggleFullscreen();
+      await f.coordinator.loadInitialMedia(
+        Uri.parse('https://synthetic.test/local'),
+      );
+      p.decode();
+      await tester.pump();
+      f.coordinator.showMiniGuide();
+      p.admissionUnavailable(revision: p.requests.last.revision - 1);
+      await tester.pump();
+      expect(f.coordinator.displayHoldActive, isTrue);
+      expect(p.plays, 0);
+      if (userPaused) await f.coordinator.pause();
+      final overlay = f.coordinator.overlay;
+      final presentation = f.coordinator.overlayPresentationGeneration;
+      p.admissionUnavailable();
+      await tester.pump();
+      expect(f.coordinator.displayHoldActive, isFalse);
+      expect(p.plays, userPaused ? 0 : 1);
+      expect(f.coordinator.overlay, overlay);
+      expect(f.coordinator.overlayPresentationGeneration, presentation);
+      expect(f.coordinator.error, isNull);
+      expect(
+        f.coordinator.diagnosticPlaybackSnapshot.displayReport.reason,
+        DisplayMatchingReason.guardianUnavailable,
+      );
+      p.admissionUnavailable();
+      await tester.pump(const Duration(seconds: 6));
+      expect(p.plays, userPaused ? 0 : 1);
+      f.coordinator.dispose();
+    });
+  }
+
   for (final finish in ['settle', 'failed', 'deadline', 'no video']) {
     testWidgets('readiness before track-list keeps display hold: $finish', (
       tester,
@@ -7166,6 +7205,14 @@ class _DisplayPlayer extends _EventPlayer {
       reason: null,
       route: DisplayMatchingRoute.advancedColor,
       activeColorMode: null,
+    );
+    _reports.add(_report);
+  }
+
+  void admissionUnavailable({int? revision}) {
+    _report = DisplayMatchingReport.unavailable(
+      revision: revision ?? requests.last.revision,
+      reason: DisplayMatchingReason.guardianUnavailable,
     );
     _reports.add(_report);
   }

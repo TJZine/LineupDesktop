@@ -10,6 +10,8 @@
 #include <exception>
 #include <iostream>
 
+#include "display_recovery.h"
+
 namespace lineup {
 namespace {
 template <typename T>
@@ -105,16 +107,6 @@ class WindowsDisplayConfig final : public DisplayConfigApi {
       return DisplayConfigSetDeviceInfo(&info.header) == ERROR_SUCCESS;
     }
     return false;
-  }
-  bool WaitForStartupRestore() override {
-    HANDLE mutex = CreateMutexW(
-        nullptr, FALSE, L"Local\\TJZine.LineupDesktop.DisplayGuardianRestore");
-    if (!mutex) return false;
-    DWORD result = WaitForSingleObject(mutex, 3000);
-    if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED)
-      ReleaseMutex(mutex);
-    CloseHandle(mutex);
-    return result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
   }
 };
 class SteadyDisplayClock final : public DisplayClock {
@@ -282,6 +274,10 @@ bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
   if (!restore && (!record.guardian || !record.guardian->IsAlive() ||
                    record.guardian_lost)) {
     record.guardian_lost = true;
+    if (!record.owned && record.guardian) {
+      record.guardian->Disarm();
+      record.guardian.reset();
+    }
     Report(&record, "failed", false, "guardian_unavailable");
     return false;
   }
@@ -293,26 +289,51 @@ bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
     record.guardian_lost = true;
     if (!restore) {
       own.attempted = previous_attempt;
+      if (!record.owned) {
+        // No Set has ever run for this hold. The parent can explicitly cancel
+        // its durable registration even when the update acknowledgment failed.
+        record.guardian->Disarm();
+        record.guardian.reset();
+      }
       Report(&record, "failed", false, "guardian_unavailable");
       return false;
     }
   }
-  record.owned = true;
-  record.unobserved_attempt = true;
-  record.write_revision = request_.revision;
-  Report(&record, "pending", true);
-  const bool accepted = api_.Set(own.target, own.route, desired);
-  bool verified = false;
-  const auto deadline = clock_.Now() + std::chrono::seconds(3);
-  do {
-    record.observed = api_.Query(own.target, own.route);
-    if (record.observed.state == desired) {
-      verified = true;
-      break;
+  bool accepted = false, verified = false, executed = false;
+  auto action = [&] {
+    executed = true;
+    record.owned = true;
+    record.unobserved_attempt = true;
+    record.write_revision = request_.revision;
+    Report(&record, "pending", true);
+    accepted = api_.Set(own.target, own.route, desired);
+    const auto deadline = clock_.Now() + std::chrono::seconds(3);
+    do {
+      record.observed = api_.Query(own.target, own.route);
+      if (record.observed.state == desired) {
+        verified = true;
+        break;
+      }
+      if (!accepted || clock_.Now() >= deadline) break;
+      clock_.Sleep(std::chrono::milliseconds(50));
+    } while (true);
+    return verified;
+  };
+  // The helper can recover on pipe loss while the parent remains alive. Its
+  // claim/removal and the parent's Set/verification use the same short gate.
+  if (record.guardian)
+    record.guardian->Execute(action);
+  else
+    action();
+  if (!executed) {
+    record.guardian_lost = true;
+    if (!record.owned && record.guardian) {
+      record.guardian->Disarm();
+      record.guardian.reset();
     }
-    if (!accepted || clock_.Now() >= deadline) break;
-    clock_.Sleep(std::chrono::milliseconds(50));
-  } while (true);
+    Report(&record, "failed", false, "guardian_unavailable");
+    return false;
+  }
   if (verified) {
     own.verified = desired;
     record.unobserved_attempt = false;
@@ -475,13 +496,17 @@ void DisplayMatchingEngine::Poll(bool remap, bool retry) {
 DisplayDynamicRange::DisplayDynamicRange(
     HWND window, std::unique_ptr<DisplayConfigApi> api,
     DisplayGuardianFactory guardian, DisplayMatchingEngine::Reporter reporter,
-    std::function<void()> wakeup, std::unique_ptr<DisplayClock> clock)
+    std::function<void()> wakeup, std::unique_ptr<DisplayClock> clock,
+    std::function<bool()> admission)
     : window_(window),
       api_(std::move(api)),
       guardian_(std::move(guardian)),
       reporter_(std::move(reporter)),
       wakeup_(std::move(wakeup)),
       clock_(std::move(clock)),
+      admission_(admission
+                     ? std::move(admission)
+                     : [] { return ProductionDisplayRecovery()->Admit(); }),
       worker_([this] { Run(); }) {}
 DisplayDynamicRange::~DisplayDynamicRange() {
   {
@@ -539,9 +564,9 @@ void DisplayDynamicRange::EndSessionAndWait(std::chrono::milliseconds timeout) {
   changed_.wait_for(lock, timeout, [this] { return released_.load(); });
 }
 void DisplayDynamicRange::Run() {
-  if (!api_->WaitForStartupRestore()) {
-    std::cerr << "[lineup-display] startup_restore_wait_timeout" << std::endl;
-  }
+  const bool admitted = admission_();
+  if (!admitted)
+    std::cerr << "[lineup-display] startup_recovery_unavailable" << std::endl;
   uint64_t processing_epoch = epoch_.load();
   DisplayMatchingEngine engine(
       window_, *api_, guardian_, *clock_,
@@ -580,13 +605,25 @@ void DisplayDynamicRange::Run() {
     }
     if (request) {
       processing_epoch = request->epoch;
-      engine.Process(request->request, remap, retry);
-    } else if (engine.SessionActive() || engine.HasOwnership())
+      if (admitted) {
+        engine.Process(request->request, remap, retry);
+      } else {
+        DisplayReport report;
+        report.revision = request->request.revision;
+        report.session = request->request.session ? "unavailable" : "inactive";
+        report.outcome = request->request.session ? "failed" : "idle";
+        report.reason =
+            request->request.session ? "guardian_unavailable" : nullptr;
+        std::lock_guard lock(mutex_);
+        if (processing_epoch == epoch_.load()) reporter_(report);
+      }
+    } else if (admitted && (engine.SessionActive() || engine.HasOwnership()))
       engine.Poll(remap, retry);
     {
       std::lock_guard lock(mutex_);
-      released_ = requests_.empty() && !engine.SessionActive() &&
-                  !engine.HasOwnership();
+      released_ =
+          requests_.empty() &&
+          (!admitted || (!engine.SessionActive() && !engine.HasOwnership()));
     }
     changed_.notify_all();
     wakeup_();
