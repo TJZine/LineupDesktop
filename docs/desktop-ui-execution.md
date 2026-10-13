@@ -420,8 +420,9 @@ publication occurred.
 
 ### Muse finding adjudication and bounded correction — September 9
 
-Baseline `ae48acb2`. See [adjudication](desktop-ui-muse-adjudication.md) for all
-nine dispositions and the additional missing setup section-rail finding. This
+Baseline `ae48acb2`. The Muse adjudication in Git history records all nine
+dispositions and the additional missing setup section-rail finding; see the
+[documentation index](README.md#historical-material-in-git). This
 record corrects the earlier overly broad setup-composition assessment; it does
 not retroactively change historical evidence.
 

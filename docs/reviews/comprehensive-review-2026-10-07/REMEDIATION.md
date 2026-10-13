@@ -2,7 +2,7 @@
 
 ## Scope and authority
 
-This companion to [REPORT.md](REPORT.md) was written as a planning-only artifact for reviewed source `0382c131713174d9f8bced9d5b942855a99a6414` on `codex/desktop-ui-second-pass`. Findings passed independent evidence calibration. On October 8 the user authorized local implementation from `01bda7960431ba8d7448a69cceabfaeb9cf686d4` through [the remediation handoff](../../codex-handoff-2026-10-08-remediation.md). The original review remained read-only; the execution authorization below supersedes its stopping boundary.
+This companion to [REPORT.md](REPORT.md) was written as a planning-only artifact for reviewed source `0382c131713174d9f8bced9d5b942855a99a6414` on `codex/desktop-ui-second-pass`. Findings passed independent evidence calibration. On October 8 the user authorized local implementation from `01bda7960431ba8d7448a69cceabfaeb9cf686d4` through the remediation handoff (available in [Git history](../../README.md#historical-material-in-git)). The original review remained read-only; the execution authorization below supersedes its stopping boundary.
 
 Authorized packages: P1–P7, P9, P10, and the new P11–P13 below. P13 shares P6's chat and follows P6's corrections. P8/F15 is deferred to the Windows session; H1/H2 and other live observations remain evidence requests. Existing planned native, release, token-compensation and live-collection refresh work is not duplicated. The user has now settled F03/F18/D3 as recorded below.
 

@@ -44,13 +44,12 @@ approved contracts do not need another design approval.
 
 ## Orchestration policy — user update
 
-The user selected a new implementation session, a stronger orchestrator with
-`worker` / `worker_luna` assignments by risk, detailed Luna briefs, and grouped
-review to reduce usage. Follow the [orchestration handoff](desktop-ui-orchestration-handoff.md)
-for the role fallback, task-card template, file leases, concrete mechanical task
-seeds and R1–R4 review gates. This overrides any interpretation below requiring
-one reviewer per worker, package or commit. Review grouping does not weaken
-verification or authorize delegating unresolved contracts to Luna.
+The user selected a new implementation session, `worker` / `worker_luna`
+assignments by risk, detailed briefs, and grouped review to reduce usage.
+The completed orchestration handoff remains in Git history; see the
+[documentation index](README.md#historical-material-in-git). New assignments
+follow the current project profile and shared skills. Review grouping does not
+weaken verification or authorize delegating unresolved contracts.
 
 ## Confirmed source and verification map
 

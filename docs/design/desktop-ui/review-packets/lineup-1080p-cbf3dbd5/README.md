@@ -37,7 +37,8 @@ Files:
 The viewer retains the original QR generator copyright/MIT notice and embeds the
 exact qrcode-generator1.4.4 script referenced by the linking mock for offline use.
 
-The main repository contains the active workflow in
-`docs/desktop-ui-collaborative-handoff.md`, the explicit manual approval ledger in
-`docs/desktop-ui-surface-approvals.md`, and the immutable original mocks in
-`docs/design/desktop-ui/`. No surface starts visually approved.
+The main repository's current workflow starts at [AGENTS.md](../../../../../AGENTS.md).
+The [manual approval ledger](../../../../desktop-ui-surface-approvals.md) records
+later surface approvals, and the [visual manifest](../../README.md) identifies
+the original mocks. This packet predates those approvals and remains a frozen
+starting reference. The former collaborative handoff is available in Git history.

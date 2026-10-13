@@ -2,7 +2,7 @@
 
 ## October 8 remediation execution update
 
-The user authorized implementation through [the October 8 handoff](../../codex-handoff-2026-10-08-remediation.md), starting at `01bda7960431ba8d7448a69cceabfaeb9cf686d4`. Product packages are integrated locally through `9aebd4c73c5e6ebf5f81083c8e9dc7bebaca1065`. The original review below remains historical evidence at its frozen SHA.
+The user authorized implementation through the October 8 handoff (available in [Git history](../../README.md#historical-material-in-git)), starting at `01bda7960431ba8d7448a69cceabfaeb9cf686d4`. Product packages are integrated locally through `9aebd4c73c5e6ebf5f81083c8e9dc7bebaca1065`. The original review below remains historical evidence at its frozen SHA.
 
 F03 uses quiet Sign out text on Servers and no-library recovery, with existing Account confirmation/cleanup. F18 adopts canonical identity order with the explicitly accepted one-time existing shuffled-schedule shift. D3 follows live while preserving time browsing and active inspection; off-screen Now is neutrally outlined as **← Now** for a future window and **Now →** for a past window, with “Return to live” tooltip/semantics. Live/visible Now remains plain. P6 uses “Couldn't change visible hours. Still showing N hours.” from the restored value, with singular “hour” and Retry; the banner covers the grid and now-line.
 

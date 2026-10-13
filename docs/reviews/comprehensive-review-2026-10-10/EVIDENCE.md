@@ -1,6 +1,6 @@
 # Evidence ledger — general review complete
 
-Source and initial dirty-state hashes: INPUT_IDENTITY.json. Host/toolchain: ENVIRONMENT.json. Scope and human authorization: CENSUS.md. No finding is accepted solely from a reviewer opinion.
+Source and initial dirty-state hashes: INPUT_IDENTITY.json. Host/toolchain: ENVIRONMENT.json. Scope and human authorization: historical CENSUS.md, available in [Git history](../../README.md#historical-material-in-git). No finding is accepted solely from a reviewer opinion.
 
 ## Commands
 
@@ -31,7 +31,7 @@ October 7 report is frozen at 0382c131713174d9f8bced9d5b942855a99a6414; local ed
 
 ## Focused evidence and adjudication
 
-All executions below are controller-owned, on the same pinned source/toolchain and TZ=America/New_York. Probes were written only after git check-ignore confirmed their ignored destination. Source/recipes and SHA-256 are preserved in [PROBES.md](PROBES.md); ignored logs do not travel with Git. Detailed reviewer evidence is preserved in REVIEWER_A–E.md and CALIBRATION_A/C/E.md. Reviewer agreement alone is not evidence.
+All executions below are controller-owned, on the same pinned source/toolchain and TZ=America/New_York. Probes were written only after git check-ignore confirmed their ignored destination. Source/recipes and SHA-256 are preserved in [PROBES.md](PROBES.md); ignored logs do not travel with Git. Detailed reviewer evidence is preserved in the historical REVIEWER_A–E.md and CALIBRATION_A/C/E.md packets in Git. Reviewer agreement alone is not evidence.
 
 Let SDK be /Users/tristan/.cache/lineup-flutter/3.47.6/flutter/bin/flutter and RUN be build/review-probes/2026-10-10-4fb77580/orchestrator-run. Each command below expands these paths, from repository root. Logs contain synthetic values only.
 

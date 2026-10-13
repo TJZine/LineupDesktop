@@ -7,6 +7,8 @@
 .pub/
 build/
 coverage/
+__pycache__/
+*.py[cod]
 **/doc/api/
 **/ios/Flutter/.last_build_id
 

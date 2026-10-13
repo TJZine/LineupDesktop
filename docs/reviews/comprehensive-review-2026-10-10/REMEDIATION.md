@@ -2,7 +2,7 @@
 
 Planning only, October 10, 2026. **No implementation, permanent tests, patches or implementation chats are authorized by this document.**
 
-Source: [REPORT.md](REPORT.md), HEAD 4fb7758034f4f47290fae13a4ea8275860ba1284, branch codex/desktop-ui-second-pass. Reviewed source and current obligations are in [CENSUS.md](CENSUS.md) and [INPUT_IDENTITY.json](INPUT_IDENTITY.json). The plan uses the repo-production-remediation-plan skill. “Accepted” means retained after evidence adjudication, not user approval to implement.
+Source: [REPORT.md](REPORT.md), HEAD 4fb7758034f4f47290fae13a4ea8275860ba1284, branch codex/desktop-ui-second-pass. Reviewed source and current obligations are in [the report's scope and provenance](REPORT.md#target-boundaries-and-provenance) and [INPUT_IDENTITY.json](INPUT_IDENTITY.json); the original census is available in [Git history](../../README.md#historical-material-in-git). The plan uses the repo-production-remediation-plan skill. “Accepted” means retained after evidence adjudication, not user approval to implement.
 
 ## Scope and constraints
 
