@@ -38,8 +38,8 @@ function Assert-BuildInputWiring {
 function Assert-WindowsBuildInputContracts {
   param([string] $LauncherPath, [string] $ReleasePath)
 
-  Assert-BuildInputWiring $LauncherPath @('Get-LineupRepository', 'Get-LineupLaunchInput', 'Invoke-LineupLaunch')
-  Assert-BuildInputWiring $ReleasePath @('Get-LineupRepository', 'Get-LineupReleaseInput', 'Invoke-LineupReleaseBuild')
+  Assert-BuildInputWiring $LauncherPath @('Get-LineupRepository', 'Get-LineupLaunchInput', 'Assert-PinnedFlutterCheckout', 'Invoke-LineupLaunch')
+  Assert-BuildInputWiring $ReleasePath @('Get-LineupRepository', 'Get-LineupReleaseInput', 'Assert-PinnedFlutterCheckout', 'Invoke-LineupReleaseBuild')
   $owner = Join-Path $PSScriptRoot 'build-inputs.ps1'
   $directory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
   function Assert-Arguments {

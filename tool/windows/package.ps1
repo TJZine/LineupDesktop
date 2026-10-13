@@ -20,19 +20,11 @@ function Throw-PackageFailure {
 }
 . (Join-Path $PSScriptRoot 'build-inputs.ps1')
 
-$versionMatch = Select-String -LiteralPath (Join-Path $repository 'pubspec.yaml') -Pattern '^version:\s*(\S+)\s*$'
-if (-not $versionMatch) { throw 'pubspec.yaml does not contain a version.' }
-$pubspecVersion = $versionMatch.Matches[0].Groups[1].Value
-$packageVersion = $pubspecVersion.Replace('+', '-')
-if (-not $Destination) {
-  $Destination = "build/package/LineupDesktop-$packageVersion-windows-x64"
-}
-$BuildDirectory = [IO.Path]::GetFullPath((Join-Path $repository $BuildDirectory))
-$Destination = [IO.Path]::GetFullPath((Join-Path $repository $Destination))
+$packageInput = Get-LineupPackageInput -BuildDirectory $BuildDirectory -Destination $Destination
+$pubspecVersion = $packageInput.Version
+$BuildDirectory = $packageInput.BuildDirectory
+$Destination = $packageInput.Destination
 $packageRoot = [IO.Path]::GetFullPath((Join-Path $repository 'build/package'))
-if (-not $Destination.StartsWith($packageRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-  throw "Package destination must be below $packageRoot."
-}
 if (-not (Test-Path -LiteralPath $BuildDirectory)) { throw 'Release build directory does not exist.' }
 if (Test-Path -LiteralPath $Destination) { throw "Package destination already exists: $Destination" }
 

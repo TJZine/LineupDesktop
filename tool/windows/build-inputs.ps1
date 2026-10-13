@@ -68,6 +68,111 @@ function Get-PubspecVersion {
   }
 }
 
+# Package identity and default archive path use the same pubspec authority as
+# release build arguments. Resolve from this owner's repository, never a caller's cwd.
+function Get-LineupPackageInput {
+  [CmdletBinding()]
+  param(
+    [string] $BuildDirectory = 'build/windows/x64/runner/Release',
+    [string] $Destination
+  )
+
+  $repository = Get-LineupRepository
+  $version = Get-PubspecVersion -Path (Join-Path $repository 'pubspec.yaml')
+  if (-not $Destination) {
+    $Destination = "build/package/LineupDesktop-$($version.Name)-$($version.Build)-windows-x64"
+  }
+  $destinationPath = [IO.Path]::GetFullPath((Join-Path $repository $Destination))
+  $packageRoot = [IO.Path]::GetFullPath((Join-Path $repository 'build/package'))
+  if (-not $destinationPath.StartsWith($packageRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Package destination must be below $packageRoot."
+  }
+  [pscustomobject]@{
+    Version = "$($version.Name)+$($version.Build)"
+    BuildDirectory = [IO.Path]::GetFullPath((Join-Path $repository $BuildDirectory))
+    Destination = $destinationPath
+  }
+}
+
+function Get-PinnedCheckoutGitOutput {
+  param(
+    [Parameter(Mandatory)] [string] $Root,
+    [Parameter(Mandatory)] [string[]] $Arguments,
+    [switch] $SingleValue
+  )
+
+  $nativePreference = $PSNativeCommandUseErrorActionPreference
+  $PSNativeCommandUseErrorActionPreference = $false
+  try {
+    $output = @(& git -C $Root @Arguments)
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $PSNativeCommandUseErrorActionPreference = $nativePreference
+  }
+  if ($exitCode -or ($SingleValue -and
+      ($output.Count -ne 1 -or [string]::IsNullOrWhiteSpace($output[0])))) {
+    throw "git $($Arguments -join ' ') failed in $Root."
+  }
+  $output
+}
+
+function Get-NormalizedTextSha256 {
+  param([Parameter(Mandatory)] [string] $Path)
+
+  $text = [IO.File]::ReadAllText($Path).Replace("`r`n", "`n").Replace("`r", "`n")
+  $bytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
+  [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+}
+
+function Assert-PinnedFlutterCheckout {
+  param(
+    [Parameter(Mandatory)] [string] $Root,
+    [Parameter(Mandatory)] [System.Collections.IDictionary] $Metadata,
+    [Parameter(Mandatory)] [string] $PatchPath
+  )
+
+  $head = Get-PinnedCheckoutGitOutput -Root $Root `
+    -Arguments @('rev-parse', '--verify', 'HEAD') -SingleValue
+  if ($head -ne $Metadata.FlutterFrameworkRevision) {
+    throw 'Flutter checkout does not match the pinned framework revision.'
+  }
+  $engineVersion = Join-Path $Root 'bin/internal/engine.version'
+  if ((Get-Content -Raw -LiteralPath $engineVersion).Trim() -ne
+    $metadata.FlutterEngineRevision) {
+    throw 'Flutter checkout does not pin the required engine revision.'
+  }
+
+  $trackedChanges = @(Get-PinnedCheckoutGitOutput -Root $Root `
+    -Arguments @('status', '--porcelain', '--untracked-files=no'))
+  $changedPaths = @($trackedChanges | ForEach-Object {
+      if ($_.Length -lt 4) { throw "Unexpected git status entry: $_" }
+      $_.Substring(3).Trim('"').Replace('\', '/')
+    } | Sort-Object -Unique)
+  if ($changedPaths.Count -ne 1 -or
+    $changedPaths[0] -ne $metadata.FlutterManagerPath) {
+    throw 'Flutter checkout must contain only the repository-owned engine patch.'
+  }
+
+  $managerPath = Join-Path $Root $metadata.FlutterManagerPath
+  if (-not (Test-Path -LiteralPath $managerPath -PathType Leaf) -or
+    (Get-NormalizedTextSha256 $managerPath) -ne
+    $metadata.FlutterPatchedManagerSha256) {
+    throw 'Patched Flutter manager source does not match the pinned result.'
+  }
+
+  $nativePreference = $PSNativeCommandUseErrorActionPreference
+  $PSNativeCommandUseErrorActionPreference = $false
+  try {
+    & git -C $Root apply --reverse --check $patchPath
+    $patchExitCode = $LASTEXITCODE
+  } finally {
+    $PSNativeCommandUseErrorActionPreference = $nativePreference
+  }
+  if ($patchExitCode) {
+    throw 'The exact repository-owned Flutter engine patch is not applied.'
+  }
+}
+
 function Assert-NoTrackedSymlinks {
   param(
     [Parameter(Mandatory)] [string] $Repository,

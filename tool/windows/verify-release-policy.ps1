@@ -13,7 +13,8 @@ $scripts = @(
   'tool/windows/prepare-mpv.ps1',
   'tool/windows/run.ps1',
   'tool/windows/verify-build-inputs.ps1',
-  'tool/windows/verify-release-policy.ps1'
+  'tool/windows/verify-release-policy.ps1',
+  'tool/windows/verify-release-authorities.ps1'
 )
 foreach ($relative in $scripts) {
   $tokens = $null
@@ -36,57 +37,8 @@ $launcherPath = Join-Path $repository 'tool/windows/run.ps1'
 . (Join-Path $PSScriptRoot 'verify-build-inputs.ps1')
 Assert-WindowsBuildInputContracts -LauncherPath $launcherPath -ReleasePath $buildReleasePath
 
-$pubspecTestDirectory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
-try {
-  New-Item -ItemType Directory -Path $pubspecTestDirectory -ErrorAction Stop | Out-Null
-
-  function Assert-PubspecVersionRejected {
-    param(
-      [Parameter(Mandatory)] [string] $Path,
-      [Parameter(Mandatory)] [string] $Description
-    )
-
-    $rejected = $false
-    try {
-      Get-PubspecVersion -Path $Path | Out-Null
-    } catch {
-      $rejected = $true
-    }
-    if (-not $rejected) {
-      throw "Pubspec version case was accepted unexpectedly: $Description."
-    }
-  }
-
-  $validPath = Join-Path $pubspecTestDirectory 'valid.yaml'
-  @(
-    'name: lineup-desktop'
-    'version: 1.2.3+45'
-  ) | Set-Content -LiteralPath $validPath -Encoding utf8
-  $valid = Get-PubspecVersion -Path $validPath
-  if ($valid.Name -ne '1.2.3' -or $valid.Build -ne '45') {
-    throw 'Get-PubspecVersion returned the wrong name or build for a valid version.'
-  }
-
-  $missingBuildPath = Join-Path $pubspecTestDirectory 'missing-build.yaml'
-  'version: 1.2.3' | Set-Content -LiteralPath $missingBuildPath -Encoding utf8
-  Assert-PubspecVersionRejected $missingBuildPath 'missing numeric build'
-
-  $nonnumericBuildPath = Join-Path $pubspecTestDirectory 'nonnumeric-build.yaml'
-  'version: 1.2.3+beta' |
-    Set-Content -LiteralPath $nonnumericBuildPath -Encoding utf8
-  Assert-PubspecVersionRejected $nonnumericBuildPath 'nonnumeric build'
-
-  $duplicateVersionPath = Join-Path $pubspecTestDirectory 'duplicate-version.yaml'
-  @(
-    'version: 1.2.3+45'
-    'version: 1.2.4+46'
-  ) | Set-Content -LiteralPath $duplicateVersionPath -Encoding utf8
-  Assert-PubspecVersionRejected $duplicateVersionPath 'duplicate top-level version entries'
-} finally {
-  if (Test-Path -LiteralPath $pubspecTestDirectory -PathType Container) {
-    Remove-Item -LiteralPath $pubspecTestDirectory -Recurse -Force -ErrorAction Stop
-  }
-}
+. (Join-Path $PSScriptRoot 'verify-release-authorities.ps1')
+Assert-WindowsReleaseAuthorities
 
 $metadataPath = Join-Path $repository 'tool/windows/build-metadata.psd1'
 $metadata = Import-PowerShellDataFile -LiteralPath $metadataPath

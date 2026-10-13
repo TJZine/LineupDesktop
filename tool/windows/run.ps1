@@ -38,24 +38,6 @@ function Get-GitValue {
   $output[0].Trim()
 }
 
-function Get-GitLines {
-  param(
-    [Parameter(Mandatory)] [string] $Root,
-    [Parameter(Mandatory)] [string[]] $Arguments
-  )
-
-  $nativePreference = $PSNativeCommandUseErrorActionPreference
-  $PSNativeCommandUseErrorActionPreference = $false
-  try {
-    $output = @(& git -C $Root @Arguments)
-    $exitCode = $LASTEXITCODE
-  } finally {
-    $PSNativeCommandUseErrorActionPreference = $nativePreference
-  }
-  if ($exitCode) { throw "git $($Arguments -join ' ') failed in $Root." }
-  $output
-}
-
 function Assert-CommittedInput {
   param([Parameter(Mandatory)] [string] $RelativePath)
 
@@ -63,57 +45,6 @@ function Assert-CommittedInput {
   $working = Get-GitValue $repository @('hash-object', '--', $RelativePath)
   if ($working -ne $committed) {
     throw "Build input must match its committed revision: $RelativePath"
-  }
-}
-
-function Get-NormalizedTextSha256 {
-  param([Parameter(Mandatory)] [string] $Path)
-
-  $text = [IO.File]::ReadAllText($Path).Replace("`r`n", "`n").Replace("`r", "`n")
-  $bytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
-  [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
-}
-
-function Assert-PinnedFlutterCheckout {
-  param([Parameter(Mandatory)] [string] $Root)
-
-  $metadataFlutter = $metadata.FlutterFrameworkRevision
-  if ((Get-GitValue $Root @('rev-parse', '--verify', 'HEAD')) -ne $metadataFlutter) {
-    throw 'Flutter checkout does not match the pinned framework revision.'
-  }
-  $engineVersion = Join-Path $Root 'bin/internal/engine.version'
-  if ((Get-Content -Raw -LiteralPath $engineVersion).Trim() -ne
-    $metadata.FlutterEngineRevision) {
-    throw 'Flutter checkout does not pin the required engine revision.'
-  }
-
-  $trackedChanges = @(Get-GitLines $Root @('status', '--porcelain', '--untracked-files=no'))
-  $changedPaths = @($trackedChanges | ForEach-Object {
-      if ($_.Length -lt 4) { throw "Unexpected git status entry: $_" }
-      $_.Substring(3).Trim('"').Replace('\', '/')
-    } | Sort-Object -Unique)
-  if ($changedPaths.Count -ne 1 -or
-    $changedPaths[0] -ne $metadata.FlutterManagerPath) {
-    throw 'Flutter checkout must contain only the repository-owned engine patch.'
-  }
-
-  $managerPath = Join-Path $Root $metadata.FlutterManagerPath
-  if (-not (Test-Path -LiteralPath $managerPath -PathType Leaf) -or
-    (Get-NormalizedTextSha256 $managerPath) -ne
-    $metadata.FlutterPatchedManagerSha256) {
-    throw 'Patched Flutter manager source does not match the pinned result.'
-  }
-
-  $nativePreference = $PSNativeCommandUseErrorActionPreference
-  $PSNativeCommandUseErrorActionPreference = $false
-  try {
-    & git -C $Root apply --reverse --check $patchPath
-    $patchExitCode = $LASTEXITCODE
-  } finally {
-    $PSNativeCommandUseErrorActionPreference = $nativePreference
-  }
-  if ($patchExitCode) {
-    throw 'The exact repository-owned Flutter engine patch is not applied.'
   }
 }
 
@@ -146,7 +77,7 @@ $engineVersion = Join-Path $flutterRoot 'bin/internal/engine.version'
 if (-not (Test-Path -LiteralPath $engineVersion -PathType Leaf)) {
   throw 'Pinned Flutter checkout is missing bin/internal/engine.version.'
 }
-Assert-PinnedFlutterCheckout $flutterRoot
+Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
 
 foreach ($relative in @(
     'include/mpv/client.h',
