@@ -71,7 +71,7 @@ void main() {
           anchor: anchor,
         );
     final all = classify({...BuilderStrategy.values});
-    void measure(String name, void Function() run) {
+    void measure<T>(String name, T Function() run) {
       for (var i = 0; i < 3; i++) {
         run();
       }
