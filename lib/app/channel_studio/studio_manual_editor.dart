@@ -171,6 +171,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   @override
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
+    // Reuse one immutable snapshot for this projection and its row closures.
     final entries = _rundown.occurrences;
     final inventory = _playableInventory.byId.values;
     final inventoryById = _playableInventory.byId;
@@ -560,6 +561,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   }
 
   void _undoLastAddition() {
+    // Focus retirement needs the occurrences from before the mutation.
     final previous = _rundown.occurrences;
     _changed(_rundown.undoLastAddition);
     _retireRemovedFocus(previous);
@@ -772,10 +774,11 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   }
 
   Future<void> _moveManualTo(ManualOccurrence entry) async {
+    final entries = _rundown.occurrences;
     final target = await showDialog<({int index, bool after})>(
       context: context,
       builder: (context) => _MoveProgramDialog(
-        entries: _rundown.occurrences,
+        entries: entries,
         moving: entry,
         titleFor: (candidate) =>
             _manualEntryTitle(candidate, _playableInventory.byId),
