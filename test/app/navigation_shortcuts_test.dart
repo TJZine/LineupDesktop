@@ -8,39 +8,49 @@ void main() {
     tester,
   ) async {
     final originalPlatform = debugDefaultTargetPlatformOverride;
-    addTearDown(() => debugDefaultTargetPlatformOverride = originalPlatform);
-    for (final platform in TargetPlatform.values) {
-      debugDefaultTargetPlatformOverride = platform;
-      expect(commandModifier(HardwareKeyboard.instance), isFalse);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-      expect(commandModifier(HardwareKeyboard.instance), isFalse);
-      expect(navigationShortcutDestination(LogicalKeyboardKey.digit1), isNull);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-      for (final control in [
-        LogicalKeyboardKey.controlLeft,
-        LogicalKeyboardKey.controlRight,
-      ]) {
-        await tester.sendKeyDownEvent(control);
+    try {
+      for (final platform in TargetPlatform.values) {
+        debugDefaultTargetPlatformOverride = platform;
+        expect(commandModifier(HardwareKeyboard.instance), isFalse);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+        expect(commandModifier(HardwareKeyboard.instance), isFalse);
         expect(
-          commandModifier(HardwareKeyboard.instance),
-          isTrue,
-          reason: '$platform / $control',
+          navigationShortcutDestination(LogicalKeyboardKey.digit1),
+          isNull,
         );
-        for (final (key, destination) in [
-          (LogicalKeyboardKey.digit1, ShellDestination.guide),
-          (LogicalKeyboardKey.keyG, ShellDestination.guide),
-          (LogicalKeyboardKey.digit2, ShellDestination.channels),
-          (LogicalKeyboardKey.digit3, ShellDestination.settings),
-          (LogicalKeyboardKey.comma, ShellDestination.settings),
-          (LogicalKeyboardKey.digit4, ShellDestination.diagnostics),
-          (LogicalKeyboardKey.digit5, ShellDestination.player),
-          (LogicalKeyboardKey.keyP, ShellDestination.player),
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+        for (final control in [
+          LogicalKeyboardKey.controlLeft,
+          LogicalKeyboardKey.controlRight,
         ]) {
-          expect(navigationShortcutDestination(key), destination);
+          await tester.sendKeyDownEvent(control);
+          expect(
+            commandModifier(HardwareKeyboard.instance),
+            isTrue,
+            reason: '$platform / $control',
+          );
+          for (final (key, destination) in [
+            (LogicalKeyboardKey.digit1, ShellDestination.guide),
+            (LogicalKeyboardKey.keyG, ShellDestination.guide),
+            (LogicalKeyboardKey.digit2, ShellDestination.channels),
+            (LogicalKeyboardKey.digit3, ShellDestination.settings),
+            (LogicalKeyboardKey.comma, ShellDestination.settings),
+            (LogicalKeyboardKey.digit4, ShellDestination.diagnostics),
+            (LogicalKeyboardKey.digit5, ShellDestination.player),
+            (LogicalKeyboardKey.keyP, ShellDestination.player),
+          ]) {
+            expect(navigationShortcutDestination(key), destination);
+          }
+          expect(
+            navigationShortcutDestination(LogicalKeyboardKey.keyQ),
+            isNull,
+          );
+          await tester.sendKeyUpEvent(control);
         }
-        expect(navigationShortcutDestination(LogicalKeyboardKey.keyQ), isNull);
-        await tester.sendKeyUpEvent(control);
       }
+    } finally {
+      // Flutter verifies foundation globals before test tearDown callbacks.
+      debugDefaultTargetPlatformOverride = originalPlatform;
     }
   });
 }

@@ -46,7 +46,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
   final _menuFocus = FocusNode(debugLabel: 'Player Lineup menu');
   final _sleepFocus = FocusNode(debugLabel: 'Player sleep timer');
-  final _sleepAnchor = LayerLink();
+  var _sleepAnchor = LayerLink();
   Timer? _visibleClockTimer;
   var _appActive = true;
   var _keyboardInput = false;
@@ -102,6 +102,10 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
               nextOverlay == PlayerOverlay.nowPlaying)) {
         _bottomPanelGeneration =
             widget.controller.overlayPresentationGeneration;
+        // Keep the anchor stable across rebuilds of this presentation. A new
+        // panel needs its own link while AnimatedSwitcher retires the old
+        // panel, because a LayerLink cannot have two live leaders.
+        _sleepAnchor = LayerLink();
       }
       final transitioningNowPlaying =
           _renderedOverlay == PlayerOverlay.nowPlaying ||
