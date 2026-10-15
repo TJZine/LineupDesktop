@@ -18,18 +18,19 @@ V samechat nowworker6.1/medium: originalNF29+viewportconfirmations actual120PASS
 3FAIL=123total; reviewV-R1 bulkRetryeviction actualBEFOREconfirmed. Finalsource
 b1744470 clean/currentYbase75fe, guard/format136/analyze/focused125/full1,675PASS.
 EightVnewcases mapped; matchedprofileworkcountsunchanged, samplesqualifiedbelow.
-SameVreviewer01a13ef8 targetedR1/queryrepairclosure RUNNING, Vnotintegrated.
+SameVreviewer01a13ef8 CLOSED R1/queryrepair, no newfinding; equivalent
+finalb75a6ebb integrated, P0mainV§8.1 gatepending. Vtreekeptuntilacceptance.
 U worker6.1/medium fullSOURCE-ONLYimplementationactive (uncommittedownedchanges),
 productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
 26scenarios48images+selfmatchPASS; rejectedbadfixture/animationcapturespreserved.
 No UAFTER/analyze/full/review yet; sourcecandidate/readycallbackpending.
-K/G undispatched (KafterVmerge, Gafterwholebranchreview); requiredUpremerge,
+K newlydispatchedworker6.1/medium afterVmerge atb75, initialinventory/inline
+fixed-reporttestprepONLY (no migration/runtimeuntilbaselinegrant); Gafterwholebranchreview. RequiredUpremerge,
 plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
 FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
-Runtime slot FREE afterVfullrelease; Ucurrentlysource-only, allothersstopped.
-NextcollectVtargetedreview, integrateonlyafterclosure, thenP0mainV§8.1; dispatch
-KfromactualcurrentintegrationonceVmerged. Ufocused/render/fullneedsfrozencandidate
+Runtime: P0mainV§8.1 exclusively. Ufullsource-only; Kinitialtest/inventoryonly.
+NootherFlutteruntilmainVrelease. NextKBEFOREorUfrozenfocuseddependsreadiness. Ufocused/render/fullneedsfrozencandidate
 andexplicitexclusivegrant; currentcompositionrendersafterVrebasewillberequired.
 Atmostfourimplementationchildren, parentsoleGitintegration/acceptanceowner.
 
@@ -91,6 +92,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | 287571e2 BEFORE123/120pass/3confirmingfail, staleactivity/contentcontrolspass/profilecaptured; source-onlyfullrepairauthorized |
 | W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalenta6a2d46f integrated; main1,645 green; tasktree/branchremoved |
 | W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
+| K | `01a13f84-69b0-7292-9a01-23be25f96503` / local | worker, gpt-6.1-sol, medium |b75a6ebb; `/Users/tristan/Software/LineupDesktop-K`, `cq/K` | Actualpost-ownerinventory+inlinebyte-report/storageproofprepONLY; no productionmigration/runtimeyet |
 | Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Acceptedf7ede071 focused88/full/main1,667green; tasktree/branchremoved; combinedreviewpending |
 
 | U | `01a13f32-18d0-7f21-ad48-6a25d94f8d3a` / local | worker, gpt-6.1-sol, medium |9d9ec78e; `/Users/tristan/Software/LineupDesktop-U`, `cq/U` | Initial source/test/history/scratch preparation; no production repair or runtime grant yet |
@@ -1572,3 +1574,35 @@ sourcefrozen; mustinspectbothrow/scheduleeviction/currentownership/loopbounds,
 postframeguards andqualifiedprofiles. Noacceptance/integrationuntilclosure.
 Uremainsisolatedsource-only fullimplementation, no runtimeuntilfrozencandidate
 ready. RuntimeVreleased; noidlepolling, callbacksresumeparent.
+
+## V review closure, acceptance, final integration and K dispatch
+
+SameVreviewer01a13ef8 CLOSED V-R1+queryrepair atcleanb1744470, no newmaterial
+finding. Reviewedprior2512/rebased4840fourfilesbyteidentical, targetrepairtest+
+source/proof; needsViewportRefreshkeepsretentionpolicycontrollerowned, visible
+missingworkonly/existingboundedrequests/manualfailurepolicy, no new per-build
+requestloop/unboundedretentionmechanism. ensureVisualUpdateclosesidleframegap,
+coalescing/currentgeneration/content/replacementcallback/disposalguardsretained.
+Actual125focused/1,675full maps8new, before120+3bookkeepingcorrect. Profilework
+countsflat, variabletimingdoesnotdemonstratestablematerialregression/improvement;
+RSSwithoutrepeatableheap/retentionprofilingnotleak/equal-memoryproof. Sourcemetadata/
+callbacksbounded, no newgrowablequeue/cacheexplainingunboundedleak. Parentaccepts
+reviewclosure/currentproof; latercombinedandwholebranchreviewsremainrequired.
+
+Finalparentrebaseoverexecutiondocsonlyb82a3925 all5patches`=`:
+7135af34→52f19cb3,ba9e5d11→fe982252,4840f5f8→6701e910,
+55f6f4e0→7661e67c,b1744470→b75a6ebb1110c8cdf89a7737f9ed7548be377bac.
+Ff integratedb75a6ebb,4files573+/51-, golden diffempty. MainVgateP0exclusive
+nowgrantedafterthisrecordcommit, logs `/tmp/lineup-cq-integration/V/`, expected
+1,675notyetmainobserved. No othermergeuntilpass; Vtreeretained.
+
+KdependenciesB/C/Vnowmerged. Actualprojectsresolved, exactKpath/branchnotpreviously
+present; createdsiblingKfromactualb75. CurrentworkerandLunapresetsread; selected
+worker6.1-sol/medium forstorage/exportprivacyboundary+multipleproducerowner+forged
+snapshotjudgment. CreatedKchat01a13f84-69b0-7292-9a01-23be25f96503 withfullKspec/
+matchingT6NF20/currentinterfaces/17historicalsetRE-INVENTORY/ownership/allprivacy
+invariants/inlinefixedexpectedbytesNOgoldenfiles andseparateUIstorageassertions.
+Initialsource/testprepONLY: actualfixedsnapshotBEFOREmustpassbeforeenum/policy/
+producer migration. No runtimewhileP0mainV. Sameactualhumanreference/callback
+verification/fullscope/returncontract/currentpresetresponsibilityexplicit. Uisolated
+fullsource-onlycontinues; no recursiveagents, maxfourimplementationchildren.
