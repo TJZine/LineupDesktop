@@ -11,15 +11,16 @@ Accepted/integrated A/H/T/M/B/L. Main L gate format112/analyze/full1,610 green.
 C independent source review CLOSED; rebased package13b935f9 actual pinned
 format112/analyze/full1,640 green. Parent's final rebase over documentation-only
 9fadb575 preserved all four patches (`range-diff` all `=`), then ff-integrated C
-at9d9ec78e79ef4de2e7fb0a1ca3c050d61ec90701. C main-checkout §8.1 gate RUNNING
-in actual session25853, logs`/tmp/lineup-cq-integration/C/`; main result pending.
-No further package integrates until collected/accepted. C task tree remains
-until main acceptance. F040e4a64 remains source-reviewed, UNVERIFIED/UNMERGED,
+at9d9ec78e79ef4de2e7fb0a1ca3c050d61ec90701. C main-checkout §8.1 gate PASSED
+in actual session25853 exit0: format112 unchanged/analyze clean/full1,640.
+Logs`/tmp/lineup-cq-integration/C/`. Clean C task tree and fully integrated
+branch removed; accepted work remains recoverable in Git/proof logs. F040e4a64 remains source-reviewed, UNVERIFIED/UNMERGED,
 retainedcq/F pending all Windows CTests and separate physical acceptance.
 
 E8ff1574a source findings CLOSED, all runtime/render/full pending; paired scratch
 harnessb6ede3f3 has actualstateassertions and credential-free syntheticconnection.
-Wb671ac62 performance repair SOURCE-CLOSED, negative/focused/full queued.
+Wb671ac62 performance repair SOURCE-CLOSED; unchanged rebasee5273248 onto
+actual728f284c ready for granted negative/focused/full gate.
 S acceptedS-R1 source correction7f250270 ready; two new real-isolate tests for
 pending/startup unknown-malformedID require actual BEFORE/AFTER checks.
 V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
@@ -31,7 +32,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: main C only. U prepares source/test/history; all other children queued.
+Runtime: W exclusive negative/focused/full slot. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -1026,3 +1027,14 @@ idly or treat child completion as acceptance without inspecting source/evidence.
   Initial source/test/history/scratch prep only; first actual NF23 test and
   matched renders BEFORE production changes. Parent must adjudicate any needed
   poster-path edit outside row. U review required before merge. No runtime overlap.
+
+## Collected C main gate and W runtime release
+
+- Main C actual session25853 exit0 on product9d9ec78e: format112 unchanged,
+  analyzer clean, full1,640 in1:26. Only execution Markdown changed while running.
+  Task C tree clean, branch ancestor verified, tree/cqC removed after acceptance.
+- W3commits rebased unchanged onto728f284c: b7ff1bb8→3f452dd6,
+  6bc53422→97a64916,b671ac62→e527324806c4bdf8277ed19e8ac3b06cad1c3356.
+  Range-diff all`=`. Same child granted exclusive old-source work-count negative
+  control, exact restoration, canonicalchecks/focused andfull. Expected1,645 is
+  not observed proof; actual mapped count required. No other runtime granted.
