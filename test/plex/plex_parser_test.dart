@@ -146,6 +146,56 @@ void main() {
     expect(item.cast, isEmpty);
   });
 
+  test('keeps absent and null selected part and stream containers empty', () {
+    final absentPart = parseMediaItem({
+      'ratingKey': 'absent-part',
+      'title': 'Absent part',
+      'type': 'movie',
+      'Media': [<String, Object?>{}],
+    });
+    final nullPart = parseMediaItem({
+      'ratingKey': 'null-part',
+      'title': 'Null part',
+      'type': 'movie',
+      'Media': [
+        {'Part': null},
+      ],
+    });
+    final absentStream = parseMediaItem({
+      'ratingKey': 'absent-stream',
+      'title': 'Absent stream',
+      'type': 'movie',
+      'Media': [
+        {
+          'Part': [
+            {'key': '/library/parts/absent-stream.mkv'},
+          ],
+        },
+      ],
+    });
+    final nullStream = parseMediaItem({
+      'ratingKey': 'null-stream',
+      'title': 'Null stream',
+      'type': 'movie',
+      'Media': [
+        {
+          'Part': [
+            {'key': '/library/parts/null-stream.mkv', 'Stream': null},
+          ],
+        },
+      ],
+    });
+
+    expect(absentPart.parts, isEmpty);
+    expect(nullPart.parts, isEmpty);
+    expect(absentStream.parts.map((part) => part.path), [
+      '/library/parts/absent-stream.mkv',
+    ]);
+    expect(nullStream.parts.map((part) => part.path), [
+      '/library/parts/null-stream.mkv',
+    ]);
+  });
+
   for (final entry in <String, Map<String, Object?>>{
     'Media': {
       'ratingKey': 'invalid-media',
@@ -182,6 +232,35 @@ void main() {
     test('rejects non-list structural ${entry.key} container', () {
       expect(
         () => parseMediaItem(entry.value),
+        throwsA(
+          isA<PlexException>().having((e) => e.code, 'code', 'parse-error'),
+        ),
+      );
+    });
+  }
+
+  for (final malformedStream in <Object?>[
+    42,
+    <String, Object?>{'codec': 'dovi'},
+  ]) {
+    test('rejects selected first-part Stream with Dolby Vision shortcut', () {
+      expect(
+        () => parseMediaItem({
+          'ratingKey': 'invalid-selected-stream',
+          'title': 'Invalid selected stream',
+          'type': 'movie',
+          'Media': [
+            {
+              'DOVIPresent': true,
+              'Part': [
+                {
+                  'key': '/library/parts/invalid-selected-stream.mkv',
+                  'Stream': malformedStream,
+                },
+              ],
+            },
+          ],
+        }),
         throwsA(
           isA<PlexException>().having((e) => e.code, 'code', 'parse-error'),
         ),

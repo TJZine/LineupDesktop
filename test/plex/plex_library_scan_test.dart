@@ -855,6 +855,45 @@ void main() {
   );
 
   test(
+    'malformed selected Stream fails the scan with a typed parse error',
+    () async {
+      final client = _client((request) async {
+        expect(request.url.path, '/library/sections/library/all');
+        return _page([
+          {
+            'ratingKey': 'invalid-selected-stream',
+            'title': 'Invalid selected stream',
+            'type': 'movie',
+            'Media': [
+              {
+                'DOVIPresent': true,
+                'Part': [
+                  {
+                    'key': '/library/parts/invalid-selected-stream.mkv',
+                    'Stream': {'codec': 'dovi'},
+                  },
+                ],
+              },
+            ],
+          },
+        ], total: 1);
+      });
+
+      await expectLater(
+        client.scanLibrary(
+          _server,
+          'token',
+          'library',
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        ),
+        _error('parse-error'),
+      );
+    },
+  );
+
+  test(
     'show genre failure fails scan while listing failure keeps item inventory',
     () async {
       for (final type in [PlexLibraryType.movie, PlexLibraryType.show]) {

@@ -1644,10 +1644,12 @@ PlexMediaPart? _parseMediaPart(Map<Object?, Object?> raw) {
   );
 }
 
-Iterable<String> _streamCodecs(Map<Object?, Object?>? part) sync* {
+List<String> _streamCodecs(Map<Object?, Object?>? part) {
+  final codecs = <String>[];
   for (final rawStream in _structuralList(part?['Stream'], 'Stream')) {
-    if (rawStream case {'codec': final String codec}) yield codec;
+    if (rawStream case {'codec': final String codec}) codecs.add(codec);
   }
+  return codecs;
 }
 
 String? _clearLogoPath(Object? raw) {
