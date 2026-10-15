@@ -16,7 +16,6 @@ class _StudioManualEditor extends StatefulWidget {
     required this.sourceExplanation,
     required this.onChanged,
     required this.onSelectionPendingChanged,
-    super.key,
   });
   final ManualRundown rundown;
   final _StudioInventory inventory;
@@ -45,7 +44,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   final _rundownFocus = <ManualOccurrence, FocusNode>{};
   final _browseScroll = ScrollController();
   final _rundownScroll = ScrollController();
-  final _browseSelection = LinkedHashSet<String>();
+  final _browseSelection = <String>{};
   final _browseSelectionItems = <String, PlexMediaItem>{};
   final _manualFilters = <LibraryFilter, List<String>>{};
   String? _manualLibraryId;

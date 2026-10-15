@@ -8,7 +8,6 @@ class _StudioInventoryStatus extends StatelessWidget {
     required this.hasInventory,
     required this.saving,
     required this.onGenerate,
-    super.key,
   });
   final LibraryScanStatus status;
   final int? totalItems;
@@ -26,8 +25,8 @@ class _StudioInventoryStatus extends StatelessWidget {
         container: true,
         child: Text(
           total == null
-              ? 'Loading programming: ${completedItems} items loaded.'
-              : 'Loading programming: ${completedItems} of $total items loaded.',
+              ? 'Loading programming: $completedItems items loaded.'
+              : 'Loading programming: $completedItems of $total items loaded.',
         ),
       );
     }

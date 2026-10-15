@@ -309,8 +309,9 @@ class ChannelStudioDraft {
   }
 
   void loadSaved(Channel channel) {
-    if (channel.source case ManualSource(:final items))
+    if (channel.source case ManualSource(:final items)) {
       rundown.acceptSaved(items);
+    }
     source = channel.source;
     playbackMode = channel.playbackMode;
     anchor = channel.anchor;

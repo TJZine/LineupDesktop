@@ -11,13 +11,13 @@ class _StudioProgramming extends StatefulWidget {
     required this.name,
     required this.sourceLabel,
     required this.sourceExplanation,
+    required this.programmingError,
     required this.inventoryStatus,
     required this.saving,
     required this.sourceRevision,
     required this.onChanged,
     required this.onPendingChanged,
     required this.onOpenChannel,
-    super.key,
   });
   final ChannelStudioDraft draft;
   final _StudioInventory inventory;
@@ -28,6 +28,7 @@ class _StudioProgramming extends StatefulWidget {
   final String name;
   final String sourceLabel;
   final String? sourceExplanation;
+  final String? programmingError;
   final Widget inventoryStatus;
   final bool saving;
   final int sourceRevision;
@@ -201,6 +202,7 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
                   saving: _saving,
                   inventoryStatus: widget.inventoryStatus,
                   sourceExplanation: widget.sourceExplanation,
+                  programmingError: widget.programmingError,
                   onChanged: widget.onChanged,
                 ),
               ),

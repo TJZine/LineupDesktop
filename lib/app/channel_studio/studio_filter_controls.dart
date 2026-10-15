@@ -12,7 +12,7 @@ final class _FilterPickerController extends ChangeNotifier {
   List<String> values = const [];
   Map<String, String> labels = const {};
   Set<String> available = const {};
-  final pending = LinkedHashSet<String>();
+  final pending = <String>{};
   bool showPending = false;
 
   void choose({required bool browse}) {

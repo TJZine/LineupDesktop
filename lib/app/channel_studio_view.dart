@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -454,6 +453,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                               widget.controller,
                             ),
                             sourceExplanation: sourceExplanation,
+                            programmingError: programmingError,
                             inventoryStatus: _StudioInventoryStatus(
                               status: widget.controller.libraryScanStatus,
                               totalItems:
@@ -466,12 +466,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             ),
                             saving: _saving,
                             sourceRevision: _sourceRevision,
-                            onChanged: () => _changed(),
+                            onChanged: _changed,
                             onPendingChanged: (choice) {
-                              if (_pendingProgrammingChoice != choice)
+                              if (_pendingProgrammingChoice != choice) {
                                 setState(
                                   () => _pendingProgrammingChoice = choice,
                                 );
+                              }
                             },
                             onOpenChannel: widget.onOpenChannel,
                           );
@@ -481,6 +482,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             name: _name,
                             number: _number,
                             saving: _saving,
+                            busy: _busy,
                             hasShowGrouping: hasShowGrouping,
                             confirmedMovieOnly: confirmedMovieOnly,
                             hasNumberConflict: _conflictingChannel != null,
@@ -490,7 +492,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                               widget.controller,
                             ),
                             validateNumber: _validateNumber,
-                            onChanged: () => _changed(),
+                            onChanged: _changed,
                             onUseNext: _useNextAvailable,
                           );
                           final preview = ChannelAirCheck(
@@ -714,7 +716,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ? 'Checking filters while library programming loads.'
               : 'Checking library programming while the selected Plex library finishes loading.';
         }
-        final available = _facetOptions(libraryId).values;
+        final available = _studioFacetOptions(
+          libraryId,
+          inventory: _playableInventory.byId.values,
+        ).values;
         final missing = [
           for (final entry in filters.entries)
             ...entry.value.where(

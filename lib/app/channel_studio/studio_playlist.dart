@@ -10,7 +10,6 @@ class _StudioPlaylist extends StatelessWidget {
     required this.sourceExplanation,
     required this.onChanged,
     required this.onOpenChannel,
-    super.key,
   });
   final List<PlexPlaylist> playlists;
   final String? selectedId;

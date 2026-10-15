@@ -10,8 +10,8 @@ class _StudioFilterEditor extends StatefulWidget {
     required this.saving,
     required this.inventoryStatus,
     required this.sourceExplanation,
+    required this.programmingError,
     required this.onChanged,
-    super.key,
   });
   final ChannelStudioDraft draft;
   final _StudioInventory inventory;
@@ -21,6 +21,7 @@ class _StudioFilterEditor extends StatefulWidget {
   final bool saving;
   final Widget inventoryStatus;
   final String? sourceExplanation;
+  final String? programmingError;
   final VoidCallback onChanged;
   @override
   State<_StudioFilterEditor> createState() => _StudioFilterEditorState();
@@ -224,8 +225,7 @@ class _StudioFilterEditorState extends State<_StudioFilterEditor>
           ],
         ),
         _studioSourceExplanation(context, widget.sourceExplanation),
-        if (matches.isEmpty &&
-            _programmingError(_resolveDraftContent()) == null)
+        if (matches.isEmpty && widget.programmingError == null)
           Text(
             'No programs match. Remove a filter or include watched items.',
             style: _studioSupportStyle(context),

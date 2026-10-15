@@ -6,6 +6,7 @@ class _StudioStation extends StatefulWidget {
     required this.name,
     required this.number,
     required this.saving,
+    required this.busy,
     required this.hasShowGrouping,
     required this.confirmedMovieOnly,
     required this.hasNumberConflict,
@@ -20,6 +21,7 @@ class _StudioStation extends StatefulWidget {
   final TextEditingController name;
   final TextEditingController number;
   final bool saving;
+  final bool busy;
   final bool hasShowGrouping;
   final bool confirmedMovieOnly;
   final bool hasNumberConflict;
@@ -39,6 +41,7 @@ class _StudioStationState extends State<_StudioStation> {
   TextEditingController get _name => widget.name;
   TextEditingController get _number => widget.number;
   bool get _saving => widget.saving;
+  bool get _busy => widget.busy;
   void _changed([VoidCallback? change]) {
     change?.call();
     widget.onChanged();

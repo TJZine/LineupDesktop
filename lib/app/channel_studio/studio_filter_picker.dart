@@ -36,7 +36,7 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
   List<String> get _activeFilterValues => widget.picker.values;
   Set<String> get _activeAvailableFilterValues => widget.picker.available;
   Map<String, String> get _activeFilterLabels => widget.picker.labels;
-  LinkedHashSet<String> get _pendingFilterValues => widget.picker.pending;
+  Set<String> get _pendingFilterValues => widget.picker.pending;
   bool get _showPendingFilterValues => widget.picker.showPending;
   set _showPendingFilterValues(bool value) => widget.picker.showPending = value;
   @override
