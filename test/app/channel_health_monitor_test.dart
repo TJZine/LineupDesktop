@@ -192,8 +192,7 @@ class _ControlledHealthController extends FixtureController {
 }
 
 class _IndexedHealthController extends _ControlledHealthController {
-  _IndexedHealthController({required List<Channel> channels})
-    : super(channels: channels);
+  _IndexedHealthController({required super.channels});
 
   int channelListReads = 0;
   int revisionReads = 0;
