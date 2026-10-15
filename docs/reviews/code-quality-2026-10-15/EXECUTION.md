@@ -47,17 +47,21 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
 | T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; former `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Accepted/integrated `dbc4dea0`; serialized main gate1,588 green; task worktree/branch removed; original artwork failure remains recorded |
 | M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main format/analyze/1,593/macOS build passed; cleanup authorized |
-| B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Corrected `2fa2ccd980f91e1d04fd3d99782ea0ac44be8fc6`; focused251/setup1 green, B-R1 closed by reviewer; exclusive full running; unintegrated |
+| B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; former `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Accepted/reviewed/integrated `bf65e00ad1c99677a2a546da6a72f669056ade8b`; corrected/full/main1,604 green; task worktree/branch removed |
 | B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
-| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | C0–C3 partial candidate `78475b9c93d5519e261e33b0994b51ac6f18dd67`; focused578 green; PAUSED until accepted B for same-chat C4, then full/review |
+| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Rebased onto B atd7497975; C4 uncommitted source reviewed; accepted C-R1 active-part reporting gap, BEFORE/focused repair in progress; unintegrated |
+| C review | `01a13f0e-4615-7161-a62c-e3ba4d6237d2` / local | reviewer, gpt-6.1-sol, high | B basebf65e00a → C HEADd7497975 plus frozen C4 patchb3fd73a7 | Full required C review complete with one P2 C-R1; targeted closure/final executed evidence pending |
 | D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1/D2 focused112, baseline14 renders green atdb92b8b9; D3 source work in progress |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
-| L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Candidate `2b594e6fcd3a95913299ded5ccd2a1f804348810`, focused224 green; required review running, full suite queued |
+| L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Reviewed/rebased/integrated441950df, package1,610 green; controller consumer atbc231cef; main combined gate queued after focused phase |
 | L review | `01a13ef8-7475-7a13-96d7-8d2e9d82c1a0` / local | reviewer, gpt-6.1-sol, high | L base2ae38b8e → 2b594e6f | Required matrix/pager/cancellation/copy review, read-only |
-| E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna, gpt-5.6-luna, xhigh | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Dispatched complete E1/E2 review/phase/step ownership and render evidence |
+| E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Source-onlyce913bd7 reviewed: six accepted compile/fixture/ownership/behavior findings; stronger worker repairing full E1/E2; unintegrated |
+| E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Complete: changes requested; runtime/render/full still unverified |
 | S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Source-only `b3893c97924f27dea32d0277a37b5369a44bb0df`, forwarding-export correction done; no runtime checks yet, stopped pending release |
 | V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Dispatched full Guide notification/selection/viewport contract, runtime hold; BEFORE tests required before suspected repair |
+| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Source-onlyb7ff1bb8; focused tests/analyze now released, no runtime proof yet |
+| Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Source83b7aa04 + finite test seam507cb296; narrow faithful old-poll negative control/clock checks released; unintegrated |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -721,6 +725,94 @@ viewport invalidation included; inspection triple/badges/UI unchanged. Runtime
 hold applies until focused release, no unconfirmed suspected repair authorized.
 Active implementation children now B/D/E/V; S/L/C stopped at resource/dependency
 queues. Full/render/build slot owned by corrected B; L full remains queued.
+
+### B accepted/integrated; C4 resumed; L package and consumer integrated
+
+Corrected B full at2fa2ccd9 passed **1,604 / exit0**,0 skips (1:48); original
+5193906f1602+1 remains retained. B-R1 targeted source review closed with no new
+finding. Parent rebased8 commits unchanged onto64d1c9af, range-diff all identical:
+861fb358→dd798f66,627934e0→a9201c3b,781940c3→d9ed8489,ebfec27e→ad033b33,
+3009dd30→5a9971d7,25d1f3f9→2da0cdf5,5193906f→0d8779ed,2fa2ccd9→bf65e00a.
+Fast-forward B integration `bf65e00ad1c99677a2a546da6a72f669056ade8b`.
+Main session33447 passed format110/analyze/**1,604 tests** (1:37), logs
+`/tmp/lineup-cq-integration/B/`. B accepted; task worktree/merged branch removed.
+
+Parent rebased same C branch cleanly onto B atd74979753f511b3640db541a81066d2d513fe2ec
+and sent complete C4/typed supersession/privacy/expectedIO packet to original
+worker. C4 source report added14 tests and four-boundary fixed-safe reporting,
+runtime unrun. Required full C0–C4 reviewer inspected baseB→HEAD+working patch
+SHA256b3fd73a7 (stable start/end), found **C-R1[P2]**: active multipart load failure
+is consumed in _completePartLoad/_failTransition before outer seek/advance/recovery
+reporter can run. Existing new seek tests cover only untuned directseek.
+Controller ACCEPTS gap; same C child released narrow BEFORE reproduction then
+owned safe-report repair/expected-native and exactly-once controls, required
+focused checks, final commit/map/full-slot request. Avoid duplicate auth reports
+or broad changes to intentional quiet cleanup. No actual C4 acceptance yet.
+
+L was rebased unchanged from2b594e6f onto B, candidate441950df7f3b1a6758951ac4cfff20a1ce629295.
+Its exclusive full passed **1,610**, not old1599 (observed B1604+sixL), plus
+format112/analyze/pin clean; logs `/tmp/lineup-cq-L/rebased-*.log`, full report
+`completion.md` and matrix retained. Required L source review had no finding.
+Parent fast-forward integrated441950df, then fulfilled planned B/L consumer in
+`bc231cefcf8cd6ae12b8cf008b70f64b53b7ab2e`: actual helper
+`_isPmsAuthorizationError(PlexException)` now uses `isAuthorizationFailure`.
+The exact three old codes equal the getter set; removed literals are internal
+duplicates, not visible output. Main L+consumer full gate is **not started yet**:
+bounded C/W/Y focused phase now runs, then parent queues stable combined gate.
+Keep L worktree/branch until that gate passes. No additional merge meanwhile.
+
+### E source findings/reassignment and recovered baseline
+
+E source-onlyce913bd7 was independently reviewed before runtime checks. Six
+controller-ACCEPTED findings: P1 relocated scaffold imports point to nonexistent
+lib/app/ui; P2 all3 new SetupReview cases use custom/unmatched fixtures yielding
+false expected composition; P2 configure forwarding render/focus callbacks to
+parent and whole-controller library input violate real E2 ownership; P2 terminal
+initial result misses focus; P2 Applying/Failed marks Review done before commit;
+P2 failed→review resets retained confirmation and safe error notice. Reviewer
+also qualified promised immutable snapshot versus raw mutable allocation; owner
+must enforce coherent snapshot boundary without unrelated composer changes.
+No runtime/render evidence existed; positives (single composition, live missing
+sources, fresh anchor, expected-base authority/notice reset) must be retained.
+
+Demonstrated ownership/focus complexity warrants authorized preset reassignment:
+**same E chat now worker gpt-6.1-sol/medium**, explicit tool override and actual
+worker responsibility supplied. Full E1/E2 scope unchanged, no shortcut/shim.
+Worker repairs source under runtime hold, then focused/render/full and targeted
+review closure. Do not change composeChannelPlan's real custom preservation to
+fit invalid tests, weaken assertions, or redesign approved visuals.
+
+Since E extracted before capture, parent created task-owned detached comparison
+tree `/Users/tristan/Software/LineupDesktop-E-baseline` at actual originalEbase
+fdc58fb9 (not historical main). This reconstructs a pre-extraction baseline;
+chronology deviation must remain explicit. Identical public-UI harness in both
+trees `test/_scratch/desktop_setup_render_harness_test.dart` SHA256
+`a64f2fd832b92fc5134548023bd81c034fd0824696531f40b3eb4a44f0ae0032`, manifest
+`/tmp/lineup-cq-E/manifest.md`, fixed clocks/fonts/fixtures/viewport sizes.
+No capture executed. Baseline updates only atfdc, candidate compares WITHOUT
+updates after fixes; no changed-state baseline/tolerance expansion/golden commits.
+Parent cleans comparison tree after accepted proof and preserving artifacts.
+
+### W/Y source delivery and current runtime slots
+
+W source-onlyb7ff1bb8 reports complete monitor/widget extraction and5 scheduling/
+currentness/disposal controls, no Flutter/analyze/test proof. Parent released
+bounded focused monitor/channels/read-only Studiohealth checks and asked actual
+controller lifetime consistency check; no full slot. Y source83b7aa04+507cb296
+reports server-attempt/clock/projection/polling changes with4 tests, all unrun.
+It changed expiry before confirming tests; parent requires honest reconstructed
+polling-only original strictisAfter negative control, with UI equality rejection
+retained. Child corrected inaccurate initial provenance against actualbf65
+source and made poll fixture finite. Narrow control+clock cases released, restore
+production mutation/diff afterward; no broad onboarding/full grant yet.
+
+Current active implementation children: **C focused/R1, W focused, Y narrow
+clock controls, E stronger-worker source repairs**. D/S/V stopped at runtime
+queues; L complete/awaits main gate; F retained/stopped. No concurrent full/build
+currently. Parent L main full queued after bounded focused phase, then schedule
+other focused/render/full work under four-child and exclusive-heavy constraints.
+Remaining undispatched implementation units K/U/G still follow dependencies;
+required D/U reviews, combined owner review and final whole-branch review remain.
 
 ## Evidence and limits
 
