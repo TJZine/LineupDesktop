@@ -34,8 +34,8 @@ map andfixedreportexpectedbytesstaticunchanged; AFTERruntimequeuedbehindU; Gafte
 plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
 FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
-Runtime: KcurrentAFTER/focused/full exclusivelyon11e0d216; U4fefrozen
-fortargetedreviewclosure. Othersheld; noextraFlutter. Ufocused/render/fullneedsfrozencandidate
+Runtime: KcurrentAFTER/focused/full exclusivelyon11e0d216+approvedtoolAPIrepair;
+mainUgatequeueduntilKrelease. Othersheld; noextraFlutter. Ufocused/render/fullneedsfrozencandidate
 andexplicitexclusivegrant; currentcompositionrendersafterVrebasewillberequired.
 Atmostfourimplementationchildren, parentsoleGitintegration/acceptanceowner.
 
@@ -1819,3 +1819,30 @@ no othertoolscenarioedit. Product20calls/17pairsunchanged, tool3countseparate.
 Kcurrentfreshlib/test/tool/test_driverinventory authoritative; ownmigrationfailure
 notbaselinebehavior. Keepafter-analyze.logfailure, fixthenrerunformat/analyze/
 focused/full undercontinuedexclusiveKlease. Utargetedsource-reviewonly, nooverlap.
+
+## U required targeted closure, acceptance, and integration
+
+SameUreviewer01a13f87 CLOSED2P1compiler+8lints, acceptedLayerLinkpresentation
+repair atclean4fe3733d, no newmaterialfinding. Exactkeymembership/20digitpairs/
+Textstyle/layoutsame, blocksyntaxonly; testfinallyrestoresdebugplatformbeforebody
+invariantwithoutweakerassertions. State-ownedlinkstablewithinpresentation,
+onlynewbottompanelgeneration/keyfromnonbottomoverlayallocatesnewanchor; outgoing
+AnimatedSwitcherretainsoldimmutablelink, incomingnewlink. OSD↔NowPlayingretains
+samekey/link; eachpickerreceivesmatchingtargetlink/showWhenUnlinkedfalse. Noinput/
+focus/modality/timeoutresetnewbehavior. Existingoldfocus/artworkregressions+new
+modifiercasepassed; all375focused/full1,687actualproofinspected, notrerun.
+
+Reviewerindependentlyhashchecked48baseline0mismatch/fouractual/expectedJSON,
+immutableharnessequality, viewedfullactual1280unknown/1920threeandcombineddiffs:
+44EXACT/fourapprovedbadge-onlydifferences accepted, no48unchangedpassclaim.
+No sourceblockerremaining; parentACCEPTSfullUcontract/proof. Wholebranchcomposition
+reviewandmainchecksnotwaived, physicalWindowsunobserved.
+
+Finalparentrebaseoverexecutiondocsonly0452c928 all4patches`=`:
+898c35ba→23003e38,f6a99892→d928031c,ce11861d→6779e22f,
+4fe3733d→bec2e8bac096b7b20536e53219c138a4b9020080. Ff integratedbec2e8ba,
+15files1,648+/718-, golden diffempty, literalmapoldsettingskeys/enums only+approved
+badgerulesretained. MainU§8.1 QUEUEDbehindKexclusiveAFTER/full; noothermergeuntil
+mainUpasses. Utasktree retainedpendingmaingateacceptance. Ktoldownsource/base/head
+muststaystablethroughongoingchecks: currentKcandidateV1675+3K, notmainUassumption;
+parentlaterrebase/mainKcombinedsettlesactualU+Kcomposition. No sharedtreeoverlap.
