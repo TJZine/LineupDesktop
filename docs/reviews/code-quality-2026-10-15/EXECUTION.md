@@ -44,6 +44,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Candidate `24691ac05fb866c64ccf1467226b7cb9c8376388` inspected; focused structural-validation correction returned to same child |
 | H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Candidate `1d6520b4c252d345572aa01ed8711977c100b252` inspected; rebase/check/integrate after A |
+| Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Independent read-only review dispatched |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -68,6 +69,12 @@ The maintainer additionally required that all changes be properly reviewed for
 adherence to the plan and goals before this assignment is considered finished.
 Use the shared `review-code` skill for acceptance and finding adjudication.
 Tests passing or a child declaring completion does not satisfy this requirement.
+Subsequent human steering (turn `01a13eba-ca40-7261-ae58-b6c8e3c36056`, message
+`01a13eba-cab6-77c3-b35a-2fc7abf9b44b`) requires delegated reviewer work so
+the controller retains orchestration context. Delegate substantive diff review
+to read-only reviewer chats/agents; the controller owns scope, adjudication,
+acceptance decisions, integration, and stable gates. H/T/G controller inspection
+may use reviewer assistance and does not replace other required reviews.
 
 - Inspect every actual package diff against its complete §7 contract, matching
   TRACES, revision-3 final-review corrections, approved behavior, and exclusions.
@@ -149,6 +156,17 @@ Media/Part selection behavior. Also requested explicit selected Part/Stream
 missing/null controls if not already covered. Do not integrate A until this
 focused correction and required evidence are inspected. Follow-up dispatched
 to the original child with unchanged model/effort and write ownership.
+
+A correction returned at `77fb36075bdd75f82432753f856e6753eab16438`:
+child reports the two Dolby Vision parser controls and scan fixture failed
+before the fix, then passed with eager validation of only the first selected
+Stream container. Four added cases yield 218 Plex and 1,583 full-suite passes;
+format106/analyze/diff checks reported clean. No moves/removals/goldens.
+Independent reviewer now owns full A candidate review and focused A-R1 closure,
+alongside H's stable candidate. Neither package is integrated pending verdicts.
+The reviewer received full exact A/H package contracts, respective T6/T5 traces,
+fixed source identities, observed evidence, ownership, and callback verification
+references. No repeated broad suite or source writes are authorized for review.
 
 ## Evidence and limits
 
