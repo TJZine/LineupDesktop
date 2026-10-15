@@ -178,7 +178,12 @@ class ScheduleWorker {
       final requestId = _correlatedRequestId(message);
       if (requestId != null) {
         final completer = _pending.remove(requestId);
-        if (completer == null) return;
+        if (completer == null) {
+          fail(
+            const FormatException('Schedule worker sent an invalid response'),
+          );
+          return;
+        }
         completer.completeError(
           const FormatException('Schedule worker sent an invalid response'),
         );

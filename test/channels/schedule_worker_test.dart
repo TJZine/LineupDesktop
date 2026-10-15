@@ -307,6 +307,42 @@ void main() {
     await expectLater(worker.build(_channel), throwsA(isA<FormatException>()));
   });
 
+  test(
+    'malformed unknown IDs fail the outstanding build instead of hanging',
+    () async {
+      final worker = ScheduleWorker(
+        [_mediaItem],
+        const [],
+        spawn: (responses, _, _) =>
+            Isolate.spawn(_unknownIdMalformedWorker, responses),
+      );
+      addTearDown(worker.dispose);
+
+      await expectLater(
+        worker.build(_channel).timeout(const Duration(seconds: 1)),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
+
+  test(
+    'malformed unknown IDs fail startup readiness instead of hanging',
+    () async {
+      final worker = ScheduleWorker(
+        [_mediaItem],
+        const [],
+        spawn: (responses, _, _) =>
+            Isolate.spawn(_startupUnknownIdMalformedWorker, responses),
+      );
+      addTearDown(worker.dispose);
+
+      await expectLater(
+        worker.build(_channel).timeout(const Duration(seconds: 1)),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
+
   test('uncorrelatable malformed responses retire the generation', () async {
     var spawnCount = 0;
     final secondSpawned = Completer<void>();
@@ -554,6 +590,18 @@ void _correlatedMalformedWorker(SendPort output) {
   final requests = ReceivePort();
   output.send(requests.sendPort);
   requests.listen((_) => output.send([1, 'malformed']));
+}
+
+void _unknownIdMalformedWorker(SendPort output) {
+  final requests = ReceivePort();
+  output.send(requests.sendPort);
+  requests.listen((_) => output.send([999, 'malformed']));
+}
+
+void _startupUnknownIdMalformedWorker(SendPort output) {
+  final requests = ReceivePort();
+  output.send([999, 'malformed']);
+  requests.listen((_) {});
 }
 
 void _uncorrelatableWorker(SendPort output) {
