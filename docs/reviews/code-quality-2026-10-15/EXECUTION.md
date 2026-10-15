@@ -5,6 +5,34 @@ Implementation assignment authorized October 15, 2026. Revision 3 of
 CQ-01 through CQ-09 and every additional package. This record tracks actual
 dispatch, acceptance, and integration; it does not replace package contracts.
 
+## Current checkpoint
+
+Current task branch contains accepted A/H/T/M/B plus source-reviewed L and
+the scheduled B/L getter consumer. B main gate is green1,604. L package gate
+is green1,610; its main combined gate is running in actual session`68553`,
+logs`/tmp/lineup-cq-integration/L/`.
+Do not merge another package until that gate is collected/accepted.
+F remains source-reviewed, UNVERIFIED/UNMERGED at040e4a64 in retainedcq/F.
+
+C candidate8b114e44: required focused600 green, +30 cases, final targeted C-R1
+closure in progress, full still queued. E same chat now worker gpt-6.1-sol/medium,
+source8ff1574a fixes are closed at source; all runtime/render/full proof pending.
+W sourceb671ac62 performance fix awaits
+targeted source review and actual negative/focused/full proof. S focused103 green
+atf02a1209, full queued; Y reconstructed polling control+fourclock cases green,
+broadfocused/analyze/full/combined review pending. D14-state preD3 baseline
+captured, D3 source unchecked/awaitingfocused+comparison+full/review. V hasn't
+run NF29 confirming controls/profilebaseline or repaired that suspected defect.
+All are unintegrated until their gates close. K/U/G not dispatched; dependencies
+and required combined/final whole-branch reviews remain. No task completion claim.
+
+Implementation/runtime slots now: parent L full; E harness source-only (if
+active); C/S/Y/D/V stopped at queues; W frozen for source review. No new Flutter
+commands until focused release/full-slot grant. Next: collect L main gate,
+adjudicate C/E/W targeted findings, schedule C rebase/full and bounded focused/
+render queues without exceeding four implementation children. Resolve actual
+source/base/counts after each rebase; do not preserve incidental old counts.
+
 ## Authority and source
 
 - Parent chat: `01a13ea7-726e-7c82-b3b4-c5172b401867`, host `local`.
@@ -871,6 +899,50 @@ cheap local checks, preserving revision/epoch/bounds/LRU/serialization and adds
 deterministic large-cache work proof. Source/light-format only until release.
 Reviewer confirms actual ChannelsView controller lifetime is coherent, no mixed
 old/new controller bug; no unrelated lifetime rewrite required. W unintegrated.
+
+### Focused phase green; stable L main gate; review closures queued
+
+C complete source8b114e44 passed pin/format110/analyze and **600 requiredfocused**
+(four previously failingPlayerView controls also4passed). No edits after checks.
+Actual unit map +30 versusBbase:8C0,14C4,8R1; parent9912330f fixture glue included,
+legacy actualunexpected StateErrors retained, safe report/nullstack/payloadabsence
+controls cover direct and active multipart/recovery paths. Full not yet granted.
+Same C reviewer now targeted-closeR1/finalactualsource/type map; original whole
+review isn't repeated. C candidate will be rebased to actualintegration before
+full, with count recalculated rather than preserving old1634 expectation.
+
+S sourcef02a1209 fixes only compile/lint/fixtureID problems on priorb3893c97.
+Pin/format110/analyze clean, **103 focused** passed; old9worker cases plus3new
+malformed/RemoteError cases retained, no weakening. Initialfailures preserved
+at`/tmp/lineup-cq-S/{analyze,focused-tests}.log`, greenrerunlogs suffix-rerun.
+Full not granted, old1596 expectation only preB/Lbase. Existing wave-zero
+reviewer now receives full S/T6/exactsource/actual103proof for independent
+premerge source/error/generation/facet review; later combinedreview still needed.
+
+Parent started required L+consumer main gate at stable productbc231cef (later
+execution Markdown only), **session68553**, logs
+`/tmp/lineup-cq-integration/L/{format,analyze,full-test}.log`. No other runtime
+full/build/render granted; focused C/S commands finished before start. Collect
+actual exit/count; don't claim mainpass from package1610. No next merge until
+gate accepted. Cfull/Sfull/Wfull/Ybroad/Vbefore+profile/DpostD3/Efocused+render
+remain queued, schedule bounded resources rather than idle polling.
+
+E targeted review at8ff1574a closed all six source findings and immutable snapshot
+qualification, no new materialsourceissue. Newsharedprogress facts/callers and
+restore behavior inspected, wholecontroller/parentrender/focus forwarding removed,
+fixtures generated/customcorrect, initialterminalfocus/retryconfirmation/error/
+visibleReview mapped asbaseline, allocation/basegraphs/maps defensivelyfrozen.
+All compilation/focused/full/render checks UNRUN. Worker sourceharness correction
+authorized identicallybothsides (syntheticconnection +stateassertions), newhash
+pending; baselinefdc production unchanged. Keep historicalcapture deviation and
+do not accept sourceclosure as visual/runtime acceptance.
+
+W sourceb671ac62 index/localrequestedrevision repair+largecache work test remains
+unrun after prior21. Same reviewer targetedsourceclosure underway; actual old-source
+negativecontrol/focused/full will follow explicit runtime release. No timing or
+private instrumentation claim. Source correct-ID note: W reviewer actual tool
+return is01a13f19-a2e0-79a1-9fb4-fd0489847ded; an uncommitted draft row was fixed
+before commit, no message was sent to the mistaken draft identity.
 
 ## Evidence and limits
 
