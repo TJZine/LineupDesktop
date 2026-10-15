@@ -34,13 +34,15 @@ Y reconstructed polling control/fourclock green, broad/analyze/full pending.
 D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
 tocd26d00d on2cf4570c. D reviewedcd26 actualfull1,657PASS; twoacceptedP2regressionsrepairedat
 6f66f331 actualBEFOREconfirmedR1, format129/analyze/focused114/render14/
-full1,658PASS. SameDreviewer targetedR1/R2closure running; notintegrated.
+full1,658PASS. SameDreviewer CLOSED bothfindings; equivalent final4615b7c0
+integrated. D main-checkout gate QUEUED untilEreleasesruntime; noothermerge
+beforethatgatepasses. Dtreekeptuntilmainacceptance.
 U newly dispatched worker6.1/medium at9d9ec78e, INITIAL source/test/history and
 scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: E exclusively baseline-first/focused/pairedrender; Dsourcefrozenfortargetedreview, otherqueuesheld. U prepares source/test/history; all other children queued.
+Runtime: E exclusively baseline-first/focused/pairedrender; D main gate queued and otherqueuesheld. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -92,8 +94,8 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Accepted9d9ec78e independentreview/package/main1,640 green; tasktree/fullyintegratedbranchremoved |
 | C review | `01a13f0e-4615-7161-a62c-e3ba4d6237d2` / local | reviewer, gpt-6.1-sol, high | B basebf65e00a → C HEADd7497975 plus frozen C4 patchb3fd73a7 | Required full review and targeted C-R1 closure complete at8b114e44; equivalent rebases retain verdict; full1,640 passed |
-| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1–D3 finalfocused113/render14green atf33d639c; equivalentcd26d00d frozen forrequiredreview; rebasedfullpending |
-| D review | `01a13f48-9ba5-72b3-b13c-227770ffd007` / local | reviewer, gpt-6.1-sol, high |2cf4570c→cd26d00d inDtree | Required wholeD1–D3 review withactualtest/render/literalproof, no runtime/mutations |
+| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Acceptedsource6f66f331 reviewR1/R2CLOSED, focused114/render14/full1,658; equivalent4615b7c0 integrated; mainqueuedErelease |
+| D review | `01a13f48-9ba5-72b3-b13c-227770ffd007` / local | reviewer, gpt-6.1-sol, high |2cf4570c→cd26d00d inDtree | RequiredwholeDreview plusR1/R2targetedclosure COMPLETE at6f66f331; no remainingmaterialsourcefinding |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
 | L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Accepted441950df plus consumerbc231cef; package/main1,610 green; task tree/fully integrated branch removed |
@@ -1237,3 +1239,26 @@ precededreconstructedbaselinecapture. Scratchfixturefixesifneededidenticalboth,
 actualnonempty/stateassertions, no baselineproductionfix/candidategoldenupdates/
 tolerancerelaxation. E-onlyrepairswithinfullcontractallowedwithproof; allother
 runtimeheld. Matchingproof/actualstatecoveragecountrequired, noemptyrenderblessing.
+
+## D required review closure, final acceptance, and integration
+
+SameDreviewer01a13f48 CLOSED D-R1/R2 atexactclean6f66f331, no newmaterialdelta
+finding. Currentkey/versionpublish latestpresentationwithactualrequestschedule/
+capturedsourcelabel; unchangedcontrolledregressionfaithfulBEFORE/AFTER. Allten
+occurrencereadsinspected, nobuild/focusnestedcopyloop; PREundo, before/afterremove,
+currentmembershipretirement, stablemove-dialogsnapshots retainlifetimes andcurrent
+membershiprevalidation. Inspected114focused/14renders/1,658full pluspin/format/
+analyze, no rerunsbyreviewer. No remainingconsequentialDplanmismatch. Parentaccepts.
+
+Parentrebase overexecutiondocsonly958e2ffc all13patches`=`:
+839df6dc→9c811a7a,a4ba1690→710865e0,2ad46855→6485cbba,
+2126e11e→9bf090a6,09ae05d0→5692d433,6da4942d→fa9643cb,
+7141c7ff→f4242a8e,acc4ac82→c68bba67,cd26d00d→807bb939,
+c21dcc94→8ea697ea,15d4b4d6→552f5abe,792e8c30→b3372917,
+6f66f331→4615b7c057aba53b5530de396c2bef1e2d1c5700.
+Ff integrated4615b7c0,21files4,415+/3,159-, golden diffempty. Visibleliteraltriage
+and8caseevidencemap retained incompletion/review-repairJSON, internalreference
+changesacceptedwithoutdeadstringpreservation. No otherproductchange sinceD's
+actualfullbaseS. Main D §8.1 gateQUEUED afterEexclusiveverificationrelease;
+nootherpackageintegratesbeforepass. Dtree retainedpendingmaingateacceptance;
+scratchrecoverableoutsideworktree. Wholebranchcompositionreviewstillrequired.
