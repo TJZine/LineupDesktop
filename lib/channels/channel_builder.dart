@@ -94,11 +94,7 @@ List<ChannelProposal> buildChannelProposals({
     return (playable: playable, withoutSpecials: withoutSpecials);
   }
 
-  void addTags(
-    BuilderStrategy strategy,
-    Iterable<String> Function(PlexMediaItem) select,
-    String filterKey,
-  ) {
+  void addTags(BuilderStrategy strategy, LibraryFilter filter) {
     if (!strategies.contains(strategy)) return;
     final countsByLibrary = <PlexLibrary, Map<String, int>>{};
     final playableCountsByLibrary = <PlexLibrary, Map<String, int>>{};
@@ -118,11 +114,11 @@ List<ChannelProposal> buildChannelProposals({
       for (final item in items.where((item) => item.libraryId == library.id)) {
         final selectedTags = <String, String>{};
         final matchingTags = <String>{};
-        for (final value in select(item)) {
+        for (final value in libraryFacetValues(item, filter)) {
           final label = value.trim();
           if (label.isEmpty) continue;
           final tag = requiresSeriesBreadth
-              ? canonicalFilterIdentity(LibraryFilter.actor, label)
+              ? canonicalFilterIdentity(filter, label)
               : label;
           selectedTags.putIfAbsent(tag, () => label);
           if (requiresSeriesBreadth || value == tag) matchingTags.add(tag);
@@ -185,7 +181,7 @@ List<ChannelProposal> buildChannelProposals({
               libraryId: library.id,
               libraryType: library.type,
               filters: {
-                _libraryFilter(filterKey): [tag],
+                filter: [tag],
               },
             ),
           );
@@ -221,7 +217,7 @@ List<ChannelProposal> buildChannelProposals({
               libraryId: library.id,
               libraryType: library.type,
               filters: {
-                _libraryFilter(filterKey): [entry.key],
+                filter: [entry.key],
               },
             ),
             mode: PlaybackMode.shuffle,
@@ -255,11 +251,7 @@ List<ChannelProposal> buildChannelProposals({
       );
     }
   }
-  addTags(
-    BuilderStrategy.collections,
-    (item) => item.collections,
-    'collection',
-  );
+  addTags(BuilderStrategy.collections, LibraryFilter.collection);
   if (strategies.contains(BuilderStrategy.recentlyAdded)) {
     for (final library in libraries) {
       final itemCount = items
@@ -288,19 +280,11 @@ List<ChannelProposal> buildChannelProposals({
       }
     }
   }
-  addTags(BuilderStrategy.genres, (item) => item.genres, 'genre');
-  addTags(
-    BuilderStrategy.studios,
-    (item) => [if (item.studio != null) item.studio!],
-    'studio',
-  );
-  addTags(BuilderStrategy.actors, (item) => item.actors, 'actor');
-  addTags(BuilderStrategy.directors, (item) => item.directors, 'director');
-  addTags(
-    BuilderStrategy.decades,
-    (item) => [?channelDecadeForYear(item.year)],
-    'decade',
-  );
+  addTags(BuilderStrategy.genres, LibraryFilter.genre);
+  addTags(BuilderStrategy.studios, LibraryFilter.studio);
+  addTags(BuilderStrategy.actors, LibraryFilter.actor);
+  addTags(BuilderStrategy.directors, LibraryFilter.director);
+  addTags(BuilderStrategy.decades, LibraryFilter.decade);
   final priority = {
     for (var index = 0; index < strategyOrder.length; index++)
       strategyOrder[index]: index,
@@ -686,10 +670,6 @@ _extraVersions(
   }
   return extras;
 }
-
-LibraryFilter _libraryFilter(String value) =>
-    LibraryFilter.values.where((filter) => filter.name == value).firstOrNull ??
-    (throw const FormatException('Unsupported content filter'));
 
 List<Channel> composeChannelPlan({
   required List<Channel> existing,

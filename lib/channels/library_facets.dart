@@ -6,6 +6,16 @@ String? channelDecadeForYear(int? year) {
   return '${year ~/ 10 * 10}s';
 }
 
+List<String> libraryFacetValues(PlexMediaItem item, LibraryFilter filter) =>
+    switch (filter) {
+      LibraryFilter.genre => item.genres,
+      LibraryFilter.collection => item.collections,
+      LibraryFilter.studio => [if (item.studio != null) item.studio!],
+      LibraryFilter.actor => item.actors,
+      LibraryFilter.director => item.directors,
+      LibraryFilter.decade => [?channelDecadeForYear(item.year)],
+    };
+
 /// OR within each facet, AND across facets. Empty selections do not constrain
 /// inventory. Source validation and inventory/order policy stay with callers.
 bool matchesLibraryFacets(
@@ -16,16 +26,17 @@ bool matchesLibraryFacets(
     if (entry.value.isEmpty) continue;
     final values = entry.value;
     final matches = switch (entry.key) {
-      LibraryFilter.genre => item.genres.any(values.contains),
-      LibraryFilter.collection => item.collections.any(values.contains),
-      LibraryFilter.studio => values.contains(item.studio),
-      LibraryFilter.actor => _matchesPeople(item.actors, values, entry.key),
-      LibraryFilter.director => _matchesPeople(
-        item.directors,
+      LibraryFilter.actor => _matchesPeople(
+        libraryFacetValues(item, entry.key),
         values,
         entry.key,
       ),
-      LibraryFilter.decade => values.contains(channelDecadeForYear(item.year)),
+      LibraryFilter.director => _matchesPeople(
+        libraryFacetValues(item, entry.key),
+        values,
+        entry.key,
+      ),
+      _ => libraryFacetValues(item, entry.key).any(values.contains),
     };
     if (!matches) return false;
   }

@@ -163,12 +163,16 @@ bool scheduleIncludesItem(
   if (mode != PlaybackMode.block || scheduleVersion < 2 || includeSpecials) {
     return true;
   }
+  return _seriesKey(item) == null || item.seasonNumber != 0;
+}
+
+String? _seriesKey(ChannelItem item) {
   final isEpisode =
       item.mediaKind == ChannelMediaKind.episode ||
       (item.mediaKind == ChannelMediaKind.unknown &&
           (item.showTitle != null || item.showThumb != null));
-  final seriesId = item.seriesId ?? item.showThumb ?? item.showTitle;
-  return !isEpisode || seriesId == null || item.seasonNumber != 0;
+  if (!isEpisode) return null;
+  return item.seriesId ?? item.showThumb ?? item.showTitle;
 }
 
 ScheduleIndex buildSchedule(
@@ -472,12 +476,8 @@ List<ChannelItem> blockOrder(
   final groups = <String, List<_MarathonRun>>{};
   var occurrence = 0;
   for (final item in items) {
-    final isEpisode =
-        item.mediaKind == ChannelMediaKind.episode ||
-        (item.mediaKind == ChannelMediaKind.unknown &&
-            (item.showTitle != null || item.showThumb != null));
-    final seriesId = item.seriesId ?? item.showThumb ?? item.showTitle;
-    if (!isEpisode || seriesId == null) {
+    final seriesId = _seriesKey(item);
+    if (seriesId == null) {
       groups['item:$occurrence'] = [
         _MarathonRun([(item: item, occurrence: occurrence)], season: null),
       ];
