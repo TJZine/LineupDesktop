@@ -120,7 +120,7 @@ class ChannelStudioView extends StatefulWidget {
 class ChannelStudioViewState extends State<ChannelStudioView> {
   GlobalKey<FormState> _form = GlobalKey<FormState>();
   final _titleKey = GlobalKey<_StudioTitleState>();
-  final _stationKey = GlobalKey<_StudioStationState>();
+  var _stationKey = GlobalKey<_StudioStationState>();
   final _recoveryKey = GlobalKey<_StudioRecoveryState>();
   late final TextEditingController _name;
   late final TextEditingController _number;
@@ -919,6 +919,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _number.text = '${current.number}';
     setState(() {
       _form = GlobalKey<FormState>();
+      _stationKey = GlobalKey<_StudioStationState>();
       _session.loadSaved(current);
       _configureSource();
       _session.acceptBaseline(_draftSignature);

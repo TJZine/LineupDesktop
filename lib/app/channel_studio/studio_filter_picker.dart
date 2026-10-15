@@ -40,6 +40,16 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
   bool get _showPendingFilterValues => widget.picker.showPending;
   set _showPendingFilterValues(bool value) => widget.picker.showPending = value;
   @override
+  void initState() {
+    super.initState();
+    if (widget.picker.activeKey != 'choose') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _filterPickerFocus.requestFocus();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _filterPickerSearch.dispose();
     _filterPickerFocus.dispose();
