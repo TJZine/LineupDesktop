@@ -17,8 +17,8 @@
 #include <vector>
 
 namespace lineup {
-enum class DisplayState { unknown, sdr, hdr };
-enum class DisplayRoute { none, hdr_state, advanced_color };
+enum class DisplayState { unknown = 0, sdr = 1, hdr = 2 };
+enum class DisplayRoute { none = 0, hdr_state = 1, advanced_color = 2 };
 const char* DisplayStateName(DisplayState state);
 const char* DisplayRouteName(DisplayRoute route);
 
@@ -118,6 +118,17 @@ class DisplayMatchingEngine {
       DisplayRequest request;
       const char *reason;
     };
+    void Relinquish() {
+      guardian.reset();
+      owned = false;
+    }
+    void MarkGuardianLost() {
+      guardian_lost = true;
+      if (!owned && guardian) {
+        guardian->Disarm();
+        guardian.reset();
+      }
+    }
     DisplayOwnership ownership;
     DisplayObservation observed;
     std::unique_ptr<DisplayGuardianLink> guardian;

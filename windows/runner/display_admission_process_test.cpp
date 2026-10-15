@@ -1,5 +1,6 @@
 #include "display_guardian.h"
 #include "display_recovery.h"
+#include "win32_handle.h"
 
 #include <shellapi.h>
 
@@ -18,22 +19,6 @@ void Check(bool value, const char *message) {
   if (!value)
     throw std::runtime_error(message);
 }
-class Handle {
-public:
-  explicit Handle(HANDLE value = nullptr) : value_(value) {}
-  ~Handle() { Reset(); }
-  Handle(const Handle &) = delete;
-  Handle &operator=(const Handle &) = delete;
-  HANDLE Get() const { return value_; }
-  void Reset(HANDLE value = nullptr) {
-    if (value_ && value_ != INVALID_HANDLE_VALUE)
-      CloseHandle(value_);
-    value_ = value;
-  }
-
-private:
-  HANDLE value_;
-};
 enum Slot {
   mapping,
   predecessor_ready,
@@ -621,6 +606,55 @@ void DelayedResolvedGuardian() {
   Check(Read(f.EffectsState().state[0]) == static_cast<LONG>(DisplayState::sdr),
         "successor restores correct original after stale recovery exits");
 }
+void VersionOneJournalFixture() {
+  Fixture f;
+  // Fixed version-1 little-endian bytes, independent of the current writer,
+  // enum casts and struct layout. The remaining capacity is zero-filled.
+  // Two synthetic entries cover both routes and both known state ordinals.
+  const std::array<unsigned char, 1428> bytes{{
+      0x4a, 0x52, 0x44, 0x4c, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+      0x03, 0x00, 0x00, 0x00, 0xa5, 0x0d, 0xc3, 0xd7, 0x2a, 0x00, 0x00, 0x00,
+      0x0b, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+      0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+      0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+      0x02, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x00,
+      0x16, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+      0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+  }};
+  {
+    Handle file(CreateFileW(f.journal.c_str(), GENERIC_WRITE, 0, nullptr,
+                           CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+    DWORD written = 0;
+    Check(file.Get() != INVALID_HANDLE_VALUE &&
+              WriteFile(file.Get(), bytes.data(), static_cast<DWORD>(bytes.size()),
+                        &written, nullptr) && written == bytes.size() &&
+              FlushFileBuffers(file.Get()),
+          "write fixed version-1 journal fixture");
+  }
+  DisplayRecoveryCoordinator recovery(f.journal, f.gate);
+  const RecoveryIdentity first{42, 11, 22, 1};
+  const RecoveryIdentity second{42, 11, 22, 2};
+  const DisplayOwnership sdr{{{1, 0}, 1}, DisplayRoute::hdr_state,
+                             DisplayState::sdr, DisplayState::hdr,
+                             DisplayState::hdr};
+  const DisplayOwnership hdr{{{1, 0}, 2}, DisplayRoute::advanced_color,
+                             DisplayState::hdr, DisplayState::sdr,
+                             DisplayState::sdr};
+  Check(recovery.Contains(first, sdr) && recovery.Contains(second, hdr),
+        "fixed journal parses exact version-1 identities, routes and states");
+  InterlockedExchange(&f.EffectsState().state[0], 2);
+  Api api(f.EffectsState(), Actor::guardian);
+  Check(recovery.Recover(first, api) && recovery.Recover(second, api) &&
+            Read(f.EffectsState().guardian_writes) == 2 &&
+            Read(f.EffectsState().state[0]) == 1 &&
+            Read(f.EffectsState().state[1]) == 2,
+        "fixed journal restores both original state ordinals");
+  Check(!recovery.Contains(first, sdr) && !recovery.Contains(second, hdr) &&
+            recovery.Recover(first, api) &&
+            Read(f.EffectsState().guardian_writes) == 2,
+        "fixture entries resolve once and late recovery cannot repeat writes");
+}
 void CorruptJournal() {
   Fixture f;
   DisplayRecoveryCoordinator recovery(f.journal, f.gate);
@@ -753,6 +787,7 @@ void RunDisplayAdmissionProcessTests() {
   MultipleTargets();
   CleanDisarmAndExternalChange();
   DelayedResolvedGuardian();
+  VersionOneJournalFixture();
   CorruptJournal();
   UnmutatedOrphan();
   AbandonedGate();
