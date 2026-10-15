@@ -203,6 +203,17 @@ unchanged ownership/preset. Requested format/analyze/tool/full checks on its
 corrected stable A+H snapshot; no rule/assertion weakening. H stays unintegrated
 pending correction evidence, focused reviewer closure, and main combined gate.
 
+H correction returned as `885c4d5861006beb5b41810c1f82627ce7de2595`, with a
+behavior-neutral typed `MapEntry` constructor tear-off replacing the flagged
+closure. Child reported corrected pinned check/format108/analyze clean, all15
+tool tests and **1,588** full tests passed (1,567 +16 A +5 H); no tests or
+assertions changed. Parent observed clean candidate and log tails for analysis,
+tool/full passes. Logs: `/tmp/lineup-cq-H/rebased-{check,format,analyze,
+tool-tests,full-tests}.log`. Actual H source chat remains the dispatch identity;
+its completion prose repeated the earlier mistyped child ID. Same independent
+reviewer received focused H-R1 closure and evidence, with no redundant broad
+suite or source writes requested. H remains unintegrated until that verdict.
+
 ## Evidence and limits
 
 Preparation `git diff --check` passed. P0's observed pinned Flutter identity was
