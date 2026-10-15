@@ -43,9 +43,9 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Accepted and integrated at `5990c0217b33d6d690b663f177fbe62e2635b557`; combined format/analyze/1,583 tests passed |
-| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | H-R1 independently closed; integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main gate running |
+| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; former `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Accepted/integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main format/analyze/1,588 tests passed; cleanup authorized |
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
-| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Dispatched; shared test doubles, assertions and inert/emitting behavior preserved |
+| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Candidate `548b7ec36dbaa333126f1467294faf179229d65c` returned; independent review in progress |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -104,11 +104,12 @@ may use reviewer assistance and does not replace other required reviews.
 
 Review status: P0 accepted; corrected A and H independently reviewed, no unresolved
 material finding established. A integrated with combined gate green; corrected
-H independently closed and integrated, main combined gate running. T dispatched
-on isolated current integration source. Final whole-branch review
+H independently closed and integrated, main combined gate green. T candidate
+independent review running. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
 Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:2`.
+T retrieval cursor: `f42cb099-62a0-4bc8-a48c-6e4332c0926f:1`.
 
 ### H candidate inspection
 
@@ -237,6 +238,27 @@ reference, and exact return/proof map. It may investigate/implement in its isola
 tree while H's stable main gate runs; H's reviewed product snapshot already has
 observed 1,588 passes and A's main gate is green. No main check observes T edits.
 T full checks are capped at concurrency2; no app/native build resources assigned.
+
+### Accepted H main gate and T review
+
+Main H gate session9533 completed with exit0. Canonical formatter checked108
+files with zero changes, strict analysis clean, Eastern full suite **1,588
+passed** (elapsed1:50). Logs `/tmp/lineup-cq-integration/H/{format,analyze,
+full-test}.log` establish this main gate, separately from candidate results.
+H is accepted and its integrated task worktree/branch may be removed. Its
+PowerShell assertion remains source-checked only; no CI execution is implied.
+
+T candidate `548b7ec3` returned clean: only15 owned test/support files, net−313
+lines (377 added/690 removed), no production/golden changes. Child reported
+format109/analyze clean, focused799 and full1,588 passes, matching actual base.
+Parent collected supported completion and inspected source identity/status,
+diff stat and final full-suite log tail. No source acceptance claimed yet.
+Same read-only reviewer received complete exact T contract/T5 and full candidate
+scope to inspect fake behavior/state, IDs, special-fake exclusions, migrated
+obligations and assertions. The one reported `loads == 1` → `hasLength(1)`
+adaptation (recorder now a list) is explicitly under review for equivalent
+count proof and adherence to T's preservation intent. T stays unintegrated
+pending verdict/adjudication; no new implementation package dispatched yet.
 
 ## Evidence and limits
 
