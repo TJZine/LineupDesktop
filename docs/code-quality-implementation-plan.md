@@ -1,11 +1,22 @@
 # Lineup Desktop: code-quality and macOS-readiness implementation plan
 
-Status: **revision 3 executed for portable code; F unmerged/unverified;
+Status: **revision 3 executed for portable code; F merged for Windows testing, validation pending;
 G documentation integrated and reviewed; portable final verification passed; plan not fully complete.**
 Original plan prepared October 15, 2026. Its specifications and native review
-conditions remain active. No push, PR, merge into `main`, branch-default change,
-or unrelated deletion is authorized by this closure. See the execution closure
+conditions remain active except the explicit maintainer override below. No PR,
+merge into `main`, branch-default change, or unrelated deletion is authorized. See the execution closure
 below for actual integration identities and remaining gates.
+
+**Windows-testing override, October 15:** the human maintainer explicitly requested
+"Merge F into codex/code-quality-2026-10 and push that branch so I can pull
+everything on Windows for testing. Keep F marked as pending validation, and
+prepare the Windows handoff." This supersedes the original pre-validation merge
+and push restrictions only for that branch. F was merged without conflict at
+`4f3b144a7989a0ba9f0096bf88bb265dd817bf7f`; it is **implemented and integrated
+for testing, not Windows-validated or physically accepted**. The four required
+CTests and full-plan completion conditions remain outstanding. Original gate
+wording below records the earlier plan, subject to this override. Follow the
+[Windows handoff](reviews/code-quality-2026-10-15/WINDOWS_HANDOFF.md).
 
 ## Execution closure October 15 2026
 
@@ -16,7 +27,7 @@ review conditions below as F's live contract. Unfinished execution, product and
 physical rows are routed through [open obligations](open-obligations.md).
 
 BASE was `14ac167be4d0007cf61ce85f9ed4879ca6d5c3b1`. The following are actual
-fast-forward integration commits (not fabricated merge commits). Portable code
+portable fast-forward integration commits plus the explicit F testing merge. Portable code
 SHAs were verified as ancestors of G's base
 `d15184831213dd6403ccb80da24a3ea17ffe088c`; G is recorded after parent integration:
 
@@ -38,7 +49,7 @@ SHAs were verified as ancestors of G's base
 | V | `b75a6ebb1110c8cdf89a7737f9ed7548be377bac` | Integrated; portable gates and required reviews accepted |
 | U | `bec2e8bac096b7b20536e53219c138a4b9020080` | Integrated; portable gates and required reviews accepted |
 | K | `9c3c62e6645913bda54dfefadff810fcc6db87f7` | Integrated; portable gates and required reviews accepted |
-| F | No integrated SHA | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3` retained unmerged/unverified; four Windows CTests and acceptance pending |
+| F | `4f3b144a7989a0ba9f0096bf88bb265dd817bf7f` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3` merged for Windows testing by explicit override; four Windows CTests and physical acceptance pending |
 | G | `c571baf2303ee8f4ea9fd932116f04ccac42b227` | Integrated; preservation review, final portable gates and macOS build accepted |
 
 L's controller authorization-getter glue was integrated at
@@ -56,10 +67,10 @@ G preservation review is clear; its actual integration identity is recorded abov
 Final stable verification at `476750d950744d6f22de99a170d4a6dfde4042d4` passed: pin3.47.7,
 format144 unchanged, analysis clean, all1,690 tests, and macOS release build54.4MB.
 Accepted task worktrees/fully integrated task branches are cleaned; F and the
-unmerged preflight probe remain recoverable. The final results record changes
-only closeout facts after that validated input tree; no product/test/build input changed. F must retain
-its branch/worktree until Windows verification, review and integration; no full
-plan completion while it is unmerged. W1–W12 remain separate, unobserved physical
+unmerged preflight probe remain recoverable. The portable closeout changed only
+documentation after the validated input tree; the later F merge adds Windows
+native source/tests only. F retains its branch/worktree until Windows validation
+and acceptance; no full plan completion before its required CTests pass. W1–W12 remain separate, unobserved physical
 acceptance even after deterministic gates. The branch-repair proposal is text
 only and has not been executed.
 

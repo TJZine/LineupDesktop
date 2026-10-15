@@ -7,6 +7,26 @@ dispatch, acceptance, and integration; it does not replace package contracts.
 
 ## Current checkpoint
 
+**Windows-testing override:** human turn `01a140ff-2a77-7653-bb41-0da87984c434`,
+message `01a140ff-2aab-79c1-825d-586b4d78550c`, explicitly authorizes merging F
+into `codex/code-quality-2026-10`, pushing that branch, retaining pending
+validation, and preparing the Windows handoff. This supersedes only the earlier
+unmerged/no-push route for this branch; no main merge, PR, default-branch change
+or publication is authorized. Original chronological entries below remain dated
+history, not current F status.
+
+F candidate `040e4a64bdc667bae9673d61a39a8d15261959c3` merged without conflict
+at `4f3b144a7989a0ba9f0096bf88bb265dd817bf7f` over portable closeout
+`952f321accfdc7b2e640f63938506023ba0acd75`. Its exact 12-file patch is retained
+without conflict resolution or new product changes. **F is integrated for Windows
+testing, validation pending; plan not fully complete.** Retain `cq/F` and its
+worktree until validation acceptance. No Windows compiler/CTest, local PowerShell
+or physical W1–W12 result has been observed on this macOS host. See the
+[Windows handoff](WINDOWS_HANDOFF.md) for checkout, prerequisites, gates and return
+contract. Push/review results will be recorded after they are observed.
+
+### Portable closeout before the testing override
+
 **Portable delivery implemented, reviewed, tested and integrated. Native candidate
 pending; plan not fully complete.** Integration branch: `codex/code-quality-2026-10`.
 Actual BASE_SHA: `14ac167be4d0007cf61ce85f9ed4879ca6d5c3b1`.
@@ -53,7 +73,7 @@ remains unsupported; compilation and synthetic UI evidence are not physical medi
   worktrees and branches were left untouched, including prunable registrations.
 
 All behavior corrections in plan §2.2a–h are accepted, subject to their required
-confirming tests. No push, PR, default-branch changes, publication, persisted or
+confirming tests. Original authorization (superseded only as stated above): no push, PR, default-branch changes, publication, persisted or
 wire changes, committed goldens, macOS media implementation, or additional
 features are authorized. Only fully integrated task branches may be deleted.
 
