@@ -249,6 +249,29 @@ class _GuideRowScrollPhysics extends ScrollPhysics {
   }
 }
 
+class _GuideViewportDemand {
+  const _GuideViewportDemand({
+    required this.first,
+    required this.count,
+    required this.channels,
+    required this.contentGeneration,
+    required this.scheduleGeneration,
+  });
+
+  final int first;
+  final int count;
+  final List<Channel> channels;
+  final int contentGeneration;
+  final int scheduleGeneration;
+
+  bool matches(_GuideViewportDemand other) =>
+      first == other.first &&
+      count == other.count &&
+      identical(channels, other.channels) &&
+      contentGeneration == other.contentGeneration &&
+      scheduleGeneration == other.scheduleGeneration;
+}
+
 class GuideView extends StatefulWidget {
   const GuideView({
     required this.controller,
@@ -300,6 +323,8 @@ class _GuideViewState extends State<GuideView>
   double? _effectiveRowHeight;
   bool _rowHeightAdjustmentScheduled = false;
   bool _revealScheduled = false;
+  bool _viewportRequestScheduled = false;
+  _GuideViewportDemand? _lastViewportDemand;
   String? _lastFocusedChannelId;
 
   @override
@@ -320,7 +345,7 @@ class _GuideViewState extends State<GuideView>
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _refreshClock();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _requestViewport());
+    _scheduleViewportRequest();
   }
 
   void _refreshClock() {
@@ -424,7 +449,7 @@ class _GuideViewState extends State<GuideView>
               .verticalOffsetFor(currentRowHeight)
               .clamp(0.0, existing.position.maxScrollExtent),
         );
-        _requestViewport();
+        _scheduleViewportRequest();
       });
     }
     return existing;
@@ -474,7 +499,7 @@ class _GuideViewState extends State<GuideView>
         );
         scroll.jumpTo(target);
       }
-      _requestViewport();
+      _scheduleViewportRequest();
     });
   }
 
@@ -493,7 +518,16 @@ class _GuideViewState extends State<GuideView>
 
   void _scrolled() {
     if (mounted) setState(() {});
-    _requestViewport();
+    _scheduleViewportRequest();
+  }
+
+  void _scheduleViewportRequest() {
+    if (!mounted || _viewportRequestScheduled) return;
+    _viewportRequestScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _viewportRequestScheduled = false;
+      if (mounted) _requestViewport();
+    });
   }
 
   void _requestViewport() {
@@ -511,6 +545,15 @@ class _GuideViewState extends State<GuideView>
     if (scroll.hasClients) {
       widget.controller.rememberVerticalOffset(scroll.offset, rowHeight);
     }
+    final demand = _GuideViewportDemand(
+      first: first,
+      count: _visibleRows,
+      channels: widget.controller.channels,
+      contentGeneration: widget.controller.lineup.contentGeneration,
+      scheduleGeneration: widget.controller.scheduleGeneration,
+    );
+    if (_lastViewportDemand?.matches(demand) ?? false) return;
+    _lastViewportDemand = demand;
     widget.controller.requestViewport(first, _visibleRows);
     _syncActivityPulse();
   }
@@ -658,9 +701,7 @@ class _GuideViewState extends State<GuideView>
                             widget.controller.row(channel.id).state ==
                             GuideLoadState.error,
                       );
-              WidgetsBinding.instance.addPostFrameCallback(
-                (_) => _requestViewport(),
-              );
+              _scheduleViewportRequest();
               final timelineWidth =
                   constraints.maxWidth -
                   policy.channelRailWidth -
