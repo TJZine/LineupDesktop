@@ -13,7 +13,9 @@ before creating or retargeting a branch or pull request.
 
 Start with [AGENTS.md](AGENTS.md), then read the relevant workflow and ownership
 sections it names. Use the [documentation index](docs/README.md) when the right
-authority is unclear. Read Windows acceptance and runtime provenance sections
+authority is unclear. Use [open obligations](docs/open-obligations.md) for pending
+work and full-commit historical recovery; the [August 23, 2026 parity audit](docs/product-parity.md)
+is dated evidence. Read Windows acceptance and runtime provenance sections
 when the task involves native behavior, packaging, or support claims; broaden
 reading when an invariant remains unclear.
 

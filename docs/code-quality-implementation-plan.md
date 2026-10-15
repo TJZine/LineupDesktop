@@ -1,17 +1,69 @@
 # Lineup Desktop: code-quality and macOS-readiness implementation plan
 
-Status: **revision 3, final source review corrected; ready for implementation
-after P0 preparation and explicit execution authorization; not yet executed or
-platform accepted.** Prepared
-2026-10-15 for execution by a Codex orchestrator using the personal
-`orchestrate-implementation-chats` skill. Execution needs the explicit §11
-authorization. No push, merge into `main`, deletion of pre-existing branches,
-persisted/wire format change, or visible change beyond accepted §2.2 is included.
+Status: **revision 3 executed for portable code; F unmerged/unverified;
+G documentation candidate awaiting parent integration; plan not fully complete.**
+Original plan prepared October 15, 2026. Its specifications and native review
+conditions remain active. No push, PR, merge into `main`, branch-default change,
+or unrelated deletion is authorized by this closure. See the execution closure
+below for actual integration identities and remaining gates.
+
+## Execution closure October 15 2026
+
+**Portable code packages integrated and reviewed; native candidate pending;
+plan not fully complete.** This supersedes the pre-execution status at the
+original planning baseline, while preserving the revision-3 specifications and
+review conditions below as F's live contract. Unfinished execution, product and
+physical rows are routed through [open obligations](open-obligations.md).
+
+BASE was `14ac167be4d0007cf61ce85f9ed4879ca6d5c3b1`. The following are actual
+fast-forward integration commits (not fabricated merge commits), verified as
+ancestors of G's base `d15184831213dd6403ccb80da24a3ea17ffe088c`:
+
+| Package | Integrated commit | Status |
+| --- | --- | --- |
+| P0 | Baseline/preflight, no product merge | Accepted preparation; not a code package |
+| A | `5990c0217b33d6d690b663f177fbe62e2635b557` | Integrated; portable gates and required reviews accepted |
+| H | `2a785c456c7238fc1221202f6be5930681d02711` | Integrated; portable gates and required reviews accepted |
+| T | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c` | Integrated; portable gates and required reviews accepted |
+| M | `d2213d4d7a06181cff341892d899f3b398627b2b` | Integrated; portable gates and required reviews accepted |
+| B | `bf65e00ad1c99677a2a546da6a72f669056ade8b` | Integrated; portable gates and required reviews accepted |
+| L | `441950df7f3b1a6758951ac4cfff20a1ce629295` | Integrated; portable gates and required reviews accepted |
+| C | `9d9ec78e79ef4de2e7fb0a1ca3c050d61ec90701` | Integrated; portable gates and required reviews accepted |
+| W | `a6a2d46ff782c96f2cdcfbb34e277fc2a4fe4202` | Integrated; portable gates and required reviews accepted |
+| S | `b078944a8cc8b6999badb477f2401257a330bf53` | Integrated; portable gates and required reviews accepted |
+| D | `4615b7c057aba53b5530de396c2bef1e2d1c5700` | Integrated; portable gates and required reviews accepted |
+| E | `edd123079c8bd8ebc929c3e768331e982c9a943c` | Integrated; portable gates and required reviews accepted |
+| Y | `f7ede071eca92d82c72d02fbfb13b44aee1635f5` | Integrated; portable gates and required reviews accepted |
+| V | `b75a6ebb1110c8cdf89a7737f9ed7548be377bac` | Integrated; portable gates and required reviews accepted |
+| U | `bec2e8bac096b7b20536e53219c138a4b9020080` | Integrated; portable gates and required reviews accepted |
+| K | `9c3c62e6645913bda54dfefadff810fcc6db87f7` | Integrated; portable gates and required reviews accepted |
+| F | No integrated SHA | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3` retained unmerged/unverified; four Windows CTests and acceptance pending |
+| G | No integrated SHA | Documentation candidate; awaiting parent inspection and integration |
+
+L's controller authorization-getter glue was integrated at
+`bc231cefcf8cd6ae12b8cf008b70f64b53b7ab2e`. The parent-owned
+[execution record](reviews/code-quality-2026-10-15/EXECUTION.md) preserves package
+bases, rebases, before/after evidence, failures, repairs, counts and acceptance.
+The [combined review](reviews/code-quality-2026-10-15/IMPLEMENTATION_COMBINED_REVIEW.md)
+and [final whole-branch review](reviews/code-quality-2026-10-15/IMPLEMENTATION_FINAL_REVIEW.md)
+closed clear at inspected HEAD `a620790e642d8c72fcdb2d76602a3a5f49bf16af`
+(product HEAD `9c3c62e6645913bda54dfefadff810fcc6db87f7`). That stable main gate
+observed pin 3.47.7, 144 formatted files unchanged, clean analysis and 1,690 tests.
+These are attributed earlier checks, not new G checks or physical acceptance.
+
+Parent final stable checks/macOS build, G's actual integration identity and
+eligible task cleanup remain to be recorded after G acceptance. F must retain
+its branch/worktree until Windows verification, review and integration; no full
+plan completion while it is unmerged. W1–W12 remain separate, unobserved physical
+acceptance even after deterministic gates. The branch-repair proposal is text
+only and has not been executed.
 
 ## Inputs and evidence
 
-- [Code-quality assessment handoff](code-quality-refactor-planning-handoff.md)
-  (CQ-01 to CQ-09). This plan is its requested planning deliverable.
+- Code-quality assessment handoff (CQ-01 to CQ-09), archived in full:
+  `git show d15184831213dd6403ccb80da24a3ea17ffe088c:docs/code-quality-refactor-planning-handoff.md`.
+  This plan is its requested planning deliverable; see the
+  [preservation map](open-obligations.md#archive-recovery-and-preservation-map).
 - [Verification traces](reviews/code-quality-2026-10-15/TRACES.md) T1 to T7.
   Seven read-only investigations traced every report area, the
   macOS-readiness question, and the previously unexamined UI, domain, and

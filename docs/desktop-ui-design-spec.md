@@ -4,8 +4,9 @@ Status: product and visual directions consolidated, September 8, 2026.
 Design-only handoff; implementation, worker dispatch and commits require a separate
 explicit instruction. These are intended changes, not current capability claims.
 
-Use this document for active requirements, the [implementation plan](desktop-ui-implementation-plan.md)
-for delivery and verification, and the [visual evidence manifest](design/desktop-ui/README.md)
+Use this document for active requirements, [Architecture](architecture.md) for
+current engineering contracts, [open obligations](open-obligations.md) for remaining
+acceptance and archived delivery evidence, and the [visual evidence manifest](design/desktop-ui/README.md)
 for each approved composition and its limitations. Superseded discussion and
 rejected alternatives remain available in Git history; see the
 [documentation index](README.md#historical-material-in-git).
@@ -1532,9 +1533,9 @@ entry; the locked Account section supplies that complete home.
 ## Design closeout
 
 No further major surface direction is awaiting selection in this package.
-Engineering details are resolved or explicitly gated in the implementation plan:
-schema migration, reproducible schedules, stale-operation guards, actual telemetry
-availability and physical-layout acceptance. They do not authorize new controls or
+Engineering contracts for schema migration, reproducible schedules and stale
+operations live in [Architecture](architecture.md). Actual telemetry availability
+and physical-layout acceptance remain in [open obligations](open-obligations.md). They do not authorize new controls or
 material visual departures. Raise a concrete conflicting requirement if source or
 validation exposes one; do not reopen resolved alternatives speculatively.
 
@@ -1542,9 +1543,8 @@ validation exposes one; do not reopen resolved alternatives speculatively.
 
 Read the complete relevant surface contracts and evidence limitations before work.
 Implementation still needs explicit user instruction. The later implementation
-uses user-requested workers and reviewer subagents, finding adjudication, repairs,
-verification and conventional commits as described in the plan. Independent
-review is recommended for that implementation. The [planning-readiness review](desktop-ui-readiness-review.md)
+followed its dated delivery plan; new work uses the current repository workflow.
+Independent review remains appropriate to the changed risk. The [archived planning-readiness review](open-obligations.md#archive-recovery-and-preservation-map)
 passed for orchestrator-led P0; it is not application-code or Windows validation.
 No private screenshots, real media metadata, credentials, token URLs or personal
 paths belong in repository design evidence.

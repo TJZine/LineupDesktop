@@ -71,9 +71,9 @@ does not claim a fresh native CTest or current package result.
 ## Product and domain
 
 Lineup Desktop is a Flutter/Dart desktop application with a Windows C++/libmpv
-media boundary. The macOS application is a development surface with explicitly
-unsupported native playback. Electron history is provenance material, not an
-application compatibility target.
+media boundary. macOS is a development surface; native playback not yet
+implemented; see [docs/native-player-protocol.md](../docs/native-player-protocol.md).
+Electron history is provenance material, not an application compatibility target.
 
 Preserve the distinction between a product requirement and its current
 implementation. In particular:
@@ -98,13 +98,15 @@ unfamiliar areas.
 
 | Concern | Starting points | Obligation to preserve |
 | --- | --- | --- |
-| Application policy, mutations, profile/server state | `lib/app/lineup_controller.dart` | Stale work cannot publish over current state; saves, rollback, and credential actions retain their ordering guarantees |
+| Application policy, mutations, profile/server state | `lib/app/lineup_controller.dart`, `lineup_scenario.dart`, `library_scan_state.dart` | Stale work cannot publish over current state; saves, rollback, and credential actions retain their ordering guarantees |
 | Channel resolution and scheduling | `lib/channels/content_resolver.dart`, `scheduler.dart`, `schedule_worker.dart` | One authoritative deterministic schedule policy; measured expensive work stays off the interaction path where needed |
 | Persisted state | `lib/persistence/app_store.dart` | Old valid data remains valid or has an explicit migration; recovery preserves original bytes; failed persistence must not masquerade as a commit |
 | Plex boundary | `lib/plex/plex_client.dart`, `plex_models.dart` | Validate external values; cancel obsolete IO where possible; preserve authentication and redaction |
-| Playback policy and state | `lib/playback/player_coordinator.dart`, `native_player.dart` | Dart owns product decisions; command acceptance is not observed playback or track confirmation |
-| Dart/native transport | `lib/playback/windows_native_player.dart` | Typed bounded payloads, correct lifetime/load/stop correlation, late-event rejection, explicit cleanup |
+| Playback policy and state | `lib/playback/player_coordinator.dart` (including `_ActiveProgram`), `native_player.dart` | Dart owns product decisions; command acceptance is not observed playback or track confirmation |
+| Dart/native transport | `lib/playback/method_channel_native_player.dart`, `native_player_factory.dart`; [protocol](../docs/native-player-protocol.md) | Typed bounded payloads, correct lifetime/load/stop correlation, late-event rejection, explicit cleanup |
 | Windows media/presentation | `windows/runner/native_player.*`, `flutter_window.*` | Native owner manages libmpv and platform objects; platform-thread and worker-thread responsibilities remain coherent |
+| Studio draft, verification and Setup review | `lib/app/manual_rundown.dart`, `air_check_verification.dart`, `setup_review.dart` | Draft occurrences, verified schedule identity and immutable reviewed application remain distinct |
+| Channel health and diagnostics | `lib/app/channel_health_monitor.dart`, `lib/diagnostics/diagnostics.dart` | Health jobs are owned outside build; typed events retain separate storage and export privacy policy |
 | Flutter surface and interaction | `lib/playback/native_video_surface.dart`, `player_view.dart`, affected `lib/app/` views | Flutter owns focus, semantics, input, overlays, and accessible interaction |
 
 These are existing responsibility boundaries. A design proposal should explain
@@ -147,7 +149,7 @@ obligation to retained evidence.
 | --- | --- | --- |
 | Schedules/resolution | `test/channels/scheduler_test.dart`, `content_resolver_test.dart`, `schedule_worker_test.dart` | Deterministic contracts; inspect relevant inputs and clock assumptions |
 | Mutations/currentness/credentials | `test/app/lineup_controller_test.dart`, `test/persistence/app_store_test.dart`, `test/plex/plex_io_transport_test.dart` | Controlled failures, late results, saved state, cancellation and transport; OS-specific behavior still needs platform evidence |
-| Playback/native messaging | `test/playback/player_coordinator_test.dart`, `windows_native_player_test.dart`, `native_video_surface_test.dart` | Dart contracts and observed widget state, not real media output |
+| Playback/native messaging | `test/playback/player_coordinator_test.dart`, `method_channel_native_player_test.dart`, `native_video_surface_test.dart` | Dart contracts and observed widget state, not real media output |
 | Interaction/accessibility | Affected widget tests; `test/support/ui_fixture.dart` | Focus, semantics, layout; physical Windows input/assistive technology remain separate when claimed |
 | Guide alpha | `test/app/guide_opacity_test.dart` on macOS | Required exact alpha behavior for the relevant Guide surface |
 | Visual comparisons | `tool/visual/`, `test/support/golden_test_support.dart` | Optional explicit visual suites; inspect their host restrictions |

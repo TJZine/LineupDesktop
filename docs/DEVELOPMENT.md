@@ -228,6 +228,10 @@ for the controller and guardian contracts covered by their fake tests.
 
 ## Portable commands
 
+Run `dart tool/check_toolchain.dart` before repository checks; it verifies that
+the Flutter SDK on PATH matches `tool/flutter_version.json`. That configuration
+is the canonical version/revision authority; use it when the pin changes.
+
 Flutter SDK `3.47.7` (revision
 `abaf9c523780a608bd46686fd5e53740a07077f8`, Dart `3.13.5`) is the reproducible
 toolchain for macOS, Windows, and CI.
@@ -341,7 +345,9 @@ Player layouts and separate approval for structural proposals.
 For macOS application builds/runs, install Xcode and its command-line tools on
 macOS 12 or newer. Resolve relevant Xcode/macOS warnings from `flutter doctor`;
 those application prerequisites do not gate unrelated Dart checks. The
-application currently targets macOS 12.0.
+application currently targets macOS 12.0. macOS is a development surface; native
+playback is not yet implemented. See [the protocol](native-player-protocol.md) and
+the [macOS backlog](open-obligations.md#macos-media-backlog).
 
 ```sh
 flutter config --enable-macos-desktop

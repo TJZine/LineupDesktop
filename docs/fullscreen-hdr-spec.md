@@ -2,7 +2,7 @@
 
 **Status:** Implemented, October 11, 2026; integrated physical acceptance is
 pending. Windows 10 discovery is complete, and the existing composition passed; see the
-[discovery result](fullscreen-hdr-discovery-plan.md#discovery-result-october-9-2026).
+[discovery result](open-obligations.md#archive-recovery-and-preservation-map).
 The [implementation plan](fullscreen-hdr-implementation-plan.md) owns the
 approved session, restoration, hold, guardian, and Diagnostics contracts.
 
@@ -56,7 +56,7 @@ existing preparing/loading presentation without changing overlay policy.
 ## Feasibility gate
 
 The completed Windows 10 22H2 discovery with known SDR and HDR10 material,
-recorded in the [discovery plan](fullscreen-hdr-discovery-plan.md), evaluated the current
+recorded in the [discovery plan](open-obligations.md#archive-recovery-and-preservation-map), evaluated the current
 composited D3D11/libmpv path first: its negotiated colorspace and HDR output
 when fullscreen, its behavior across manual and programmatic Windows HDR
 transitions, and the resulting overlay, focus, video stacking, and normal

@@ -34,9 +34,12 @@ reported; they do not establish evidence for the new target.
 The implementation sequence is portable review/checks, coherent candidate commit,
 then exact-commit packaging and physical acceptance. A required fix creates a new
 reviewed commit and affected retesting; no physical pass is inferred from the
-preceding portable gate. Use the current [implementation plan](desktop-ui-implementation-plan.md)
-for this campaign's extended 720p/1080p/1440p/2160p, display/text-scale, ticker,
-track-confirmation and timer suspend/wake requirements.
+preceding portable gate. Preserve the extended 720p/1080p/1440p/2160p campaign:
+representative 100/150/200% display scaling and enlarged text, live monitor/DPI
+transitions, native font/input/AT behavior, moving-video contrast and exact Guide
+alpha/aperture, protected OSD/Now Playing, ticker timing, confirmed tracks and timer
+suspend/wake. [Open obligations](open-obligations.md#product-plans-and-earlier-campaigns)
+retains the original campaign evidence and additional targeted scenarios.
 
 ## Exit criteria
 
@@ -490,8 +493,8 @@ Do not merge. Do not make product-code changes during acceptance unless a
 separate implementation task explicitly authorizes them.
 
 Read AGENTS.md and the relevant sections of docs/DEVELOPMENT.md,
-docs/architecture.md, docs/windows-runtime.md, and
-docs/desktop-ui-design-spec.md and docs/desktop-ui-implementation-plan.md.
+docs/architecture.md, docs/windows-runtime.md,
+docs/desktop-ui-design-spec.md and docs/open-obligations.md.
 Distinguish the approved target from implemented behavior at the tested commit.
 Use docs/README.md for authority questions.
 

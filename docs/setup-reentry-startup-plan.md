@@ -1,6 +1,8 @@
 # Saved-Lineup Startup and Setup Re-Entry Fix Plan
 
-**Status:** approved for implementation on October 7, 2026.
+**Status:** implemented (October 7, 2026 review closeout); retained product
+decisions and render approvals. Physical Windows acceptance remains pending in
+[the obligation register](open-obligations.md#product-plans-and-earlier-campaigns).
 
 **Source:** `codex/desktop-ui-second-pass` at `c5fccffe` (pushed).
 
@@ -307,7 +309,7 @@ TZ=America/New_York flutter test
     setup and during regeneration, during a scan, and with no libraries;
   - relaunch, confirming the lineup is intact.
 - **Last,** resume the collaborative session in
-  [windows-collaborative-acceptance-handoff.md](windows-collaborative-acceptance-handoff.md)
+  [windows-collaborative-acceptance-handoff.md](open-obligations.md#archive-recovery-and-preservation-map)
   on the new commit.
 
 ---

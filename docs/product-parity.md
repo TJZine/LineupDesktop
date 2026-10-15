@@ -1,4 +1,9 @@
-# Definitive product-parity and release audit
+# Product-parity and release audit — historical, August 23, 2026
+
+This is a dated audit with explicitly dated later updates, not an authoritative
+current status page. Use [Architecture](architecture.md), current source and
+[open obligations](open-obligations.md) for present ownership and unfinished work.
+The original source identities and evidence boundaries below are preserved.
 
 **Audit date:** 2026-08-23
 
@@ -91,8 +96,8 @@ coverage, and artifact-bound package provenance already present in source/tests.
 This documentation correction adds no test-run, CI, platform, or support evidence;
 the named historical campaign results retain their original boundaries.
 
-This is the authoritative current product-parity record. The classifications
-in [Portable UI Parity](ui-parity.md) remain historical evidence for their
+This is the product-parity record for the dated audit and updates above. The
+[archived portable UI classifications](open-obligations.md#archive-recovery-and-preservation-map) remain historical evidence for their
 named campaigns; they do not override this audit. Current source and observed
 evidence outrank older documentation.
 
