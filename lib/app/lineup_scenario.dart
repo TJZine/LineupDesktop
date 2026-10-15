@@ -170,7 +170,7 @@ class LineupFixtureActor {
         controller.server?.id,
       );
     } else {
-      controller._scan.status = status;
+      controller._scan.restoreStatus(status);
     }
     controller.notifyListeners();
   }

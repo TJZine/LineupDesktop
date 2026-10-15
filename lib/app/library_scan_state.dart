@@ -82,6 +82,25 @@ class _ScanReadiness {
   final bool catalogUnavailable;
 }
 
+@immutable
+class _ScanCommitCandidate {
+  const _ScanCommitCandidate({
+    required this.readiness,
+    required this.libraryIds,
+    required this.media,
+    required this.playlists,
+    required this.evidence,
+    required this.status,
+  });
+
+  final _ScanReadiness readiness;
+  final Set<String> libraryIds;
+  final List<PlexMediaItem> media;
+  final List<PlexPlaylist> playlists;
+  final _LibraryScanResult evidence;
+  final LibraryScanStatus status;
+}
+
 class _ScanAttempt {
   const _ScanAttempt({required this.previous, required this.retry});
 
@@ -134,6 +153,48 @@ class _LibraryScanState {
               )
               .map((entry) => entry.key),
         );
+
+  LibraryScanStatus get currentStatus => status;
+
+  void restoreStatus(LibraryScanStatus value) => status = value;
+
+  List<PlexMediaItem> inventoryFor(Iterable<String> inventoryOrder) => [
+    for (final id in inventoryOrder) ...?rows[id]?.items,
+  ];
+
+  _ScanCommitCandidate? candidateFor(
+    Set<String> ids,
+    int contentScope,
+    Iterable<String> inventoryOrder,
+  ) {
+    final ready = _ready;
+    if (ready == null ||
+        ready.contentScope != contentScope ||
+        ids.isEmpty ||
+        !ids.every(
+          (id) => ready.rows[id]?.fact.status == LibraryScanStatus.complete,
+        )) {
+      return null;
+    }
+    return _ScanCommitCandidate(
+      readiness: ready,
+      libraryIds: Set.unmodifiable(ids),
+      media: List.unmodifiable([
+        for (final id in inventoryOrder)
+          if (ids.contains(id))
+            ...?ready.rows[id]?.items?.where((item) => item.isPlayable),
+      ]),
+      playlists: ready.result.playlists,
+      evidence: ready.result,
+      status: LibraryScanStatus.complete,
+    );
+  }
+
+  bool isCurrent(_ScanCommitCandidate candidate, int contentScope) =>
+      candidate.readiness.contentScope == contentScope &&
+      identical(_ready, candidate.readiness);
+
+  void didCommit(_ScanCommitCandidate candidate) => status = candidate.status;
 
   int get completedPages =>
       rows.values.fold(0, (total, row) => total + row.fact.completedPages);

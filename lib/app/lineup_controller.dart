@@ -302,7 +302,7 @@ class LineupController extends ChangeNotifier {
   bool _secureCancellationRequired = false;
   bool get secureCancellationRequired => _secureCancellationRequired;
   final _LibraryScanState _scan = _LibraryScanState();
-  LibraryScanStatus get libraryScanStatus => _scan.status;
+  LibraryScanStatus get libraryScanStatus => _scan.currentStatus;
   int get libraryScanCompletedPages => _scan.completedPages;
   int get libraryScanCompletedItems => _scan.completedItems;
   int? get libraryScanTotalItems => _scan.totalItems;
@@ -324,8 +324,8 @@ class LineupController extends ChangeNotifier {
   bool isGeneratedSourceConfirmedGone(Channel channel) {
     if (channel.builderKey == null ||
         _scan.discoveryObsolete ||
-        _scan.status == LibraryScanStatus.scanning ||
-        _scan.status == LibraryScanStatus.cancelled ||
+        _scan.currentStatus == LibraryScanStatus.scanning ||
+        _scan.currentStatus == LibraryScanStatus.cancelled ||
         !_sourceDiscoveryComplete(channel.source)) {
       return false;
     }
@@ -942,7 +942,7 @@ class LineupController extends ChangeNotifier {
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
           final loaded = await _loadLibraries(operation, selectedLibraryIds);
           if (operation != _epoch) return;
-          _scan.status = loaded.status;
+          _scan.restoreStatus(loaded.status);
           _requireAvailablePlaylists(loaded.failedPlaylistIds);
           _requireAvailableCollections(loaded);
           _publishAvailableMedia = loaded.media;
@@ -1058,52 +1058,46 @@ class LineupController extends ChangeNotifier {
   Future<bool> _commitScannedLibraries(Set<String> ids) async {
     final operation = _epoch;
     final scope = _mutationScope;
-    final pending = _scan.readiness;
-    if (pending == null ||
-        _scan.readinessScope != _mutationScope ||
-        ids.isEmpty ||
-        !_scan.ids.containsAll(ids) ||
-        !libraryScanReadyIds.containsAll(ids)) {
+    final candidate = _scan.candidateFor(
+      ids,
+      scope,
+      libraries.map((library) => library.id),
+    );
+    if (candidate == null || !libraryScanReadyIds.containsAll(ids)) {
       return false;
     }
     return _run(
       () => _queueStateOperation(operation, () async {
-        if (_scan.readinessScope != _mutationScope ||
-            !identical(_scan.readiness, pending)) {
-          return;
-        }
-        _requireAvailablePlaylists(pending.failedPlaylistIds);
-        _requireAvailableCollections(pending, libraryIds: ids);
-        final media = List<PlexMediaItem>.unmodifiable([
-          for (final library in libraries)
-            if (ids.contains(library.id))
-              ...?_scan.rows[library.id]?.items?.where(
-                (item) => item.isPlayable,
-              ),
-        ]);
-        final inventory = _buildPlayableInventory(media, pending.playlists);
+        if (!_scan.isCurrent(candidate, _mutationScope)) return;
+        _requireAvailablePlaylists(candidate.evidence.failedPlaylistIds);
+        _requireAvailableCollections(
+          candidate.evidence,
+          libraryIds: candidate.libraryIds,
+        );
+        final media = candidate.media;
+        final inventory = _buildPlayableInventory(media, candidate.playlists);
         final migrated = _migratedLegacyChannels(
           _scheduleClock().toUtc(),
           inventory: inventory,
         );
         await _commitLineup(
           ScopedLineup(
-            libraryIds: ids,
+            libraryIds: candidate.libraryIds,
             channels: migrated,
             currentChannelId: currentChannelId,
           ),
         );
         if (!_isCurrentMutationScope(scope)) return;
         _publishAvailableMedia = media;
-        _publishAvailablePlaylists = pending.playlists;
+        _publishAvailablePlaylists = candidate.playlists;
         _publishLineup(
           ScopedLineup(
-            libraryIds: ids,
+            libraryIds: candidate.libraryIds,
             channels: migrated,
             currentChannelId: currentChannelId,
           ),
         );
-        _scan.status = _scan.statusFor(ids);
+        _scan.didCommit(candidate);
         _contentGeneration++;
         notifyListeners();
       }),
@@ -1216,11 +1210,7 @@ class LineupController extends ChangeNotifier {
           status: LibraryScanStatus.cancelled,
         );
       }
-      final items = selected
-          .map((library) => _scan.rows[library.id]?.items)
-          .whereType<List<PlexMediaItem>>()
-          .expand((items) => items)
-          .toList();
+      final items = _scan.inventoryFor(selected.map((library) => library.id));
       _scan.playlistProgress = const PlexPlaylistProgress();
       notifyListeners();
       PlexPlaylistCatalog catalog;
@@ -1299,7 +1289,7 @@ class LineupController extends ChangeNotifier {
       return _scan.result(playable, catalog.playlists);
     } catch (_) {
       if (_isCurrent(operation)) {
-        _scan.status = LibraryScanStatus.transientFailure;
+        _scan.restoreStatus(LibraryScanStatus.transientFailure);
         notifyListeners();
       }
       rethrow;
