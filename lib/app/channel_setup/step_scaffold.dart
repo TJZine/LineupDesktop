@@ -3,13 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../ui/app_theme.dart';
-import '../../ui/app_ui.dart';
 
 class SetupStage extends StatelessWidget {
   const SetupStage({
     required this.child,
     required this.footer,
     this.footerGap = 12,
+    super.key,
   });
 
   final Widget child;
@@ -56,6 +56,7 @@ class SetupFooter extends StatelessWidget {
     required this.trailing,
     this.summary,
     this.configuration = false,
+    super.key,
   });
 
   final List<Widget> leading;
@@ -90,7 +91,7 @@ class SetupFooter extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (summary != null) summary!,
+                    ?summary,
                     const SizedBox(height: 12),
                     Align(alignment: Alignment.centerRight, child: actionGroup),
                   ],

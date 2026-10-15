@@ -1648,14 +1648,22 @@ void main() {
           {replace ? ChannelBuildMode.replace : ChannelBuildMode.merge},
         );
         if (!replace) {
-          expect(
-            tester
-                .widget<LineupSegmentedControl<bool>>(
-                  find.byKey(const ValueKey('missing-source-choice-missing')),
-                )
-                .selected,
-            {true},
+          final choice = find.byKey(
+            const ValueKey('missing-source-choice-missing'),
           );
+          await tester.scrollUntilVisible(
+            choice,
+            150,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('channel-setup-review-roster')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          expect(tester.widget<LineupSegmentedControl<bool>>(choice).selected, {
+            true,
+          });
         }
       },
     );

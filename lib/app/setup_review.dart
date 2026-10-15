@@ -1,6 +1,5 @@
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
-import 'channel_setup_projection.dart';
 
 enum SetupReviewKind { unchanged, updated, added, removed }
 
@@ -96,14 +95,13 @@ class SetupReview {
     required this.mode,
     required this.removeSourceIds,
     required this.strategyBySource,
-    required SetupReviewPlanFactory? planFactory,
+    required this._planFactory,
   }) : finalChannels = _finalChannels(
          base: base,
          planned: plan.channels,
          mode: mode,
          removeSourceIds: removeSourceIds,
-       ),
-       _planFactory = planFactory {
+       ) {
     final computedEntries = _reviewEntries(
       base: base,
       planned: plan.channels,

@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../ui/app_theme.dart';
-import '../../ui/app_ui.dart';
 import '../setup_review.dart';
-import 'step_scaffold.dart';
 
 class SetupResultStep extends StatefulWidget {
   const SetupResultStep({

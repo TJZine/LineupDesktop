@@ -326,9 +326,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       error: widget.controller.error,
       collectionRecoveryByLibrary: Map.unmodifiable({
         for (final library in widget.controller.libraries)
-          if (widget.controller.collectionScaleRecovery({library.id})
-              case final recovery?)
-            library.id: recovery,
+          library.id: ?widget.controller.collectionScaleRecovery({library.id}),
       }),
       selectionCollectionRecovery: widget.controller.collectionScaleRecovery(
         _selectedLibraries,
@@ -471,8 +469,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       }),
       discoveryFailures: Map.unmodifiable({
         for (final strategy in BuilderStrategy.values)
-          if (_discoveryFailure(strategy) case final failure?)
-            strategy: failure,
+          strategy: ?_discoveryFailure(strategy),
       }),
       collectionRecovery: widget.controller.collectionScaleRecovery(
         _selectedLibraries,

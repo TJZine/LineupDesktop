@@ -182,7 +182,7 @@ void main() {
         review.counts,
         const SetupReviewCounts(unchanged: 0, updated: 1, added: 0, removed: 1),
       );
-      expect(() => review.plan.channels.clear(), throwsUnsupportedError);
+      expect(review.plan.channels.clear, throwsUnsupportedError);
       expect(
         () => (review.plan.channels.single.source as LibrarySource).filters
             .clear(),
