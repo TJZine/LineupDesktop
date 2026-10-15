@@ -118,7 +118,13 @@ class LineupFixtureActor {
     if (media != null) controller._publishAvailableMedia = media;
     if (playlists != null) controller._publishAvailablePlaylists = playlists;
     if (selectedLibraryIds != null) {
-      controller._publishSelectedLibraryIds = selectedLibraryIds;
+      controller._publishLineup(
+        ScopedLineup(
+          libraryIds: selectedLibraryIds,
+          channels: controller.channels,
+          currentChannelId: controller.currentChannelId,
+        ),
+      );
     }
     controller._contentGeneration++;
     controller.notifyListeners();
@@ -176,11 +182,17 @@ class LineupFixtureActor {
     _controller._scenarioOpen = false;
     final controller = _controller;
     controller._publishLibraries = libraries;
-    controller._publishSelectedLibraryIds =
-        selectedLibraryIds ??
-        controller.selectedLibraryIds.intersection(
-          libraries.map((library) => library.id).toSet(),
-        );
+    controller._publishLineup(
+      ScopedLineup(
+        libraryIds:
+            selectedLibraryIds ??
+            controller.selectedLibraryIds.intersection(
+              libraries.map((library) => library.id).toSet(),
+            ),
+        channels: controller.channels,
+        currentChannelId: controller.currentChannelId,
+      ),
+    );
     controller._contentGeneration++;
     controller.notifyListeners();
   }

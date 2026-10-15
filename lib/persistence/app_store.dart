@@ -41,6 +41,8 @@ class ScopedLineup {
 }
 
 class PersistedState {
+  static const empty = PersistedState();
+
   const PersistedState({
     this.settings = const LineupSettings(),
     this.profileId,

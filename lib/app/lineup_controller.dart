@@ -183,8 +183,13 @@ class LineupController extends ChangeNotifier {
     _scenarioInstalled = true;
     _settings = scenario.settings ?? const LineupSettings();
     diagnostics.enabled = settings.diagnosticsEnabled;
-    _publishChannels = scenario.channels ?? const [];
-    _currentChannelId = scenario.currentChannelId;
+    _publishLineup(
+      ScopedLineup(
+        libraryIds: scenario.selectedLibraryIds ?? const {},
+        channels: scenario.channels ?? const [],
+        currentChannelId: scenario.currentChannelId,
+      ),
+    );
     _account = scenario.account;
     _profile = scenario.profile;
     _publishProfiles = scenario.profiles ?? const [];
@@ -192,7 +197,6 @@ class LineupController extends ChangeNotifier {
     _publishServer = scenario.server;
     _connection = scenario.connection;
     _publishLibraries = scenario.libraries ?? const [];
-    _publishSelectedLibraryIds = scenario.selectedLibraryIds ?? const {};
     _publishAvailableMedia = scenario.availableMedia ?? const [];
     _publishAvailablePlaylists = scenario.availablePlaylists ?? const [];
     _activePin = scenario.activePin;
@@ -235,13 +239,9 @@ class LineupController extends ChangeNotifier {
 
   LineupSettings _settings = const LineupSettings();
   LineupSettings get settings => _settings;
-  List<Channel> _channels = const [];
-  List<Channel> get channels => _channels;
-  set _publishChannels(List<Channel> value) => _channels = List.unmodifiable(
-    value.map((channel) => channel.immutableCopy()),
-  );
-  String? _currentChannelId;
-  String? get currentChannelId => _currentChannelId;
+  ScopedLineup _lineup = ScopedLineup.empty;
+  List<Channel> get channels => _lineup.channels;
+  String? get currentChannelId => _lineup.currentChannelId;
   PlexAccount? _account;
   PlexAccount? get account => _account;
   PlexHomeUser? _profile;
@@ -264,10 +264,7 @@ class LineupController extends ChangeNotifier {
   List<PlexLibrary> get libraries => _libraries;
   set _publishLibraries(List<PlexLibrary> value) =>
       _libraries = List.unmodifiable(value);
-  Set<String> _selectedLibraryIds = const {};
-  Set<String> get selectedLibraryIds => _selectedLibraryIds;
-  set _publishSelectedLibraryIds(Set<String> value) =>
-      _selectedLibraryIds = Set.unmodifiable(value);
+  Set<String> get selectedLibraryIds => _lineup.libraryIds;
   List<PlexMediaItem> _availableMedia = const [];
   List<PlexMediaItem> get availableMedia => _availableMedia;
   set _publishAvailableMedia(List<PlexMediaItem> value) => _availableMedia =
@@ -444,7 +441,7 @@ class LineupController extends ChangeNotifier {
   Future<PlexConnection>? _pmsRefresh;
   int? _pmsRefreshOperation;
   String? _pmsRefreshServerId;
-  PersistedState _persisted = const PersistedState();
+  PersistedState _persisted = PersistedState.empty;
   Timer? _pinTimer;
   int? _busyOperation;
   List<PlexMediaItem>? _scheduleWorkerMedia;
@@ -978,11 +975,9 @@ class LineupController extends ChangeNotifier {
     _connection = selection.connection;
     _pmsToken = committedAccess.token;
     _publishLibraries = selection.libraries;
-    _publishSelectedLibraryIds = selection.lineup.libraryIds;
     _publishAvailableMedia = const [];
     _publishAvailablePlaylists = const [];
-    _publishChannels = selection.lineup.channels;
-    _currentChannelId = selection.lineup.currentChannelId;
+    _publishLineup(selection.lineup);
     _stage = SetupStage.channelSetup;
     _channelSetupCanCancel = false;
     _resetSetupDiscovery();
@@ -1091,15 +1086,23 @@ class LineupController extends ChangeNotifier {
           _scheduleClock().toUtc(),
           inventory: inventory,
         );
-        await _save(
-          channelsOverride: migrated,
-          selectedLibraryIdsOverride: ids,
+        await _commitLineup(
+          ScopedLineup(
+            libraryIds: ids,
+            channels: migrated,
+            currentChannelId: currentChannelId,
+          ),
         );
         if (!_isCurrentMutationScope(scope)) return;
-        _publishSelectedLibraryIds = Set.unmodifiable(ids);
         _publishAvailableMedia = media;
         _publishAvailablePlaylists = pending.playlists;
-        _publishChannels = migrated;
+        _publishLineup(
+          ScopedLineup(
+            libraryIds: ids,
+            channels: migrated,
+            currentChannelId: currentChannelId,
+          ),
+        );
         _scan.status = _scan.statusFor(ids);
         _contentGeneration++;
         notifyListeners();
@@ -1685,9 +1688,12 @@ class LineupController extends ChangeNotifier {
         : next.isEmpty
         ? null
         : next[oldIndex.clamp(0, next.length - 1)].id;
-    await _save(
-      channelsOverride: next,
-      currentChannelOverride: (id: nextCurrent),
+    await _commitLineup(
+      ScopedLineup(
+        libraryIds: selectedLibraryIds,
+        channels: next,
+        currentChannelId: nextCurrent,
+      ),
     );
     if (!_isCurrentMutationScope(operation)) {
       throw StateError('Channel mutation was superseded');
@@ -1700,8 +1706,13 @@ class LineupController extends ChangeNotifier {
     String? currentId,
     List<Channel> previous,
   ) {
-    _publishChannels = next;
-    _currentChannelId = currentId;
+    _publishLineup(
+      ScopedLineup(
+        libraryIds: selectedLibraryIds,
+        channels: next,
+        currentChannelId: currentId,
+      ),
+    );
     _recordChannelChanges(previous);
     notifyListeners();
   }
@@ -1908,13 +1919,21 @@ class LineupController extends ChangeNotifier {
           .every((index) => identical(old[index], migrated[index]))) {
         return;
       }
-      try {
-        await _save(channelsOverride: migrated);
-      } catch (_) {
-        rethrow;
-      }
+      await _commitLineup(
+        ScopedLineup(
+          libraryIds: selectedLibraryIds,
+          channels: migrated,
+          currentChannelId: currentChannelId,
+        ),
+      );
       if (_isCurrentMutationScope(scope)) {
-        _publishChannels = migrated;
+        _publishLineup(
+          ScopedLineup(
+            libraryIds: selectedLibraryIds,
+            channels: migrated,
+            currentChannelId: currentChannelId,
+          ),
+        );
         _recordChannelChanges(old);
       }
     });
@@ -2141,7 +2160,13 @@ class LineupController extends ChangeNotifier {
           (id != null && !channels.any((channel) => channel.id == id))) {
         return;
       }
-      await _save(currentChannelOverride: (id: id));
+      await _commitLineup(
+        ScopedLineup(
+          libraryIds: selectedLibraryIds,
+          channels: channels,
+          currentChannelId: id,
+        ),
+      );
       if (!_isCurrentMutationScope(operation)) {
         throw StateError('Current channel mutation was superseded');
       }
@@ -2154,7 +2179,7 @@ class LineupController extends ChangeNotifier {
   ) async {
     await _queueGlobalStateOperation(() async {
       final proposed = change(settings);
-      await _save(settingsOverride: proposed);
+      await _commitSettings(proposed);
       if (_disposed) return;
       _publishSettingsCommit(proposed);
     });
@@ -2167,7 +2192,13 @@ class LineupController extends ChangeNotifier {
   }
 
   void _publishCurrentChannel(String? id) {
-    _currentChannelId = id;
+    _publishLineup(
+      ScopedLineup(
+        libraryIds: selectedLibraryIds,
+        channels: channels,
+        currentChannelId: id,
+      ),
+    );
     notifyListeners();
   }
 
@@ -2267,11 +2298,9 @@ class LineupController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _publishEmptyLineup() {
-    _publishSelectedLibraryIds = const {};
-    _publishChannels = const [];
-    _currentChannelId = null;
-  }
+  void _publishEmptyLineup() => _publishLineup(ScopedLineup.empty);
+
+  void _publishLineup(ScopedLineup lineup) => _lineup = lineup;
 
   PersistedState _persistedFromRuntime({
     ScopedLineup? lineup,
@@ -2285,87 +2314,19 @@ class LineupController extends ChangeNotifier {
     if (profileKey == null || serverId == null) return base;
     return base.withLineup(
       LineupScope(profileKey: profileKey, serverId: serverId),
-      lineup ??
-          ScopedLineup(
-            libraryIds: selectedLibraryIds,
-            channels: channels,
-            currentChannelId: currentChannelId,
-          ),
+      lineup ?? _lineup,
     );
   }
 
-  Future<void> _save({
-    LineupSettings? settingsOverride,
-    List<Channel>? channelsOverride,
-    Set<String>? selectedLibraryIdsOverride,
-    ({String? id})? currentChannelOverride,
-  }) async {
-    final next = _stateSnapshot(
-      profileId: profile?.id,
-      serverId: server?.id,
-      settingsOverride: settingsOverride,
-      channelsOverride: channelsOverride,
-      selectedLibraryIdsOverride: selectedLibraryIdsOverride,
-      currentChannelOverride: currentChannelOverride,
-    );
+  Future<void> _commitLineup(ScopedLineup lineup) =>
+      _commitPersistedState(_persistedFromRuntime(lineup: lineup));
+
+  Future<void> _commitSettings(LineupSettings settings) =>
+      _commitPersistedState(_persistedFromRuntime(settings: settings));
+
+  Future<void> _commitPersistedState(PersistedState next) async {
     await _persistState(next);
     if (!_disposed) _persisted = next;
-  }
-
-  PersistedState _stateSnapshot({
-    required String? profileId,
-    required String? serverId,
-    LineupSettings? settingsOverride,
-    List<Channel>? channelsOverride,
-    Set<String>? selectedLibraryIdsOverride,
-    ({String? id})? currentChannelOverride,
-  }) {
-    final scopeProfileId = profileId ?? account?.id;
-    final selectedServers = Map<String, String>.of(
-      _persisted.selectedServerByProfile,
-    );
-    final librarySelections = {
-      for (final entry in _persisted.selectedLibraryIdsByProfileServer.entries)
-        entry.key: {
-          for (final selection in entry.value.entries)
-            selection.key: List<String>.of(selection.value),
-        },
-    };
-    final channelSelections = {
-      for (final entry in _persisted.channelsByProfileServer.entries)
-        entry.key: {
-          for (final selection in entry.value.entries)
-            selection.key: List<Channel>.of(selection.value),
-        },
-    };
-    final currentSelections = {
-      for (final entry in _persisted.currentChannelByProfileServer.entries)
-        entry.key: Map<String, String>.of(entry.value),
-    };
-    if (scopeProfileId != null && serverId != null) {
-      selectedServers[scopeProfileId] = serverId;
-      librarySelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
-          (selectedLibraryIdsOverride ?? selectedLibraryIds).toList();
-      channelSelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
-          (channelsOverride ?? channels).toList();
-      final current = currentChannelOverride == null
-          ? currentChannelId
-          : currentChannelOverride.id;
-      if (current == null) {
-        currentSelections[scopeProfileId]?.remove(serverId);
-      } else {
-        currentSelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
-            current;
-      }
-    }
-    return PersistedState(
-      settings: settingsOverride ?? settings,
-      profileId: profileId,
-      selectedServerByProfile: selectedServers,
-      selectedLibraryIdsByProfileServer: librarySelections,
-      channelsByProfileServer: channelSelections,
-      currentChannelByProfileServer: currentSelections,
-    );
   }
 
   Future<void> _persistState(PersistedState state) async {
