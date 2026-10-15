@@ -51,6 +51,10 @@ audience and purpose.
 
 ### Evidence and design records
 
+- [Feature opportunity report](feature-opportunity-report.md) describes four
+  proposed additions, comparable-app research, and additional backlog candidates.
+  The [Opus validation request](opus-feature-research-request.md) asks for an
+  independent research pass before implementation planning.
 - [Desktop UI Design Specification](desktop-ui-design-spec.md) contains the
   consolidated approved target. It does not authorize implementation or claim
   that the design has been implemented.
