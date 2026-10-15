@@ -35,6 +35,7 @@ class ChannelHealthMonitor extends ChangeNotifier {
   ChannelHealthMonitor({required LineupController controller})
     : _controller = controller,
       _contentGeneration = controller.contentGeneration {
+    _refreshChannelIndex();
     controller.addListener(_controllerChanged);
   }
 
@@ -46,6 +47,8 @@ class ChannelHealthMonitor extends ChangeNotifier {
   final LinkedHashMap<String, _ChannelHealthEntry> _cache = LinkedHashMap();
   final Queue<_PendingChannelHealth> _pending = Queue();
   final Map<String, _ChannelHealthSignature> _active = {};
+  List<Channel> _channelSnapshot = const [];
+  Map<String, Channel> _channelsById = const {};
   int _activeLoads = 0;
   int _epoch = 0;
   int _contentGeneration;
@@ -71,18 +74,9 @@ class ChannelHealthMonitor extends ChangeNotifier {
   /// immediately once that transition is reached.
   void request(Channel channel) {
     if (_disposed) return;
-    _synchronizeControllerState();
+    _refreshIfNeeded();
     if (_enqueue(channel)) _pump();
   }
-
-  @visibleForTesting
-  int get activeLoadCount => _activeLoads;
-
-  @visibleForTesting
-  int get pendingRequestCount => _pending.length;
-
-  @visibleForTesting
-  int get cachedEntryCount => _cache.length;
 
   void _controllerChanged() {
     if (_disposed) return;
@@ -101,13 +95,11 @@ class ChannelHealthMonitor extends ChangeNotifier {
       _pending.clear();
     }
 
-    final liveIds = _controller.channels.map((channel) => channel.id).toSet();
+    _refreshChannelIndex();
     final cachedIds = _cache.keys.toList(growable: false);
     for (final id in cachedIds) {
       final channel = _channelFor(id);
-      if (!liveIds.contains(id) ||
-          channel == null ||
-          _cache[id]!.signature != _signatureFor(channel)) {
+      if (channel == null || _cache[id]!.signature != _signatureFor(channel)) {
         _cache.remove(id);
         changed = true;
       }
@@ -196,6 +188,7 @@ class ChannelHealthMonitor extends ChangeNotifier {
     if (_active[id] == signature) _active.remove(id);
     if (_disposed) return;
 
+    _refreshIfNeeded();
     final current = _channelFor(id);
     if (epoch == _epoch &&
         current != null &&
@@ -212,13 +205,31 @@ class ChannelHealthMonitor extends ChangeNotifier {
     _pump();
   }
 
-  Channel? _channelFor(String id) =>
-      _controller.channels.where((channel) => channel.id == id).firstOrNull;
+  void _refreshIfNeeded() {
+    if (_controller.contentGeneration != _contentGeneration ||
+        !identical(_controller.channels, _channelSnapshot)) {
+      _synchronizeControllerState();
+    }
+  }
+
+  void _refreshChannelIndex() {
+    final channels = _controller.channels;
+    final channelsById = <String, Channel>{};
+    for (final channel in channels) {
+      channelsById[channel.id] = channel;
+    }
+    _channelSnapshot = channels;
+    _channelsById = channelsById;
+  }
+
+  Channel? _channelFor(String id) => _channelsById[id];
 
   _ChannelHealthSignature _signatureFor(Channel channel) => (
     contentGeneration: _contentGeneration,
-    channelRevision: _controller.channelRevision(channel.id),
+    channelRevision: _revisionFor(channel.id),
   );
+
+  int _revisionFor(String id) => _controller.channelRevision(id);
 
   @override
   void dispose() {

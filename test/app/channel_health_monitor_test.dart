@@ -9,7 +9,7 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
-  test('bounds active and pending health work', () {
+  test('bounds active and pending health work', () async {
     final controller = _ControlledHealthController(
       channels: [for (var index = 1; index <= 16; index++) _channel(index)],
     );
@@ -21,9 +21,13 @@ void main() {
       monitor.request(channel);
     }
 
-    expect(monitor.activeLoadCount, 2);
-    expect(monitor.pendingRequestCount, 12);
+    expect(controller.pending, hasLength(2));
     expect(controller.maximumActive, 2);
+    while (controller.pending.isNotEmpty) {
+      controller.complete(controller.pending.first.channel.id);
+      await _flushHealthWork();
+    }
+    expect(controller.requests, 14);
   });
 
   test(
@@ -41,7 +45,6 @@ void main() {
       await _flushHealthWork();
 
       expect(monitor.issueFor(channel.id), isFalse);
-      expect(monitor.cachedEntryCount, 1);
       monitor.request(channel);
       expect(controller.requests, 1);
 
@@ -72,14 +75,11 @@ void main() {
       controller.notifyListeners();
       monitor.request(original);
 
-      expect(monitor.cachedEntryCount, 0);
-      expect(monitor.activeLoadCount, 1);
-      expect(monitor.pendingRequestCount, 1);
+      expect(controller.pending, hasLength(1));
       controller.complete(original.id, error: StateError('stale failure'));
       await _flushHealthWork();
 
       expect(controller.pending, hasLength(1));
-      expect(monitor.activeLoadCount, 1);
       controller.complete(original.id);
       await _flushHealthWork();
 
@@ -104,6 +104,30 @@ void main() {
     expect(notifications, 0);
     expect(monitor.issueFor(channel.id), isNull);
     controller.dispose();
+  });
+
+  test('repeated cached requests use the current channel index', () async {
+    final controller = _IndexedHealthController(
+      channels: [for (var index = 1; index <= 1000; index++) _channel(index)],
+    );
+    final monitor = ChannelHealthMonitor(controller: controller);
+    addTearDown(controller.dispose);
+    addTearDown(monitor.dispose);
+
+    for (final channel in controller.channels) {
+      monitor.request(channel);
+      controller.complete(channel.id);
+      await _flushHealthWork();
+    }
+    final listReadsBefore = controller.channelListReads;
+    final revisionReadsBefore = controller.revisionReads;
+    final cached = controller.channels.first;
+    for (var index = 0; index < 20; index++) {
+      monitor.request(cached);
+    }
+
+    expect(controller.channelListReads - listReadsBefore, lessThan(100));
+    expect(controller.revisionReads - revisionReadsBefore, lessThan(100));
   });
 }
 
@@ -164,6 +188,26 @@ class _ControlledHealthController extends FixtureController {
     } else {
       call.completer.completeError(error);
     }
+  }
+}
+
+class _IndexedHealthController extends _ControlledHealthController {
+  _IndexedHealthController({required List<Channel> channels})
+    : super(channels: channels);
+
+  int channelListReads = 0;
+  int revisionReads = 0;
+
+  @override
+  List<Channel> get channels {
+    channelListReads++;
+    return super.channels;
+  }
+
+  @override
+  int channelRevision(String id) {
+    revisionReads++;
+    return super.channelRevision(id);
   }
 }
 
