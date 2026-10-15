@@ -50,8 +50,8 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Dispatched B0–B6; source work only until checks release |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | C0–C3 partial candidate `78475b9c93d5519e261e33b0994b51ac6f18dd67`; focused578 green; PAUSED until accepted B for same-chat C4, then full/review |
 | D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Dispatched full D1/D2/D3 including temporary render comparisons |
-| F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; implemented/unverified, UNMERGED, retained; source review running |
-| F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Required independent native source review; no compile/runtime proof or integration authority |
+| F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
+| F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
 | L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Dispatched full Plex pager/cancellation contract with endpoint-policy matrix |
 | E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna, gpt-5.6-luna, xhigh | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Dispatched complete E1/E2 review/phase/step ownership and render evidence |
 
@@ -533,6 +533,32 @@ E1 and E2 both mandatory; live missing-source evidence, fresh anchor/expected
 base and notice reset preserved; no parent-State forwarding extraction. Required
 temporary scratch render comparisons need exclusive slot; focused checks are
 released. No full/render/build slot currently owned or queued.
+
+### F source-review closure, native gates unchanged
+
+Required independent F review closed exact `d2213d4d` → `040e4a64`, all12 files,
+with no material actionable source finding. Reviewer rechecked clean HEAD and
+surrounding native state/guardian/parser/queue/CMake/test callers, not only the
+diff. Controller accepts source-review closure, not integration acceptance.
+Report confirms distinct classifier inputs/asymmetries, explicit ordinals and
+unchanged wire layout, RAII/helper ordering and pointer/type guards, retained
+old runtime functions/entry points plus five new case groups and constexpr
+table. Journal fixture is wired into guardian admission process tests; actual
+parse/checksum success remains unobserved. Source audit and diff whitespace
+passed; no compile/link/static_assert/fixture/CTest execution occurred.
+
+Candidate remains `/Users/tristan/Software/LineupDesktop-F`, branch`cq/F`,
+commit`040e4a64bdc667bae9673d61a39a8d15261959c3`, clean and recoverable.
+Outstanding build targets: `display_dynamic_range_test display_guardian_test
+native_player_contract_test runner_lifecycle_test`; Release CTest selection
+`^(display_dynamic_range|display_guardian|native_player_contract|runner_lifecycle)$`
+with output-on-failure/timeout60 and exact Windows/MSVC/SDK/CMake, pinned Flutter
+generated inputs, prepared DLL, installed patched-engine assets and recorded
+hashes/identities per DEVELOPMENT. No Windows host/CI execution established and
+no push authorized. All four checks gate integration; physical W4–W6 and real
+media/HDR/composition/input/package claims remain separately pending. Whole
+plan remains incomplete while F is unintegrated. Independent portable work
+continues; do not consume implementation slots with the stopped F candidate.
 
 ## Evidence and limits
 
