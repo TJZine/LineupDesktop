@@ -45,8 +45,12 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Accepted and integrated at `5990c0217b33d6d690b663f177fbe62e2635b557`; combined format/analyze/1,583 tests passed |
 | H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; former `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Accepted/integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main format/analyze/1,588 tests passed; task worktree/branch removed |
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
-| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Source reviewed/integrated at `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; main gate failed one logo-widget case; original child diagnosing |
-| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Candidate `b97df2cf33d9df0ec9c5ea13296f0beaf317d127`, 1,593 tests/macOS build reported green; independent review running; unintegrated |
+| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; former `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Accepted/integrated `dbc4dea0`; serialized main gate1,588 green; task worktree/branch removed; original artwork failure remains recorded |
+| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Independently reviewed/M-R1 closed; integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main suite/macOS build running |
+| B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Dispatched B0–B6; source work only until checks release |
+| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Dispatched C0–C3; C4 returns to same chat after accepted B |
+| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Dispatched full D1/D2/D3 including temporary render comparisons |
+| F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Dispatched native candidate; default retain unmerged pending all four Windows CTests |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -105,9 +109,10 @@ may use reviewer assistance and does not replace other required reviews.
 
 Review status: P0 accepted; corrected A and H independently reviewed, no unresolved
 material finding established. A integrated with combined gate green; corrected
-H independently closed and integrated, main combined gate green. T independently
-reviewed and integrated, main gate failed one logo-widget case; original T child
-diagnosing. M candidate review in flight, integration held. Final whole-branch review
+H and T independently reviewed/integrated with main gates green (T's original
+failure remains attributed separately). M independently reviewed/integrated,
+main suite/macOS build running. Four worker children B/C/D/F perform isolated
+source work with runtime checks held until release. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
 Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:5`.
@@ -399,6 +404,38 @@ controls fail as intended, production restored. No new finding. Controller
 accepts closure and original M source/protocol verdict. Corrected full count
 1,593 remains expected until actually observed on the new integrated gate;
 original M1,593/build proof remains attributed to `b97df2cf`.
+
+### M integration and wave1 resource ownership
+
+After accepted T rerun and M-R1 closure, T's task worktree/fully integrated
+branch were removed. M rebased without conflict onto docs-only `7864b871`:
+range-diff preserved both patches (`b97df2cf` → `86edf386`, `78177ac4` →
+`d2213d4d`). Fast-forward task head is
+`d2213d4d7a06181cff341892d899f3b398627b2b`. Main M gate session`7315` runs pinned
+format/analyze/full suite THEN macOS build sequentially. Logs:
+`/tmp/lineup-cq-integration/M/{format,analyze,full-test,macos-build}.log`.
+Collect exit/results on next activation. Product/check inputs remain stable;
+parent only edits this execution Markdown while the gate runs.
+
+B/C/D/F worktrees were created from that exact head, never historical main.
+All four received actual worker responsibility/model/effort, their full exact
+package and T1/T2/T3/T4 respectively, source/ownership/accepted decisions,
+human callback reference and full return/test maps. B owns all B0–B6 and
+persist/currentness/credential invariants. C owns C0–C3 now, C4 later in the
+same chat after B. D explicitly owns D3 as well as D1/D2, required render
+evidence and true picker/editor responsibility migration. F owns only native
+candidate source/tests, preserving live/durable restoration asymmetries.
+
+Exclusive heavy-check slot: **parent M main gate/build**. Initial
+`CHECKS_RELEASED=false` for B/C/D; they may read/edit/light-format, but no
+Flutter checks until explicit release. If ready first, they report a meaningful
+resource blocker and end; no polling. After focused checks are released, every
+child requests an exclusive slot before any full suite/app/native build.
+Partial source/focused delivery must not be labeled complete. This policy
+keeps implementation parallel while serializing expensive verification.
+F has no Windows host established and must report source implementation as
+unverified/pending; unchanged Flutter full reruns cannot substitute for Win32
+CTest evidence. No Windows push/host guessing is authorized.
 
 ## Evidence and limits
 
