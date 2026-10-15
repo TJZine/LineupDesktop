@@ -553,10 +553,7 @@ void _heldHandshakeWorker(List<Object?> bootstrap) {
 void _correlatedMalformedWorker(SendPort output) {
   final requests = ReceivePort();
   output.send(requests.sendPort);
-  requests.listen((message) {
-    final request = message as dynamic;
-    output.send([request.id, 'malformed']);
-  });
+  requests.listen((_) => output.send([1, 'malformed']));
 }
 
 void _uncorrelatableWorker(SendPort output) {

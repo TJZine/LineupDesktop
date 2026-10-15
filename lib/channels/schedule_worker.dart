@@ -17,7 +17,9 @@ typedef ScheduleWorkerSpawn = Future<Isolate> Function(
   List<PlexPlaylist> playlists,
 );
 
-sealed class _ScheduleWorkerMessage {}
+sealed class _ScheduleWorkerMessage {
+  const _ScheduleWorkerMessage();
+}
 
 final class _ScheduleWorkerBootstrap extends _ScheduleWorkerMessage {
   const _ScheduleWorkerBootstrap(this.output, this.media, this.playlists);
@@ -126,7 +128,7 @@ class ScheduleWorker {
       retire();
     }
 
-    responses.listen((message) {
+    responses.listen((Object? message) {
       if (!identical(_responses, responses)) return;
       if (message == null) {
         fail(StateError('Schedule worker exited unexpectedly'));
