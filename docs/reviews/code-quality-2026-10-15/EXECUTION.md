@@ -47,9 +47,10 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
 | T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; former `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Accepted/integrated `dbc4dea0`; serialized main gate1,588 green; task worktree/branch removed; original artwork failure remains recorded |
 | M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main format/analyze/1,593/macOS build passed; cleanup authorized |
-| B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Dispatched B0–B6; source work only until checks release |
+| B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | B0–B6 candidate `5193906f71ca267659d66b464557e14b39752bbe`; focused250 clean; exclusive full suite and required review running |
+| B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | C0–C3 partial candidate `78475b9c93d5519e261e33b0994b51ac6f18dd67`; focused578 green; PAUSED until accepted B for same-chat C4, then full/review |
-| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Dispatched full D1/D2/D3 including temporary render comparisons |
+| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1/D2 partial at `db92b8b91dc4fee68631ffcf0f2994cb17ba7b2f`, focused112 clean; D3 mandatory, baseline render slot queued |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
 | L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Dispatched full Plex pager/cancellation contract with endpoint-policy matrix |
@@ -559,6 +560,46 @@ no push authorized. All four checks gate integration; physical W4–W6 and real
 media/HDR/composition/input/package claims remain separately pending. Whole
 plan remains incomplete while F is unintegrated. Independent portable work
 continues; do not consume implementation slots with the stopped F candidate.
+
+### B full slot/review and D baseline-render queue
+
+B reported clean full B0–B6 candidate `5193906f`, seven step commits, six owned
+files. Parent verified status/head/stat. Full report `/tmp/lineup-cq-B/report.md`:
+all NF07/08/09/16 confirmed BEFORE, focused controller+persistence250 green
+(ten added cases), actual POSIX denial/no skip and UTF8 recovery observed,
+format110/analyze/diff clean. No moves/removals/schema/golden/visible changes
+reported. Actual24 StateError assertions classified (historical25 is not a gate):
+three supersession assertions typed; invariant/scenario/store/programmer cases
+retained. Final C4 API is const `LineupScopeSuperseded implements Exception`.
+NF19 getter consumer remains scheduled for L integration, not a B omission.
+
+Exclusive full-suite slot **B at5193906f** granted for pinned Eastern
+`flutter test --concurrency=2`; expected1,603 not yet observed. Source is frozen
+during checks/review. Required reviewer `01a13ef5-2b22-7571-96f5-7893df867269`
+received complete B/T1/actual report and exact fixed source, persistence/credential/
+restore/scan/currentness constraints, maps and original human callback reference.
+No reviewer test/build mutation. B remains unaccepted/unintegrated pending full
+result, adjudication and main gate; C4 follows accepted B in original C chat.
+
+To keep full checks low-contention, parent sent D/L/E a temporary hold on NEW
+Flutter tests/pub/analyze/heavy render/build (let an existing focused command
+finish; source work/light format allowed). Parent will send explicit focused
+resume after heavy-check coordination. No acknowledgment callbacks required.
+
+D returned partial D1/D2 at`db92b8b9` (commits`966bc5de`, `1efb149e`, `db92b8b9`),
+NF12 replacement/last-removal controls failed BEFORE, final focused112/touched
+analysis green. Six outcome/queue cases moved to owner-level proof, including
+synchronous projection-failure/retry in place of obsolete callback timing;
+full old/new map and D3 review remain required. D3 NOT started or omitted.
+Uncommitted scratch test prepared for14 baseline states: library, playlist,
+manual, mixed, generated, dirty, conflict, deleted, saving, loading, worker-error,
+off-air, filter-picker, browse-selection. Heavy render request is **queued next**
+after current B full slot: pinned Eastern `flutter test
+test/_scratch/studio_render_test.dart --update-goldens --concurrency=1`.
+No render/full/build started. D resumes for baseline capture when granted, then
+full D3 implementation/comparison/scratch removal and later full-slot request.
+No slot grant is implied by this queue record. Preserve at most four active
+implementation children and reserve C4 resumption when B accepted.
 
 ## Evidence and limits
 
