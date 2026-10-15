@@ -42,16 +42,22 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | Unit | Actual child / host | Executor | Source / worktree | State |
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
+| A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Dispatched; Plex decoding, strict analysis, version consistency |
+| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Dispatched; checked toolchain guard; integrate after A |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
 `flutter analyze`, and `TZ=America/New_York flutter test` on BASE_SHA in the main
 checkout. Only after a green baseline may it commit a harmless probe file in
 the preflight worktree and run pinned version/pub-get/`flutter test test/tool`.
-Product packages are not yet dispatched. The parent may edit this Markdown
-record while baseline checks run; no Dart/product/check inputs change.
+P0 is complete. A and H now run in isolated worktrees, with full-suite
+concurrency capped at two per child. Neither runs application/native builds.
+Both received their full exact package contract and matching TRACES section,
+ownership row, preset responsibility, actual source identities, human callback
+retrieval reference, exclusions, and complete return contract. A's broad lint
+ownership applies only to mechanical fixes; H is rebased/rechecked after A.
 
-Remaining dispatch follows plan dependencies: A/H, T, M, then B/C/D/F first
+Remaining dispatch follows plan dependencies: accept A then H, T, M, then B/C/D/F first
 in wave 1, followed by L/E/S/V/W as slots free; C4 returns to the same C chat
 after B; K/U/Y follow their owners; required scoped reviews and final composition
 review precede G. Required full gates run against stable integration inputs.
@@ -71,7 +77,7 @@ flutter-version-preflight,pub-get-preflight,test-tool-preflight}.log`.
 P0 retrieval cursor: `7195b524-37c0-4a66-bf78-950bb46ed665:1`.
 
 Preparation commits preserve existing work and contain no product changes.
-The throwaway preflight worktree can now be removed; retain `cq/preflight`
+The throwaway preflight worktree was removed after acceptance; retain `cq/preflight`
 because its marker commit was deliberately never integrated and the human
 allowed branch deletion only for fully integrated task branches.
 The current host is macOS; no suitable Windows execution
