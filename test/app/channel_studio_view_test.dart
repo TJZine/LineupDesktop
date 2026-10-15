@@ -21,6 +21,102 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('NF-12 conflict replacement clears browse undo', (tester) async {
+    final original = _channel(
+      id: 'undo-conflict',
+      number: 27,
+      name: 'Undo conflict',
+      source: ManualSource([channelItemFor(_media('one'))]),
+    );
+    final external = _channel(
+      id: original.id,
+      number: original.number,
+      name: 'External edit',
+      source: original.source,
+    );
+    final controller = _ExpectedBaseController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [_media('one'), _media('two')],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await _settleAirCheck(tester);
+    await tester.ensureVisible(find.textContaining('Browse library'));
+    await tester.tap(find.textContaining('Browse library'));
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('studio-result-two')));
+    await tester.tap(find.byKey(const Key('studio-result-two')));
+    await _settleAirCheck(tester);
+    expect(find.text('Undo last addition'), findsOneWidget);
+    controller.fixtureActor.replaceChannels([external]);
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save changes'))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Use saved version…'));
+    await tester.tap(find.text('Use saved version…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use saved version'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.textContaining('Browse library'));
+    await tester.tap(find.textContaining('Browse library'));
+    await tester.pump();
+    expect(find.text('Undo last addition'), findsNothing);
+  });
+
+  for (final removeAll in [false, true]) {
+    testWidgets(
+      'NF-12 removal prunes ${removeAll ? 'last' : 'partial'} undo occurrences',
+      (tester) async {
+        final controller = _RecordingSaveController(
+          scenario: LineupScenario(
+            availableMedia: [_media('one'), _media('two')],
+          ),
+        );
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(
+          _studio(controller, ChannelStudioMode.createCustom),
+        );
+        await _settleAirCheck(tester);
+        await tester.ensureVisible(find.text('Select'));
+        await tester.tap(find.text('Select'));
+        await tester.pump();
+        for (final id in ['one', 'two']) {
+          await tester.ensureVisible(find.byKey(Key('studio-result-$id')));
+          await tester.tap(find.byKey(Key('studio-result-$id')));
+        }
+        await tester.pump();
+        await tester.ensureVisible(find.text('Add selected (2)'));
+        await tester.tap(find.text('Add selected (2)'));
+        await tester.pump();
+        expect(find.text('Undo last addition'), findsOneWidget);
+        await tester.ensureVisible(find.textContaining('Channel programs · 2'));
+        await tester.tap(find.textContaining('Channel programs · 2'));
+        await tester.pump();
+        for (var index = 0; index < (removeAll ? 2 : 1); index++) {
+          final button = find.byTooltip('Remove from channel').first;
+          tester.widget<IconButton>(button).onPressed!();
+          await tester.pump();
+        }
+        if (!removeAll) {
+          await tester.ensureVisible(find.textContaining('Browse library'));
+          await tester.tap(find.textContaining('Browse library'));
+          await tester.pump();
+          expect(find.text('Undo last addition'), findsOneWidget);
+          await tester.tap(find.text('Undo last addition'));
+          await tester.pump();
+          expect(find.textContaining('Channel programs · 0'), findsOneWidget);
+        } else {
+          expect(find.text('Undo last addition'), findsNothing);
+        }
+      },
+    );
+  }
+
   test(
     'source summaries retain titles, filters, manual counts, and mix shape',
     () {
