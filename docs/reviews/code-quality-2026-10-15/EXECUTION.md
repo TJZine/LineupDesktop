@@ -26,18 +26,19 @@ format114/analyze/full1,645 on stablea0cd5399, task tree/branch cleaned.
 S c2f35887 two-control BEFORE reproduced pending/startupnonsettlement;
 pinnedformat114/analyze/focused105/full1,650 PASS; independent R1 CLOSED.
 Unchanged final rebaseb078944a8cc8b6999badb477f2401257a330bf53 integrated.
-S main-checkout gate QUEUED until D releases runtime; no furtherpackageintegrates
-before that gate passes.
+S main-checkout gate now dispatched toP0 after D released runtime;
+no furtherpackageintegrates before that gate passes.
 V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
 viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
 Y reconstructed polling control/fourclock green, broad/analyze/full pending.
-D preD3 baseline14 states captured, D3 awaitingfocused/comparison/full/review.
+D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
+tocd26d00d on2cf4570c. RequiredindependentDreview01a13f48 running, fullpending.
 U newly dispatched worker6.1/medium at9d9ec78e, INITIAL source/test/history and
 scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: D exclusive focused+matched14-render gate; S finished/released and reviewer source-only. U prepares source/test/history; all other children queued.
+Runtime: P0 mainSgate exclusively; Dsourcefrozen for independentreview and awaits fullslot. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -89,7 +90,8 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Accepted9d9ec78e independentreview/package/main1,640 green; tasktree/fullyintegratedbranchremoved |
 | C review | `01a13f0e-4615-7161-a62c-e3ba4d6237d2` / local | reviewer, gpt-6.1-sol, high | B basebf65e00a → C HEADd7497975 plus frozen C4 patchb3fd73a7 | Required full review and targeted C-R1 closure complete at8b114e44; equivalent rebases retain verdict; full1,640 passed |
-| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1/D2 focused112, baseline14 renders green atdb92b8b9; D3 source work in progress |
+| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1–D3 finalfocused113/render14green atf33d639c; equivalentcd26d00d frozen forrequiredreview; rebasedfullpending |
+| D review | `01a13f48-9ba5-72b3-b13c-227770ffd007` / local | reviewer, gpt-6.1-sol, high |2cf4570c→cd26d00d inDtree | Required wholeD1–D3 review withactualtest/render/literalproof, no runtime/mutations |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
 | L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Accepted441950df plus consumerbc231cef; package/main1,610 green; task tree/fully integrated branch removed |
@@ -1144,3 +1146,26 @@ messages only, no visiblecopychange; unsupportedfilter unreachablethrow removed
 by exhaustive typedlookup, not retainedasdeadstring. Requiredcombinedreview
 stillpending. Main S §8.1 gate deliberately QUEUED while D holds exclusivefocused/
 render slot. No furtherpackageintegrationuntilmainSgateaccepted; S tree retained.
+
+## D focused/render acceptance inputs, rebase, required review dispatch
+
+D childf33d639c cleantracked, onlyscratchuntracked: guard/format126/analyzeclean,
+focused113PASS. Actualnet+7 mapped3NF12widget+3manualunit+1typedfailurewidget;
+sixqueue/outcome cases movedowner-level, deferredprojectiontransition replaced
+withsynchronousownedtransition plusretainedstaleproof. Full/evidence at
+`/tmp/lineup-cq-D/completion-evidence.json`. Actual14exactharness/rendercomparisons
+passed withoutbaselineupdates/tolerancerelaxation; identicalSHAmanifests. Initial
+recoverytypography/focustiming/reload/pickerregressionsrepaired, failedimagesretained.
+
+Parent9patchrebase d221..f33 ontoactual2cf4570c all`=`:
+966bc5de→839df6dc,1efb149e→a4ba1690,db92b8b9→2ad46855,
+fa4d695e→2126e11e,a2d34239→09ae05d0,44338524→6da4942d,
+d1f4da26→7141c7ff,6ecbe072→acc4ac82,f33d639c→cd26d00db7fe2b84c2893b112022cd7e2665a1e8.
+No sourceconflicts/edits; scratchpreserved. DfullpendingaftermainSgate/reviewadjudication.
+
+Currentreviewerpreset reread6.1-sol/high/read-onlyresponsibility, actualprojects
+resolved. CreatedDreview01a13f48-9ba5-72b3-b13c-227770ffd007 withwhole2cf..cd26,
+exactDspec/T3, proofmap/literal/renderobservations andlimits, originalhumanreference/
+callbackverification, no recursiveagents or runtime. Reviewsourcefrozen; full notclaimed.
+P0sameboundedverificationchat nowowns exclusive mainS§8.1 (logs `/tmp/lineup-cq-integration/S/`),
+exactmainHEAD suppliedafterthisrecordcommit, expected1,650notyetmainobserved.
