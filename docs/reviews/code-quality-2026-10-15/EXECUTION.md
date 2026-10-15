@@ -37,14 +37,14 @@ D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
 tocd26d00d on2cf4570c. D reviewedcd26 actualfull1,657PASS; twoacceptedP2regressionsrepairedat
 6f66f331 actualBEFOREconfirmedR1, format129/analyze/focused114/render14/
 full1,658PASS. SameDreviewer CLOSED bothfindings; equivalent final4615b7c0
-integrated. D main-checkout gate dispatchedtoP0 afterEreleasedruntime; noothermerge
-beforethatgatepasses. Dtreekeptuntilmainacceptance.
+integrated. D main-checkout gate PASSED at9254e66d guard/format129/analyze/full1,658;
+acceptedtasktree/fullyintegratedcqDremoved; allrender/repairproofretained.
 U newly dispatched worker6.1/medium at9d9ec78e, INITIAL source/test/history and
 scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: P0 mainD§8.1 exclusively; Esourcefrozenfortargetedreview/fullqueued, otherqueuesheld. U prepares source/test/history; all other children queued.
+Runtime: E rebased full exclusively onfrozenb8ac165f; sameEreviewer source-only inparallel, otherqueuesheld. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -96,7 +96,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Accepted9d9ec78e independentreview/package/main1,640 green; tasktree/fullyintegratedbranchremoved |
 | C review | `01a13f0e-4615-7161-a62c-e3ba4d6237d2` / local | reviewer, gpt-6.1-sol, high | B basebf65e00a → C HEADd7497975 plus frozen C4 patchb3fd73a7 | Required full review and targeted C-R1 closure complete at8b114e44; equivalent rebases retain verdict; full1,640 passed |
-| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Acceptedsource6f66f331 reviewR1/R2CLOSED, focused114/render14/full1,658; equivalent4615b7c0 integrated; mainqueuedErelease |
+| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Acceptedsource6f66f331 reviewR1/R2CLOSED, focused114/render14/full1,658; equivalent4615b7c0 integrated; main1,658green; tasktree/fullyintegratedbranchremoved |
 | D review | `01a13f48-9ba5-72b3-b13c-227770ffd007` / local | reviewer, gpt-6.1-sol, high |2cf4570c→cd26d00d inDtree | RequiredwholeDreview plusR1/R2targetedclosure COMPLETE at6f66f331; no remainingmaterialsourcefinding |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
@@ -1287,3 +1287,18 @@ carryprior6findingsclosure. Esourcefrozen/fullqueued; comparisonbaselineunchange
 P0nowgrantedexclusiveDmain§8.1 atrecordHEADsuppliedaftercommit. Logs
 `/tmp/lineup-cq-integration/D/`, expected1,658notyetmainobserved. Parentproduct
 D4615b7c0equivalentpassedreviewed6f66; E/Dwritersstopped, no sharedtreeediting.
+
+## D main acceptance and frozen E full release
+
+P0 main9254e66d0d3facd63e0a64e8cbb39c699cf3f3b9 unchanged/clean,
+pin3.47.7/Dart3.13.5, formatter129zeroexit0(2.37s), analyzecleanexit0(3.11s),
+full1,658exit0(81.47s). `/tmp/lineup-cq-integration/D/`, allCOMMAND_EXIT=0.
+AcceptedDtreeclean/ancestorverified, tasktree/fullyintegratedcqDremoved; all
+scratch/render/BEFORE/repairproofremainrecoverableoutsidecheckout.
+
+Ereviewersnapshot64ad408e-7c3d-4252-a353-d70fc4f87538:1 active: inspected67focused,
+12render/14matches,harness/font/imagehashes andunchangedrebase. No verdictyet.
+Eexclusive rebasedfull grantedonFROZENb8ac165f, no source/testrepairswhilechecks/
+reviewrun. Task-onlyscratchfresharchiveoutsidediscovery, no12scratchcasescounted.
+Expected1,663 fromD1658+4SetupReview+net1expandedfailurecase isnotobserved;
+actualmaprequired. FailuremustSTOP/reportparent, noeditingfrozeninputs. Otherqueuesheld.
