@@ -8,6 +8,54 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
   test(
+    'NF-16 unreadable identity propagates error without replacing identity',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-identity-denial',
+      );
+      final identity = File('${directory.path}/plex-client-identity');
+      const original = 'lineup-desktop-test-abcdefghijklmnopqrst';
+      await identity.writeAsString(original);
+      addTearDown(() async {
+        await Process.run('chmod', ['600', identity.path]);
+        await directory.delete(recursive: true);
+      });
+      expect((await Process.run('chmod', ['000', identity.path])).exitCode, 0);
+      try {
+        await identity.readAsBytes();
+        markTestSkipped(
+          'Host bypasses POSIX read denial; NF-16 observation unavailable.',
+        );
+        return;
+      } on FileSystemException {
+        // A real denied read is the precondition, not the behavior under test.
+      }
+      await expectLater(
+        FileAppStore(directory).clientIdentifier(),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect((await Process.run('chmod', ['600', identity.path])).exitCode, 0);
+      expect(await identity.readAsString(), original);
+    },
+    skip: Platform.isWindows ? 'POSIX file permissions required' : false,
+  );
+
+  test(
+    'malformed UTF-8 identity regenerates independently of IO failures',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-identity-utf8',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final identity = File('${directory.path}/plex-client-identity');
+      await identity.writeAsBytes([0xff, 0xfe]);
+      final regenerated = await FileAppStore(directory).clientIdentifier();
+      expect(regenerated, startsWith('lineup-desktop-'));
+      expect(await identity.readAsString(), '$regenerated\n');
+    },
+  );
+
+  test(
     'raw persisted durations are checked before microsecond multiplication',
     () {
       Map<String, Object?> item(int milliseconds) => {

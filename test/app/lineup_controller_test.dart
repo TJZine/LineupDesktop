@@ -43,6 +43,110 @@ Future<void> _waitForTestState(
 
 void main() {
   test(
+    'NF-07 refresh during saved selection save cannot strand restore intent',
+    () async {
+      final store = _ControlledSaveStore();
+      final fixture = _reentryFixture(storeOverride: store);
+      final controller = fixture.controller;
+      await controller.initialize();
+      store.blockNext();
+      final selecting = controller.selectServer(
+        fixture.plex.serversResult.first,
+      );
+      await store.blockedSaveStarted.future;
+      await controller.refreshServers();
+      store.releaseBlockedSave();
+      await selecting;
+      expect(controller.server!.id, 'server');
+      expect(controller.selectedLibraryIds, {'movies', 'tv'});
+      expect(store.state.selectedServerByProfile['owner'], 'server');
+      expect(controller.restoringSavedLineup, isFalse);
+    },
+  );
+
+  test(
+    'NF-07 old scan completion preserves newer saved restore intent',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      await controller.initialize();
+      final oldStarted = Completer<void>();
+      final oldRelease = Completer<void>();
+      final newStarted = Completer<void>();
+      final newRelease = Completer<void>();
+      var old = true;
+      fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, _) async {
+        if (old) {
+          if (!oldStarted.isCompleted) oldStarted.complete();
+          await oldRelease.future;
+        } else {
+          if (!newStarted.isCompleted) newStarted.complete();
+          await newRelease.future;
+        }
+        return PlexLibraryScan(items: [_scanMovie(id)]);
+      };
+      final abandoned = controller.scanLibraries({'movies', 'tv'});
+      await oldStarted.future;
+      old = false;
+      final restoring = controller.selectServer(
+        fixture.plex.serversResult.first,
+      );
+      await newStarted.future;
+      expect(controller.restoringSavedLineup, isTrue);
+      oldRelease.complete();
+      expect(await abandoned, isFalse);
+      expect(controller.restoringSavedLineup, isTrue);
+      newRelease.complete();
+      await restoring;
+      expect(controller.restoringSavedLineup, isFalse);
+      expect(controller.stage, SetupStage.ready);
+    },
+  );
+
+  test(
+    'NF-08 queued scan commit reports false after selection retires readiness',
+    () async {
+      final store = _ControlledSaveStore();
+      final fixture = _reentryFixture(storeOverride: store);
+      final controller = fixture.controller;
+      await controller.initialize();
+      store.blockNext();
+      final selecting = controller.selectServer(
+        fixture.plex.serversResult.last,
+      );
+      await store.blockedSaveStarted.future;
+      final committing = controller.commitLibraryScan({'movies'});
+      store.releaseBlockedSave();
+      await selecting;
+      expect(await committing, isFalse);
+      expect(controller.error, isNull);
+      expect(controller.server!.id, 'other');
+      expect(controller.selectedLibraryIds, isEmpty);
+    },
+  );
+
+  test('NF-09 scan schedule migration records channel revisions', () async {
+    final fixture = _reentryFixture();
+    final controller = fixture.controller;
+    await controller.initialize();
+    final raw = _channel('legacy').toJson()..remove('scheduleVersion');
+    controller.fixtureActor.replaceChannels([Channel.fromJson(raw)]);
+    final before = controller.channelRevision('legacy');
+    expect(await controller.commitLibraryScan({'movies'}), isTrue);
+    expect(controller.channels.single.scheduleVersion, currentScheduleVersion);
+    expect(controller.channelRevision('legacy'), greaterThan(before));
+    expect(
+      fixture
+          .store
+          .state
+          .channelsByProfileServer['owner']!['server']!
+          .single
+          .scheduleVersion,
+      currentScheduleVersion,
+    );
+  });
+
+  test(
     'queued reviewed plans detach every programming alias at entry',
     () async {
       final store = _ControlledSaveStore()..blockNext();
@@ -8616,27 +8720,27 @@ Channel _generatedChannel(String id, int number, {String? builderKey}) =>
     );
 
 ({LineupController controller, _FakePlex plex, _MemoryStore store})
-_reentryFixture({bool saved = true}) {
+_reentryFixture({bool saved = true, _MemoryStore? storeOverride}) {
   final selected = _server('server');
-  final store = _MemoryStore(
-    PersistedState(
-      selectedServerByProfile: const {'owner': 'server'},
-      selectedLibraryIdsByProfileServer: saved
-          ? const {
-              'owner': {
-                'server': ['movies', 'tv'],
-              },
-            }
-          : const {},
-      channelsByProfileServer: saved
-          ? {
-              'owner': {
-                'server': [_channel('saved')],
-              },
-            }
-          : const {},
-    ),
+  final initialState = PersistedState(
+    selectedServerByProfile: const {'owner': 'server'},
+    selectedLibraryIdsByProfileServer: saved
+        ? const {
+            'owner': {
+              'server': ['movies', 'tv'],
+            },
+          }
+        : const {},
+    channelsByProfileServer: saved
+        ? {
+            'owner': {
+              'server': [_channel('saved')],
+            },
+          }
+        : const {},
   );
+  final store = storeOverride ?? _MemoryStore();
+  store.state = initialState;
   final plex = _FakePlex()
     ..serversResult = [selected, _server('other')]
     ..connectionResult = selected.connections.single
