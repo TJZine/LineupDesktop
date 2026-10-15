@@ -128,6 +128,7 @@ void main() {
     expect(f.coordinator.displayHoldActive, isFalse);
     expect(p.plays, 1);
     expect(f.coordinator.busyLabel, isNull);
+    f.coordinator.dispose();
   });
 
   test('listener-origin publication gets one further reconciliation round', () {
@@ -141,20 +142,20 @@ void main() {
     addTearDown(lineup.dispose);
     addTearDown(guide.dispose);
     addTearDown(coordinator.dispose);
-    final observations = <bool>[];
+    final observations = <PlayerOverlay>[];
     var depth = 0;
     var maxDepth = 0;
     coordinator.addListener(() {
       depth++;
       if (depth > maxDepth) maxDepth = depth;
-      observations.add(coordinator.cursorVisible);
+      observations.add(coordinator.overlay);
       if (observations.length == 1) coordinator.showMiniGuide();
       depth--;
     });
 
     coordinator.showOsd();
 
-    expect(observations, hasLength(2));
+    expect(observations, [PlayerOverlay.osd, PlayerOverlay.miniGuide]);
     expect(maxDepth, 1);
     expect(coordinator.overlay, PlayerOverlay.miniGuide);
   });
@@ -3848,6 +3849,42 @@ void main() {
     },
   );
 
+  test('channel deleted during load retains orphaned playback', () async {
+    final lineup = _TestLineup(useRealCurrentChannelMutation: true);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _ControlledPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final tune = coordinator.tune('channel-b');
+    await player.firstLoadStarted.future;
+    lineup.replaceChannels([
+      for (final channel in lineup.channels)
+        if (channel.id != 'channel-b') channel,
+    ]);
+    player.releaseFirstLoad.complete();
+
+    expect(await tune, isFalse);
+    expect(coordinator.tuning, isFalse);
+    expect(coordinator.error, isNull);
+    expect(coordinator.currentChannel?.id, 'channel-0');
+    expect(coordinator.currentProgram?.channelId, 'channel-b');
+    expect(coordinator.hasPlaybackIntent, isTrue);
+    expect(player.stops, 0);
+    await coordinator.stop();
+    expect(player.stops, 1);
+  });
+
   test('stop cancels a pending tune and clears its request', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
@@ -6485,6 +6522,7 @@ class _TestLineup extends LineupController {
     this.failAuthorizationRecovery = false,
     this.authorizationRecoveryFailure,
     this.useRealPlaybackRequest = false,
+    this.useRealCurrentChannelMutation = false,
     this.playbackParts,
   }) : super(
          store: MemoryAppStore(clientId: 'test'),
@@ -6531,6 +6569,7 @@ class _TestLineup extends LineupController {
   final bool failAuthorizationRecovery;
   final Object? authorizationRecoveryFailure;
   final bool useRealPlaybackRequest;
+  final bool useRealCurrentChannelMutation;
   final List<LineupPlaybackPart>? playbackParts;
   int playbackRequests = 0;
   String? lastPlaybackItemId;
@@ -6617,6 +6656,7 @@ class _TestLineup extends LineupController {
 
   @override
   Future<void> setCurrentChannel(String? id) async {
+    if (useRealCurrentChannelMutation) return super.setCurrentChannel(id);
     fixtureActor.selectChannel(id);
     notifyListeners();
   }
