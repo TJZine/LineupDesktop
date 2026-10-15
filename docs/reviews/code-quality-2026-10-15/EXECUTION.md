@@ -60,7 +60,8 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Complete: changes requested; runtime/render/full still unverified |
 | S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Source-only `b3893c97924f27dea32d0277a37b5369a44bb0df`, forwarding-export correction done; no runtime checks yet, stopped pending release |
 | V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Dispatched full Guide notification/selection/viewport contract, runtime hold; BEFORE tests required before suspected repair |
-| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Source-onlyb7ff1bb8; focused tests/analyze now released, no runtime proof yet |
+| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Corrected6bc53422, pin/format/analyze and focused21 green; independent review running; full slot requested/ungranted |
+| W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full monitor/old policy/widget lifetime/test-map review, read-only |
 | Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Source83b7aa04 + finite test seam507cb296; narrow faithful old-poll negative control/clock checks released; unintegrated |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
@@ -813,6 +814,63 @@ currently. Parent L main full queued after bounded focused phase, then schedule
 other focused/render/full work under four-child and exclusive-heavy constraints.
 Remaining undispatched implementation units K/U/G still follow dependencies;
 required D/U reviews, combined owner review and final whole-branch review remain.
+
+### C fixed-report proof/fixture glue; E shared presentation extension
+
+C-R1 actual before controls:8 cases,5 pass/3 fail for missing active-load,
+post-readiness seek and natural-advance reports; expected-native/no-duplicate
+recovery controls already pass. Fixture duration/category mistake was corrected
+BEFORE product repair; log`c4-r1-before-confirmed.log`. Consuming active-load
+branch now reports only after current ownership/matching request, then safe
+settlement; rethrown recovery remains reported by existing outer owner. After22
+dedicated cases and coordinator249 pass. Broad required focused then596pass/4fail,
+all PlayerView's expected-load StateError fixture triggering new fixed reports.
+Parent inspected actual safe-error switch: PlayerUnavailable and generic failures
+retain identical safe UI text. Parent accepted representative native fixture
+correction and committed ONLY one throw in child C branch:
+`9912330f7f69facbf4a9fdcfdc9d31a2915dbba4`, StateError→constPlayerUnavailable.
+No assertions changed; actual unexpected StateError coordinator coverage retained.
+C coordinator/test working changes preserved. C focused rerun/format/analyze,
+commit/full request now active; no full acceptance yet. R1 current patchhash
+`4443ebdfa4d6ddfa9eebe43de245bdc4999e590d7267648b0eec9310fd2a5c60` before
+parent fixture commit; all30 new C cases require actual final map/results.
+
+E stronger worker prepared accepted fixes but correctly stopped at a shared
+presentation boundary. Controller authorizes a bounded extension to
+`lib/app/lineup_restore_view.dart` ONLY: immutable LibraryScanProgress facts,
+LibraryScanPhaseStatus consuming them, and restoration constructor adaptation.
+Actual library callers are only restore/setup, no direct restore-test constructor
+use found. Labels/count formatting/semantics/style unchanged; restore controller,
+Switch-server action and async/state ownership untouched. Snapshot constructed
+fresh by flow/restore, no live controller/callback stored. This avoids duplicate
+progress UI and completes E2's explicit immutable presentation contract; no new
+feature/compatibility overload. Added file must be included in targeted review
+and existing restoration widget checks. E production correction source remains
+unverified until coherent commit/focused/render/full proof.
+
+### Y reconstructed negative control observed; W review repair
+
+Y at507cb296 ran faithful polling-only original strictisAfter mutation, with UI
+equality rejection unchanged. Exact polling test failed **exit1, actualpollCalls1
+versusexpected0**, `/tmp/lineup-cq-Y/negative-control.log`. Restored condition
+verified zero production diff/clean snapshot. After3 before/exact/after projection
+cases and1 exactpoll case passed; no cancellation, pin cleared and exact expiry
+error as intended. This reconstructs old semantics, NOT a pre-initial-edit run.
+Source provenance now correct (pollisAfter, UIexpiresAt.isAfter(now)). Broader
+onboarding/app938/analyze/full/combined review remain pending; no Y acceptance.
+
+W focused stage: pin/format112/analyze clean; missing newtest LineupScenario
+import fixed at6bc53422. Corrected --name command ran21 actual cases (4 newmonitor,
+11 existingChannels,6 read-onlyStudiohealth); preceding --plain-name zero-match
+exit79 is NOT proof. Full requested, not granted. Required independent W source
+review established **W-R1[P2]**: cached requests synchronize all cached IDs with
+linear lineup searches, ~500,500 ID comparisons per1,000-cache request versus
+old bounded lookup behavior. No measured latency claim. Controller ACCEPTS
+source work amplification; same W child repairs using coherent channel indexing/
+cheap local checks, preserving revision/epoch/bounds/LRU/serialization and adds
+deterministic large-cache work proof. Source/light-format only until release.
+Reviewer confirms actual ChannelsView controller lifetime is coherent, no mixed
+old/new controller bug; no unrelated lifetime rewrite required. W unintegrated.
 
 ## Evidence and limits
 
