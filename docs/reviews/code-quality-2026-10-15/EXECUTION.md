@@ -651,6 +651,46 @@ Other new Flutter checks remain held until explicit release; existing focused
 command may finish, no forced termination. Pending heavy work: L full, B repair
 focused/full and later main gate; coordinate dependency priority after capture.
 
+### D baseline complete, L review closed, B focused repair released
+
+D baseline capture atdb92b8b9 exited0/all14 states. Production lib/test-app
+diff against that fixed preD3 SHA was empty. Scratch SHA256
+`e29b01652f783a219b9addc00c76c57a6fe5f94e05c942a6c1acf54cd6327998`;
+manifest `/tmp/lineup-cq-D/pre-d3-render-sha256.txt`, log`pre-d3-render.log`,
+original test/PNGs archived at`pre-d3-render-inputs/`. Inputs also remain
+uncommitted in test/_scratch for postD3 comparison. D source extraction resumes;
+no further render/full slot granted. Controller released **B-R1 focused checks
+only**, old failing setup assertion unchanged plus controller/persistence/new
+identity regression, then commit/full-slot request and targeted review closure.
+Other new Flutter workloads remain held; heavy slot otherwise free but B repair
+has immediate dependency priority. L's full suite is still queued.
+
+L required independent review closed2ae38b8e→2b594e6f with no material findings.
+Controller accepts source-review closure only; no full result yet. Report
+confirms actual endpoint matrix, subtype/classification and callback/currentness/
+raw-offset/cancellation/occurrence policies, all33 copy facts/immutability,
+unchanged old tests and six new proof obligations. Broader auth getter in
+selectConnection adds no reachable behavior per actual probe failure set.
+Cross-owner controller consumer remains scheduled. Review cursor
+`5da0704f-71ab-4952-94f2-578d7dfc2d2e:1`; D cursor
+`69e0e775-aee4-4b42-ba53-a8f38452b557:2`.
+
+S returned source-only/unverified candidate5eaa5d0a with three new worker
+boundary/error cases, no Flutter/pub/analyze/test run under hold. Child correctly
+does not infer runtime proof from light format/source scan. Small forwarding
+export in content_resolver.dart is outside S's row: controller returned source
+correction to remove it and directly import owned library_facets helper in
+channel_builder, or return concrete existing-consumer evidence if required.
+No facet scope reduction or generic compatibility layer authorized. S resumes
+only for that source correction, then waits runtime release. Do not exceed four
+active children by dispatching a new writer during this correction.
+
+Read-only Git state check observed a newly configured upstream and local remote
+ref `origin/codex/code-quality-2026-10` atf77154ea, reflog “update by push”. The
+controller issued no push command and has no evidence identifying the actor.
+Preserve this external-to-issued-actions state; no reset/delete/remote mutation
+or new push is authorized. Current task commits remain local ahead of it.
+
 ## Evidence and limits
 
 Preparation `git diff --check` passed. P0's observed pinned Flutter identity was
