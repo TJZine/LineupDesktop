@@ -6395,7 +6395,7 @@ class _Native implements NativePlayer {
     bool startPaused = false,
   }) async {
     loadCalls++;
-    if (failLoad) throw StateError('synthetic load failure');
+    if (failLoad) throw const PlayerUnavailable('synthetic load failure');
     if (blockLoad) {
       if (!loadStarted.isCompleted) loadStarted.complete();
       await _loadCompletion.future;
