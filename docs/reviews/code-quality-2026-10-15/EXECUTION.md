@@ -1541,3 +1541,24 @@ Vworker6.1 nowexclusive selectedbulkRetryevictionBEFOREtestat8bd, no repairyet;
 faithfulfixture-onlyfixifneeded notconfirmation. Reportsintendedvisiblemissing
 result/facts/bounds/order, no genericsetup/timeoutacceptance. Uonlysourceedits,
 allotherFlutterheld. SameparentadjudicatesactualV-R1resultthenrepairgrant.
+
+## V-R1 actual confirmation, current-input rebase, repair/AFTER grant
+
+V exact8bd selectedpublicbulkRetrytest exit1/0pass1fail, intendedfinal
+GuideLoadState.readyvsloadingat1691; all40initialfailures/publicRetry/order0..39/
+earlychannel0currentProgramnonnull/cache16/concurrency2/active0/scroll0preconditions
+passed. Guard3.47.7, `/tmp/lineup-cq-V/r1-before-{toolchain,test}.log`, libdiffempty.
+ParentCONFIRMED/ACCEPTEDrepair; no fixturecorrectionwasneeded.
+
+Parent4patchrebase6f..8bdontoactual75fe44ec (acceptedYsource+docs) all`=`:
+f5a36482→7135af34,287571e2→ba9e5d11,2512eb9a→4840f5f8,
+8bd82381→55f6f4e09e5bd22dd55a15ce8873d79da5e469a6. SameVworker6.1 now
+exclusiveFULLrepair+AFTERguide/profile/full oncurrentacceptedsharedinputs.
+Retain/reassertONLYmissingviewportwork underboundedcache/queue/currentownership,
+failedrowsmanualretryonly, no blanketrebuildrequest/pin/loadloop. AllVother
+notification/activity/coalescing/selection/invalidationobligationsretained.
+Fullactualexpected1,674=Y1,667+7Vcases, notobserved; focused124expectedfrom
+correct123baseline+newR1case. Beforeprofilefactsretained, matchedAFTERmustnot
+regressmaterially; investigatewithfaithfulcontrolsifneeded, no staticlatencyclaim.
+Parentwillreturnrepairdelta/proofsameVreviewerfortargetedclosurebeforeintegration.
+Usource-onlyfullimplementationcontinues; no otherFlutterresourceoverlap.
