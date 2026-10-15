@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../ui/app_theme.dart';
-import '../ui/app_ui.dart';
+import '../../ui/app_theme.dart';
+import '../../ui/app_ui.dart';
 
 class SetupStage extends StatelessWidget {
   const SetupStage({

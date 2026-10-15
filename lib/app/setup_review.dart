@@ -61,9 +61,10 @@ final class Applying extends SetupPhase {
 }
 
 final class Failed extends SetupPhase {
-  const Failed(super.review, this.error);
+  const Failed(super.review, this.error, {required this.confirmed});
 
   final String error;
+  final bool confirmed;
 }
 
 final class Completed extends SetupPhase {
@@ -79,8 +80,10 @@ class SetupReview {
     SetupReviewPlanFactory? planFactory,
     Set<String> removeSourceIds = const {},
   }) : this._(
-         base: List.unmodifiable(base),
-         plan: plan,
+         base: List.unmodifiable(
+           base.map((channel) => channel.immutableCopy()),
+         ),
+         plan: freezeSetupAllocation(plan),
          mode: mode,
          removeSourceIds: Set.unmodifiable(removeSourceIds),
          strategyBySource: Map.unmodifiable(strategyBySource),
@@ -216,3 +219,30 @@ class SetupReview {
             .length,
       );
 }
+
+/// Freeze the allocation at the setup presentation/review boundary. The builder
+/// record itself does not promise ownership of its lists, maps or source data.
+ChannelPlanAllocation freezeSetupAllocation(ChannelPlanAllocation plan) => (
+  channels: List.unmodifiable(
+    plan.channels.map((channel) => channel.immutableCopy()),
+  ),
+  allocatedOriginals: plan.allocatedOriginals,
+  excludedOriginals: plan.excludedOriginals,
+  allocatedExtras: plan.allocatedExtras,
+  excludedExtras: plan.excludedExtras,
+  numberLimitExcluded: plan.numberLimitExcluded,
+  existingSkipped: plan.existingSkipped,
+  unmatchedGenerated: List.unmodifiable(
+    plan.unmatchedGenerated.map((channel) => channel.immutableCopy()),
+  ),
+  eligibleOriginalsByStrategy: Map.unmodifiable(
+    plan.eligibleOriginalsByStrategy,
+  ),
+  allocatedOriginalsByStrategy: Map.unmodifiable(
+    plan.allocatedOriginalsByStrategy,
+  ),
+  allocatedChannelsByStrategy: Map.unmodifiable(
+    plan.allocatedChannelsByStrategy,
+  ),
+  truncated: plan.truncated,
+);

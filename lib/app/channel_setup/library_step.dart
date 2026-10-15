@@ -2,10 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../channels/channel.dart';
 import '../../plex/plex_models.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/app_ui.dart';
-import '../lineup_controller.dart';
+import '../lineup_controller.dart' show LibraryScanFact, LibraryScanStatus;
+import '../lineup_restore_view.dart';
 import 'step_scaffold.dart';
 
 typedef SetupScanIntent = Future<void> Function({
@@ -14,9 +16,62 @@ typedef SetupScanIntent = Future<void> Function({
   bool advanceWhenReady,
 });
 
+/// One render's library/scan facts. Commands remain in the setup flow.
+class SetupLibraryData {
+  SetupLibraryData({
+    required List<PlexLibrary> libraries,
+    required Map<String, LibraryScanFact> libraryScanFacts,
+    required Set<String> libraryScanReadyIds,
+    required Set<String> libraryScanRetryIds,
+    required Set<String> libraryScanCommittableIds,
+    required Set<String> unavailableCollectionLibraryIds,
+    required Set<String> failedPlaylistIds,
+    required this.libraryScanStatus,
+    required this.playlistCatalogUnavailable,
+    required this.busy,
+    required this.canSwitchServer,
+    required this.channelSetupCanCancel,
+    required this.error,
+    required Map<String, String> collectionRecoveryByLibrary,
+    required this.selectionCollectionRecovery,
+    required this.progress,
+  }) : libraries = List.unmodifiable(libraries),
+       libraryScanFacts = Map.unmodifiable(libraryScanFacts),
+       libraryScanReadyIds = Set.unmodifiable(libraryScanReadyIds),
+       libraryScanRetryIds = Set.unmodifiable(libraryScanRetryIds),
+       libraryScanCommittableIds = Set.unmodifiable(libraryScanCommittableIds),
+       unavailableCollectionLibraryIds = Set.unmodifiable(
+         unavailableCollectionLibraryIds,
+       ),
+       failedPlaylistIds = Set.unmodifiable(failedPlaylistIds),
+       collectionRecoveryByLibrary = Map.unmodifiable(
+         collectionRecoveryByLibrary,
+       );
+
+  final List<PlexLibrary> libraries;
+  final Map<String, LibraryScanFact> libraryScanFacts;
+  final Set<String> libraryScanReadyIds;
+  final Set<String> libraryScanRetryIds;
+  final Set<String> libraryScanCommittableIds;
+  final Set<String> unavailableCollectionLibraryIds;
+  final Set<String> failedPlaylistIds;
+  final LibraryScanStatus libraryScanStatus;
+  final bool playlistCatalogUnavailable;
+  final bool busy;
+  final bool canSwitchServer;
+  final bool channelSetupCanCancel;
+  final String? error;
+  final Map<String, String> collectionRecoveryByLibrary;
+  final String? selectionCollectionRecovery;
+  final LibraryScanProgress progress;
+}
+
 class SetupLibraryStep extends StatelessWidget {
   const SetupLibraryStep({
-    required this.controller,
+    required this.data,
+    required this.onSwitchServer,
+    required this.onCancelSetup,
+    required this.onCancelScan,
     required this.selectedLibraryIds,
     required this.error,
     required this.onScan,
@@ -27,7 +82,10 @@ class SetupLibraryStep extends StatelessWidget {
     super.key,
   });
 
-  final LineupController controller;
+  final SetupLibraryData data;
+  final VoidCallback onSwitchServer;
+  final VoidCallback onCancelSetup;
+  final VoidCallback onCancelScan;
   final Set<String> selectedLibraryIds;
   final String? error;
   final SetupScanIntent onScan;
@@ -36,7 +94,7 @@ class SetupLibraryStep extends StatelessWidget {
   final VoidCallback onToggleAll;
   final Future<void> Function()? onRequestLogout;
 
-  bool get _settled => switch (controller.libraryScanStatus) {
+  bool get _settled => switch (data.libraryScanStatus) {
     LibraryScanStatus.complete ||
     LibraryScanStatus.empty ||
     LibraryScanStatus.unsupported ||
@@ -47,11 +105,11 @@ class SetupLibraryStep extends StatelessWidget {
   String _summary() {
     final statuses = [
       for (final id in selectedLibraryIds)
-        controller.libraryScanFacts[id]?.status ?? LibraryScanStatus.idle,
+        data.libraryScanFacts[id]?.status ?? LibraryScanStatus.idle,
     ];
     int count(LibraryScanStatus status) =>
         statuses.where((value) => value == status).length;
-    if (controller.libraryScanStatus == LibraryScanStatus.scanning) {
+    if (data.libraryScanStatus == LibraryScanStatus.scanning) {
       final checked = statuses
           .where(
             (status) => const {
@@ -64,20 +122,20 @@ class SetupLibraryStep extends StatelessWidget {
           .length;
       return '$checked of ${statuses.length} libraries checked';
     }
-    if (controller.libraryScanStatus == LibraryScanStatus.cancelled) {
+    if (data.libraryScanStatus == LibraryScanStatus.cancelled) {
       return 'Your selections are preserved. Scan again when you’re ready.';
     }
     if (!_settled || statuses.isEmpty) {
       return 'Select the Plex libraries to scan for channel ideas.';
     }
-    final ready = controller.libraryScanCommittableIds
+    final ready = data.libraryScanCommittableIds
         .intersection(selectedLibraryIds)
         .length;
     if (ready == 0) {
-      if (controller.collectionScaleRecovery(selectedLibraryIds) != null) {
+      if (data.selectionCollectionRecovery != null) {
         return 'No libraries are ready. Change the collection inventory in Plex before rescanning, or change your selection.';
       }
-      return controller.libraryScanRetryIds
+      return data.libraryScanRetryIds
               .intersection(selectedLibraryIds)
               .isNotEmpty
           ? 'No libraries are ready. Retry failed scans or change your selection.'
@@ -98,35 +156,32 @@ class SetupLibraryStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ready = controller.libraryScanCommittableIds.intersection(
+    final ready = data.libraryScanCommittableIds.intersection(
       selectedLibraryIds,
     );
-    final retry = controller.libraryScanRetryIds.intersection(
-      selectedLibraryIds,
-    );
-    final hasLibraries = controller.libraries.isNotEmpty;
-    final scanning = controller.libraryScanStatus == LibraryScanStatus.scanning;
+    final retry = data.libraryScanRetryIds.intersection(selectedLibraryIds);
+    final hasLibraries = data.libraries.isNotEmpty;
+    final scanning = data.libraryScanStatus == LibraryScanStatus.scanning;
     final canContinue = hasLibraries && !scanning && ready.isNotEmpty;
     final canRetry =
         !scanning &&
-        controller.libraryScanStatus != LibraryScanStatus.cancelled &&
+        data.libraryScanStatus != LibraryScanStatus.cancelled &&
         (retry.isNotEmpty ||
-            controller.error != null ||
+            data.error != null ||
             (_settled &&
-                (controller.playlistCatalogUnavailable ||
-                    controller.failedPlaylistIds.isNotEmpty)));
+                (data.playlistCatalogUnavailable ||
+                    data.failedPlaylistIds.isNotEmpty)));
     final roles = LineupTheme.of(context);
     final bodyStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
     final actionStyle = Theme.of(context).textTheme.labelLarge!
         .copyWith(fontSize: 18);
-    final retryLabel =
-        controller.collectionScaleRecovery(selectedLibraryIds) != null
+    final retryLabel = data.selectionCollectionRecovery != null
         ? 'Rescan after Plex changes'
         : retry.isEmpty
         ? 'Retry scan'
         : 'Retry failed scans';
-    final scanError = error ?? controller.error;
+    final scanError = error ?? data.error;
     final excluded = selectedLibraryIds.length - ready.length;
     final footer = SetupFooter(
       configuration: true,
@@ -141,14 +196,12 @@ class SetupLibraryStep extends StatelessWidget {
                 minimumSize: const Size(0, 48),
                 alignment: Alignment.centerLeft,
               ),
-              onPressed: controller.canSwitchServer
-                  ? controller.showServers
-                  : null,
+              onPressed: data.canSwitchServer ? onSwitchServer : null,
               child: Text('Switch server', style: actionStyle),
             ),
-          if (!scanning && controller.channelSetupCanCancel)
+          if (!scanning && data.channelSetupCanCancel)
             TextButton(
-              onPressed: controller.cancelChannelSetup,
+              onPressed: onCancelSetup,
               child: Text('Cancel', style: actionStyle),
             ),
         ],
@@ -156,22 +209,18 @@ class SetupLibraryStep extends StatelessWidget {
       leading: [
         if (hasLibraries &&
             !scanning &&
-            controller.libraryScanReadyIds
+            data.libraryScanReadyIds
                 .intersection(selectedLibraryIds)
                 .isNotEmpty)
           OutlinedButton(
             key: const ValueKey('scan-again-libraries'),
-            onPressed: controller.busy
-                ? null
-                : () => onScan(advanceWhenReady: false),
+            onPressed: data.busy ? null : () => onScan(advanceWhenReady: false),
             child: const Text('Scan again'),
           ),
         if (canRetry && canContinue)
           OutlinedButton(
             key: const ValueKey('retry-failed-libraries'),
-            onPressed: controller.busy
-                ? null
-                : () => onScan(retryFailedOnly: true),
+            onPressed: data.busy ? null : () => onScan(retryFailedOnly: true),
             child: Text(retryLabel),
           ),
       ],
@@ -184,27 +233,25 @@ class SetupLibraryStep extends StatelessWidget {
               children: [
                 if (onRequestLogout != null)
                   TextButton(
-                    onPressed: controller.busy ? null : onRequestLogout,
+                    onPressed: data.busy ? null : onRequestLogout,
                     child: const Text('Sign out'),
                   ),
                 FilledButton(
                   key: const ValueKey('setup-switch-server'),
-                  onPressed: controller.canSwitchServer
-                      ? controller.showServers
-                      : null,
+                  onPressed: data.canSwitchServer ? onSwitchServer : null,
                   child: const Text('Switch server'),
                 ),
               ],
             )
           : scanning
           ? TextButton(
-              onPressed: controller.cancelLibraryScan,
+              onPressed: onCancelScan,
               child: Text('Cancel scan', style: actionStyle),
             )
           : canContinue
           ? FilledButton(
               key: const ValueKey('continue-ready-libraries'),
-              onPressed: controller.busy ? null : () => onCommit(ready),
+              onPressed: data.busy ? null : () => onCommit(ready),
               child: Text(
                 'Continue with ${ready.length} ${ready.length == 1 ? 'library' : 'libraries'}',
               ),
@@ -212,14 +259,14 @@ class SetupLibraryStep extends StatelessWidget {
           : canRetry
           ? FilledButton(
               key: const ValueKey('retry-failed-libraries'),
-              onPressed: selectedLibraryIds.isEmpty || controller.busy
+              onPressed: selectedLibraryIds.isEmpty || data.busy
                   ? null
                   : () => onScan(retryFailedOnly: true),
               child: Text(retryLabel),
             )
           : FilledButton(
               key: const ValueKey('scan-selected-libraries'),
-              onPressed: selectedLibraryIds.isEmpty || controller.busy
+              onPressed: selectedLibraryIds.isEmpty || data.busy
                   ? null
                   : onScan,
               child: Text(_settled ? 'Scan again' : 'Scan selected libraries'),
@@ -234,12 +281,12 @@ class SetupLibraryStep extends StatelessWidget {
           key: const ValueKey('library-selection-list'),
           shrinkWrap: true,
           physics: singleScroll ? const NeverScrollableScrollPhysics() : null,
-          itemCount: controller.libraries.length,
+          itemCount: data.libraries.length,
           separatorBuilder: (_, _) => const Divider(height: 1),
           itemBuilder: (_, index) =>
-              _libraryRow(context, controller.libraries[index]),
+              _libraryRow(context, data.libraries[index]),
         );
-        final title = controller.libraryScanStatus == LibraryScanStatus.scanning
+        final title = data.libraryScanStatus == LibraryScanStatus.scanning
             ? 'Scanning your libraries'
             : _settled
             ? 'Review your libraries'
@@ -251,16 +298,14 @@ class SetupLibraryStep extends StatelessWidget {
             _header(
               context,
               title,
-              controller.libraries.isEmpty || _settled || scanning
-                  ? ''
-                  : _summary(),
+              data.libraries.isEmpty || _settled || scanning ? '' : _summary(),
             ),
             if (scanning) ...[
               const SizedBox(height: 10),
-              LibraryScanPhaseStatus(controller: controller, centered: false),
+              LibraryScanPhaseStatus(progress: data.progress, centered: false),
             ],
             const SizedBox(height: 32),
-            if (controller.libraries.isEmpty)
+            if (data.libraries.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 24),
                 child: LineupEmptyState(
@@ -287,7 +332,7 @@ class SetupLibraryStep extends StatelessWidget {
                         ? scanError
                         : ready.isEmpty
                         ? _summary()
-                        : '${ready.length} of ${selectedLibraryIds.length} ${selectedLibraryIds.length == 1 ? 'library' : 'libraries'} ${ready.length == 1 ? 'is' : 'are'} ready. Continuing builds from ${controller.libraries.where((library) => ready.contains(library.id)).map((library) => library.title).join(', ')}${excluded > 0 ? ' only' : ''}.',
+                        : '${ready.length} of ${selectedLibraryIds.length} ${selectedLibraryIds.length == 1 ? 'library' : 'libraries'} ${ready.length == 1 ? 'is' : 'are'} ready. Continuing builds from ${data.libraries.where((library) => ready.contains(library.id)).map((library) => library.title).join(', ')}${excluded > 0 ? ' only' : ''}.',
                     style: bodyStyle,
                   ),
                 ),
@@ -345,9 +390,8 @@ class SetupLibraryStep extends StatelessWidget {
     final summaryStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.secondaryText, fontSize: 16, height: 1.4);
     final editable =
-        !controller.busy &&
-        controller.libraryScanStatus != LibraryScanStatus.scanning;
-    final libraries = controller.libraries;
+        !data.busy && data.libraryScanStatus != LibraryScanStatus.scanning;
+    final libraries = data.libraries;
     final selected = selectedLibraryIds.length;
     final all = selected == libraries.length;
     final value = all
@@ -418,8 +462,8 @@ class SetupLibraryStep extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final selected = selectedLibraryIds.contains(library.id);
-    final fact = controller.libraryScanFacts[library.id];
-    final collectionRecovery = controller.collectionScaleRecovery({library.id});
+    final fact = data.libraryScanFacts[library.id];
+    final collectionRecovery = data.collectionRecoveryByLibrary[library.id];
     final titleStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
       fontSize: 20,
@@ -451,7 +495,7 @@ class SetupLibraryStep extends StatelessWidget {
                 Text(library.title, style: titleStyle),
                 if (selected &&
                     _settled &&
-                    !controller.libraryScanCommittableIds.contains(library.id))
+                    !data.libraryScanCommittableIds.contains(library.id))
                   Text("Won't be used", style: typeStyle),
               ],
             ),
@@ -468,12 +512,10 @@ class SetupLibraryStep extends StatelessWidget {
                     ),
                   ),
                   if (fact.status == LibraryScanStatus.transientFailure ||
-                      controller.unavailableCollectionLibraryIds.contains(
-                        library.id,
-                      ))
+                      data.unavailableCollectionLibraryIds.contains(library.id))
                     LineupInlineLink(
                       key: ValueKey('retry-library-${library.id}'),
-                      onPressed: controller.busy
+                      onPressed: data.busy
                           ? null
                           : () => onScan(retryLibraryIds: {library.id}),
                       child: Text(
@@ -503,7 +545,7 @@ class SetupLibraryStep extends StatelessWidget {
                   _checkbox(
                     value: selected,
                     semanticLabel: library.title,
-                    onChanged: controller.busy
+                    onChanged: data.busy
                         ? null
                         : (_) => onToggleLibrary(library.id),
                   ),
@@ -526,7 +568,7 @@ class SetupLibraryStep extends StatelessWidget {
                   _checkbox(
                     value: selected,
                     semanticLabel: library.title,
-                    onChanged: controller.busy
+                    onChanged: data.busy
                         ? null
                         : (_) => onToggleLibrary(library.id),
                   ),
@@ -539,7 +581,7 @@ class SetupLibraryStep extends StatelessWidget {
         return InkWell(
           canRequestFocus: false,
           excludeFromSemantics: true,
-          onTap: controller.busy ? null : () => onToggleLibrary(library.id),
+          onTap: data.busy ? null : () => onToggleLibrary(library.id),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
             child: content,

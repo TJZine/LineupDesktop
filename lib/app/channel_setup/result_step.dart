@@ -47,6 +47,19 @@ class _SetupResultStepState extends State<SetupResultStep> {
   bool get _applying => widget.phase is Applying;
 
   @override
+  void initState() {
+    super.initState();
+    _focusTerminalResult();
+  }
+
+  void _focusTerminalResult() {
+    if (widget.phase is Applying) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.phase is! Applying) _resultFocus.requestFocus();
+    });
+  }
+
+  @override
   void dispose() {
     _resultFocus.dispose();
     super.dispose();
@@ -57,9 +70,7 @@ class _SetupResultStepState extends State<SetupResultStep> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.phase.runtimeType != widget.phase.runtimeType &&
         widget.phase is! Applying) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _resultFocus.requestFocus();
-      });
+      _focusTerminalResult();
     }
   }
 
