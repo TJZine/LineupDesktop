@@ -48,11 +48,12 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; former `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Accepted/integrated `dbc4dea0`; serialized main gate1,588 green; task worktree/branch removed; original artwork failure remains recorded |
 | M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main format/analyze/1,593/macOS build passed; cleanup authorized |
 | B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Dispatched B0–B6; source work only until checks release |
-| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Dispatched C0–C3; C4 returns to same chat after accepted B |
+| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | C0–C3 partial candidate `78475b9c93d5519e261e33b0994b51ac6f18dd67`; focused578 green; PAUSED until accepted B for same-chat C4, then full/review |
 | D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Dispatched full D1/D2/D3 including temporary render comparisons |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; implemented/unverified, UNMERGED, retained; source review running |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Required independent native source review; no compile/runtime proof or integration authority |
 | L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Dispatched full Plex pager/cancellation contract with endpoint-policy matrix |
+| E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna, gpt-5.6-luna, xhigh | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Dispatched complete E1/E2 review/phase/step ownership and render evidence |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -115,7 +116,8 @@ H and T independently reviewed/integrated with main gates green (T's original
 failure remains attributed separately). M independently reviewed/integrated,
 main suite/macOS build green. Four worker children B/C/D/F perform isolated
 work; F returned an unverified/unmerged candidate and L took its active slot.
-Current implementation children B/C/D/L; focused checks released, full/build
+Current implementation children B/D/L/E; C partial stage waits for accepted B;
+focused checks released, full/build
 slots remain serialized. F has a separate source reviewer. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
@@ -503,6 +505,34 @@ the four active children is dispatched until a slot frees.
 
 Latest cursors: F `1e9be9fb-ab71-45e2-9430-2da15d93af53:1`,
 B `e47d22d8-698e-4e5a-9449-35958b6ec70f:2`. C/D prior cursors retained above.
+
+### C0–C3 partial stage; E dispatched
+
+C returned clean `78475b9c` after C0 test commit`98cb771b` and C1–C3 commit
+`78475b9c`, only coordinator/test files,344 additions/114 deletions. Parent
+verified actual identity/status. Reported BEFORE evidence: five recovery cases
+had1 pass/four failures (stuck tuning success/failure/rollback and newer-scope
+rollback), both notification controls failed (2 notifications instead of1,
+listener depth2 instead of1). Logs `/tmp/lineup-cq-C/c0-{recovery,publication}-before.log`.
+Stable final format110/analyze clean, required focused playback/navigation/app
+package **578 passed** (+8 versus actual570 focused baseline), no full slot used.
+No old tests/fakes moved/removed, all28 scenario subclasses retained; eight
+new controls include faithful real-boundary orphan playback after deletion.
+Active/track ownership, recovery lineage and guarded rollback, explicit
+coalesced reconciliation implemented per child report; not yet independently
+reviewed or integrated. C4 still required after accepted B, same chat only.
+Synthetic recovery fixture StateError classification must be carried into C4's
+expected-IO/fixed-safe-report map. Full suite and single required C review follow
+C4. Stop source edits until parent rebases/sends actual B base and C4 packet.
+
+E takes the freed active implementation slot (B/D/L/E). It starts from actual
+current integration `fdc58fb9` (execution docs only after M product) and received
+complete E/T3/row, worker_luna responsibility/model/effort, human callback
+reference, complete return/proof map and strict explicit widget-boundary rules.
+E1 and E2 both mandatory; live missing-source evidence, fresh anchor/expected
+base and notice reset preserved; no parent-State forwarding extraction. Required
+temporary scratch render comparisons need exclusive slot; focused checks are
+released. No full/render/build slot currently owned or queued.
 
 ## Evidence and limits
 
