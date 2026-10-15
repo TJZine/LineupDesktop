@@ -7,31 +7,36 @@ dispatch, acceptance, and integration; it does not replace package contracts.
 
 ## Current checkpoint
 
-Current task branch contains accepted A/H/T/M/B plus source-reviewed L and
-the scheduled B/L getter consumer. B main gate is green1,604. L package gate
-is green1,610; its main combined gate is running in actual session`68553`,
-logs`/tmp/lineup-cq-integration/L/`.
-Do not merge another package until that gate is collected/accepted.
+Accepted/integrated A/H/T/M/B/L plus the planned B/L authorization getter
+consumer. Stable main L gate at product `bc231cefcf8cd6ae12b8cf008b70f64b53b7ab2e`
+passed: pinned formatter112 unchanged, analyzer clean, full1,610; actual session
+`68553` exit0, logs `/tmp/lineup-cq-integration/L/`. L task tree/fully integrated
+branch removed; earlier source and proof remain recoverable in Git/logs.
 F remains source-reviewed, UNVERIFIED/UNMERGED at040e4a64 in retainedcq/F.
 
-C candidate8b114e44: required focused600 green, +30 cases, final targeted C-R1
-closure in progress, full still queued. E same chat now worker gpt-6.1-sol/medium,
-source8ff1574a fixes are closed at source; all runtime/render/full proof pending.
-W sourceb671ac62 performance fix awaits
-targeted source review and actual negative/focused/full proof. S focused103 green
-atf02a1209, full queued; Y reconstructed polling control+fourclock cases green,
-broadfocused/analyze/full/combined review pending. D14-state preD3 baseline
-captured, D3 source unchecked/awaitingfocused+comparison+full/review. V hasn't
-run NF29 confirming controls/profilebaseline or repaired that suspected defect.
-All are unintegrated until their gates close. K/U/G not dispatched; dependencies
-and required combined/final whole-branch reviews remain. No task completion claim.
+C final independent review CLOSED C-R1 at8b114e44 with600 focused green.
+Parent rebased four commits unchanged (`range-diff` all `=`) onto actual main
+03a946f2: current C13b935f9a05036a1f68aac8d05b780efd0d55269.
+C now owns exclusive pinned format/analyze/full slot; expected1,640 is not
+an observed result. All C source remains unintegrated until the gate passes.
+E8ff1574a source findings CLOSED; no runtime acceptance. Identical baseline/
+candidate scratch harness hashb6ede3f3d1d787b83105d504bf32fc4017d6a4165d8e1f39722d7d137dfbc2ec
+now includes synthetic connection and actual nonempty/state/content assertions;
+both render comparisons unexecuted. Wb671ac62 performance repair SOURCE-CLOSED;
+actual negative/focused/full proof queued. S f02a1209 focused103 green, independent
+review found S-R1 malformed integer ID with no matching pending waiter can leave
+requests/startup unresolved; accepted and returned to same child for source/test
+repair only, actual BEFORE runtime proof still required. Y reconstructed poll
+control/four clock cases green; broad/analyze/full pending. D14-state preD3 render
+baseline captured; D3 source awaitingfocused/comparison/full/review. V only
+prepares faithful NF29 BEFORE tests/profilebaseline, no production repair yet.
+K/U/G undispatched; combined/final whole-branch reviews remain. No completion claim.
 
-Implementation/runtime slots now: parent L full; E harness source-only (if
-active); C/S/Y/D/V stopped at queues; W frozen for source review. No new Flutter
-commands until focused release/full-slot grant. Next: collect L main gate,
-adjudicate C/E/W targeted findings, schedule C rebase/full and bounded focused/
-render queues without exceeding four implementation children. Resolve actual
-source/base/counts after each rebase; do not preserve incidental old counts.
+Runtime owner: C full only. S repair and V test preparation may edit their
+isolated source; E/W/Y/D are queued. No other Flutter commands until explicit
+release. At most four implementation children active. Next bounded work includes
+W negative/focused, Y broader checks, D/E focused and matched render, V BEFORE/
+profilebaseline. Rebase/counts/source acceptance follow actual integration state.
 
 ## Authority and source
 
@@ -972,3 +977,28 @@ With children running, completion/blocker callbacks are authorized only to the v
 parent. On the next activation, collect reports with nonblocking `wait_threads`
 (`timeoutMs: 0`) or bounded `read_thread`; retain returned cursors. Do not poll
 idly or treat child completion as acceptance without inspecting source/evidence.
+
+## Collected paging gate and review closures
+
+- Main L session68553 completed exit0: format112 unchanged, analyzer clean,
+  full1,610. No product mutation during checks. L tree clean before removal;
+  `cq/L`441950df was an ancestor of main and deleted only after accepted gate.
+- C reviewer01a13f0e independently closed R1 at8b114e44, inspected fixed reporting
+  ownership,22 dedicated/600focused proofs and retained expected/unexpected/stale
+  controls. Four-commit rebase mapping:57d878d2→d6e96ff4,
+  d7497975→71f1d677,9912330f→0457aabe,8b114e44→13b935f9.
+  All patches equivalent. Full slot granted on13b935f9, not yet accepted.
+- W reviewer01a13f19 source-closed R1 atb671ac62. Public1000-entry/20cached-request
+  read-count test is meaningful; expected old/new counts are source calculations,
+  not execution. Old21 evidence remains scoped to6bc53422 until new checks.
+- E reviewer01a13f08 source-closed all six findings plus immutable snapshot
+  qualification at8ff1574a. Restore shared progress API extension is included.
+  Runtime/render/full pending. Harness hashes/chronology retained in `/tmp/lineup-cq-E/manifest.md`.
+- S reviewer01a13ebb reviewed whole bounded net diff atf02a1209 and raised P2
+  S-R1. Parent ACCEPTED: malformed `[999, 'malformed']` with only pending1 must
+  fall through to fail/retire when extracted ID is not a pending ID. Typed valid
+  unknown results remain ignorable. Source path confirmed, runtime hang not yet
+  reproduced. Same Luna child owns focused repair/test, with runtime hold until
+  parent grant; no speculative broader protocol changes authorized.
+- E/W acknowledged queue; V may prepare faithful BEFORE/profile source only,
+  without repairs/runtime until confirming results. C exclusive runtime lease.
