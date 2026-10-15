@@ -1493,3 +1493,18 @@ updateflagONLYpreproductiontaskbaseline, notcommittedgoldens. Actual48countmust
 beobserved, notassumed. CurrentacceptedD/E/Yinputs, Vstillunmerged; affectedcurrent
 render/compositionafterfutureVrebaseexplicitlyrequired. Vsource/testprepONLY,
 noFlutter; othersheld. FullUandalllaterreviews/gatesremainpending.
+
+## V-R1 faithful regression prepared, not yet executed
+
+SameVworker6.1 clean8bd823812dd96d943880eb50629f2267c6faa681, test-only104lines
+above2512; Guideproductiondiffempty. ActualGuideView1280x800/DPR1/reduceMotion,
+40authoritativeinitialfailures/maxCachedRows16/maxConcurrentLoads2/publicRetry,
+orderedretry0..39: preconditionearlychannel0currentProgramnonnull, thenlateroffscreen
+completionspastcachebound; finalvisible0..4ready/currentProgramnonnull withoutscroll,
+cache/concurrencyboundsandactive0. ExpectedBEFOREfinalready-vs-loadingassertion,
+notsetup/timeout. No runtimeobserved, productionrepairstillheld. Selectedtestname
+`bulk Retry restores an evicted visible schedule without scrolling` inGuideViewtest.
+Likelypurecurrentdemandretained/inflight/queuedownershipquery interface remains
+proposaluntilactualconfirm/refute; failedrowsmuststayexplicitretryonly. Ucurrently
+exclusiveNF23/baseline, VqueuedforactualBEFOREgrantafterUrelease. Correct123total/
+120pass3failbaselinebookkeepingretained; sixoldVadditionsplusnewR1case maplater.
