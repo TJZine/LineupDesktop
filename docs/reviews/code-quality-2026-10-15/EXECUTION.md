@@ -1940,3 +1940,24 @@ Branch/defaultrepairproposalTEXTONLY, no tag/default/unrelatedbranchoperations.
 Originalhumanmessageactualretrieval/callbackrule/responsibility/returncontract
 explicit. No runtime/build/sourcechanges/delegationauthorizedforG. Parentwill
 inspect/reviewGcandidate, integrateacceptedwork, thenfinalmainfull+macOSbuild.
+
+## G consolidation candidate and independent preservation inspection
+
+Gactual8b7a7ff47802f3defc45b2cb99a7d921dad9c7d7 on d151,25docsfiles503+/4,327-,
+no code/assets/protocol/reviewsdiff. Eightcampaign/handoffarchiveswithactualfull
+preGd151gitshowbytehashrecoverymap; retainedstartup/reentry+Player/Guideunique
+October7decisions, correctedstaleheadings. Registercoversallactive/completedT5,
+mac§9,individualW1–12,FfourCTests/separatephysical,Hpwshlimit,Tunexplainedfailure,
+featureinputs/oldreviewqualifications. Uniquecontracts/currentauthoritymigrations
+andfullsource/build/capture/rationalesrefrecoverable,15portableSHAs+Lglueverified,
+Gawaitsparentmergeidentity. BranchproposalTEXTONLY,noactions. `/tmp/lineup-cq-G/REPORT.md`.
+
+Parentrebasedonepatchoverexecutiondocsto579c2a30,8b7→79670103ddc898a5ef523c1187ab59f6fef72ab7
+all`=`, frozenGtarget. Parentinspectedactualprofile/root/architecturechanges,
+readscratchcheckerandreran:33liveMD/414localpaths+anchors/10fullcommitrefsPASS;
+diffcheckPASS, prohibitedcode/protocol/reviewassetdiffempty. Archivehashmanifest
+retained. No Flutter/runtime/build/PowerShell/goldenexecutionclaimedbyG.
+Sameindependentwholebranchreviewer01a13fa6 reusedread-onlyforboundedGpreservation/
+link/status/authorityinspectionwithfullGspec/T5/archiveMatrix/sourcechecks. No
+code-reviewrestart. Gsourcefrozenuntilreport; parentmainEXECUTIONcoordinationonly,
+no competingwrites. FinalmainpostG/fullmacOSbuild/actualGmergeclosure/cleanupremain.
