@@ -26,8 +26,8 @@ format114/analyze/full1,645 on stablea0cd5399, task tree/branch cleaned.
 S c2f35887 two-control BEFORE reproduced pending/startupnonsettlement;
 pinnedformat114/analyze/focused105/full1,650 PASS; independent R1 CLOSED.
 Unchanged final rebaseb078944a8cc8b6999badb477f2401257a330bf53 integrated.
-S main-checkout gate now dispatched toP0 after D released runtime;
-no furtherpackageintegrates before that gate passes.
+S main-checkout gate PASSED at9b066698: format114/analyzeclean/full1,650;
+acceptedStasktree/fullyintegratedbranchremoved. Combinedreviewstillrequired.
 V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
 viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
 Y reconstructed polling control/fourclock green, broad/analyze/full pending.
@@ -38,7 +38,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: P0 mainSgate exclusively; Dsourcefrozen for independentreview and awaits fullslot. U prepares source/test/history; all other children queued.
+Runtime: D rebased full exclusively onfrozencd26d00d; requiredindependentreview source-only inparallel. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -98,7 +98,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | L review | `01a13ef8-7475-7a13-96d7-8d2e9d82c1a0` / local | reviewer, gpt-6.1-sol, high | L base2ae38b8e → 2b594e6f | Required matrix/pager/cancellation/copy review, read-only |
 | E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Corrected8ff1574a source findings CLOSED; paired scratch harness ready; all runtime/render/full pending |
 | E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Six findings and immutable qualification SOURCE-CLOSED at8ff1574a; runtime/render/full unverified |
-| S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | IndependentS-R1CLOSED, c2f35887 BEFORE/105focused/1,650fullgreen; equivalentb078944a integrated; maingatequeuedDrelease |
+| S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Acceptedb078944a independentclosure/105focused/1,650full/main1,650green; tasktree/fullyintegratedbranchremoved |
 | V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Test-onlyd2fbdf3b prepared; actual NF29 BEFORE and matched GUIDE_PROFILE baseline queued, no production repair |
 | W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalenta6a2d46f integrated; main1,645 green; tasktree/branchremoved |
 | W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
@@ -1169,3 +1169,17 @@ exactDspec/T3, proofmap/literal/renderobservations andlimits, originalhumanrefer
 callbackverification, no recursiveagents or runtime. Reviewsourcefrozen; full notclaimed.
 P0sameboundedverificationchat nowowns exclusive mainS§8.1 (logs `/tmp/lineup-cq-integration/S/`),
 exactmainHEAD suppliedafterthisrecordcommit, expected1,650notyetmainobserved.
+
+## S main gate acceptance and frozen D rebased full grant
+
+P0 actualmainHEAD9b0666980a76b33ddf41f080485768b314ec92a1 unchanged/clean,
+pin3.47.7/Dart3.13.5, formatter1140changedexit0(2.50s), analyzecleanexit0(2.86s),
+full1,650exit0(81.47s). `/tmp/lineup-cq-integration/S/*`, COMMAND_EXIT=0each.
+AcceptedStreeclean/branchancestorverified, tree/fullyintegratedcqSremoved.
+
+D exclusive rebased guard/format/analyze/full now granted onfrozencd26d00d;
+NOsource/testrepairs whileindependentrevieweractive (failuremustSTOP/reportparent).
+Task-onlyscratchmustmovefresh/tmpoutsideanalyzer/defaulttestdiscovery after
+recoverablearchive/hashverification;14scratchgoldenchecksnotcountedinnormalfull.
+Expected1,657 isnotobserved. Reviewercoordinatedsourceunchanged/scratcharchiveaccess.
+Allotherruntimequeuesheld, nextE/Y/V/Uavailableafterrelease.
