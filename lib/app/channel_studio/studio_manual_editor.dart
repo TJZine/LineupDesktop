@@ -59,7 +59,6 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   _StudioInventory get _playableInventory => _inventorySnapshot;
   set _playableInventory(_StudioInventory value) => _inventorySnapshot = value;
   ManualRundown get _rundown => widget.rundown;
-  List<ManualOccurrence> get _manualEntries => _rundown.occurrences;
   @override
   _FilterPickerController get _picker => widget.picker;
   @override
@@ -87,7 +86,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   void initState() {
     super.initState();
     _playableInventory = widget.inventory;
-    _manualRundown = _manualEntries.isNotEmpty;
+    _manualRundown = _rundown.occurrences.isNotEmpty;
   }
 
   @override
@@ -96,7 +95,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
     _playableInventory = widget.inventory;
     if (oldWidget.sourceRevision != widget.sourceRevision) {
       _retireRemovedFocus(_rundownFocus.keys.toList(growable: false));
-      _manualRundown = _manualEntries.isNotEmpty;
+      _manualRundown = _rundown.occurrences.isNotEmpty;
       _manualLibraryId = null;
       _manualMediaType = null;
       _manualFilters.clear();
@@ -172,6 +171,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   @override
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
+    final entries = _rundown.occurrences;
     final inventory = _playableInventory.byId.values;
     final inventoryById = _playableInventory.byId;
     final facets = _facetOptions(_manualLibraryId, inventory: inventory);
@@ -194,18 +194,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
     final unavailableSelections = _browseSelection
         .where((id) => !_playableInventory.byId.containsKey(id))
         .length;
-    final selectedIds = _manualEntries.map((entry) => entry.id).toSet();
+    final selectedIds = entries.map((entry) => entry.id).toSet();
     final rundownQuery = _rundownSearch.text.trim().toLowerCase();
     final rundownEntries = [
-      for (var index = 0; index < _manualEntries.length; index++)
-        if (_manualEntrySearchText(
-          _manualEntries[index],
-          inventoryById,
-        ).contains(rundownQuery))
-          (entry: _manualEntries[index], index: index),
+      if (_manualRundown)
+        for (var index = 0; index < entries.length; index++)
+          if (_manualEntrySearchText(
+            entries[index],
+            inventoryById,
+          ).contains(rundownQuery))
+            (entry: entries[index], index: index),
     ];
-    final countLabel =
-        '${visible.length} matching · ${_manualEntries.length} added';
+    final countLabel = '${visible.length} matching · ${entries.length} added';
     return LineupCompactControls(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -228,7 +228,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                 key: const Key('studio-manual-rundown-stage'),
                 selected: _manualRundown,
                 label: 'Channel programs',
-                count: _manualEntries.length,
+                count: entries.length,
                 onPressed: _saving
                     ? null
                     : () => setState(() => _manualRundown = true),
@@ -483,9 +483,9 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             ),
             SizedBox(height: 8),
             Text(
-              _manualEntries.isEmpty
+              entries.isEmpty
                   ? 'No programs selected. Return to Browse library to add programming.'
-                  : '${rundownEntries.length} of ${_manualEntries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
+                  : '${rundownEntries.length} of ${entries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
             ),
             SizedBox(height: 8),
             SizedBox(
@@ -506,6 +506,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                     !inventoryById.containsKey(item.entry.id),
                     inventoryById,
                     dragIndex: rundownQuery.isEmpty ? visibleIndex : null,
+                    entries: entries,
                   );
                 },
               ),
@@ -559,7 +560,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   }
 
   void _undoLastAddition() {
-    final previous = _manualEntries;
+    final previous = _rundown.occurrences;
     _changed(_rundown.undoLastAddition);
     _retireRemovedFocus(previous);
   }
@@ -572,7 +573,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   );
 
   String get _countLabel =>
-      '${_manualMatches.length} matching · ${_manualEntries.length} added';
+      '${_manualMatches.length} matching · ${_rundown.occurrences.length} added';
 
   Widget _rundownRow(
     ManualOccurrence entry,
@@ -580,10 +581,11 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
     bool unavailable,
     Map<String, PlexMediaItem> inventoryById, {
     int? dragIndex,
+    required List<ManualOccurrence> entries,
   }) {
     final title = _manualEntryTitle(entry, inventoryById);
     final repeatedTitle =
-        _manualEntries
+        entries
             .where(
               (candidate) =>
                   _manualEntryTitle(candidate, inventoryById) == title,
@@ -591,7 +593,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             .length >
         1;
     final positionedTitle = repeatedTitle
-        ? '$title, item ${index + 1} of ${_manualEntries.length}'
+        ? '$title, item ${index + 1} of ${entries.length}'
         : title;
     final focus = _rundownFocus.putIfAbsent(
       entry,
@@ -603,7 +605,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
     final season = liveItem?.seasonNumber ?? entry.item.seasonNumber;
     final episode = liveItem?.episodeNumber ?? entry.item.episodeNumber;
     final facts = [
-      '${index + 1} of ${_manualEntries.length}',
+      '${index + 1} of ${entries.length}',
       _compactDuration(duration),
       if (season != null || episode != null)
         'S${season ?? '—'} E${episode ?? '—'}',
@@ -620,7 +622,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
         ),
         lineupArrowButton(
           tooltip: 'Move $positionedTitle later in $_draftChannelLabel',
-          onPressed: _saving || index == _manualEntries.length - 1
+          onPressed: _saving || index == entries.length - 1
               ? null
               : () => _moveManual(entry, 1),
           icon: Icons.arrow_downward,
@@ -752,9 +754,10 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
 
   void _moveManual(ManualOccurrence entry, int delta) {
     if (_saving) return;
-    final from = _manualEntries.indexOf(entry);
+    final entries = _rundown.occurrences;
+    final from = entries.indexOf(entry);
     final to = from + delta;
-    if (from < 0 || to < 0 || to >= _manualEntries.length) return;
+    if (from < 0 || to < 0 || to >= entries.length) return;
     _changed(() {
       _rundown.move(entry, delta);
     });
@@ -772,15 +775,13 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
     final target = await showDialog<({int index, bool after})>(
       context: context,
       builder: (context) => _MoveProgramDialog(
-        entries: _manualEntries,
+        entries: _rundown.occurrences,
         moving: entry,
         titleFor: (candidate) =>
             _manualEntryTitle(candidate, _playableInventory.byId),
       ),
     );
     if (target == null || !mounted) return;
-    final from = _manualEntries.indexOf(entry);
-    if (from < 0) return;
     _changed(() {
       _rundown.moveTo(entry, target.index, after: target.after);
     });
@@ -788,15 +789,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
 
   void _removeManual(ManualOccurrence entry) {
     if (_saving) return;
-    final index = _manualEntries.indexOf(entry);
+    final entries = _rundown.occurrences;
+    final index = entries.indexOf(entry);
     if (index < 0) return;
+    late List<ManualOccurrence> remaining;
     _changed(() {
       _rundown.remove(entry);
-      if (_manualEntries.isEmpty) _manualRundown = false;
+      remaining = _rundown.occurrences;
+      if (remaining.isEmpty) _manualRundown = false;
     });
-    final nextEntry = _manualEntries.isEmpty
+    final nextEntry = remaining.isEmpty
         ? null
-        : _manualEntries[index.clamp(0, _manualEntries.length - 1)];
+        : remaining[index.clamp(0, remaining.length - 1)];
     final removedFocus = _rundownFocus.remove(entry);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -811,7 +815,8 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   }
 
   void _retireRemovedFocus(List<ManualOccurrence> previous) {
-    final removed = previous.where((entry) => !_manualEntries.contains(entry));
+    final current = _rundown.occurrences.toSet();
+    final removed = previous.where((entry) => !current.contains(entry));
     final removedFocus = removed
         .map(_rundownFocus.remove)
         .nonNulls
