@@ -195,7 +195,7 @@ Map<String, Object?> _asJsonMap(Object? value, String description) {
   if (value is! Map<String, dynamic>) {
     throw FormatException('$description must be a JSON object.');
   }
-  return value.map<String, Object?>((key, value) => MapEntry(key, value));
+  return value.map<String, Object?>(MapEntry<String, Object?>.new);
 }
 
 String _requiredString(
