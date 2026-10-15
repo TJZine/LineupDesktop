@@ -1,7 +1,7 @@
 # Lineup Desktop: code-quality and macOS-readiness implementation plan
 
 Status: **revision 3 executed for portable code; F unmerged/unverified;
-G documentation candidate awaiting parent integration; plan not fully complete.**
+G documentation integrated and reviewed; final verification pending; plan not fully complete.**
 Original plan prepared October 15, 2026. Its specifications and native review
 conditions remain active. No push, PR, merge into `main`, branch-default change,
 or unrelated deletion is authorized by this closure. See the execution closure
@@ -16,8 +16,9 @@ review conditions below as F's live contract. Unfinished execution, product and
 physical rows are routed through [open obligations](open-obligations.md).
 
 BASE was `14ac167be4d0007cf61ce85f9ed4879ca6d5c3b1`. The following are actual
-fast-forward integration commits (not fabricated merge commits), verified as
-ancestors of G's base `d15184831213dd6403ccb80da24a3ea17ffe088c`:
+fast-forward integration commits (not fabricated merge commits). Portable code
+SHAs were verified as ancestors of G's base
+`d15184831213dd6403ccb80da24a3ea17ffe088c`; G is recorded after parent integration:
 
 | Package | Integrated commit | Status |
 | --- | --- | --- |
@@ -38,7 +39,7 @@ ancestors of G's base `d15184831213dd6403ccb80da24a3ea17ffe088c`:
 | U | `bec2e8bac096b7b20536e53219c138a4b9020080` | Integrated; portable gates and required reviews accepted |
 | K | `9c3c62e6645913bda54dfefadff810fcc6db87f7` | Integrated; portable gates and required reviews accepted |
 | F | No integrated SHA | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3` retained unmerged/unverified; four Windows CTests and acceptance pending |
-| G | No integrated SHA | Documentation candidate; awaiting parent inspection and integration |
+| G | `c571baf2303ee8f4ea9fd932116f04ccac42b227` | Integrated; preservation review accepted; final gates/build pending |
 
 L's controller authorization-getter glue was integrated at
 `bc231cefcf8cd6ae12b8cf008b70f64b53b7ab2e`. The parent-owned
@@ -51,8 +52,8 @@ closed clear at inspected HEAD `a620790e642d8c72fcdb2d76602a3a5f49bf16af`
 observed pin 3.47.7, 144 formatted files unchanged, clean analysis and 1,690 tests.
 These are attributed earlier checks, not new G checks or physical acceptance.
 
-Parent final stable checks/macOS build, G's actual integration identity and
-eligible task cleanup remain to be recorded after G acceptance. F must retain
+G preservation review is clear; its actual integration identity is recorded above.
+Parent final stable checks/macOS build and eligible task cleanup remain pending. F must retain
 its branch/worktree until Windows verification, review and integration; no full
 plan completion while it is unmerged. W1–W12 remain separate, unobserved physical
 acceptance even after deterministic gates. The branch-repair proposal is text

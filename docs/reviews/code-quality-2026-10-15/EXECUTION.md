@@ -1961,3 +1961,22 @@ Sameindependentwholebranchreviewer01a13fa6 reusedread-onlyforboundedGpreservatio
 link/status/authorityinspectionwithfullGspec/T5/archiveMatrix/sourcechecks. No
 code-reviewrestart. Gsourcefrozenuntilreport; parentmainEXECUTIONcoordinationonly,
 no competingwrites. FinalmainpostG/fullmacOSbuild/actualGmergeclosure/cleanupremain.
+
+## G preservation closure and actual integration
+
+Sameindependentreviewer01a13fa6 completedGread-onlyatclean79670103, no actionable
+materialfinding. All8historicalsources/currentauthoritymigrations/retainedOct7
+approvals/obligations/mac+Windowsstatuses/fullrecoverableidentities/link/profile
+factsinspected, sourceunchanged. ParentACCEPTSclosure; retainedattributedrecord
+IMPLEMENTATION_DOCUMENTATION_REVIEW.md. Parent independentlyverified8gitshow
+snapshots265,182bytes/SHA256, fullrefs, link414/anchor/ref10 andscopechecks.
+No new productruntimebyG/reviewer, allprior1690proofkeepsa620attribution.
+
+Parentrebase796overcoordinationdocs241bb9b8 allonepatch`=`→
+c571baf2303ee8f4ea9fd932116f04ccac42b227, Ff integratedactualGcommitc571baf2.
+25docsfiles503+/4,327-, no code/protocol/reviews/assetschangedbyG. Parentrecords
+ACTUALGmergeidentity/statusinplan/register afterintegration(no self-placeholder)
+andthisreviewmetadata. Allportablepackages+Gimplemented/reviewed/integrated;
+finalstablepostGformat/analyze/full/macOSbuild andGtaskcleanupstillpending.
+F040e4a64 remainsUNVERIFIED/UNMERGED, physicalW1–12separate. Branchrepairproposal
+textonly, no default/tag/unrelatedbranchoperationperformed.
