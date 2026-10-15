@@ -6,8 +6,9 @@ explicit instruction. These are intended changes, not current capability claims.
 
 Use this document for active requirements, the [implementation plan](desktop-ui-implementation-plan.md)
 for delivery and verification, and the [visual evidence manifest](design/desktop-ui/README.md)
-for each approved composition and its limitations. The [chronological history](desktop-ui-design-history.md)
-preserves discussion and rejected alternatives; it is not a competing authority.
+for each approved composition and its limitations. Superseded discussion and
+rejected alternatives remain available in Git history; see the
+[documentation index](README.md#historical-material-in-git).
 Later prose requirements govern older mock omissions or illustrative behavior.
 
 The [interface system](../.interface-design/system.md) supplies Cinema Continuity

@@ -1,15 +1,19 @@
 #include "track_list_encoder.h"
 
-// Assertions must execute in Release and Profile too.
-#ifdef NDEBUG
-#undef NDEBUG
-#endif
-#include <cassert>
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <vector>
 
 namespace {
+
+void Check(bool condition, const char* obligation) {
+  if (!condition) {
+    std::cerr << obligation << '\n';
+    std::exit(1);
+  }
+}
 
 using flutter::EncodableList;
 using flutter::EncodableMap;
@@ -51,15 +55,19 @@ EncodableList Encode(std::vector<mpv_node> entries) {
 
 const EncodableValue& At(const EncodableMap& map, const char* key) {
   const auto found = map.find(EncodableValue(key));
-  assert(found != map.end());
+  Check(found != map.end(),
+        "found != map.end()");
   return found->second;
 }
 
 void CheckIdentity(const EncodableMap& map, int64_t id, const char* type,
                    bool selected) {
-  assert(std::get<int64_t>(At(map, "id")) == id);
-  assert(std::get<std::string>(At(map, "type")) == type);
-  assert(std::get<bool>(At(map, "selected")) == selected);
+  Check(std::get<int64_t>(At(map, "id")) == id,
+        "std::get<int64_t>(At(map, \"id\")) == id");
+  Check(std::get<std::string>(At(map, "type")) == type,
+        "std::get<std::string>(At(map, \"type\")) == type");
+  Check(std::get<bool>(At(map, "selected")) == selected,
+        "std::get<bool>(At(map, \"selected\")) == selected");
 }
 
 void CheckBounds() {
@@ -103,7 +111,8 @@ void CheckBounds() {
   for (const int size : {256, 257}) {
     entries.resize(size, track);
     const auto result = Encode(entries);
-    assert(result.size() == 256);
+    Check(result.size() == 256,
+          "result.size() == 256");
     CheckIdentity(std::get<EncodableMap>(result.front()), 1, "audio", false);
     size_t bytes = 0;
     for (size_t i = 0; i < result.size(); ++i) {
@@ -111,40 +120,52 @@ void CheckBounds() {
       for (const char* key : {"title", "lang", "codec", "demux-channels"}) {
         const auto found = encoded.find(EncodableValue(key));
         if (i < 4) {
-          assert(found != encoded.end());
+          Check(found != encoded.end(),
+                "found != encoded.end()");
           const auto& text = std::get<std::string>(found->second);
-          assert(text.size() == 4096);
+          Check(text.size() == 4096,
+                "text.size() == 4096");
           bytes += text.size();
         } else {
-          assert(found == encoded.end());
+          Check(found == encoded.end(),
+                "found == encoded.end()");
         }
       }
     }
-    assert(bytes == 64 * 1024);
+    Check(bytes == 64 * 1024,
+          "bytes == 64 * 1024");
     const auto& late = std::get<EncodableMap>(result.back());
     CheckIdentity(late, 256, "sub", true);
-    assert(late.size() == 9);
-    assert(std::get<int64_t>(At(late, "demux-channel-count")) == 2);
-    assert(!std::get<bool>(At(late, "forced")));
-    assert(std::get<bool>(At(late, "external")));
-    assert(!std::get<bool>(At(late, "hearing-impaired")));
-    assert(std::get<bool>(At(late, "visual-impaired")));
-    assert(!std::get<bool>(At(late, "commentary")));
+    Check(late.size() == 9,
+          "late.size() == 9");
+    Check(std::get<int64_t>(At(late, "demux-channel-count")) == 2,
+          "std::get<int64_t>(At(late, \"demux-channel-count\")) == 2");
+    Check(!std::get<bool>(At(late, "forced")),
+          "!std::get<bool>(At(late, \"forced\"))");
+    Check(std::get<bool>(At(late, "external")),
+          "std::get<bool>(At(late, \"external\"))");
+    Check(!std::get<bool>(At(late, "hearing-impaired")),
+          "!std::get<bool>(At(late, \"hearing-impaired\"))");
+    Check(std::get<bool>(At(late, "visual-impaired")),
+          "std::get<bool>(At(late, \"visual-impaired\"))");
+    Check(!std::get<bool>(At(late, "commentary")),
+          "!std::get<bool>(At(late, \"commentary\"))");
   }
-  // The bound counts input entries, including rejected entries.
   entries.assign(257, mpv_node{});
   entries.back() = track;
-  assert(Encode(entries).empty());
+  Check(Encode(entries).empty(),
+        "Encode(entries).empty()");
 
-  // Rejected identities must not spend any optional-string budget.
   late_values[0] = Int(0);
   entries.assign(20, List(&late_map, MPV_FORMAT_NODE_MAP));
   entries.insert(entries.end(), 4, track);
   const auto accepted = Encode(entries);
-  assert(accepted.size() == 4);
-  assert(std::get<std::string>(
+  Check(accepted.size() == 4,
+        "accepted.size() == 4");
+  Check(std::get<std::string>(
              At(std::get<EncodableMap>(accepted.back()), "demux-channels"))
-             .size() == 4096);
+             .size() == 4096,
+        "std::get<std::string>( At(std::get<EncodableMap>(accepted.back()), \"demux-channels\")) .size() == 4096");
 }
 
 void CheckStrings() {
@@ -156,15 +177,15 @@ void CheckStrings() {
   for (const std::string sequence :
        {std::string("\xC2\xA2"), std::string("\xE2\x82\xAC"),
         std::string("\xF0\x9F\x98\x80")}) {
-    // Whole sequence exactly fits, straddles the cap, or starts at the cap.
     for (size_t room = 0; room <= sequence.size(); ++room) {
       const std::string prefix(4096 - room, 'a');
       const std::string input = prefix + sequence + "z";
       values[3] = String(input.c_str());
       const auto result = Encode({track});
       const auto& encoded = std::get<EncodableMap>(result.front());
-      assert(std::get<std::string>(At(encoded, "title")) ==
-             (room == sequence.size() ? prefix + sequence : prefix));
+      Check(std::get<std::string>(At(encoded, "title")) ==
+             (room == sequence.size() ? prefix + sequence : prefix),
+            "std::get<std::string>(At(encoded, \"title\")) == (room == sequence.size() ? prefix + sequence : prefix)");
     }
   }
   for (const char* invalid :
@@ -172,17 +193,19 @@ void CheckStrings() {
         "\xF4\x90\x80\x80", "\xF5\x80\x80\x80", "\xC2", "\xE2\x82",
         "\xF0\x9F\x98", "a\xC2z"}) {
     values[3] = String(invalid);
-    assert(std::get<EncodableMap>(Encode({track}).front()).size() == 3);
+    Check(std::get<EncodableMap>(Encode({track}).front()).size() == 3,
+          "std::get<EncodableMap>(Encode({track}).front()).size() == 3");
   }
   const std::string invalid_at_cap = std::string(4095, 'a') + "\x80";
   values[3] = String(invalid_at_cap.c_str());
-  assert(std::get<EncodableMap>(Encode({track}).front()).size() == 3);
+  Check(std::get<EncodableMap>(Encode({track}).front()).size() == 3,
+        "std::get<EncodableMap>(Encode({track}).front()).size() == 3");
   values[3] = String("");
-  assert(std::get<std::string>(
+  Check(std::get<std::string>(
              At(std::get<EncodableMap>(Encode({track}).front()), "title"))
-             .empty());
+             .empty(),
+        "std::get<std::string>( At(std::get<EncodableMap>(Encode({track}).front()), \"title\")) .empty()");
 
-  // One byte left cannot encode a multibyte sequence: omit, then allow ASCII.
   const std::string full(4096, 'a');
   const std::string almost_full(4095, 'a');
   values[3] = String(full.c_str());
@@ -199,19 +222,22 @@ void CheckStrings() {
   mpv_node_list ascii_map{4, ascii_values, keys};
   entries.push_back(List(&ascii_map, MPV_FORMAT_NODE_MAP));
   const auto result = Encode(entries);
-  assert(std::get<EncodableMap>(result[16]).size() == 3);
-  assert(std::get<std::string>(
-             At(std::get<EncodableMap>(result[17]), "title")) == "b");
+  Check(std::get<EncodableMap>(result[16]).size() == 3,
+        "std::get<EncodableMap>(result[16]).size() == 3");
+  Check(std::get<std::string>(
+             At(std::get<EncodableMap>(result[17]), "title")) == "b",
+        "std::get<std::string>( At(std::get<EncodableMap>(result[17]), \"title\")) == \"b\"");
 
-  // Reject the whole malformed optional string without charging its prefix.
   unicode_values[3] = String(invalid_at_cap.c_str());
   entries.assign(20, List(&unicode_map, MPV_FORMAT_NODE_MAP));
   entries.insert(entries.end(), 16, track);
   const auto uncharged = Encode(entries);
-  assert(std::get<EncodableMap>(uncharged.front()).size() == 3);
-  assert(std::get<std::string>(
+  Check(std::get<EncodableMap>(uncharged.front()).size() == 3,
+        "std::get<EncodableMap>(uncharged.front()).size() == 3");
+  Check(std::get<std::string>(
              At(std::get<EncodableMap>(uncharged.back()), "title"))
-             .size() == 4096);
+             .size() == 4096,
+        "std::get<std::string>( At(std::get<EncodableMap>(uncharged.back()), \"title\")) .size() == 4096");
 }
 
 void CheckMalformed() {
@@ -227,25 +253,29 @@ void CheckMalformed() {
   for (const auto invalid :
        {Int(0), Int(-1), String("1"), floating, Flag(true), mpv_node{}}) {
     values[0] = invalid;
-    assert(Encode({track}).empty());
+    Check(Encode({track}).empty(),
+          "Encode({track}).empty()");
   }
   values[0] = Int(1);
   for (const auto invalid :
        {String("Audio"), String("subtitle"), String("audio "), String(""),
         String(nullptr), Int(1), mpv_node{}}) {
     values[1] = invalid;
-    assert(Encode({track}).empty());
+    Check(Encode({track}).empty(),
+          "Encode({track}).empty()");
   }
   values[1] = String("audio");
   for (const auto invalid : {Int(1), String("true"), floating, mpv_node{}}) {
     values[2] = invalid;
-    assert(Encode({track}).empty());
+    Check(Encode({track}).empty(),
+          "Encode({track}).empty()");
   }
   values[2] = Flag(true);
   for (int i = 0; i < 3; ++i) {
     char* saved = keys[i];
     keys[i] = nullptr;
-    assert(Encode({track}).empty());
+    Check(Encode({track}).empty(),
+          "Encode({track}).empty()");
     keys[i] = saved;
   }
   for (const char* key :
@@ -255,32 +285,37 @@ void CheckMalformed() {
     keys[3] = const_cast<char*>(key);
     for (const auto invalid : {mpv_node{}, floating, String(nullptr)}) {
       values[3] = invalid;
-      assert(std::get<EncodableMap>(Encode({track}).front()).size() == 3);
+      Check(std::get<EncodableMap>(Encode({track}).front()).size() == 3,
+            "std::get<EncodableMap>(Encode({track}).front()).size() == 3");
     }
   }
   for (const char* key : {"title", "lang", "codec", "demux-channels"}) {
     keys[3] = const_cast<char*>(key);
     for (const auto invalid : {Int(1), Flag(false)}) {
       values[3] = invalid;
-      assert(std::get<EncodableMap>(Encode({track}).front()).size() == 3);
+      Check(std::get<EncodableMap>(Encode({track}).front()).size() == 3,
+            "std::get<EncodableMap>(Encode({track}).front()).size() == 3");
     }
   }
   keys[3] = const_cast<char*>("demux-channel-count");
   for (const auto invalid : {Int(0), Int(-1), String("2"), Flag(true)}) {
     values[3] = invalid;
-    assert(std::get<EncodableMap>(Encode({track}).front()).size() == 3);
+    Check(std::get<EncodableMap>(Encode({track}).front()).size() == 3,
+          "std::get<EncodableMap>(Encode({track}).front()).size() == 3");
   }
   for (const char* key : {"forced", "external", "hearing-impaired",
                           "visual-impaired", "commentary"}) {
     keys[3] = const_cast<char*>(key);
     for (const auto invalid : {Int(0), Int(1), String("false")}) {
       values[3] = invalid;
-      assert(std::get<EncodableMap>(Encode({track}).front()).size() == 3);
+      Check(std::get<EncodableMap>(Encode({track}).front()).size() == 3,
+            "std::get<EncodableMap>(Encode({track}).front()).size() == 3");
     }
     for (const bool flag : {false, true}) {
       values[3] = Flag(flag);
-      assert(std::get<bool>(At(std::get<EncodableMap>(Encode({track}).front()),
-                               key)) == flag);
+      Check(std::get<bool>(At(std::get<EncodableMap>(Encode({track}).front()),
+                               key)) == flag,
+            "std::get<bool>(At(std::get<EncodableMap>(Encode({track}).front()), key)) == flag");
     }
   }
   for (const char* key :
@@ -289,7 +324,8 @@ void CheckMalformed() {
         "decoder", "unlisted-sentinel"}) {
     keys[3] = const_cast<char*>(key);
     values[3] = String("excluded-sentinel");
-    assert(std::get<EncodableMap>(Encode({track}).front()).size() == 3);
+    Check(std::get<EncodableMap>(Encode({track}).front()).size() == 3,
+          "std::get<EncodableMap>(Encode({track}).front()).size() == 3");
   }
   mpv_node_list no_keys{4, values, nullptr};
   mpv_node_list no_values{4, nullptr, keys};
@@ -300,18 +336,20 @@ void CheckMalformed() {
               List(&no_keys, MPV_FORMAT_NODE_MAP),
               List(&no_values, MPV_FORMAT_NODE_MAP),
               List(&negative, MPV_FORMAT_NODE_MAP), track});
-  assert(result.size() == 1);
+  Check(result.size() == 1,
+        "result.size() == 1");
   CheckIdentity(std::get<EncodableMap>(result.front()), 1, "audio", true);
   for (const auto invalid :
        {mpv_node{}, track, List(nullptr, MPV_FORMAT_NODE_ARRAY),
         List(&empty, MPV_FORMAT_NODE_ARRAY),
         List(&no_values, MPV_FORMAT_NODE_ARRAY),
         List(&negative, MPV_FORMAT_NODE_ARRAY)}) {
-    assert(std::get<EncodableList>(lineup::EncodeTrackList(invalid)).empty());
+    Check(std::get<EncodableList>(lineup::EncodeTrackList(invalid)).empty(),
+          "std::get<EncodableList>(lineup::EncodeTrackList(invalid)).empty()");
   }
 }
 
-}  // namespace
+}
 
 int main() {
   CheckBounds();

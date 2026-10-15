@@ -14,7 +14,7 @@ void main() {
   test(
     'header deadline triggers request abortion and consumes a late response',
     () async {
-      final aborted = Completer<void>();
+      late Future<void> aborted;
       final lateBodyCancelled = Completer<void>();
       final pending = Completer<http.StreamedResponse>();
       final lateBody = StreamController<List<int>>(
@@ -25,15 +25,13 @@ void main() {
         requestTimeout: const Duration(milliseconds: 5),
         httpClient: MockClient.streaming((request, _) {
           expect(request, isA<http.AbortableRequest>());
-          (request as http.AbortableRequest).abortTrigger!.then((_) {
-            aborted.complete();
-          });
+          aborted = (request as http.AbortableRequest).abortTrigger!;
           return pending.future;
         }),
       );
       addTearDown(client.close);
       await expectLater(client.createPin(), _plexError('network-timeout'));
-      await aborted.future.timeout(const Duration(seconds: 1));
+      await aborted.timeout(const Duration(seconds: 1));
       pending.complete(http.StreamedResponse(lateBody.stream, 201));
       await lateBodyCancelled.future.timeout(const Duration(seconds: 1));
       await lateBody.close();
@@ -46,6 +44,7 @@ void main() {
       (tester) async {
         final pending = Completer<http.StreamedResponse>();
         var aborts = 0;
+        late StreamSubscription<void> abortObserver;
         var bodyCancelled = 0;
         final body = StreamController<List<int>>(
           onCancel: () {
@@ -56,15 +55,15 @@ void main() {
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
           requestTimeout: const Duration(milliseconds: 10),
           httpClient: MockClient.streaming((request, _) {
-            (request as http.AbortableRequest).abortTrigger!.then((_) {
-              aborts++;
-            });
+            abortObserver = (request as http.AbortableRequest).abortTrigger!
+                .asStream()
+                .listen((_) => aborts++);
             return pending.future;
           }),
         );
         var completions = 0;
         Object? failure;
-        client.createPin().then(
+        final pinRequest = client.createPin().then(
           (_) {
             completions++;
           },
@@ -77,9 +76,14 @@ void main() {
         // A rejected response isolates the header deadline from body timing,
         // whose remaining budget uses a real Stopwatch rather than fake time.
         pending.complete(http.StreamedResponse(body.stream, 401));
-        unawaited(body.close());
+        final bodyClosed = body.close();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 20));
+        await pinRequest;
+        await bodyClosed;
+        await tester.runAsync(() async {
+          await abortObserver.cancel();
+        });
         expect(completions, 1);
         expect(bodyCancelled, 1);
         expect(
@@ -239,15 +243,13 @@ void main() {
 
   test('control response deadline includes body streaming', () async {
     final canceled = Completer<void>();
-    final aborted = Completer<void>();
+    late Future<void> aborted;
     final stream = StreamController<List<int>>(onCancel: canceled.complete);
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
       requestTimeout: const Duration(milliseconds: 5),
       httpClient: MockClient.streaming((request, _) async {
-        (request as http.AbortableRequest).abortTrigger!.then(
-          (_) => aborted.complete(),
-        );
+        aborted = (request as http.AbortableRequest).abortTrigger!;
         return http.StreamedResponse(stream.stream, 200);
       }),
     );
@@ -263,7 +265,9 @@ void main() {
       ),
     );
     await canceled.future.timeout(const Duration(seconds: 1));
-    await aborted.future.timeout(const Duration(seconds: 1));
+    await aborted.timeout(const Duration(seconds: 1));
+    await stream.close();
+    client.close();
   });
 
   test('cancel PIN propagates a normalized HTTP failure', () async {
@@ -2163,8 +2167,6 @@ void main() {
               return http.StreamedResponse(Stream.empty(), status);
             }
             if (path == '/playlists/p1/items') {
-              // The first page stays available until the fatal abort fires,
-              // so any second page would prove sibling work was not stopped.
               await releaseFatal.future;
               await abortObserved.future;
               return http.StreamedResponse(
@@ -2232,9 +2234,6 @@ void main() {
     'first fatal playlist authorization error wins the attempt',
     timeout: const Timeout(Duration(seconds: 10)),
     () async {
-      // p1 fails first with 403 while p0's 401 is held back until the abort
-      // signal proves p1's failure was already recorded. A simultaneous abort
-      // converging on p0 must not replace it.
       final releaseSecond = Completer<void>();
       final abortObserved = Completer<void>();
       final client = PlexClient(
@@ -3713,8 +3712,6 @@ void main() {
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
       httpClient: MockClient.streaming((request, _) async {
         requests++;
-        // Hang like an unresponsive server until the scan is cancelled, then
-        // abort the way a real transport observes the abort trigger.
         await (request as http.AbortableRequest).abortTrigger!;
         throw http.RequestAbortedException(request.url);
       }),
@@ -3800,9 +3797,6 @@ void main() {
   });
 
   test('library advances raw offsets past unplayable records', () async {
-    // libraryItems retains every parsed record (playable filtering happens
-    // later in the controller), so this locks in that the next request offset
-    // counts raw records including the unplayable one.
     final requestedStarts = <int>[];
     Map<String, Object?> playable(String id) => {
       'ratingKey': id,

@@ -8,6 +8,7 @@ import '../diagnostics/diagnostics.dart';
 import '../guide/guide_controller.dart';
 import '../plex/plex_models.dart';
 import 'native_player.dart';
+import 'display_matching.dart';
 
 enum PlayerOverlay {
   none,
@@ -42,9 +43,28 @@ class PlayerCoordinator extends ChangeNotifier {
     _tracks = player.tracks;
     _contentGeneration = lineup.contentGeneration;
     _osdAutoHideSeconds = lineup.settings.osdAutoHideSeconds;
+    _displayMatching = DisplayMatching(
+      player: player,
+      clock: _clock,
+      changed: notifyListeners,
+    );
+    _displaySubscription = player.displayReports.listen(
+      _displayMatching.receive,
+    );
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
+    notifyListeners();
+  }
+
+  late final DisplayMatching _displayMatching;
+  StreamSubscription<DisplayMatchingReport>? _displaySubscription;
+  bool _playerDestinationVisible = true;
+  bool get displayHoldActive => _displayMatching.holdActive;
+  DisplayMatchingReport get displayReport => _displayMatching.report;
+  void setPlayerDestinationVisible(bool value) {
+    if (_playerDestinationVisible == value) return;
+    _playerDestinationVisible = value;
     notifyListeners();
   }
 
@@ -131,6 +151,7 @@ class PlayerCoordinator extends ChangeNotifier {
   PlaybackDiagnosticSnapshot get diagnosticPlaybackSnapshot =>
       PlaybackDiagnosticSnapshot(
         state: _status.state,
+        displayReport: displayReport,
         receivedTelemetry:
             _activeLoadGeneration != null &&
                 const {
@@ -187,6 +208,7 @@ class PlayerCoordinator extends ChangeNotifier {
   bool get canRetry => _canRetry;
   bool get hasPlaybackIntent =>
       _tuning ||
+      _activeLoad != null ||
       _activePlayback != null ||
       switch (_status.state) {
         PlayerState.loading ||
@@ -259,18 +281,26 @@ class PlayerCoordinator extends ChangeNotifier {
     _busyIdentity = null;
   }
 
-  // All status publication passes here, including native events and tune/scope
-  // changes. Restart the delay only when the actual busy operation changes.
   @override
   void notifyListeners() {
     if (_disposed) return;
+    _updateDisplaySession();
     final busy =
         !_scopeCleanupPending &&
         _error == null &&
-        (_tuning ||
+        (displayHoldActive ||
+            _tuning ||
             _status.state == PlayerState.loading ||
             _status.state == PlayerState.buffering);
-    final identity = busy ? (_tuneGeneration, _tuning, _status.state) : null;
+    final identity = busy
+        ? displayHoldActive
+              ? (
+                  _activeLoadGeneration ?? _tuneGeneration,
+                  false,
+                  PlayerState.loading,
+                )
+              : (_tuneGeneration, _tuning, _status.state)
+        : null;
     if (_busyIdentity != identity) {
       _busyTimer?.cancel();
       _busyLabel = null;
@@ -278,7 +308,10 @@ class PlayerCoordinator extends ChangeNotifier {
       if (identity != null) {
         _busyTimer = Timer(const Duration(seconds: 2), () {
           if (_disposed || _busyIdentity != identity) return;
-          _busyLabel = !_tuning && _status.state == PlayerState.buffering
+          _busyLabel =
+              !displayHoldActive &&
+                  !_tuning &&
+                  _status.state == PlayerState.buffering
               ? 'Buffering…'
               : 'Starting playback…';
           notifyListeners();
@@ -288,7 +321,24 @@ class PlayerCoordinator extends ChangeNotifier {
     super.notifyListeners();
   }
 
-  // Native position remains exact; only its UI publication is bucketed.
+  void _updateDisplaySession() {
+    _displayMatching.updateSession(
+      displayMatchingSession(
+        active: _displayMatching.session,
+        enabled: lineup.settings.matchDisplayHdr,
+        fullscreen: _fullscreen,
+        intent:
+            hasPlaybackIntent &&
+            (!_scopeCleanupPending) &&
+            (_nativeStopOperation == null || _tuning),
+        playerVisible: _playerDestinationVisible,
+        fullGuide: _overlay == PlayerOverlay.fullGuide,
+        error: _error != null || _overlay == PlayerOverlay.error,
+      ),
+      paused: _status.state == PlayerState.paused,
+    );
+  }
+
   Object get _eventVisibleFacts => (
     (
       _status.state,
@@ -313,6 +363,9 @@ class PlayerCoordinator extends ChangeNotifier {
       _telemetry.gamma,
       _telemetry.colorMatrix,
       _telemetry.signalPeak,
+      _telemetry.targetGamma,
+      _telemetry.targetPrimaries,
+      _telemetry.targetPixelFormat,
     ),
     _tracks,
     _overlay,
@@ -325,6 +378,17 @@ class PlayerCoordinator extends ChangeNotifier {
   void _event(PlayerEvent event) {
     if (event.generation != _activeLoadGeneration) return;
     final load = _activeLoad;
+    final terminal = const {
+      PlayerState.error,
+      PlayerState.ended,
+      PlayerState.stopped,
+      PlayerState.idle,
+      PlayerState.unsupported,
+    }.contains(event.status.state);
+    if (terminal &&
+        (event.status.state == PlayerState.error || load?.replacing != true)) {
+      _displayMatching.cancelLoad();
+    }
     if (event.position > Duration.zero) {
       load?.lastPositivePosition = event.position;
     }
@@ -333,6 +397,9 @@ class PlayerCoordinator extends ChangeNotifier {
     }
     final previousFacts = _eventVisibleFacts;
     final previousState = _status.state;
+    final holdTransition = _displayMatching.suppressTransition(
+      event.status.state,
+    );
     _status = event.status.state == PlayerState.error
         ? PlayerStatus(
             state: PlayerState.error,
@@ -350,7 +417,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final playback = _activeLoad?.request ?? _activePlayback;
     if (playback != null &&
         _activePartIndex < playback.parts.length &&
-        _allPartDurationsKnown(playback)) {
+        _usesAggregateCoordinates(playback)) {
       final offset = _partOffset(_activePartIndex)!;
       _position = offset + event.position;
       _duration = _partDurations.values.fold(Duration.zero, (a, b) => a + b);
@@ -360,6 +427,17 @@ class PlayerCoordinator extends ChangeNotifier {
     }
     _telemetry = event.telemetry;
     _tracks = event.tracks;
+    if (event.generation case final generation? when !terminal) {
+      _displayMatching.observe(generation, event.telemetry, event.position);
+      if (event.tracksUpdated) {
+        _displayMatching.tracksUpdated(
+          generation,
+          noVideo: !event.tracks.any(
+            (track) => track.type == PlayerTrackType.video && track.selected,
+          ),
+        );
+      }
+    }
     if (const {
       PlayerState.idle,
       PlayerState.ended,
@@ -413,8 +491,6 @@ class PlayerCoordinator extends ChangeNotifier {
               load.target ?? _nativePosition,
               Future.sync(recover),
             );
-            // A settled load has no caller waiting for its recovery. Pending
-            // loads instead settle through their shared part operation.
             if (!load.pending) {
               unawaited(_settleActiveAuthorization(recovery));
             }
@@ -422,6 +498,7 @@ class PlayerCoordinator extends ChangeNotifier {
           }
         }
       }
+      _displayMatching.cancelLoad();
       final audioCodec = event.tracks
           .where(
             (track) => track.type == PlayerTrackType.audio && track.selected,
@@ -458,6 +535,7 @@ class PlayerCoordinator extends ChangeNotifier {
         case PlayerState.paused:
         case PlayerState.buffering:
         case PlayerState.seeking:
+          if (holdTransition) break;
           if (!_preservePresentation &&
               event.status.state != previousState &&
               _overlay != PlayerOverlay.nowPlaying) {
@@ -465,6 +543,7 @@ class PlayerCoordinator extends ChangeNotifier {
           }
           break;
         case PlayerState.playing:
+          if (holdTransition) break;
           if (!_preservePresentation &&
               previousState != PlayerState.playing &&
               _overlay == PlayerOverlay.osd) {
@@ -501,8 +580,6 @@ class PlayerCoordinator extends ChangeNotifier {
               (playback == null
                   ? null
                   : playback.parts[load.partIndex].duration);
-          // Readiness clears the pending target after seeking. Until time-pos
-          // arrives, retain the live join's start as progress evidence.
           final position = load.lastPositivePosition > Duration.zero
               ? load.lastPositivePosition
               : load.startTarget ?? Duration.zero;
@@ -532,8 +609,6 @@ class PlayerCoordinator extends ChangeNotifier {
           break;
       }
     }
-    // Preserve the first readiness event itself, then let later state changes
-    // use the same presentation policy as a manually tuned program.
     if (_preservePresentation &&
         load != null &&
         (event.status.state == PlayerState.ready ||
@@ -553,14 +628,11 @@ class PlayerCoordinator extends ChangeNotifier {
     if (endedProgram == null) _clearTransientStatus();
     _resolvingProgram = null;
     final generation = ++_tuneGeneration;
-    // Automatic continuation changes media, not the user's current presentation.
-    // Keep this identity through the first readiness event; never restore a
-    // snapshot that could overwrite an overlay opened or closed during loading.
     _continuationGeneration = endedProgram == null ? null : generation;
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
-    final nativeStop = _beginNativeStop();
     _tuning = true;
+    final nativeStop = _beginNativeStop();
     _canRetry = false;
     _error = null;
     _retryChannelId = channelId;
@@ -648,7 +720,6 @@ class PlayerCoordinator extends ChangeNotifier {
         program = successor;
         fromBeginning = true;
       }
-      // A stale or incomplete schedule must never replay the item that ended.
       if (program.id == endedProgram.id) {
         _tuning = false;
         _retireEndedPlayback();
@@ -786,6 +857,9 @@ class PlayerCoordinator extends ChangeNotifier {
       authorizationRetried: authorizationRetried,
     );
     _activeLoad = load;
+    _displayMatching.cancelLoad();
+    _updateDisplaySession();
+    final startPaused = _displayMatching.beginLoad(load.generation, target);
     _nativeCleanupRequired = true;
     _nativePosition = Duration.zero;
     _telemetry = const PlayerTelemetry();
@@ -796,6 +870,19 @@ class PlayerCoordinator extends ChangeNotifier {
         media,
         plexToken: request?.plexToken,
         generation: load.generation,
+        startPaused: startPaused,
+      ),
+    );
+    unawaited(
+      load.readiness.then(
+        (_) {
+          if (!_ownsLoad(load)) return;
+          _displayMatching.ready(load.generation);
+          if (displayHoldActive) notifyListeners();
+        },
+        onError: (Object _) {
+          if (_ownsLoad(load)) _displayMatching.cancelLoad();
+        },
       ),
     );
     return load;
@@ -866,8 +953,6 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       if (!_ownsLoad(load)) return null;
       if (failure != null) throw failure;
-      // New seek intents update this load's target while readiness or a seek
-      // is pending. Only this operation applies it, including retry loads.
       while (load.target != null) {
         final target = load.target!;
         if (_nativePosition != target) {
@@ -988,8 +1073,11 @@ class PlayerCoordinator extends ChangeNotifier {
       identical(_activePlayback, recovery.rejected.request) &&
       _ownsLoad(recovery.replacement ?? recovery.rejected);
 
-  bool _allPartDurationsKnown(LineupPlaybackRequest request) =>
-      request.parts.length == _partDurations.length;
+  bool _usesAggregateCoordinates(LineupPlaybackRequest request) =>
+      request.parts.length == _partDurations.length &&
+      request.parts.asMap().keys.every(
+        (index) => _partDurations.containsKey(index),
+      );
 
   Duration? _partOffset(int partIndex) {
     var offset = Duration.zero;
@@ -1019,6 +1107,25 @@ class PlayerCoordinator extends ChangeNotifier {
       remaining -= duration;
     }
     return null;
+  }
+
+  (int, Duration)? _interactivePartForPosition(
+    LineupPlaybackRequest request,
+    Duration position,
+  ) {
+    if (_usesAggregateCoordinates(request)) {
+      return _partForPosition(request, position);
+    }
+    final load = _activeLoad;
+    if (load == null ||
+        load.request == null ||
+        load.tuneGeneration != _tuneGeneration) {
+      return null;
+    }
+    return (
+      load.partIndex,
+      position < Duration.zero ? Duration.zero : position,
+    );
   }
 
   Future<void> _advancePart(
@@ -1077,9 +1184,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (nativeStop != null) {
       try {
         await nativeStop;
-      } catch (_) {
-        // The transition failure remains the useful error.
-      }
+      } catch (_) {}
     }
     if (_disposed || tuneGeneration != _tuneGeneration) return;
     _recordPlaybackFailure(error);
@@ -1100,14 +1205,20 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> togglePlayback() =>
-      _status.state == PlayerState.playing ? pause() : play();
+      (displayHoldActive || _status.state == PlayerState.playing)
+      ? pause()
+      : play();
 
   Future<void> play() async {
     if (await _expireSleepIfNeeded()) return;
+    _displayMatching.userPlay();
     await _runPlaybackControl('play', player.play);
   }
 
-  Future<void> pause() => _runPlaybackControl('pause', player.pause);
+  Future<void> pause() {
+    _displayMatching.userPause();
+    return _runPlaybackControl('pause', player.pause);
+  }
 
   Future<void> stop() async {
     _clearSleepTimer();
@@ -1174,7 +1285,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final playback = _activePlayback;
     final target = playback == null
         ? null
-        : _partForPosition(playback, position);
+        : _interactivePartForPosition(playback, position);
     final load = _activeLoad;
     try {
       if (playback != null && target != null && load != null) {
@@ -1375,8 +1486,6 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void showSleepTimer() {
-    // The picker belongs to the OSD presentation. Keep the mounted OSD (and
-    // its presentation generation) stable when it is opened from the OSD.
     if (_overlay != PlayerOverlay.osd) {
       _setOverlay(PlayerOverlay.osd, timed: false);
     } else {
@@ -1808,9 +1917,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (stop == null) return;
     try {
       await stop;
-    } catch (_) {
-      // The original tune failure remains the useful error.
-    }
+    } catch (_) {}
   }
 
   Future<void>? _beginNativeStop({bool force = false}) {
@@ -1843,6 +1950,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _retirePlaybackIntent() {
+    _displayMatching.cancelLoad();
     ++_trackSelectionGeneration;
     _clearTrackSelection();
     _activeLoad = null;
@@ -1859,9 +1967,7 @@ class PlayerCoordinator extends ChangeNotifier {
       PlayerUnavailable(:final failureCode) => failureCode,
       _ => 'unexpected',
     };
-    final code = RegExp(r'^[a-z][a-z0-9_-]{0,63}$').hasMatch(rawCode)
-        ? rawCode
-        : 'unexpected';
+    final code = Diagnostics.failureCategory(rawCode) ?? 'unexpected';
     lineup.diagnostics.add('playback', 'Playback request failed', {
       if (operation != 'request') 'operation': operation,
       'code': code,
@@ -1894,6 +2000,9 @@ class PlayerCoordinator extends ChangeNotifier {
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
+    _displayMatching.dispose();
+    unawaited(_cancelPlayerSubscription(_displaySubscription));
+    _displaySubscription = null;
     ++_tuneGeneration;
     ++_controlGeneration;
     ++_sleepEpoch;
@@ -1901,7 +2010,8 @@ class PlayerCoordinator extends ChangeNotifier {
     _tuning = false;
     lineup.removeListener(_lineupChanged);
     guide.removeListener(_guideChanged);
-    _subscription?.cancel();
+    unawaited(_cancelPlayerSubscription(_subscription));
+    _subscription = null;
     _cancelOverlayTimer();
     _sleepTimer?.cancel();
     _cursorTimer?.cancel();
@@ -1912,10 +2022,24 @@ class PlayerCoordinator extends ChangeNotifier {
     unawaited(fullscreenReset.catchError((_) {}));
     super.dispose();
   }
+
+  Future<void> _cancelPlayerSubscription(
+    StreamSubscription<Object?>? subscription,
+  ) async {
+    try {
+      await subscription?.cancel();
+    } catch (_) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: StateError('Native player subscription cleanup failed.'),
+          library: 'Lineup Desktop',
+          context: ErrorDescription('while cancelling native player events'),
+        ),
+      );
+    }
+  }
 }
 
-// The native identity, logical part, readiness, and mutable target travel
-// together. Tune, seek intent, and track confirmation retain separate identities.
 class _PlaybackLoad {
   _PlaybackLoad({
     required this.generation,

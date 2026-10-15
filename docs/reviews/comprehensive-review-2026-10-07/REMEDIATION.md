@@ -2,7 +2,7 @@
 
 ## Scope and authority
 
-This companion to [REPORT.md](REPORT.md) was written as a planning-only artifact for reviewed source `0382c131713174d9f8bced9d5b942855a99a6414` on `codex/desktop-ui-second-pass`. Findings passed independent evidence calibration. On October 8 the user authorized local implementation from `01bda7960431ba8d7448a69cceabfaeb9cf686d4` through [the remediation handoff](../../codex-handoff-2026-10-08-remediation.md). The original review remained read-only; the execution authorization below supersedes its stopping boundary.
+This companion to [REPORT.md](REPORT.md) was written as a planning-only artifact for reviewed source `0382c131713174d9f8bced9d5b942855a99a6414` on `codex/desktop-ui-second-pass`. Findings passed independent evidence calibration. On October 8 the user authorized local implementation from `01bda7960431ba8d7448a69cceabfaeb9cf686d4` through the remediation handoff (available in [Git history](../../README.md#historical-material-in-git)). The original review remained read-only; the execution authorization below supersedes its stopping boundary.
 
 Authorized packages: P1–P7, P9, P10, and the new P11–P13 below. P13 shares P6's chat and follows P6's corrections. P8/F15 is deferred to the Windows session; H1/H2 and other live observations remain evidence requests. Existing planned native, release, token-compensation and live-collection refresh work is not duplicated. The user has now settled F03/F18/D3 as recorded below.
 
@@ -197,3 +197,19 @@ Wave 1: P1, P5, P6 (+P13 after P6), P7, P9 and P10 research run in parallel with
 Before each package, recheck its mechanism at `01bda796`/the actual integrated starting state and drop/narrow already resolved work with evidence. Each child follows its configured worker/worker_luna preset, owns only assigned files, formats its changed paths, runs meaningful existing targeted checks and returns one terminal completion/blocked report. The controller reviews and commits accepted packages with finding IDs. After each integration wave run formatting, analysis and the full Eastern-timezone suite. At the end, obtain one independent read-only review of the complete diff from `01bda796`, adjudicate/repair accepted findings, rerun the full checks and annotate REPORT.md with resolution commits.
 
 Hold P11 Sign out renders, P13 Now-emphasis renders, and any visible copy/layout beyond this plan's stated direction for user approval **before commit**. Include P3's playlist phase in that render review; routine status-line copy may be batched. Complete concrete implementation/evidence before requesting approval. Native Windows behavior remains unverified until its separate session.
+
+## Execution record — October 8
+
+The local product integration from `01bda7960431ba8d7448a69cceabfaeb9cf686d4` is complete through `9aebd4c73c5e6ebf5f81083c8e9dc7bebaca1065`; P10 documentation reconciliation and the final independent whole-diff review remain in progress. The [report execution ledger](REPORT.md#october-8-remediation-execution-update) records each executor, finding, resolution commit and distinguishing tests. The original frozen review and gate evidence remain historical.
+
+Actual integration order was P1, P9, P7, P5, P2, P12, P3, P6, P4, P13, P11. Disjoint investigation/implementation overlapped; controller and Guide ownership overlaps were serialized. Every shared Flutter command used the exclusive ignored lock. No child committed. The controller reviewed concrete diffs, corrected P2's measured excessive cost and P4's initially missing first-run nested return, and committed accepted packages locally. No push, PR or merge occurred.
+
+The user's later render refinements are binding:
+
+- P6 failure copy uses the restored visible-hours value: “Couldn't change visible hours. Still showing N hours.”; singular “hour” for one; Retry keeps the requested choice. Its opaque themed banner paints above the grid and now-line. Both-size renders and painted intersections were checked before the authorized commit.
+- P13 off-screen Now uses the same subtle border as the hours dropdown and neutral text: **← Now** for a future window, **Now →** for a past window. Tooltip and accessible label are “Return to live”. Visible/live Now retains plain styling. Matched live/future/past renders at 1920×1080 and 960×720 were inspected before the authorized commit.
+- P11 matched Sign out renders were presented before the user's later instruction to organize and commit remaining code. Only its six owned source/test files were included in that commit; protected untracked paths were preserved.
+
+P8/F15 is explicitly deferred, not dropped or marked resolved. H1/H2, existing collection-refresh/schedule-boundary/credential-compensation decisions and native/release work retain their prior owner and scope. Remaining Windows acceptance follows the report's L1–L13 plus both prior plans, on the final candidate with the pinned engine/libmpv. Portable tests, source traces and render approval do not prove physical Windows behavior.
+
+Latest stable combined gate: format (160 files, zero changes), analyze and 1,295 tests passed with integrated P13 and the exact unchanged P11 patch subsequently committed. Final review disposition, verification and P10 commit will be recorded before completion.

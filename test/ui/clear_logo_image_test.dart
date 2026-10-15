@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -80,6 +81,181 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('intrinsic logo probing releases a cold image handle', (
+    tester,
+  ) async {
+    final referenceHandles = await _measureColdReferenceHandles(
+      tester,
+      await _solidLogoBytes(tester, size: const Size(620, 120)),
+    );
+    final bytes = await _solidLogoBytes(tester);
+    final stream = MemoryImage(bytes).resolve(const ImageConfiguration());
+    ImageInfo? captured;
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener((info, _) {
+      if (captured != null) {
+        info.dispose();
+      } else {
+        captured = info;
+      }
+    });
+    stream.addListener(listener);
+    var listenerRemoved = false;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.centerLeft,
+            child: ClearLogoImage(
+              bytes,
+              maximumSize: const Size(420, 84),
+              minimumVisibleSize: const Size(96, 28),
+              imageKey: const Key('accepted-logo'),
+              fallback: const Text('Readable title'),
+            ),
+          ),
+        ),
+      );
+      for (var i = 0; i < 4; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 40)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      stream.removeListener(listener);
+      listenerRemoved = true;
+      await _clearImageCache(tester);
+
+      expect(captured, isNotNull);
+      expect(
+        captured!.image.debugGetOpenHandleStackTraces()!.length,
+        referenceHandles,
+      );
+    } finally {
+      if (!listenerRemoved) stream.removeListener(listener);
+      captured?.dispose();
+      await _clearImageCache(tester);
+    }
+  });
+
+  testWidgets(
+    'intrinsic logo probing releases cached handles across replacement',
+    (tester) async {
+      final referenceHandles = await _measureColdReferenceHandles(
+        tester,
+        await _solidLogoBytes(tester, size: const Size(620, 120)),
+      );
+      final firstBytes = await _solidLogoBytes(tester);
+      final replacementBytes = await _solidLogoBytes(
+        tester,
+        size: const Size(480, 120),
+      );
+      await _show(tester, firstBytes);
+      final captured = await _captureImageInfo(firstBytes);
+      try {
+        await _show(tester, replacementBytes);
+        await _show(tester, firstBytes);
+        await _show(tester, replacementBytes);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await _clearImageCache(tester);
+
+        expect(
+          captured.image.debugGetOpenHandleStackTraces()!.length,
+          referenceHandles,
+        );
+      } finally {
+        captured.dispose();
+        await _clearImageCache(tester);
+      }
+    },
+  );
+}
+
+Future<int> _measureColdReferenceHandles(
+  WidgetTester tester,
+  Uint8List bytes,
+) async {
+  final stream = MemoryImage(bytes).resolve(const ImageConfiguration());
+  ImageInfo? captured;
+  late final ImageStreamListener listener;
+  listener = ImageStreamListener((info, _) {
+    if (captured != null) {
+      info.dispose();
+    } else {
+      captured = info;
+    }
+  });
+  stream.addListener(listener);
+  var listenerRemoved = false;
+  try {
+    for (var i = 0; i < 4 && captured == null; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 40)),
+      );
+      await tester.pump();
+    }
+    expect(captured, isNotNull);
+    stream.removeListener(listener);
+    listenerRemoved = true;
+    await _clearImageCache(tester);
+    return captured!.image.debugGetOpenHandleStackTraces()!.length;
+  } finally {
+    if (!listenerRemoved) stream.removeListener(listener);
+    captured?.dispose();
+    await _clearImageCache(tester);
+  }
+}
+
+Future<Uint8List> _solidLogoBytes(
+  WidgetTester tester, {
+  Size size = const Size(600, 120),
+}) async {
+  final bytes = await tester.runAsync(() async {
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder)
+        .drawRect(Offset.zero & size, Paint()..color = Colors.white);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      size.width.toInt(),
+      size.height.toInt(),
+    );
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    return data!.buffer.asUint8List();
+  });
+  return bytes!;
+}
+
+Future<ImageInfo> _captureImageInfo(Uint8List bytes) async {
+  final stream = MemoryImage(bytes).resolve(const ImageConfiguration());
+  final delivered = Completer<ImageInfo>();
+  late final ImageStreamListener listener;
+  listener = ImageStreamListener((info, _) {
+    if (delivered.isCompleted) {
+      info.dispose();
+    } else {
+      delivered.complete(info);
+    }
+  });
+  stream.addListener(listener);
+  try {
+    return await delivered.future;
+  } finally {
+    stream.removeListener(listener);
+  }
+}
+
+Future<void> _clearImageCache(WidgetTester tester) async {
+  PaintingBinding.instance.imageCache
+    ..clear()
+    ..clearLiveImages();
+  await tester.pump();
+  await tester.pump();
 }
 
 Future<void> _show(

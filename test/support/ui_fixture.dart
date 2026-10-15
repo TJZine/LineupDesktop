@@ -16,9 +16,11 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 class UiFixture {
   UiFixture({
     FixtureController? controller,
+    LineupScenario? scenario,
     FixturePlayer? player,
     this.guideClock,
-  }) : controller = controller ?? FixtureController(),
+  }) : assert(controller == null || scenario == null),
+       controller = controller ?? FixtureController(scenario: scenario),
        player = player ?? FixturePlayer();
 
   final FixtureController controller;
@@ -33,11 +35,17 @@ class UiFixture {
 }
 
 class FixtureController extends LineupController {
-  FixtureController({FixtureStore? store, bool restoreOnInitialize = false})
-    : this._(store ?? FixtureStore(), restoreOnInitialize);
+  FixtureController({
+    FixtureStore? store,
+    bool restoreOnInitialize = false,
+    LineupScenario? scenario,
+  }) : this._(store ?? FixtureStore(), restoreOnInitialize, scenario);
 
-  FixtureController._(FixtureStore store, this.restoreOnInitialize)
-    : fixtureStore = store,
+  FixtureController._(
+    FixtureStore store,
+    this.restoreOnInitialize,
+    LineupScenario? scenario,
+  ) : fixtureStore = store,
       super(
         store: store,
         credentials: _MemoryCredentials(),
@@ -48,10 +56,16 @@ class FixtureController extends LineupController {
           ),
         ),
       ) {
-    connection = PlexConnection(
-      uri: Uri.parse('https://synthetic.invalid'),
-      local: true,
-      relay: false,
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(
+          connection: PlexConnection(
+            uri: Uri.parse('https://synthetic.invalid'),
+            local: true,
+            relay: false,
+          ),
+        ),
+      ),
     );
   }
 
@@ -87,8 +101,11 @@ Future<void> openDestination(WidgetTester tester, String destination) async {
 }
 
 class FixturePlayer implements NativePlayer {
+  FixturePlayer() : _eventGeneration = 0;
+  FixturePlayer.preloaded() : _eventGeneration = null;
+
   final _events = StreamController<PlayerEvent>.broadcast();
-  int generation = 0;
+  int? _eventGeneration;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
     message: 'Test player is idle',
@@ -97,6 +114,8 @@ class FixturePlayer implements NativePlayer {
   Duration _duration = Duration.zero;
   PlayerTelemetry _telemetry = const PlayerTelemetry();
   List<PlayerTrack> _tracks = const [];
+
+  int get generation => _eventGeneration ?? 0;
 
   @override
   PlayerStatus get status => _status;
@@ -110,14 +129,27 @@ class FixturePlayer implements NativePlayer {
   @override
   List<PlayerTrack> get tracks => _tracks;
   @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.initial();
+  @override
   Stream<PlayerEvent> get events => _events.stream;
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
-    this.generation = generation ?? this.generation + 1;
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
+    _eventGeneration = generation ?? this.generation + 1;
     emit(const PlayerStatus(state: PlayerState.loading, message: 'Loading'));
   }
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   @override
   Future<void> pause() async {}
@@ -159,7 +191,7 @@ class FixturePlayer implements NativePlayer {
         duration: _duration,
         telemetry: _telemetry,
         tracks: _tracks,
-        generation: eventGeneration ?? generation,
+        generation: eventGeneration ?? _eventGeneration,
       ),
     );
   }

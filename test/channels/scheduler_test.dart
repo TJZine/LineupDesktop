@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
+import 'package:lineup_desktop/plex/plex_client.dart';
 
 void main() {
   final items = [
@@ -8,6 +10,196 @@ void main() {
     const ChannelItem(id: 'b', title: 'B', duration: Duration(minutes: 20)),
   ];
   final anchor = DateTime.utc(2026, 1, 1, 12);
+
+  final invalidDuration = throwsA(
+    isA<ScheduleBuildException>().having(
+      (error) => error.reason,
+      'reason',
+      ScheduleFailureReason.invalidProgramDuration,
+    ),
+  );
+
+  ChannelItem parsedDuration(int milliseconds, [String id = 'parsed']) =>
+      channelItemFor(
+        parseMediaItem({
+          'ratingKey': id,
+          'title': 'Synthetic',
+          'type': 'movie',
+          'duration': milliseconds,
+          'Media': [
+            {
+              'Part': [
+                {'key': '/library/parts/synthetic'},
+              ],
+            },
+          ],
+        }, libraryId: 'library'),
+      );
+
+  ScheduleIndex sequential(
+    List<ChannelItem> values, {
+    ScheduleTransition? transition,
+  }) => buildSchedule(
+    values,
+    mode: PlaybackMode.sequential,
+    seed: 1,
+    transition: transition,
+  );
+
+  test('real parsed media projects normally and rejects extreme positive durations', () {
+    final normal = parsedDuration(1800000);
+    final schedule = sequential([normal]);
+    expect(
+      programAt(anchor, anchor, schedule).end,
+      anchor.add(const Duration(minutes: 30)),
+    );
+    expect(
+      scheduleWindow(
+        anchor,
+        anchor.add(const Duration(hours: 1)),
+        anchor,
+        schedule,
+      ),
+      hasLength(2),
+    );
+    final extreme = parsedDuration(9007199254740991);
+    expect(() => sequential([extreme]), invalidDuration);
+    expect(
+      () => sequential([extreme, parsedDuration(9007199254740991, 'second')]),
+      invalidDuration,
+    );
+    final long = parsedDuration(5000000000000000);
+    expect(sequential([long]).loopDuration, long.duration);
+    expect(() => sequential([long, long]), invalidDuration);
+  });
+
+  test(
+    'direct and persisted items and legacy transition share duration checks',
+    () {
+      const extreme = ChannelItem(
+        id: 'direct',
+        title: 'Direct',
+        duration: Duration(microseconds: 9007199254740991000),
+      );
+      final persisted = ChannelItem.fromJson(extreme.toJson());
+      expect(() => sequential([extreme]), invalidDuration);
+      expect(() => sequential([persisted]), invalidDuration);
+      expect(
+        () => sequential(
+          items,
+          transition: ScheduleTransition(
+            boundary: anchor,
+            legacyCycleItems: [persisted],
+          ),
+        ),
+        invalidDuration,
+      );
+      expect(
+        () => sequential(
+          items,
+          transition: ScheduleTransition(
+            boundary: anchor,
+            legacyCycleItems: [
+              parsedDuration(5000000000000000),
+              parsedDuration(5000000000000000),
+            ],
+          ),
+        ),
+        invalidDuration,
+      );
+      expect(
+        () => sequential(
+          items,
+          transition: ScheduleTransition(
+            boundary: anchor,
+            legacyCycleItems: const [],
+          ),
+        ),
+        invalidDuration,
+      );
+    },
+  );
+
+  test(
+    'reconstructed indexes reject inconsistent arithmetic before publication',
+    () {
+      expect(
+        () => ScheduleIndex(
+          items: items,
+          offsets: const [Duration.zero],
+          loopDuration: const Duration(minutes: 30),
+          mode: PlaybackMode.sequential,
+          seed: 1,
+          scheduleVersion: 1,
+        ),
+        invalidDuration,
+      );
+      expect(
+        () => ScheduleIndex(
+          items: items,
+          offsets: const [Duration.zero, Duration(minutes: 10)],
+          loopDuration: const Duration(minutes: -30),
+          mode: PlaybackMode.sequential,
+          seed: 1,
+          scheduleVersion: 1,
+        ),
+        invalidDuration,
+      );
+    },
+  );
+
+  test('projection is exact across opposite DateTime endpoints and fails at range edges', () {
+    const maximum = 8640000000000000000;
+    final minimum = DateTime.fromMicrosecondsSinceEpoch(-maximum, isUtc: true);
+    final latest = DateTime.fromMicrosecondsSinceEpoch(maximum, isUtc: true);
+    final schedule = sequential([
+      const ChannelItem(
+        id: 'hour',
+        title: 'Hour',
+        duration: Duration(hours: 1),
+      ),
+    ]);
+    final nearEnd = latest.subtract(const Duration(hours: 1));
+    for (final mode in [PlaybackMode.sequential, PlaybackMode.shuffle]) {
+      final index = buildSchedule(
+        schedule.items,
+        mode: mode,
+        seed: 1,
+        scheduleVersion: 2,
+      );
+      final forward = programAt(nearEnd, minimum, index);
+      expect(forward.start, nearEnd);
+      expect(forward.end, latest);
+      final backward = programAt(minimum, latest, index);
+      expect(backward.start, minimum);
+      expect(backward.end, minimum.add(const Duration(hours: 1)));
+      expect(() => programAt(latest, minimum, index), invalidDuration);
+    }
+    final transition = sequential(
+      schedule.items,
+      transition: ScheduleTransition(
+        boundary: latest,
+        legacyCycleItems: schedule.items,
+      ),
+    );
+    expect(programAt(minimum, anchor, transition).start, minimum);
+    expect(() => programAt(latest, anchor, transition), invalidDuration);
+    final nonAligned = latest.subtract(const Duration(minutes: 1));
+    final channel = Channel(
+      id: 'legacy',
+      number: 1,
+      name: 'Legacy',
+      scheduleVersion: 1,
+      source: ManualSource(schedule.items),
+      playbackMode: PlaybackMode.sequential,
+      anchor: nonAligned,
+      shuffleSeed: 1,
+    );
+    expect(
+      () => migrateLegacySchedule(channel, schedule.items, nonAligned),
+      invalidDuration,
+    );
+  });
 
   test('invalid schedules report stable failure reasons', () {
     Matcher failsWith(ScheduleFailureReason reason) => throwsA(

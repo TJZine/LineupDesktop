@@ -12,7 +12,9 @@
 
 Starting comparison: `cbf3dbd5`, September 9, 2026. The user accepted the comparison
 as useful; **no application surface is visually approved by that statement**.
-Follow the [collaborative handoff](desktop-ui-collaborative-handoff.md).
+New work follows [AGENTS.md](../AGENTS.md) and the
+[project profile](../.agents/project.md). The completed collaborative handoff is
+available in Git history; see the [documentation index](README.md#historical-material-in-git).
 
 Use `Unreviewed`, `In review`, `Changes requested`, or `Approved at 1080p` for the
 visual column. The adaptation column separately records other resolutions,
@@ -1206,8 +1208,8 @@ this bounded correction; root retains tests, capture and acceptance review.
 Worker-context preference recorded during the Studio second pass: use a fresh
 Luna worker per new surface family/type, then reuse it only within that family.
 The user explicitly permits continuing with the current worker for Studio; the
-[collaborative handoff](desktop-ui-collaborative-handoff.md) now carries this
-standing preference.
+collaborative handoff recorded that campaign preference. Its execution policy
+is historical, as explained in the authority notice above.
 
 
 ### Studio second-pass candidate07 — awaiting approval

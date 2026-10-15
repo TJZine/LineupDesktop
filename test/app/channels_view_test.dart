@@ -14,13 +14,16 @@ void main() {
   testWidgets(
     'selection survives search and batch delete receives the reviewed channels',
     (tester) async {
-      final controller = _RecordingDirectoryController()
-        ..stage = SetupStage.ready
-        ..channels = [
-          _channel('first', 2, 'First'),
-          _channel('second', 7, 'Second'),
-          _channel('third', 20, 'Third', generated: true),
-        ];
+      final controller = _RecordingDirectoryController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel('first', 2, 'First'),
+            _channel('second', 7, 'Second'),
+            _channel('third', 20, 'Third', generated: true),
+          ],
+        ),
+      );
       final fixture = UiFixture(controller: controller);
       await tester.pumpWidget(fixture.build());
       await tester.pump();
@@ -90,13 +93,16 @@ void main() {
   testWidgets('reorder previews retained number gaps and saves one order', (
     tester,
   ) async {
-    final controller = _RecordingDirectoryController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        _channel('first', 2, 'First'),
-        _channel('second', 7, 'Second'),
-        _channel('third', 20, 'Third'),
-      ];
+    final controller = _RecordingDirectoryController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel('first', 2, 'First'),
+          _channel('second', 7, 'Second'),
+          _channel('third', 20, 'Third'),
+        ],
+      ),
+    );
     controller.pendingReorder = Completer<void>();
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
@@ -133,12 +139,15 @@ void main() {
   testWidgets(
     'reorder uses the directory number label and compact move action',
     (tester) async {
-      final controller = _RecordingDirectoryController()
-        ..stage = SetupStage.ready
-        ..channels = [
-          _channel('first', 2, 'First'),
-          _channel('second', 7, 'Second'),
-        ];
+      final controller = _RecordingDirectoryController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel('first', 2, 'First'),
+            _channel('second', 7, 'Second'),
+          ],
+        ),
+      );
       await tester.pumpWidget(UiFixture(controller: controller).build());
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
@@ -182,12 +191,20 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        final controller = _RecordingDirectoryController()
-          ..stage = SetupStage.ready
-          ..channels = [
-            _channel('first', 2, 'First', source: const PlaylistSource('P')),
-            _channel('second', 7, 'Second', source: const PlaylistSource('P')),
-          ];
+        final controller = _RecordingDirectoryController(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('first', 2, 'First', source: const PlaylistSource('P')),
+              _channel(
+                'second',
+                7,
+                'Second',
+                source: const PlaylistSource('P'),
+              ),
+            ],
+          ),
+        );
         await tester.pumpWidget(UiFixture(controller: controller).build());
         await tester.pumpAndSettle();
         await openDestination(tester, 'Channels');
@@ -230,9 +247,12 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     const longName =
         'A very long channel name that wraps across multiple lines in the deletion confirmation';
-    final controller = _RecordingDirectoryController()
-      ..stage = SetupStage.ready
-      ..channels = [_channel('long', 42, longName, generated: true)];
+    final controller = _RecordingDirectoryController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_channel('long', 42, longName, generated: true)],
+      ),
+    );
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
@@ -269,12 +289,15 @@ void main() {
   testWidgets('removed focused row restores focus to a surviving channel', (
     tester,
   ) async {
-    final controller = _RecordingDirectoryController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        _channel('first', 1, 'First'),
-        _channel('second', 2, 'Second'),
-      ];
+    final controller = _RecordingDirectoryController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel('first', 1, 'First'),
+          _channel('second', 2, 'Second'),
+        ],
+      ),
+    );
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
@@ -287,7 +310,7 @@ void main() {
         .firstWhere((node) => node.debugLabel == 'Open First');
     firstFocus.requestFocus();
     await tester.pump();
-    controller.channels = [controller.channels.last];
+    controller.fixtureActor.replaceChannels([controller.channels.last]);
     controller.notifyListeners();
     await tester.pump();
     await tester.pump();
@@ -298,13 +321,15 @@ void main() {
     testWidgets(
       '${batch ? 'batch' : 'single'} deletion locks mutations and retains retry scope',
       (tester) async {
-        final controller = _RecordingDirectoryController()
-          ..stage = SetupStage.ready
-          ..channels = [
-            _channel('first', 2, 'First'),
-            _channel('second', 7, 'Second'),
-          ]
-          ..pendingDelete = Completer<void>();
+        final controller = _RecordingDirectoryController(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('first', 2, 'First'),
+              _channel('second', 7, 'Second'),
+            ],
+          ),
+        )..pendingDelete = Completer<void>();
         await tester.pumpWidget(UiFixture(controller: controller).build());
         await tester.pumpAndSettle();
         await openDestination(tester, 'Channels');
@@ -367,12 +392,15 @@ void main() {
   testWidgets(
     'batch deletion restores an actionable surviving row or empty action',
     (tester) async {
-      final controller = _RecordingDirectoryController()
-        ..stage = SetupStage.ready
-        ..channels = [
-          _channel('first', 2, 'First'),
-          _channel('second', 7, 'Second'),
-        ];
+      final controller = _RecordingDirectoryController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel('first', 2, 'First'),
+            _channel('second', 7, 'Second'),
+          ],
+        ),
+      );
       await tester.pumpWidget(UiFixture(controller: controller).build());
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
@@ -431,6 +459,8 @@ Channel _channel(
 );
 
 class _RecordingDirectoryController extends FixtureController {
+  _RecordingDirectoryController({super.scenario});
+
   Completer<void>? pendingDelete;
   Completer<void>? pendingReorder;
   List<Channel> deleted = const [];
@@ -442,7 +472,9 @@ class _RecordingDirectoryController extends FixtureController {
     deleted = List.unmodifiable(expectedChannels);
     await pendingDelete?.future;
     final ids = expectedChannels.map((channel) => channel.id).toSet();
-    channels = channels.where((channel) => !ids.contains(channel.id)).toList();
+    fixtureActor.replaceChannels(
+      channels.where((channel) => !ids.contains(channel.id)).toList(),
+    );
     notifyListeners();
   }
 

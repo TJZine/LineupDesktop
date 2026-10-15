@@ -47,15 +47,12 @@ def _load_capture_directory(path):
         if not isinstance(data, list):
             raise ValueError(f'JSON probe is not a list: {file.stem}')
         captures[file.stem] = data
-    # Text-free scenes such as the buffering arc are valid. A wholly empty
-    # directory cannot establish any text geometry and must still fail.
     if not any(captures.values()):
         raise ValueError('capture directory has no text geometry')
     return captures
 
 
 def _flatten(probes):
-    """Yield paragraph and nested text-run geometry without shortening identity."""
     for probe in probes:
         if not isinstance(probe, dict):
             raise ValueError('probe entry is not an object')

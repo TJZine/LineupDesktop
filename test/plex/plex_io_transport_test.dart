@@ -57,7 +57,6 @@ void main() {
         await received.future.timeout(const Duration(seconds: 2));
         if (cancelScan) cancelled.complete();
         await assertion;
-        // Observe the peer closing before client.close(): timeout alone is not proof.
         await disconnected.future.timeout(const Duration(seconds: 2));
       },
     );

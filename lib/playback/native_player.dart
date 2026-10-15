@@ -6,12 +6,19 @@ abstract interface class NativePlayer {
   Duration get duration;
   PlayerTelemetry get telemetry;
   List<PlayerTrack> get tracks;
+  DisplayMatchingReport get displayReport;
 
   /// A hot broadcast stream of player state snapshots.
   ///
   /// Implementations must allow multiple simultaneous listeners. Events
   /// emitted without listeners are not buffered for later delivery.
   Stream<PlayerEvent> get events;
+
+  /// A hot broadcast stream of player-scoped display matching reports.
+  ///
+  /// Reports are not associated with a media load. Implementations must keep
+  /// them independent from [events] and allow multiple listeners.
+  Stream<DisplayMatchingReport> get displayReports;
 
   Future<void> initialize();
 
@@ -28,7 +35,13 @@ abstract interface class NativePlayer {
   /// Windows disables libmpv reference following and automatic external-file
   /// loading. Nested-reference media (including same-server HLS, DASH, MOV
   /// references, and external-segment ordered chapters) is unsupported.
-  Future<void> load(Uri media, {String? plexToken, int? generation});
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  });
+  Future<void> setDisplayMatching(DisplayMatchingRequest request);
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);
@@ -51,6 +64,236 @@ abstract interface class NativePlayer {
   /// responsibility and may retry. Replacement loads wait for pending cleanup.
   Future<void> stop();
   Future<void> dispose();
+}
+
+enum DisplayMatchingState { hdr, sdr, unknown }
+
+enum DisplayMatchingSessionState { inactive, active, suspended, unavailable }
+
+enum DisplayMatchingOutcome { idle, pending, matched, failed }
+
+enum DisplayMatchingReason {
+  unsupportedApi,
+  notHdrCapable,
+  ambiguousTarget,
+  stateUnknown,
+  guardianUnavailable,
+  setRejected,
+  notObserved,
+  externalChange,
+  restoreFailed,
+  targetLost,
+}
+
+enum DisplayMatchingRoute { hdrState, advancedColor, none }
+
+enum DisplayActiveColorMode { sdr, wcg, hdr, unknown }
+
+class DisplayMatchingRequest {
+  const DisplayMatchingRequest({
+    required this.revision,
+    required this.session,
+    required this.desired,
+  });
+
+  final int revision;
+  final bool session;
+  final DisplayMatchingState desired;
+
+  Map<String, Object?> toJson() => {
+    'revision': revision,
+    'session': session,
+    'desired': desired.name,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayMatchingRequest &&
+      revision == other.revision &&
+      session == other.session &&
+      desired == other.desired;
+
+  @override
+  int get hashCode => Object.hash(revision, session, desired);
+}
+
+class DisplayMatchingReport {
+  const DisplayMatchingReport({
+    required this.revision,
+    required this.session,
+    required this.observed,
+    required this.outcome,
+    required this.wrote,
+    required this.owned,
+    required this.reason,
+    required this.route,
+    required this.activeColorMode,
+  });
+
+  const DisplayMatchingReport.initial()
+    : this(
+        revision: 0,
+        session: DisplayMatchingSessionState.inactive,
+        observed: DisplayMatchingState.unknown,
+        outcome: DisplayMatchingOutcome.idle,
+        wrote: false,
+        owned: false,
+        reason: null,
+        route: DisplayMatchingRoute.none,
+        activeColorMode: null,
+      );
+
+  const DisplayMatchingReport.unavailable({
+    this.revision = 0,
+    this.reason = DisplayMatchingReason.unsupportedApi,
+  }) : session = DisplayMatchingSessionState.unavailable,
+       observed = DisplayMatchingState.unknown,
+       outcome = DisplayMatchingOutcome.failed,
+       wrote = false,
+       owned = false,
+       route = DisplayMatchingRoute.none,
+       activeColorMode = null;
+
+  final int revision;
+  final DisplayMatchingSessionState session;
+  final DisplayMatchingState observed;
+  final DisplayMatchingOutcome outcome;
+  final bool wrote;
+  final bool owned;
+  final DisplayMatchingReason? reason;
+  final DisplayMatchingRoute route;
+  final DisplayActiveColorMode? activeColorMode;
+
+  static DisplayMatchingReport? tryParse(Object? value) {
+    if (value is! Map) return null;
+    final map = Map<Object?, Object?>.from(value);
+    const requiredKeys = {
+      'revision',
+      'session',
+      'observed',
+      'outcome',
+      'wrote',
+      'owned',
+      'reason',
+      'route',
+      'activeColorMode',
+    };
+    if (!map.keys.toSet().containsAll(requiredKeys)) return null;
+    final revision = map['revision'];
+    final session = _sessionState(map['session']);
+    final observed = _matchingState(map['observed']);
+    final outcome = _outcome(map['outcome']);
+    final wrote = map['wrote'];
+    final owned = map['owned'];
+    final reasonValue = map['reason'];
+    final route = _route(map['route']);
+    final activeColorModeValue = map['activeColorMode'];
+    if (revision is! int ||
+        revision < 0 ||
+        session == null ||
+        observed == null ||
+        outcome == null ||
+        wrote is! bool ||
+        owned is! bool ||
+        route == null) {
+      return null;
+    }
+    final reason = _reason(reasonValue);
+    if (reasonValue != null && reason == null) return null;
+    final activeColorMode = _activeColorMode(activeColorModeValue);
+    if (activeColorModeValue != null && activeColorMode == null) return null;
+    return DisplayMatchingReport(
+      revision: revision,
+      session: session,
+      observed: observed,
+      outcome: outcome,
+      wrote: wrote,
+      owned: owned,
+      reason: reason,
+      route: route,
+      activeColorMode: activeColorMode,
+    );
+  }
+
+  static DisplayMatchingState? _matchingState(Object? value) => switch (value) {
+    'hdr' => DisplayMatchingState.hdr,
+    'sdr' => DisplayMatchingState.sdr,
+    'unknown' => DisplayMatchingState.unknown,
+    _ => null,
+  };
+
+  static DisplayMatchingSessionState? _sessionState(Object? value) =>
+      switch (value) {
+        'inactive' => DisplayMatchingSessionState.inactive,
+        'active' => DisplayMatchingSessionState.active,
+        'suspended' => DisplayMatchingSessionState.suspended,
+        'unavailable' => DisplayMatchingSessionState.unavailable,
+        _ => null,
+      };
+
+  static DisplayMatchingOutcome? _outcome(Object? value) => switch (value) {
+    'idle' => DisplayMatchingOutcome.idle,
+    'pending' => DisplayMatchingOutcome.pending,
+    'matched' => DisplayMatchingOutcome.matched,
+    'failed' => DisplayMatchingOutcome.failed,
+    _ => null,
+  };
+
+  static DisplayMatchingReason? _reason(Object? value) => switch (value) {
+    'unsupported_api' => DisplayMatchingReason.unsupportedApi,
+    'not_hdr_capable' => DisplayMatchingReason.notHdrCapable,
+    'ambiguous_target' => DisplayMatchingReason.ambiguousTarget,
+    'state_unknown' => DisplayMatchingReason.stateUnknown,
+    'guardian_unavailable' => DisplayMatchingReason.guardianUnavailable,
+    'set_rejected' => DisplayMatchingReason.setRejected,
+    'not_observed' => DisplayMatchingReason.notObserved,
+    'external_change' => DisplayMatchingReason.externalChange,
+    'restore_failed' => DisplayMatchingReason.restoreFailed,
+    'target_lost' => DisplayMatchingReason.targetLost,
+    _ => null,
+  };
+
+  static DisplayMatchingRoute? _route(Object? value) => switch (value) {
+    'hdr_state' => DisplayMatchingRoute.hdrState,
+    'advanced_color' => DisplayMatchingRoute.advancedColor,
+    'none' => DisplayMatchingRoute.none,
+    _ => null,
+  };
+
+  static DisplayActiveColorMode? _activeColorMode(Object? value) =>
+      switch (value) {
+        'sdr' => DisplayActiveColorMode.sdr,
+        'wcg' => DisplayActiveColorMode.wcg,
+        'hdr' => DisplayActiveColorMode.hdr,
+        'unknown' => DisplayActiveColorMode.unknown,
+        _ => null,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayMatchingReport &&
+      revision == other.revision &&
+      session == other.session &&
+      observed == other.observed &&
+      outcome == other.outcome &&
+      wrote == other.wrote &&
+      owned == other.owned &&
+      reason == other.reason &&
+      route == other.route &&
+      activeColorMode == other.activeColorMode;
+
+  @override
+  int get hashCode => Object.hash(
+    revision,
+    session,
+    observed,
+    outcome,
+    wrote,
+    owned,
+    reason,
+    route,
+    activeColorMode,
+  );
 }
 
 enum PlayerState {
@@ -90,6 +333,7 @@ class PlayerEvent {
     required this.duration,
     required this.telemetry,
     required this.tracks,
+    this.tracksUpdated = false,
     this.generation,
   });
 
@@ -98,6 +342,10 @@ class PlayerEvent {
   final Duration duration;
   final PlayerTelemetry telemetry;
   final List<PlayerTrack> tracks;
+
+  /// A track-list property update arrived for this load, including an empty list.
+  /// Other events may carry the reset snapshot without establishing no video.
+  final bool tracksUpdated;
 
   /// Identifies the media load associated with this event.
   ///
@@ -180,6 +428,9 @@ class PlayerTelemetry {
     this.hardwarePixelFormat,
     this.primaries,
     this.gamma,
+    this.targetGamma,
+    this.targetPrimaries,
+    this.targetPixelFormat,
     this.colorMatrix,
     this.signalPeak,
   });
@@ -194,6 +445,9 @@ class PlayerTelemetry {
   final String? hardwarePixelFormat;
   final String? primaries;
   final String? gamma;
+  final String? targetGamma;
+  final String? targetPrimaries;
+  final String? targetPixelFormat;
   final String? colorMatrix;
   final double? signalPeak;
 

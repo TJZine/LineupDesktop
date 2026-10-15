@@ -48,8 +48,8 @@ No new visual design was produced in this archive pass.
 | [settings-layout-comparison.html](settings-layout-comparison.html) | Settings A ONLY. B preview rejected. Account must include later approved signed-in account/sign-out section absent here. |
 | [lineup-menu-comparison.html](lineup-menu-comparison.html) | Compact anchored A ONLY. Remove mock Current caption; disabled Player helper becomes Choose a channel in Guide. Exact invoker anchoring required. |
 
-The chronological discussion is retained separately in
-[design history](../../desktop-ui-design-history.md). Historical visual filenames
+The superseded chronological discussion remains available in Git history;
+see the [documentation index](../../README.md#historical-material-in-git). Historical visual filenames
 not included here are not required to implement the approved package. For Welcome
 and protected OSD/Now Playing, also inspect the actual Flutter baseline; do not
 construct missing production states from mock context.

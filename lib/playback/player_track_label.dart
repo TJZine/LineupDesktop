@@ -2,7 +2,6 @@ import 'package:language_code/language_code.dart';
 
 import 'native_player.dart';
 
-/// The complete display contract for one audio or subtitle track.
 class PlayerTrackDisplay {
   PlayerTrackDisplay({
     required this.primaryText,
@@ -19,27 +18,168 @@ class PlayerTrackDisplay {
   final String semanticsText;
 }
 
-/// Pure, shared presentation policy for audio and subtitle track choices.
+class PlayerTrackDisplayCache {
+  PlayerTrackDisplayProjection? _projection;
+
+  PlayerTrackDisplayProjection forTracks(Iterable<PlayerTrack> tracks) {
+    if (_projection?.matches(tracks) != true) {
+      _projection = PlayerTrackDisplayProjection(tracks);
+    }
+    return _projection!;
+  }
+}
+
+/// Prepared display policy for a complete immutable track snapshot.
+/// Selection is deliberately excluded: callers read confirmed selection live.
+class PlayerTrackDisplayProjection {
+  PlayerTrackDisplayProjection(Iterable<PlayerTrack> tracks)
+    : _tracks = List.unmodifiable(tracks) {
+    _regional = [
+      for (final track in _tracks) _regionalLanguage(track.language),
+    ];
+    final facts = [for (final track in _tracks) _factsFor(track)];
+    _bases = [
+      for (var i = 0; i < _tracks.length; i++)
+        _baseDisplay(_tracks[i], facts[i]),
+    ];
+    _compactKeys = [for (final fact in facts) _compactKey(fact)];
+    _titleKeys = [for (final base in _bases) _equivalenceKey(base.titleText)];
+    _displays = List.unmodifiable([
+      for (var i = 0; i < _tracks.length; i++)
+        _displayFor(_tracks[i], facts[i], _bases[i]),
+    ]);
+  }
+
+  final List<PlayerTrack> _tracks;
+  late final List<({String? language, String? region})> _regional;
+  late final List<_BaseDisplay> _bases;
+  late final List<String> _compactKeys;
+  late final List<String?> _titleKeys;
+  late final List<PlayerTrackDisplay> _displays;
+
+  _TrackFacts _factsFor(PlayerTrack track) {
+    final index = _tracks.indexOf(track);
+    final regional = index < 0
+        ? _regionalLanguage(track.language)
+        : _regional[index];
+    final disambiguateRegion =
+        regional.region != null &&
+        _tracks.indexed.any(
+          (entry) =>
+              entry.$2.type == track.type &&
+              entry.$2.id != track.id &&
+              _regional[entry.$1].language == regional.language &&
+              _regional[entry.$1].region != null &&
+              _regional[entry.$1].region != regional.region,
+        );
+    return _TrackFacts.from(
+      track,
+      language: disambiguateRegion
+          ? _language(track.language)
+          : regional.language,
+      region: disambiguateRegion ? null : regional.region,
+    );
+  }
+
+  PlayerTrackDisplay _displayFor(
+    PlayerTrack track,
+    _TrackFacts facts,
+    _BaseDisplay base,
+  ) {
+    final compactKey = _compactKey(facts);
+    final titleKey = _equivalenceKey(base.titleText);
+    return _display(
+      track,
+      facts,
+      base,
+      needsTrackDiscriminator: _tracks.indexed.any(
+        (entry) =>
+            entry.$2.type == track.type &&
+            entry.$2.id != track.id &&
+            _bases[entry.$1].visibleKey == base.visibleKey,
+      ),
+      sameCompact: _tracks.indexed.any(
+        (entry) =>
+            entry.$2.type == track.type &&
+            entry.$2.id != track.id &&
+            _compactKeys[entry.$1] == compactKey,
+      ),
+      titleDiffers: _tracks.indexed.any(
+        (entry) =>
+            entry.$2.type == track.type &&
+            entry.$2.id != track.id &&
+            _titleKeys[entry.$1] != titleKey,
+      ),
+    );
+  }
+
+  /// Reuses labels across position, pending-command and selection updates.
+  /// Order, type, identity and every display input must still match.
+  bool matches(Iterable<PlayerTrack> tracks) {
+    final current = tracks.iterator;
+    for (final previous in _tracks) {
+      if (!current.moveNext() ||
+          _displayInputs(previous) != _displayInputs(current.current)) {
+        return false;
+      }
+    }
+    return !current.moveNext();
+  }
+
+  PlayerTrackDisplay displayFor(PlayerTrack track) {
+    final index = _tracks.indexWhere(
+      (entry) => entry.type == track.type && entry.id == track.id,
+    );
+    if (index < 0) {
+      throw ArgumentError.value(track.id, 'track', 'Not in this snapshot');
+    }
+    return _displays[index];
+  }
+}
+
+Object _displayInputs(PlayerTrack track) => (
+  track.id,
+  track.type,
+  track.title,
+  track.language,
+  track.codec,
+  track.channelCount,
+  track.channelLayout,
+  track.forced,
+  track.external,
+  track.hearingImpaired,
+  track.visualImpaired,
+  track.commentary,
+);
+
+/// Pure, shared presentation policy for an individual track choice.
 PlayerTrackDisplay formatPlayerTrackDisplay(
   PlayerTrack track, {
   Iterable<PlayerTrack> peers = const <PlayerTrack>[],
 }) {
-  final sameType = peers
-      .where((peer) => peer.type == track.type)
-      .toList(growable: false);
-  final facts = _TrackFacts.from(track, peers: sameType);
-  final base = _baseDisplay(track, facts);
-  final needsTrackDiscriminator = sameType.any((peer) {
-    if (peer.id == track.id) return false;
-    final peerFacts = _TrackFacts.from(peer, peers: sameType);
-    final peerBase = _baseDisplay(peer, peerFacts);
-    return peerBase.visibleKey == base.visibleKey;
-  });
+  final projection = PlayerTrackDisplayProjection(peers);
+  final facts = projection._factsFor(track);
+  return projection._displayFor(track, facts, _baseDisplay(track, facts));
+}
+
+PlayerTrackDisplay _display(
+  PlayerTrack track,
+  _TrackFacts facts,
+  _BaseDisplay base, {
+  required bool needsTrackDiscriminator,
+  required bool sameCompact,
+  required bool titleDiffers,
+}) {
   final secondaryFacts = [
     if (needsTrackDiscriminator) 'Track ${track.id}',
     ...base.secondaryFacts,
   ];
-  final compactText = _compactText(track, facts, sameType, base);
+  final compactText = _compactText(
+    facts,
+    base,
+    sameCompact: sameCompact,
+    titleDiffers: titleDiffers,
+  );
   final description = _description(base.primaryText, secondaryFacts);
   final semanticsDescription = _semanticsDescription(base, secondaryFacts);
   final typeName = _typeName(track.type);
@@ -64,22 +204,10 @@ class _TrackFacts {
 
   factory _TrackFacts.from(
     PlayerTrack track, {
-    Iterable<PlayerTrack> peers = const [],
+    required String? language,
+    required String? region,
   }) {
     final title = _clean(track.title);
-    final regional = _regionalLanguage(track.language);
-    final disambiguateRegion =
-        regional.region != null &&
-        peers.any((peer) {
-          if (peer.id == track.id || peer.type != track.type) return false;
-          final other = _regionalLanguage(peer.language);
-          return other.language == regional.language &&
-              other.region != null &&
-              other.region != regional.region;
-        });
-    final language = disambiguateRegion
-        ? _language(track.language)
-        : regional.language;
     final purposes = <String>[
       if (track.type == PlayerTrackType.audio && track.visualImpaired == true)
         'Audio description',
@@ -96,7 +224,7 @@ class _TrackFacts {
         : null;
     return _TrackFacts(
       language: language,
-      region: disambiguateRegion ? null : regional.region,
+      region: region,
       title: title,
       purposes: purposes,
       channels: channels,
@@ -182,31 +310,16 @@ _BaseDisplay _baseDisplay(PlayerTrack track, _TrackFacts facts) {
 }
 
 String? _compactText(
-  PlayerTrack track,
   _TrackFacts facts,
-  List<PlayerTrack> peers,
-  _BaseDisplay base,
-) {
+  _BaseDisplay base, {
+  required bool sameCompact,
+  required bool titleDiffers,
+}) {
   final language = facts.language;
   final purposes = facts.purposes;
   final title = base.titleText;
   if (language == null) return title ?? purposes.firstOrNull;
-
-  final sameCompact = peers.where((peer) => peer.id != track.id).any((peer) {
-    final otherFacts = _TrackFacts.from(peer, peers: peers);
-    return _compactKey(otherFacts) == _compactKey(facts);
-  });
   final purposeText = purposes.join(' • ');
-  final titleDiffers =
-      title != null &&
-      peers.any((peer) {
-        if (peer.id == track.id || peer.type != track.type) return false;
-        final otherTitle = _baseDisplay(
-          peer,
-          _TrackFacts.from(peer, peers: peers),
-        ).titleText;
-        return _equivalenceKey(otherTitle) != _equivalenceKey(title);
-      });
   if (title == null || !sameCompact || !titleDiffers) {
     return purposeText.isEmpty ? language : '$language — $purposeText';
   }
@@ -252,7 +365,6 @@ String _semanticsDescription(_BaseDisplay base, List<String> secondaryFacts) {
     return (language: full, region: null);
   }
   final base = _language(parts.take(parts.length - 1).join('-'));
-  // Unknown tags retain the original label instead of inventing a region.
   if (full == _clean(value) || base == null || full == base) {
     return (language: full, region: null);
   }
@@ -264,7 +376,6 @@ String _semanticsDescription(_BaseDisplay base, List<String> secondaryFacts) {
   return (language: base, region: qualifier);
 }
 
-/// Canonical short video codec policy shared by runtime and Plex facts.
 String? formatPlayerVideoCodec(String? value) {
   final cleaned = _clean(value)?.toLowerCase();
   if (cleaned == null) return null;

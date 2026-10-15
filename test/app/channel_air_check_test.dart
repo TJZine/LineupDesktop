@@ -1,3 +1,5 @@
+import 'package:lineup_desktop/app/lineup_controller.dart';
+
 import 'dart:async';
 import 'dart:ui' show SemanticsAction;
 
@@ -14,6 +16,150 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'successful Air Check load with failed projection offers a recovering retry',
+    (tester) async {
+      final controller = _AirController();
+      addTearDown(controller.dispose);
+      var validity = ChannelAirCheckValidity.valid;
+      controller.scheduleOverride = buildSchedule(
+        [
+          const ChannelItem(
+            id: 'long',
+            title: 'Long',
+            duration: Duration(microseconds: 8640000000000000000),
+          ),
+        ],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+      );
+      final channel = _channel(items: [_item('one')]);
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          channel,
+          onValidityChanged: (value) => validity = value,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Retry Air Check'), findsOneWidget);
+      expect(validity, ChannelAirCheckValidity.unknown);
+      controller.scheduleOverride = null;
+      await tester.tap(find.text('Retry Air Check'));
+      await tester.pumpAndSettle();
+      expect(controller.requests, 2);
+      expect(find.text('One'), findsWidgets);
+      expect(find.text('Retry Air Check'), findsNothing);
+      expect(validity, ChannelAirCheckValidity.valid);
+    },
+  );
+
+  testWidgets(
+    'later Air Check transition failure retires the cached preview and retries',
+    (tester) async {
+      final controller = _AirController();
+      addTearDown(controller.dispose);
+      var now = DateTime.utc(2026, 1, 1, 0, 10);
+      final boundary = now.add(const Duration(days: 1));
+      controller.scheduleOverride = buildSchedule(
+        [
+          const ChannelItem(
+            id: 'long',
+            title: 'Long',
+            duration: Duration(microseconds: 8640000000000000000),
+          ),
+        ],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+        transition: ScheduleTransition(
+          boundary: boundary,
+          legacyCycleItems: [_item('one')],
+        ),
+      );
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          _channel(items: [_item('one')]),
+          clock: () => now,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('One'), findsWidgets);
+      now = boundary;
+      await tester.pump(const Duration(seconds: 30));
+      expect(tester.takeException(), isNull);
+      expect(find.text('Retry Air Check'), findsOneWidget);
+      expect(find.text('One'), findsNothing);
+      controller.scheduleOverride = null;
+      await tester.tap(find.text('Retry Air Check'));
+      await tester.pumpAndSettle();
+      expect(controller.requests, 2);
+      expect(find.text('One'), findsWidgets);
+      expect(find.text('Retry Air Check'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'deferred comparison failure cannot retire a newer retry request',
+    (tester) async {
+      final controller = _AirController(controlled: true);
+      addTearDown(controller.dispose);
+      var now = DateTime.utc(2026, 1, 1, 0, 10);
+      final boundary = now.add(const Duration(days: 1));
+      final original = _channel(items: [_item('one')]);
+      final draft = _channel(items: [_item('two')]);
+      controller.scheduleOverride = buildSchedule(
+        [
+          const ChannelItem(
+            id: 'long',
+            title: 'Long',
+            duration: Duration(microseconds: 8640000000000000000),
+          ),
+        ],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+        transition: ScheduleTransition(
+          boundary: boundary,
+          legacyCycleItems: [_item('one')],
+        ),
+      );
+      Widget surface() => _airCheck(
+        controller,
+        draft,
+        originalChannel: original,
+        clock: () => now,
+      );
+      await tester.pumpWidget(surface());
+      controller.scheduleOverride = null;
+      controller.completeNext();
+      await tester.pump();
+      controller.completeNext();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Two'), findsWidgets);
+
+      now = boundary;
+      final dynamic state = tester.state(find.byType(ChannelAirCheck));
+      WidgetsBinding.instance.addPostFrameCallback((_) => state.retry());
+      await tester.pumpWidget(surface());
+      now = boundary.subtract(const Duration(days: 1));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Two'), findsWidgets);
+      expect(find.text('Retry Air Check'), findsNothing);
+      expect(controller.requests, 2);
+      await tester.pump(
+        channelAirCheckDebounce + const Duration(milliseconds: 1),
+      );
+      controller.completeNext();
+      await tester.pump();
+      expect(controller.requests, 3);
+      expect(find.text('Two'), findsWidgets);
+      expect(find.text('Retry Air Check'), findsNothing);
+    },
+  );
+
   testWidgets(
     'sequential Air Check exposes authoritative facts, selection, and clock rollover',
     (tester) async {
@@ -351,7 +497,6 @@ void main() {
           matching: find.byType(Scrollable),
         ),
       );
-      // scrollUntilVisible jumps both nested scrollables; lay out before tapping.
       await tester.pump();
       await tester.tap(futureRow);
       await tester.pump();
@@ -847,8 +992,9 @@ void main() {
   testWidgets(
     'partially playable mixed source reports every nested retained occurrence',
     (tester) async {
-      final controller = _MixedAirController()
-        ..availableMedia = [_playableMedia('live')];
+      final controller = _MixedAirController(
+        scenario: LineupScenario(availableMedia: [_playableMedia('live')]),
+      );
       addTearDown(controller.dispose);
       final channel = Channel.fromJson({
         ..._channel(items: [_item('live')]).toJson(),
@@ -1225,13 +1371,14 @@ String _formatted(DateTime value, {bool always24 = false}) =>
     );
 
 class _AirController extends FixtureController {
-  _AirController({this.controlled = false});
+  _AirController({super.scenario, this.controlled = false});
 
   final bool controlled;
   final _pending = <(Completer<ScheduleIndex>, ScheduleIndex)>[];
   int requests = 0;
   int generation = 0;
   Object? nextFailure;
+  ScheduleIndex? scheduleOverride;
 
   @override
   int get contentGeneration => generation;
@@ -1249,12 +1396,14 @@ class _AirController extends FixtureController {
         const ScheduleBuildException(ScheduleFailureReason.noContent),
       );
     }
-    final schedule = buildSchedule(
-      source.items,
-      mode: channel.playbackMode,
-      seed: channel.shuffleSeed,
-      blockSize: channel.blockSize ?? 3,
-    );
+    final schedule =
+        scheduleOverride ??
+        buildSchedule(
+          source.items,
+          mode: channel.playbackMode,
+          seed: channel.shuffleSeed,
+          blockSize: channel.blockSize ?? 3,
+        );
     if (!controlled) return Future.value(schedule);
     final completer = Completer<ScheduleIndex>();
     _pending.add((completer, schedule));
@@ -1272,6 +1421,7 @@ class _AirController extends FixtureController {
 }
 
 class _MixedAirController extends _AirController {
+  _MixedAirController({super.scenario});
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
     [_item('live')],

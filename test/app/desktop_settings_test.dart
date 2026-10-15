@@ -1,3 +1,5 @@
+import 'package:lineup_desktop/app/lineup_controller.dart';
+
 import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
@@ -114,37 +116,67 @@ void main() {
     expect(store.state.settings.guideShowChannelSources, isTrue);
   });
 
+  testWidgets('fullscreen HDR switch follows DVR playback controls', (
+    tester,
+  ) async {
+    final controller = FixtureController();
+    addTearDown(controller.dispose);
+    await _showSettings(tester, controller);
+    await _openCategory(tester, SettingsCategory.playback);
+
+    final title = find.text('Match display HDR in fullscreen');
+    final toggle = find.byType(Switch).last;
+    await tester.ensureVisible(title);
+    await tester.pumpAndSettle();
+    expect(title, findsOneWidget);
+    expect(
+      find.text(
+        'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(controller.settings.matchDisplayHdr, isFalse);
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+  });
+
   testWidgets('Settings categories and theme control remain accessible', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..account = const PlexAccount(
-        id: 'account',
-        name: _longAccountName,
-        email: 'synthetic@example.invalid',
-      )
-      ..profile = const PlexHomeUser(
-        id: 'profile',
-        name: _longProfileName,
-        protected: false,
-      )
-      ..server = PlexServer(
-        id: 'server',
-        name: _longServerName,
-        owned: true,
-        connections: [
-          PlexConnection(
-            uri: Uri.parse('https://synthetic.invalid:32400'),
-            local: false,
-            relay: false,
-          ),
-        ],
-      )
-      ..connection = PlexConnection(
-        uri: Uri.parse('https://synthetic.invalid:32400'),
-        local: false,
-        relay: false,
-      );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        account: const PlexAccount(
+          id: 'account',
+          name: _longAccountName,
+          email: 'synthetic@example.invalid',
+        ),
+        profile: const PlexHomeUser(
+          id: 'profile',
+          name: _longProfileName,
+          protected: false,
+        ),
+        server: PlexServer(
+          id: 'server',
+          name: _longServerName,
+          owned: true,
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://synthetic.invalid:32400'),
+              local: false,
+              relay: false,
+            ),
+          ],
+        ),
+        connection: PlexConnection(
+          uri: Uri.parse('https://synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
 
     await _showSettings(tester, controller);
@@ -226,22 +258,25 @@ void main() {
   testWidgets('settings controls share one right edge across categories', (
     tester,
   ) async {
-    final controller = FixtureController()
-      ..account = const PlexAccount(
-        id: 'account',
-        name: _longAccountName,
-        email: 'synthetic@example.invalid',
-      )
-      ..profile = const PlexHomeUser(
-        id: 'profile',
-        name: _longProfileName,
-        protected: false,
-      )
-      ..server = const PlexServer(
-        id: 'server',
-        name: _longServerName,
-        connections: [],
-      );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        account: const PlexAccount(
+          id: 'account',
+          name: _longAccountName,
+          email: 'synthetic@example.invalid',
+        ),
+        profile: const PlexHomeUser(
+          id: 'profile',
+          name: _longProfileName,
+          protected: false,
+        ),
+        server: const PlexServer(
+          id: 'server',
+          name: _longServerName,
+          connections: [],
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
 
     await _showSettings(tester, controller);

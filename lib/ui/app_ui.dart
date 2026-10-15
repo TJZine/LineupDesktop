@@ -577,8 +577,6 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
                       fitted.height * fraction.height < minimum.height)) {
                 return widget.fallback;
               }
-              // Preserve the contain scale unless the caller caps visible ink;
-              // crop padding without enlarging the artwork or moving fallback.
               return SizedBox(
                 width: fitted.width * fraction.width,
                 height: fitted.height * fraction.height,
@@ -611,10 +609,19 @@ Future<Size?> _decodeImageSize(
   late final ImageStreamListener listener;
   listener = ImageStreamListener(
     (info, _) {
-      completer.complete(
-        Size(info.image.width.toDouble(), info.image.height.toDouble()),
+      final size = Size(
+        info.image.width.toDouble(),
+        info.image.height.toDouble(),
       );
-      stream.removeListener(listener);
+      try {
+        completer.complete(size);
+      } finally {
+        try {
+          info.dispose();
+        } finally {
+          stream.removeListener(listener);
+        }
+      }
     },
     onError: (_, _) {
       completer.complete();
@@ -625,7 +632,6 @@ Future<Size?> _decodeImageSize(
   return completer.future;
 }
 
-// Bound the alpha scan; only OSD callers opt into visible-content validation.
 Future<Rect?> _decodeVisibleFraction(Uint8List bytes) async {
   ui.Codec? codec;
   ui.Image? image;
@@ -651,7 +657,6 @@ Future<Rect?> _decodeVisibleFraction(Uint8List bytes) async {
       }
     }
     if (right < left || bottom < top) return null;
-    // Retain a sample around the detected ink to protect antialiased edges.
     return Rect.fromLTRB(
       math.max(0, left - 1) / image.width,
       math.max(0, top - 1) / image.height,

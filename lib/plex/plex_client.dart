@@ -45,8 +45,6 @@ class PlexClient {
   final http.Client _http;
   final Duration requestTimeout;
 
-  // Match the item pager's 1000 × 100 bound. Both collection records and
-  // member occurrences (including duplicates across collections) are bounded.
   static const maximumLibraryCollections = 100000;
   static const maximumLibraryCollectionMembers = 100000;
   static const maximumLibraryMetadataPages = 1000;
@@ -355,10 +353,8 @@ class PlexClient {
     );
     final container = json['MediaContainer'];
     if (container is! Map) throw invalid;
-    final size = _libraryPageCount(container['size']);
+    final size = _pageCount(container['size'], _libraryPageException);
     final rawDirectories = container['Directory'];
-    // PMS can omit Directory for an explicitly empty server. Missing inventory
-    // without that evidence must not authorize removal of saved selections.
     final List<Object?> directories;
     if (!container.containsKey('Directory') && size == 0) {
       directories = const [];
@@ -416,79 +412,20 @@ class PlexClient {
       if (!isCurrent()) {
         throw const PlexException('cancelled', 'Library scan cancelled.');
       }
-      final containerRaw = json['MediaContainer'];
-      if (containerRaw is! Map) {
-        throw const PlexException(
-          'library-page-invalid',
-          'Plex returned an invalid library page.',
-        );
-      }
-      final container = Map<String, Object?>.from(containerRaw);
-      final pageTotal = _libraryPageCount(container['totalSize']);
-      final pageSizeValue = _libraryPageCount(container['size']);
-      final pageOffset = _libraryPageCount(container['offset']);
-      if (pageOffset != null && pageOffset != start) {
-        throw const PlexException(
-          'library-page-invalid',
-          'Plex returned an invalid library page.',
-        );
-      }
-      if (pageTotal != null) {
-        if (knownTotal == null) {
-          knownTotal = pageTotal;
-        } else if (knownTotal != pageTotal) {
-          throw const PlexException(
-            'library-page-invalid',
-            'Plex returned an invalid library page.',
-          );
-        }
-      }
-      final rawMetadata = container['Metadata'];
-      final List<Object?> metadata;
-      if (rawMetadata == null) {
-        if (pageSizeValue == 0) {
-          metadata = const [];
-        } else {
-          throw const PlexException(
-            'library-page-invalid',
-            'Plex returned an invalid library page.',
-          );
-        }
-      } else if (rawMetadata is List) {
-        metadata = rawMetadata;
-      } else {
-        throw const PlexException(
-          'library-page-invalid',
-          'Plex returned an invalid library page.',
-        );
-      }
-      if (metadata.length > pageSize) {
-        throw const PlexException(
+      final validated = _validatePageEnvelope(
+        json,
+        start: start,
+        pageSize: pageSize,
+        rawConsumed: rawConsumed,
+        knownTotal: knownTotal,
+        invalid: _libraryPageException,
+        oversized: const PlexException(
           'library-page-too-large',
           'Plex returned more library items than requested.',
-        );
-      }
-      if (pageSizeValue != null && pageSizeValue != metadata.length) {
-        throw const PlexException(
-          'library-page-invalid',
-          'Plex returned an invalid library page.',
-        );
-      }
-      final known = knownTotal;
-      if (known != null) {
-        if (rawConsumed + metadata.length > known) {
-          throw const PlexException(
-            'library-page-invalid',
-            'Plex returned an invalid library page.',
-          );
-        }
-        if (metadata.isEmpty && rawConsumed < known) {
-          throw const PlexException(
-            'library-page-invalid',
-            'Plex returned an invalid library page.',
-          );
-        }
-      }
+        ),
+      );
+      knownTotal = validated.knownTotal;
+      final metadata = validated.metadata;
       final pageItems = <PlexMediaItem>[];
       for (final raw in metadata) {
         final item = parseMediaItem(raw, libraryId: libraryId);
@@ -779,8 +716,6 @@ class PlexClient {
             }
           } on PlexException catch (error, stack) {
             if (fatalCodes.contains(error.code)) {
-              // Sibling cancellation caused by our abort must not replace the
-              // authorization or scale failure that caused it.
               if (!abort.isCompleted || callerCancelled || !isCurrent()) {
                 fatal ??= error;
                 fatalStack ??= stack;
@@ -831,8 +766,6 @@ class PlexClient {
     }
   }
 
-  /// Strict library paging for the collection and show metadata streams.
-  /// Children may exceed the requested size only when that page ends at total.
   Future<List<T>> _libraryMetadata<T>(
     Uri base,
     String token, {
@@ -876,40 +809,22 @@ class PlexClient {
           cancelled: cancelled,
         );
         check();
-        final rawContainer = json['MediaContainer'];
-        if (rawContainer is! Map) throw _libraryPageException;
-        final pageTotal = _libraryPageCount(rawContainer['totalSize']);
-        final size = _libraryPageCount(rawContainer['size']);
-        final offset = _libraryPageCount(rawContainer['offset']);
-        if (offset != null && offset != start) throw _libraryPageException;
-        if (pageTotal != null) {
-          if (total != null && total != pageTotal) {
-            throw _libraryPageException;
-          }
-          total = pageTotal;
-          if (total > maximumEntries) throw _libraryScaleException;
-        }
-        final rawRows = rawContainer['Metadata'];
-        final List<Object?> metadata;
-        if (rawRows is List) {
-          metadata = rawRows;
-        } else if (rawRows == null && size == 0) {
-          metadata = const [];
-        } else {
-          throw _libraryPageException;
-        }
-        if (size != null && size != metadata.length) {
-          throw _libraryPageException;
-        }
+        final validated = _validatePageEnvelope(
+          json,
+          start: start,
+          pageSize: 100,
+          rawConsumed: start,
+          knownTotal: total,
+          invalid: _libraryPageException,
+          oversized: _libraryPageException,
+          allowOversizedComplete: allowOversizedComplete,
+          validateDeclaredTotal: (declaredTotal) {
+            if (declaredTotal > maximumEntries) throw _libraryScaleException;
+          },
+        );
+        total = validated.knownTotal;
+        final metadata = validated.metadata;
         final end = start + metadata.length;
-        if (metadata.length > 100 &&
-            !(allowOversizedComplete && total == end)) {
-          throw _libraryPageException;
-        }
-        if (total != null &&
-            (end > total || (metadata.isEmpty && start < total))) {
-          throw _libraryPageException;
-        }
         if (end > maximumEntries) throw _libraryScaleException;
         for (final raw in metadata) {
           final id = _id(
@@ -950,10 +865,6 @@ class PlexClient {
 
     checkCurrent();
     onProgress?.call(const PlexPlaylistProgress());
-    // One attempt-local lifetime for this catalog load. The first fatal
-    // authorization failure is recorded for propagation and aborts active
-    // sibling IO through the existing abortable transport; a fresh retry gets
-    // a fresh lifetime. Recoverable per-playlist failures never trigger it.
     final attemptAbort = Completer<void>();
     PlexException? fatal;
     StackTrace? fatalStack;
@@ -987,9 +898,6 @@ class PlexClient {
       }
     }
 
-    // A catalog failure throws and never becomes a successful empty catalog.
-    // A later contents-page failure for one playlist marks that playlist's
-    // canonical id in failedIds without publishing its accumulated prefix.
     final catalogRecords = await _playlistCatalogRaws(
       server,
       token,
@@ -1006,8 +914,6 @@ class PlexClient {
     for (var start = 0; start < catalogRecords.length; start += 4) {
       checkCurrent();
       final batch = catalogRecords.skip(start).take(4).map((record) async {
-        // The catalog carries one normalized identity per row; requests,
-        // models, and failure accounting all reuse it.
         final id = record.id;
         try {
           final title = _text(record.playlist['title'], 'playlist title');
@@ -1019,10 +925,6 @@ class PlexClient {
             checkCurrent: checkAttemptCurrent,
           );
           checkAttemptCurrent();
-          // Playable filtering applies after raw paging so unplayable records
-          // never shift pagination offsets. Repeated media is intentional
-          // programming and keeps its order; repeated supplied occurrence
-          // identities fail the playlist inside [_playlistItemRaws].
           final items = itemRaws
               .map(parseMediaItem)
               .where((item) => item.isPlayable)
@@ -1034,8 +936,6 @@ class PlexClient {
           checkCurrent();
           if (exception.code == 'cancelled') {
             if (fatal == null) rethrow;
-            // Our own attempt abort converging on a sibling while the
-            // recorded fatal propagates.
             return null;
           }
           if (fatalCodes.contains(exception.code)) {
@@ -1083,14 +983,6 @@ class PlexClient {
     );
   }
 
-  /// Pages the complete video-playlist catalog as identified records.
-  ///
-  /// Every row must carry a usable identity before the catalog can complete:
-  /// an unidentifiable row fails the whole catalog instead of becoming a
-  /// successful absence. Catalog entries carry unique identities, so a
-  /// repeated playlist id is a non-progressing page. Playlist *contents* use
-  /// [_playlistItemRaws], which preserves repeated media but rejects repeated
-  /// supplied occurrence identities.
   Future<List<({String id, Map<String, Object?> playlist})>>
   _playlistCatalogRaws(
     Uri server,
@@ -1124,12 +1016,17 @@ class PlexClient {
         cancelled: cancelled,
       );
       checkCurrent();
-      final validated = _validatePlaylistPage(
+      final validated = _validatePageEnvelope(
         json,
         start: start,
         pageSize: pageSize,
         rawConsumed: rawConsumed,
         knownTotal: knownTotal,
+        invalid: _playlistPageException,
+        oversized: const PlexException(
+          'playlist-page-too-large',
+          'Plex returned more playlist items than requested.',
+        ),
       );
       knownTotal = validated.knownTotal;
       for (final raw in validated.metadata) {
@@ -1207,12 +1104,17 @@ class PlexClient {
         cancelled: cancelled,
       );
       checkCurrent();
-      final validated = _validatePlaylistPage(
+      final validated = _validatePageEnvelope(
         json,
         start: start,
         pageSize: pageSize,
         rawConsumed: rawConsumed,
         knownTotal: knownTotal,
+        invalid: _playlistPageException,
+        oversized: const PlexException(
+          'playlist-page-too-large',
+          'Plex returned more playlist items than requested.',
+        ),
       );
       knownTotal = validated.knownTotal;
       for (final raw in validated.metadata) {
@@ -1553,8 +1455,6 @@ const _libraryScaleException = PlexException(
   'This library is too large to scan safely.',
 );
 
-/// Shared by concurrent library attempts on this client, with cancellable
-/// waiters. The attempt owns a permit until all pages for that collection end.
 class _CollectionRequestPool {
   _CollectionRequestPool(this.limit);
   final int limit;
@@ -1940,70 +1840,56 @@ int _integer(Object? value, String label) => value is num
           (throw PlexException('parse-error', '$label was invalid.'));
 const _maxExactJsonInteger = 0x1fffffffffffff;
 
-/// Validates one playlist page against the pagination contract shared by the
-/// video-playlist catalog and playlist item streams: container shape,
-/// echoed offset, retained total, declared size, oversized pages, and
-/// empty/over-total pages. Returns the page records and the retained total.
-({List<Object?> metadata, int? knownTotal}) _validatePlaylistPage(
+const _playlistPageException = PlexException(
+  'playlist-page-invalid',
+  'Plex returned an invalid playlist page.',
+);
+
+({List<Object?> metadata, int? knownTotal}) _validatePageEnvelope(
   Map<String, Object?> json, {
   required int start,
   required int pageSize,
   required int rawConsumed,
   required int? knownTotal,
+  required PlexException invalid,
+  required PlexException oversized,
+  bool allowOversizedComplete = false,
+  void Function(int total)? validateDeclaredTotal,
 }) {
-  const invalid = PlexException(
-    'playlist-page-invalid',
-    'Plex returned an invalid playlist page.',
-  );
   final containerRaw = json['MediaContainer'];
   if (containerRaw is! Map) throw invalid;
   final container = Map<String, Object?>.from(containerRaw);
-  final pageTotal = _playlistPageCount(container['totalSize']);
-  final pageSizeValue = _playlistPageCount(container['size']);
-  final pageOffset = _playlistPageCount(container['offset']);
+  final pageTotal = _pageCount(container['totalSize'], invalid);
+  final pageSizeValue = _pageCount(container['size'], invalid);
+  final pageOffset = _pageCount(container['offset'], invalid);
   if (pageOffset != null && pageOffset != start) throw invalid;
   var known = knownTotal;
   if (pageTotal != null) {
-    if (known == null) {
-      known = pageTotal;
-    } else if (known != pageTotal) {
-      throw invalid;
-    }
+    if (known != null && known != pageTotal) throw invalid;
+    known = pageTotal;
+    validateDeclaredTotal?.call(pageTotal);
   }
   final rawMetadata = container['Metadata'];
   final List<Object?> metadata;
-  if (rawMetadata == null) {
-    if (pageSizeValue == 0) {
-      metadata = const [];
-    } else {
-      throw invalid;
-    }
-  } else if (rawMetadata is List) {
+  if (rawMetadata is List) {
     metadata = rawMetadata;
+  } else if (rawMetadata == null && pageSizeValue == 0) {
+    metadata = const [];
   } else {
     throw invalid;
   }
-  if (metadata.length > pageSize) {
-    throw const PlexException(
-      'playlist-page-too-large',
-      'Plex returned more playlist items than requested.',
-    );
+  final end = rawConsumed + metadata.length;
+  if (metadata.length > pageSize && !(allowOversizedComplete && known == end)) {
+    throw oversized;
   }
   if (pageSizeValue != null && pageSizeValue != metadata.length) throw invalid;
-  final total = known;
-  if (total != null) {
-    if (rawConsumed + metadata.length > total) throw invalid;
-    if (metadata.isEmpty && rawConsumed < total) throw invalid;
+  if (known != null) {
+    if (end > known) throw invalid;
+    if (metadata.isEmpty && rawConsumed < known) throw invalid;
   }
   return (metadata: metadata, knownTotal: known);
 }
 
-/// Normalizes a supplied playlist occurrence identity to its canonical form.
-///
-/// The documented numeric occurrence id arrives as an integral JSON number or
-/// its ordinary decimal-string form. Any other supplied value is contradictory
-/// identity evidence and fails the page. Absent identity never reaches this
-/// helper; the caller skips it to stay compatible.
 String _playlistOccurrenceId(Object? value) {
   const invalid = PlexException(
     'playlist-page-invalid',
@@ -2023,9 +1909,7 @@ String _playlistOccurrenceId(Object? value) {
   return number.toInt().toString();
 }
 
-/// Validates an optional playlist container count. Absent values stay absent;
-/// present values must be nonnegative integral counts or the page is invalid.
-int? _playlistPageCount(Object? value) {
+int? _pageCount(Object? value, PlexException invalid) {
   if (value == null) return null;
   final number = switch (value) {
     num number => number,
@@ -2037,32 +1921,7 @@ int? _playlistPageCount(Object? value) {
       number.isNegative ||
       number.abs() > _maxExactJsonInteger ||
       number.toInt() != number) {
-    throw const PlexException(
-      'playlist-page-invalid',
-      'Plex returned an invalid playlist page.',
-    );
-  }
-  return number.toInt();
-}
-
-/// Validates an optional library container count. Absent values stay absent;
-/// present values must be nonnegative integral counts or the page is invalid.
-int? _libraryPageCount(Object? value) {
-  if (value == null) return null;
-  final number = switch (value) {
-    num number => number,
-    String text => num.tryParse(text.trim()),
-    _ => null,
-  };
-  if (number == null ||
-      !number.isFinite ||
-      number.isNegative ||
-      number.abs() > _maxExactJsonInteger ||
-      number.toInt() != number) {
-    throw const PlexException(
-      'library-page-invalid',
-      'Plex returned an invalid library page.',
-    );
+    throw invalid;
   }
   return number.toInt();
 }
@@ -2157,7 +2016,6 @@ DynamicRange _dynamicRange(Map? media, Iterable<String> streamCodecs) {
   return media == null ? DynamicRange.unknown : DynamicRange.sdr;
 }
 
-/// Keeps a replacement listing's limit distinct from a children-stream limit.
 class _CollectionListingScaleException extends PlexException {
   const _CollectionListingScaleException()
     : super(

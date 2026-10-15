@@ -33,8 +33,11 @@ void main() {
   testWidgets('Guide without playback remains opaque outside its aperture', (
     tester,
   ) async {
-    final fixture = _readyFixture()
-      ..controller.settings = const LineupSettings(reduceMotion: true);
+    final fixture = _readyFixture(
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, fixture.build());
     await _expectClassicOpacity(tester);
   });
@@ -47,7 +50,10 @@ void main() {
         state: PlayerState.ready,
         message: 'Synthetic player surface',
       ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     await _pump(tester, fixture.build());
     await _expectClassicOpacity(
       tester,
@@ -102,8 +108,6 @@ Future<void> _expectClassicOpacity(
     final right = allowed.right.floor() - 2;
     final top = allowed.top.ceil() + 1;
     final bottom = allowed.bottom.floor() - 2;
-    // The aperture is flush with the window on the left: those corners reveal
-    // video all the way to the edge. Only the interior right corners are masked.
     expect(alphaAt(left, top), 0, reason: 'Square top-left native corner');
     expect(
       alphaAt(left, bottom),
@@ -144,7 +148,7 @@ Future<void> _expectClassicOpacity(
   expect(transparentPixels, allowed == null ? 0 : greaterThan(0));
 }
 
-UiFixture _readyFixture({PlayerStatus? playerState}) {
+UiFixture _readyFixture({LineupScenario? scenario, PlayerStatus? playerState}) {
   final player = FixturePlayer();
   if (playerState != null) {
     player.emit(
@@ -158,10 +162,15 @@ UiFixture _readyFixture({PlayerStatus? playerState}) {
       ),
     );
   }
-  final controller = _OpacityController()
-    ..stage = SetupStage.ready
-    ..channels = _channels
-    ..currentChannelId = _channels[1].id;
+  final controller = _OpacityController(
+    scenario: (scenario ?? const LineupScenario()).withDefaults(
+      LineupScenario(
+        stage: SetupStage.ready,
+        channels: _channels,
+        currentChannelId: _channels[1].id,
+      ),
+    ),
+  );
   return UiFixture(
     controller: controller,
     player: player,
@@ -170,6 +179,8 @@ UiFixture _readyFixture({PlayerStatus? playerState}) {
 }
 
 class _OpacityController extends FixtureController {
+  _OpacityController({super.scenario});
+
   @override
   Future<Uint8List?> artworkForPath(
     Uri path, {

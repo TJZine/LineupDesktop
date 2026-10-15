@@ -31,7 +31,6 @@ final _tinyPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
   'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 );
-// Synthetic 3:1 title artwork and a 20x1200 image that fits too narrowly.
 final _wideLogoPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAAAAAA+i0toAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC',
 );
@@ -131,7 +130,6 @@ void main() {
           _drawnRect(tester, find.text('1')).left,
           closeTo(controls.left, .001),
         );
-        // Scrollbar updates use ScrollPosition.jumpTo, not ScrollController.jumpTo.
         position().jumpTo(row * 2.4);
         await tester.pumpAndSettle();
         expect(position().pixels, closeTo(row * 2, .000001));
@@ -145,7 +143,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(position().pixels, closeTo(row * 3, .000001));
         expectSnapped();
-        // Drag the actual desktop thumb from the first row.
         position().jumpTo(0);
         await tester.pumpAndSettle();
         await tester.dragFrom(
@@ -269,9 +266,6 @@ void main() {
     'Guide PiP preserves pre-full-bleed dimensions and native alignment across the matrix',
     (tester) async {
       addTearDown(tester.view.reset);
-      // Frozen drawn dimensions measured from the retained pre-B production
-      // Guide widget with the same canvas, theme and text scale. This protects
-      // the approved aperture size independently of the current layout policy.
       for (final (size, textScale, expectedPicture, expectedInformationHeight)
           in const [
             (Size(1280.0, 720.0), 1.0, Size(296.967111, 167.044), 167.036),
@@ -289,7 +283,6 @@ void main() {
           final lineup = _Lineup(20);
           final guide = GuideController(
             lineup: lineup,
-            // Match the non-midnight reference clock used for the frozen measurements.
             clock: () => DateTime.utc(2026, 1, 15, 3, 17),
             loadSchedule: (c) async => _schedule(c),
           );
@@ -380,10 +373,14 @@ void main() {
           'A signal arrives.',
           List.filled(80, 'A signal reaches the crew.').join(' '),
         ]) {
-          final lineup = _Lineup(1)
-            ..settings = const LineupSettings(preferClearLogos: false);
+          final lineup = _Lineup(
+            1,
+            scenario: LineupScenario(
+              settings: const LineupSettings(preferClearLogos: false),
+            ),
+          );
           final channel = lineup.channels.single;
-          lineup.channels = [
+          lineup.fixtureActor.replaceChannels([
             Channel(
               id: channel.id,
               number: 1,
@@ -406,7 +403,7 @@ void main() {
               anchor: channel.anchor,
               shuffleSeed: 1,
             ),
-          ];
+          ]);
           final guide = GuideController(
             lineup: lineup,
             loadSchedule: (c) async => _schedule(c),
@@ -517,10 +514,15 @@ void main() {
         ..physicalSize = const Size(1920, 1080);
       addTearDown(tester.view.reset);
       final start = DateTime.utc(2026, 1, 15, 3, 12);
-      final lineup = _Lineup(1, anchor: start)
-        ..settings = const LineupSettings(preferClearLogos: false);
+      final lineup = _Lineup(
+        1,
+        anchor: start,
+        scenario: LineupScenario(
+          settings: const LineupSettings(preferClearLogos: false),
+        ),
+      );
       final channel = lineup.channels.single;
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: channel.id,
           number: 2,
@@ -540,7 +542,7 @@ void main() {
           anchor: start,
           shuffleSeed: 1,
         ),
-      ];
+      ]);
       final guide = GuideController(
         lineup: lineup,
         clock: () => start.add(const Duration(minutes: 5)),
@@ -582,8 +584,6 @@ void main() {
         final paragraph = tester.renderObject<RenderParagraph>(finder);
         final text = paragraph.text.toPlainText();
         final lines = <double, String>{};
-        // Inspect actual glyph positions, including soft line breaks. The test
-        // font forces wrapping inside both paragraphs at this allocation.
         for (var offset = 0; offset < text.length; offset++) {
           final character = text.substring(offset, offset + 1);
           if (character.trim().isEmpty) continue;
@@ -613,13 +613,18 @@ void main() {
       addTearDown(tester.view.reset);
       final start = DateTime.utc(2026, 1, 15, 3, 12);
       var now = start.add(const Duration(minutes: 5));
-      final lineup = _Lineup(1, anchor: start)
-        ..settings = const LineupSettings(
-          preferClearLogos: false,
-          reduceMotion: true,
-        );
+      final lineup = _Lineup(
+        1,
+        anchor: start,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            preferClearLogos: false,
+            reduceMotion: true,
+          ),
+        ),
+      );
       final old = lineup.channels.single;
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: old.id,
           number: 2,
@@ -639,7 +644,7 @@ void main() {
           anchor: start,
           shuffleSeed: 1,
         ),
-      ];
+      ]);
       final guide = GuideController(
         lineup: lineup,
         clock: () => now,
@@ -724,8 +729,12 @@ void main() {
         ..devicePixelRatio = 1
         ..physicalSize = const Size(1920, 1080);
       addTearDown(tester.view.reset);
-      final lineup = _Lineup(1)
-        ..settings = const LineupSettings(reduceMotion: true);
+      final lineup = _Lineup(
+        1,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (c) async => _schedule(c),
@@ -768,13 +777,17 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final lineup = _Lineup(1)
-        ..settings = const LineupSettings(
-          preferClearLogos: false,
-          largeFocusIndicators: true,
-        );
+      final lineup = _Lineup(
+        1,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            preferClearLogos: false,
+            largeFocusIndicators: true,
+          ),
+        ),
+      );
       final channel = lineup.channels.single;
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: channel.id,
           number: 1,
@@ -797,7 +810,7 @@ void main() {
           anchor: channel.anchor,
           shuffleSeed: 1,
         ),
-      ];
+      ]);
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
@@ -907,8 +920,12 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
-        final lineup = _Lineup(12)
-          ..settings = const LineupSettings(reduceMotion: true);
+        final lineup = _Lineup(
+          12,
+          scenario: LineupScenario(
+            settings: const LineupSettings(reduceMotion: true),
+          ),
+        );
         addTearDown(lineup.dispose);
         final attempts = <String, int>{};
         final guide = GuideController(
@@ -1072,18 +1089,19 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final pending = <String, Completer<Uint8List?>>{};
-      final lineup =
-          _Lineup(
-              2,
-              artworkLoader: (path) =>
-                  (pending[path.path] = Completer<Uint8List?>()).future,
-            )
-            ..settings = const LineupSettings(
-              guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
-              preferClearLogos: false,
-              reduceMotion: true,
-            );
-      lineup.channels = [
+      final lineup = _Lineup(
+        2,
+        artworkLoader: (path) =>
+            (pending[path.path] = Completer<Uint8List?>()).future,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+            preferClearLogos: false,
+            reduceMotion: true,
+          ),
+        ),
+      );
+      lineup.fixtureActor.replaceChannels([
         for (var i = 0; i < 2; i++)
           Channel(
             id: 'channel-$i',
@@ -1101,7 +1119,7 @@ void main() {
             anchor: DateTime.now().subtract(const Duration(hours: 1)),
             shuffleSeed: i,
           ),
-      ];
+      ]);
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
@@ -1241,7 +1259,10 @@ void main() {
   });
 
   testWidgets('non-positive timeline slots render safely', (tester) async {
-    final lineup = _Lineup(1)..settings = const LineupSettings(guideHours: 0);
+    final lineup = _Lineup(
+      1,
+      scenario: LineupScenario(settings: const LineupSettings(guideHours: 0)),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -1271,8 +1292,12 @@ void main() {
     tester,
   ) async {
     final now = DateTime.utc(2026, 1, 1, 12, 17);
-    final lineup = _Lineup(1)
-      ..settings = const LineupSettings(dvrControlsEnabled: false);
+    final lineup = _Lineup(
+      1,
+      scenario: LineupScenario(
+        settings: const LineupSettings(dvrControlsEnabled: false),
+      ),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -1416,9 +1441,13 @@ void main() {
     tester,
   ) async {
     final now = DateTime.utc(2026, 1, 1, 12, 15);
-    final lineup = _Lineup(1000)
-      ..settings = const LineupSettings(guideHours: 4, reduceMotion: true);
-    lineup.channels = [
+    final lineup = _Lineup(
+      1000,
+      scenario: LineupScenario(
+        settings: const LineupSettings(guideHours: 4, reduceMotion: true),
+      ),
+    );
+    lineup.fixtureActor.replaceChannels([
       for (var index = 0; index < 1000; index++)
         Channel(
           id: 'channel-$index',
@@ -1436,7 +1465,7 @@ void main() {
           anchor: now.subtract(const Duration(minutes: 15)),
           shuffleSeed: index,
         ),
-    ];
+    ]);
     addTearDown(lineup.dispose);
     final loadedChannelIds = <String>[];
     final guide = GuideController(
@@ -1528,7 +1557,7 @@ void main() {
     final now = DateTime.utc(2026, 1, 1, 12, 45);
     final lineup = _Lineup(1);
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'semantic-channel',
         number: 1,
@@ -1554,8 +1583,8 @@ void main() {
         anchor: DateTime.utc(2026, 1, 1, 12, 30),
         shuffleSeed: 1,
       ),
-    ];
-    lineup.currentChannelId = 'semantic-channel';
+    ]);
+    lineup.fixtureActor.selectChannel('semantic-channel');
     var fail = true;
     var tunes = 0;
     final guide = GuideController(
@@ -1826,7 +1855,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final lineup = _Lineup(1, artworkBytes: _tinyPng);
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'channel',
         number: 7,
@@ -1855,7 +1884,7 @@ void main() {
         anchor: DateTime.now().subtract(const Duration(hours: 1)),
         shuffleSeed: 7,
       ),
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -1916,13 +1945,18 @@ void main() {
     'Guide details keep loading, retry, and error scoped to focused channel',
     (tester) async {
       final now = DateTime.utc(2026, 1, 1, 12, 30);
-      final lineup = _Lineup(2, artworkBytes: _tinyPng)
-        ..settings = const LineupSettings(
-          guideHours: 4,
-          reduceMotion: true,
-          guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
-        );
-      lineup.channels = [
+      final lineup = _Lineup(
+        2,
+        artworkBytes: _tinyPng,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            guideHours: 4,
+            reduceMotion: true,
+            guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+          ),
+        ),
+      );
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: 'channel-a',
           number: 1,
@@ -1955,8 +1989,8 @@ void main() {
           anchor: now,
           shuffleSeed: 2,
         ),
-      ];
-      lineup.currentChannelId = 'channel-a';
+      ]);
+      lineup.fixtureActor.selectChannel('channel-a');
       addTearDown(lineup.dispose);
       final firstLoad = Completer<ScheduleIndex>();
       final retryLoad = Completer<ScheduleIndex>();
@@ -2060,8 +2094,12 @@ void main() {
   testWidgets('Guide details identify a focused ready row with no programs', (
     tester,
   ) async {
-    final lineup = _Lineup(2)
-      ..settings = const LineupSettings(guideHours: 0, reduceMotion: true);
+    final lineup = _Lineup(
+      2,
+      scenario: LineupScenario(
+        settings: const LineupSettings(guideHours: 0, reduceMotion: true),
+      ),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -2098,7 +2136,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final lineup = _Lineup(2);
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'without-artwork',
         number: 1,
@@ -2130,7 +2168,7 @@ void main() {
         anchor: DateTime.now().subtract(const Duration(hours: 1)),
         shuffleSeed: 2,
       ),
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -2174,7 +2212,7 @@ void main() {
   testWidgets('Guide omits incomplete episode coordinates', (tester) async {
     final lineup = _Lineup(1);
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       for (final (index, item) in [
         const ChannelItem(
           id: 'season-only',
@@ -2200,7 +2238,7 @@ void main() {
           anchor: DateTime.now().subtract(const Duration(hours: 1)),
           shuffleSeed: index + 1,
         ),
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -2232,12 +2270,17 @@ void main() {
       ..physicalSize = const Size(1600, 900);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final lineup = _Lineup(1, artworkBytes: _wideLogoPng)
-      ..settings = const LineupSettings(
-        guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
-      );
+    final lineup = _Lineup(
+      1,
+      artworkBytes: _wideLogoPng,
+      scenario: LineupScenario(
+        settings: const LineupSettings(
+          guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+        ),
+      ),
+    );
     addTearDown(lineup.dispose);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'channel',
         number: 7,
@@ -2257,7 +2300,7 @@ void main() {
         anchor: DateTime.now().subtract(const Duration(hours: 1)),
         shuffleSeed: 7,
       ),
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -2310,7 +2353,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final lineup = _Lineup(1, artworkBytes: bytes);
       addTearDown(lineup.dispose);
-      lineup.channels = [
+      lineup.fixtureActor.replaceChannels([
         Channel(
           id: 'channel',
           number: 7,
@@ -2329,7 +2372,7 @@ void main() {
           anchor: DateTime.now().subtract(const Duration(hours: 1)),
           shuffleSeed: 7,
         ),
-      ];
+      ]);
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
@@ -2524,8 +2567,13 @@ void main() {
       'Guide hours failure retains $restoredHours hours and Retry saves the choice',
       (tester) async {
         final store = _RetryStore();
-        final lineup = _Lineup(1, store: store)
-          ..settings = LineupSettings(guideHours: restoredHours);
+        final lineup = _Lineup(
+          1,
+          store: store,
+          scenario: LineupScenario(
+            settings: LineupSettings(guideHours: restoredHours),
+          ),
+        );
         store.saved = PersistedState(settings: lineup.settings);
         final guide = GuideController(
           lineup: lineup,
@@ -2719,7 +2767,6 @@ void main() {
         expect(find.byType(SnackBar), findsNothing);
         expect(guide.guideHours, 2);
         expect(tester.takeException(), isNull);
-        // The persistent shell messenger still works after the Guide scope leaves.
         shellMessenger.currentState!.showSnackBar(
           const SnackBar(content: Text('Shell feedback')),
         );
@@ -2928,6 +2975,342 @@ void main() {
       },
     );
   }
+
+  for (final activation in [
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.space,
+    LogicalKeyboardKey.select,
+  ]) {
+    testWidgets('focused Guide controls own $activation without tuning', (
+      tester,
+    ) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final lineup = _Lineup(
+        2,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      final now = DateTime.utc(2026, 10, 10, 12, 15);
+      final ready = Channel(
+        id: 'channel-0',
+        number: 1,
+        name: 'Channel 0',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'program-0',
+            title: 'Program 0',
+            duration: Duration(minutes: 30),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026, 10, 10, 12),
+        shuffleSeed: 0,
+      );
+      lineup.fixtureActor.replaceChannels([
+        ready,
+        Channel(
+          id: 'library-channel',
+          number: 2,
+          name: 'Library Channel',
+          source: const LibrarySource(
+            libraryId: 'library',
+            libraryType: PlexLibraryType.show,
+          ),
+          playbackMode: PlaybackMode.sequential,
+          anchor: ready.anchor,
+          shuffleSeed: 1,
+        ),
+      ]);
+      var retries = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async {
+          if (channel.id == ready.id) return _schedule(ready);
+          retries++;
+          throw StateError('offline');
+        },
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      var menus = 0;
+      var closes = 0;
+      var tunes = 0;
+      var chords = 0;
+      final grid = FocusNode(debugLabel: 'test grid');
+      addTearDown(grid.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: Focus(
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  HardwareKeyboard.instance.isControlPressed &&
+                  event.logicalKey == LogicalKeyboardKey.keyG) {
+                chords++;
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: GuideView(
+              controller: guide,
+              focusNode: grid,
+              onClose: () => closes++,
+              onTune: (_) async => tunes++,
+              onOpenMenu: (_, _) => menus++,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(guide.focusedProgram, isNotNull);
+      Future<void> focus(Finder control) async {
+        final leaf = find
+            .descendant(
+              of: control,
+              matching: find.byWidgetPredicate(
+                (widget) => widget is Text || widget is Icon,
+              ),
+            )
+            .first;
+        Focus.of(tester.element(leaf)).requestFocus();
+        await tester.pump();
+        expect(grid.hasPrimaryFocus, isFalse);
+      }
+
+      final menu = find.byKey(const Key('guide-app-menu'));
+      await focus(menu);
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(menus, 1);
+      expect(tunes, 0);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(chords, 1);
+      expect(closes, 0);
+
+      await focus(find.byTooltip('Close Guide'));
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(closes, 1);
+      expect(tunes, 0);
+      guide.moveWindow(1);
+      await tester.pumpAndSettle();
+      expect(guide.followingLive, isFalse);
+      await focus(find.byKey(const Key('guide-now')));
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(guide.followingLive, isTrue);
+      expect(tunes, 0);
+
+      for (final picker in ['guide-hours', 'guide-library-picker']) {
+        final control = find.byKey(Key(picker));
+        // DropdownButton owns an internal focus node on its InkWell. Focus that
+        // actual trigger rather than a selected-item Text inside its stack.
+        final trigger = tester.widget<InkWell>(
+          find.descendant(of: control, matching: find.byType(InkWell)).first,
+        );
+        final triggerFocus = trigger.focusNode!;
+        triggerFocus.requestFocus();
+        await tester.pumpAndSettle();
+        expect(
+          triggerFocus.hasPrimaryFocus,
+          isTrue,
+          reason: '$picker owns focus',
+        );
+        await tester.sendKeyEvent(activation);
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(LineupDropdownMenuRow),
+          findsWidgets,
+          reason: '$picker must open via $activation',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(tunes, 0);
+        expect(closes, 1, reason: 'popup Escape dismisses only the popup');
+      }
+      final beforeRetry = retries;
+      await focus(find.widgetWithText(LineupInlineLink, 'Retry'));
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(retries, beforeRetry + 1);
+      expect(tunes, 0);
+
+      for (final key in [
+        LogicalKeyboardKey.f2,
+        LogicalKeyboardKey.escape,
+        LogicalKeyboardKey.keyG,
+        LogicalKeyboardKey.backspace,
+        LogicalKeyboardKey.goBack,
+      ]) {
+        await focus(menu);
+        final beforeClose = closes;
+        await tester.sendKeyEvent(
+          key,
+          // The simulator has no physical mapping for the remote Back key.
+          physicalKey: key == LogicalKeyboardKey.goBack
+              ? PhysicalKeyboardKey.escape
+              : null,
+        );
+        await tester.pump();
+        expect(closes, beforeClose + 1);
+        expect(tunes, 0);
+      }
+      final search = find.byKey(const Key('guide-channel-search'));
+      await tester.enterText(search, 'channel');
+      await tester.pump();
+      final beforeSearchEscape = closes;
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(guide.searchQuery, isEmpty);
+      expect(closes, beforeSearchEscape);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(closes, beforeSearchEscape);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+
+      final program = guide.currentProgram(ready.id)!;
+      await tester.tap(find.byKey(ValueKey(program.id)));
+      await tester.pumpAndSettle();
+      expect(tunes, 0);
+      await focus(find.byKey(ValueKey(program.id)));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(guide.focusedChannelId, 'library-channel');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(guide.focusedChannelId, ready.id);
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(guide.focusedProgramId, program.id);
+      expect(tunes, 1);
+      await focus(
+        find
+            .ancestor(of: find.text(ready.name), matching: find.byType(InkWell))
+            .first,
+      );
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(guide.focusedChannelId, ready.id);
+      expect(tunes, 2);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(guide.focusedProgramId, isNot(program.id));
+      final upcoming = guide.focusedProgram!;
+      expect(upcoming.isCurrentAt(guide.now), isFalse);
+      await focus(find.byKey(ValueKey(upcoming.id)));
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(guide.selectedProgramId, upcoming.id);
+      expect(tunes, 2);
+      guide.playToNow();
+      await tester.pumpAndSettle();
+      grid.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(activation);
+      await tester.pumpAndSettle();
+      expect(tunes, 3);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets(
+    'raw search editing survives row completion and unrelated notifications',
+    (tester) async {
+      final lineup = _Lineup(
+        2,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      final pending = Completer<ScheduleIndex>();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) => channel.id == 'channel-0'
+            ? Future.value(_schedule(channel))
+            : pending.future,
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final search = find.byKey(const Key('guide-channel-search'));
+      await tester.enterText(search, 'channel ');
+      await tester.pump();
+      final editor = tester.widget<TextField>(search).controller!;
+      final trailing = editor.value;
+      expect(guide.searchQuery, 'channel');
+      pending.complete(_schedule(lineup.channels.last));
+      await tester.pumpAndSettle();
+      expect(editor.value, trailing);
+      expect(editor.text, 'channel ');
+      await tester.enterText(search, 'channel 1');
+      await tester.pump();
+      expect(guide.channels.single.id, 'channel-1');
+
+      const editing = TextEditingValue(
+        text: 'ChAnnel 0 ',
+        selection: TextSelection(baseOffset: 2, extentOffset: 5),
+        composing: TextRange(start: 0, end: 7),
+      );
+      tester.testTextInput.updateEditingValue(editing);
+      await tester.pump();
+      expect(editor.value, editing);
+      expect(guide.channels.single.id, 'channel-0');
+      guide.refreshForPresentation();
+      lineup.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(editor.value, editing);
+      guide.setSearchQuery('CHANNEL 0');
+      await tester.pump();
+      expect(editor.value, editing);
+      guide.setSearchQuery('CHANNEL 1');
+      await tester.pump();
+      expect(
+        editor.value,
+        const TextEditingValue(
+          text: 'channel 1',
+          selection: TextSelection.collapsed(offset: 9),
+        ),
+      );
+      guide.setSearchQuery('');
+      await tester.pump();
+      expect(editor.text, isEmpty);
+      expect(guide.channels.length, 2);
+      await tester.enterText(search, '   ');
+      await tester.pump();
+      expect(guide.searchQuery, isEmpty);
+      expect(editor.text, '   ');
+      expect(await lineup.logout(), isTrue);
+      await tester.pumpAndSettle();
+      expect(
+        editor.text,
+        isEmpty,
+        reason: 'content reset clears even a normalized-empty raw edit',
+      );
+      expect(editor.value.composing, TextRange.empty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,
@@ -3141,7 +3524,7 @@ void main() {
     const libraryId =
         'International television documentaries and limited series archive';
     final lineup = _Lineup(2);
-    lineup.channels = [
+    lineup.fixtureActor.replaceChannels([
       Channel(
         id: 'library-channel',
         number: 17,
@@ -3155,7 +3538,7 @@ void main() {
         shuffleSeed: 1,
       ),
       lineup.channels.last,
-    ];
+    ]);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -3200,8 +3583,12 @@ void main() {
   testWidgets(
     'standard resolutions and enlarged text do not clip Guide controls',
     (tester) async {
-      final lineup = _Lineup(20)
-        ..settings = const LineupSettings(reduceMotion: true);
+      final lineup = _Lineup(
+        20,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
@@ -3248,7 +3635,10 @@ void main() {
   testWidgets('Now Playing context remains stable while Guide focus moves', (
     tester,
   ) async {
-    final lineup = _Lineup(2)..currentChannelId = 'channel-0';
+    final lineup = _Lineup(
+      2,
+      scenario: LineupScenario(currentChannelId: 'channel-0'),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -3277,7 +3667,6 @@ void main() {
     expect(guide.focusedChannelId, 'channel-1');
     expect(tester.widget<Text>(context).data, contains('Channel 0'));
 
-    // Remembering a channel is not evidence of current playback.
     await tester.pumpWidget(
       MaterialApp(
         builder: LineupCanvas.builder,
@@ -3301,7 +3690,10 @@ void main() {
   testWidgets('Now Playing context setting updates its Guide consumer', (
     tester,
   ) async {
-    final lineup = _Lineup(2)..currentChannelId = 'channel-0';
+    final lineup = _Lineup(
+      2,
+      scenario: LineupScenario(currentChannelId: 'channel-0'),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -3322,7 +3714,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('guide-now-playing-context')), findsOneWidget);
 
-    lineup.settings = lineup.settings.copyWith(nowWatchingBanner: false);
+    lineup.fixtureActor.publishSettings(
+      lineup.settings.copyWith(nowWatchingBanner: false),
+    );
     lineup.notifyListeners();
     await tester.pump();
     expect(find.byKey(const Key('guide-now-playing-context')), findsNothing);
@@ -3390,8 +3784,12 @@ void main() {
   testWidgets('focused row survives row-height resize and route recreation', (
     tester,
   ) async {
-    final lineup = _Lineup(100)
-      ..settings = const LineupSettings(reduceMotion: true);
+    final lineup = _Lineup(
+      100,
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -3458,8 +3856,12 @@ void main() {
   });
 
   testWidgets('focus fully reveals a trailing partial row', (tester) async {
-    final lineup = _Lineup(100)
-      ..settings = const LineupSettings(reduceMotion: true);
+    final lineup = _Lineup(
+      100,
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
@@ -3538,6 +3940,7 @@ String _testTime(DateTime value) =>
 class _Lineup extends LineupController {
   _Lineup(
     int count, {
+    LineupScenario? scenario,
     this.artworkBytes,
     this.artworkLoader,
     DateTime? anchor,
@@ -3549,7 +3952,7 @@ class _Lineup extends LineupController {
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
        ) {
-    channels = List.generate(
+    final initialChannels = List.generate(
       count,
       (index) => Channel(
         id: 'channel-$index',
@@ -3567,7 +3970,12 @@ class _Lineup extends LineupController {
         shuffleSeed: index,
       ),
     );
-    stage = SetupStage.ready;
+
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(channels: initialChannels, stage: SetupStage.ready),
+      ),
+    );
   }
 
   final Uint8List? artworkBytes;

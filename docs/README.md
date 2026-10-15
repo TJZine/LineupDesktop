@@ -51,21 +51,6 @@ audience and purpose.
 
 ### Evidence and design records
 
-- [Workflow refresh report for GPT Pro](reviews/workflow-refresh-2026-10-03/REPORT.md)
-  reconciles the shared-skill migration with restored optional Codex presets,
-  the user's reviewer-model adjustment and separate-chat delegation preferences.
-  It includes dated personal orchestration source snapshots for connector review;
-  these are evidence, not additional workflow entry points or runtime acceptance.
-
-- [Collaborative desktop visual correction handoff](desktop-ui-collaborative-handoff.md)
-  preserves the earlier user-led campaign and its provenance. Its dispatch,
-  model, and sequential-work rules are historical execution policy. Still-
-  approved design decisions remain in the [interface system](../.interface-design/system.md),
-  [target specification](desktop-ui-design-spec.md), and
-  [approval ledger](desktop-ui-surface-approvals.md). The
-  [portable 1080p packet](design/desktop-ui/review-packets/README.md) remains
-  evidence for its recorded state, not a newly verified baseline.
-
 - [Desktop UI Design Specification](desktop-ui-design-spec.md) contains the
   consolidated approved target. It does not authorize implementation or claim
   that the design has been implemented.
@@ -73,14 +58,19 @@ audience and purpose.
   campaign delivery packages, owners and migration safeguards. Check its scope
   and status against current source before resuming unfinished product work;
   its worker/reviewer procedure does not override the current shared workflow.
-- [Desktop UI orchestration handoff](desktop-ui-orchestration-handoff.md)
-  preserves historical assignment rules and grouped reviews. Do not use its
-  model roster or new-session prompt as the entry point for a new task.
 - [Desktop UI readiness review](desktop-ui-readiness-review.md) records the
   independent reviewer findings, corrections and P0-ready/P1-gated verdict.
+- [Desktop UI execution record](desktop-ui-execution.md) retains the concrete
+  migration, source and schedule contracts resolved during preparation.
+- [Desktop surface approvals](desktop-ui-surface-approvals.md) and the
+  [October second-pass decisions](desktop-ui-second-pass.md) retain explicit
+  visual approvals and later amendments, including the protected Player layout.
+- [Desktop scaling evidence](desktop-ui-scaling-progress.md) distinguishes
+  portable layout checks from outstanding physical Windows acceptance.
 - [Desktop UI visual evidence](design/desktop-ui/README.md) identifies approved
-  synthetic compositions and later refinements; [design history](desktop-ui-design-history.md)
-  preserves superseded discussion separately from active requirements.
+  synthetic compositions and later refinements. The
+  [portable 1080p packet](design/desktop-ui/review-packets/README.md) remains
+  evidence for its recorded state, not a newly verified baseline.
 
 - [Product Parity](product-parity.md) is the authoritative current
   bidirectional product-parity, UX/UI, evidence-gap, and release-readiness
@@ -113,6 +103,52 @@ audience and purpose.
   after cold start or automation, and shuffled schedule continuity across Plex
   response reorderings. Its upstream references are investigation context, not
   a Desktop porting mandate.
+- [Plex transcoding plan](plex-transcoding-implementation-plan.md) retains
+  pending product packages and their discovery and design gates; consult the
+  project profile for the current implementation boundary.
+- [Track-label plan](audio-subtitle-track-label-implementation-plan.md),
+  [setup/reentry plan](setup-reentry-startup-plan.md),
+  [Player/Guide polish plan](player-guide-polish-plan.md), and
+  [OSD/collection plan](osd-autohide-and-collection-membership-plan.md) retain
+  approved contracts and targeted acceptance that have not been fully closed.
+
+### Review records with open obligations
+
+- [October 7 review](reviews/comprehensive-review-2026-10-07/REPORT.md) and
+  [remediation](reviews/comprehensive-review-2026-10-07/REMEDIATION.md) retain
+  deferred buffering work and physical acceptance requirements.
+- [October 10 review](reviews/comprehensive-review-2026-10-10/REPORT.md),
+  [implementation](reviews/comprehensive-review-2026-10-10/IMPLEMENTATION.md),
+  and [Windows handoff](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md)
+  retain the ancestor-junction policy decision, native CTest gate and targeted
+  physical observations. Evidence, probe recipes and frozen identities remain
+  alongside them.
+- [Workflow remediation](reviews/workflow-remediation-2026-10-04/REPORT.md),
+  [maintainability remediation](reviews/maintainability-remediation-2026-10-12/EXECUTION.md),
+  and [audit follow-up](reviews/audit-followup-2026-10-12/IMPLEMENTATION.md)
+  retain scoped implementation evidence and unperformed platform checks.
+
+## Historical material in Git
+
+Completed dispatch prompts and handoffs, superseded design discussion, the
+October 2 test inventory, October 3 workflow snapshots, October 10 reviewer and
+calibration drafts, and the old dependency-refresh log are available in Git
+history. Their current decisions, adjudicated findings and open acceptance gates
+are retained in the documents above. Historical workspace lists and hash
+manifests describe their recorded checkout; they are not current file dependencies.
+
+The redundant 1080p review-packet ZIP is also available in history. Every archived
+file matched the retained extracted packet byte for byte before cleanup.
+
+To inspect a removed document without restoring it to the active tree, use the
+pre-cleanup commit and its original repository path, for example:
+
+```sh
+git show 13d711e02b7fa5d4bb3687e138429baa0a768c97:docs/desktop-ui-design-history.md
+```
+
+This history preserves the original context; it does not activate old execution
+instructions or promote dated observations into current acceptance.
 
 ## Documentation authority
 

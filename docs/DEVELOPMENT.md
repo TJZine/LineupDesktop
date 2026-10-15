@@ -62,7 +62,7 @@ block unrelated portable work; report the specific unverified scenario.
 | Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the required alpha suite and optional local visual checks below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
 | Persistence or credentials | Controller/store/transport failure, rollback, scope-isolation, and secret-flow tests named in [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Deterministic recovery/currentness; OS credential storage and physical filesystem behavior need platform observation |
 | macOS development app | Xcode and macOS setup below; `flutter run -d macos` or `flutter build macos` as relevant | Development UI/runtime or build evidence; the macOS player explicitly reports unsupported playback |
-| Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing and pinned policy inputs; no Windows runtime or package execution proof |
+| Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing, repository-derived release inputs, production launch/exit contracts with fixture platform executables, and pinned policy inputs; no native Windows or package execution proof |
 | Native player contract / C++ integration | Dart adapter/coordinator tests, lifetime/currentness inspection, Windows C++ toolchain and prepared libmpv; `flutter build windows` | Contract and stock-engine compile/link proof; not a runnable or packageable Lineup player |
 | Patched engine / portable package | Full Windows provisioning below; release wrapper and [package acceptance](windows-native-validation.md#8-portable-package-acceptance) | Artifact-bound build/package checks; launch, media, HDR, layering, fullscreen, input, and support claims require [physical Windows acceptance](windows-native-validation.md) |
 
@@ -84,21 +84,77 @@ same analyzer configuration as `lib/`. There is no coverage-percentage floor;
 Optional visual suites run explicitly as described below. Native runtime and
 hardware proof follows [physical Windows acceptance](windows-native-validation.md).
 
-The assertion-based `track_list_encoder_test` CTest target exercises the real
-encoder, not the app. It is excluded from the default build and is not run in
-CI. After configuring the Windows build with the prerequisites below, run:
+Windows CI explicitly builds and runs `track_list_encoder_test`,
+`native_playback_state_test`, `display_dynamic_range_test`, and
+`display_guardian_test` after the stock-engine application build, using the
+prepared pinned libmpv runtime and Flutter-generated inputs. These targets
+remain excluded from the default application build. CTest runs serially, rejects
+an empty selection, and allows 30 seconds per suite except the guardian's
+60-second process-fixture budget. These contracts do not require a live Flutter
+engine or physical HDR changes; they do not establish media or presentation
+acceptance.
+
+The assertion-based `track_list_encoder_test` exercises the real encoder,
+not the app. After configuring the Windows build with the prerequisites below,
+run:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test
 ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
 ```
 
+Three additional targets cover native correlation and shutdown:
+
+- `native_playback_state_test` exercises the actual worker-owned correlation
+  state, including replacement, redirects, retirement, and observed idle.
+- `native_player_contract_test` drives the production parser, command queue,
+  load-to-state handoff, event projection, and real libmpv worker through a
+  bounded HWND/message pump. Test-local DLL responses make selected load
+  command/query outcomes deterministic; lifecycle scenarios use the real DLL.
+- `runner_lifecycle_test` uses the actual `FlutterWindow`, engine, and messenger
+  against installed candidate assets. A retained blank-widget Dart entry point
+  avoids opening user state or credentials through the application bootstrap.
+
+All are `EXCLUDE_FROM_ALL`; only `native_playback_state_test` is selected by
+CI. The state test does not require a live engine. The player-contract and
+runner-lifecycle targets remain explicit local checks. Build/install the
+candidate with the pinned patched engine and prepared libmpv first for those
+checks, then build the targets and run their CTests:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target native_playback_state_test native_player_contract_test runner_lifecycle_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^(native_playback_state|native_player_contract|runner_lifecycle)$' --output-on-failure --timeout 60
+```
+
+Record the exact candidate commit, installed asset identity, prepared/copied DLL
+hashes, and patched-engine identity. The runner test's data path is the built
+application's installed `data` directory. Stock-engine compilation does not
+provide the runner test's required composition marker. Keep encoder and
+authenticated-reference checks as distinct obligations.
+
+The state component is also portable with a C++17 compiler:
+
+```sh
+clang++ -std=c++17 -Wall -Wextra -Werror -pedantic windows/runner/native_playback_state_test.cpp -o /tmp/lineup-native-playback-state-test
+/tmp/lineup-native-playback-state-test
+```
+
+Portable state proof does not compile or execute the Windows parser/runner.
+Blank-widget runner proof does not establish physical media, HDR, composition,
+input, or package acceptance. Queue pressure preferentially removes property
+events; an all-non-property saturated queue can evict an old acknowledgment,
+so existing timeout/retry behavior remains necessary. Use the affected
+[physical acceptance](windows-native-validation.md) scenarios for rapid tune
+replacement, track confirmation, stop/retry, disposal/recreation, and window
+close while work is pending.
+
 The gated `authenticated_reference_test` target compiles the production native
 player and drives its existing method channel against the exact prepared DLL.
 It is `EXCLUDE_FROM_ALL`, with no CI gate change. Python 3, an FFmpeg executable
 with the `libx264` encoder and DASH muxer, and OpenSSL are required. Put them on
-PATH before configuring/running CTest; the runner also recognizes Git for
-Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
+PATH before running CTest; Python is resolved when the test runs, so ordinary
+application configuration and builds do not require it. The runner also recognizes
+Git for Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
 No Python packages or system trust-store changes are needed.
 
 ```powershell
@@ -125,6 +181,51 @@ negative comparison locally, remove only the two reference-hardening options,
 rebuild the same test target, observe containment failure, then restore them and
 rebuild. Do not distribute or commit that unhardened configuration.
 
+The CI-selected `display_dynamic_range_test` uses fake
+DisplayConfig/guardian/clock inputs, including failed-admission report and
+shutdown checks.
+`display_guardian_test` retains protocol/pipe fixtures and also launches real
+Win32 predecessor, guardian and successor processes against isolated journals
+and controlled display effects. Event barriers pause recovery before gate
+acquisition and observe blocked production admission. Cases cover both desired
+states, original HDR, timeout, multiple retained targets, clean disarm, helper
+loss, failed/unknown recovery, late-write liability, external changes, stale
+guardian identities, abandoned gates, corruption and unmutated orphan cleanup.
+Its negative control bypasses admission to demonstrate premature original
+capture; it does not reproduce the complete wrong-restoration chain.
+The process fixture exercises production admission, display worker and guardian
+recovery, with a controlled successor guardian link and a test protocol client.
+It does not test the production `WindowsGuardianLink` launcher or `wWinMain`
+window-focus path. Neither target changes Windows HDR or establishes physical
+display behavior. After configuration, build the affected targets explicitly:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target display_dynamic_range_test display_guardian_test native_player_contract_test runner_lifecycle_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^(display_dynamic_range|display_guardian|native_player_contract|runner_lifecycle)$' --output-on-failure --timeout 60
+```
+
+Install the pinned patched-engine candidate and prepared runtime before
+runner-lifecycle execution as described above. The guardian CTest has a
+60-second budget for process startup and its deliberately unresolved admission
+cases. Synchronous Windows display/storage calls have no general OS timeout
+guarantee; explicit coordination waits are bounded and run on native workers.
+Unknown or failed recovery after helper loss intentionally retains its journal
+record and disables successor matching; restarting does not erase that liability.
+Power loss, OS crash and interrupted shutdown remain physical limits.
+
+To include the separate encoder/authenticated-reference obligations:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test authenticated_reference_test display_dynamic_range_test display_guardian_test
+ctest --test-dir .\build\windows\x64 -C Release --output-on-failure --timeout 180
+```
+
+The encoder/authenticated targets depend on Flutter-generated native inputs;
+serialize these builds with Flutter checks and other shared-build writers.
+The authenticated target retains the FFmpeg, OpenSSL, Python and pinned-runtime
+prerequisites above. See the [HDR plan's evidence](fullscreen-hdr-implementation-plan.md#evidence)
+for the controller and guardian contracts covered by their fake tests.
+
 ## Portable commands
 
 Flutter SDK `3.47.6` (revision
@@ -142,7 +243,7 @@ flutter doctor -v
 
 ```sh
 flutter pub get
-dart format --output=none --set-exit-if-changed .
+dart tool/format.dart --check
 flutter analyze
 TZ=America/New_York flutter test
 ```
@@ -154,11 +255,30 @@ $env:TZ = 'America/New_York'
 flutter test
 ```
 
-Use `dart format <changed-paths>` when formatting is needed. The timezone above
-is canonical for localized schedule goldens. On Windows, Dart uses the Windows
-system timezone; `$env:TZ` alone does not select it. Run the portable Windows
-tests in the machine's configured timezone, or set the OS timezone to Eastern
-Standard Time before treating localized schedule assertions as canonical. The
+The [formatter](../tool/format.dart) uses tracked and non-ignored untracked Dart
+files from Git, including new source in `lib`, `test`, `tool`, and `test_driver`.
+Ignored build output and deleted files are excluded. `--check` reports formatting
+differences without writing files; use `dart tool/format.dart` to format all these
+inputs or `dart format <changed-paths>` to format an edit. Git and the selected
+Dart SDK must be available; run from within the checkout.
+
+The timezone above is canonical for localized schedule goldens on POSIX hosts.
+On Windows, use the machine's configured Eastern Standard Time with the process
+`TZ` variable unset:
+
+```powershell
+Remove-Item Env:TZ -ErrorAction SilentlyContinue
+flutter test
+```
+
+The Windows Dart 3.13.5 runtime can interpret `TZ=America/New_York` as an
+incorrect base offset while retaining Windows' Eastern timezone name/DST shift;
+the October 11 HDR verification observed offsets 0/+1 instead of -5/-4.
+The explicit POSIX-style plan command is still reported separately when requested.
+Check effective local offsets; do not infer correctness from the timezone name.
+If the machine is not configured for Eastern time, report that prerequisite
+or have its operator configure it before claiming canonical schedule evidence.
+The
 full suite on Linux/Windows excludes the required alpha suite marked
 `@TestOn('mac-os')`; the optional visual checks are outside the default `test/`
 tree. A portable pass there is not macOS visual evidence. Run the required
@@ -174,8 +294,8 @@ must execute and pass when the machine's effective local offsets match its
 Eastern cases. It explicitly skips incompatible offsets so another host does
 not turn a portability limitation into a false failure; that skip is
 portability evidence only, not a timezone-independent suite result. The
-Windows OS timezone governs Windows behavior, and `TZ` alone cannot establish
-the canonical Windows result.
+Windows OS timezone with process `TZ` unset governs the canonical Windows
+result; `TZ=America/New_York` cannot establish it.
 
 The five screenshot goldens are optional local visual-review checks outside the
 default `test/` tree. They use Flutter's default exact comparator and remain
@@ -234,8 +354,15 @@ flutter build macos
 ### Application compile check
 
 Use the pinned Flutter SDK, Git, PowerShell 7.4+ (`pwsh`), Visual Studio Build
-Tools 2022 with Desktop C++ and a Windows SDK, and 7-Zip. Prepare the ignored
-x86-64 LGPL libmpv directory before configuring the application:
+Tools 2022 with Desktop C++ and a Windows SDK, and 7-Zip.
+
+Windows application builds require SDK **10.0.26100.0 or newer**; CMake rejects
+an older selected SDK with a configure error. The shared DisplayConfig API
+translation unit enables newer declarations locally, with runtime capability
+detection preserving Windows 10 execution. The patched engine's separately
+pinned SDK below is unchanged.
+
+Prepare the ignored x86-64 LGPL libmpv directory before configuring the application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
@@ -310,6 +437,13 @@ remain current. Select the resulting engine explicitly; do not replace a stock
 Flutter SDK cache.
 
 ### Development launcher
+
+Only one Lineup instance runs per Windows user session. A second application
+launch, including a second `flutter run`, brings the existing window forward and
+exits successfully; its arguments (including `--media`) are ignored. Close the
+existing app normally before launching a different development candidate.
+Guardian mode dispatch occurs before instance enforcement and initializes no
+Flutter engine or window.
 
 After the one-time prerequisites and patched `host_debug` setup above, the
 small PowerShell launcher reuses those exact local-engine outputs. Configure
@@ -406,7 +540,12 @@ engine metadata, and rejects stale markers or modified build artifacts.
 [The workflow](../.github/workflows/ci.yml) runs portable Dart verification on
 Linux, the required macOS alpha suite and an application build on macOS, portable
 PowerShell release-policy validation, and focused widget tests plus a
-stock-engine C++/CMake application build on Windows Server 2022.
+stock-engine C++/CMake application build on Windows Server 2022 followed by
+the existing encoder, playback-state, display-controller, and guardian CTests.
+The native suites use real contract assertions and controlled fixtures; the
+guardian includes Win32 subprocess coverage. The player-contract,
+runner-lifecycle, and authenticated-reference CTests remain separate explicit
+checks and are not selected by CI.
 
 The expensive patched-engine/package job is conditional on engine and direct
 package-policy inputs selected by `release-inputs`. Ordinary `lib/` or

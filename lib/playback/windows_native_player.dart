@@ -41,6 +41,9 @@ class WindowsNativePlayer implements NativePlayer {
        _trackTimeout = trackTimeout ?? const Duration(seconds: 5);
 
   final _events = StreamController<PlayerEvent>.broadcast(sync: true);
+  final _displayReports = StreamController<DisplayMatchingReport>.broadcast(
+    sync: true,
+  );
   final Duration _loadTimeout;
   final Duration _stopTimeout;
   final Duration _trackTimeout;
@@ -64,6 +67,8 @@ class WindowsNativePlayer implements NativePlayer {
   int? _activeGeneration;
   bool _initialized = false;
   bool _paused = false;
+  int _displayRevision = 0;
+  DisplayMatchingReport _displayReport = const DisplayMatchingReport.initial();
 
   @override
   PlayerStatus get status => _status;
@@ -81,11 +86,19 @@ class WindowsNativePlayer implements NativePlayer {
   List<PlayerTrack> get tracks => _tracks;
 
   @override
+  DisplayMatchingReport get displayReport => _displayReport;
+
+  @override
   Stream<PlayerEvent> get events => _events.stream;
+
+  @override
+  Stream<DisplayMatchingReport> get displayReports => _displayReports.stream;
 
   @override
   Future<void> initialize() => _serializeLifecycle(() async {
     if (_initialized) return;
+    _displayRevision = 0;
+    _displayReport = const DisplayMatchingReport.initial();
     if (_handlerOwner != null && !identical(_handlerOwner, this)) {
       throw const PlayerUnavailable(
         'Another Windows native player already owns the platform channel.',
@@ -107,7 +120,12 @@ class WindowsNativePlayer implements NativePlayer {
   });
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     if (plexToken != null &&
         (media.scheme.toLowerCase() != 'https' ||
             !media.hasAuthority ||
@@ -133,7 +151,7 @@ class WindowsNativePlayer implements NativePlayer {
     _pendingLoad = pending;
     _activeLoadId = loadId;
     _activeGeneration = generation;
-    _resetMediaState();
+    _resetMediaState(startPaused: startPaused);
     _setStatus(PlayerState.loading, 'Loading media');
     try {
       final completion = pending.future
@@ -147,6 +165,7 @@ class WindowsNativePlayer implements NativePlayer {
         'uri': media.toString(),
         'plexToken': plexToken,
         'loadId': loadId,
+        'startPaused': startPaused,
       });
       final failure = await completion;
       if (failure != null) {
@@ -178,6 +197,18 @@ class WindowsNativePlayer implements NativePlayer {
         _pendingLoad = null;
       }
     }
+  }
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {
+    if (request.revision < 0) {
+      throw ArgumentError.value(request.revision, 'revision');
+    }
+    await _lifecycle;
+    _requireInitialized();
+    if (request.revision <= _displayRevision) return;
+    _displayRevision = request.revision;
+    await _invokeNative<void>('setDisplayMatching', request.toJson());
   }
 
   @override
@@ -269,7 +300,6 @@ class WindowsNativePlayer implements NativePlayer {
     _activeLoadId = null;
     _activeGeneration = null;
     Future<void> performStop() async {
-      // Queue acceptance is separate from native stop execution and idle proof.
       final completion = pending.future.then<Object?>(
         (_) => null,
         onError: (Object error) => error,
@@ -413,6 +443,13 @@ class WindowsNativePlayer implements NativePlayer {
       }
       return;
     }
+    if (event['type'] == 'display') {
+      final report = DisplayMatchingReport.tryParse(event);
+      if (report == null || report.revision != _displayRevision) return;
+      _displayReport = report;
+      if (!_displayReports.isClosed) _displayReports.add(report);
+      return;
+    }
     if (!_isCurrentLoadEvent(event)) return;
     switch (event['type']) {
       case 'state':
@@ -529,8 +566,10 @@ class WindowsNativePlayer implements NativePlayer {
         _telemetry = _copyTelemetry(hardwareDecoder: value);
       case 'video-params':
         _applyVideoParameters(value);
+      case 'video-target-params':
+        _applyVideoTargetParameters(value);
     }
-    _emit();
+    _emit(tracksUpdated: name == 'track-list' && value is List);
   }
 
   Duration _durationFromSeconds(Object? value) {
@@ -655,6 +694,38 @@ class WindowsNativePlayer implements NativePlayer {
     );
   }
 
+  void _applyVideoTargetParameters(Object? value) {
+    if (value == null) {
+      _telemetry = _copyTelemetry(
+        targetGamma: null,
+        targetPrimaries: null,
+        targetPixelFormat: null,
+      );
+      return;
+    }
+    if (value is! Map) return;
+    final parameters = Map<Object?, Object?>.from(value);
+    final gamma = parameters['gamma'];
+    final primaries = parameters['primaries'];
+    final pixelFormat = parameters['pixelformat'];
+    if ((gamma != null && gamma is! String) ||
+        (primaries != null && primaries is! String) ||
+        (pixelFormat != null && pixelFormat is! String)) {
+      return;
+    }
+    _telemetry = _copyTelemetry(
+      targetGamma: _normalizedVideoFact(gamma),
+      targetPrimaries: _normalizedVideoFact(primaries),
+      targetPixelFormat: _normalizedVideoFact(pixelFormat),
+    );
+  }
+
+  static String? _normalizedVideoFact(Object? value) {
+    if (value is! String) return null;
+    final normalized = value.trim().toLowerCase();
+    return normalized.isEmpty ? null : normalized;
+  }
+
   PlayerTelemetry _copyTelemetry({
     Object? videoOutput = _unchanged,
     Object? hardwareDecoder = _unchanged,
@@ -666,6 +737,9 @@ class WindowsNativePlayer implements NativePlayer {
     Object? hardwarePixelFormat = _unchanged,
     Object? primaries = _unchanged,
     Object? gamma = _unchanged,
+    Object? targetGamma = _unchanged,
+    Object? targetPrimaries = _unchanged,
+    Object? targetPixelFormat = _unchanged,
     Object? colorMatrix = _unchanged,
     Object? signalPeak = _unchanged,
   }) {
@@ -694,6 +768,15 @@ class WindowsNativePlayer implements NativePlayer {
           ? _telemetry.primaries
           : primaries as String?,
       gamma: gamma == _unchanged ? _telemetry.gamma : gamma as String?,
+      targetGamma: targetGamma == _unchanged
+          ? _telemetry.targetGamma
+          : targetGamma as String?,
+      targetPrimaries: targetPrimaries == _unchanged
+          ? _telemetry.targetPrimaries
+          : targetPrimaries as String?,
+      targetPixelFormat: targetPixelFormat == _unchanged
+          ? _telemetry.targetPixelFormat
+          : targetPixelFormat as String?,
       colorMatrix: colorMatrix == _unchanged
           ? _telemetry.colorMatrix
           : colorMatrix as String?,
@@ -718,9 +801,8 @@ class WindowsNativePlayer implements NativePlayer {
     }
   }
 
-  void _resetMediaState() {
-    // The native load command resets mpv pause before replacing the file.
-    _paused = false;
+  void _resetMediaState({bool startPaused = false}) {
+    _paused = startPaused;
     _position = Duration.zero;
     _duration = Duration.zero;
     _telemetry = const PlayerTelemetry();
@@ -744,7 +826,7 @@ class WindowsNativePlayer implements NativePlayer {
     _emit();
   }
 
-  void _emit() {
+  void _emit({bool tracksUpdated = false}) {
     if (_events.isClosed) return;
     _events.add(
       PlayerEvent(
@@ -753,6 +835,7 @@ class WindowsNativePlayer implements NativePlayer {
         duration: _duration,
         telemetry: _telemetry,
         tracks: _tracks,
+        tracksUpdated: tracksUpdated,
         generation: _activeGeneration,
       ),
     );

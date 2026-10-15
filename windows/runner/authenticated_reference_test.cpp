@@ -1,5 +1,3 @@
-// Exercise the existing method-channel boundary with the real production
-// configuration and load command. Only CA and presentation are test-local.
 #include "native_player.h"
 
 #include <flutter/standard_method_codec.h>
@@ -31,27 +29,24 @@ mpv_handle* CreateTestClient() {
 }
 
 int InitializeTestClient(mpv_handle* client) {
-  // These override presentation only, after all production options were set.
   for (const auto* name : {"vo", "ao"}) {
     const int status = mpv_set_option_string(client, name, "null");
     if (status < 0) return status;
   }
   return mpv_initialize(client);
 }
-}  // namespace
+}
 
-// Compile the production implementation unchanged, without exporting a private
-// method, copying options, or replacing the authenticated load path. Forward
-// both runtime calls to the pinned DLL, with the temporary CA and null outputs.
-#define mpv_create CreateTestClient
-#define mpv_initialize InitializeTestClient
-#define mpv_set_option_string SetTestOption
-#include "native_player.cpp"
-#undef mpv_set_option_string
-#undef mpv_initialize
-#undef mpv_create
 
 namespace {
+WindowsNativePlayer::MpvOperations TestOperations() {
+  WindowsNativePlayer::MpvOperations operations;
+  operations.create = CreateTestClient;
+  operations.initialize = InitializeTestClient;
+  operations.set_option_string = SetTestOption;
+  return operations;
+}
+
 using Value = flutter::EncodableValue;
 using Map = flutter::EncodableMap;
 
@@ -72,7 +67,7 @@ class TestMessenger final : public flutter::BinaryMessenger {
     const auto state = map->find(Value("state"));
     if (state != map->end()) {
       const auto* text = std::get_if<std::string>(&state->second);
-      if (text && (*text == "stopped" || *text == "error")) {
+      if (text && (*text == "ended" || *text == "stopped" || *text == "error")) {
         finished = true;
         failed = failed || (*text == "error");
       }
@@ -113,9 +108,31 @@ void SendTestEvent(TestMessenger& messenger, Map arguments) {
   messenger.Send("lineup/native_player", message->data(), message->size());
 }
 
-// Exercise the actual decoder and latch with checks that remain active in
-// Release builds. These bounded event sequences do not simulate media output.
 bool TerminalStateContractHolds() {
+  TestMessenger ended;
+  SendTestEvent(ended, {{Value("state"), Value("ended")}});
+  if (!ended.finished || ended.failed || ended.progressed) return false;
+
+  TestMessenger progressed_then_ended;
+  SendTestEvent(progressed_then_ended,
+                {{Value("name"), Value("time-pos")},
+                 {Value("value"), Value(1.0)}});
+  if (progressed_then_ended.finished || progressed_then_ended.failed ||
+      !progressed_then_ended.progressed) return false;
+  SendTestEvent(progressed_then_ended,
+                {{Value("state"), Value("ended")}});
+  if (!progressed_then_ended.finished || progressed_then_ended.failed ||
+      !progressed_then_ended.progressed) return false;
+  SendTestEvent(progressed_then_ended,
+                {{Value("state"), Value("error")}});
+  if (!progressed_then_ended.failed) return false;
+
+  TestMessenger rejected_then_ended;
+  SendTestEvent(rejected_then_ended, {{Value("state"), Value("error")}});
+  SendTestEvent(rejected_then_ended, {{Value("state"), Value("ended")}});
+  if (!rejected_then_ended.finished || !rejected_then_ended.failed ||
+      rejected_then_ended.progressed) return false;
+
   TestMessenger stopped;
   SendTestEvent(stopped, {{Value("state"), Value("stopped")}});
   if (!stopped.finished || stopped.failed || stopped.progressed) return false;
@@ -136,7 +153,7 @@ bool TerminalStateContractHolds() {
   return progressed_then_rejected.finished && progressed_then_rejected.failed &&
          progressed_then_rejected.progressed;
 }
-}  // namespace
+}
 
 int main(int argc, char** argv) {
   if (argc != 3 && argc != 4) return 2;
@@ -147,7 +164,6 @@ int main(int argc, char** argv) {
   test_ca = argv[1];
   const bool observe = argc == 4 && std::strcmp(argv[3], "observe") == 0;
   if (argc == 4 && !observe) rejected_option = argv[3];
-  // Never retain raw native diagnostic output. Report fixed outcomes only.
   FILE* redirected = nullptr;
   if (freopen_s(&redirected, "NUL", "w", stderr) != 0) return 2;
   SetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE",
@@ -160,7 +176,7 @@ int main(int argc, char** argv) {
   bool timed_out = false;
   bool initialized = false;
   {
-    WindowsNativePlayer player(window, window, &messenger);
+    WindowsNativePlayer player(window, window, &messenger, TestOperations());
     initialized = messenger.Call("initialize");
     if (initialized && messenger.Call("load", {
           {Value("uri"), Value(argv[2])},
@@ -183,7 +199,6 @@ int main(int argc, char** argv) {
     } else {
       messenger.failed = true;
     }
-    // The production destructor bounds native worker termination to 5 seconds.
   }
   DestroyWindow(window);
   std::cout << "initialized=" << initialized

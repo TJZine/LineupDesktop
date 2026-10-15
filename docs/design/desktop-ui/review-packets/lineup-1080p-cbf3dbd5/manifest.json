@@ -1,0 +1,764 @@
+{
+  "commit": "cbf3dbd580d7c8147c1327342811c56fa4af6bfb",
+  "capture": {
+    "physical_size": [
+      1920,
+      1080
+    ],
+    "device_pixel_ratio": 1,
+    "text_scale": 1,
+    "png_size": [
+      1920,
+      1080
+    ],
+    "resized": false
+  },
+  "entries": [
+    {
+      "title": "Playback order \u00b7 corrected",
+      "image": "setup-playback-order.png",
+      "reference": "playback-order-fluid.html",
+      "kind": "1080",
+      "options": {
+        "play-size": "1920"
+      },
+      "clicks": [
+        "#po-extra"
+      ],
+      "note": "Extras are off in the implementation per final specification. The mock toggle is set off for this comparison.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-01",
+      "png_sha256": "9998d87b7f8ba28096c2364aa3511a60b95519d9cc3c11f62bc8ae3b977faf6e",
+      "mock_sha256": "f7b6677cde06804414455fffb1799e528298fb8cf9b592492c294e4c1baf5025"
+    },
+    {
+      "title": "Mini-marathons \u00b7 corrected",
+      "image": "setup-mini-marathons.png",
+      "reference": "playback-order-fluid.html",
+      "kind": "1080",
+      "options": {
+        "play-size": "1920"
+      },
+      "clicks": [
+        "#po-extra",
+        "[data-mode=\"block\"]"
+      ],
+      "note": "Include specials is a later approved requirement absent from the original mock.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-02",
+      "png_sha256": "03e04e8f3ac720aab98c21f36124128270f61d32b7d11df9352e92cfa482c36b",
+      "mock_sha256": "f7b6677cde06804414455fffb1799e528298fb8cf9b592492c294e4c1baf5025"
+    },
+    {
+      "title": "Channel sources \u00b7 corrected",
+      "image": "channel-setup-strategies-1920x1080.png",
+      "reference": "channel-source-comparison.html",
+      "kind": "component",
+      "options": {
+        "sources-layout": "rich",
+        "sources-scenario": "all"
+      },
+      "clicks": [],
+      "note": "Original 960px rich-row component; this archive has no authored 1080p source-screen variant. Do not judge whole-window proportions against this component.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-03",
+      "png_sha256": "285e85b026e88ed0b5016639010e52ee093dc33e267049a417d91c879c9d5c33",
+      "mock_sha256": "cf9b0c7c3dae1913d2dc2d65637f282cf2101cdfbc86e072f3a6f2c7c06deb2f"
+    },
+    {
+      "title": "Lineup rules \u00b7 corrected",
+      "image": "setup-lineup-rules.png",
+      "reference": "lineup-rules-design.html",
+      "kind": "1080",
+      "options": {
+        "rules-size": "1920"
+      },
+      "clicks": [],
+      "note": "Source priorities and counts differ; the illustrative mock order is not a requirement to change build defaults.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-04",
+      "png_sha256": "b58dc062a1ed6cad848810052798f266c0a803c5c178254e5a7f4830830b7aa9",
+      "mock_sha256": "9708f73a51c625a660698c81310687029b0f5ce1578825469475fc42b56ecf65"
+    },
+    {
+      "title": "Review lineup \u00b7 corrected labels",
+      "image": "channel-setup-review-1920x1080.png",
+      "reference": "review-polished-states.html",
+      "kind": "1080",
+      "options": {
+        "large-size": "1920"
+      },
+      "clicks": [],
+      "note": "Different synthetic channel counts and names; all production build methods remain required.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-05",
+      "png_sha256": "7d33049fcad7cfda73021ae8119b87513dee31c6eb0c04d5ff5ece3267fa0595",
+      "mock_sha256": "511e6d957e6742e146d272138abdfb226bb198018b51e8cc27cd4e1dbb19953e"
+    },
+    {
+      "title": "Review removals \u00b7 corrected labels",
+      "image": "channel-setup-review-removals-1920x1080.png",
+      "reference": "review-edge-cases.html",
+      "kind": "1080",
+      "options": {
+        "large-size": "1920",
+        "edge-check": "tiny"
+      },
+      "clicks": [],
+      "note": "One-removal mock state; counts and generated channel identities differ.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-06",
+      "png_sha256": "5b658f4f67af6fdf456bfbe0ff27eb5653577c44a91f689fb14a82315db5d492",
+      "mock_sha256": "06797e12ab0084a474ce98182d44296b28b810892dc8fc86c77341c1ca2789d9"
+    },
+    {
+      "title": "Linking \u00b7 corrected",
+      "image": "linking-normal.png",
+      "reference": "plex-linking-hybrid.html",
+      "kind": "component",
+      "options": {
+        "hybrid-state": "waiting"
+      },
+      "clicks": [],
+      "note": "Original 736px normal component centered without resizing; no authored full-window 1080p version. QR/code are synthetic.",
+      "group": "Onboarding",
+      "css": "#plex-hybrid .ph-narrow,#plex-hybrid .ph-caption{display:none} #plex-hybrid .ph-variant{margin:0 auto}",
+      "id": "surface-07",
+      "png_sha256": "32e33b6d5d8489ac61038aa83452843ace1b8fe6f5db865919d8af02527b5ac4",
+      "mock_sha256": "c84a86c81c1c90831b399daef98dc89e594bbb6af5e5c7342cbd1e16acca35fe"
+    },
+    {
+      "title": "Linking expired \u00b7 corrected",
+      "image": "linking-expired.png",
+      "reference": "plex-linking-hybrid.html",
+      "kind": "component",
+      "options": {
+        "hybrid-state": "expired"
+      },
+      "clicks": [],
+      "note": "Actual expired active code, not terminal authentication failure. Original 736px component.",
+      "group": "Onboarding",
+      "css": "#plex-hybrid .ph-narrow,#plex-hybrid .ph-caption{display:none} #plex-hybrid .ph-variant{margin:0 auto}",
+      "id": "surface-08",
+      "png_sha256": "0c59d6f9a304acc9031f0fcce02e42683496ee26c58c80734ac3afbb50f98ed7",
+      "mock_sha256": "c84a86c81c1c90831b399daef98dc89e594bbb6af5e5c7342cbd1e16acca35fe"
+    },
+    {
+      "title": "Terminal linking failure",
+      "image": "auth-link-failure-1920x1080.png",
+      "reference": null,
+      "kind": "1080",
+      "options": {},
+      "clicks": [],
+      "note": "No matching locked no-code terminal-failure mock. Expired-code mock is deliberately not substituted.",
+      "group": "Onboarding",
+      "css": "",
+      "id": "surface-09",
+      "png_sha256": "60d7fbba802a3d5fdc6531c8e5f5ffe7abf8ff0400c0c657c440b6d99dafc4e4"
+    },
+    {
+      "title": "Profile selection",
+      "image": "profiles-1920x1080.png",
+      "reference": "profile-selection-refinement.html",
+      "kind": "component",
+      "options": {
+        "profile-width": "736"
+      },
+      "clicks": [],
+      "note": "Original 736px component; names, profile count and avatars differ.",
+      "group": "Onboarding",
+      "css": "",
+      "id": "surface-10",
+      "png_sha256": "623e2e8068fb895150c9be7e6d5157616986cf9b20db27ce6599605a5d338a7f",
+      "mock_sha256": "2135805b5d6023972a7b6baa8de8ab9041a02218bf1c4def089a86887d3d0ab6"
+    },
+    {
+      "title": "Profile PIN",
+      "image": "profile-pin-1920x1080.png",
+      "reference": "pin-refined-a.html",
+      "kind": "component",
+      "options": {
+        "pin-state": "entry"
+      },
+      "clicks": [],
+      "note": "Original compact PIN component; avatar/content differ.",
+      "group": "Onboarding",
+      "css": "",
+      "id": "surface-11",
+      "png_sha256": "118aa6a2e6c0d155715be243584d24297a6b92776aedd61476f22e8a876b6c86",
+      "mock_sha256": "cdcce8c786b635b57c54a1157649476b4868fbf4ad04ce58cf4c459dd5780735"
+    },
+    {
+      "title": "Server selection",
+      "image": "server-selection-1920x1080.png",
+      "reference": "server-selection-refinement.html",
+      "kind": "component",
+      "options": {
+        "server-preview": "ready"
+      },
+      "clicks": [],
+      "note": "Original 736px component. Switch profile is present only when meaningful in production.",
+      "group": "Onboarding",
+      "css": "",
+      "id": "surface-12",
+      "png_sha256": "b52310c3f7b2894233757ac7685ee35405adb7be075c34863ce8cd6627401622",
+      "mock_sha256": "ea7c2e6d7f1a76476321d8c12e7bbf11cdca1609a59a96a124a70d084a234455"
+    },
+    {
+      "title": "Library scan outcomes",
+      "image": "channel-setup-libraries-1920x1080.png",
+      "reference": "library-scan-states.html",
+      "kind": "component",
+      "options": {
+        "scan-preview": "mixed"
+      },
+      "clicks": [],
+      "note": "Original 736px component. Synthetic library counts/outcomes differ.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-13",
+      "png_sha256": "962d8c8c8d511fbf32ee578eb55728a5a18d952cf41b6e72ec29f632e1204e2a",
+      "mock_sha256": "5164e17dbad4637c650ae826f904055d82ad8400484ac87af772f79d4ffe7fd8"
+    },
+    {
+      "title": "Setup progress",
+      "image": "channel-setup-progress-1920x1080.png",
+      "reference": "setup-result-states.html",
+      "kind": "1080",
+      "options": {
+        "result-size": "1920",
+        "result-state": "progress"
+      },
+      "clicks": [],
+      "note": "Synthetic progress snapshot; timing is not synchronized.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-14",
+      "png_sha256": "7407e45bdae1f5d4f68cb9d6f037958bcf6c9db7d0c826ae552317dfb82c18a5",
+      "mock_sha256": "08013839b45912af74423a225e11d21389a30a6968d4d280a93b99ce5bdfb212"
+    },
+    {
+      "title": "Setup complete",
+      "image": "channel-setup-complete-1920x1080.png",
+      "reference": "setup-result-states.html",
+      "kind": "1080",
+      "options": {
+        "result-size": "1920",
+        "result-state": "success"
+      },
+      "clicks": [],
+      "note": "Different synthetic counts.",
+      "group": "Setup",
+      "css": "",
+      "id": "surface-15",
+      "png_sha256": "e39a99b152ec53619b423df13fd3ce1bfb697ee9ed9b36cdea3de17b1a71a1bc",
+      "mock_sha256": "08013839b45912af74423a225e11d21389a30a6968d4d280a93b99ce5bdfb212"
+    },
+    {
+      "title": "Channel directory",
+      "image": "channels-directory.png",
+      "reference": "channels-management-refined.html",
+      "kind": "1080",
+      "options": {
+        "cd-size": "1920",
+        "cd-design": "normal"
+      },
+      "clicks": [],
+      "note": "Different synthetic channel lists and selection counts.",
+      "group": "Channels",
+      "css": "",
+      "id": "surface-16",
+      "png_sha256": "e53f1b53f7efd726468a99f1e9a5a630ac4c02b4332b533ca4d11ac75513fee1",
+      "mock_sha256": "1c97468e14cad4bf5e0c69da336160d58b359db9418d3d311a1d4c13e2d51680"
+    },
+    {
+      "title": "Channel selection",
+      "image": "channels-selection.png",
+      "reference": "channels-management-refined.html",
+      "kind": "1080",
+      "options": {
+        "cd-size": "1920",
+        "cd-design": "selection"
+      },
+      "clicks": [],
+      "note": "Different synthetic channel lists and selection counts.",
+      "group": "Channels",
+      "css": "",
+      "id": "surface-17",
+      "png_sha256": "6b6dbb3e075a3d9881d0ee9851a8c61130c09da161d4e26db47bc4a5d4fd3341",
+      "mock_sha256": "1c97468e14cad4bf5e0c69da336160d58b359db9418d3d311a1d4c13e2d51680"
+    },
+    {
+      "title": "Channel reorder",
+      "image": "channels-reorder.png",
+      "reference": "channels-management-refined.html",
+      "kind": "1080",
+      "options": {
+        "cd-size": "1920",
+        "cd-design": "reorder"
+      },
+      "clicks": [],
+      "note": "Different synthetic channel lists and selection counts.",
+      "group": "Channels",
+      "css": "",
+      "id": "surface-18",
+      "png_sha256": "93c4878cd30fec1265e608b3c883662342603f7e33edef80dde2bb935d97d4bc",
+      "mock_sha256": "1c97468e14cad4bf5e0c69da336160d58b359db9418d3d311a1d4c13e2d51680"
+    },
+    {
+      "title": "Delete confirmation",
+      "image": "channels-delete-confirmation.png",
+      "reference": null,
+      "kind": "1080",
+      "options": {},
+      "clicks": [],
+      "note": "No separate locked deletion-dialog mock in the approved archive.",
+      "group": "Channels",
+      "css": "",
+      "id": "surface-19",
+      "png_sha256": "770de3e98a2124796d898a6a0b54329a6b42e37717910f047880f3f14a0f101f"
+    },
+    {
+      "title": "Studio \u00b7 hand-picked",
+      "image": "studio-handpicked.png",
+      "reference": "studio-playback-space-refinement.html",
+      "kind": "1080",
+      "options": {
+        "st-size": "1920",
+        "st-layout": "beside",
+        "st-example": "manual"
+      },
+      "clicks": [],
+      "note": "Final shared playback-row reference. Different content, artwork and draft state.",
+      "group": "Studio",
+      "css": "",
+      "id": "surface-20",
+      "png_sha256": "970a5a504f36ba0888242a69d0197284b566f032d948a6f23b081391b3c98970",
+      "mock_sha256": "4fa2e67da7e066d36dedd377800af9cdb05b7388ff764c4ccc203567ad0406c3"
+    },
+    {
+      "title": "Studio \u00b7 full authoring",
+      "image": "channel-studio-expanded-1920x1080.png",
+      "reference": "studio-playback-space-refinement.html",
+      "kind": "1080",
+      "options": {
+        "st-size": "1920",
+        "st-layout": "beside",
+        "st-example": "manual"
+      },
+      "clicks": [],
+      "note": "Final shared playback-row reference. Different content, artwork and draft state.",
+      "group": "Studio",
+      "css": "",
+      "id": "surface-21",
+      "png_sha256": "970a5a504f36ba0888242a69d0197284b566f032d948a6f23b081391b3c98970",
+      "mock_sha256": "4fa2e67da7e066d36dedd377800af9cdb05b7388ff764c4ccc203567ad0406c3"
+    },
+    {
+      "title": "Studio \u00b7 browse sources",
+      "image": "studio-browse.png",
+      "reference": null,
+      "kind": "1080",
+      "options": {},
+      "clicks": [],
+      "note": "No standalone locked browse-sources state; production capture supplied without an invented mock.",
+      "group": "Studio",
+      "css": "",
+      "id": "surface-22",
+      "png_sha256": "aff07d6658ab5e0a4a575b3cd8f41d6760addd1acda7c59de9fe4a7dcce40c36"
+    },
+    {
+      "title": "Studio \u00b7 library programming",
+      "image": "studio-library.png",
+      "reference": "studio-filter-picker-options.html",
+      "kind": "1080",
+      "options": {
+        "st-size": "1920",
+        "st-layout": "beside"
+      },
+      "clicks": [
+        "#fp-cancel"
+      ],
+      "note": "Programming layout reference; real capture is an empty fixture, mock contains sample programs.",
+      "group": "Studio",
+      "css": "",
+      "id": "surface-23",
+      "png_sha256": "515f312ffc3ff1bc0bf09dc6a92e6d4091f4b65efed483f069039d2f2dc825df",
+      "mock_sha256": "80e4a575dc2b121b49d00449ea95b67079c5b6a49e43dfcb755fcf66449f0bf1"
+    },
+    {
+      "title": "Studio \u00b7 filter picker",
+      "image": "studio-filter-picker.png",
+      "reference": "studio-filter-picker-options.html",
+      "kind": "1080",
+      "options": {
+        "st-size": "1920",
+        "st-layout": "beside"
+      },
+      "clicks": [],
+      "note": "Approved panel picker B. Mock has populated choices; current capture is an empty fixture. Not equivalent search-result state.",
+      "group": "Studio",
+      "css": "",
+      "id": "surface-24",
+      "png_sha256": "df41cd7cd6b24bfc62df8b13eee16d71b0c71b97260a20be67921c901ed8211a",
+      "mock_sha256": "80e4a575dc2b121b49d00449ea95b67079c5b6a49e43dfcb755fcf66449f0bf1"
+    },
+    {
+      "title": "Guide \u00b7 no playback",
+      "image": "guide-no-playback-1920x1080.png",
+      "reference": "guide-row-count.html",
+      "kind": "1080",
+      "options": {
+        "gr-resolution": "1080",
+        "gr-count": "5"
+      },
+      "clicks": [],
+      "note": "1080p five-row composition reference. Later search/library/timeline refinements are in guide-timeline.html; content and playback background differ.",
+      "group": "Guide",
+      "css": "",
+      "id": "surface-25",
+      "png_sha256": "dd8e2ae14e1f492ab5fe383795fe5fae34fdea13db634dcae71f8fe93abe8945",
+      "mock_sha256": "de8b99d25a1984b68107884b34586056d6158f5f065541ef8a5c1cba4684ebe8"
+    },
+    {
+      "title": "Guide \u00b7 PiP",
+      "image": "guide-pip-1920x1080.png",
+      "reference": "guide-timeline.html",
+      "kind": "responsive",
+      "options": {},
+      "clicks": [],
+      "note": "Later timeline/control reference: authored responsive 1280\u00d7720 canvas. Its own fit function renders it into 1920\u00d71080; no PNG enlargement or DPI change.",
+      "group": "Guide",
+      "css": "",
+      "id": "surface-26",
+      "png_sha256": "df387a9563942a021b75319b965ab0581eb9d0361616ce7af71af2e640f1652a",
+      "mock_sha256": "dd52146eb41ef06b851177531e41ebefef606a93758bdc920922c0dbab959594"
+    },
+    {
+      "title": "Mini Guide",
+      "image": "mini-guide-1920x1080.png",
+      "reference": "mini-guide-edge-blend.html",
+      "kind": "1080",
+      "options": {
+        "mg-size": "1920",
+        "mg-treatment": "shaped"
+      },
+      "clicks": [],
+      "note": "Shaped fade B; synthetic background differs. Real-footage contrast is not established.",
+      "group": "Guide",
+      "css": "",
+      "id": "surface-27",
+      "png_sha256": "ce0935ca9ee78d0310c3464e0b3c7e9b5902da505b80bb882b5fc2ce97227dc4",
+      "mock_sha256": "12c140b34886d00364f6848b65d2d96e78cfbd5601cbf3210093fba672824082"
+    },
+    {
+      "title": "Player OSD \u00b7 protected",
+      "image": "player-osd-1920x1080.png",
+      "reference": null,
+      "kind": "1080",
+      "options": {},
+      "clicks": [],
+      "note": "No independent locked OSD redesign mock. Protected production baseline is the authority; supplied as current-only.",
+      "group": "Player",
+      "css": "",
+      "id": "surface-28",
+      "png_sha256": "f7f3c28ede6238d8771a8d00641315a7703031284ac1da5ef22b28d476643c33"
+    },
+    {
+      "title": "Now Playing \u00b7 protected",
+      "image": "player-now-playing-1920x1080.png",
+      "reference": null,
+      "kind": "1080",
+      "options": {},
+      "clicks": [],
+      "note": "No independent locked Now Playing redesign mock. Protected production baseline is the authority; supplied as current-only.",
+      "group": "Player",
+      "css": "",
+      "id": "surface-29",
+      "png_sha256": "7792b8764736087e85498fba3aca97f6c8d3c901ef3acca51cb4248d20309691"
+    },
+    {
+      "title": "Audio tracks",
+      "image": "player-audio-tracks-1920x1080.png",
+      "reference": "track-panel-directions.html",
+      "kind": "1080",
+      "options": {
+        "tp-size": "1920",
+        "tp-treatment": "strong",
+        "tp-kind": "audio"
+      },
+      "clicks": [],
+      "note": "Approved right-edge B. Tracks and synthetic video background differ.",
+      "group": "Player",
+      "css": "",
+      "id": "surface-30",
+      "png_sha256": "1b3882777f334020030ee1bfbd38b146f37d0d3b7455f46fb3cb20e2d6e2c33e",
+      "mock_sha256": "7459150dd8be6dbd184786416f6d194bbca24993f2376cd2d395108d6d0931b0"
+    },
+    {
+      "title": "Subtitles \u00b7 long names",
+      "image": "player-subtitles-long-1920x1080.png",
+      "reference": "track-panel-directions.html",
+      "kind": "1080",
+      "options": {
+        "tp-size": "1920",
+        "tp-treatment": "strong",
+        "tp-kind": "subtitles"
+      },
+      "clicks": [],
+      "note": "Approved right-edge B. Tracks and synthetic video background differ.",
+      "group": "Player",
+      "css": "",
+      "id": "surface-31",
+      "png_sha256": "782279610a5a3a9edd5157fba2b1d2dee488b3a31e207cb731e8095b85d734e4",
+      "mock_sha256": "7459150dd8be6dbd184786416f6d194bbca24993f2376cd2d395108d6d0931b0"
+    },
+    {
+      "title": "Sleep timer",
+      "image": "sleep-timer.png",
+      "reference": "playback-timer-picker.html",
+      "kind": "1080",
+      "options": {
+        "st-size": "1920 \u00d7 1080",
+        "st-state": "off"
+      },
+      "clicks": [],
+      "note": "Picker geometry only; surrounding mock OSD is context, not an approved structural redesign.",
+      "group": "Player",
+      "css": "",
+      "id": "surface-32",
+      "png_sha256": "bfe4e22d128cea046c61e989c39f251fc3bdf6b9e3c675e5cf25dbe16b924718",
+      "mock_sha256": "89631a518307f04cacabfc7ae2a2e3b7452ceb481664414af8203c905f8b0be3"
+    },
+    {
+      "title": "Settings \u00b7 Appearance",
+      "image": "settings-appearance.png",
+      "reference": "settings-layout-comparison.html",
+      "kind": "responsive",
+      "options": {
+        "sl-direction": "a"
+      },
+      "clicks": [
+        "[data-page=\"Appearance\"]"
+      ],
+      "note": "Settings A; authored responsive 1280\u00d7720 canvas rendered by its own fit function. Different sample values.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-33",
+      "png_sha256": "ac5cceabe9b4638e3b7db5308ebd5cc850401313ada0ba9c5a97a993ee1b34e9",
+      "mock_sha256": "56c1ef182cc60a1a350dce6989ebd359da85301d0d50cbb7bd396661ea6185f5"
+    },
+    {
+      "title": "Settings \u00b7 Guide",
+      "image": "settings-guide.png",
+      "reference": "settings-layout-comparison.html",
+      "kind": "responsive",
+      "options": {
+        "sl-direction": "a"
+      },
+      "clicks": [
+        "[data-page=\"Guide\"]"
+      ],
+      "note": "Settings A; authored responsive 1280\u00d7720 canvas rendered by its own fit function. Different sample values.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-34",
+      "png_sha256": "3f12c2f6eda6daf92cabef73dce7dd7357d6eaa57c36ba2b40d1b898eeaf137b",
+      "mock_sha256": "56c1ef182cc60a1a350dce6989ebd359da85301d0d50cbb7bd396661ea6185f5"
+    },
+    {
+      "title": "Settings \u00b7 Playback",
+      "image": "settings-playback.png",
+      "reference": "settings-layout-comparison.html",
+      "kind": "responsive",
+      "options": {
+        "sl-direction": "a"
+      },
+      "clicks": [
+        "[data-page=\"Playback\"]"
+      ],
+      "note": "Settings A; authored responsive 1280\u00d7720 canvas rendered by its own fit function. Different sample values.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-35",
+      "png_sha256": "0d1172cc02a5c22c6f2591f5b35a8dd23ee6df41d7b5f592bf2e2d3fecc15143",
+      "mock_sha256": "56c1ef182cc60a1a350dce6989ebd359da85301d0d50cbb7bd396661ea6185f5"
+    },
+    {
+      "title": "Settings \u00b7 Accessibility",
+      "image": "settings-accessibility.png",
+      "reference": "settings-layout-comparison.html",
+      "kind": "responsive",
+      "options": {
+        "sl-direction": "a"
+      },
+      "clicks": [
+        "[data-page=\"Accessibility\"]"
+      ],
+      "note": "Settings A; authored responsive 1280\u00d7720 canvas rendered by its own fit function. Different sample values.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-36",
+      "png_sha256": "c8ce31ce7089d074085149d215a773d62d5ab7c9e097f3a51da9cb789ffa1fd4",
+      "mock_sha256": "56c1ef182cc60a1a350dce6989ebd359da85301d0d50cbb7bd396661ea6185f5"
+    },
+    {
+      "title": "Settings \u00b7 Account",
+      "image": "settings-account.png",
+      "reference": "settings-layout-comparison.html",
+      "kind": "responsive",
+      "options": {
+        "sl-direction": "a"
+      },
+      "clicks": [
+        "[data-page=\"Account\"]"
+      ],
+      "note": "Settings A; authored responsive 1280\u00d7720 canvas rendered by its own fit function. Later account sign-out additions are not shown in the mock.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-37",
+      "png_sha256": "e861e92049d631a46d23e054458da32c3bdf6d86c6d670869792a0e3a79e9b09",
+      "mock_sha256": "56c1ef182cc60a1a350dce6989ebd359da85301d0d50cbb7bd396661ea6185f5"
+    },
+    {
+      "title": "Settings \u00b7 Support",
+      "image": "settings-support.png",
+      "reference": "settings-layout-comparison.html",
+      "kind": "responsive",
+      "options": {
+        "sl-direction": "a"
+      },
+      "clicks": [
+        "[data-page=\"Support\"]"
+      ],
+      "note": "Settings A; authored responsive 1280\u00d7720 canvas rendered by its own fit function. Different sample values.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-38",
+      "png_sha256": "9d173b05dc785a6e70b4766cfef6fabef4e4af48908f5a4d3100a48609250652",
+      "mock_sha256": "56c1ef182cc60a1a350dce6989ebd359da85301d0d50cbb7bd396661ea6185f5"
+    },
+    {
+      "title": "Settings over playback",
+      "image": "settings-playback-ember-steel-1920x1080.png",
+      "reference": "settings-layout-comparison.html",
+      "kind": "responsive",
+      "options": {
+        "sl-direction": "a"
+      },
+      "clicks": [
+        "[data-page=\"Playback\"]"
+      ],
+      "note": "Settings A geometry; background/values differ.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-39",
+      "png_sha256": "ac5cceabe9b4638e3b7db5308ebd5cc850401313ada0ba9c5a97a993ee1b34e9",
+      "mock_sha256": "56c1ef182cc60a1a350dce6989ebd359da85301d0d50cbb7bd396661ea6185f5"
+    },
+    {
+      "title": "Alternate theme \u00b7 current only",
+      "image": "settings-slate-pine-1920x1080.png",
+      "reference": null,
+      "kind": "1080",
+      "options": {},
+      "clicks": [],
+      "note": "Cinema mock palette is not an accurate comparator for Slate & Pine.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-40",
+      "png_sha256": "b8e3a92033176f633eeca3ce468c9d320988a459a1a4a12891a457892e1a6692"
+    },
+    {
+      "title": "Lineup menu",
+      "image": "lineup-menu.png",
+      "reference": "lineup-menu-comparison.html",
+      "kind": "responsive",
+      "options": {
+        "lm-layout": "a",
+        "lm-example": "normal"
+      },
+      "clicks": [],
+      "note": "Approved anchored A. Mock Current caption is obsolete; final helper/account refinements take precedence.",
+      "group": "Settings",
+      "css": "",
+      "id": "surface-41",
+      "png_sha256": "118950f1944a024d9681da92132b1ae9d4a1033d8a0af30775d22bae937f788a",
+      "mock_sha256": "25ffca3fa24fa6744e3a0e82cadcb0e739e51bf1fba3cd5e86771e965943e8d9"
+    },
+    {
+      "title": "Diagnostics \u00b7 recording off",
+      "image": "diagnostics-summary.png",
+      "reference": "diagnostics-refined.html",
+      "kind": "responsive",
+      "options": {
+        "dr-record": "off",
+        "dr-example": "idle"
+      },
+      "clicks": [],
+      "note": "Four-group A reference. Available telemetry, event content and disclosure state differ; not matched native playback evidence.",
+      "group": "Diagnostics",
+      "css": "",
+      "id": "surface-42",
+      "png_sha256": "9c7d7a6a143933a1ccb91860ec948901a38bd8c8e48fee47dcecfe186bd9e5fc",
+      "mock_sha256": "a80bd7d6aa17c43ff8f837a35c726561db970ab2c450f2ce75dba009921596ee"
+    },
+    {
+      "title": "Diagnostics \u00b7 synthetic events",
+      "image": "diagnostics-events.png",
+      "reference": "diagnostics-refined.html",
+      "kind": "responsive",
+      "options": {
+        "dr-record": "on",
+        "dr-example": "idle"
+      },
+      "clicks": [],
+      "note": "Four-group A reference. Available telemetry, event content and disclosure state differ; not matched native playback evidence.",
+      "group": "Diagnostics",
+      "css": "",
+      "id": "surface-43",
+      "png_sha256": "fa7629f9a282b2bc149fd781de605e4441d8281108b316f7bae21c12d4e8606e",
+      "mock_sha256": "a80bd7d6aa17c43ff8f837a35c726561db970ab2c450f2ce75dba009921596ee"
+    },
+    {
+      "title": "Diagnostics \u00b7 technical details",
+      "image": "diagnostics-expanded.png",
+      "reference": "diagnostics-refined.html",
+      "kind": "responsive",
+      "options": {
+        "dr-record": "off",
+        "dr-example": "idle"
+      },
+      "clicks": [],
+      "note": "Four-group A reference. Available telemetry, event content and disclosure state differ; not matched native playback evidence.",
+      "group": "Diagnostics",
+      "css": "",
+      "id": "surface-44",
+      "png_sha256": "c1d0d7a86e1ca9f84d0fb8fbf4a9dc5d46ca96d37d641593bea0b3348b09877e",
+      "mock_sha256": "a80bd7d6aa17c43ff8f837a35c726561db970ab2c450f2ce75dba009921596ee"
+    },
+    {
+      "title": "Diagnostics \u00b7 events and details",
+      "image": "diagnostics-events-expanded.png",
+      "reference": "diagnostics-refined.html",
+      "kind": "responsive",
+      "options": {
+        "dr-record": "on",
+        "dr-example": "idle"
+      },
+      "clicks": [],
+      "note": "Four-group A reference. Available telemetry, event content and disclosure state differ; not matched native playback evidence.",
+      "group": "Diagnostics",
+      "css": "",
+      "id": "surface-45",
+      "png_sha256": "73ef083c1dc42a1f34291112db67c442243bf59e481df8339782350b0ca86e23",
+      "mock_sha256": "a80bd7d6aa17c43ff8f837a35c726561db970ab2c450f2ce75dba009921596ee"
+    }
+  ]
+}

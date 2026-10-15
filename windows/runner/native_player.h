@@ -6,6 +6,7 @@
 #include <flutter/method_channel.h>
 #include <mpv/client.h>
 #include <windows.h>
+#include "display_dynamic_range.h"
 
 #include <atomic>
 #include <cstdint>
@@ -16,21 +17,37 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <unordered_map>
 #include <utility>
+#include <variant>
+
+#include "native_playback_state.h"
 
 class WindowsNativePlayer {
  public:
   static constexpr UINT kPlatformEventMessage = WM_APP + 0x31;
 
+  struct MpvOperations {
+    decltype(&::mpv_create) create = &::mpv_create;
+    decltype(&::mpv_initialize) initialize = &::mpv_initialize;
+    decltype(&::mpv_set_option_string) set_option_string = &::mpv_set_option_string;
+    decltype(&::mpv_get_property) get_property = &::mpv_get_property;
+    decltype(&::mpv_set_property) set_property = &::mpv_set_property;
+    decltype(&::mpv_command) command = &::mpv_command;
+    decltype(&::mpv_terminate_destroy) terminate_destroy = &::mpv_terminate_destroy;
+  };
+
   WindowsNativePlayer(HWND top_level_window, HWND flutter_view,
                       flutter::BinaryMessenger* messenger);
+  WindowsNativePlayer(HWND top_level_window, HWND flutter_view,
+                      flutter::BinaryMessenger* messenger,
+                      MpvOperations mpv_operations);
   ~WindowsNativePlayer();
 
   WindowsNativePlayer(const WindowsNativePlayer&) = delete;
   WindowsNativePlayer& operator=(const WindowsNativePlayer&) = delete;
 
-  bool HandleWindowMessage(UINT message);
+  bool HandleWindowMessage(UINT message, WPARAM wparam = 0);
+  void EndWindowsSession();
   bool BeginWindowClose();
   bool TakeWindowCloseReady();
   void SetParentMinimized(bool minimized);
@@ -41,7 +58,6 @@ class WindowsNativePlayer {
     flutter::EncodableMap value;
   };
 
-  enum class CommandType { load, play, pause, seek, stop, track, volume };
   class PlexHeader {
    public:
     PlexHeader() = default;
@@ -63,22 +79,34 @@ class WindowsNativePlayer {
     size_t size_ = 0;
   };
 
-  struct QueuedCommand {
-    QueuedCommand(CommandType type, int64_t load_id = 0,
-                  std::string text = {}, double number = 0)
-        : type(type),
-          load_id(load_id),
-          text(std::move(text)),
-          number(number) {}
-
-    CommandType type;
-    int64_t load_id = 0;
-    int64_t expected_load_id = 0;
-    int64_t request_id = 0;
-    std::string text;
-    double number = 0;
+  struct LoadCommand {
+    int64_t load_id;
+    std::string uri;
     PlexHeader plex_header;
+    bool start_paused = false;
   };
+  struct PlayCommand {};
+  struct PauseCommand {};
+  struct SeekCommand {
+    double seconds;
+  };
+  struct StopCommand {
+    int64_t stop_id;
+  };
+  struct TrackCommand {
+    int64_t load_id;
+    int64_t request_id;
+    std::string property;
+    std::optional<int64_t> selection_id;
+  };
+  struct VolumeCommand {
+    double volume;
+  };
+  using QueuedCommand = std::variant<LoadCommand, PlayCommand, PauseCommand,
+                                     SeekCommand, StopCommand, TrackCommand,
+                                     VolumeCommand>;
+
+  friend struct NativePlayerTestAccess;
 
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
@@ -90,7 +118,7 @@ class WindowsNativePlayer {
   void RunCommand(QueuedCommand& command, uint64_t generation);
   bool SetVideoRect(const flutter::EncodableMap& arguments);
   bool SetFullscreen(bool fullscreen, std::string& error);
-  std::optional<QueuedCommand> ParseTrack(
+  std::optional<TrackCommand> ParseTrack(
       const flutter::EncodableMap& arguments);
   void StartEventThread();
   void StopEventThread();
@@ -104,11 +132,15 @@ class WindowsNativePlayer {
   void DrainEvents();
   flutter::EncodableValue EncodeTrackList(const mpv_node& node) const;
   flutter::EncodableValue EncodeVideoParameters(const mpv_node& node) const;
+  flutter::EncodableValue EncodeVideoTargetParameters(const mpv_node& node) const;
+  void QueueDisplayReport(const lineup::DisplayReport& report);
 
+  const MpvOperations mpv_operations_;
   HWND top_level_window_;
   HWND flutter_view_;
   HWND video_host_ = nullptr;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
+  std::unique_ptr<lineup::DisplayDynamicRange> display_;
   mpv_handle* mpv_ = nullptr;
   std::thread event_thread_;
   std::atomic<bool> accepting_commands_{false};
@@ -120,14 +152,7 @@ class WindowsNativePlayer {
   size_t queued_command_bytes_ = 0;
   std::mutex event_mutex_;
   std::deque<QueuedEvent> events_;
-  std::optional<int64_t> active_load_id_;
-  std::optional<int64_t> pending_stop_id_;
-  std::optional<int64_t> event_load_id_;
-  std::deque<int64_t> pending_load_ids_;
-  std::unordered_map<int64_t, int64_t> playlist_load_ids_;
-  std::optional<int64_t> last_failure_load_id_;
-  std::string last_failure_code_;
-  std::optional<int64_t> last_failure_http_status_;
+  lineup::NativePlaybackState playback_;
   std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
       dispose_result_;
   std::atomic<bool> dispose_ready_{false};
@@ -136,6 +161,7 @@ class WindowsNativePlayer {
   bool disposed_ = true;
   bool window_close_requested_ = false;
   bool window_close_ready_ = false;
+  bool display_close_timeout_ = false;
   RECT video_rect_{};
   bool video_rect_set_ = false;
   bool parent_minimized_ = false;
@@ -144,4 +170,4 @@ class WindowsNativePlayer {
   LONG_PTR window_style_ = 0;
 };
 
-#endif  // RUNNER_NATIVE_PLAYER_H_
+#endif

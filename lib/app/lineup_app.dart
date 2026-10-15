@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -124,8 +126,6 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   void _changed() {
     final settings = widget.controller.settings;
     final startupRecoveryNotice = widget.controller.startupRecoveryNotice;
-    // Keep the shell mounted if Switch server cancels the initial restore
-    // while its obsolete asynchronous work is still unwinding.
     final restoreStarted =
         _restoreStarted || widget.controller.restoringSavedLineup;
     if (settings.theme == _settings.theme &&
@@ -147,9 +147,23 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
-    widget.player.dispose();
+    unawaited(_disposePlayer());
     widget.controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _disposePlayer() async {
+    try {
+      await widget.player.dispose();
+    } catch (_) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: StateError('Native player shutdown failed.'),
+          library: 'Lineup Desktop',
+          context: ErrorDescription('while disposing the native player'),
+        ),
+      );
+    }
   }
 
   @override

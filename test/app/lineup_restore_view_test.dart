@@ -16,6 +16,8 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 class _SurfaceController extends FixtureController {
+  _SurfaceController({super.scenario});
+
   PlexLibraryScanPhase phase = PlexLibraryScanPhase.items;
   PlexPlaylistProgress? playlistProgress;
   @override
@@ -54,7 +56,9 @@ Future<void> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  controller.settings = const LineupSettings(reduceMotion: true);
+  controller.fixtureActor.publishSettings(
+    const LineupSettings(reduceMotion: true),
+  );
   await tester.pumpWidget(UiFixture(controller: controller).build());
   await tester.pumpAndSettle();
 }
@@ -63,12 +67,27 @@ void main() {
   testWidgets('restore routing, phase-only live region, and server switch', (
     tester,
   ) async {
-    final c = _SurfaceController()
-      ..stage = SetupStage.channelSetup
-      ..restoringSavedLineup = true
-      ..libraryScanStatus = LibraryScanStatus.scanning
-      ..libraryScanCompletedItems = 1200
-      ..libraryScanTotalItems = 5000;
+    final c = _SurfaceController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        restoringSavedLineup: true,
+        libraryScanStatus: LibraryScanStatus.scanning,
+        libraries: const [
+          PlexLibrary(
+            id: 'fixture',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        scanFacts: {
+          'fixture': LibraryScanFact(
+            status: LibraryScanStatus.scanning,
+            completedItems: 1200,
+            totalItems: 5000,
+          ),
+        },
+      ),
+    );
     addTearDown(c.dispose);
     final semantics = tester.ensureSemantics();
     await _pump(tester, c);
@@ -80,12 +99,29 @@ void main() {
     expect(find.text('Cancel scan'), findsNothing);
     final status = find.byKey(const ValueKey('library-scan-phase'));
     expect(tester.getSemantics(status).label, 'Checking items');
-    c.libraryScanCompletedItems = 1300;
+    c.fixtureActor.reportScan(
+      status: LibraryScanStatus.scanning,
+      facts: {
+        'fixture': const LibraryScanFact(
+          status: LibraryScanStatus.scanning,
+          completedItems: 1300,
+          totalItems: 5000,
+        ),
+      },
+    );
     c.notifyListeners();
     await tester.pump();
     expect(find.text('Checking items · 1,300 of 5,000'), findsOneWidget);
     expect(tester.getSemantics(status).label, 'Checking items');
-    c.libraryScanTotalItems = null;
+    c.fixtureActor.reportScan(
+      status: LibraryScanStatus.scanning,
+      facts: {
+        'fixture': const LibraryScanFact(
+          status: LibraryScanStatus.scanning,
+          completedItems: 1300,
+        ),
+      },
+    );
     c.notifyListeners();
     await tester.pump();
     expect(find.text('Checking items · 1,300'), findsOneWidget);
@@ -150,21 +186,23 @@ void main() {
       testWidgets(
         'library step ${empty ? 'empty' : 'settled'} offers server switch at $size',
         (tester) async {
-          final c = _SurfaceController()
-            ..stage = SetupStage.ready
-            ..libraries = empty
-                ? []
-                : const [
-                    PlexLibrary(
-                      id: 'movies',
-                      title: 'Movies',
-                      type: PlexLibraryType.movie,
-                    ),
-                  ]
-            // An empty server may still have a saved library selection.
-            ..selectedLibraryIds = {'movies'}
-            ..libraryScanStatus = LibraryScanStatus.complete;
-          c.enterChannelSetup();
+          final c = _SurfaceController(
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              libraries: empty
+                  ? []
+                  : const [
+                      PlexLibrary(
+                        id: 'movies',
+                        title: 'Movies',
+                        type: PlexLibraryType.movie,
+                      ),
+                    ],
+              selectedLibraryIds: empty ? const {} : const {'movies'},
+              libraryScanStatus: LibraryScanStatus.complete,
+            ),
+          );
+          await c.enterChannelSetup();
           addTearDown(c.dispose);
           await _pump(tester, c, size: size);
           expect(find.text('Switch server'), findsOneWidget);
@@ -223,18 +261,22 @@ void main() {
   testWidgets(
     'setup scan exposes enrichment and keeps Switch server usable while busy',
     (tester) async {
-      final c = _SurfaceController()
-        ..stage = SetupStage.channelSetup
-        ..busy = true
-        ..phase = PlexLibraryScanPhase.collections
-        ..libraryScanStatus = LibraryScanStatus.scanning
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ];
+      final c =
+          _SurfaceController(
+              scenario: LineupScenario(
+                stage: SetupStage.channelSetup,
+                busy: true,
+              ),
+            )
+            ..phase = PlexLibraryScanPhase.collections
+            ..fixtureActor.discoverLibraries(const [
+              PlexLibrary(
+                id: 'movies',
+                title: 'Movies',
+                type: PlexLibraryType.movie,
+              ),
+            ])
+            ..fixtureActor.reportScan(status: LibraryScanStatus.scanning);
       addTearDown(c.dispose);
       await _pump(tester, c);
       expect(find.text('Loading collections'), findsWidgets);
@@ -255,20 +297,28 @@ void main() {
   testWidgets(
     'setup phase displays bounded playlist work after library facts complete',
     (tester) async {
-      final c = _SurfaceController()
-        ..stage = SetupStage.channelSetup
-        ..libraryScanStatus = LibraryScanStatus.scanning
-        ..playlistProgress = const PlexPlaylistProgress(
-          completedPlaylists: 4,
-          totalPlaylists: 8,
-        )
-        ..libraries = const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ];
+      final c =
+          _SurfaceController(
+              scenario:
+                  LineupScenario(
+                    stage: SetupStage.channelSetup,
+                    libraryScanStatus: LibraryScanStatus.scanning,
+                  ).withDefaults(
+                    LineupScenario(
+                      libraries: const [
+                        PlexLibrary(
+                          id: 'movies',
+                          title: 'Movies',
+                          type: PlexLibraryType.movie,
+                        ),
+                      ],
+                    ),
+                  ),
+            )
+            ..playlistProgress = const PlexPlaylistProgress(
+              completedPlaylists: 4,
+              totalPlaylists: 8,
+            );
       addTearDown(c.dispose);
       await _pump(tester, c);
       expect(find.text('Loading playlists · 4 of 8'), findsOneWidget);
@@ -296,10 +346,13 @@ void main() {
           Size(3840, 2160),
         ]) {
           tester.view.physicalSize = size;
-          final c = _SurfaceController()
-            ..stage = SetupStage.channelSetup
-            ..restoringSavedLineup = true
-            ..settings = LineupSettings(theme: theme, reduceMotion: true);
+          final c = _SurfaceController(
+            scenario: LineupScenario(
+              stage: SetupStage.channelSetup,
+              restoringSavedLineup: true,
+              settings: LineupSettings(theme: theme, reduceMotion: true),
+            ),
+          );
           await tester.pumpWidget(UiFixture(controller: c).build());
           await tester.pumpAndSettle();
           expect(find.text('Loading your lineup…'), findsOneWidget);
@@ -308,10 +361,13 @@ void main() {
         }
         tester.view.physicalSize = const Size(1920, 1080);
         tester.platformDispatcher.textScaleFactorTestValue = 1.5;
-        final c = _SurfaceController()
-          ..stage = SetupStage.channelSetup
-          ..restoringSavedLineup = true
-          ..settings = LineupSettings(theme: theme, reduceMotion: true);
+        final c = _SurfaceController(
+          scenario: LineupScenario(
+            stage: SetupStage.channelSetup,
+            restoringSavedLineup: true,
+            settings: LineupSettings(theme: theme, reduceMotion: true),
+          ),
+        );
         await tester.pumpWidget(UiFixture(controller: c).build());
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);

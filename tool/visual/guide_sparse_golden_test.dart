@@ -19,9 +19,7 @@ import '../../test/support/ui_fixture.dart';
 const _goldenKey = Key('guide-sparse-visual-boundary');
 const _viewport = Size(1920, 1080);
 final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
-// Keep this composition capture independent of asynchronous palette decoding:
-// empty artwork resolves to the same color before and after sampling.
-final Uint8List _artworkBytes = Uint8List(0);
+final Uint8List _emptyArtworkBytes = Uint8List(0);
 
 void main() {
   setUpAll(loadPinnedTestFonts);
@@ -140,12 +138,15 @@ List<Channel> _channels(bool rich) => [
 ];
 
 class _ComparisonController extends FixtureController {
-  _ComparisonController(List<Channel> fixtureChannels) {
-    stage = SetupStage.ready;
-    settings = const LineupSettings(reduceMotion: true);
-    channels = fixtureChannels;
-    currentChannelId = fixtureChannels[1].id;
-  }
+  _ComparisonController(List<Channel> fixtureChannels)
+    : super(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          settings: const LineupSettings(reduceMotion: true),
+          channels: fixtureChannels,
+          currentChannelId: fixtureChannels[1].id,
+        ),
+      );
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
@@ -159,5 +160,5 @@ class _ComparisonController extends FixtureController {
     Uri path, {
     int? width,
     int? height,
-  }) async => _artworkBytes;
+  }) async => _emptyArtworkBytes;
 }

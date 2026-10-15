@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
 import '../guide/guide_controller.dart';
 import '../guide/focused_ticker.dart';
@@ -36,6 +37,7 @@ class PlayerView extends StatefulWidget {
 }
 
 class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
+  final _trackDisplays = PlayerTrackDisplayCache();
   late PlayerOverlay _renderedOverlay;
   late int _bottomPanelGeneration;
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
@@ -128,8 +130,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                     ?.controller ==
                 widget.controller &&
             _keyboardInput) {
-          // The shared panel retains focus across expansion, while the
-          // coordinator retires each presentation's auto-hide suspension.
           widget.controller.overlayFocusChanged(nextOverlay, generation, true);
         }
       });
@@ -151,7 +151,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       _visibleClockTimer = null;
       return;
     }
-    // Schedule clocks and progress must advance even without native events.
     _visibleClockTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       if (!_needsVisibleClock) {
@@ -185,18 +184,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    // Shell route shortcuts must reach the shared navigation/leave guard.
-    if (HardwareKeyboard.instance.isControlPressed &&
-        const [
-          LogicalKeyboardKey.digit1,
-          LogicalKeyboardKey.digit2,
-          LogicalKeyboardKey.digit3,
-          LogicalKeyboardKey.digit4,
-          LogicalKeyboardKey.digit5,
-          LogicalKeyboardKey.keyG,
-          LogicalKeyboardKey.keyP,
-          LogicalKeyboardKey.comma,
-        ].contains(event.logicalKey)) {
+    if (navigationShortcutIndex(event.logicalKey) != null) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
@@ -558,6 +546,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                         },
                         child: switch (overlay) {
                           PlayerOverlay.osd || PlayerOverlay.nowPlaying => _Osd(
+                            trackDisplays: _trackDisplays,
                             detailsExpanded:
                                 overlay == PlayerOverlay.nowPlaying,
                             controller: controller,
@@ -573,10 +562,12 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                             openGuide: widget.openGuide,
                           ),
                           PlayerOverlay.audioTracks => _Tracks(
+                            trackDisplays: _trackDisplays,
                             controller: controller,
                             type: PlayerTrackType.audio,
                           ),
                           PlayerOverlay.subtitleTracks => _Tracks(
+                            trackDisplays: _trackDisplays,
                             controller: controller,
                             type: PlayerTrackType.subtitle,
                           ),
@@ -600,7 +591,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   }
 }
 
-/// The one Flutter geometry used for both the full player and Guide PiP.
 class PlayerSurface extends StatelessWidget {
   const PlayerSurface({
     required this.controller,
@@ -621,7 +611,10 @@ class PlayerSurface extends StatelessWidget {
     final unsupported = state == PlayerState.unsupported;
     final hasError = controller.error != null;
     final preparing =
-        !hasError && (state == PlayerState.loading || controller.tuning);
+        !hasError &&
+        (controller.displayHoldActive ||
+            state == PlayerState.loading ||
+            controller.tuning);
     final roles = LineupTheme.of(context);
     final unavailable =
         hasError ||
@@ -706,8 +699,6 @@ class _SurfaceError extends StatelessWidget {
   }
 }
 
-// Keep the material bottom-anchored while its content grows upward. Bypass
-// animation entirely for Reduce Motion, including asynchronous artwork sizes.
 class _BottomPanelExpansion extends StatelessWidget {
   const _BottomPanelExpansion({required this.child});
   final Widget child;
@@ -726,6 +717,7 @@ class _BottomPanelExpansion extends StatelessWidget {
 
 class _Osd extends StatelessWidget {
   const _Osd({
+    required this.trackDisplays,
     required this.controller,
     required this.menuFocus,
     required this.sleepFocus,
@@ -735,6 +727,7 @@ class _Osd extends StatelessWidget {
     this.detailsExpanded = false,
   });
   final bool detailsExpanded;
+  final PlayerTrackDisplayCache trackDisplays;
   final PlayerCoordinator controller;
   final LineupMenuCallback? openMenu;
   final FocusNode menuFocus;
@@ -744,6 +737,7 @@ class _Osd extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displays = trackDisplays.forTracks(controller.tracks);
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
     final horizontalInset = (size.width * 0.05).clamp(24.0, 96.0).toDouble();
@@ -780,9 +774,6 @@ class _Osd extends StatelessWidget {
     final unsupported = controller.status.state == PlayerState.unsupported;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
     final expanded = !LineupLayout.isCompactWidth(size.width);
-    // 720p desktop still has enough room for the broadcast-style progress
-    // lane; keep the compact 800x600 regime stacked so every action remains
-    // reachable without crowding the identity block.
     final horizontal = size.width >= 1200 && size.height >= 640;
 
     final actionStyle = _playerActionStyle(context);
@@ -802,7 +793,9 @@ class _Osd extends StatelessWidget {
       ),
       IconButton(
         style: actionStyle,
-        tooltip: controller.status.state == PlayerState.playing
+        tooltip:
+            (controller.displayHoldActive ||
+                controller.status.state == PlayerState.playing)
             ? 'Pause'
             : 'Play',
         onPressed: unsupported
@@ -814,7 +807,8 @@ class _Osd extends StatelessWidget {
         padding: null,
         iconSize: 36,
         icon: Icon(
-          controller.status.state == PlayerState.playing
+          (controller.displayHoldActive ||
+                  controller.status.state == PlayerState.playing)
               ? Icons.pause
               : Icons.play_arrow,
         ),
@@ -843,7 +837,7 @@ class _Osd extends StatelessWidget {
         .firstOrNull;
     final audioDisplay = selectedAudio == null
         ? null
-        : formatPlayerTrackDisplay(selectedAudio, peers: controller.tracks);
+        : displays.displayFor(selectedAudio);
     final audioLabel = audioDisplay == null || audioDisplay.compactText == null
         ? 'Audio'
         : 'Audio • ${audioDisplay.compactText}';
@@ -852,7 +846,7 @@ class _Osd extends StatelessWidget {
         (audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable');
     final subtitlesDisplay = selectedSubtitles == null
         ? null
-        : formatPlayerTrackDisplay(selectedSubtitles, peers: controller.tracks);
+        : displays.displayFor(selectedSubtitles);
     final subtitlesLabel = subtitlesDisplay == null
         ? '${expanded ? 'Subtitles' : 'Subs'} • Off'
         : subtitlesDisplay.compactText == null
@@ -955,7 +949,11 @@ class _Osd extends StatelessWidget {
     final episodeFacts = item == null ? null : _osdEpisodeFacts(item);
     final statusFacts = [
       episodeFacts,
-      _statusLabel(controller.status.state),
+      _statusLabel(
+        controller.displayHoldActive
+            ? PlayerState.loading
+            : controller.status.state,
+      ),
     ].nonNulls.toList(growable: false);
     final identity = Column(
       key: const Key('player-osd-identity'),
@@ -1222,11 +1220,14 @@ class _Osd extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    controller.status.state ==
-                                            PlayerState.playing
+                                    (!controller.displayHoldActive &&
+                                            controller.status.state ==
+                                                PlayerState.playing)
                                         ? 'Playing'
                                         : _statusLabel(
-                                                controller.status.state,
+                                                controller.displayHoldActive
+                                                    ? PlayerState.loading
+                                                    : controller.status.state,
                                               ) ??
                                               'Ready',
                                     style: osdSecondaryStyle,
@@ -1238,9 +1239,15 @@ class _Osd extends StatelessWidget {
                             )
                           else ...[
                             Text(
-                              controller.status.state == PlayerState.playing
+                              (!controller.displayHoldActive &&
+                                      controller.status.state ==
+                                          PlayerState.playing)
                                   ? 'Playing'
-                                  : _statusLabel(controller.status.state) ??
+                                  : _statusLabel(
+                                          controller.displayHoldActive
+                                              ? PlayerState.loading
+                                              : controller.status.state,
+                                        ) ??
                                         'Ready',
                               style: osdSecondaryStyle,
                             ),
@@ -1473,8 +1480,6 @@ class _NowPlaying extends StatelessWidget {
                   key: const Key('player-now-playing-collapse'),
                   style: _playerActionStyle(context).copyWith(
                     padding: const WidgetStatePropertyAll(
-                      // Center the 20px glyph like the fullscreen action's
-                      // 48px target, while keeping the label-to-icon gap tight.
                       EdgeInsets.only(left: 10, right: 14),
                     ),
                   ),
@@ -1656,9 +1661,6 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
       final item = widget.program.scheduled.item;
       final showTitle = item.showTitle?.trim();
       const logoMaxHeight = 72.0;
-      // Keep the artwork slot proportional to its compact height, so the
-      // shared relative-size guard evaluates this title-art layout rather
-      // than the retired tall shelf's much wider reservation.
       const logoMaxWidth = logoMaxHeight * 6;
       return LayoutBuilder(
         builder: (context, available) {
@@ -1763,11 +1765,6 @@ TextStyle _nowPlayingTitleStyle(BuildContext context, {required bool dense}) =>
       color: LineupTheme.of(context).primaryText,
       shadows: _overlayTextShadow,
     );
-
-/*
- * Keep the logo bounds on the image path only. ClearLogoImage's fallback is
- * intentionally independent so a failed logo cannot constrain the title.
- */
 
 class _PlayerArtwork extends StatelessWidget {
   const _PlayerArtwork({
@@ -1916,8 +1913,6 @@ class _NowPlayingCast extends StatelessWidget {
           0.0,
           constraints.maxWidth - gap * math.max(0, visible.length - 1),
         );
-        // Preserve natural content widths when they fit. When constrained,
-        // share the remaining space without reserving wide blank columns.
         var remaining = available;
         final pending = <int>{for (var i = 0; i < widths.length; i++) i};
         while (pending.isNotEmpty) {
@@ -1958,8 +1953,6 @@ class _NowPlayingCast extends StatelessWidget {
   }
 }
 
-/// Measure painted bounds after layout: canvas pixels may be scaled before
-/// they reach the window, independently of the device's pixel ratio.
 class _CastPortrait extends StatefulWidget {
   const _CastPortrait({
     required this.portrait,
@@ -2887,7 +2880,12 @@ class _SleepTimerPicker extends StatelessWidget {
 }
 
 class _Tracks extends StatefulWidget {
-  const _Tracks({required this.controller, required this.type});
+  const _Tracks({
+    required this.controller,
+    required this.type,
+    required this.trackDisplays,
+  });
+  final PlayerTrackDisplayCache trackDisplays;
   final PlayerCoordinator controller;
   final PlayerTrackType type;
 
@@ -2924,6 +2922,7 @@ class _TracksState extends State<_Tracks> {
 
   @override
   Widget build(BuildContext context) {
+    final displays = widget.trackDisplays.forTracks(widget.controller.tracks);
     final tracks = widget.controller.tracks
         .where((track) => track.type == widget.type)
         .toList();
@@ -3026,9 +3025,6 @@ class _TracksState extends State<_Tracks> {
                                       style: textTheme.bodyMedium,
                                     ),
                                   )
-                                // Native track projection is bounded to 256 rows.
-                                // Lay them out once so wrapped labels can be
-                                // focused/revealed without estimating row heights.
                                 : SingleChildScrollView(
                                     key: const Key('playback-options-list'),
                                     controller: _scrollController,
@@ -3071,10 +3067,7 @@ class _TracksState extends State<_Tracks> {
                                                   : track!.selected;
                                               final display = track == null
                                                   ? null
-                                                  : formatPlayerTrackDisplay(
-                                                      track,
-                                                      peers: tracks,
-                                                    );
+                                                  : displays.displayFor(track);
                                               final title = off
                                                   ? 'Off'
                                                   : display!.primaryText;

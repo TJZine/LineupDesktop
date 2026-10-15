@@ -7,9 +7,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
-$repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 . (Join-Path $PSScriptRoot 'build-inputs.ps1')
+$repository = Get-LineupRepository
+$metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 $patchRelativePath = $metadata.FlutterEnginePatchPath
 if ($patchRelativePath -notmatch '^[A-Za-z0-9._/-]+$' -or
   [IO.Path]::IsPathRooted($patchRelativePath) -or
@@ -60,68 +60,23 @@ function Test-SourceDirty {
   $dirty
 }
 
-function Get-NormalizedTextSha256 {
-  param([Parameter(Mandatory)] [string] $Path)
-
-  $text = [IO.File]::ReadAllText($Path).Replace("`r`n", "`n").Replace("`r", "`n")
-  $bytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
-  [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
-}
-
-function Assert-PinnedFlutterCheckout {
-  param([Parameter(Mandatory)] [string] $Root)
-
-  $PSNativeCommandUseErrorActionPreference = $false
-  if ((Get-GitValue $Root @('rev-parse', '--verify', 'HEAD')) -ne
-    $metadata.FlutterFrameworkRevision) {
-    throw 'Flutter checkout does not match the pinned framework revision.'
-  }
-  if ((Get-Content -Raw -LiteralPath (Join-Path $Root 'bin/internal/engine.version')).Trim() -ne
-    $metadata.FlutterEngineRevision) {
-    throw 'Flutter checkout does not pin the required engine revision.'
-  }
-
-  $trackedChanges = @(& git -C $Root status --porcelain --untracked-files=no)
-  if ($LASTEXITCODE) { throw 'Could not inspect the Flutter checkout state.' }
-  $changedPaths = @($trackedChanges | ForEach-Object {
-      if ($_.Length -lt 4) { throw "Unexpected git status entry: $_" }
-      $_.Substring(3).Trim('"').Replace('\', '/')
-    } | Sort-Object -Unique)
-  if ($changedPaths.Count -ne 1 -or $changedPaths[0] -ne $metadata.FlutterManagerPath) {
-    throw 'Flutter checkout must contain only the repository-owned engine patch.'
-  }
-  $managerPath = Join-Path $Root $metadata.FlutterManagerPath
-  if ((Get-NormalizedTextSha256 $managerPath) -ne
-    $metadata.FlutterPatchedManagerSha256) {
-    throw 'Patched Flutter manager source does not match the pinned result.'
-  }
-  & git -C $Root apply --reverse --check $patchPath
-  if ($LASTEXITCODE) { throw 'The exact repository-owned Flutter engine patch is not applied.' }
-}
-
 if (Test-SourceDirty $repository) {
   throw 'Refusing to create release provenance from a dirty Lineup source tree.'
 }
 Assert-NoTrackedSymlinks -Repository $repository
-$sourceCommit = Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')
-$pubspecVersion = Get-PubspecVersion -Path (Join-Path $repository 'pubspec.yaml')
-$lineupVersion = $pubspecVersion.Name
-$lineupBuild = "$($pubspecVersion.Build)@$sourceCommit"
-
-$EngineSource = (Resolve-Path -LiteralPath $EngineSource).Path
-$flutterRoot = Split-Path -Parent (Split-Path -Parent $EngineSource)
+$releaseInput = Get-LineupReleaseInput -EngineSource $EngineSource
+$sourceCommit = $releaseInput.SourceCommit
+$EngineSource = $releaseInput.EngineSource
+$flutterRoot = $releaseInput.FlutterRoot
 if (-not (Test-Path -LiteralPath (Join-Path $flutterRoot 'bin/flutter.bat') -PathType Leaf)) {
   throw 'EngineSource must be the engine/src directory below the pinned Flutter checkout.'
 }
-Assert-PinnedFlutterCheckout $flutterRoot
-$flutter = Join-Path $flutterRoot 'bin/flutter.bat'
+Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
+$flutter = $releaseInput.Flutter
 Set-Location $flutterRoot
-& {
-  $PSNativeCommandUseErrorActionPreference = $false
-  & $flutter precache --windows
-  if ($LASTEXITCODE) { throw 'Pinned Flutter SDK cache preparation failed.' }
-}
-Assert-PinnedFlutterCheckout $flutterRoot
+Invoke-NativeChecked -FilePath $flutter -Arguments @('precache', '--windows') `
+  -FailureMessage 'Pinned Flutter SDK cache preparation failed.'
+Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
 
 $engineOutput = Join-Path $EngineSource 'out/host_release'
 if (-not (Test-Path -LiteralPath (Join-Path $engineOutput 'build.ninja') -PathType Leaf)) {
@@ -133,7 +88,7 @@ Set-Location $EngineSource
   & ninja -C $engineOutput
   if ($LASTEXITCODE) { throw 'Pinned host_release engine build failed.' }
 }
-Assert-PinnedFlutterCheckout $flutterRoot
+Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
 $engineLibrary = Join-Path $engineOutput 'flutter_windows.dll'
 if (-not (Test-Path -LiteralPath $engineLibrary -PathType Leaf)) {
   throw 'Pinned host_release engine did not produce flutter_windows.dll.'
@@ -147,24 +102,13 @@ if (Test-Path -LiteralPath $buildMarkerPath -PathType Leaf) {
   Remove-Item -LiteralPath $buildMarkerPath
 }
 Set-Location $repository
-$flutterBuildArguments = @(
-  '--local-engine=host_release'
-  '--local-engine-host=host_release'
-  "--local-engine-src-path=$EngineSource"
-  "--dart-define=LINEUP_VERSION=$lineupVersion"
-  "--dart-define=LINEUP_BUILD=$lineupBuild"
-)
-& {
-  $PSNativeCommandUseErrorActionPreference = $false
-  & $flutter build windows @flutterBuildArguments
-  if ($LASTEXITCODE) { throw 'Flutter Windows release build failed.' }
-}
+Invoke-LineupReleaseBuild -Release $releaseInput
 
 if ((Test-SourceDirty $repository) -or
   (Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')) -ne $sourceCommit) {
   throw 'Lineup source changed during the release build.'
 }
-Assert-PinnedFlutterCheckout $flutterRoot
+Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
 
 if (-not (Test-Path -LiteralPath $BuildDirectory -PathType Container)) {
   throw 'Release build directory does not exist after the build.'

@@ -19,7 +19,9 @@ void main() {
   testWidgets('Settings applies and persists a theme immediately', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     final emberSteel = LineupTheme.forName(LineupThemeName.emberSteel);
     final slatePine = LineupTheme.forName(LineupThemeName.slatePine);
     await tester.pumpWidget(fixture.build());
@@ -74,7 +76,9 @@ void main() {
   testWidgets('Settings preview retains pointer and keyboard focus modality', (
     tester,
   ) async {
-    final controller = _DelayedSettingsController()..stage = SetupStage.ready;
+    final controller = _DelayedSettingsController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
@@ -165,7 +169,9 @@ void main() {
   testWidgets('theme dropdown exposes selection and keyboard traversal', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
@@ -196,7 +202,9 @@ void main() {
   }, semanticsEnabled: true);
 
   testWidgets('theme dropdown applies every approved palette', (tester) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
@@ -226,7 +234,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
@@ -248,7 +258,9 @@ void main() {
   testWidgets('Settings refreshes from controller setting changes', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
@@ -269,7 +281,9 @@ void main() {
   testWidgets('failed setting save restores value without moving focus', (
     tester,
   ) async {
-    final controller = _DelayedSettingsController()..stage = SetupStage.ready;
+    final controller = _DelayedSettingsController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
@@ -306,8 +320,10 @@ void main() {
   ) async {
     final player = FixturePlayer()
       ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
-    final fixture = UiFixture(player: player)
-      ..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      player: player,
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -326,7 +342,9 @@ void main() {
   testWidgets('Settings uses one immersive rail without playback', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -342,8 +360,10 @@ void main() {
   testWidgets('Settings retains one mounted player surface', (tester) async {
     final player = FixturePlayer()
       ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
-    final fixture = UiFixture(player: player)
-      ..controller.stage = SetupStage.ready;
+    final fixture = UiFixture(
+      player: player,
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -364,9 +384,13 @@ void main() {
             message: 'Playback is not supported on this device.',
           ),
         );
-      final fixture = UiFixture(player: player)
-        ..controller.stage = SetupStage.ready
-        ..controller.settings = const LineupSettings(reduceMotion: true);
+      final fixture = UiFixture(
+        player: player,
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       expect(find.text('Playback unavailable'), findsOneWidget);
@@ -386,12 +410,16 @@ void main() {
   ) async {
     final player = FixturePlayer()
       ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
-    final fixture = UiFixture(player: player)
-      ..controller.stage = SetupStage.ready
-      ..controller.settings = LineupSettings.fromJson({
-        ...const LineupSettings().toJson(),
-        'guideLayoutMode': 'overlay',
-      });
+    final fixture = UiFixture(
+      player: player,
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        settings: LineupSettings.fromJson({
+          ...const LineupSettings().toJson(),
+          'guideLayoutMode': 'overlay',
+        }),
+      ),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -404,12 +432,15 @@ void main() {
   testWidgets('accessibility settings propagate through the application root', (
     tester,
   ) async {
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.ready
-      ..controller.settings = const LineupSettings(
-        reduceMotion: true,
-        largeFocusIndicators: true,
-      );
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        settings: const LineupSettings(
+          reduceMotion: true,
+          largeFocusIndicators: true,
+        ),
+      ),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -427,6 +458,8 @@ void main() {
 }
 
 class _DelayedSettingsController extends FixtureController {
+  _DelayedSettingsController({super.scenario});
+
   final _update = Completer<void>();
 
   @override

@@ -187,8 +187,6 @@ class FileAppStore implements AppStore {
         recoveredCorruptState: true,
       );
     }
-    // Migration IO is not decoding: a failed rewrite must never quarantine
-    // valid state or report successful recovery to an empty lineup.
     if (_hasNoncanonicalArtwork(decoded)) await save(state);
     return AppStoreLoadResult(state);
   }
@@ -200,9 +198,6 @@ class FileAppStore implements AppStore {
     try {
       await _stateFile.rename('${quarantine.path}/state.json');
     } catch (error, stackTrace) {
-      // The directory is exclusively owned by this operation. A nonrecursive
-      // delete only removes it when the failed move left it empty, so recovery
-      // bytes are never removed while preserving the original failure.
       try {
         await quarantine.delete();
       } catch (_) {}
@@ -230,8 +225,6 @@ class FileAppStore implements AppStore {
     } on PathNotFoundException {
       return;
     }
-    // Retain the exact pre-migration bytes, including before a load-triggered
-    // artwork rewrite. A failed backup prevents replacing the original file.
     await _atomicWriteBytes(backup, original);
   }
 

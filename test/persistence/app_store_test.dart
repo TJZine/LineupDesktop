@@ -8,6 +8,40 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
   test(
+    'raw persisted durations are checked before microsecond multiplication',
+    () {
+      Map<String, Object?> item(int milliseconds) => {
+        'id': 'raw',
+        'title': 'Raw',
+        'durationMs': milliseconds,
+      };
+      expect(
+        ChannelItem.fromJson(item(1800000)).duration,
+        const Duration(minutes: 30),
+      );
+      const maximumMilliseconds = 9223372036854775;
+      expect(
+        ChannelItem.fromJson(item(maximumMilliseconds)).duration.inMicroseconds,
+        9223372036854775000,
+      );
+      for (final milliseconds in [
+        0,
+        -1,
+        maximumMilliseconds + 1,
+        18446744073709552,
+        -18446744073709551,
+      ]) {
+        expect(
+          () => ChannelItem.fromJson(item(milliseconds)),
+          throwsFormatException,
+          reason:
+              'raw milliseconds $milliseconds must not wrap into valid media',
+        );
+      }
+    },
+  );
+
+  test(
     'pre-source-setting file loads saves and reloads without quarantine',
     () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -16,7 +50,6 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final file = File('${directory.path}/state.json');
       final old = _canonicalJson();
-      // Literal settings from the pre-change schema, independent of new serialization.
       old['settings'] = {
         'theme': 'slate-pine',
         'guideHours': 3,
@@ -37,11 +70,13 @@ void main() {
       final loaded = await store.load();
       expect(loaded.recoveredCorruptState, isFalse);
       expect(loaded.state.settings.guideShowChannelSources, isFalse);
+      expect(loaded.state.settings.matchDisplayHdr, isTrue);
       final expected = Map<String, Object?>.from(old)
         ..['settings'] = {
           ...old['settings'] as Map,
           'guideShowChannelSources': false,
           'overlayTransparency': 'standard',
+          'matchDisplayHdr': true,
         };
       expect(loaded.state.toJson(), expected);
       await store.save(loaded.state);
@@ -72,7 +107,6 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final file = File('${directory.path}/state.json');
       final old = _canonicalJson();
-      // Literal settings from the pre-change schema, independent of new serialization.
       old['settings'] = {
         'theme': 'slate-pine',
         'guideHours': 3,
@@ -98,10 +132,12 @@ void main() {
         loaded.state.settings.overlayTransparency,
         OverlayTransparency.standard,
       );
+      expect(loaded.state.settings.matchDisplayHdr, isTrue);
       final expected = Map<String, Object?>.from(old)
         ..['settings'] = {
           ...old['settings'] as Map,
           'overlayTransparency': 'standard',
+          'matchDisplayHdr': true,
         };
       expect(loaded.state.toJson(), expected);
       await store.save(loaded.state);
@@ -740,6 +776,23 @@ void main() {
 
   for (final corruptState in <String, String>{
     'malformed JSON': '{broken',
+    for (final durationMs in [18446744073709552, -18446744073709551])
+      'overflow duration $durationMs JSON': _encodedState(
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {
+              'server': [
+                _channelJson()
+                  ..['source'] = {
+                    'type': 'manual',
+                    'items': [
+                      {'id': 'raw', 'title': 'Raw', 'durationMs': durationMs},
+                    ],
+                  },
+              ],
+            },
+          },
+      ),
     'schema-invalid JSON': '{"selectedServerByProfile":[]}',
     'invalid settings JSON': _encodedState(
       _canonicalJson()

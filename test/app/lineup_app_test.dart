@@ -22,10 +22,40 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'shutdown observes delayed native failure without leaking details',
+    (tester) async {
+      final controller = _FakeController(
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
+      final player = _DelayedDisposalPlayer();
+      await tester.pumpWidget(
+        LineupBootstrap(player: player, controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(player.disposed, isTrue);
+      expect(tester.takeException(), isNull);
+      player.finishDisposal.completeError(
+        StateError('https://private.test/media?X-Plex-Token=secret-sentinel'),
+      );
+      await tester.pump();
+
+      final failure = tester.takeException();
+      expect(failure, isA<StateError>());
+      expect(failure.toString(), contains('Native player shutdown failed'));
+      expect(failure.toString(), isNot(contains('secret-sentinel')));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('position-only player events do not rebuild the Guide route', (
     tester,
   ) async {
-    final controller = _FakeController()..stage = SetupStage.ready;
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     final player = _PositionEventPlayer();
     await tester.pumpWidget(
       MaterialApp(
@@ -58,7 +88,9 @@ void main() {
     'startup mounts a progress surface while composition is pending',
     (tester) async {
       final composition = Completer<LineupBootstrap>();
-      final controller = _FakeController()..stage = SetupStage.ready;
+      final controller = _FakeController(
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
@@ -122,9 +154,12 @@ void main() {
   testWidgets('root Reduce Motion setting disables descendant animations', (
     tester,
   ) async {
-    final controller = _FakeController()
-      ..settings = const LineupSettings(reduceMotion: true)
-      ..stage = SetupStage.ready;
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+        stage: SetupStage.ready,
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -146,7 +181,9 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = _FakeController()..stage = SetupStage.ready;
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     addTearDown(controller.dispose);
     await controller.enterChannelSetup();
 
@@ -170,11 +207,18 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = _ChannelSetupController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
+    final controller = _ChannelSetupController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -217,11 +261,18 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = _ChannelSetupController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
+    final controller = _ChannelSetupController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
@@ -242,7 +293,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
     await tester.pumpAndSettle();
 
-    controller.channels = [
+    controller.fixtureActor.replaceChannels([
       for (var number = 1; number <= 1000; number++)
         Channel(
           id: 'occupied-$number',
@@ -253,7 +304,7 @@ void main() {
           anchor: DateTime.utc(2026),
           shuffleSeed: number,
         ),
-    ];
+    ]);
     controller.notifyListeners();
     await tester.pump();
     await tester.tap(find.text('Add a custom channel'));
@@ -299,7 +350,9 @@ void main() {
     tester,
   ) async {
     final player = _FakePlayer();
-    final controller = _FakeController()..stage = SetupStage.ready;
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
 
     await tester.pumpWidget(
       LineupBootstrap(player: player, controller: controller),
@@ -322,9 +375,12 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = _LogoutController()
-      ..stage = SetupStage.ready
-      ..channels = [_studioChannel];
+    final controller = _LogoutController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_studioChannel],
+      ),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -371,9 +427,13 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = _LogoutController(blockSave: true)
-      ..stage = SetupStage.ready
-      ..channels = [_studioChannel];
+    final controller = _LogoutController(
+      blockSave: true,
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_studioChannel],
+      ),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -406,7 +466,9 @@ void main() {
   testWidgets('Guide and player routes transfer and restore focus explicitly', (
     tester,
   ) async {
-    final controller = _FakeController()..stage = SetupStage.ready;
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _PlayingPlayer(), controller: controller),
     );
@@ -428,7 +490,9 @@ void main() {
   testWidgets('Guide Backspace opens the Lineup menu without playback', (
     tester,
   ) async {
-    final controller = _FakeController()..stage = SetupStage.ready;
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -443,7 +507,9 @@ void main() {
   testWidgets('Ctrl destination shortcuts outrank Guide letter shortcuts', (
     tester,
   ) async {
-    final controller = _FakeController()..stage = SetupStage.ready;
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _PlayingPlayer(), controller: controller),
     );
@@ -469,7 +535,9 @@ void main() {
   });
 
   testWidgets('F3 opens Settings from Guide and Player routes', (tester) async {
-    final controller = _FakeController()..stage = SetupStage.ready;
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _PlayingPlayer(), controller: controller),
     );
@@ -518,26 +586,29 @@ void main() {
       ],
       owned: true,
     );
-    final controller = _FakeController()
-      ..stage = SetupStage.ready
-      ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
-      ..profile = const PlexHomeUser(
-        id: 'child',
-        name: 'Child',
-        protected: true,
-      )
-      ..profiles = const [
-        PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
-        PlexHomeUser(id: 'child', name: 'Child', protected: true),
-      ]
-      ..servers = [selectedServer]
-      ..server = selectedServer
-      ..connection = PlexConnection(
-        uri: Uri.parse('https://plex.example:32400'),
-        local: true,
-        relay: false,
-        latency: const Duration(milliseconds: 18),
-      );
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        profile: const PlexHomeUser(
+          id: 'child',
+          name: 'Child',
+          protected: true,
+        ),
+        profiles: const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+          PlexHomeUser(id: 'child', name: 'Child', protected: true),
+        ],
+        servers: [selectedServer],
+        server: selectedServer,
+        connection: PlexConnection(
+          uri: Uri.parse('https://plex.example:32400'),
+          local: true,
+          relay: false,
+          latency: const Duration(milliseconds: 18),
+        ),
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -572,23 +643,26 @@ void main() {
   testWidgets(
     'Account profile transition hides the menu once cancellation is unsafe',
     (tester) async {
-      final controller = _AccountProfileController()
-        ..stage = SetupStage.ready
-        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
-        ..profile = const PlexHomeUser(
-          id: 'owner',
-          name: 'Owner',
-          protected: false,
-        )
-        ..profiles = const [
-          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
-          PlexHomeUser(id: 'child', name: 'Child', protected: false),
-        ]
-        ..server = const PlexServer(
-          id: 'server',
-          name: 'Living Room',
-          connections: [],
-        );
+      final controller = _AccountProfileController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          profile: const PlexHomeUser(
+            id: 'owner',
+            name: 'Owner',
+            protected: false,
+          ),
+          profiles: const [
+            PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+            PlexHomeUser(id: 'child', name: 'Child', protected: false),
+          ],
+          server: const PlexServer(
+            id: 'server',
+            name: 'Living Room',
+            connections: [],
+          ),
+        ),
+      );
       await tester.pumpWidget(
         LineupBootstrap(player: _FakePlayer(), controller: controller),
       );
@@ -611,23 +685,26 @@ void main() {
   testWidgets('Account PIN menu route cancels the protected selection safely', (
     tester,
   ) async {
-    final controller = _AccountPinController()
-      ..stage = SetupStage.ready
-      ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
-      ..profile = const PlexHomeUser(
-        id: 'owner',
-        name: 'Owner',
-        protected: false,
-      )
-      ..profiles = const [
-        PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
-        PlexHomeUser(id: 'child', name: 'Child', protected: true),
-      ]
-      ..server = const PlexServer(
-        id: 'server',
-        name: 'Living Room',
-        connections: [],
-      );
+    final controller = _AccountPinController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        profile: const PlexHomeUser(
+          id: 'owner',
+          name: 'Owner',
+          protected: false,
+        ),
+        profiles: const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+          PlexHomeUser(id: 'child', name: 'Child', protected: true),
+        ],
+        server: const PlexServer(
+          id: 'server',
+          name: 'Living Room',
+          connections: [],
+        ),
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -654,12 +731,15 @@ void main() {
   testWidgets('Account PIN keeps its step and origin during a pending retry', (
     tester,
   ) async {
-    final controller = _RetryPinController()
-      ..stage = SetupStage.ready
-      ..server = const PlexServer(id: 'server', name: 'Server', connections: [])
-      ..profiles = const [
-        PlexHomeUser(id: 'child', name: 'Child', protected: true),
-      ];
+    final controller = _RetryPinController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        server: const PlexServer(id: 'server', name: 'Server', connections: []),
+        profiles: const [
+          PlexHomeUser(id: 'child', name: 'Child', protected: true),
+        ],
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -701,16 +781,16 @@ void main() {
     expect(find.byKey(const Key('profile-pin-error')), findsOneWidget);
     expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
 
-    // Successful sign-out retires the picker origin. A fresh first-run PIN
-    // returns to Profiles rather than offering the old Account destination.
     controller
-      ..stage = SetupStage.welcome
-      ..busy = false
-      ..error = null
-      ..profileSelectionCanCancel = false;
+      ..fixtureActor.cancelProfilePicker()
+      ..fixtureActor.present(LineupPresentation(stage: SetupStage.welcome))
+      ..fixtureActor.present(LineupPresentation(busy: false))
+      ..fixtureActor.present(LineupPresentation(error: (null,)));
     controller.notifyListeners();
     await tester.pumpAndSettle();
-    controller.stage = SetupStage.profiles;
+    controller.fixtureActor.present(
+      LineupPresentation(stage: SetupStage.profiles),
+    );
     controller.notifyListeners();
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-card-child')));
@@ -722,25 +802,28 @@ void main() {
   testWidgets('Guide activation tunes and returns to the full player', (
     tester,
   ) async {
-    final controller = _FakeController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        Channel(
-          id: 'channel',
-          number: 7,
-          name: 'Synthetic Seven',
-          source: const ManualSource([
-            ChannelItem(
-              id: 'program',
-              title: 'Synthetic Program',
-              duration: Duration(hours: 24),
-            ),
-          ]),
-          playbackMode: PlaybackMode.sequential,
-          anchor: DateTime.now().subtract(const Duration(hours: 1)),
-          shuffleSeed: 7,
-        ),
-      ];
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          Channel(
+            id: 'channel',
+            number: 7,
+            name: 'Synthetic Seven',
+            source: const ManualSource([
+              ChannelItem(
+                id: 'program',
+                title: 'Synthetic Program',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: 7,
+          ),
+        ],
+      ),
+    );
     final player = _FakePlayer();
     await tester.pumpWidget(
       LineupBootstrap(player: player, controller: controller),
@@ -765,25 +848,28 @@ void main() {
   testWidgets('Guide activation opens Player while native tune is pending', (
     tester,
   ) async {
-    final controller = _FakeController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        Channel(
-          id: 'channel',
-          number: 7,
-          name: 'Synthetic Seven',
-          source: const ManualSource([
-            ChannelItem(
-              id: 'program',
-              title: 'Synthetic Program',
-              duration: Duration(hours: 24),
-            ),
-          ]),
-          playbackMode: PlaybackMode.sequential,
-          anchor: DateTime.now().subtract(const Duration(hours: 1)),
-          shuffleSeed: 7,
-        ),
-      ];
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          Channel(
+            id: 'channel',
+            number: 7,
+            name: 'Synthetic Seven',
+            source: const ManualSource([
+              ChannelItem(
+                id: 'program',
+                title: 'Synthetic Program',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: 7,
+          ),
+        ],
+      ),
+    );
     final player = _DelayedLoadPlayer();
     addTearDown(controller.dispose);
     await tester.pumpWidget(
@@ -808,26 +894,29 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = _FakeController()
-      ..stage = SetupStage.ready
-      ..channels = [
-        Channel(
-          id: 'channel',
-          number: 7,
-          name: 'Synthetic Seven',
-          source: const ManualSource([
-            ChannelItem(
-              id: 'program',
-              title: 'Synthetic Program',
-              duration: Duration(hours: 24),
-            ),
-          ]),
-          playbackMode: PlaybackMode.sequential,
-          anchor: DateTime.now().subtract(const Duration(hours: 1)),
-          shuffleSeed: 7,
-        ),
-      ]
-      ..currentChannelId = 'channel';
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          Channel(
+            id: 'channel',
+            number: 7,
+            name: 'Synthetic Seven',
+            source: const ManualSource([
+              ChannelItem(
+                id: 'program',
+                title: 'Synthetic Program',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: 7,
+          ),
+        ],
+        currentChannelId: 'channel',
+      ),
+    );
     final player = _PlayingPlayer();
     await tester.pumpWidget(
       LineupBootstrap(player: player, controller: controller),
@@ -892,13 +981,16 @@ void main() {
   testWidgets('Plex linking presents QR, PIN cells, and cancellation', (
     tester,
   ) async {
-    final controller = _FakeController()
-      ..stage = SetupStage.linking
-      ..activePin = PlexPin(
-        id: 1,
-        code: 'ABCD',
-        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
-      );
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        ),
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -915,13 +1007,16 @@ void main() {
   testWidgets('linking cancellation failure moves focus to secure retry', (
     tester,
   ) async {
-    final controller = _FakeController()
-      ..stage = SetupStage.linking
-      ..activePin = PlexPin(
-        id: 1,
-        code: 'ABCD',
-        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
-      );
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        ),
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -946,13 +1041,16 @@ void main() {
   testWidgets(
     'terminal linking failure is live, focused, and keyboard retryable',
     (tester) async {
-      final controller = _FakeController()
-        ..stage = SetupStage.linking
-        ..activePin = PlexPin(
-          id: 1,
-          code: 'ABCD',
-          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
-        );
+      final controller = _FakeController(
+        scenario: LineupScenario(
+          stage: SetupStage.linking,
+          activePin: PlexPin(
+            id: 1,
+            code: 'ABCD',
+            expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+          ),
+        ),
+      );
       await tester.pumpWidget(
         LineupBootstrap(player: _FakePlayer(), controller: controller),
       );
@@ -987,9 +1085,12 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = _FakeController()
-      ..stage = SetupStage.linking
-      ..error = 'Synthetic safe Plex failure.';
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        error: 'Synthetic safe Plex failure.',
+      ),
+    );
 
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
@@ -1004,10 +1105,13 @@ void main() {
     tester,
   ) async {
     const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
-    final controller = _FakeController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [child]
-      ..profileSelectionCanCancel = true;
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [child],
+        profileSelectionOrigin: SetupStage.ready,
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -1046,10 +1150,13 @@ void main() {
       protected: false,
       restricted: false,
     );
-    final controller = _FakeController()
-      ..stage = SetupStage.profiles
-      ..profile = active
-      ..profiles = const [standard, active, restricted];
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: const [standard, active, restricted],
+      ),
+    );
 
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
@@ -1074,11 +1181,14 @@ void main() {
   testWidgets('profile cards show no Active badge without a current profile', (
     tester,
   ) async {
-    final controller = _FakeController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [
-        PlexHomeUser(id: 'standard', name: 'Standard', protected: false),
-      ];
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'standard', name: 'Standard', protected: false),
+        ],
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -1090,16 +1200,19 @@ void main() {
   testWidgets('focused profile name reveals the full name without reflow', (
     tester,
   ) async {
-    final controller = _FakeController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [
-        PlexHomeUser(id: 'first', name: 'First', protected: false),
-        PlexHomeUser(
-          id: 'long',
-          name: 'A very long profile name that needs the focused treatment',
-          protected: false,
-        ),
-      ];
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'first', name: 'First', protected: false),
+          PlexHomeUser(
+            id: 'long',
+            name: 'A very long profile name that needs the focused treatment',
+            protected: false,
+          ),
+        ],
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -1127,11 +1240,14 @@ void main() {
   testWidgets('unprotected profile failure remains visible in onboarding', (
     tester,
   ) async {
-    final controller = _FailingProfileController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [
-        PlexHomeUser(id: 'child', name: 'Child', protected: false),
-      ];
+    final controller = _FailingProfileController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'child', name: 'Child', protected: false),
+        ],
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -1159,13 +1275,16 @@ void main() {
   });
 
   testWidgets('onboarding rebuilds without a listening parent', (tester) async {
-    final controller = _FakeController()
-      ..stage = SetupStage.linking
-      ..activePin = PlexPin(
-        id: 1,
-        code: 'ABCD',
-        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
-      );
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        ),
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -1195,9 +1314,12 @@ void main() {
       connections: [],
       owned: true,
     );
-    final controller = _FakeController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [profile];
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [profile],
+      ),
+    );
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -1212,31 +1334,45 @@ void main() {
     expect(find.text('Child'), findsOneWidget);
 
     controller
-      ..servers = [server]
-      ..stage = SetupStage.servers;
+      ..fixtureActor.discoverServers([server])
+      ..fixtureActor.present(LineupPresentation(stage: SetupStage.servers));
     controller.notifyListeners();
     await tester.pumpAndSettle();
     expect(find.text('Living Room'), findsOneWidget);
 
-    controller.error = 'Server discovery needs attention.';
+    controller.fixtureActor.present(
+      LineupPresentation(error: ('Server discovery needs attention.',)),
+    );
     controller.notifyListeners();
     await tester.pump();
     expect(find.text('Server discovery needs attention.'), findsOneWidget);
 
     controller
-      ..stage = SetupStage.linking
-      ..error = null
-      ..activePin = PlexPin(
-        id: 1,
-        code: 'ABCD',
-        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+      ..fixtureActor.present(LineupPresentation(stage: SetupStage.linking))
+      ..fixtureActor.present(LineupPresentation(error: (null,)))
+      ..fixtureActor.present(
+        LineupPresentation(
+          pin: (
+            PlexPin(
+              id: 1,
+              code: 'ABCD',
+              expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+            ),
+          ),
+        ),
       );
     controller.notifyListeners();
     await tester.pumpAndSettle();
-    controller.activePin = PlexPin(
-      id: 2,
-      code: 'WXYZ',
-      expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+    controller.fixtureActor.present(
+      LineupPresentation(
+        pin: (
+          PlexPin(
+            id: 2,
+            code: 'WXYZ',
+            expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+          ),
+        ),
+      ),
     );
     controller.notifyListeners();
     await tester.pump();
@@ -1279,17 +1415,20 @@ void main() {
         ),
       ],
     );
-    final controller = _FakeController()
-      ..stage = SetupStage.servers
-      ..servers = [selected, shared]
-      ..server = selected
-      ..connection = PlexConnection(
-        uri: Uri.parse('https://selected.synthetic.invalid:32400'),
-        local: false,
-        relay: false,
-        latency: const Duration(milliseconds: 500),
-      )
-      ..error = 'Lineup could not reach that Plex server. Try again.';
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        servers: [selected, shared],
+        server: selected,
+        connection: PlexConnection(
+          uri: Uri.parse('https://selected.synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+          latency: const Duration(milliseconds: 500),
+        ),
+        error: 'Lineup could not reach that Plex server. Try again.',
+      ),
+    );
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -1330,9 +1469,12 @@ void main() {
     tester,
   ) async {
     const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
-    final controller = _FakeController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [child];
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [child],
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -1361,9 +1503,12 @@ void main() {
     tester,
   ) async {
     const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
-    final controller = _RetryPinController()
-      ..stage = SetupStage.profiles
-      ..profiles = const [child];
+    final controller = _RetryPinController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [child],
+      ),
+    );
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
@@ -1586,7 +1731,9 @@ void main() {
   testWidgets('makes a missing required Windows engine explicit', (
     tester,
   ) async {
-    final controller = _LoadingController()..restoringSavedLineup = true;
+    final controller = _LoadingController(
+      scenario: LineupScenario(restoringSavedLineup: true),
+    );
     await tester.pumpWidget(
       LineupBootstrap(
         player: _RequiredEngineFailingPlayer(),
@@ -1630,7 +1777,7 @@ void main() {
 }
 
 class _FakeController extends LineupController {
-  _FakeController()
+  _FakeController({super.scenario})
     : super(
         store: _MemoryStore(),
         credentials: _MemoryCredentials(),
@@ -1660,19 +1807,25 @@ class _FakeController extends LineupController {
   }
 
   void requireSecureCancellation() {
-    secureCancellationRequired = true;
-    error = 'Synthetic secure credential storage failure.';
+    fixtureActor.present(LineupPresentation(secureCancellationRequired: true));
+    fixtureActor.present(
+      LineupPresentation(
+        error: ('Synthetic secure credential storage failure.',),
+      ),
+    );
     notifyListeners();
   }
 
   void stopLinking() {
-    activePin = null;
-    error = 'Synthetic safe Plex failure.';
+    fixtureActor.present(LineupPresentation(pin: (null,)));
+    fixtureActor.present(
+      LineupPresentation(error: ('Synthetic safe Plex failure.',)),
+    );
     notifyListeners();
   }
 
   void beginCancellableProfileSelection() {
-    busy = true;
+    fixtureActor.present(LineupPresentation(busy: true));
     notifyListeners();
   }
 
@@ -1703,47 +1856,55 @@ class _FakeController extends LineupController {
 }
 
 class _FailingProfileController extends _FakeController {
+  _FailingProfileController({super.scenario});
+
   @override
   Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
-    error = 'Profile switch failed safely.';
+    fixtureActor.present(
+      LineupPresentation(error: ('Profile switch failed safely.',)),
+    );
     notifyListeners();
     return false;
   }
 }
 
 class _FailingLinkController extends _FakeController {
+  _FailingLinkController();
+
   @override
   Future<void> startLinking() async {
-    error = 'Link start failed safely.';
+    fixtureActor.present(
+      LineupPresentation(error: ('Link start failed safely.',)),
+    );
     notifyListeners();
   }
 }
 
 class _AccountProfileController extends _FakeController {
+  _AccountProfileController({super.scenario});
+
   @override
   Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
     selectedProfile = selected;
     selectedPin = pin;
-    profile = selected;
-    server = null;
-    connection = null;
-    servers = const [
-      PlexServer(id: 'next-server', name: 'Next server', connections: []),
-    ];
-    profileSelectionCanCancel = false;
-    serverSelectionCanCancel = false;
-    stage = SetupStage.servers;
+    fixtureActor.profileSelected(
+      selected,
+      servers: const [
+        PlexServer(id: 'next-server', name: 'Next server', connections: []),
+      ],
+    );
     notifyListeners();
     return true;
   }
 }
 
 class _AccountPinController extends _FakeController {
+  _AccountPinController({super.scenario});
+
   @override
   void cancelProfileSelection() {
     super.cancelProfileSelection();
-    profileSelectionCanCancel = false;
-    stage = SetupStage.ready;
+    fixtureActor.cancelProfilePicker();
     notifyListeners();
   }
 }
@@ -1765,7 +1926,7 @@ final _studioChannel = Channel(
 );
 
 class _LogoutController extends _FakeController {
-  _LogoutController({bool blockSave = false})
+  _LogoutController({super.scenario, bool blockSave = false})
     : _saveRelease = blockSave ? Completer<void>() : null;
 
   final Completer<void>? _saveRelease;
@@ -1774,7 +1935,7 @@ class _LogoutController extends _FakeController {
   @override
   Future<bool> logout() async {
     logoutCalls++;
-    stage = SetupStage.welcome;
+    fixtureActor.present(LineupPresentation(stage: SetupStage.welcome));
     notifyListeners();
     return true;
   }
@@ -1793,13 +1954,18 @@ class _LogoutController extends _FakeController {
 }
 
 class _ChannelSetupController extends _FakeController {
-  _ChannelSetupController() {
-    connection = PlexConnection(
-      uri: Uri.parse('https://synthetic.invalid'),
-      local: true,
-      relay: false,
-    );
-  }
+  _ChannelSetupController({LineupScenario? scenario})
+    : super(
+        scenario: (scenario ?? const LineupScenario()).withDefaults(
+          LineupScenario(
+            connection: PlexConnection(
+              uri: Uri.parse('https://synthetic.invalid'),
+              local: true,
+              relay: false,
+            ),
+          ),
+        ),
+      );
 
   @override
   Set<String> get libraryScanReadyIds => _readyIds;
@@ -1818,18 +1984,20 @@ class _ChannelSetupController extends _FakeController {
     Set<String> ids, {
     bool retryFailedOnly = false,
   }) async {
-    availableMedia = [
-      for (var index = 0; index < 12; index++)
-        PlexMediaItem(
-          id: 'movie-$index',
-          title: 'Movie $index',
-          type: 'movie',
-          duration: const Duration(minutes: 90),
-          libraryId: 'movies',
-          parts: [PlexMediaPart(path: '/parts/movie-$index')],
-          genres: const ['Drama'],
-        ),
-    ];
+    fixtureActor.publishInventory(
+      media: [
+        for (var index = 0; index < 12; index++)
+          PlexMediaItem(
+            id: 'movie-$index',
+            title: 'Movie $index',
+            type: 'movie',
+            duration: const Duration(minutes: 90),
+            libraryId: 'movies',
+            parts: [PlexMediaPart(path: '/parts/movie-$index')],
+            genres: const ['Drama'],
+          ),
+      ],
+    );
     _readyIds = Set.unmodifiable(ids);
     _scanFacts = {
       for (final id in ids)
@@ -1840,19 +2008,23 @@ class _ChannelSetupController extends _FakeController {
           totalItems: 12,
         ),
     };
-    libraryScanStatus = LibraryScanStatus.complete;
+    fixtureActor.reportScan(status: LibraryScanStatus.complete);
     notifyListeners();
     return true;
   }
 
   @override
   Future<bool> commitLibraryScan(Set<String> readyIds) async {
-    selectedLibraryIds = Set.unmodifiable(readyIds);
+    fixtureActor.publishInventory(
+      selectedLibraryIds: Set.unmodifiable(readyIds),
+    );
     return true;
   }
 }
 
 class _RetryPinController extends _FakeController {
+  _RetryPinController({super.scenario});
+
   final _firstAttempt = Completer<void>();
   final List<String> pins = [];
   int attempts = 0;
@@ -1864,11 +2036,13 @@ class _RetryPinController extends _FakeController {
     attempts++;
     pins.add(pin!);
     if (attempts == 1) {
-      busy = true;
+      fixtureActor.present(LineupPresentation(busy: true));
       notifyListeners();
       await _firstAttempt.future;
-      busy = false;
-      error = 'That PIN was not accepted. Try again.';
+      fixtureActor.present(LineupPresentation(busy: false));
+      fixtureActor.present(
+        LineupPresentation(error: ('That PIN was not accepted. Try again.',)),
+      );
       notifyListeners();
       return false;
     }
@@ -1879,6 +2053,8 @@ class _RetryPinController extends _FakeController {
 }
 
 class _LoadingController extends _FakeController {
+  _LoadingController({super.scenario});
+
   final _initialization = Completer<void>();
 
   @override
@@ -1957,14 +2133,27 @@ class _FakePlayer implements NativePlayer {
 
   @override
   Stream<PlayerEvent> get events => const Stream.empty();
+  @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.initial();
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
 
   @override
   Future<void> initialize() async {}
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     loads++;
   }
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   @override
   Future<void> play() async {}
@@ -1996,6 +2185,16 @@ class _FakePlayer implements NativePlayer {
   }
 }
 
+class _DelayedDisposalPlayer extends _FakePlayer {
+  final finishDisposal = Completer<void>();
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+    await finishDisposal.future;
+  }
+}
+
 class _PlayingPlayer extends _FakePlayer {
   @override
   PlayerStatus get status =>
@@ -2007,7 +2206,12 @@ class _DelayedLoadPlayer extends _FakePlayer {
   final _loadRelease = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     loads++;
     loadStarted.complete();
     await _loadRelease.future;

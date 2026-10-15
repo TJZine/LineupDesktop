@@ -19,6 +19,7 @@ import 'channels_view.dart';
 import 'diagnostics_view.dart';
 import 'lineup_controller.dart';
 import 'lineup_restore_view.dart';
+import 'navigation_shortcuts.dart';
 import 'onboarding_view.dart';
 
 class LineupShell extends StatefulWidget {
@@ -82,6 +83,7 @@ class _LineupShellState extends State<LineupShell> {
       guide: _guide,
       clock: widget.guideClock,
     );
+    _player.setPlayerDestinationVisible(_selectedIndex == 4);
     final initialMediaPath = widget.initialMediaPath;
     if (initialMediaPath != null) {
       unawaited(_player.loadInitialMedia(_mediaUri(initialMediaPath)));
@@ -102,8 +104,8 @@ class _LineupShellState extends State<LineupShell> {
     _player.status.message,
     _player.currentChannel?.id,
     _player.currentProgram?.scheduled.item.title,
-    // Only Diagnostics consumes telemetry at the shell boundary.
     _selectedIndex == 3 ? _player.telemetry : null,
+    _selectedIndex == 3 ? _player.displayReport : null,
   );
 
   void _playerChanged() {
@@ -181,7 +183,6 @@ class _LineupShellState extends State<LineupShell> {
         } else if (index != 2 && index != 3) {
           _settingsReturnIndex = null;
         }
-        // Direct Diagnostics entry still has a real Settings origin.
         if (index == 3 && _settingsReturnIndex == null) {
           _settingsReturnIndex = _selectedIndex == 4
               ? 4
@@ -198,6 +199,7 @@ class _LineupShellState extends State<LineupShell> {
       }
       setState(() {
         _selectedIndex = index;
+        _player.setPlayerDestinationVisible(index == 4);
         _appMenuOpen = false;
         _appMenuAnchor = null;
         _appMenuInvokerFocus = null;
@@ -238,8 +240,6 @@ class _LineupShellState extends State<LineupShell> {
       return;
     }
     _player.showNowPlaying();
-    // Same-route menu dismissal restores its invoker on the next frame.
-    // Transfer focus to Player afterwards, not to the now-hidden OSD button.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted &&
           widget.controller.stage == SetupStage.ready &&
@@ -384,17 +384,7 @@ class _LineupShellState extends State<LineupShell> {
       unawaited(_select(2));
       return KeyEventResult.handled;
     }
-    if (!keyboard.isControlPressed) {
-      return KeyEventResult.ignored;
-    }
-    final index = switch (event.logicalKey) {
-      LogicalKeyboardKey.digit1 || LogicalKeyboardKey.keyG => 0,
-      LogicalKeyboardKey.digit2 => 1,
-      LogicalKeyboardKey.digit3 || LogicalKeyboardKey.comma => 2,
-      LogicalKeyboardKey.digit4 => 3,
-      LogicalKeyboardKey.digit5 || LogicalKeyboardKey.keyP => 4,
-      _ => null,
-    };
+    final index = navigationShortcutIndex(event.logicalKey);
     if (index == null) return KeyEventResult.ignored;
     unawaited(_select(index));
     return KeyEventResult.handled;
@@ -1336,6 +1326,20 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
               ),
               _settingFeedback('dvrControlsEnabled'),
+              _SettingsSwitchTile(
+                title: const Text('Match display HDR in fullscreen'),
+                subtitle: const Text(
+                  'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+                ),
+                value: value.matchDisplayHdr,
+                onChanged: _pendingSettingKeys.contains('matchDisplayHdr')
+                    ? null
+                    : (item) => _update(
+                        'matchDisplayHdr',
+                        (current) => current.copyWith(matchDisplayHdr: item),
+                      ),
+              ),
+              _settingFeedback('matchDisplayHdr'),
             ],
             SettingsCategory.accessibility => [
               _SettingsSwitchTile(

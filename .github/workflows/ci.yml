@@ -19,16 +19,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: 3.47.6
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed .
+      - run: dart tool/format.dart --check
       - run: flutter analyze
       - run: flutter test
         env:
@@ -39,18 +39,16 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: 3.47.6
           channel: stable
           cache: true
       - name: Run required Guide alpha checks
         env:
-          # Required alpha checks use the same deterministic locale as the
-          # optional visual-review captures.
           TZ: America/New_York
         run: flutter test test/app/guide_opacity_test.dart
       - run: flutter build macos
@@ -60,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Validate package scripts and pinned provenance inputs
@@ -72,10 +70,10 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: 3.47.6
           channel: stable
@@ -86,13 +84,20 @@ jobs:
           test/app/ui_parity_test.dart
           test/guide/guide_view_test.dart
           test/playback/player_view_test.dart
-      - name: Build with the pinned LGPL libmpv runtime
+      - name: Build Windows and verify native contracts with the pinned LGPL libmpv runtime
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
           & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
           $env:LINEUP_MPV_ROOT = $mpvRoot
           flutter build windows
+          cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test native_playback_state_test display_dynamic_range_test display_guardian_test
+          foreach ($nativeTest in @('track_list_encoder', 'native_playback_state', 'display_dynamic_range')) {
+            ctest --test-dir .\build\windows\x64 -C Release -R "^${nativeTest}$" --output-on-failure --no-tests=error --parallel 1 --timeout 30
+          }
+          ctest --test-dir .\build\windows\x64 -C Release -R '^display_guardian$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
 
   release-inputs:
     name: Detect Windows release inputs
@@ -102,7 +107,7 @@ jobs:
       engine-required: ${{ steps.detect.outputs.engine-required }}
       package-required: ${{ steps.detect.outputs.package-required }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -175,10 +180,10 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: 3.47.6
           channel: stable
@@ -373,7 +378,7 @@ jobs:
           }
           & .\tool\windows\package.ps1
       - name: Upload portable Windows package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: LineupDesktop-windows-x64
           path: build/package/LineupDesktop-*-windows-x64.zip

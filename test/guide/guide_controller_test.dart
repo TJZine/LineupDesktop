@@ -13,6 +13,91 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test('successful load with failed projection owns error, evicts cache, and retries', () async {
+    final lineup = _TestLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    var fail = true;
+    var requests = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        requests++;
+        if (!fail) return _schedule(channel);
+        return buildSchedule(
+          [
+            const ChannelItem(
+              id: 'long',
+              title: 'Long',
+              duration: Duration(microseconds: 8640000000000000000),
+            ),
+          ],
+          mode: PlaybackMode.sequential,
+          seed: 1,
+        );
+      },
+    );
+    addTearDown(guide.dispose);
+    final id = lineup.channels.single.id;
+    guide.requestChannels(lineup.channels);
+    await _settle();
+    expect(guide.row(id).state, GuideLoadState.error);
+    expect(guide.row(id).error, isA<ScheduleBuildException>());
+    expect(guide.activeLoadCount, 0);
+    expect(guide.currentProgram(id), isNull);
+    fail = false;
+    await guide.retry(id);
+    await _settle();
+    expect(requests, 2);
+    expect(guide.row(id).state, GuideLoadState.ready);
+    expect(guide.currentProgram(id), isNotNull);
+  });
+
+  test('cached Guide projection failure during later presentation evicts and retries', () async {
+    final lineup = _TestLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    var now = DateTime.utc(2026, 1, 1);
+    final boundary = now.add(const Duration(days: 1));
+    var requests = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async {
+        requests++;
+        return buildSchedule(
+          [
+            const ChannelItem(
+              id: 'long',
+              title: 'Long',
+              duration: Duration(microseconds: 8640000000000000000),
+            ),
+          ],
+          mode: PlaybackMode.sequential,
+          seed: 1,
+          transition: ScheduleTransition(
+            boundary: boundary,
+            legacyCycleItems: _schedule(channel).items,
+          ),
+        );
+      },
+    );
+    addTearDown(guide.dispose);
+    final id = lineup.channels.single.id;
+    guide.requestChannels(lineup.channels);
+    await _settle();
+    expect(guide.row(id).state, GuideLoadState.ready);
+    now = boundary;
+    guide.refreshForPresentation();
+    expect(guide.row(id).state, GuideLoadState.error);
+    expect(guide.row(id).error, isA<ScheduleBuildException>());
+    expect(guide.currentProgram(id), isNull);
+    now = boundary.subtract(const Duration(days: 1));
+    guide.playToNow();
+    await guide.retry(id);
+    await _settle();
+    expect(requests, 2);
+    expect(guide.row(id).state, GuideLoadState.ready);
+  });
+
   test(
     'bulk retry includes offscreen failures and preserves concurrency bound',
     () async {
@@ -151,8 +236,10 @@ void main() {
 
   test('live clock advances current focus and window without repeated schedule work', () async {
     var now = DateTime(2026, 8, 13, 23, 47);
-    final lineup = _TestLineup(_channels(2))
-      ..settings = const LineupSettings(guideHours: 2);
+    final lineup = _TestLineup(
+      _channels(2),
+      scenario: LineupScenario(settings: const LineupSettings(guideHours: 2)),
+    );
     final loads = <String, int>{};
     final guide = GuideController(
       lineup: lineup,
@@ -294,7 +381,6 @@ void main() {
     now = now.add(const Duration(hours: 1));
     guide.refreshForPresentation();
     expect(guide.focusedProgramId, header);
-    // Replacing source data must retire retained inspection, not resurrect it.
     lineup.changeContentScope();
     guide.requestViewport(0, 2);
     await _settle();
@@ -306,7 +392,10 @@ void main() {
 
   test('pending inspected navigation recovers the retained airing after clock rollover', () async {
     var now = DateTime(2026, 8, 13, 12, 17);
-    final lineup = _TestLineup(_channels(2))..currentChannelId = 'channel-0';
+    final lineup = _TestLineup(
+      _channels(2),
+      scenario: LineupScenario(currentChannelId: 'channel-0'),
+    );
     final target = Completer<ScheduleIndex>();
     final guide = GuideController(
       lineup: lineup,
@@ -329,7 +418,6 @@ void main() {
     now = now.add(const Duration(hours: 5));
     guide.refreshForPresentation();
     expect(guide.focusTime, retained);
-    // The explicit selection expires with its projection; pending focus does not.
     final selectionAfterRollover = (
       channelId: guide.selectedChannelId,
       programId: guide.selectedProgramId,
@@ -977,6 +1065,52 @@ void main() {
     lineup.dispose();
   });
 
+  test(
+    'synchronous artwork failure settles null and advances queued work',
+    () async {
+      final lineup = _ArtworkLineup(_channels(1));
+      addTearDown(lineup.dispose);
+      final guide = GuideController(lineup: lineup);
+      addTearDown(guide.dispose);
+      final active = List.generate(
+        GuideController.maximumConcurrentArtworkLoads,
+        (_) => Completer<Uint8List?>(),
+      );
+      final paths = List.generate(
+        active.length + 2,
+        (index) => Uri.parse('/art/$index'),
+      );
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      lineup.artworkHandler = (path) {
+        final index = paths.indexOf(path);
+        if (index < active.length) return active[index].future;
+        if (index == active.length) {
+          throw StateError('Synchronous artwork failure');
+        }
+        return Future.value(bytes);
+      };
+      final results = [for (final path in paths) guide.artworkForPath(path)];
+      expect(lineup.artworkPaths, paths.take(active.length).toList());
+
+      active.first.complete(Uint8List(0));
+      expect(
+        await results[active.length].timeout(const Duration(seconds: 1)),
+        isNull,
+      );
+      expect(await results.last.timeout(const Duration(seconds: 1)), bytes);
+      expect(lineup.artworkPaths, paths);
+
+      for (final pending in active.skip(1)) {
+        pending.complete(Uint8List(0));
+      }
+      expect(
+        await Future.wait(results.take(active.length))
+            .timeout(const Duration(seconds: 1)),
+        everyElement(isNotNull),
+      );
+    },
+  );
+
   test('stale artwork is evicted so the same key can retry', () async {
     final lineup = _ArtworkLineup(_channels(1));
     addTearDown(lineup.dispose);
@@ -1116,32 +1250,33 @@ void main() {
       shuffleSeed: 1,
     );
     var workerCreations = 0;
-    final lineup =
-        _TestLineup(
-            [channel],
-            scheduleWorkerFactory: (media, playlists) {
-              workerCreations++;
-              return ScheduleWorker(media, playlists);
-            },
-          )
-          ..availableMedia = List.unmodifiable(
-            List.generate(
-              2000,
-              (index) => PlexMediaItem(
-                id: 'item-$index',
-                title: 'Item $index',
-                type: 'movie',
-                duration: const Duration(minutes: 30),
-                libraryId: 'library',
-                parts: [PlexMediaPart(path: '/library/parts/item-$index')],
-              ),
+    final lineup = _TestLineup(
+      [channel],
+      scheduleWorkerFactory: (media, playlists) {
+        workerCreations++;
+        return ScheduleWorker(media, playlists);
+      },
+      scenario: LineupScenario(
+        availableMedia: List.unmodifiable(
+          List.generate(
+            2000,
+            (index) => PlexMediaItem(
+              id: 'item-$index',
+              title: 'Item $index',
+              type: 'movie',
+              duration: const Duration(minutes: 30),
+              libraryId: 'library',
+              parts: [PlexMediaPart(path: '/library/parts/item-$index')],
             ),
-          )
-          ..connection = PlexConnection(
-            uri: Uri.parse('https://guide.example:32400'),
-            local: true,
-            relay: false,
-          );
+          ),
+        ),
+        connection: PlexConnection(
+          uri: Uri.parse('https://guide.example:32400'),
+          local: true,
+          relay: false,
+        ),
+      ),
+    );
     addTearDown(lineup.dispose);
 
     final first = await lineup.loadScheduleFor(channel);
@@ -1176,21 +1311,25 @@ void main() {
         anchor: DateTime.utc(2026, 8, 13, 12),
         shuffleSeed: 1,
       );
-      final lineup = _TestLineup([channel])
-        ..connection = PlexConnection(
-          uri: Uri.parse('https://guide.example:32400'),
-          local: true,
-          relay: false,
-        )
-        ..availableMedia = [
-          PlexMediaItem(
-            id: 'current',
-            title: 'Current title',
-            type: 'movie',
-            duration: const Duration(hours: 1),
-            parts: [PlexMediaPart(path: '/current')],
+      final lineup = _TestLineup(
+        [channel],
+        scenario: LineupScenario(
+          connection: PlexConnection(
+            uri: Uri.parse('https://guide.example:32400'),
+            local: true,
+            relay: false,
           ),
-        ];
+          availableMedia: [
+            PlexMediaItem(
+              id: 'current',
+              title: 'Current title',
+              type: 'movie',
+              duration: const Duration(hours: 1),
+              parts: [PlexMediaPart(path: '/current')],
+            ),
+          ],
+        ),
+      );
       final guide = GuideController(
         lineup: lineup,
         clock: () => DateTime.utc(2026, 8, 13, 12, 15),
@@ -1296,41 +1435,56 @@ void main() {
     lineup.dispose();
   });
 
-  test('hung loader deadline releases capacity for queued work', () async {
+  test(
+    'hung loader deadline releases capacity and owns a late failure',
+    () async {
+      final lineup = _TestLineup(_channels(2));
+      final hung = Completer<ScheduleIndex>();
+      final started = <String>[];
+      final guide = GuideController(
+        lineup: lineup,
+        maximumConcurrentLoads: 1,
+        scheduleLoadTimeout: Duration.zero,
+        loadSchedule: (channel) {
+          started.add(channel.id);
+          return channel.id == 'channel-0'
+              ? hung.future
+              : Future.value(_schedule(channel));
+        },
+      );
+
+      guide.requestViewport(0, 1);
+      await _settle();
+
+      expect(started, ['channel-0', 'channel-1']);
+      expect(guide.row('channel-0').state, GuideLoadState.error);
+      expect(guide.row('channel-0').error, isA<TimeoutException>());
+      expect(guide.row('channel-1').state, GuideLoadState.ready);
+      expect(guide.activeLoadCount, 0);
+
+      hung.completeError(StateError('Late failure after timeout'));
+      await _settle();
+      expect(started, ['channel-0', 'channel-1']);
+      expect(guide.row('channel-0').error, isA<TimeoutException>());
+      expect(guide.row('channel-1').state, GuideLoadState.ready);
+      expect(guide.activeLoadCount, 0);
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('disposal settles an active loader and owns its late failure', () async {
     final lineup = _TestLineup(_channels(2));
     final hung = Completer<ScheduleIndex>();
     final started = <String>[];
     final guide = GuideController(
       lineup: lineup,
       maximumConcurrentLoads: 1,
-      scheduleLoadTimeout: Duration.zero,
       loadSchedule: (channel) {
         started.add(channel.id);
-        return channel.id == 'channel-0'
-            ? hung.future
-            : Future.value(_schedule(channel));
+        return hung.future;
       },
-    );
-
-    guide.requestViewport(0, 1);
-    await _settle();
-
-    expect(started, ['channel-0', 'channel-1']);
-    expect(guide.row('channel-0').state, GuideLoadState.error);
-    expect(guide.row('channel-0').error, isA<TimeoutException>());
-    expect(guide.row('channel-1').state, GuideLoadState.ready);
-    expect(guide.activeLoadCount, 0);
-
-    guide.dispose();
-    lineup.dispose();
-  });
-
-  test('disposal settles an active hung loader', () async {
-    final lineup = _TestLineup(_channels(1));
-    final hung = Completer<ScheduleIndex>();
-    final guide = GuideController(
-      lineup: lineup,
-      loadSchedule: (_) => hung.future,
     );
 
     guide.requestViewport(0, 1);
@@ -1340,6 +1494,14 @@ void main() {
     guide.dispose();
     await _settle();
     expect(guide.activeLoadCount, 0);
+    expect(started, ['channel-0']);
+    final retiredRow = guide.row('channel-0');
+
+    hung.completeError(StateError('Late failure after disposal'));
+    await _settle();
+    expect(guide.activeLoadCount, 0);
+    expect(started, ['channel-0']);
+    expect(guide.row('channel-0'), same(retiredRow));
 
     lineup.dispose();
   });
@@ -1682,8 +1844,10 @@ void main() {
         anchor: anchor,
         shuffleSeed: 1,
       );
-      final lineup = _TestLineup([channel])
-        ..settings = const LineupSettings(guideHours: 4);
+      final lineup = _TestLineup(
+        [channel],
+        scenario: LineupScenario(settings: const LineupSettings(guideHours: 4)),
+      );
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => buildSchedule(
@@ -1799,8 +1963,10 @@ void main() {
     'browsed window stays preserved even after its visible range elapses',
     () {
       var now = DateTime(2026, 8, 13, 12, 47);
-      final lineup = _TestLineup(_channels(1))
-        ..settings = const LineupSettings(guideHours: 2);
+      final lineup = _TestLineup(
+        _channels(1),
+        scenario: LineupScenario(settings: const LineupSettings(guideHours: 2)),
+      );
       final guide = GuideController(lineup: lineup, clock: () => now);
 
       expect(guide.windowStart, DateTime(2026, 8, 13, 12, 30));
@@ -1875,9 +2041,10 @@ void main() {
     lineup.setSettings(const LineupSettings(guideHours: 2));
     guide.requestChannels([lineup.channels.last]);
     await _settle();
-    final current = guide.ensureCurrentProgram('channel-0');
     var completed = false;
-    current.whenComplete(() => completed = true);
+    final current = guide
+        .ensureCurrentProgram('channel-0')
+        .whenComplete(() => completed = true);
     await _settle();
 
     expect(guide.row('channel-0').state, GuideLoadState.retrying);
@@ -2019,6 +2186,7 @@ Future<void> _settle() => Future<void>.delayed(Duration.zero);
 class _TestLineup extends LineupController {
   _TestLineup(
     List<Channel> value, {
+    LineupScenario? scenario,
     AppStore? store,
     super.scheduleWorkerFactory,
   }) : super(
@@ -2028,35 +2196,43 @@ class _TestLineup extends LineupController {
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
        ) {
-    connection = PlexConnection(
-      uri: Uri.parse('https://synthetic.invalid'),
-      local: true,
-      relay: false,
-    );
-    availableMedia = [
-      for (var index = 0; index < 3; index++)
-        PlexMediaItem(
-          id: 'library-$index-item',
-          title: 'Library $index item',
-          type: 'movie',
-          duration: const Duration(minutes: 30),
-          libraryId: 'library-$index',
-          parts: [PlexMediaPart(path: '/library-$index-item')],
+    final initialChannels = value;
+
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(
+          connection: PlexConnection(
+            uri: Uri.parse('https://synthetic.invalid'),
+            local: true,
+            relay: false,
+          ),
+          availableMedia: [
+            for (var index = 0; index < 3; index++)
+              PlexMediaItem(
+                id: 'library-$index-item',
+                title: 'Library $index item',
+                type: 'movie',
+                duration: const Duration(minutes: 30),
+                libraryId: 'library-$index',
+                parts: [PlexMediaPart(path: '/library-$index-item')],
+              ),
+            for (final channel in value)
+              if (channel.source case ManualSource(:final items))
+                for (final item in items)
+                  PlexMediaItem(
+                    id: item.id,
+                    title: item.title,
+                    type: 'movie',
+                    duration: item.duration,
+                    parts: [PlexMediaPart(path: '/${item.id}')],
+                  ),
+          ],
+          channels: initialChannels,
+          stage: SetupStage.ready,
+          settings: const LineupSettings(guideHours: 4),
         ),
-      for (final channel in value)
-        if (channel.source case ManualSource(:final items))
-          for (final item in items)
-            PlexMediaItem(
-              id: item.id,
-              title: item.title,
-              type: 'movie',
-              duration: item.duration,
-              parts: [PlexMediaPart(path: '/${item.id}')],
-            ),
-    ];
-    channels = value;
-    stage = SetupStage.ready;
-    settings = const LineupSettings(guideHours: 4);
+      ),
+    );
   }
 
   int _testContentGeneration = 0;
@@ -2070,12 +2246,12 @@ class _TestLineup extends LineupController {
   }
 
   void setChannels(List<Channel> value) {
-    channels = List.unmodifiable(value);
+    fixtureActor.replaceChannels(List.unmodifiable(value));
     notifyListeners();
   }
 
   void setSettings(LineupSettings value) {
-    settings = value;
+    fixtureActor.publishSettings(value);
     notifyListeners();
   }
 }
@@ -2087,12 +2263,15 @@ class _ArtworkLineup extends _TestLineup {
   final artworkPaths = <Uri>[];
   final artworkSizes = <({int? width, int? height})>[];
   int artworkLoads = 0;
+  Future<Uint8List?> Function(Uri path)? artworkHandler;
 
   @override
   Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) {
     artworkLoads++;
     artworkPaths.add(path);
     artworkSizes.add((width: width, height: height));
+    final handler = artworkHandler;
+    if (handler != null) return handler(path);
     final completer = Completer<Uint8List?>();
     _artwork.add(completer);
     return completer.future;

@@ -1,3 +1,4 @@
+import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,20 +49,41 @@ void main() {
     await tester.tap(find.text('Technical details'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    for (final row in ['Windows display', 'HDR matching', 'Renderer output']) {
+      expect(find.text(row), findsOneWidget);
+    }
+    expect(
+      find.text(
+        "Display state is reported by Windows; it does not verify the TV's picture.",
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
     'copy failure retains context and retry produces an allowlisted snapshot',
     (tester) async {
-      final controller = FixtureController()
-        ..server = const PlexServer(
-          id: 'synthetic',
-          name: 'Private Server Sentinel',
-          connections: [],
-        );
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          server: const PlexServer(
+            id: 'synthetic',
+            name: 'Private Server Sentinel',
+            connections: [],
+          ),
+        ),
+      );
       addTearDown(controller.dispose);
       controller.diagnostics.enabled = true;
-      controller.diagnostics.add('plex-auth', 'PIN cancellation failed');
+      controller.diagnostics.add('plex-auth', 'PIN cancellation failed', {
+        'code': 'auth-denied',
+      });
+      controller.diagnostics.add('playback', 'Playback request failed', {
+        'operation': 'audio_track',
+        'code': 'command_error',
+      });
+      controller.diagnostics.add('playback', 'Native playback failed', {
+        'failureCode': 'safe-looking-private-sentinel',
+      });
       controller.diagnostics.add(
         'plex-library',
         'Some collections could not be loaded',
@@ -109,7 +131,12 @@ void main() {
       expect(find.text('Report copied'), findsOneWidget);
       expect(copied, contains('Playback state: stopped'));
       expect(copied, contains('Playback method: Unknown'));
-      expect(copied, contains('plex-auth: PIN cancellation failed'));
+      expect(
+        copied,
+        contains('plex-auth: PIN cancellation failed (code=auth-denied)'),
+      );
+      expect(copied, contains('operation=audio_track, code=command_error'));
+      expect(copied, isNot(contains('safe-looking-private-sentinel')));
       expect(
         copied,
         contains(

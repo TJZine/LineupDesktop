@@ -67,13 +67,12 @@ const char* TrackType(const mpv_node* node) {
   return nullptr;
 }
 
-}  // namespace
+}
 
 flutter::EncodableValue EncodeTrackList(const mpv_node& node) {
   using flutter::EncodableValue;
   flutter::EncodableList tracks;
-  // Shared optional string contents only, not total serialized message size.
-  size_t remaining_bytes = 64 * 1024;
+  size_t remaining_optional_string_bytes = 64 * 1024;
   constexpr size_t kMaxStringBytes = 4096;
   constexpr int kMaxTracks = 256;
   if (node.format != MPV_FORMAT_NODE_ARRAY || !node.u.list ||
@@ -104,17 +103,17 @@ flutter::EncodableValue EncodeTrackList(const mpv_node& node) {
     for (const char* key : {"title", "lang", "codec", "demux-channels"}) {
       const auto* fact = FindTrackNode(map, key);
       if (!fact || fact->format != MPV_FORMAT_STRING || !fact->u.string ||
-          remaining_bytes == 0) {
+          remaining_optional_string_bytes == 0) {
         continue;
       }
       bool valid_utf8 = false;
       std::string text =
           BoundedUtf8(fact->u.string,
-                      std::min(kMaxStringBytes, remaining_bytes), &valid_utf8);
+                      std::min(kMaxStringBytes, remaining_optional_string_bytes), &valid_utf8);
       if (!valid_utf8 || (text.empty() && fact->u.string[0] != '\0')) {
         continue;
       }
-      remaining_bytes -= text.size();
+      remaining_optional_string_bytes -= text.size();
       value.emplace(EncodableValue(key), EncodableValue(std::move(text)));
     }
     const auto* channels = FindTrackNode(map, "demux-channel-count");
@@ -135,4 +134,4 @@ flutter::EncodableValue EncodeTrackList(const mpv_node& node) {
   return EncodableValue(std::move(tracks));
 }
 
-}  // namespace lineup
+}

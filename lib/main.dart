@@ -10,6 +10,11 @@ import 'playback/unsupported_native_player.dart';
 import 'playback/windows_native_player.dart';
 import 'plex/plex_client.dart';
 
+@pragma('vm:entry-point')
+void nativeRunnerLifecycleTestMain() {
+  runApp(const SizedBox.shrink());
+}
+
 void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
 

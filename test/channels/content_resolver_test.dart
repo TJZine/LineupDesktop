@@ -4,6 +4,54 @@ import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  test('typed browse facets and saved source resolution agree on people and conjunctions', () {
+    final matching = PlexMediaItem(
+      id: 'matching',
+      title: 'Matching',
+      type: 'movie',
+      duration: const Duration(minutes: 90),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/matching')],
+      genres: const ['Drama'],
+      actors: const [' Ada Actor '],
+      directors: const ['Dee Director'],
+      year: 1987,
+    );
+    final wrongGenre = PlexMediaItem(
+      id: 'wrong-genre',
+      title: 'Other',
+      type: 'movie',
+      duration: const Duration(minutes: 90),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/other')],
+      genres: const ['Comedy'],
+      actors: const ['Ada Actor'],
+      directors: const ['Dee Director'],
+      year: 1987,
+    );
+    const filters = {
+      LibraryFilter.genre: ['Drama', 'Mystery'],
+      LibraryFilter.actor: ['ADA ACTOR', 'Someone else'],
+      LibraryFilter.director: [' dee director '],
+      LibraryFilter.decade: ['1980s'],
+      LibraryFilter.collection: <String>[],
+    };
+    final inventory = [matching, wrongGenre];
+    final browsed = inventory.where(
+      (item) => matchesLibraryFacets(item, filters),
+    );
+    final resolved = resolveContent(
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: filters,
+      ),
+      inventory,
+    );
+    expect(browsed.map((item) => item.id), ['matching']);
+    expect(resolved.map((item) => item.id), browsed.map((item) => item.id));
+  });
+
   test(
     'persisted collection filters resolve annotated TV and smart inventory',
     () {

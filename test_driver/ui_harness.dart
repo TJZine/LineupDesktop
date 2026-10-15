@@ -18,7 +18,7 @@ void main() {
 /// Synthetic, credential-free visual/profile harness. Production main.dart
 /// cannot reach this composition root.
 class HarnessController extends LineupController {
-  HarnessController()
+  HarnessController({LineupScenario? scenario})
     : super(
         store: _HarnessStore(),
         credentials: _HarnessCredentials(),
@@ -26,9 +26,17 @@ class HarnessController extends LineupController {
           clientIdentifier: 'lineup-desktop-harness-abcdefghijklmnopqr',
         ),
       ) {
-    channels = List.generate(1000, _channel, growable: false);
-    currentChannelId = channels[40].id;
-    stage = SetupStage.ready;
+    final initialChannels = List.generate(1000, _channel, growable: false);
+
+    installScenario(
+      (scenario ?? const LineupScenario()).withDefaults(
+        LineupScenario(
+          channels: initialChannels,
+          currentChannelId: initialChannels[40].id,
+          stage: SetupStage.ready,
+        ),
+      ),
+    );
   }
 
   @override
@@ -49,7 +57,7 @@ class HarnessController extends LineupController {
 
   @override
   Future<void> setCurrentChannel(String? id) async {
-    currentChannelId = id;
+    fixtureActor.selectChannel(id);
     notifyListeners();
   }
 
@@ -119,12 +127,22 @@ class HarnessPlayer implements NativePlayer {
     ),
   ];
   @override
+  DisplayMatchingReport get displayReport =>
+      const DisplayMatchingReport.initial();
+  @override
   Stream<PlayerEvent> get events => _events.stream;
+  @override
+  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
 
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
     if (_disposed) return;
     final operation = ++_loadEpoch;
     _generation = generation;
@@ -141,6 +159,9 @@ class HarnessPlayer implements NativePlayer {
     );
     _emit();
   }
+
+  @override
+  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
 
   @override
   Future<void> pause() async {
