@@ -23,9 +23,11 @@ W SOURCE-CLOSED, actual negative control failed on intended count bounds,
 corrected5554d6d8 format114/analyze/focused22/full1,645 green. Equivalent final
 a6a2d46ff782c96f2cdcfbb34e277fc2a4fe4202 integrated; main W gate PASSED
 format114/analyze/full1,645 on stablea0cd5399, task tree/branch cleaned.
-S c2f35887 actual two-control BEFORE reproduced pending/startupnonsettlement;
-pinnedformat114/analyze/focused105/full1,650 PASS. SameSreviewer targeted
-R1closure running beforeacceptance/integration.
+S c2f35887 two-control BEFORE reproduced pending/startupnonsettlement;
+pinnedformat114/analyze/focused105/full1,650 PASS; independent R1 CLOSED.
+Unchanged final rebaseb078944a8cc8b6999badb477f2401257a330bf53 integrated.
+S main-checkout gate QUEUED until D releases runtime; no furtherpackageintegrates
+before that gate passes.
 V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
 viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
 Y reconstructed polling control/fourclock green, broad/analyze/full pending.
@@ -85,7 +87,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main format/analyze/1,593/macOS build passed; cleanup authorized |
 | B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; former `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Accepted/reviewed/integrated `bf65e00ad1c99677a2a546da6a72f669056ade8b`; corrected/full/main1,604 green; task worktree/branch removed |
 | B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
-| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Independent review CLOSED; package13b935f9 full1,640 green; equivalent final9d9ec78e integrated; main gate session25853 pending |
+| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Accepted9d9ec78e independentreview/package/main1,640 green; tasktree/fullyintegratedbranchremoved |
 | C review | `01a13f0e-4615-7161-a62c-e3ba4d6237d2` / local | reviewer, gpt-6.1-sol, high | B basebf65e00a → C HEADd7497975 plus frozen C4 patchb3fd73a7 | Required full review and targeted C-R1 closure complete at8b114e44; equivalent rebases retain verdict; full1,640 passed |
 | D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1/D2 focused112, baseline14 renders green atdb92b8b9; D3 source work in progress |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
@@ -94,9 +96,9 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | L review | `01a13ef8-7475-7a13-96d7-8d2e9d82c1a0` / local | reviewer, gpt-6.1-sol, high | L base2ae38b8e → 2b594e6f | Required matrix/pager/cancellation/copy review, read-only |
 | E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Corrected8ff1574a source findings CLOSED; paired scratch harness ready; all runtime/render/full pending |
 | E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Six findings and immutable qualification SOURCE-CLOSED at8ff1574a; runtime/render/full unverified |
-| S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | f02a1209 focused103 green; independent S-R1 accepted; correction7f250270 source/test ready, BEFORE/AFTER/full pending |
+| S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | IndependentS-R1CLOSED, c2f35887 BEFORE/105focused/1,650fullgreen; equivalentb078944a integrated; maingatequeuedDrelease |
 | V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Test-onlyd2fbdf3b prepared; actual NF29 BEFORE and matched GUIDE_PROFILE baseline queued, no production repair |
-| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalent a6a2d46f integrated; P0 main gate pending |
+| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalenta6a2d46f integrated; main1,645 green; tasktree/branchremoved |
 | W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
 | Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Source83b7aa04 + finite test seam507cb296; narrow faithful old-poll negative control/clock checks released; unintegrated |
 
@@ -1123,3 +1125,22 @@ Verifyarchivedharness/manifests, preserveactualvisiblevalues/focus, repaircaused
 failureswithinrow. No fullsuiteyet; parentrebaseactualintegrationbeforefullgrant,
 thenrequiredindependentDreview. Noscratchdeleteuntilacceptedproofrecoverable.
 Allotherruntimequeuesheld.
+
+## S independent closure, acceptance, and integration
+
+Same reviewer01a13ebb CLOSED S-R1 onexactc2f35887, no newmaterialfindings.
+Inspected actual repair2622790d..c2, all4equivalentrebasedpatches, negativecontrols
+and105focused/1,650full logs. Confirmed unmatchedmalformedID fails readiness/all
+pending and retires via existingfail(); matchingmalformed/validunknown/staleguard
+semantics unchanged. Newtesttimeout is failurebound, not passingproof. Existing
+uncorrelatable restart control+source covers retirement; no separate newunknownID
+restart assertion claimed. Original9worker cases retained,5newtotal.
+
+Parent rebase over onlyexecutiondocs b7070665 preserved4patches all`=`:
+9797df80→91c8dd30,4c120022→2668bab8,2622790d→8b86cb6e,
+c2f35887→b078944a8cc8b6999badb477f2401257a330bf53. Ff integratedb078944a.
+Actual5files301+/85-, no goldens; changedstrings internaltypedvalidation/failure
+messages only, no visiblecopychange; unsupportedfilter unreachablethrow removed
+by exhaustive typedlookup, not retainedasdeadstring. Requiredcombinedreview
+stillpending. Main S §8.1 gate deliberately QUEUED while D holds exclusivefocused/
+render slot. No furtherpackageintegrationuntilmainSgateaccepted; S tree retained.
