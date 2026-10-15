@@ -1811,8 +1811,9 @@ Kactual11e0d216 guardPASS/format137zeroPASS; analyzer7issuesALLtracked
 missedtool. Parentinspected752–806 andAPPROVED exactdiagnostics-scenario3add
 calls+matchedmessagefindersONLY: playbackRequestFailed; guideScheduleLoadTimedOut
 foroldsyntheticrequesttimeout; guideCurrentProgramWaitTimedOutfordistinctold
-syntheticrefresh-arrival. Realenumtrafficsurrogatespreserveexpandedreader/new-event
-hidden-then-visible/safecontext/shotnames/positions/assertionstructure. No dead
+syntheticrefresh-arrival. Realenumtrafficsurrogatespreserveexpandedreader/new-arriving-event
+HIDDENwhile readerpositionstable/safecontext/shotnames/positions/assertionstructure.
+No laterrevealassertionexistsinthistoolscenario; childnotifiedprecisioncorrection. No dead
 fixturestrings/debugcompat/rawinjectionneeded. NOcapture/render/goldenupdate,
 no othertoolscenarioedit. Product20calls/17pairsunchanged, tool3countseparate.
 Kcurrentfreshlib/test/tool/test_driverinventory authoritative; ownmigrationfailure
