@@ -1,12 +1,12 @@
 @{
-  FlutterFrameworkRevision = '5fc346839b5d0eef006ed8404392afb4dfae428d'
-  FlutterEngineRevision = '692136cb6582dbfc5af3fb33c2515a069f2f66d0'
+  FlutterFrameworkRevision = 'abaf9c523780a608bd46686fd5e53740a07077f8'
+  FlutterEngineRevision = 'deb287481e3ce9468f3434937ced4240a70539ca'
   FlutterManagerPath = 'engine/src/flutter/shell/platform/windows/egl/manager.cc'
   FlutterManagerBlob = '64fb765bf546190fa610a9bdff007fc881c3cc7e'
-  FlutterPatchedManagerSha256 = 'A5935B2FD7DB88C3C54540505011215DFDAC8C89345AD0981EBBC4FB18F51F22'
+  FlutterPatchedManagerSha256 = 'FA7787257D251272416A8219924A5415BE5FCF5D24DB377456E7636739F6AAE3'
   FlutterStandardGclientBlob = 'a05a39e336335389321b8a6d855b13bd3fc7892c'
   FlutterEnginePatchPath = 'tool/flutter_engine/0001-windows-direct-composition.patch'
-  FlutterEnginePatchSha256 = '3217BB18FF0C5EE2FE1027F43F98AEAA20B0BA0B393CBB09B015B96F416F467F'
+  FlutterEnginePatchSha256 = 'AB205D4B313E920DA448D186BDEBA7CE1AF248E99A8A8CE635D8176649EDFBFB'
   DepotToolsRevision = '13febbee9ece9e03df923f69d540afc63c6db93e'
 
   MpvVersion = 'mpv-v0.41.0-1092-g3186d369f'

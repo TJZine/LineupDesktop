@@ -228,15 +228,15 @@ for the controller and guardian contracts covered by their fake tests.
 
 ## Portable commands
 
-Flutter SDK `3.47.6` (revision
-`5fc346839b5d0eef006ed8404392afb4dfae428d`, Dart `3.13.5`) is the reproducible
+Flutter SDK `3.47.7` (revision
+`abaf9c523780a608bd46686fd5e53740a07077f8`, Dart `3.13.5`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
 Select the exact Flutter checkout rather than a different SDK already on PATH:
 
 ```sh
 git clone https://github.com/flutter/flutter.git /path/to/flutter
-git -C /path/to/flutter checkout 5fc346839b5d0eef006ed8404392afb4dfae428d
+git -C /path/to/flutter checkout abaf9c523780a608bd46686fd5e53740a07077f8
 export PATH=/path/to/flutter/bin:$PATH
 flutter doctor -v
 ```
@@ -386,8 +386,8 @@ package machines also need a GPU driver or Vulkan Runtime providing
 
 When the pinned runtime changes, provision it into a fresh unique destination;
 do not reuse or overwrite an older prepared directory. Rebuild the Lineup
-application against the new runtime. This refresh also upgrades Flutter to
-3.47.6, so reprovision its patched `host_debug` and `host_release` outputs
+application against the new runtime. When the pinned Flutter SDK or engine
+changes, reprovision its patched `host_debug` and `host_release` outputs
 before launching or packaging; the older SDK outputs cannot be reused.
 
 ### Patched engine provisioning
