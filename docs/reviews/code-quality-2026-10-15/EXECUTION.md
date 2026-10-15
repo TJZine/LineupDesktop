@@ -28,7 +28,8 @@ productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
 UfirstAFTERguard/format143PASS, analyzer59issues/exit1; STOPPEDbeforefocused/
 render/full. Frozenreviewer informed; compilerroots+reviewfindingsbatchrepairlater.
 Kworker6.1/medium a4033b3d BEFORE22PASS(19old+3new), exactreport/storage/UI
-contractsunchanged. FullKsource-onlyenum/per-keypolicy/callmigration nowauthorized; Gafterwholebranchreview. RequiredUpremerge,
+contractsunchanged. FullKsource3682c24d ready/frozen;17enum/20producercalls/20contextkeypolicy
+map andfixedreportexpectedbytesstaticunchanged; AFTERruntimequeuedbehindU; Gafterwholebranchreview. RequiredUpremerge,
 plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
 FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
@@ -1741,3 +1742,32 @@ returnsparent. No baseline/golden/tolerancerelaxation, no scratchcasecountinflat
 Expected1,687=V1,675+12Unewcasessourcemap, notresult. SameUreviewerfinaltargeted
 closuremustinspectcompiler/anyruntimefixdelta+actualfocus/render/fullbeforemerge.
 No extra sourcepermissionasked, no recursiveagents/childintegration/push/build.
+
+## K full typed diagnostics source candidate, AFTER still unrun
+
+K exactclean3682c24d2bc95ea934b1e2c29452af6395c22b0b onb75, commits40d14dd9/
+a4033b3d/3682c24d,7files514+/150-. TypedDiagnosticEvent17exactexistingarea/message
+pairs(orderstaticcomparedPASS), addenum, exportforgedrawEntryeventmatchfromenum
+values, no parallelmanual_allowedEvents.20sharedkeypolicies:11categoricalSEPARATE
+sanitizeForStorage(safevaluecase/unknownverbatim, unsafeunexpected, invaliddrop)
+vsadmitForExport(recognizednormalized/unknownomit/directforgedrevalidation);
+9integerrangesunchanged(http100..599,counts0..1e6,timing0..86400000). Category
+setsstaticbyteidentical, report/metadata/redaction/telemetryunchanged.
+
+20producerreversemechanicalcomparisonLC16/PC2/Guide2PASS (onlyenumsubstitution/
+Guideimport/formatcommas), context/lifetime/Bscope/Cfixedsafeerror/Vactivityuntouched.
+Approved11desktopcallfixturesmigratedvalidenum; allcopy/count/slot/reader/grid
+assertionsstaticUNCHANGED. Arbitrarymessageproducerfixturesadapttoenum, redaction
+staticfunctionassertions+fixedmessage/sensitivecontextproofpreserved; bounded251
+evictionidentitynowcount1 ratherthan arbitraryentry1message, sameobligation.
+Unknownproducernegativepreservedviaforgedsnapshotunknownarea/message+context.
+No oldtestdeleted/renamed, expected22focused old19+new3; AFTERUNRUN.
+
+PassedBEFORE_expectedReport literalassignmentSHA256
+7989753e5454e5a215df6777cba959660d83c69fabdba8659c967748fd443c46
+andUIstoredspellingassertionsSTATICUNCHANGED. APIsetupcallsadaptedonly, allraw
+forgedentryfixturesretainprivacynegativepath. FixedreportbyteidentityAFTERstill
+mustexecute, notinferredfromliteralhash. Onlylightformat/diffobserved. KSTOPqueued
+behindUexclusivecompleteAFTER. Futureguard/analyze/diag+desktop/affectedLC/PC/Guide
+producerfocused/fullneeded, expected1,678vsbaseV1675onlyuntilactualintegrationmap.
+Combined/finalwholebranchreviewstillrequired. No rawprivate/native/wire/goldens.
