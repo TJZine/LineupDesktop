@@ -25,16 +25,17 @@ U worker6.1/medium completedsource0b10b2fe, rebasedtof6a99892 oncurrentV9ded.
 RequiredUreview01a13f87 running, sourceFROZEN; firstAFTERchecksnowgranted. Initial
 productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
 26scenarios48images+selfmatchPASS; rejectedbadfixture/animationcapturespreserved.
-UfirstAFTERguard/format143PASS, analyzer59issues/exit1; STOPPEDbeforefocused/
-render/full. Frozenreviewer informed; compilerroots+reviewfindingsbatchrepairlater.
+U final4fe3733d compiler+LayerLinkrepairs:guard/format143/analyze/focused375/
+full1,687PASS. Current48render44exact/fourapprovedbadge-onlydiffsretained;
+sameUreviewer finaltargetedclosure running, Uunintegrated.
 Kworker6.1/medium a4033b3d BEFORE22PASS(19old+3new), exactreport/storage/UI
 contractsunchanged. FullKsource3682c24d ready/frozen;17enum/20producercalls/20contextkeypolicy
 map andfixedreportexpectedbytesstaticunchanged; AFTERruntimequeuedbehindU; Gafterwholebranchreview. RequiredUpremerge,
 plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
 FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
-Runtime: KBEFOREreleased, Kfullsource-only. Uboundedcompilerfixsource-only
-afterrequiredreview, queuedfornextverificationwhenready; noactiveFlutter. Ufocused/render/fullneedsfrozencandidate
+Runtime: KcurrentAFTER/focused/full exclusivelyon11e0d216; U4fefrozen
+fortargetedreviewclosure. Othersheld; noextraFlutter. Ufocused/render/fullneedsfrozencandidate
 andexplicitexclusivegrant; currentcompositionrendersafterVrebasewillberequired.
 Atmostfourimplementationchildren, parentsoleGitintegration/acceptanceowner.
 
@@ -1771,3 +1772,34 @@ mustexecute, notinferredfromliteralhash. Onlylightformat/diffobserved. KSTOPqueu
 behindUexclusivecompleteAFTER. Futureguard/analyze/diag+desktop/affectedLC/PC/Guide
 producerfocused/fullneeded, expected1,678vsbaseV1675onlyuntilactualintegrationmap.
 Combined/finalwholebranchreviewstillrequired. No rawprivate/native/wire/goldens.
+
+## U final current runtime/render proof and targeted closure; K AFTER release
+
+U actualclean4fe3733d95a5a0e85245b68dcc09bb65efdec548 oncurrentV9ded,15files
+1,648+/718-, wholepackagecount+12observed. ce11861dcompilerfixfollowedbyactual
+focused372pass3fail:2OLDPlayeroverlappingAnimatedSwitcherleadersusedsameLayerLink,
+newmodifierplatformcleanupafterinvariant. Allowed4feownedrepairkeepslinkinState/
+stableforonepanelpresentation, freshlinkONLYnewpanelpresentation/outgoingkeepsold,
+NowPlaying↔OSDsamepanelretains; modifierfinallyrestoresplatformbeforetestbodyexit,
+unchangedexpectations. Exact3regressionsPASSthenall12focused375PASS/full1,687PASS
+atstable4fe, guard3.47.7/format143zero/analyzeclean. Oldfailuresretained, noassertion
+weakening/oldtestsdeleted/renamed. `/tmp/lineup-cq-U/FINAL.md`,after-*-final.log,
+after-full.log,after-focused-repaired.log,after-regressions-repair1.log.
+
+CURRENTV-composedrenderstockno-updateexit1=22pass4fail:44EXACT+fourONLYapproved
+badgediffs. Names1280/1920-approved-badge-three-channels and-approved-badge-unknown.
+ChangedboundsXYXYexclusive1280three[700,528,745,560]/940pixels,unknown
+[538,528,837,560]/7,366;1920three[716,708,761,740]/940,unknown
+[554,708,853,740]/7,366. Actual/expected/diffsafter-render-scratch/failures and
+hash/boundsJSON. ParentVIEWEDactualapproved-badge-comparison.png:3ch→3 CH,
+UNKNOWNremovedandH.264/STEREOshiftwithinbadgerowonly. No all48-equalclaim.
+44otherfocus/route/artwork/statepixelsmatch. Baseline48refs/harness8c45957a/fonts
+unchanged, scratchoutsidenormaldiscovery. SameUreviewer01a13f87requestedtargeted
+f6..4fecompiler+lifecycle/testcleanup+actualgate/renderclosure, sourcefrozen.
+
+K3patchrebasedunchangedontoactual072ed78d:40d→5935a701,a403→12ab1741,
+3682→11e0d2162f645ed0d348f1dc50887ed2941c9ce5, all`=`. ActualbaseproductsV/Y
+sameasBEFORE(noUintegrated). Kexclusiveguard/format/analyze/22diag+desktop/
+affectedLC-PC-Guidefocused/full granted; preserveexpectedliteralUTF8bytes/storage
+UIassertions andproducerlifetimes. Expected1,678=V1675+3Konly, notobserved;
+currentfullwithUwillneedmaincompositionafterintegration. NootherFlutter overlap.
