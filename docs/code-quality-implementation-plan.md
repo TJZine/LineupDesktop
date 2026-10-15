@@ -18,6 +18,11 @@ CTests and full-plan completion conditions remain outstanding. Original gate
 wording below records the earlier plan, subject to this override. Follow the
 [Windows handoff](reviews/code-quality-2026-10-15/WINDOWS_HANDOFF.md).
 
+Merged-composition/handoff review is clear at `32e68e4c44e831680ab661bc88a8d8dfd63e4104`;
+fresh portable pin/format/analyze/full1,690 checks passed at that same stable
+candidate. See the [attributed review and verification record](reviews/code-quality-2026-10-15/IMPLEMENTATION_WINDOWS_HANDOFF_REVIEW.md).
+These results do not satisfy F's required Windows CTests or physical acceptance.
+
 ## Execution closure October 15 2026
 
 **Portable code packages integrated and reviewed; native candidate pending;

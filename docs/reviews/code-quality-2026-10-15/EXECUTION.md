@@ -23,7 +23,19 @@ testing, validation pending; plan not fully complete.** Retain `cq/F` and its
 worktree until validation acceptance. No Windows compiler/CTest, local PowerShell
 or physical W1–W12 result has been observed on this macOS host. See the
 [Windows handoff](WINDOWS_HANDOFF.md) for checkout, prerequisites, gates and return
-contract. Push/review results will be recorded after they are observed.
+contract. The [merged-candidate review](IMPLEMENTATION_WINDOWS_HANDOFF_REVIEW.md)
+is clear and accepted. P0's fresh exclusive gate on clean unchanged
+`32e68e4c44e831680ab661bc88a8d8dfd63e4104` passed the toolchain check,
+format144/0changed (12.52s), analysis (7.60s) and full1,690 tests (327.61s), all
+exit0. Logs: `/tmp/lineup-cq-integration/windows-handoff/`. No macOS rebuild was
+needed: all portable/macOS inputs equal previously tested `476750d9`; F adds
+Windows paths only. The longer test duration has no established cause.
+
+Before the controller's push, `git ls-remote` already showed reviewed `32e68e4c`
+on GitHub; local remote-tracking reflog said `update by push`. The controller
+had not issued that push and cannot attribute its actor. The controller will
+push the documentation-only final results commit with an explicit task-branch
+refspec and verify the remote SHA. No force push or main merge is authorized.
 
 ### Portable closeout before the testing override
 

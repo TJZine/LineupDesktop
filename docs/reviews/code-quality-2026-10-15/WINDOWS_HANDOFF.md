@@ -169,6 +169,10 @@ Return a redacted report containing:
 The portable closeout at `476750d950744d6f22de99a170d4a6dfde4042d4` passed
 format/analyze, 1,690 tests and a macOS release build. Those results are attributed
 portable evidence, not Windows execution. F was independently source-reviewed
-with no material finding. **Merged, reviewed, compiled/tested and physically
+with no material finding. The merged composition and this handoff also passed
+[independent review](IMPLEMENTATION_WINDOWS_HANDOFF_REVIEW.md). A fresh combined
+portable gate at `32e68e4c44e831680ab661bc88a8d8dfd63e4104` passed the pin
+check, format144/0changed, clean analysis and all 1,690 tests. Later status-only
+commits do not change those inputs. **Merged, reviewed, compiled/tested and physically
 accepted are separate statuses.** Keep F pending until observed Windows results
 are reviewed and closure records updated; retain its recovery branch/worktree.
