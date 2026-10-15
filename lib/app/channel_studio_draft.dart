@@ -45,6 +45,10 @@ class ChannelStudioDraft {
   final filters = <LibraryFilter, List<String>>{};
 
   void configureSource({String? defaultPlaylistId, String? defaultLibraryId}) {
+    rundown.replaceFrom(switch (source) {
+      ManualSource(:final items) => items,
+      _ => const <ChannelItem>[],
+    });
     sourceReadOnly = generated;
     sourceChoice = switch (source) {
       LibrarySource() => StudioSourceChoice.library,
@@ -305,6 +309,8 @@ class ChannelStudioDraft {
   }
 
   void loadSaved(Channel channel) {
+    if (channel.source case ManualSource(:final items))
+      rundown.acceptSaved(items);
     source = channel.source;
     playbackMode = channel.playbackMode;
     anchor = channel.anchor;
