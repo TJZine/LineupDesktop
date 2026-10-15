@@ -4,6 +4,7 @@
 // ignore_for_file: close_sinks
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -106,6 +107,57 @@ void main() {
       );
     },
   );
+
+  testWidgets('display hold session exit publishes exactly once', (
+    tester,
+  ) async {
+    final f = _ContinuationFixture(player: _DisplayPlayer());
+    final p = f.player as _DisplayPlayer;
+    addTearDown(f.close);
+    await f.coordinator.toggleFullscreen();
+    await f.coordinator.loadInitialMedia(
+      Uri.parse('https://synthetic.test/local'),
+    );
+    expect(f.coordinator.displayHoldActive, isTrue);
+    var notifications = 0;
+    f.coordinator.addListener(() => notifications++);
+
+    await f.coordinator.toggleFullscreen();
+
+    expect(notifications, 1);
+    expect(f.coordinator.displayHoldActive, isFalse);
+    expect(p.plays, 1);
+    expect(f.coordinator.busyLabel, isNull);
+  });
+
+  test('listener-origin publication gets one further reconciliation round', () {
+    final lineup = _TestLineup();
+    final guide = GuideController(lineup: lineup);
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    final observations = <bool>[];
+    var depth = 0;
+    var maxDepth = 0;
+    coordinator.addListener(() {
+      depth++;
+      if (depth > maxDepth) maxDepth = depth;
+      observations.add(coordinator.cursorVisible);
+      if (observations.length == 1) coordinator.showMiniGuide();
+      depth--;
+    });
+
+    coordinator.showOsd();
+
+    expect(observations, hasLength(2));
+    expect(maxDepth, 1);
+    expect(coordinator.overlay, PlayerOverlay.miniGuide);
+  });
 
   for (final userPaused in [false, true]) {
     testWidgets('admission fallback preserves playback intent: $userPaused', (
@@ -4873,6 +4925,92 @@ void main() {
     },
   );
 
+  for (final outcome in [
+    'success',
+    'failure',
+    'rollback failure',
+    'newer tune',
+    'newer scope',
+  ]) {
+    test('authorization recovery during persistence: $outcome', () async {
+      final recoveryFails =
+          outcome == 'failure' || outcome == 'rollback failure';
+      final lineup = _BlockingLineup(
+        recoverAuthorization: true,
+        failAuthorizationRecovery: recoveryFails,
+        failRollback: outcome == 'rollback failure',
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _EventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      final tune = coordinator.tune('channel-b');
+      await lineup.persistenceStarted.future;
+      player.emitError(
+        recoverable: true,
+        generation: player.loadGenerations.single,
+        failureCode: 'http_error',
+        httpStatus: 401,
+      );
+      await pumpEventQueue(times: 10);
+      expect(lineup.recoveryCalls, 1);
+      final tuningBeforeSaveRelease = coordinator.tuning;
+      if (!recoveryFails) {
+        expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
+      }
+      Future<bool>? winner;
+      if (outcome == 'newer tune') winner = coordinator.tune('channel-0');
+      if (outcome == 'newer scope') lineup.changeContentScope();
+      lineup.releasePersistence.complete();
+      final tuned = await tune;
+      if (winner != null) expect(await winner, isTrue);
+      await pumpEventQueue(times: 5);
+
+      expect(coordinator.tuning, isFalse);
+      if (outcome == 'success') {
+        expect(tuned, isTrue);
+        expect(lineup.currentChannelId, 'channel-b');
+        expect(coordinator.error, isNull);
+        expect(player.stops, 0);
+        // The recovered load remains the active playback lifetime.
+        await coordinator.seekTo(const Duration(minutes: 5));
+        expect(player.loadPlexTokens.last, 'test-token-2');
+      } else if (recoveryFails) {
+        expect(tuningBeforeSaveRelease, isFalse);
+        expect(tuned, isFalse);
+        expect(
+          lineup.currentChannelId,
+          outcome == 'rollback failure' ? 'channel-b' : 'channel-0',
+        );
+        expect(coordinator.error, isNotNull);
+        expect(coordinator.overlay, PlayerOverlay.error);
+        expect(player.stops, 1);
+      } else {
+        expect(tuned, isFalse);
+        expect(coordinator.error, isNull);
+        if (outcome == 'newer tune') {
+          expect(lineup.currentChannelId, 'channel-0');
+          expect(player.loadPlexTokens.last, 'test-token-1');
+        } else {
+          // A retired tune must not roll back the new content scope.
+          expect(lineup.currentChannelId, 'channel-b');
+        }
+      }
+    });
+  }
+
   test('known schedule elapsed starts directly in the matching part', () async {
     final lineup = _TestLineup(
       playbackParts: _parts(first: const Duration(minutes: 30)),
@@ -6505,12 +6643,22 @@ class _FailingPersistenceLineup extends _TestLineup {
 }
 
 class _BlockingLineup extends _TestLineup {
+  _BlockingLineup({
+    super.recoverAuthorization,
+    super.failAuthorizationRecovery,
+    this.failRollback = false,
+  });
+
+  final bool failRollback;
   final persistenceStarted = Completer<void>();
   final releasePersistence = Completer<void>();
   bool _blocked = false;
 
   @override
   Future<void> setCurrentChannel(String? id) async {
+    if (failRollback && _blocked && id == 'channel-0') {
+      throw const FileSystemException('Synthetic rollback failure.');
+    }
     fixtureActor.selectChannel(id);
     notifyListeners();
     if (!_blocked) {
