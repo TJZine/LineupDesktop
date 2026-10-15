@@ -1,7 +1,7 @@
 # Lineup Desktop: code-quality and macOS-readiness implementation plan
 
 Status: **revision 3 executed for portable code; F unmerged/unverified;
-G documentation integrated and reviewed; final verification pending; plan not fully complete.**
+G documentation integrated and reviewed; portable final verification passed; plan not fully complete.**
 Original plan prepared October 15, 2026. Its specifications and native review
 conditions remain active. No push, PR, merge into `main`, branch-default change,
 or unrelated deletion is authorized by this closure. See the execution closure
@@ -39,7 +39,7 @@ SHAs were verified as ancestors of G's base
 | U | `bec2e8bac096b7b20536e53219c138a4b9020080` | Integrated; portable gates and required reviews accepted |
 | K | `9c3c62e6645913bda54dfefadff810fcc6db87f7` | Integrated; portable gates and required reviews accepted |
 | F | No integrated SHA | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3` retained unmerged/unverified; four Windows CTests and acceptance pending |
-| G | `c571baf2303ee8f4ea9fd932116f04ccac42b227` | Integrated; preservation review accepted; final gates/build pending |
+| G | `c571baf2303ee8f4ea9fd932116f04ccac42b227` | Integrated; preservation review, final portable gates and macOS build accepted |
 
 L's controller authorization-getter glue was integrated at
 `bc231cefcf8cd6ae12b8cf008b70f64b53b7ab2e`. The parent-owned
@@ -53,7 +53,11 @@ observed pin 3.47.7, 144 formatted files unchanged, clean analysis and 1,690 tes
 These are attributed earlier checks, not new G checks or physical acceptance.
 
 G preservation review is clear; its actual integration identity is recorded above.
-Parent final stable checks/macOS build and eligible task cleanup remain pending. F must retain
+Final stable verification at `476750d950744d6f22de99a170d4a6dfde4042d4` passed: pin3.47.7,
+format144 unchanged, analysis clean, all1,690 tests, and macOS release build54.4MB.
+Accepted task worktrees/fully integrated task branches are cleaned; F and the
+unmerged preflight probe remain recoverable. The final results record changes
+only closeout facts after that validated input tree; no product/test/build input changed. F must retain
 its branch/worktree until Windows verification, review and integration; no full
 plan completion while it is unmerged. W1–W12 remain separate, unobserved physical
 acceptance even after deterministic gates. The branch-repair proposal is text

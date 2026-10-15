@@ -7,27 +7,29 @@ dispatch, acceptance, and integration; it does not replace package contracts.
 
 ## Current checkpoint
 
-All portable CODE packages A/H/T/M/B/L/C/W/S/D/E/Y/V/U/K integrated.
-Latest observed mainU§8.1 at9f1f25fd:pin3.47.7/format143/analyze/full1,687PASS.
-K final9c3c62e6 merged; freshmainKa620 actually1,690PASS
-=U1687+K3, format144/analyzeclean. BothfinalcodereviewsCLEAR/parentaccepted. No furthercodeedits/integrationuntilstablechecks/reviews.
-Koldcandidatea33 ownV/Ybasefull1,678excludedU; properattributionretained.
-Urequiredfull+targetedreviewCLOSED all2P1/compiler/lifecycle; actual375focused/
-1,687full and44exact/fourapprovedbadge-renderdifferences accepted. Otherrequired
-B/C/D/F/Lsource reviews andalladjudicationsbelow. Kfull17enum/20calls/storage-vs-
-export2354bytecontract+UIproofpasses, plannedcombinedreviewstillrequired.
+**Portable delivery implemented, reviewed, tested and integrated. Native candidate
+pending; plan not fully complete.** Integration branch: `codex/code-quality-2026-10`.
+Actual BASE_SHA: `14ac167be4d0007cf61ce85f9ed4879ca6d5c3b1`.
+All portable packages A/H/T/M/B/L/C/W/S/D/E/Y/V/U/K and G are integrated. All
+required scoped reviews, combined review, final whole-branch review and G
+preservation review are clear; every material finding was repaired and closed.
 
-Bothindependentread-onlyreviewers6.1/highcompletedata620: combined01a13fa4
-andwholebranch01a13fa6CLEAR, attributedrecordsretained; freezeendedafterresults.
-Gdispatchedworker6.1/medium01a13fb2 onactuald1518483; documentation-only
-consolidation/open-obligations/link/authorityworkactive, nocodefindingunresolved. FinalmacOSbuildpending(Mbuildpassed).
-U/Kacceptedtasktrees/fullyintegratedbranchesremovedafterallcodereview/gates;
-Gtasktreeactive. Otheracceptedtasktreescleaned, F/probekeptasrequired.
-F040e4a64 remainsUNVERIFIED/UNMERGED inretainedcq/F pendingWindowsCTests
-(display_dynamic_range/display_guardian/native_player_contract/runner_lifecycle),
-plusseparatephysicalWindowsacceptance. No push/PR/mainmerge/publication/default
-branchrepair authorized/performed. Preflightunmergedprobebranchretainedasrequired.
-No entireplancompletionclaim, allnineCQ+additionalpackagesscopepreserved.
+Final frozen verification at `476750d950744d6f22de99a170d4a6dfde4042d4`:
+Flutter3.47.7 / framework `abaf9c523780a608bd46686fd5e53740a07077f8` / Dart3.13.5;
+formatter144/0changed, analysis clean, full1,690 PASS, macOS release build54.4MB PASS.
+Tracked tree remained clean. Artifact/log hashes and exact commands are below.
+Subsequent closeout commit changes only this record, the plan status and register;
+all validated product, tests, protocol, assets and build inputs remain unchanged.
+
+Accepted task worktrees and fully integrated task branches are removed, including G.
+F remains clean at `040e4a64bdc667bae9673d61a39a8d15261959c3` in
+`/Users/tristan/Software/LineupDesktop-F`, branch `cq/F`, UNMERGED/UNVERIFIED:
+Windows build and display_dynamic_range/display_guardian/native_player_contract/
+runner_lifecycle CTests remain required, with physical W1–W12 separately pending.
+The unmerged capability probe `cq/preflight` is retained. Pre-existing/unrelated
+branches/worktrees are untouched. No push, PR, main merge, publication, tag or
+default-branch repair was performed by this assignment. macOS native playback
+remains unsupported; compilation and synthetic UI evidence are not physical media proof.
 
 ## Authority and source
 
@@ -63,16 +65,16 @@ Preset files were read from the actual checkout. `worker_luna` resolves to
 text and explicit model/effort. At most four implementation children run together.
 The parent owns integration and worktree cleanup. Children cannot delegate.
 
-| Unit | Actual child / host | Executor | Source / worktree | State |
+| Unit | Actual child / host | Executor | Initial source / task worktree | State |
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Accepted and integrated at `5990c0217b33d6d690b663f177fbe62e2635b557`; combined format/analyze/1,583 tests passed |
 | H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; former `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Accepted/integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main format/analyze/1,588 tests passed; task worktree/branch removed |
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
 | T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; former `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Accepted/integrated `dbc4dea0`; serialized main gate1,588 green; task worktree/branch removed; original artwork failure remains recorded |
-| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main format/analyze/1,593/macOS build passed; cleanup authorized |
+| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated d2213d4d; main1,593/macOS build passed; task tree/branch removed |
 | B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; former `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Accepted/reviewed/integrated `bf65e00ad1c99677a2a546da6a72f669056ade8b`; corrected/full/main1,604 green; task worktree/branch removed |
-| B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
+| B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Complete: B-R1 identity finding repaired and closed; required source/proof review accepted |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Accepted9d9ec78e independentreview/package/main1,640 green; tasktree/fullyintegratedbranchremoved |
 | C review | `01a13f0e-4615-7161-a62c-e3ba4d6237d2` / local | reviewer, gpt-6.1-sol, high | B basebf65e00a → C HEADd7497975 plus frozen C4 patchb3fd73a7 | Required full review and targeted C-R1 closure complete at8b114e44; equivalent rebases retain verdict; full1,640 passed |
 | D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Acceptedsource6f66f331 reviewR1/R2CLOSED, focused114/render14/full1,658; equivalent4615b7c0 integrated; main1,658green; tasktree/fullyintegratedbranchremoved |
@@ -80,21 +82,21 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
 | L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Accepted441950df plus consumerbc231cef; package/main1,610 green; task tree/fully integrated branch removed |
-| L review | `01a13ef8-7475-7a13-96d7-8d2e9d82c1a0` / local | reviewer, gpt-6.1-sol, high | L base2ae38b8e → 2b594e6f | Required matrix/pager/cancellation/copy review, read-only |
+| L review | `01a13ef8-7475-7a13-96d7-8d2e9d82c1a0` / local | reviewer, gpt-6.1-sol, high | L base2ae38b8e → 2b594e6f | Complete: endpoint matrix, traversal/cancellation and retained proof clear; accepted |
 | E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Acceptededd12307 reviewed/currentfull1,663/render14/main1,663green; candidate+baselineworktrees/taskbranchcleaned, proofarchived |
-| E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Six findings and immutable qualification SOURCE-CLOSED at8ff1574a; runtime/render/full unverified |
+| E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Complete: six source findings and immutable qualification closed; runtime cleanup/proof review clear at b8ac165f |
 | S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Acceptedb078944a independentclosure/105focused/1,650full/main1,650green; tasktree/fullyintegratedbranchremoved |
-| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | 287571e2 BEFORE123/120pass/3confirmingfail, staleactivity/contentcontrolspass/profilecaptured; source-onlyfullrepairauthorized |
+| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Accepted b75a6ebb; worker reassignment, confirmed repairs,125focused/full1,675/main1,675; tree/branch removed |
 | W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalenta6a2d46f integrated; main1,645 green; tasktree/branchremoved |
 | W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
-| K | `01a13f84-69b0-7292-9a01-23be25f96503` / local | worker, gpt-6.1-sol, medium |b75a6ebb; `/Users/tristan/Software/LineupDesktop-K`, `cq/K` | Actualpost-ownerinventory+inlinebyte-report/storageproofprepONLY; no productionmigration/runtimeyet |
+| K | `01a13f84-69b0-7292-9a01-23be25f96503` / local | worker, gpt-6.1-sol, medium |b75a6ebb; `/Users/tristan/Software/LineupDesktop-K`, `cq/K` | Accepted9c3c62e6;17enum/20producer map, separate policies/2354bytes; maincombined1,690; tree/branch removed |
 | Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Acceptedf7ede071 focused88/full/main1,667green; tasktree/branchremoved; combinedreviewpending |
 
-| U | `01a13f32-18d0-7f21-ad48-6a25d94f8d3a` / local | worker, gpt-6.1-sol, medium |9d9ec78e; `/Users/tristan/Software/LineupDesktop-U`, `cq/U` | Initial source/test/history/scratch preparation; no production repair or runtime grant yet |
+| U | `01a13f32-18d0-7f21-ad48-6a25d94f8d3a` / local | worker, gpt-6.1-sol, medium |9d9ec78e; `/Users/tristan/Software/LineupDesktop-U`, `cq/U` | Acceptedbec2e8ba;375focused/full/main1,687,44exact+4approvedrenders; required review closed; tree/branch removed |
 
-| U review | `01a13f87-43a9-72e2-b347-babedac17eb5` / local | reviewer, gpt-6.1-sol, high |9ded0693→f6a99892 inUtree | RequiredwholeUpremergereview onfrozencurrentVcomposition; firstAFTERruntimeparallel |
+| U review | `01a13f87-43a9-72e2-b347-babedac17eb5` / local | reviewer, gpt-6.1-sol, high |9ded0693→f6a99892 inUtree | Complete: full review plus compiler/lifecycle/current-render closure at4fe3733d; no remaining material finding |
 
-| G | `01a13fb2-5d59-7c43-b5c6-4515afcd6bd4` / local | worker, gpt-6.1-sol, medium |d15184831213dd6403ccb80da24a3ea17ffe088c; `/Users/tristan/Software/LineupDesktop-G`, `cq/G` | FullGdocumentation/obligation/authorityconsolidationactive afterbothclearcodereviews |
+| G | `01a13fb2-5d59-7c43-b5c6-4515afcd6bd4` / local | worker, gpt-6.1-sol, medium |d15184831213dd6403ccb80da24a3ea17ffe088c; `/Users/tristan/Software/LineupDesktop-G`, `cq/G` | Acceptedc571baf2; authority/archive/link preservation review clear; final1,690/macOS build passed; tree/branch removed |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -1980,3 +1982,51 @@ andthisreviewmetadata. Allportablepackages+Gimplemented/reviewed/integrated;
 finalstablepostGformat/analyze/full/macOSbuild andGtaskcleanupstillpending.
 F040e4a64 remainsUNVERIFIED/UNMERGED, physicalW1–12separate. Branchrepairproposal
 textonly, no default/tag/unrelatedbranchoperationperformed.
+
+## Final post-G verification, artifact identity and cleanup
+
+Verifier: original P0 child `01a13eaa-0f77-7ef1-a805-cbad67a3714a`, worker_luna
+`gpt-5.6-luna`/xhigh. Main HEAD before/after exactly
+`476750d950744d6f22de99a170d4a6dfde4042d4`, tracked porcelain empty.
+All commands used PATH `/Users/tristan/.cache/lineup-flutter/3.47.7/flutter/bin:$PATH`.
+
+| Observed command | Result | Wall time | Retained log |
+| --- | --- | --- | --- |
+| `flutter --version` | Flutter3.47.7, frameworkabaf9c5237, Dart3.13.5 |0.22s|`/tmp/lineup-cq-integration/final/toolchain.log`|
+| `dart tool/format.dart --check` |Exit0; guard matched;144files/0changed|2.77s|`format.log` in final log directory|
+| `flutter analyze` |Exit0; no issues|3.32s|`analyze.log`|
+| `TZ=America/New_York flutter test --concurrency=2 --reporter expanded` |Exit0;1,690 passed|82.98s|`full-test.log`|
+| `flutter build macos --no-pub` |Exit0; release.app built54.4MB|40.26s|`macos-build.log`|
+
+Parent independently read final COMMAND_EXIT=0 summaries and hashed both artifact
+executables. App:
+`build/macos/Build/Products/Release/Lineup Desktop.app`, bundle identifier
+`com.tjzine.lineupDesktop`, CFBundleExecutable `Lineup Desktop`.
+Runner SHA256 `e2162ea67670c9c4f5931765dc3d9d1ade42f80be8784a2207d6816d18015470`.
+Dart `Contents/Frameworks/App.framework/Versions/A/App` SHA256
+`13f66a151ab5ad126c00b9adbfd7812f52c1e173f6a6491da02d5db031413dbb`.
+Build log's Xcode x86_64 deprecation note was nonfatal. No app launch, native
+Windows test, physical acceptance, dependency/source/config repair, publication
+or signing-policy change occurred. macOS media remains unsupported.
+
+Parent verified accepted G tree clean and branch ancestor, removed only
+LineupDesktop-G/cqG. F clean exact040e4a64 remains unmerged; cq/preflight exact
+`74f0fe588410336da2876c58437d0faebb478be3` retained. All accepted task trees and
+fully integrated task branches are cleaned, no unrelated/pre-existing deletion.
+Raw code/render/negative-control/archive evidence remains in the attributed
+`/tmp/lineup-cq-*` locations; merged work and archived document snapshots remain
+recoverable through actual full integration/base commits and current review records.
+
+Package/test map reconciles baseline1,567→1,690 (+123), with no count-quality
+substitute: A16/H5/T0/M5/B11/L6/C30/W5/S5/D8/E5/Y4/V8/U12/K3/G0. All before/
+after, moved/renamed fixture and literal-set dispositions remain above. Final
+executor selections: Luna5.6/xhigh P0/A/H/T/M/S/W/Y; worker6.1/medium
+B/C/D/E/F/L/V/K/U/G, with E and V reassigned from Luna for demonstrated judgment
+needs; reviewers6.1/high. Actual chat IDs and source/diff/rebase maps remain above.
+
+Maintainer-only proposal (not executed): promote the accepted Flutter line as
+default, individually review merged/stale branch candidates with recovery and
+authorization, optionally tag electron-ui/initial-build milestones. This assignment
+performed no push/PR/default/tag/unrelated branch operation. Native F and physical
+platform rows remain in `docs/open-obligations.md`; entire plan completion is
+explicitly unclaimed while F is unintegrated.
