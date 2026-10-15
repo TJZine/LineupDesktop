@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
+import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
@@ -2819,7 +2820,7 @@ class _ProgramDetails extends StatelessWidget {
       ?_episodeCode(item),
       if (item.showTitle != null) item.title,
     ].join(' · ');
-    final badges = _mediaBadges(item);
+    final badges = mediaBadges(item, surface: MediaBadgeSurface.guide);
     return LayoutBuilder(
       builder: (context, box) {
         final dense = box.maxHeight < 270 || enlarged;
@@ -3007,27 +3008,6 @@ String? _episodeCode(ChannelItem item) {
   if (season == null || episode == null) return null;
   return 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}';
 }
-
-List<String> _mediaBadges(ChannelItem item) => [
-  item.contentRating,
-  item.resolution?.toUpperCase(),
-  switch (item.dynamicRange) {
-    'hdr10' => 'HDR10',
-    'hlg' => 'HLG',
-    'dolbyVision' => 'DOLBY VISION',
-    _ => null,
-  },
-  item.audioCodec?.toUpperCase(),
-  if (item.audioChannels != null) _audioChannels(item.audioChannels!),
-].nonNulls.toList();
-
-String _audioChannels(int channels) => switch (channels) {
-  1 => 'MONO',
-  2 => 'STEREO',
-  6 => '5.1',
-  8 => '7.1',
-  _ => '$channels CH',
-};
 
 String _duration(Duration duration) {
   final totalMinutes = duration.inMinutes;

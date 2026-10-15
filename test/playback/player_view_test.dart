@@ -39,6 +39,32 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  testWidgets(
+    'presentation getters distinguish watching from selected and held state',
+    (tester) async {
+      for (final state in PlayerState.values) {
+        final fixture = _Fixture(state);
+        expect(fixture.player.presentedState, state);
+        expect(
+          fixture.player.watchingChannelId,
+          const {
+                PlayerState.playing,
+                PlayerState.paused,
+                PlayerState.buffering,
+                PlayerState.seeking,
+              }.contains(state)
+              ? 'channel'
+              : null,
+          reason: '$state',
+        );
+        fixture.dispose();
+      }
+      final empty = _Fixture(PlayerState.playing, channelCount: 0);
+      expect(empty.player.watchingChannelId, isNull);
+      empty.dispose();
+    },
+  );
+
   for (final overlay in [PlayerOverlay.osd, PlayerOverlay.nowPlaying]) {
     testWidgets('display hold projects preparing and loading in $overlay', (
       tester,
@@ -58,6 +84,8 @@ void main() {
         Uri.parse('https://synthetic.test/local'),
       );
       expect(f.player.displayHoldActive, isTrue);
+      expect(f.player.presentedState, PlayerState.loading);
+      expect(f.player.status.state, PlayerState.paused);
       if (overlay == PlayerOverlay.nowPlaying) f.player.showNowPlaying();
       await tester.pumpWidget(
         MaterialApp(
@@ -71,6 +99,8 @@ void main() {
       );
       await tester.pump();
       expect(f.player.displayHoldActive, isTrue);
+      expect(f.player.presentedState, PlayerState.loading);
+      expect(f.player.status.state, PlayerState.paused);
       expect(
         find.byWidgetPredicate(
           (widget) =>
@@ -1546,6 +1576,8 @@ void main() {
   testWidgets('player errors remain named live regions', (tester) async {
     final fixture = _Fixture(PlayerState.playing, failLoad: true);
     await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
+    expect(fixture.player.error, isNotNull);
+    expect(fixture.player.watchingChannelId, isNull);
     await tester.pumpWidget(
       MaterialApp(
         builder: LineupCanvas.builder,
@@ -1581,6 +1613,8 @@ void main() {
     final tuning = fixture.player.tune('channel');
     await tester.pump();
     await fixture.native.loadStarted.future;
+    expect(fixture.player.tuning, isTrue);
+    expect(fixture.player.watchingChannelId, isNull);
 
     await tester.pumpWidget(
       MaterialApp(

@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 
 import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
+import '../channels/channel_artwork.dart';
+import '../ui/media_badges.dart';
 import '../guide/guide_controller.dart';
 import '../guide/focused_ticker.dart';
 import '../settings/lineup_settings.dart';
@@ -16,6 +18,7 @@ import '../ui/app_ui.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
 import 'player_coordinator.dart';
+import 'player_key_resolver.dart';
 import 'player_track_label.dart';
 
 class PlayerView extends StatefulWidget {
@@ -43,6 +46,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
   final _menuFocus = FocusNode(debugLabel: 'Player Lineup menu');
   final _sleepFocus = FocusNode(debugLabel: 'Player sleep timer');
+  final _sleepAnchor = LayerLink();
   Timer? _visibleClockTimer;
   var _appActive = true;
   var _keyboardInput = false;
@@ -184,229 +188,93 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    if (navigationShortcutIndex(event.logicalKey) != null) {
+    if (navigationShortcutDestination(event.logicalKey) != null) {
       return KeyEventResult.ignored;
     }
-    final key = event.logicalKey;
-    final initialPress = event is KeyDownEvent;
     final controller = widget.controller;
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.backspace ||
-        key == LogicalKeyboardKey.goBack) {
-      if (controller.overlay == PlayerOverlay.none) {
+    return _executeKey(
+      resolvePlayerKey(
+        event.logicalKey,
+        overlay: controller.overlay,
+        dvr: controller.lineup.settings.dvrControlsEnabled,
+        unsupported: controller.status.state == PlayerState.unsupported,
+        initialPress: event is KeyDownEvent,
+        hasProgram:
+            event.logicalKey == LogicalKeyboardKey.arrowDown &&
+                (controller.overlay == PlayerOverlay.none ||
+                    controller.overlay == PlayerOverlay.osd)
+            ? controller.currentProgram != null
+            : false,
+      ),
+    );
+  }
+
+  KeyEventResult _executeKey(PlayerCommand command) {
+    final controller = widget.controller;
+    if (command.closesSleepPicker) controller.closeSleepPicker();
+    switch (command) {
+      case PlayerAction.ignored:
+        return KeyEventResult.ignored;
+      case PlayerAction.consumed:
+        break;
+      case PlayerAction.backToGuide || PlayerAction.openGuide:
         controller.showFullGuide();
         widget.openGuide();
-      } else {
+      case PlayerAction.collapseNowPlaying || PlayerAction.closeOverlay:
         final restoreSleep = controller.sleepPickerOpen;
-        controller.overlay == PlayerOverlay.nowPlaying
+        command == PlayerAction.collapseNowPlaying
             ? controller.showOsd()
             : controller.closeOverlay();
         if (restoreSleep) _restoreSleepFocus();
-      }
-      return KeyEventResult.handled;
-    }
-    final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
-    final ordinaryPlayerContext =
-        controller.overlay == PlayerOverlay.none ||
-        controller.overlay == PlayerOverlay.osd ||
-        controller.overlay == PlayerOverlay.nowPlaying;
-    final mediaTransportKey =
-        key == LogicalKeyboardKey.mediaPlay ||
-        key == LogicalKeyboardKey.mediaPause ||
-        key == LogicalKeyboardKey.mediaPlayPause ||
-        key == LogicalKeyboardKey.mediaStop ||
-        key == LogicalKeyboardKey.mediaRewind ||
-        key == LogicalKeyboardKey.mediaFastForward;
-    final keyboardTransportKey =
-        key == LogicalKeyboardKey.space ||
-        key == LogicalKeyboardKey.keyJ ||
-        key == LogicalKeyboardKey.keyK ||
-        key == LogicalKeyboardKey.keyL ||
-        key == LogicalKeyboardKey.arrowLeft ||
-        key == LogicalKeyboardKey.arrowRight;
-    if (!dvrControlsEnabled &&
-        (mediaTransportKey ||
-            (ordinaryPlayerContext && keyboardTransportKey))) {
-      return KeyEventResult.handled;
-    }
-    final unsupported = controller.status.state == PlayerState.unsupported;
-    final selects =
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter ||
-        key == LogicalKeyboardKey.space ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.mediaPlayPause;
-    if (unsupported &&
-        (_digit(key) != null ||
-            key == LogicalKeyboardKey.mediaPlay ||
-            key == LogicalKeyboardKey.mediaPause ||
-            key == LogicalKeyboardKey.mediaStop ||
-            key == LogicalKeyboardKey.mediaRewind ||
-            key == LogicalKeyboardKey.mediaFastForward ||
-            key == LogicalKeyboardKey.keyF ||
-            key == LogicalKeyboardKey.f11 ||
-            key == LogicalKeyboardKey.keyJ ||
-            key == LogicalKeyboardKey.keyK ||
-            key == LogicalKeyboardKey.keyL ||
-            ((key == LogicalKeyboardKey.pageUp ||
-                    key == LogicalKeyboardKey.pageDown) &&
-                controller.overlay != PlayerOverlay.miniGuide) ||
-            (controller.overlay == PlayerOverlay.none &&
-                (selects ||
-                    key == LogicalKeyboardKey.arrowLeft ||
-                    key == LogicalKeyboardKey.arrowRight)) ||
-            (controller.overlay == PlayerOverlay.miniGuide && selects))) {
-      return KeyEventResult.handled;
-    }
-    final overlayOwnsKey = switch (controller.overlay) {
-      PlayerOverlay.audioTracks || PlayerOverlay.subtitleTracks =>
-        key != LogicalKeyboardKey.keyG && key != LogicalKeyboardKey.f2,
-      PlayerOverlay.error =>
-        key != LogicalKeyboardKey.pageUp && key != LogicalKeyboardKey.pageDown,
-      _ => false,
-    };
-    if (overlayOwnsKey) {
-      return KeyEventResult.ignored;
-    }
-    final showingNowPlaying = controller.overlay == PlayerOverlay.nowPlaying;
-    if (controller.overlay == PlayerOverlay.channelNumber) {
-      final digit = _digit(key);
-      if (digit != null) {
-        controller.closeSleepPicker();
+      case AppendChannelDigit(:final digit):
         controller.appendChannelDigit(digit);
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.enter ||
-          key == LogicalKeyboardKey.numpadEnter ||
-          key == LogicalKeyboardKey.select) {
+      case PlayerAction.commitChannelNumber:
         unawaited(controller.commitChannelNumber());
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    if (key == LogicalKeyboardKey.keyG || key == LogicalKeyboardKey.f2) {
-      controller.closeSleepPicker();
-      controller.showFullGuide();
-      widget.openGuide();
-    } else if (controller.overlay == PlayerOverlay.miniGuide &&
-        key == LogicalKeyboardKey.arrowUp) {
-      controller.moveMiniGuide(-1);
-    } else if (controller.overlay == PlayerOverlay.miniGuide &&
-        key == LogicalKeyboardKey.arrowDown) {
-      controller.moveMiniGuide(1);
-    } else if (key == LogicalKeyboardKey.pageUp) {
-      controller.closeSleepPicker();
-      controller.overlay == PlayerOverlay.miniGuide
-          ? controller.moveMiniGuide(-7)
-          : unawaited(controller.previousChannel());
-    } else if (key == LogicalKeyboardKey.pageDown) {
-      controller.closeSleepPicker();
-      controller.overlay == PlayerOverlay.miniGuide
-          ? controller.moveMiniGuide(7)
-          : unawaited(controller.nextChannel());
-    } else if (controller.overlay == PlayerOverlay.miniGuide &&
-        (key == LogicalKeyboardKey.enter ||
-            key == LogicalKeyboardKey.numpadEnter ||
-            key == LogicalKeyboardKey.space ||
-            key == LogicalKeyboardKey.select)) {
-      unawaited(controller.tuneMiniGuideSelection());
-    } else if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter ||
-        key == LogicalKeyboardKey.select) {
-      if (showingNowPlaying) {
+      case PlayerAction.miniGuideUp:
+        controller.moveMiniGuide(-1);
+      case PlayerAction.miniGuideDown:
+        controller.moveMiniGuide(1);
+      case PlayerAction.miniGuidePageUp:
+        controller.moveMiniGuide(-7);
+      case PlayerAction.miniGuidePageDown:
+        controller.moveMiniGuide(7);
+      case PlayerAction.previousChannel:
+        unawaited(controller.previousChannel());
+      case PlayerAction.nextChannel:
+        unawaited(controller.nextChannel());
+      case PlayerAction.tuneMiniGuide:
+        unawaited(controller.tuneMiniGuideSelection());
+      case PlayerAction.showOsd || PlayerAction.showOsdFromInfo:
         controller.showOsd();
-      } else if (controller.overlay == PlayerOverlay.none) {
+      case PlayerAction.togglePlayback:
+        unawaited(controller.togglePlayback());
         controller.showOsd();
-      } else {
-        return KeyEventResult.ignored;
-      }
-    } else if (key == LogicalKeyboardKey.space ||
-        key == LogicalKeyboardKey.keyK ||
-        key == LogicalKeyboardKey.mediaPlayPause) {
-      if (controller.overlay != PlayerOverlay.none &&
-          controller.overlay != PlayerOverlay.osd &&
-          !showingNowPlaying) {
-        return KeyEventResult.ignored;
-      }
-      controller.closeSleepPicker();
-      unawaited(controller.togglePlayback());
-      controller.showOsd();
-    } else if (key == LogicalKeyboardKey.arrowLeft ||
-        key == LogicalKeyboardKey.keyJ) {
-      if (controller.overlay != PlayerOverlay.none &&
-          controller.overlay != PlayerOverlay.osd &&
-          !showingNowPlaying) {
-        return KeyEventResult.ignored;
-      }
-      controller.closeSleepPicker();
-      unawaited(controller.seekBy(const Duration(seconds: -10)));
-      controller.showOsd();
-    } else if (key == LogicalKeyboardKey.arrowRight ||
-        key == LogicalKeyboardKey.keyL) {
-      if (controller.overlay == PlayerOverlay.miniGuide) {
-        controller.closeSleepPicker();
-        controller.showFullGuide();
-        widget.openGuide();
-      } else if (controller.overlay == PlayerOverlay.none ||
-          controller.overlay == PlayerOverlay.osd ||
-          showingNowPlaying) {
-        controller.closeSleepPicker();
+      case PlayerAction.seekBackward || PlayerAction.rewind:
+        unawaited(controller.seekBy(const Duration(seconds: -10)));
+        if (command == PlayerAction.seekBackward) controller.showOsd();
+      case PlayerAction.seekForward || PlayerAction.fastForward:
         unawaited(controller.seekBy(const Duration(seconds: 30)));
-        controller.showOsd();
-      } else {
-        return KeyEventResult.ignored;
-      }
-    } else if (key == LogicalKeyboardKey.arrowUp &&
-        (controller.overlay == PlayerOverlay.none ||
-            controller.overlay == PlayerOverlay.osd)) {
-      controller.closeSleepPicker();
-      controller.showMiniGuide();
-    } else if (key == LogicalKeyboardKey.arrowDown &&
-        (controller.overlay == PlayerOverlay.none ||
-            controller.overlay == PlayerOverlay.osd)) {
-      controller.closeSleepPicker();
-      controller.currentProgram == null
-          ? controller.showOsd()
-          : controller.showNowPlaying();
-    } else if (initialPress && key == LogicalKeyboardKey.keyI) {
-      controller.closeSleepPicker();
-      showingNowPlaying ? controller.showOsd() : controller.showNowPlaying();
-    } else if (initialPress &&
-        (key == LogicalKeyboardKey.keyF || key == LogicalKeyboardKey.f11)) {
-      controller.closeSleepPicker();
-      unawaited(controller.toggleFullscreen());
-    } else if (initialPress && key == LogicalKeyboardKey.keyS) {
-      controller.showSleepTimer();
-    } else if (key == LogicalKeyboardKey.keyA) {
-      controller.closeSleepPicker();
-      controller.showTracks(PlayerTrackType.audio);
-    } else if (key == LogicalKeyboardKey.keyC) {
-      controller.closeSleepPicker();
-      controller.showTracks(PlayerTrackType.subtitle);
-    } else if (key == LogicalKeyboardKey.mediaPlay) {
-      controller.closeSleepPicker();
-      unawaited(controller.play());
-      if (showingNowPlaying) controller.showOsd();
-    } else if (key == LogicalKeyboardKey.mediaPause) {
-      controller.closeSleepPicker();
-      unawaited(controller.pause());
-      if (showingNowPlaying) controller.showOsd();
-    } else if (key == LogicalKeyboardKey.mediaStop) {
-      controller.closeSleepPicker();
-      unawaited(controller.requestStop());
-    } else if (key == LogicalKeyboardKey.mediaRewind) {
-      controller.closeSleepPicker();
-      unawaited(controller.seekBy(const Duration(seconds: -10)));
-      if (showingNowPlaying) controller.showOsd();
-    } else if (key == LogicalKeyboardKey.mediaFastForward) {
-      controller.closeSleepPicker();
-      unawaited(controller.seekBy(const Duration(seconds: 30)));
-      if (showingNowPlaying) controller.showOsd();
-    } else {
-      final digit = _digit(key);
-      if (digit == null) return KeyEventResult.ignored;
-      controller.closeSleepPicker();
-      controller.appendChannelDigit(digit);
+        if (command == PlayerAction.seekForward) controller.showOsd();
+      case PlayerAction.showMiniGuide:
+        controller.showMiniGuide();
+      case PlayerAction.showNowPlaying:
+        controller.showNowPlaying();
+      case PlayerAction.toggleFullscreen:
+        unawaited(controller.toggleFullscreen());
+      case PlayerAction.showSleepTimer:
+        controller.showSleepTimer();
+      case PlayerAction.showAudioTracks:
+        controller.showTracks(PlayerTrackType.audio);
+      case PlayerAction.showSubtitleTracks:
+        controller.showTracks(PlayerTrackType.subtitle);
+      case PlayerAction.play || PlayerAction.playAndShowOsd:
+        unawaited(controller.play());
+        if (command == PlayerAction.playAndShowOsd) controller.showOsd();
+      case PlayerAction.pause || PlayerAction.pauseAndShowOsd:
+        unawaited(controller.pause());
+        if (command == PlayerAction.pauseAndShowOsd) controller.showOsd();
+      case PlayerAction.stop:
+        unawaited(controller.requestStop());
     }
     return KeyEventResult.handled;
   }
@@ -422,7 +290,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final sleepAnchor = LayerLink();
     final overlay = controller.overlay;
     final presentationGeneration = controller.overlayPresentationGeneration;
     final bottomPanel =
@@ -553,7 +420,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                             openMenu: widget.openMenu,
                             menuFocus: _menuFocus,
                             sleepFocus: _sleepFocus,
-                            sleepAnchor: sleepAnchor,
+                            sleepAnchor: _sleepAnchor,
                             restoreSleepFocus: _restoreSleepFocus,
                           ),
                           PlayerOverlay.miniGuide => _MiniGuide(
@@ -939,6 +806,12 @@ class _Osd extends StatelessWidget {
         ),
       ),
     ];
+    final playbackStatus = Text(
+      controller.presentedState == PlayerState.playing
+          ? 'Playing'
+          : _statusLabel(controller.presentedState) ?? 'Ready',
+      style: osdSecondaryStyle,
+    );
     final title = program?.scheduled.item.title ?? 'Nothing playing';
     final logoPath = program == null
         ? null
@@ -949,11 +822,7 @@ class _Osd extends StatelessWidget {
     final episodeFacts = item == null ? null : _osdEpisodeFacts(item);
     final statusFacts = [
       episodeFacts,
-      _statusLabel(
-        controller.displayHoldActive
-            ? PlayerState.loading
-            : controller.status.state,
-      ),
+      _statusLabel(controller.presentedState),
     ].nonNulls.toList(growable: false);
     final identity = Column(
       key: const Key('player-osd-identity'),
@@ -1218,39 +1087,13 @@ class _Osd extends StatelessWidget {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    (!controller.displayHoldActive &&
-                                            controller.status.state ==
-                                                PlayerState.playing)
-                                        ? 'Playing'
-                                        : _statusLabel(
-                                                controller.displayHoldActive
-                                                    ? PlayerState.loading
-                                                    : controller.status.state,
-                                              ) ??
-                                              'Ready',
-                                    style: osdSecondaryStyle,
-                                  ),
-                                ),
+                                Expanded(child: playbackStatus),
                                 const SizedBox(width: 24),
                                 groupedActions,
                               ],
                             )
                           else ...[
-                            Text(
-                              (!controller.displayHoldActive &&
-                                      controller.status.state ==
-                                          PlayerState.playing)
-                                  ? 'Playing'
-                                  : _statusLabel(
-                                          controller.displayHoldActive
-                                              ? PlayerState.loading
-                                              : controller.status.state,
-                                        ) ??
-                                        'Ready',
-                              style: osdSecondaryStyle,
-                            ),
+                            playbackStatus,
                             const SizedBox(height: 6),
                             Align(
                               alignment: Alignment.centerRight,
@@ -1431,14 +1274,12 @@ class _NowPlaying extends StatelessWidget {
         formatPlayerVideoCodec(controller.telemetry.videoFormat) ??
         formatPlayerVideoCodec(item.videoCodec) ??
         formatPlayerVideoCodec(controller.telemetry.videoCodec);
-    final badges = <String>[
-      ?item.contentRating,
-      if (item.resolution case final resolution?) resolution.toUpperCase(),
-      ?_dynamicRangeLabel(item.dynamicRange, controller.telemetry.isHdr),
-      ?videoCodec,
-      if (item.audioCodec case final codec?) codec.toUpperCase(),
-      if (item.audioChannels case final channels?) _audioChannels(channels),
-    ];
+    final badges = mediaBadges(
+      item,
+      surface: MediaBadgeSurface.nowPlaying,
+      runtimeHdr: controller.telemetry.isHdr,
+      effectiveVideoCodec: videoCodec,
+    );
     final castFacts = item.cast
         .map(
           (member) => member.role == null
@@ -2459,16 +2300,7 @@ class _MiniGuideRow extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final focused = channel.id == controller.miniGuideChannelId;
     final foreground = roles.primaryText;
-    final tuned =
-        channel.id == controller.lineup.currentChannelId &&
-        !controller.tuning &&
-        controller.error == null &&
-        const {
-          PlayerState.playing,
-          PlayerState.paused,
-          PlayerState.buffering,
-          PlayerState.seeking,
-        }.contains(controller.status.state);
+    final tuned = channel.id == controller.watchingChannelId;
     final unsupported = controller.status.state == PlayerState.unsupported;
     final current = controller.guide.currentProgram(channel.id);
     final next = controller.guide.nextProgram(channel.id);
@@ -3453,32 +3285,6 @@ class _Unsupported extends StatelessWidget {
   }
 }
 
-String? _digit(LogicalKeyboardKey key) {
-  final keys = {
-    LogicalKeyboardKey.digit0: '0',
-    LogicalKeyboardKey.digit1: '1',
-    LogicalKeyboardKey.digit2: '2',
-    LogicalKeyboardKey.digit3: '3',
-    LogicalKeyboardKey.digit4: '4',
-    LogicalKeyboardKey.digit5: '5',
-    LogicalKeyboardKey.digit6: '6',
-    LogicalKeyboardKey.digit7: '7',
-    LogicalKeyboardKey.digit8: '8',
-    LogicalKeyboardKey.digit9: '9',
-    LogicalKeyboardKey.numpad0: '0',
-    LogicalKeyboardKey.numpad1: '1',
-    LogicalKeyboardKey.numpad2: '2',
-    LogicalKeyboardKey.numpad3: '3',
-    LogicalKeyboardKey.numpad4: '4',
-    LogicalKeyboardKey.numpad5: '5',
-    LogicalKeyboardKey.numpad6: '6',
-    LogicalKeyboardKey.numpad7: '7',
-    LogicalKeyboardKey.numpad8: '8',
-    LogicalKeyboardKey.numpad9: '9',
-  };
-  return keys[key];
-}
-
 String _duration(Duration value) {
   final hours = value.inHours;
   final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -3539,10 +3345,7 @@ Widget _osdAction(
 }
 
 Uri? _artworkPath(ChannelItem item, GuideArtworkKind kind) => switch (kind) {
-  GuideArtworkKind.poster =>
-    item.showThumb == null || item.showThumb!.isEmpty
-        ? item.poster
-        : Uri.tryParse(item.showThumb!) ?? item.poster,
+  GuideArtworkKind.poster => posterPath(item),
   GuideArtworkKind.backdrop => item.backdrop,
   GuideArtworkKind.clearLogo => item.clearLogo,
 };
@@ -3575,31 +3378,6 @@ String? _osdEpisodeFacts(ChannelItem item) {
       ? numbered
       : '$numbered — $episodeTitle';
 }
-
-String? _dynamicRangeLabel(String? value, bool telemetryIsHdr) {
-  final catalog = switch (value?.toLowerCase()) {
-    'sdr' => 'SDR',
-    'hdr' => 'HDR',
-    'hdr10' => 'HDR10',
-    'hlg' => 'HLG',
-    'dolbyvision' || 'dolby vision' => 'DOLBY VISION',
-    final value? when value.trim().isNotEmpty => value.toUpperCase(),
-    _ => null,
-  };
-  if (!telemetryIsHdr) return catalog;
-  return switch (catalog) {
-    'HDR10' || 'HLG' || 'DOLBY VISION' => catalog,
-    _ => 'HDR',
-  };
-}
-
-String _audioChannels(int channels) => switch (channels) {
-  1 => 'MONO',
-  2 => 'STEREO',
-  6 => '5.1',
-  8 => '7.1',
-  _ => '${channels}ch',
-};
 
 String _time(BuildContext context, DateTime value) =>
     MaterialLocalizations.of(context).formatTimeOfDay(

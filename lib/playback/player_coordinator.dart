@@ -238,6 +238,25 @@ class PlayerCoordinator extends ChangeNotifier {
     return index == null ? null : _indexedChannels[index];
   }
 
+  /// The selected channel is watching only after tuning settles into a live
+  /// playback state. A deleted/orphaned active program has no visible channel.
+  String? get watchingChannelId =>
+      !tuning &&
+          error == null &&
+          const {
+            PlayerState.playing,
+            PlayerState.paused,
+            PlayerState.buffering,
+            PlayerState.seeking,
+          }.contains(status.state)
+      ? currentChannel?.id
+      : null;
+
+  /// A display hold presents loading while preserving the native state used
+  /// for playback intent, including the ability to pause during preparation.
+  PlayerState get presentedState =>
+      displayHoldActive ? PlayerState.loading : status.state;
+
   GuideProgram? get currentProgram {
     final id = lineup.currentChannelId;
     return _resolvingProgram ??

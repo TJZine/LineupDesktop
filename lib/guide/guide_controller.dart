@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
+import '../channels/channel_artwork.dart';
 import '../channels/scheduler.dart';
 import '../settings/lineup_settings.dart';
 
@@ -307,10 +308,7 @@ class GuideController extends ChangeNotifier {
     if (_disposed) return Future.value();
     final item = program.scheduled.item;
     final path = switch (kind) {
-      GuideArtworkKind.poster =>
-        item.showThumb == null || item.showThumb!.isEmpty
-            ? item.poster
-            : Uri.tryParse(item.showThumb!) ?? item.poster,
+      GuideArtworkKind.poster => posterPath(item),
       GuideArtworkKind.backdrop => item.backdrop,
       GuideArtworkKind.clearLogo => item.clearLogo,
     };
