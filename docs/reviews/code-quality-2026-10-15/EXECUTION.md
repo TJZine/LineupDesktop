@@ -43,8 +43,9 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Accepted and integrated at `5990c0217b33d6d690b663f177fbe62e2635b557`; combined format/analyze/1,583 tests passed |
-| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Reviewed candidate rebased to `9e2ea64ad6d6b7a0b2ffd055632d40218ecbc10a`; strict lint correction returned to same child; unintegrated |
+| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | H-R1 independently closed; integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main gate running |
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
+| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Dispatched; shared test doubles, assertions and inert/emitting behavior preserved |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -102,11 +103,12 @@ may use reviewer assistance and does not replace other required reviews.
   until actually observed, even when deterministic checks pass.
 
 Review status: P0 accepted; corrected A and H independently reviewed, no unresolved
-material finding established. A integrated with combined gate green; H must
-rebase onto accepted A and pass strict/combined checks. Final whole-branch review
+material finding established. A integrated with combined gate green; corrected
+H independently closed and integrated, main combined gate running. T dispatched
+on isolated current integration source. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
-H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:2`.
-Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:1`.
+H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
+Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:2`.
 
 ### H candidate inspection
 
@@ -213,6 +215,22 @@ tool-tests,full-tests}.log`. Actual H source chat remains the dispatch identity;
 its completion prose repeated the earlier mistyped child ID. Same independent
 reviewer received focused H-R1 closure and evidence, with no redundant broad
 suite or source writes requested. H remains unintegrated until that verdict.
+
+The independent reviewer closed H-R1 at `885c4d58`: exact one-line diff is
+behavior-neutral, original patch range-diff is identical, and inspected corrected
+logs support strict analysis/15 tools/1,588 full passes. No new material finding.
+Parent accepted the closure. H was rebased without conflict onto docs-only
+`b84d9eb34631fba31288f23901abb74a593860ef`; both replayed patches were identical
+in range-diff (`9e2ea64a` → `5bb92ec9`, `885c4d58` → `2a785c45`). Fast-forward
+integration head is `2a785c456c7238fc1221202f6be5930681d02711`. Required main
+format/analyze/full gate runs with logs `/tmp/lineup-cq-integration/H/`.
+
+T was created from that exact current integration head and given full package
+contract, T5 trace, owner row, selected preset text, original human callback
+reference, and exact return/proof map. It may investigate/implement in its isolated
+tree while H's stable main gate runs; H's reviewed product snapshot already has
+observed 1,588 passes and A's main gate is green. No main check observes T edits.
+T full checks are capped at concurrency2; no app/native build resources assigned.
 
 ## Evidence and limits
 
