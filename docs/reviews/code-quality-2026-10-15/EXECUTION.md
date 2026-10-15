@@ -1367,3 +1367,13 @@ parentadjudicatesactualresults. Meaningfulstaleactivity/contentinvalidationsix
 controlsretained. Before/afterprofilingundercomparablehost/SDK/fonts/theme/size/
 exclusiveworkload; reportactualfacts/counts/times notlatencyclaimsfromstaticcode.
 No full/build/render yet. Othersruntimeheld; nextY/Uavailableafterrelease.
+
+## Queued Y/U current-input preparation
+
+WhileVownsisolatedruntime, parentrebasedqueuedY/Uonly (noFlutter/sourcechanges):
+Ybf65..507cb296 onto17ae911e all2`=`,83b7aa04→609ad351,
+507cb296→1c1967655bce7712d951b6fd65d70523e5969acf. Futurebroad/fullusescurrent
+D/E/sharedinputs; priorclockproofremainsoldattribution. U9d..a813cbbe onto17ae911e
+onepatch`=`,a813cbbe→b0aac29df99b869787034eb7ee26f3f4df88c314. Uproductionstill
+untouched, scratchpreserved; futureinitialconfirm/baselineoncurrentacceptedUI.
+Bothsamechildrennotifiedruntime/sourcehold, noackcallbacksneeded. Vexclusive.
