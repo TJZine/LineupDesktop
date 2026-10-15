@@ -1803,3 +1803,18 @@ sameasBEFORE(noUintegrated). Kexclusiveguard/format/analyze/22diag+desktop/
 affectedLC-PC-Guidefocused/full granted; preserveexpectedliteralUTF8bytes/storage
 UIassertions andproducerlifetimes. Expected1,678=V1675+3Konly, notobserved;
 currentfullwithUwillneedmaincompositionafterintegration. NootherFlutter overlap.
+
+## K analyzer missed tool-caller adjudication
+
+Kactual11e0d216 guardPASS/format137zeroPASS; analyzer7issuesALLtracked
+`tool/design-review/capture_test.dart` becauseinitialinventorysearchedlib/test,
+missedtool. Parentinspected752–806 andAPPROVED exactdiagnostics-scenario3add
+calls+matchedmessagefindersONLY: playbackRequestFailed; guideScheduleLoadTimedOut
+foroldsyntheticrequesttimeout; guideCurrentProgramWaitTimedOutfordistinctold
+syntheticrefresh-arrival. Realenumtrafficsurrogatespreserveexpandedreader/new-event
+hidden-then-visible/safecontext/shotnames/positions/assertionstructure. No dead
+fixturestrings/debugcompat/rawinjectionneeded. NOcapture/render/goldenupdate,
+no othertoolscenarioedit. Product20calls/17pairsunchanged, tool3countseparate.
+Kcurrentfreshlib/test/tool/test_driverinventory authoritative; ownmigrationfailure
+notbaselinebehavior. Keepafter-analyze.logfailure, fixthenrerunformat/analyze/
+focused/full undercontinuedexclusiveKlease. Utargetedsource-reviewonly, nooverlap.
