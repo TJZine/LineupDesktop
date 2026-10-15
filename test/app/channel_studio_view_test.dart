@@ -497,7 +497,7 @@ void main() {
   testWidgets(
     'identity validation names conflicts and focuses the first error',
     (tester) async {
-      final controller = FixtureController(
+      final controller = _RecordingSaveController(
         scenario: LineupScenario(
           channels: [_channel(id: 'taken', number: 7, name: 'The Seven')],
           libraries: const [
@@ -4700,6 +4700,9 @@ void main() {
       _expectFitsHorizontally(tester, finder, const Size(800, 600));
       expect(tester.takeException(), isNull);
     }
+    await tester.ensureVisible(find.byKey(const Key('studio-result-one')));
+    await tester.tap(find.byKey(const Key('studio-result-one')));
+    await _settleAirCheck(tester);
     tester
         .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save channel'))
         .onPressed!();

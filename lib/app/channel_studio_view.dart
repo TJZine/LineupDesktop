@@ -10,6 +10,7 @@ import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'channel_air_check.dart';
+import 'air_check_verification.dart';
 import 'channel_studio_draft.dart';
 import 'form_error.dart';
 import 'manual_rundown.dart';
@@ -148,7 +149,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool _baseDeleted = false;
   String? _error;
   String? _success;
-  ChannelAirCheckStatus? _airCheckStatus;
+  late final AirCheckVerification _verification;
+  String? _verificationInputKey;
 
   late ({
     List<PlexMediaItem> media,
@@ -169,6 +171,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   void initState() {
     super.initState();
     _loadInitial();
+    _verification = AirCheckVerification(
+      loadSchedule: (channel) => widget.controller.loadScheduleFor(channel),
+      clock: _clock,
+    );
+    _verification.addListener(_verificationChanged);
+    _updateVerification();
   }
 
   void _loadInitial() {
@@ -206,6 +214,49 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _rundownSearch = TextEditingController();
     _configureSource(_session.source);
     _session.acceptBaseline(_draftSignature);
+  }
+
+  @override
+  void didUpdateWidget(ChannelStudioView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateVerification();
+  }
+
+  void _updateVerification() {
+    _refreshPlayableInventory();
+    final resolution = _session.generated ? null : _resolveDraftContent();
+    final issue = resolution == null ? null : _programmingError(resolution);
+    _session.stageScheduleIdentity(_clock, valid: issue == null);
+    final source = resolution?.source ?? _session.source;
+    final preview = _session.project(
+      name: _name.text,
+      number: _number.text,
+      programming: source,
+      preview: true,
+    );
+    _verificationInputKey = channelAirCheckSnapshotKey(
+      preview,
+      widget.controller.contentGeneration,
+    );
+    _verification.update(
+      preview,
+      _session.expectedBase,
+      widget.controller.contentGeneration,
+      issue,
+      sourceLabel: _sourceLabel(source, widget.controller),
+    );
+  }
+
+  void _verificationChanged() {
+    if (!mounted) return;
+    final result = _verification.result;
+    if (result.revisionKey != _verificationInputKey) return;
+    setState(() {
+      if (result.validity == ChannelAirCheckValidity.valid ||
+          result.validity == ChannelAirCheckValidity.retainedOffAir) {
+        _session.commitScheduleIdentity(_draftSignature);
+      }
+    });
   }
 
   DateTime _clock() => (widget.clock ?? DateTime.now)();
@@ -265,6 +316,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   @override
   void dispose() {
+    _verification.removeListener(_verificationChanged);
+    _verification.dispose();
     _backFocus.dispose();
     _recoveryFocus.dispose();
     _name.dispose();
@@ -290,11 +343,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     super.dispose();
   }
 
-  void _changed([VoidCallback? change]) => setState(() {
-    change?.call();
-    _session.updateDirty(_draftSignature);
-    _success = null;
-  });
+  void _changed([VoidCallback? change]) {
+    setState(() {
+      change?.call();
+      _session.updateDirty(_draftSignature);
+      _success = null;
+    });
+    _updateVerification();
+  }
 
   Map<String, Object?> get _draftSignature => _session.signature(
     name: _name.text,
@@ -356,7 +412,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ) ??
         false;
     final confirmedMovieOnly = _confirmedMovieOnly(draftResolution);
-    _stageScheduleIdentity(programmingError);
     final theme = Theme.of(context);
     final compact = LineupLayout.isCompactWidth(
       MediaQuery.sizeOf(context).width,
@@ -471,13 +526,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             sourceIssue: programmingError,
                             sourceIssueExplained: sourceExplanation != null,
                             playableById: _playableInventory.byId,
-                            onValidityChanged: (status) {
-                              if (!mounted || _airCheckStatus == status) return;
-                              setState(() => _airCheckStatus = status);
-                              if (_isCurrentAirCheckStatus(status)) {
-                                _commitScheduleIdentity();
-                              }
-                            },
+                            verification: _verification,
                           );
                           return constraints.maxWidth /
                                       MediaQuery.textScalerOf(context)
@@ -761,13 +810,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final showSave =
         !recovering &&
         (!_session.generated || !persisted || _session.dirty || _saving);
-    final canSave =
-        !_busy &&
-        !_hasPendingProgrammingChoice &&
-        (!persisted || _session.dirty) &&
-        !noNumber &&
-        !(identityLooksValid && programmingError != null) &&
-        !(identityLooksValid && !_airCheckCanSave);
+    final canSave = _canSave;
     return Wrap(
       alignment: WrapAlignment.end,
       spacing: 8,
@@ -2909,26 +2952,34 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     preview: true,
   );
 
-  bool _isCurrentAirCheckStatus(ChannelAirCheckStatus? status) =>
-      status != null &&
-      status.snapshotKey ==
-          channelAirCheckSnapshotKey(
-            _previewDraft,
-            widget.controller.contentGeneration,
-          ) &&
-      (status.validity == ChannelAirCheckValidity.valid ||
-          status.validity == ChannelAirCheckValidity.retainedOffAir);
+  bool get _airCheckCanSave {
+    final result = _verification.result;
+    return result.revisionKey ==
+            channelAirCheckSnapshotKey(
+              _previewDraft,
+              widget.controller.contentGeneration,
+            ) &&
+        (result.validity == ChannelAirCheckValidity.valid ||
+            result.validity == ChannelAirCheckValidity.retainedOffAir);
+  }
 
-  bool get _airCheckCanSave => _isCurrentAirCheckStatus(_airCheckStatus);
   bool get _hasPendingProgrammingChoice =>
       _activeFilterKey != null || _browseSelecting;
 
-  void _stageScheduleIdentity(String? programmingError) =>
-      _session.stageScheduleIdentity(_clock, valid: programmingError == null);
-
-  void _commitScheduleIdentity() {
-    if (!mounted || _session.scheduleIdentityCommitted) return;
-    setState(() => _session.commitScheduleIdentity(_draftSignature));
+  bool get _canSave {
+    final persisted = _session.expectedBase != null;
+    final identityLooksValid =
+        _name.text.trim().isNotEmpty && _validateNumber(_number.text) == null;
+    final programmingError = _session.generated
+        ? null
+        : _programmingError(_resolveDraftContent());
+    return !_busy &&
+        !_hasPendingProgrammingChoice &&
+        (!persisted || _session.dirty) &&
+        !(_lowestFreeNumber() == null && _number.text.trim().isEmpty) &&
+        !(identityLooksValid && programmingError != null) &&
+        !(identityLooksValid && !_airCheckCanSave) &&
+        _session.scheduleIdentityCommitted;
   }
 
   Future<void> _save({Channel? rebasedExpected}) async {
@@ -2941,7 +2992,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       );
       return;
     }
-    _refreshPlayableInventory();
+    _updateVerification();
     final valid = _form.currentState?.validate() ?? false;
     if (!valid) {
       setState(
@@ -2955,7 +3006,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         _programmingError(_resolveDraftContent()) != null) {
       return;
     }
-    if (!_airCheckCanSave || !_session.scheduleIdentityCommitted) {
+    if (!_canSave) {
       setState(
         () => _error = 'Air Check must verify this schedule before the channel can be saved.',
       );
@@ -2984,6 +3035,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         _saving = false;
         _success = 'Channel saved.';
       });
+      _updateVerification();
       widget.onSaved(committed.id);
     } catch (error) {
       if (!mounted) return;
@@ -3049,6 +3101,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       _error = null;
       _success = null;
     });
+    _updateVerification();
   }
 
   Future<void> _confirmUseSaved() async {
@@ -3091,6 +3144,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       _conflict = false;
       _error = 'Review the available channel number and schedule preview, then save this new custom channel.';
     });
+    _updateVerification();
   }
 
   Future<void> _confirmReapply() async {
