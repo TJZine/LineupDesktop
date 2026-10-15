@@ -33,11 +33,11 @@ pinnedformat114/analyze/focused105/full1,650 PASS; independent R1 CLOSED.
 Unchanged final rebaseb078944a8cc8b6999badb477f2401257a330bf53 integrated.
 S main-checkout gate PASSED at9b066698: format114/analyzeclean/full1,650;
 acceptedStasktree/fullyintegratedbranchremoved. Combinedreviewstillrequired.
-V test-only287571e2 actualBEFORE120tests117pass/3confirmingfail, controls
+V test-only287571e2 actualBEFORE123tests120pass/3confirmingfail, controls
 passandprofilebaselinecaptured. ParentacceptedNF29/viewportfindings; sameVchild
 nowSOURCE-ONLYfullVrepairwhileYowns broad/fullruntime.
-Y current1c196765 guard/format136/analyze/focused88/full1,667PASS;
-parentinspectedPINdiff, equivalentfinalf7ede071 integrated; mainYgate nowP0pending.
+Y acceptedf7ede071 main3a87d607 guard/format136/analyze/full1,667PASS;
+acceptedtasktree/fullyintegratedbranchremoved, plannedcombinedreviewstillrequired.
 D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
 tocd26d00d on2cf4570c. D reviewedcd26 actualfull1,657PASS; twoacceptedP2regressionsrepairedat
 6f66f331 actualBEFOREconfirmedR1, format129/analyze/focused114/render14/
@@ -49,7 +49,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: P0 mainY§8.1 exclusively; V2512sourcefrozenforearlyreview/AFTERqueued, Uproductionuntouched, K/Gnotdispatched. U prepares source/test/history; all other children queued.
+Runtime: mainYreleased; Uinitialconfirmation/baselinegrantnext. Vsamechatnowworker6.1/medium test-onlyV-R1prep, NOrepairbeforeactualconfirmation; K/Gnotdispatched. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -110,10 +110,10 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Acceptededd12307 reviewed/currentfull1,663/render14/main1,663green; candidate+baselineworktrees/taskbranchcleaned, proofarchived |
 | E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Six findings and immutable qualification SOURCE-CLOSED at8ff1574a; runtime/render/full unverified |
 | S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Acceptedb078944a independentclosure/105focused/1,650full/main1,650green; tasktree/fullyintegratedbranchremoved |
-| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | 287571e2 BEFORE120/117pass/3confirmingfail, staleactivity/contentcontrolspass/profilecaptured; source-onlyfullrepairauthorized |
+| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | 287571e2 BEFORE123/120pass/3confirmingfail, staleactivity/contentcontrolspass/profilecaptured; source-onlyfullrepairauthorized |
 | W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalenta6a2d46f integrated; main1,645 green; tasktree/branchremoved |
 | W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
-| Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Current1c196765 focused88/full1,667green; equivalentf7ede071 integrated; mainY P0gatepending, plannedcombinedreviewstillrequired |
+| Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Acceptedf7ede071 focused88/full/main1,667green; tasktree/branchremoved; combinedreviewpending |
 
 | U | `01a13f32-18d0-7f21-ad48-6a25d94f8d3a` / local | worker, gpt-6.1-sol, medium |9d9ec78e; `/Users/tristan/Software/LineupDesktop-U`, `cq/U` | Initial source/test/history/scratch preparation; no production repair or runtime grant yet |
 
@@ -1384,7 +1384,7 @@ Bothsamechildrennotifiedruntime/sourcehold, noackcallbacksneeded. Vexclusive.
 
 V clean287571e2dbe62b495143da9da7a5354f7664dfd1 (f5testprep+fixturetestroot/
 fakeasyncpump stabilization), productionGuideunchangedon6f909a36. Guardpin3.47.7.
-FinalfaithfulGuideController+GuideViewsuite exit1:120total/117pass/3newconfirming
+FinalfaithfulGuideController+GuideViewsuite exit1:123total/120pass/3newconfirming
 failures. Earlierinterruptedrootfixturefailureexcluded, correctedtest-onlyseam.
 `/tmp/lineup-cq-V/before-guide-rerun.log`, before-toolchain.log,before-query.log.
 ActualconfirmationsACCEPTEDbyparent beforeproductionrepair:
@@ -1449,3 +1449,34 @@ Ff integratedf7ede071,3files177+/34-, golden diffempty. P0exclusive mainY§8.1
 nowgrantedafterthisrecordcommit, logs `/tmp/lineup-cq-integration/Y/`;
 expected1,667notyetmainobserved. No othermergeuntilpass. Vsource2512stillfrozen
 forearlyreview, noAFTERproofyet; Uqueuedproductionuntouched, K/Gdependenciesheld.
+
+## V early review adjudication and executor reassignment; Y main acceptance
+
+IndependentVreviewer01a13ef8 completedsource2512 READ-ONLY. ParentACCEPTED P2
+V-R1: viewportdedupatGuideView555 assumesretainedrows/schedules. ExistingbulkRetry
+queuesallfailed/offscreenrows; aftervisibleworkfinishesearly, lateroffscreenresults
+>maxCachedRows64 evictvisiblecacheswithoutgeneration/snapshotchange. rowreturns
+loadingwithnolive/queuedrequest, identicaldemandgets skippedforeveruntilscroll.
+Oldrepeatedviewportrecovered. RequirefaithfulcontrolledBEFOREat2512 withbulk
+retry/fixedearlyviewport/orderedcompletion/eviction, visiblemustsettlewithoutscroll
+andboundedcache/concurrency. No runtimeproofyet, no productionrepairuntilconfirmed.
+CoherentfixmustreassertONLYmissingwork/retainviewportcorrectly, notblanketrequests,
+autoretryknownerrors, unboundedpinning/loadloops. OtherVsourceverdictclearwithlimits;
+plannedcombinedreview/AFTER/profile/fullstillrequired.
+
+SameVchat reassigned5.6-luna/xhigh→6.1-sol/medium worker; actualcurrentworkerpreset
+reread andresponsibility/model/effortexplicitlypassed. Reason: demonstratedbounded
+cache/dedup/bulkretry/requestretention interaction needsstrongerownership/concurrency
+judgment. SamecompleteVscope, no recursiveagents. PhaseTESTPREPonlywhileYgate,
+no productionrepairbeforeactualconfirm/refute; newtest/choseninterfaceevidencereturn.
+
+COUNT CORRECTION verifiedactualbeforelogline194 `+120 -3`:120PASS+3FAIL=123total,
+notpriorpacket/record117passof120. Correctedmatchingrecordclaims; countwasreported
+incorrectlybychildandcopiedbyparent. Actual3defectobservations/controlresultsand
+6newtestnetmapunchanged; no incidentalcountpreservation. Source/testproofmapsremain.
+
+P0mainY3a87d607a1551d77b8949845b3dd62e82ff73295 unchanged/clean, pin3.47.7/
+Dart3.13.5, format136zeroexit0(2.91s), analyzecleanexit0(3.69s), full1,667exit0
+(81.50s). `/tmp/lineup-cq-integration/Y/`. Parentcollectedactualexit0, Ytreeclean/
+ancestorverified, acceptedtasktree/fullyintegratedcqYremoved. Runtimeavailablefor
+Uinitialconfirmation/preproductionbaseline whileVtest-onlypreparesregression.
