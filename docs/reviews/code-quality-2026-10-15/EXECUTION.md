@@ -19,8 +19,10 @@ export2354bytecontract+UIproofpasses, plannedcombinedreviewstillrequired.
 
 Bothindependentread-onlyreviewers6.1/highcompletedata620: combined01a13fa4
 andwholebranch01a13fa6CLEAR, attributedrecordsretained; freezeendedafterresults.
-Gnoweligiblefordispatch, nocodefindingunresolved. FinalmacOSbuildpending(Mbuildpassed).
-U/Kacceptedtasktreesretainedforpossiblefocusedcorrections, clean. Otherscleaned.
+Gdispatchedworker6.1/medium01a13fb2 onactuald1518483; documentation-only
+consolidation/open-obligations/link/authorityworkactive, nocodefindingunresolved. FinalmacOSbuildpending(Mbuildpassed).
+U/Kacceptedtasktrees/fullyintegratedbranchesremovedafterallcodereview/gates;
+Gtasktreeactive. Otheracceptedtasktreescleaned, F/probekeptasrequired.
 F040e4a64 remainsUNVERIFIED/UNMERGED inretainedcq/F pendingWindowsCTests
 (display_dynamic_range/display_guardian/native_player_contract/runner_lifecycle),
 plusseparatephysicalWindowsacceptance. No push/PR/mainmerge/publication/default
@@ -91,6 +93,8 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | U | `01a13f32-18d0-7f21-ad48-6a25d94f8d3a` / local | worker, gpt-6.1-sol, medium |9d9ec78e; `/Users/tristan/Software/LineupDesktop-U`, `cq/U` | Initial source/test/history/scratch preparation; no production repair or runtime grant yet |
 
 | U review | `01a13f87-43a9-72e2-b347-babedac17eb5` / local | reviewer, gpt-6.1-sol, high |9ded0693→f6a99892 inUtree | RequiredwholeUpremergereview onfrozencurrentVcomposition; firstAFTERruntimeparallel |
+
+| G | `01a13fb2-5d59-7c43-b5c6-4515afcd6bd4` / local | worker, gpt-6.1-sol, medium |d15184831213dd6403ccb80da24a3ea17ffe088c; `/Users/tristan/Software/LineupDesktop-G`, `cq/G` | FullGdocumentation/obligation/authorityconsolidationactive afterbothclearcodereviews |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -1914,3 +1918,25 @@ post-Gmaingate/cleanupremain. F040e4a64 UNMERGED/UNVERIFIED, fourWindowsCTestsan
 physicalW1–W12separate; localPowerShellassertionexecutionunavailable. FullplanNOT
 complete. No code findings require correction. Gmustpreserve allcurrentauthority/
 openobligations/rationale/source-buildidentities/attributedevidence beforearchive.
+
+## G actual dispatch after final reviews and accepted-tree cleanup
+
+ParentverifiedU/Ktreesclean, branchesancestorsofintegration, removedONLYtasktrees
+LineupDesktop-U/K andfullyintegratedcqU/cqK. Factual040e4a64unchangedretained;
+pre-existing/unrelated/prunableworktreesandbranchesuntouched, cq/preflightprobe
+unmergedbranchkept. Currentworkerpresetreread6.1-sol/medium/responsibility,
+actualprojectsresolved, noGpath/branchpreviouslypresent. CreatedexactGtree/cqG
+fromactuald15184831213dd6403ccb80da24a3ea17ffe088c afterattributedreviewrecords.
+CreatedGchat01a13fb2-5d59-7c43-b5c6-4515afcd6bd4 explicitworker6.1/medium for
+liveauthority/obligation/rationale/source-buildidentitymigrationjudgment.
+
+FullGspec+T5, actualmergeSHAs, reviewedhead/1690proof, nativeFpendinglimits,
+HDEVELOPMENTsentence, ownership/docsprotocolandreviewsEXCLUSIONS, preservation/
+recoverablefullgitshowrefs/linkchecks/no-dead-link requirements supplied. Full
+candidatearchiveworkrequiredwherepreservationmet; retainuniqueauthorityor
+migratefirstwithrationale. Keepfeatureinputs/validation/productdesignauthorities.
+KeepcodequalityplanactivewhileFpending; GownmergeSHAawaitsparentnotplaceholder.
+Branch/defaultrepairproposalTEXTONLY, no tag/default/unrelatedbranchoperations.
+Originalhumanmessageactualretrieval/callbackrule/responsibility/returncontract
+explicit. No runtime/build/sourcechanges/delegationauthorizedforG. Parentwill
+inspect/reviewGcandidate, integrateacceptedwork, thenfinalmainfull+macOSbuild.
