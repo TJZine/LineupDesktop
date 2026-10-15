@@ -26,8 +26,8 @@ RequiredUreview01a13f87 running, sourceFROZEN; firstAFTERchecksnowgranted. Initi
 productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
 26scenarios48images+selfmatchPASS; rejectedbadfixture/animationcapturespreserved.
 No UAFTERresult/fullaccepted yet; focused/renderactuals andfullrequired.
-K newlydispatchedworker6.1/medium afterVmerge atb75, initialinventory/inline
-fixed-reporttestprepONLY (no migration/runtimeuntilbaselinegrant); Gafterwholebranchreview. RequiredUpremerge,
+Kworker6.1/medium test-only40d14dd9 ready:3exact-report/storage/UItests,
+20producercalls/all17pairsinventoried, BEFOREunrun/no productionmigration; Gafterwholebranchreview. RequiredUpremerge,
 plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
 FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
@@ -1641,3 +1641,27 @@ U nowexclusivefirstAFTERguard/format/analyze/allfocused+current48renders under
 frozenreview:44MUSTexact/fourapprovedUNKNOWN/3CHimagesretaineddiffsinspectedonly,
 NOupdates/tolerance. FailureSTOPparentbeforeedit. No fulluntiladjudication; Kprep
 only andallotherFlutterheld. Scratcharchiveoutsideanalyzer/discoverythenrestoreexact.
+
+## K exact-byte/storage/UI BEFORE tests prepared, unrun
+
+K clean40d14dd9792f25169035056fc4058bab723d1b5b onactualb75, test-onlynew
+`test/diagnostics/diagnostic_contract_test.dart`312lines, libdiffempty. Three
+preparedUNRUNproofs: manuallyspecifiedfixedcompleteUTF8supportreportwithall17
+realpairs/forgedunknownarea/message/pair/11mixedcasecategoricalkeys/9integerkeys/
+safeunknown/unsafe/invalidprimitiveadmission; independentstoredmixedspelling+
+safeunknown/unsafe→unexpected/primitiveomission/immutabilityandliteralexporttail;
+realDiagnosticsViewassertsstoredHTTP_ERROR/SEEK/opaque-safe/unexpectedvalues.
+FixedUTCtimes/app1.2.3/build42/timezone, synthetictelemetry, noexternalgoldens.
+Onlylightformatter/diffcheckobserved, notanalysis/runtime. Beforecommandwhen
+slotgranted: pinnedTZtest/diagnostics+read-onlydesktop_diagnostics(concurrency2),
+noenum/policy/producerproductionmigrationuntilactualBEFOREpass/parentadjudication.
+
+Actual20postownerproducerinvocations/all17admittedpairs:LC16/PC2/Guide2. LC:
+applicationCredentialcleanup2/StateSave1/Operationfailed2; plexauthPINcancel2/
+credentialwrite1/PINpoll1; plexlibraryplaylistdiscovery1/someplaylists1/
+somecollections1/collectiondiscovery1/scanTiming1; Plexportrait1/playbackselected1.
+PCnativefailure1/requestfailure1; Guidetimeoutcurrentprogram1/scheduleload1.
+Historical~30notpreserved. Eventset/map willbeactualenumreviewevidence.
+Olddiagnostics/redaction/bounds/retention/metadata/export/copyretry/readerlayout
+proofretained. Approvedmechanical11desktopdiagnosticscallsmigrationstillunperformed.
+KSTOPqueued, UexclusivefrozenAFTERchecks+requiredreviewactive. NootherFlutter.
