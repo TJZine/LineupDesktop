@@ -21,9 +21,10 @@ E8ff1574a source findings CLOSED, all runtime/render/full pending; paired scratc
 harnessb6ede3f3 has actualstateassertions and credential-free syntheticconnection.
 W SOURCE-CLOSED, actual negative control failed on intended count bounds,
 corrected5554d6d8 format114/analyze/focused22/full1,645 green. Equivalent final
-a6a2d46ff782c96f2cdcfbb34e277fc2a4fe4202 integrated; main W gate queued viaP0.
-S acceptedS-R1 source correction7f250270 ready; two new real-isolate tests for
-pending/startup unknown-malformedID require actual BEFORE/AFTER checks.
+a6a2d46ff782c96f2cdcfbb34e277fc2a4fe4202 integrated; main W gate PASSED
+format114/analyze/full1,645 on stablea0cd5399, task tree/branch cleaned.
+S acceptedS-R1 correction rebased unchanged toc2f35887 ona0cd5399;
+exclusive two-control BEFORE, focused, andfull slot now granted.
 V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
 viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
 Y reconstructed polling control/fourclock green, broad/analyze/full pending.
@@ -33,7 +34,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: P0 verification child now owns W main-checkout gate once dispatched. U prepares source/test/history; all other children queued.
+Runtime: S exclusive BEFORE/focused/full; P0 W main gate passed and released. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -1087,3 +1088,18 @@ then required. Final exactSHA/logs/negativecontrol/results still await completio
   completion callback after the exclusive main gate instead of idle polling.
   Actual head supplied after this record commit; logs `/tmp/lineup-cq-integration/W/`.
   Expected1,645 is not yet an observed MAIN result. No other runtime authorized.
+
+## W main acceptance and S confirming verification release
+
+P0 actualchild01a13eaa verified mainHEADa0cd539921a837de2f4da40642115989a32b434c
+before/after unchanged and clean. Pinned3.47.7/Dart3.13.5, formatter114unchanged
+exit0(2.39s), analyzerexit0(2.91s), full1,645 exit0(83.03s).
+Logs `/tmp/lineup-cq-integration/W/`, each COMMAND_EXIT=0. No source/Git mutation.
+W tasktreeclean/branchancestorverified, acceptedtree/fullyintegratedcqW removed.
+
+S unchanged rebase ona0cd5399:5eaa5d0a→9797df80,b3893c97→4c120022,
+f02a1209→2622790d,7f250270→c2f358870702e79bbce4025ba70006f1503cec97;
+range-diff all4`=`. Samechild grantedexclusive BEFORE unknownID pending/startup
+controls onoldf02/rebased2622790dsource withnewtests, exactrestore, guard/format/
+analyze/requiredfocused/full. Expected105focused/1,650full are notobserved.
+SameSreviewer must adjudicate finalrepair/proof beforeintegration. Otherqueuesheld.
