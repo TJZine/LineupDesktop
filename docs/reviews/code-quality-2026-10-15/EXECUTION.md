@@ -32,13 +32,14 @@ V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
 viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
 Y reconstructed polling control/fourclock green, broad/analyze/full pending.
 D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
-tocd26d00d on2cf4570c. RequiredindependentDreview01a13f48 running, fullpending.
+tocd26d00d on2cf4570c. RequiredDreview01a13f48 foundtwoacceptedP2regressions; sameDchildwill
+finishfrozencd26fullthenconfirm/repair/reverify, targetedreviewclosurepending.
 U newly dispatched worker6.1/medium at9d9ec78e, INITIAL source/test/history and
 scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: D rebased full exclusively onfrozencd26d00d; requiredindependentreview source-only inparallel. U prepares source/test/history; all other children queued.
+Runtime: D exclusively completesfrozencd26full, thenowns acceptedD-R1/R2 confirming/repair/checks; allotherqueuesheld. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -1183,3 +1184,29 @@ Task-onlyscratchmustmovefresh/tmpoutsideanalyzer/defaulttestdiscovery after
 recoverablearchive/hashverification;14scratchgoldenchecksnotcountedinnormalfull.
 Expected1,657 isnotobserved. Reviewercoordinatedsourceunchanged/scratcharchiveaccess.
 Allotherruntimequeuesheld, nextE/Y/V/Uavailableafterrelease.
+
+## D required-review adjudication: two accepted regressions
+
+Reviewer01a13f48 completedwhole21-fileDunit read-only atstablecd26d00d,
+actualhumanconsentverified, all9patches`=`, no runtime/mutation. DsourceNOTclear.
+ParentACCEPTED bothP2findings, returnedtosameDworker, no scopeexpansion:
+
+- D-R1 air_check_verification.dart299-305/update124-126: pendingrequestcaptures
+  oldname/number; samecanonicalkeyedit updatescurrent_channelwithoutversionchange;
+  completionprojectsoldrequest.channel, leavingoldfacts/semantics afterform/save
+  updates. RequireactualcontrolledBEFOREpendingidentitytest thenlatest-current-key
+  presentationfix preservingrequestschedule/identity/loadcount/stalepreviewrules.
+- D-R2 studio_manual_editor.dart199-205/getter62/ManualRundown.occurrences:
+  repeatedList.unmodifiablecopyeachlooplength/indexread yieldsO(N²)references,
+  includingBrowse derivation. Source-provencomplexity, notmeasuredlatency.
+  Singleimmutablebuild/operationsnapshot/coherentcachewithboundedcopywork;
+  preservepre-mutationundofocus snapshot andavoidunneededhiddenrundownwork.
+  Meaningfulpublicworkinstrumentationifavailable, otherwiseexplicitstaticworkmap
+  plusactualmanual/undo/focuscontrols, no inventeddebugAPI/timingtests.
+
+Dcurrentlyrunningfrozencd26full mustfinish/collect BEFORE anyedit. Samechildthen
+continuesexclusivelease forBEFORE/corrections/format/analyze/allDfocused/14same
+renders/full. Oldfullatcd26doesnotpromote repair. Requiredsame-reviewertargeted
+closureandmainintegrationgateremain. Exact scratcharchived
+`/tmp/lineup-cq-D/rebased-scratch-ospY31/scratch`; restoreonlytemporarilyforrender,
+archiveoutsidedefaultfull/analyzetestdiscovery. Otherqueuesremainheld.
