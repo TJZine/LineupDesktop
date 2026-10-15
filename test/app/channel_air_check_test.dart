@@ -131,7 +131,6 @@ void main() {
         clock: () => now,
       );
       await tester.pumpWidget(surface());
-      // Baseline has a future invalid projection; the draft itself is normal.
       controller.scheduleOverride = null;
       controller.completeNext();
       await tester.pump();
@@ -141,13 +140,9 @@ void main() {
       expect(find.text('Two'), findsWidgets);
 
       now = boundary;
-      // Register ahead of the comparison callback created by this build.
-      // A retry can advance the request before that deferred error publishes.
       final dynamic state = tester.state(find.byType(ChannelAirCheck));
       WidgetsBinding.instance.addPostFrameCallback((_) => state.retry());
       await tester.pumpWidget(surface());
-      // Restore the clock so the following build sees a valid baseline, while
-      // the already deferred failure still carries the old request version.
       now = boundary.subtract(const Duration(days: 1));
       await tester.pump();
       expect(tester.takeException(), isNull);
@@ -502,7 +497,6 @@ void main() {
           matching: find.byType(Scrollable),
         ),
       );
-      // scrollUntilVisible jumps both nested scrollables; lay out before tapping.
       await tester.pump();
       await tester.tap(futureRow);
       await tester.pump();

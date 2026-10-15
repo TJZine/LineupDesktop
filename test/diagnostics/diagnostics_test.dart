@@ -116,8 +116,6 @@ void main() {
         'Bearer private-secret',
         'x' * 65,
       ]) {
-        // Construct external snapshots directly as well: export must not rely
-        // on the recording sanitizer having run first.
         final snapshot = DiagnosticSupportSnapshot(
           reportTime: DateTime.utc(2026, 10, 12),
           timeZone: 'UTC',

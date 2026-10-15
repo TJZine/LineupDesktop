@@ -830,7 +830,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(player.generation, 1);
       expect(player.status.state, PlayerState.playing);
-      // A stale Player transition would replace the management/Guide route.
       expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
       if (destination == 'Settings') {
         expect(find.text('Appearance'), findsWidgets);
@@ -3003,7 +3002,6 @@ void main() {
   testWidgets(
     'repeated persisted manual IDs keep occurrence focus and snapshots',
     (tester) async {
-      // Exercise the compact canvas, where all three occurrence rows remain visible.
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(640, 480);
       addTearDown(tester.view.resetPhysicalSize);
@@ -4045,6 +4043,54 @@ void main() {
       find.byKey(const ValueKey('channel-row-viewport-40')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Channels health releases slots after synchronous load failure', (
+    tester,
+  ) async {
+    final controller = _ControlledHealthController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          for (var index = 1; index <= 2; index++)
+            _channel(
+              id: 'controlled-$index',
+              number: index,
+              name: 'Controlled $index',
+              source: ManualSource([_itemForHealth(index)]),
+            ),
+        ],
+      ),
+    );
+    final fixture = UiFixture(controller: controller);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    controller.completePending();
+    await tester.pump();
+    controller.resetMeasurements();
+    controller.failSynchronously = true;
+    await openDestination(tester, 'Channels');
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(controller.requests, 2);
+    expect(controller.pending, isEmpty);
+    expect(
+      find.textContaining('Schedule issue — open this channel to recover'),
+      findsNWidgets(2),
+    );
+
+    controller.failSynchronously = false;
+    controller.generation++;
+    controller.notifyListeners();
+    await tester.pump();
+    expect(controller.pending, hasLength(2));
+    expect(controller.maximumActive, lessThanOrEqualTo(2));
+    controller.completePending();
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('Schedule issue'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Channels health supersedes stale work and recovers issues', (
@@ -5582,6 +5628,7 @@ class _ControlledHealthController extends FixtureController {
   int generation = 0;
   int requests = 0;
   int maximumActive = 0;
+  bool failSynchronously = false;
 
   @override
   int get contentGeneration => generation;
@@ -5589,6 +5636,7 @@ class _ControlledHealthController extends FixtureController {
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) {
     requests++;
+    if (failSynchronously) throw StateError('synchronous health failure');
     final completer = Completer<ScheduleIndex>();
     final call = _HealthCall(channel, completer);
     pending.add(call);
@@ -5605,8 +5653,7 @@ class _ControlledHealthController extends FixtureController {
       }
     }
 
-    completer.future.then((_) => finished(), onError: (_) => finished());
-    return completer.future;
+    return completer.future.whenComplete(finished);
   }
 
   void complete(String id, {Object? error}) {
@@ -5696,7 +5743,7 @@ class _RecoveryHarnessState extends State<_RecoveryHarness> {
               onOpenGenerateLineup: () async {
                 widget.onLeft();
                 setState(() => open = false);
-                widget.controller.enterChannelSetup();
+                await widget.controller.enterChannelSetup();
               },
               onTune: (_) async => false,
             )

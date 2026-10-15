@@ -45,8 +45,6 @@ class PlexClient {
   final http.Client _http;
   final Duration requestTimeout;
 
-  // Match the item pager's 1000 × 100 bound. Both collection records and
-  // member occurrences (including duplicates across collections) are bounded.
   static const maximumLibraryCollections = 100000;
   static const maximumLibraryCollectionMembers = 100000;
   static const maximumLibraryMetadataPages = 1000;
@@ -357,8 +355,6 @@ class PlexClient {
     if (container is! Map) throw invalid;
     final size = _pageCount(container['size'], _libraryPageException);
     final rawDirectories = container['Directory'];
-    // PMS can omit Directory for an explicitly empty server. Missing inventory
-    // without that evidence must not authorize removal of saved selections.
     final List<Object?> directories;
     if (!container.containsKey('Directory') && size == 0) {
       directories = const [];
@@ -720,8 +716,6 @@ class PlexClient {
             }
           } on PlexException catch (error, stack) {
             if (fatalCodes.contains(error.code)) {
-              // Sibling cancellation caused by our abort must not replace the
-              // authorization or scale failure that caused it.
               if (!abort.isCompleted || callerCancelled || !isCurrent()) {
                 fatal ??= error;
                 fatalStack ??= stack;
@@ -772,8 +766,6 @@ class PlexClient {
     }
   }
 
-  /// Strict library paging for the collection and show metadata streams.
-  /// Children may exceed the requested size only when that page ends at total.
   Future<List<T>> _libraryMetadata<T>(
     Uri base,
     String token, {
@@ -873,10 +865,6 @@ class PlexClient {
 
     checkCurrent();
     onProgress?.call(const PlexPlaylistProgress());
-    // One attempt-local lifetime for this catalog load. The first fatal
-    // authorization failure is recorded for propagation and aborts active
-    // sibling IO through the existing abortable transport; a fresh retry gets
-    // a fresh lifetime. Recoverable per-playlist failures never trigger it.
     final attemptAbort = Completer<void>();
     PlexException? fatal;
     StackTrace? fatalStack;
@@ -910,9 +898,6 @@ class PlexClient {
       }
     }
 
-    // A catalog failure throws and never becomes a successful empty catalog.
-    // A later contents-page failure for one playlist marks that playlist's
-    // canonical id in failedIds without publishing its accumulated prefix.
     final catalogRecords = await _playlistCatalogRaws(
       server,
       token,
@@ -929,8 +914,6 @@ class PlexClient {
     for (var start = 0; start < catalogRecords.length; start += 4) {
       checkCurrent();
       final batch = catalogRecords.skip(start).take(4).map((record) async {
-        // The catalog carries one normalized identity per row; requests,
-        // models, and failure accounting all reuse it.
         final id = record.id;
         try {
           final title = _text(record.playlist['title'], 'playlist title');
@@ -942,10 +925,6 @@ class PlexClient {
             checkCurrent: checkAttemptCurrent,
           );
           checkAttemptCurrent();
-          // Playable filtering applies after raw paging so unplayable records
-          // never shift pagination offsets. Repeated media is intentional
-          // programming and keeps its order; repeated supplied occurrence
-          // identities fail the playlist inside [_playlistItemRaws].
           final items = itemRaws
               .map(parseMediaItem)
               .where((item) => item.isPlayable)
@@ -957,8 +936,6 @@ class PlexClient {
           checkCurrent();
           if (exception.code == 'cancelled') {
             if (fatal == null) rethrow;
-            // Our own attempt abort converging on a sibling while the
-            // recorded fatal propagates.
             return null;
           }
           if (fatalCodes.contains(exception.code)) {
@@ -1006,14 +983,6 @@ class PlexClient {
     );
   }
 
-  /// Pages the complete video-playlist catalog as identified records.
-  ///
-  /// Every row must carry a usable identity before the catalog can complete:
-  /// an unidentifiable row fails the whole catalog instead of becoming a
-  /// successful absence. Catalog entries carry unique identities, so a
-  /// repeated playlist id is a non-progressing page. Playlist *contents* use
-  /// [_playlistItemRaws], which preserves repeated media but rejects repeated
-  /// supplied occurrence identities.
   Future<List<({String id, Map<String, Object?> playlist})>>
   _playlistCatalogRaws(
     Uri server,
@@ -1486,8 +1455,6 @@ const _libraryScaleException = PlexException(
   'This library is too large to scan safely.',
 );
 
-/// Shared by concurrent library attempts on this client, with cancellable
-/// waiters. The attempt owns a permit until all pages for that collection end.
 class _CollectionRequestPool {
   _CollectionRequestPool(this.limit);
   final int limit;
@@ -1878,11 +1845,6 @@ const _playlistPageException = PlexException(
   'Plex returned an invalid playlist page.',
 );
 
-/// Shared envelope rules only; stream owners retain identity validation,
-/// raw-consumed accounting, progress, scale limits, and failure recovery.
-/// Children may exceed the requested size only under an explicit terminal-page
-/// policy. A declared-total guard runs before row validation so a metadata
-/// scale failure retains its precedence over malformed or oversized rows.
 ({List<Object?> metadata, int? knownTotal}) _validatePageEnvelope(
   Map<String, Object?> json, {
   required int start,
@@ -1928,12 +1890,6 @@ const _playlistPageException = PlexException(
   return (metadata: metadata, knownTotal: known);
 }
 
-/// Normalizes a supplied playlist occurrence identity to its canonical form.
-///
-/// The documented numeric occurrence id arrives as an integral JSON number or
-/// its ordinary decimal-string form. Any other supplied value is contradictory
-/// identity evidence and fails the page. Absent identity never reaches this
-/// helper; the caller skips it to stay compatible.
 String _playlistOccurrenceId(Object? value) {
   const invalid = PlexException(
     'playlist-page-invalid',
@@ -1953,8 +1909,6 @@ String _playlistOccurrenceId(Object? value) {
   return number.toInt().toString();
 }
 
-/// Absent counts stay absent; supplied counts must be nonnegative exact
-/// integers. Each stream supplies its own page error category.
 int? _pageCount(Object? value, PlexException invalid) {
   if (value == null) return null;
   final number = switch (value) {
@@ -2062,7 +2016,6 @@ DynamicRange _dynamicRange(Map? media, Iterable<String> streamCodecs) {
   return media == null ? DynamicRange.unknown : DynamicRange.sdr;
 }
 
-/// Keeps a replacement listing's limit distinct from a children-stream limit.
 class _CollectionListingScaleException extends PlexException {
   const _CollectionListingScaleException()
     : super(

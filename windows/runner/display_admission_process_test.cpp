@@ -12,9 +12,6 @@
 #include <string>
 #include <vector>
 
-// Real Win32 processes, inherited handles, pipes, parent death and production
-// admission/recovery. Only display effects and the successor's guardian link
-// are controlled. This executable never touches the user's DisplayConfig.
 namespace {
 using namespace lineup;
 void Check(bool value, const char *message) {
@@ -186,7 +183,6 @@ void Send(HANDLE commands, HANDLE acknowledgments,
   Check(WriteFile(commands, &record, sizeof(record), &written, nullptr) &&
             written == sizeof(record),
         "write real guardian record");
-  // Peek before Read keeps failed IPC bounded, as the production link does.
   const auto deadline = GetTickCount64() + 2000;
   DWORD available = 0;
   while (GetTickCount64() < deadline) {
@@ -195,7 +191,6 @@ void Send(HANDLE commands, HANDLE acknowledgments,
           "guardian acknowledgment pipe");
     if (available >= sizeof(GuardianAck))
       break;
-    // Only an IPC readiness poll, never the test's process-ordering fence.
     Sleep(1);
   }
   Check(available >= sizeof(GuardianAck), "bounded guardian acknowledgment");
@@ -337,7 +332,6 @@ int Successor(const std::wstring &journal, const std::wstring &gate,
       },
       [] {}, MakeDisplayClock(),
       [recovery, bypass] {
-        // Negative control recreates the former unowned-mutex admission result.
         return bypass || recovery->Admit();
       });
   Check(worker.Submit({1, true, effects.desired}),
@@ -411,8 +405,6 @@ public:
           "fixture process cleanup job");
   }
   ~Fixture() {
-    // Every failure path kills this fixture's process tree before deleting
-    // data.
     TerminateJobObject(job_.Get(), EXIT_FAILURE);
     for (auto &process : processes_)
       WaitForSingleObject(process, 6000);
@@ -527,8 +519,6 @@ void TimeoutAndLoss(bool kill_guardian, bool reject, bool missing,
   }
   f.Finish(successor);
   if (kill_guardian) {
-    // All guardian handles can disappear; the unresolved journal still fences
-    // a later launch. Process termination is deliberately not safe completion.
     guardian.Reset();
     f.NextSuccessor();
     HANDLE later = f.Start(L"successor");
@@ -601,8 +591,6 @@ void DelayedResolvedGuardian() {
   HANDLE predecessor = f.Start(L"predecessor");
   f.Ready();
   f.Crash(predecessor);
-  // A different native recovery actor explicitly verifies and resolves the
-  // hold while the original guardian remains paused with a stale identity.
   DisplayRecoveryCoordinator recovery(f.journal, f.gate);
   Api api(f.EffectsState(), Actor::guardian);
   Check(recovery.Recover(f.EffectsState().identity[0], api),
@@ -703,7 +691,7 @@ void NegativeControl() {
   Handle guardian(f.Guardian(0));
   ExitSuccess(guardian.Get());
 }
-} // namespace
+}
 
 std::optional<int> DispatchDisplayAdmissionTestChild(int argc, char **argv) {
   if (argc < 2 || std::string(argv[1]) != "--display-admission-test")

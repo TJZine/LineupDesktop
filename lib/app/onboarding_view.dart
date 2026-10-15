@@ -91,8 +91,6 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     setState(() {
       _linkingStopped = nextLinkingStopped;
       _busy = nextBusy;
-      // Profile acceptance changes stage before reconnecting a saved server.
-      // The old PIN submitter may already be unmounted when reconnect finishes.
       if (controller.stage != SetupStage.profiles) _pinUser = null;
     });
     final target = retryNeedsFocus
@@ -1534,7 +1532,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
       _error = null;
       _pin += '$digit';
     });
-    if (_pin.length == 4) _submit();
+    if (_pin.length == 4) unawaited(_submit());
   }
 
   Future<void> _submit() async {
@@ -1542,13 +1540,20 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
     final attempt = ++_attempt;
     final pin = _pin;
     setState(() => _submitting = true);
-    final accepted = await widget.onSubmit(pin);
+    bool accepted;
+    String? submissionError;
+    try {
+      accepted = await widget.onSubmit(pin);
+    } catch (_) {
+      accepted = false;
+      submissionError = 'The profile could not be selected. Try again.';
+    }
     if (!mounted || attempt != _attempt) return;
     if (accepted) {
       widget.onAccepted();
       return;
     }
-    final reportedError = widget.error();
+    final reportedError = submissionError ?? widget.error();
     setState(() {
       _pin = '';
       _submitting = false;

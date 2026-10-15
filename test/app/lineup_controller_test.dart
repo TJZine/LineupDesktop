@@ -1175,10 +1175,11 @@ void main() {
         final finish = Completer<void>();
         fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, abort) async {
           if (!started.isCompleted) started.complete();
-          abort?.then((_) {
+          final cancellation = abort?.then((_) {
             if (!cancelled.isCompleted) cancelled.complete();
           });
           await finish.future;
+          await cancellation;
           return PlexLibraryScan(
             items: [_scanMovie(id)],
             collections: const PlexCollectionMembership(
@@ -1497,7 +1498,6 @@ void main() {
       plex: plex,
     );
     addTearDown(controller.dispose);
-    // The persisted setting must enable recording before launch restoration.
     await controller.initialize();
     expect(controller.stage, SetupStage.ready);
     expect(await controller.scanLibraries({'movies'}), isTrue);
@@ -8317,14 +8317,10 @@ void main() {
           isEmpty,
         );
         expect(controller.channels, isEmpty);
-        expect(
-          store.saveCalls,
-          2,
-        ); // Initial server restore and the started deletion.
+        expect(store.saveCalls, 2);
         if (cleanupFails) {
           expect(controller.server, serverValue(selected));
           expect(controller.error, contains('securely sign out'));
-          // Fresh work is eligible; the denied reorder cannot revive after failure.
           await controller.saveChannel(_channel('fresh'), expectedBase: null);
           expect(controller.channels.single.id, 'fresh');
         } else {

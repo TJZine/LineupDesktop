@@ -1909,8 +1909,6 @@ void main() {
     // mpv does not repeat pause=true after FILE_LOADED.
     expect(player.status.state, PlayerState.paused);
 
-    // A subsequent native load resets pause and autoplays, even when there is
-    // no new pause property event before FILE_LOADED.
     final third = player.load(Uri.parse('file:///third.mp4'));
     await Future<void>.delayed(Duration.zero);
     final thirdId = calls.last.arguments!['loadId']! as int;

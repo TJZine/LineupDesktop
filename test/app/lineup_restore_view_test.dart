@@ -202,7 +202,7 @@ void main() {
               libraryScanStatus: LibraryScanStatus.complete,
             ),
           );
-          c.enterChannelSetup();
+          await c.enterChannelSetup();
           addTearDown(c.dispose);
           await _pump(tester, c, size: size);
           expect(find.text('Switch server'), findsOneWidget);

@@ -27,9 +27,6 @@ int main(int argc, char** argv) {
   const std::filesystem::path data(argv[1]);
   Check(std::filesystem::is_directory(data / "flutter_assets"), "assembled Flutter assets required");
   flutter::DartProject project(data.wstring());
-  // This retained entrypoint draws an empty widget and does not initialize
-  // Lineup stores, credentials or account state. Failure to assemble it fails
-  // engine creation; there is no fallback to the product main entrypoint.
   project.set_dart_entrypoint("nativeRunnerLifecycleTestMain");
   {
     FlutterWindow window(project);

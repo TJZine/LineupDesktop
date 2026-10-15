@@ -6,7 +6,6 @@ import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 import 'setup_result_atmosphere.dart';
 
-/// Saved-lineup restoration is a loading moment, separate from setup choices.
 class LineupRestoreView extends StatelessWidget {
   const LineupRestoreView({required this.controller, super.key});
 
@@ -72,7 +71,6 @@ class LineupRestoreView extends StatelessWidget {
   }
 }
 
-/// Counts remain visible; the stable live-region label changes only with phase.
 class LibraryScanPhaseStatus extends StatelessWidget {
   const LibraryScanPhaseStatus({
     required this.controller,

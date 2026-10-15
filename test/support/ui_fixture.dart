@@ -101,8 +101,11 @@ Future<void> openDestination(WidgetTester tester, String destination) async {
 }
 
 class FixturePlayer implements NativePlayer {
+  FixturePlayer() : _eventGeneration = 0;
+  FixturePlayer.preloaded() : _eventGeneration = null;
+
   final _events = StreamController<PlayerEvent>.broadcast();
-  int generation = 0;
+  int? _eventGeneration;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
     message: 'Test player is idle',
@@ -111,6 +114,8 @@ class FixturePlayer implements NativePlayer {
   Duration _duration = Duration.zero;
   PlayerTelemetry _telemetry = const PlayerTelemetry();
   List<PlayerTrack> _tracks = const [];
+
+  int get generation => _eventGeneration ?? 0;
 
   @override
   PlayerStatus get status => _status;
@@ -139,7 +144,7 @@ class FixturePlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
   }) async {
-    this.generation = generation ?? this.generation + 1;
+    _eventGeneration = generation ?? this.generation + 1;
     emit(const PlayerStatus(state: PlayerState.loading, message: 'Loading'));
   }
 
@@ -186,7 +191,7 @@ class FixturePlayer implements NativePlayer {
         duration: _duration,
         telemetry: _telemetry,
         tracks: _tracks,
-        generation: eventGeneration ?? generation,
+        generation: eventGeneration ?? _eventGeneration,
       ),
     );
   }

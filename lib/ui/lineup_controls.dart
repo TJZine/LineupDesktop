@@ -4,7 +4,6 @@ import '../plex/plex_models.dart';
 import 'app_theme.dart';
 import 'lineup_focus.dart';
 
-/// Shared control sizing; color and state policy remain owned by the theme.
 class LineupCompactControls extends StatelessWidget {
   const LineupCompactControls({required this.child, super.key});
   final Widget child;
@@ -484,7 +483,6 @@ class LineupDropdownMenuRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LineupRowSurface(
     selected: selected,
-    // The popup owns the interactive focus node above its item content.
     focused: Focus.maybeOf(context)?.hasFocus ?? false,
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -633,7 +631,6 @@ class LineupFieldButton extends StatelessWidget {
   );
 }
 
-/// Content links share the theme's compact target, amber tier and focus policy.
 class LineupInlineLink extends StatelessWidget {
   const LineupInlineLink({
     required this.onPressed,

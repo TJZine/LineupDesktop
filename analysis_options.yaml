@@ -1,5 +1,10 @@
 include: package:flutter_lints/flutter.yaml
 
+linter:
+  rules:
+    - unawaited_futures
+    - discarded_futures
+
 analyzer:
   exclude:
     - build/**

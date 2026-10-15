@@ -60,7 +60,6 @@ if ((git -C $FlutterRoot rev-parse "HEAD:$managerPath").Trim() -ne $managerBlob)
   throw 'FlutterRoot does not contain the exact pinned Windows EGL manager source.'
 }
 
-# The patch has normal source context; this rejects a source tree it does not target.
 & git -C $FlutterRoot apply --check $patch
 if ($LASTEXITCODE) { throw 'Flutter engine patch does not apply to this checkout.' }
 & git -C $FlutterRoot apply $patch

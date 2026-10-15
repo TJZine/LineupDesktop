@@ -50,9 +50,6 @@ class GuideLayoutPolicy {
         (timeHeaderHeight ?? 38 * textScale);
     final minimumRowHeight = 58 * textScale;
     final available = math.max(0.0, height - chromeHeight);
-    // The aperture keeps its approved responsive footprint independently of
-    // the full-bleed grid. Its compact budget reserves 70% for reference rows;
-    // the former 20px frame reserve now goes to the grid, not to a larger PiP.
     final pictureControlHeight = controlHeight(size, textScale: textScale);
     final pictureControlsHeight =
         controlsWrapForWidth(math.max(0.0, width - 40), textScale: textScale)
@@ -67,7 +64,6 @@ class GuideLayoutPolicy {
           pictureControlsHeight -
           (timeHeaderHeight ?? 38 * textScale),
     );
-    // Preserve the prior five 0.001px row tails in the aperture budget.
     const pictureRoundingAllowance = 0.005;
     final compactPictureHeight =
         pictureAvailable * 0.3 + pictureRoundingAllowance;
@@ -80,15 +76,16 @@ class GuideLayoutPolicy {
         pictureAvailable - minimumRowHeight * minimumRows,
       ),
     );
-    // Keep the information area's allocation as well as the aperture size.
-    // Freed frame space goes to the five rows; 16:10 extra height stays here.
-    final showcaseHeight = math.max(0.0, pictureAllocation - 0.01);
+    const showcaseHeightAdjustment = 0.01;
+    final showcaseHeight = math.max(
+      0.0,
+      pictureAllocation - showcaseHeightAdjustment,
+    );
     final rowHeight = math.max(
       minimumRowHeight,
       (available - showcaseHeight) / minimumRows,
     );
     final pictureHeight = math.min(324.0, pictureAllocation);
-    // The extra width exposed by full-bleed belongs to the companion panel.
     final widthBudget = math.max(0.0, width - 360 - 12 - 40);
     final pictureWidth = hasPicture
         ? math.min(pictureHeight * 16 / 9, widthBudget)
@@ -443,8 +440,6 @@ class _GuideViewState extends State<GuideView>
             contentGeneration != _searchContentGeneration);
     _observedSearchQuery = searchQuery;
     _searchContentGeneration = contentGeneration;
-    // The editor owns raw text, selection and composing state. Normalized
-    // matching and unrelated schedule notifications must not rewrite an edit.
     if (externalSearchChange) {
       _searchController.value = TextEditingValue(
         text: searchQuery,
@@ -477,7 +472,6 @@ class _GuideViewState extends State<GuideView>
           0.0,
           scroll.position.maxScrollExtent,
         );
-        // Reveal a whole row without animating through partial header rows.
         scroll.jumpTo(target);
       }
       _requestViewport();
@@ -536,7 +530,6 @@ class _GuideViewState extends State<GuideView>
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
-    // Search consumes its own Escape and keeps unmodified editing keys local.
     if (_searchFocus.hasFocus && !commandModified) {
       return KeyEventResult.ignored;
     }
@@ -548,8 +541,6 @@ class _GuideViewState extends State<GuideView>
       widget.onClose();
       return KeyEventResult.handled;
     }
-    // Toolbar and recovery controls retain their own activation Actions.
-    // Cell subtrees dispatch through _gridKey before reaching this ancestor.
     if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
     return _gridKey(node, event);
   }
@@ -821,9 +812,6 @@ class _GuideViewState extends State<GuideView>
   Widget build(BuildContext context) {
     final channels = widget.controller.channels;
     final roles = LineupTheme.of(context);
-    // Keep Guide feedback inside this route's lifetime. The shell's Scaffold
-    // remains mounted when switching to Player or another destination. Its
-    // SnackBar paints after the body, above both the grid and the Now line.
     return ScaffoldMessenger(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -2253,7 +2241,6 @@ class _ProgramCellState extends State<_ProgramCell> {
         : widget.past
         ? roles.primarySurface.withValues(alpha: 0.56)
         : roles.primarySurface.withValues(alpha: 0.55);
-    // Guide focus is deliberately fill-only, including Large focus indicators.
     final border = Border.all(color: Colors.transparent, width: 1);
 
     return Positioned(
@@ -2733,7 +2720,6 @@ class _ProgramDetails extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final scaler = MediaQuery.textScalerOf(context);
     final enlarged = scaler.scale(1) > 1;
-    // Keep a wrapping separator attached to the preceding metadata segment.
     final metadataSeparator = enlarged ? '\u00a0· ' : ' · ';
     final hasSynopsis = item.summary?.trim().isNotEmpty == true;
     final duration = program.scheduled.end.difference(program.scheduled.start);
@@ -2792,8 +2778,6 @@ class _ProgramDetails extends StatelessWidget {
     final badges = _mediaBadges(item);
     return LayoutBuilder(
       builder: (context, box) {
-        // Keep the existing type hierarchy. Compact spacing releases height to
-        // the facts before constraining the synopsis, including enlarged text.
         final dense = box.maxHeight < 270 || enlarged;
         final mergeFacts = dense && !enlarged;
         final gap = dense ? 4.0 : 10.0;

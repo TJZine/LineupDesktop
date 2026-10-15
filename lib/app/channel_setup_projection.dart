@@ -67,8 +67,6 @@ class ChannelSetupProjection {
     }
     if (_enabled == null || !_sameSet(_enabled!, strategies)) {
       _enabled = Set.of(strategies);
-      // Use the exact selected-only builder path: equal count/title proposals
-      // can sort differently when unselected entries are present.
       _proposals = _build(strategies, strategyOrder: _order);
       _allocation = null;
       _disabledEligibility.clear();
@@ -120,7 +118,6 @@ class ChannelSetupProjection {
     maximumChannels: null,
   );
 
-  /// Fresh materialization is also used by review, with its own time anchor.
   static ChannelPlanAllocation allocate(
     List<ChannelProposal> proposals, {
     required List<Channel> existing,

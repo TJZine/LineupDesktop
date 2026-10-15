@@ -270,7 +270,6 @@ class LineupController extends ChangeNotifier {
   /// The immediate stage to which a cancellable profile picker returns.
   SetupStage? get profileSelectionOriginStage => _profilePickerOrigin?.stage;
 
-  /// Takes precedence over [stage] while the saved inventory is restoring.
   bool _restoringSavedLineup = false;
   bool get restoringSavedLineup => _restoringSavedLineup;
   _PickerOrigin? _profilePickerOrigin;
@@ -285,12 +284,9 @@ class LineupController extends ChangeNotifier {
   PlexPlaylistProgress? get playlistScanProgress => _scan.playlistProgress;
   String? _error;
   String? get error => _error;
-  // Request cancellation is independent of the retained playback/content scope.
   int _epoch = 0;
   int _authorizationScope = 0;
   int _mutationScope = 0;
-  // Logout rejects queued work immediately, while started commits finish
-  // against the retained content scope before successful runtime retirement.
   int _mutationEligibility = 0;
   Future<PlexConnection>? _playbackRefresh;
   int? _playbackRefreshScope;
@@ -308,8 +304,6 @@ class LineupController extends ChangeNotifier {
         !_sourceDiscoveryComplete(channel.source)) {
       return false;
     }
-    // A retry may have settled before its inventory could be committed. Never
-    // infer absence from the previous inventory when the new scan found items.
     final pending = _scan.readiness;
     if (pending != null &&
         resolveContent(
@@ -917,8 +911,6 @@ class LineupController extends ChangeNotifier {
             rethrow;
           }
           if (_disposed) return;
-          // Active playback may refresh this profile's access while saving.
-          // Discovery omission alone does not revoke the chosen working access.
           final committedAccess = _serverAccess[selected.id] ?? access;
           _serverAccess = {..._serverAccess, selected.id: committedAccess};
           _persisted = next;
@@ -1147,8 +1139,6 @@ class LineupController extends ChangeNotifier {
             if (!_isCurrent(operation)) return;
             final items = scanned.items;
             if (scanned.timing case final timing?) {
-              // Launch restoration does not settle failures; Channel Setup
-              // does. Live scan-budget acceptance measures them separately.
               diagnostics.add('plex-library', 'Library scan timing', {
                 'scanPath': settleFailures ? 'setup' : 'launch',
                 'libraryType': library.type.name,
@@ -1454,11 +1444,6 @@ class LineupController extends ChangeNotifier {
     }
   }
 
-  /// Returns to the picker origin without reconnecting the current server.
-  ///
-  /// This intentionally shares the same guards and invalidation path as the
-  /// existing picker cancellation API; it is a named transition for the
-  /// current-server Continue action rather than a second server owner.
   bool continueCurrentServer() {
     if (stage != SetupStage.servers || busy || server == null) {
       return false;
@@ -1469,9 +1454,6 @@ class LineupController extends ChangeNotifier {
       return true;
     }
 
-    // During first-run discovery, an already-selected server can be retained
-    // while the picker is still non-cancellable. Continue must finish that
-    // transition without reconnecting, rediscovering, or persisting anything.
     _serverSelectionCanCancel = false;
     _channelSetupCanCancel = false;
     _serverTargetId = null;

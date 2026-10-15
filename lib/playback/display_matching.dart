@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'native_player.dart';
 
-/// Dart owns eligibility and decoded transfer; Windows owns target restoration.
 bool displayMatchingSession({
   required bool active,
   required bool enabled,
@@ -39,7 +38,6 @@ class DisplayMatching {
   DisplayMatchingState desired = DisplayMatchingState.unknown;
   int revision = 0;
   int _sessionRevision = 0;
-  // Native target sessions can retire without changing the Dart revision/load.
   int _operationEpoch = 0;
   bool _targetRetired = false;
   int? _load;
@@ -48,7 +46,6 @@ class DisplayMatching {
   bool? _noVideo;
   DateTime? _positionReached;
   bool _decided = false;
-  // A fallback ends the hold, but does not discard a later first decoded fact.
   bool _transferKnown = false;
   bool _userPaused = false;
   bool _suppressTransition = false;
@@ -71,7 +68,6 @@ class DisplayMatching {
     _send();
     if (next) _sessionRevision = revision;
     if (next && _load != null) {
-      // A resume may still be queued when fullscreen is re-entered.
       _userPaused = paused && !_suppressTransition;
       _hold = _DisplayHold(false);
       _requestDecision();

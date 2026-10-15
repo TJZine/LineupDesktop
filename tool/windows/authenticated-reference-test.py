@@ -1,4 +1,3 @@
-"""Gated pinned-libmpv containment test; only normalized outcomes leave the run."""
 
 import argparse
 import hashlib
@@ -30,7 +29,6 @@ def remaining(timeout):
 def run(command, timeout=30):
     result = subprocess.run(command, capture_output=True, timeout=remaining(timeout))
     if result.returncode:
-        # Tool output can contain paths, URLs or headers. Never emit it.
         raise RuntimeError("fixture tool failed")
     return result.stdout
 
@@ -80,7 +78,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def certificate(root, openssl):
-    # No OS trust-store writes. Both names are covered; libmpv receives CA file.
     config = root / "leaf.cnf"
     config.write_text("[req]\ndistinguished_name=dn\nprompt=no\n[dn]\nCN=localhost\n"
                       "[leaf]\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n"

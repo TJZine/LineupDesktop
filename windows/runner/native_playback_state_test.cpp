@@ -110,7 +110,7 @@ void StopObservation() {
   Check(!state.ObserveIdle(true, 0), "stop completion emitted once");
   Check(state.active_load() == 5, "stop observation is separate from END_FILE");
 }
-}  // namespace
+}
 
 int main() {
   ReplacementAndRetirement();

@@ -321,8 +321,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   void _selectSource(StudioSourceChoice? choice) {
     if (choice == _session.sourceChoice) return;
     _changed(() {
-      // Pending picker/selection work belongs to the visible editor. Completed
-      // filters, playlist choices and hand-picked entries remain in their drafts.
       _activeFilterKey = null;
       _pendingFilterValues.clear();
       _browseSelecting = false;
@@ -1423,8 +1421,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   void _retainProgrammingHeight() {
-    // A shorter picker must not clamp the page's scroll offset and move both
-    // panels. Reserve only the already occupied editor height while it is open.
     final box = _programmingContext?.findRenderObject();
     if (box is RenderBox && box.hasSize) _pickerMinimumHeight = box.size.height;
   }

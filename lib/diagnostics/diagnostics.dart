@@ -252,8 +252,6 @@ class Diagnostics extends ChangeNotifier {
     'scanPath',
     'libraryType',
   };
-  // Non-negative scan facts: phase milliseconds (up to one day) and redacted
-  // inventory counts. No titles, keys, or URLs are representable.
   static const _boundedIntegers = {
     'itemsMs': 86400000,
     'collectionsMs': 86400000,
@@ -269,8 +267,6 @@ class Diagnostics extends ChangeNotifier {
 
   static String _safeFact(String value) =>
       _safeToken.hasMatch(value) ? value : 'Unavailable';
-  // Release wrappers emit a numeric build followed by the full Git commit.
-  // Keep this grammar separate: @ is not safe in arbitrary diagnostic facts.
   static final _releaseBuild = RegExp(r'^[0-9]{1,20}@[a-fA-F0-9]{40}$');
 
   static String _safeBuild(String value) =>
@@ -366,13 +362,11 @@ class Diagnostics extends ChangeNotifier {
     'unexpected',
     'offline',
     'http_error',
-    // Normalized sign-in outcomes from LineupController.
     'network-timeout',
     'network-unavailable',
     'rate-limited',
     'auth-denied',
     'response-unavailable',
-    // Fixed Plex domain failures used by application and playback producers.
     'auth-required',
     'auth-invalid',
     'access-denied',
@@ -393,7 +387,6 @@ class Diagnostics extends ChangeNotifier {
     'playlist-page-too-large',
     'playlist-page-not-progressing',
     'playlist-scale-exceeded',
-    // Normalized native playback/command outcomes and Dart lifetime failures.
     'network_error',
     'audio_decode_error',
     'video_decode_error',
@@ -441,7 +434,6 @@ class Diagnostics extends ChangeNotifier {
   static const _videoCodecs = {'h264', 'hevc', 'av1', 'mpeg2video', 'vp9'};
   static const _audioCodecs = {'aac', 'ac3', 'eac3', 'dts', 'truehd', 'opus'};
   static const _dynamicRanges = {'pq', 'hlg', 'smpte-st-2084', 'hdr10', 'sdr'};
-  // Explicit media-value vocabularies: unknown strings must never enter reports.
   static const _pixelFormats = {
     'yuv420p',
     'yuv420p10le',

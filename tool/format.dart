@@ -63,7 +63,6 @@ Future<int> _format({required bool check}) async {
         ..sort();
   final files = <String>[];
   for (final path in paths) {
-    // Tracked files may have been removed from the working tree.
     final nativePath = path.split('/').join(Platform.pathSeparator);
     final file = File('$root${Platform.pathSeparator}$nativePath');
     if (await file.exists()) {

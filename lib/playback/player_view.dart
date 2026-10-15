@@ -130,8 +130,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                     ?.controller ==
                 widget.controller &&
             _keyboardInput) {
-          // The shared panel retains focus across expansion, while the
-          // coordinator retires each presentation's auto-hide suspension.
           widget.controller.overlayFocusChanged(nextOverlay, generation, true);
         }
       });
@@ -153,7 +151,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       _visibleClockTimer = null;
       return;
     }
-    // Schedule clocks and progress must advance even without native events.
     _visibleClockTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       if (!_needsVisibleClock) {
@@ -187,7 +184,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    // Shell route shortcuts must reach the shared navigation/leave guard.
     if (navigationShortcutIndex(event.logicalKey) != null) {
       return KeyEventResult.ignored;
     }
@@ -595,7 +591,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   }
 }
 
-/// The one Flutter geometry used for both the full player and Guide PiP.
 class PlayerSurface extends StatelessWidget {
   const PlayerSurface({
     required this.controller,
@@ -704,8 +699,6 @@ class _SurfaceError extends StatelessWidget {
   }
 }
 
-// Keep the material bottom-anchored while its content grows upward. Bypass
-// animation entirely for Reduce Motion, including asynchronous artwork sizes.
 class _BottomPanelExpansion extends StatelessWidget {
   const _BottomPanelExpansion({required this.child});
   final Widget child;
@@ -781,9 +774,6 @@ class _Osd extends StatelessWidget {
     final unsupported = controller.status.state == PlayerState.unsupported;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
     final expanded = !LineupLayout.isCompactWidth(size.width);
-    // 720p desktop still has enough room for the broadcast-style progress
-    // lane; keep the compact 800x600 regime stacked so every action remains
-    // reachable without crowding the identity block.
     final horizontal = size.width >= 1200 && size.height >= 640;
 
     final actionStyle = _playerActionStyle(context);
@@ -1490,8 +1480,6 @@ class _NowPlaying extends StatelessWidget {
                   key: const Key('player-now-playing-collapse'),
                   style: _playerActionStyle(context).copyWith(
                     padding: const WidgetStatePropertyAll(
-                      // Center the 20px glyph like the fullscreen action's
-                      // 48px target, while keeping the label-to-icon gap tight.
                       EdgeInsets.only(left: 10, right: 14),
                     ),
                   ),
@@ -1673,9 +1661,6 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
       final item = widget.program.scheduled.item;
       final showTitle = item.showTitle?.trim();
       const logoMaxHeight = 72.0;
-      // Keep the artwork slot proportional to its compact height, so the
-      // shared relative-size guard evaluates this title-art layout rather
-      // than the retired tall shelf's much wider reservation.
       const logoMaxWidth = logoMaxHeight * 6;
       return LayoutBuilder(
         builder: (context, available) {
@@ -1780,11 +1765,6 @@ TextStyle _nowPlayingTitleStyle(BuildContext context, {required bool dense}) =>
       color: LineupTheme.of(context).primaryText,
       shadows: _overlayTextShadow,
     );
-
-/*
- * Keep the logo bounds on the image path only. ClearLogoImage's fallback is
- * intentionally independent so a failed logo cannot constrain the title.
- */
 
 class _PlayerArtwork extends StatelessWidget {
   const _PlayerArtwork({
@@ -1933,8 +1913,6 @@ class _NowPlayingCast extends StatelessWidget {
           0.0,
           constraints.maxWidth - gap * math.max(0, visible.length - 1),
         );
-        // Preserve natural content widths when they fit. When constrained,
-        // share the remaining space without reserving wide blank columns.
         var remaining = available;
         final pending = <int>{for (var i = 0; i < widths.length; i++) i};
         while (pending.isNotEmpty) {
@@ -1975,8 +1953,6 @@ class _NowPlayingCast extends StatelessWidget {
   }
 }
 
-/// Measure painted bounds after layout: canvas pixels may be scaled before
-/// they reach the window, independently of the device's pixel ratio.
 class _CastPortrait extends StatefulWidget {
   const _CastPortrait({
     required this.portrait,
@@ -3049,9 +3025,6 @@ class _TracksState extends State<_Tracks> {
                                       style: textTheme.bodyMedium,
                                     ),
                                   )
-                                // Native track projection is bounded to 256 rows.
-                                // Lay them out once so wrapped labels can be
-                                // focused/revealed without estimating row heights.
                                 : SingleChildScrollView(
                                     key: const Key('playback-options-list'),
                                     controller: _scrollController,

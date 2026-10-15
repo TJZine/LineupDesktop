@@ -205,77 +205,75 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
       _originalOffAirKey = null;
     }
     if (mounted) setState(() {});
-    Future<ScheduleIndex>.sync(
-          () => widget.controller.loadScheduleFor(request.channel),
-        )
-        .then<void>((schedule) {
-          if (_disposed) return;
-          if (request.baseline && request.key == _wantedOriginalKey) {
-            // Validate the comparison baseline before treating it as ready.
-            programAt(widget.clock(), request.channel.anchor, schedule);
-            _originalSchedule = schedule;
-            _originalScheduleKey = request.key;
-            _originalScheduleError = null;
-            _originalScheduleErrorKey = null;
-            _originalOffAirKey = null;
-          }
-          if (request.publishes &&
-              request.key == _targetKey &&
-              request.version == _requestVersion) {
-            final preview = _project(
-              schedule,
-              request.key,
-              request.channel,
-              sourceLabel: request.sourceLabel,
-            );
-            _preview = preview;
-            _error = null;
-            _preserveSelection(preview, widget.clock());
-            final validity = _comparisonReady
-                ? ChannelAirCheckValidity.valid
-                : ChannelAirCheckValidity.unknown;
-            _reportValidity(validity, snapshotKey: request.key);
-          }
-        })
-        .catchError((Object error) {
-          if (_disposed || request.version != _requestVersion) {
-            return;
-          }
-          if (request.baseline && request.key == _wantedOriginalKey) {
-            _originalSchedule = null;
-            _originalScheduleKey = null;
-            if (_isNoContentFailure(error)) {
-              _originalOffAirKey = request.key;
-              _originalScheduleError = null;
-              _originalScheduleErrorKey = null;
-            } else {
-              _originalOffAirKey = null;
-              _originalScheduleError = error;
-              _originalScheduleErrorKey = request.key;
-            }
-          }
-          if (request.key != _targetKey) return;
-          _error = error;
-          _reportValidity(
-            _canRetainOffAir(error)
-                ? ChannelAirCheckValidity.retainedOffAir
-                : ChannelAirCheckValidity.unknown,
-            snapshotKey: request.key,
-          );
-        })
-        .whenComplete(() {
-          if (_disposed) return;
-          if (identical(_active, request)) _active = null;
-          final pending =
-              _pending ??
-              (request.version == _requestVersion ? request.followUp : null);
-          _pending = null;
-          if (pending != null) {
-            _start(pending);
-          } else if (mounted) {
-            setState(() {});
-          }
-        });
+    unawaited(_load(request));
+  }
+
+  Future<void> _load(_AirCheckRequest request) async {
+    try {
+      final schedule = await widget.controller.loadScheduleFor(request.channel);
+      if (_disposed) return;
+      if (request.baseline && request.key == _wantedOriginalKey) {
+        programAt(widget.clock(), request.channel.anchor, schedule);
+        _originalSchedule = schedule;
+        _originalScheduleKey = request.key;
+        _originalScheduleError = null;
+        _originalScheduleErrorKey = null;
+        _originalOffAirKey = null;
+      }
+      if (request.publishes &&
+          request.key == _targetKey &&
+          request.version == _requestVersion) {
+        final preview = _project(
+          schedule,
+          request.key,
+          request.channel,
+          sourceLabel: request.sourceLabel,
+        );
+        _preview = preview;
+        _error = null;
+        _preserveSelection(preview, widget.clock());
+        final validity = _comparisonReady
+            ? ChannelAirCheckValidity.valid
+            : ChannelAirCheckValidity.unknown;
+        _reportValidity(validity, snapshotKey: request.key);
+      }
+    } catch (error) {
+      if (_disposed || request.version != _requestVersion) return;
+      if (request.baseline && request.key == _wantedOriginalKey) {
+        _originalSchedule = null;
+        _originalScheduleKey = null;
+        if (_isNoContentFailure(error)) {
+          _originalOffAirKey = request.key;
+          _originalScheduleError = null;
+          _originalScheduleErrorKey = null;
+        } else {
+          _originalOffAirKey = null;
+          _originalScheduleError = error;
+          _originalScheduleErrorKey = request.key;
+        }
+      }
+      if (request.key != _targetKey) return;
+      _error = error;
+      _reportValidity(
+        _canRetainOffAir(error)
+            ? ChannelAirCheckValidity.retainedOffAir
+            : ChannelAirCheckValidity.unknown,
+        snapshotKey: request.key,
+      );
+    } finally {
+      if (!_disposed) {
+        if (identical(_active, request)) _active = null;
+        final pending =
+            _pending ??
+            (request.version == _requestVersion ? request.followUp : null);
+        _pending = null;
+        if (pending != null) {
+          _start(pending);
+        } else if (mounted) {
+          setState(() {});
+        }
+      }
+    }
   }
 
   _AirCheckPreview _project(
@@ -903,8 +901,6 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
       return programAt(now, original.anchor, originalSchedule).item.id !=
           programAt(now, preview.channel.anchor, preview.schedule).item.id;
     } on ScheduleBuildException catch (error) {
-      // Rendering can encounter a newly unrepresentable comparison before the
-      // next clock tick. Retire it through the same error owner after this frame.
       final version = _requestVersion;
       final originalKey = _originalScheduleKey;
       WidgetsBinding.instance.addPostFrameCallback((_) {

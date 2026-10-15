@@ -345,8 +345,6 @@ void main() {
             }, .006),
           );
           if (level != OverlayTransparency.moreTransparent) {
-            // A single shader joins the feather to flat material without
-            // an uncovered pixel or two separately anti-aliased edges.
             final above = pixels.getUint8((54 * 8 + 4) * 4 + 3);
             final below = pixels.getUint8((55 * 8 + 4) * 4 + 3);
             expect(above, closeTo(below, 3));
@@ -1114,7 +1112,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Existing Ctrl chords accept additional modifiers, including repeats.
     for (final modifier in [
       LogicalKeyboardKey.controlLeft,
       LogicalKeyboardKey.shiftLeft,
@@ -2966,9 +2963,7 @@ void main() {
         }
         await tester.pump();
         if (keyboard) {
-          // Enter traversal before activating the preset with the keyboard.
           await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-          // The preset is a ListTile, so focus its nearest Focus descendant.
           final choiceContext = tester.element(find.text('30 minutes'));
           Focus.of(choiceContext).requestFocus();
           await tester.pump();
@@ -3304,13 +3299,9 @@ void main() {
     );
     await tester.pump();
 
-    // A whitespace-only title falls back to the meaningful language, and the
-    // detail drops the duplicated language instead of repeating it.
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Dolby Digital Plus'), findsOneWidget);
     expect(find.text('English • eac3'), findsNothing);
-    // Fully blank metadata falls back to distinct readable type/ID labels
-    // without inventing a redundant secondary fact.
     expect(find.text('Audio track 2'), findsOneWidget);
     expect(find.text('Audio track 3'), findsOneWidget);
     expect(
@@ -3330,12 +3321,9 @@ void main() {
         reason: 'track $id has no meaningful detail',
       );
     }
-    // A custom title keeps its trimmed text, resolved language, and friendly
-    // codec detail.
     expect(find.text('English — Director commentary'), findsOneWidget);
     expect(find.text('AAC'), findsOneWidget);
     expect(find.text('   '), findsNothing);
-    // Formatting and metadata display emit no native selection command.
     expect(fixture.native.selectedTracks, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -3590,7 +3578,6 @@ void main() {
 
       expect(find.text('日本語 — 監督コメンタリー 🎬'), findsOneWidget);
       expect(find.text('ASS (styled text)'), findsOneWidget);
-      // language_code resolves the Klingon code to its self-name.
       expect(find.text('Klingon'), findsOneWidget);
       expect(
         tester
@@ -3600,7 +3587,6 @@ void main() {
             .subtitle,
         isNull,
       );
-      // Subtitle Off stays a distinct first action.
       expect(find.text('Off'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Off')).dy,
@@ -3640,13 +3626,10 @@ void main() {
     );
     await tester.pump();
 
-    // Rail and OSD agree the whitespace title is absent: the OSD uses the
-    // language without forcing the rail's full type/ID label into the chip.
     expect(find.text('Audio • Deutsch'), findsOneWidget);
     expect(find.text('Subtitles • Off'), findsOneWidget);
     expect(fixture.native.selectedTracks, isEmpty);
 
-    // The same tracks in the rail agree: language title, no repeated detail.
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pump();
     expect(find.text('Deutsch'), findsOneWidget);
@@ -3713,7 +3696,6 @@ void main() {
     ]);
     await tester.pump();
     expect(fixture.player.tracks.singleWhere((track) => track.selected).id, 2);
-    // The asynchronous native event schedules the OSD rebuild for the next frame.
     await tester.pump();
     expect(find.text('Audio • English — Restored'), findsOneWidget);
     expect(find.byTooltip('Audio track: English — Restored'), findsOneWidget);
@@ -3931,7 +3913,6 @@ void main() {
     await tester.pump();
     expect(fixture.native.selectedTracks, isEmpty);
 
-    // Positive control: tapping a row still reaches the native selection.
     await tester.tap(find.text('Surround'));
     await tester.pump();
     await tester.pump();
@@ -4568,8 +4549,8 @@ void main() {
         ),
       ],
     );
-    addTearDown(() {
-      tester.binding.setSurfaceSize(null);
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
       tester.view.resetDevicePixelRatio();
     });
     for (final layout in const [
@@ -5207,8 +5188,6 @@ void main() {
         0.5,
       );
 
-      // Schedule fallback describes progress; it does not establish an
-      // observed native seek duration or enable a native seek command.
       expect(tester.widget<Slider>(find.byType(Slider)).onChanged, isNull);
       expect(fixture.native.transportCommands, 0);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -5593,7 +5572,6 @@ void main() {
   ) async {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    // A 3:1 image remains usable in the compact shelf's title-artwork slot.
     final wideArtwork = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAAAAAA+i0toAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC',
     );
@@ -5892,8 +5870,6 @@ void main() {
       );
       expect(switcher.duration, Duration.zero);
       expect(switcher.reverseDuration, Duration.zero);
-      // Completed artwork under the canvas layout scope needs one build frame,
-      // without advancing animation time.
       for (var frame = 0; frame < 4; frame++) {
         await tester.pump();
       }

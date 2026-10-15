@@ -1,7 +1,5 @@
 import 'package:flutter/services.dart';
 
-/// Recognizes Shell route chords without deciding when a caller handles them.
-/// Shell accepts initial presses; Player also lets matching repeats propagate.
 int? navigationShortcutIndex(LogicalKeyboardKey key) {
   if (!HardwareKeyboard.instance.isControlPressed) return null;
   return switch (key) {

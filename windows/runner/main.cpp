@@ -30,19 +30,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return EXIT_SUCCESS;
   }
 
-  // Attach to console when present (e.g., 'flutter run') or create a
-  // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
   }
 
-  // Initialize COM, so that it is available for use in the library and/or
-  // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-  // The pinned Lineup engine patch consumes this opt-in before creating the
-  // Flutter view's ANGLE surface. Clear the proof marker so a stock engine or
-  // failed DirectComposition surface cannot silently masquerade as supported.
   ::SetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE", nullptr);
   ::SetEnvironmentVariableW(L"FLUTTER_WINDOWS_DCOMP", L"1");
 

@@ -22,6 +22,34 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'shutdown observes delayed native failure without leaking details',
+    (tester) async {
+      final controller = _FakeController(
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
+      final player = _DelayedDisposalPlayer();
+      await tester.pumpWidget(
+        LineupBootstrap(player: player, controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(player.disposed, isTrue);
+      expect(tester.takeException(), isNull);
+      player.finishDisposal.completeError(
+        StateError('https://private.test/media?X-Plex-Token=secret-sentinel'),
+      );
+      await tester.pump();
+
+      final failure = tester.takeException();
+      expect(failure, isA<StateError>());
+      expect(failure.toString(), contains('Native player shutdown failed'));
+      expect(failure.toString(), isNot(contains('secret-sentinel')));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('position-only player events do not rebuild the Guide route', (
     tester,
   ) async {
@@ -753,8 +781,6 @@ void main() {
     expect(find.byKey(const Key('profile-pin-error')), findsOneWidget);
     expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
 
-    // Successful sign-out retires the picker origin. A fresh first-run PIN
-    // returns to Profiles rather than offering the old Account destination.
     controller
       ..fixtureActor.cancelProfilePicker()
       ..fixtureActor.present(LineupPresentation(stage: SetupStage.welcome))
@@ -2156,6 +2182,16 @@ class _FakePlayer implements NativePlayer {
   @override
   Future<void> dispose() async {
     disposed = true;
+  }
+}
+
+class _DelayedDisposalPlayer extends _FakePlayer {
+  final finishDisposal = Completer<void>();
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+    await finishDisposal.future;
   }
 }
 

@@ -68,8 +68,6 @@ List<ChannelProposal> buildChannelProposals({
 }) {
   final proposals = <ChannelProposal>[];
   final sourceLibraries = libraries.toList();
-  // Each media item is classified at most once per build, even when it belongs
-  // to many tags. No full content list is materialized for an individual proposal.
   final blockInclusion = <PlexMediaItem, bool>{};
   bool includedWithoutSpecials(PlexMediaItem item) =>
       blockInclusion.putIfAbsent(
@@ -115,8 +113,6 @@ List<ChannelProposal> buildChannelProposals({
       final counts = <String, int>{};
       final playableCounts = <String, int>{};
       final blockCounts = <String, int>{};
-      // Library resolution filters before deduplicating by ID: a repeated item
-      // can belong to a different tag, but counts once within each tag source.
       final seenPlayableByTag = <String, Set<String>>{};
       final seriesByTag = <String, Set<String>>{};
       for (final item in items.where((item) => item.libraryId == library.id)) {
@@ -129,8 +125,6 @@ List<ChannelProposal> buildChannelProposals({
               ? canonicalFilterIdentity(LibraryFilter.actor, label)
               : label;
           selectedTags.putIfAbsent(tag, () => label);
-          // People filters canonicalize names; other source filters match their
-          // supplied tag exactly, including any surrounding whitespace.
           if (requiresSeriesBreadth || value == tag) matchingTags.add(tag);
           tagLabels.update(
             tag,
@@ -246,8 +240,6 @@ List<ChannelProposal> buildChannelProposals({
   if (strategies.contains(BuilderStrategy.playlists)) {
     for (final playlist in playlists) {
       if (playlist.items.length < minimumItems) continue;
-      // Playlist occurrences are intentional; unlike library sources, repeated
-      // IDs remain distinct programs in the resolved schedule.
       final counts = contentCounts(playlist.items);
       proposals.add(
         ChannelProposal(
@@ -534,8 +526,6 @@ ChannelPlanAllocation materializeChannelPlan({
     final channel = materialize(entry);
     if (channel == null) {
       numberLimitExcluded++;
-      // A merge can still match an existing extra for this source even when
-      // its original cannot receive a new channel number.
       expansionOriginals.add(entry);
       continue;
     }

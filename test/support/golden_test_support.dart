@@ -4,6 +4,16 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 Future<void> loadPinnedTestFonts() async {
+  const pinnedRobotoAliases = ['Roboto', '.AppleSystemUIFont', 'Arial'];
+  const pinnedRobotoFiles = [
+    'Roboto-Regular.ttf',
+    'Roboto-Medium.ttf',
+    'Roboto-Bold.ttf',
+  ];
+  const requiredMaterialFiles = [
+    ...pinnedRobotoFiles,
+    'MaterialIcons-Regular.otf',
+  ];
   var flutterRoot = File(Platform.resolvedExecutable).parent;
   while (flutterRoot.parent.path != flutterRoot.path &&
       !File(
@@ -18,26 +28,14 @@ Future<void> loadPinnedTestFonts() async {
       'Pinned Flutter material-fonts directory is missing: $fontDirectory',
     );
   }
-  final requiredFonts = [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-    'MaterialIcons-Regular.otf',
-  ];
-  for (final filename in requiredFonts) {
+  for (final filename in requiredMaterialFiles) {
     if (!File('$fontDirectory/$filename').existsSync()) {
       throw StateError('Pinned Flutter test font is missing: $filename');
     }
   }
-  // Golden tests map platform family names to pinned Roboto; this Arial alias
-  // is a deterministic test surrogate, not physical Arial evidence.
-  for (final family in ['Roboto', '.AppleSystemUIFont', 'Arial']) {
+  for (final family in pinnedRobotoAliases) {
     final loader = FontLoader(family);
-    for (final file in [
-      'Roboto-Regular.ttf',
-      'Roboto-Medium.ttf',
-      'Roboto-Bold.ttf',
-    ]) {
+    for (final file in pinnedRobotoFiles) {
       loader.addFont(
         File('$fontDirectory/$file').readAsBytes().then(ByteData.sublistView),
       );

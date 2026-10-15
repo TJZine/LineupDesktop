@@ -10,8 +10,6 @@ import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 
-/// Session-only support information. Event reading is deliberately decoupled
-/// from the live summary so new events cannot move an expanded event or focus.
 class DiagnosticsView extends StatefulWidget {
   const DiagnosticsView({
     required this.controller,
@@ -674,7 +672,6 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     ),
   );
 
-  // Use a local 24-hour clock with seconds so closely spaced events remain distinct.
   String _eventTime(DateTime time) {
     final local = time.toLocal();
     return [

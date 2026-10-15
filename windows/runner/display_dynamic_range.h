@@ -60,8 +60,7 @@ struct DisplayOwnership {
   DisplayState verified = DisplayState::unknown;
   DisplayState attempted = DisplayState::unknown;
 };
-// One link per owned target. Each operation includes an acknowledgment and
-// bounded IPC wait; Arm must return within two seconds. Durable safe resolution
+// One link per owned target. Arm must return within two seconds. Durable safe resolution
 // makes disarm authoritative even when the helper acknowledgment is lost.
 class DisplayGuardianLink {
  public:
@@ -100,7 +99,6 @@ struct DisplayReport {
   const char* active_color_mode = "unknown";
 };
 
-// Worker-confined policy, also exercised directly by deterministic CTest.
 class DisplayMatchingEngine {
  public:
   using Reporter = std::function<void(const DisplayReport&)>;
@@ -132,7 +130,16 @@ class DisplayMatchingEngine {
   Record* Find(DisplayTarget target);
   void Start();
   void Reconcile();
-  bool Write(Record& record, DisplayState desired, bool restore);
+  enum class WritePurpose { matching, restoration };
+  struct WriteObservation {
+    bool accepted = false;
+    bool verified = false;
+  };
+  bool Write(Record& record, DisplayState desired, WritePurpose purpose);
+  WriteObservation WriteAndObserve(Record& record, DisplayState desired);
+  bool RetainForRestartOnTarget(DisplayTarget target);
+  bool RetainForAnyRestart();
+  void RestartForTargetChange(std::optional<DisplayTarget> target);
   void Release(Record& record);
   void Suspend(Record& record);
   void Report(Record* record, const char* outcome, bool wrote,
@@ -192,5 +199,5 @@ class DisplayDynamicRange {
   std::atomic<bool> finished_{false};
   std::thread worker_;
 };
-}  // namespace lineup
+}
 #endif

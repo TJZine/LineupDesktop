@@ -648,7 +648,6 @@ class Channel {
   }
 }
 
-/// Validates a complete channel collection in one pass.
 void validateChannels(Iterable<Channel> channels) {
   final channelIds = <String>{};
   final channelIdByNumber = <int, String>{};

@@ -3,9 +3,6 @@ import '../plex/plex_models.dart';
 
 enum StudioSourceChoice { library, playlist, filter, handPicked }
 
-/// The editable programming and schedule identity of one Studio session.
-/// Text controllers, inventory discovery and pending picker choices belong to
-/// the view; persistence and conflict detection belong to the controller.
 class ChannelStudioDraft {
   ChannelStudioDraft({
     required this.id,
@@ -154,7 +151,6 @@ class ChannelStudioDraft {
     required List<ChannelItem> manualItems,
   }) => {
     'name': name.trim(),
-    // Invalid raw edits remain distinct even though preview needs a safe number.
     'number': int.tryParse(number) ?? number.trim(),
     'source': _sourceIdentity(libraries, manualItems),
     'playbackMode': playbackMode.name,

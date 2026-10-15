@@ -31,7 +31,6 @@ final _tinyPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
   'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 );
-// Synthetic 3:1 title artwork and a 20x1200 image that fits too narrowly.
 final _wideLogoPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAAAAAA+i0toAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC',
 );
@@ -131,7 +130,6 @@ void main() {
           _drawnRect(tester, find.text('1')).left,
           closeTo(controls.left, .001),
         );
-        // Scrollbar updates use ScrollPosition.jumpTo, not ScrollController.jumpTo.
         position().jumpTo(row * 2.4);
         await tester.pumpAndSettle();
         expect(position().pixels, closeTo(row * 2, .000001));
@@ -145,7 +143,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(position().pixels, closeTo(row * 3, .000001));
         expectSnapped();
-        // Drag the actual desktop thumb from the first row.
         position().jumpTo(0);
         await tester.pumpAndSettle();
         await tester.dragFrom(
@@ -269,9 +266,6 @@ void main() {
     'Guide PiP preserves pre-full-bleed dimensions and native alignment across the matrix',
     (tester) async {
       addTearDown(tester.view.reset);
-      // Frozen drawn dimensions measured from the retained pre-B production
-      // Guide widget with the same canvas, theme and text scale. This protects
-      // the approved aperture size independently of the current layout policy.
       for (final (size, textScale, expectedPicture, expectedInformationHeight)
           in const [
             (Size(1280.0, 720.0), 1.0, Size(296.967111, 167.044), 167.036),
@@ -289,7 +283,6 @@ void main() {
           final lineup = _Lineup(20);
           final guide = GuideController(
             lineup: lineup,
-            // Match the non-midnight reference clock used for the frozen measurements.
             clock: () => DateTime.utc(2026, 1, 15, 3, 17),
             loadSchedule: (c) async => _schedule(c),
           );
@@ -591,8 +584,6 @@ void main() {
         final paragraph = tester.renderObject<RenderParagraph>(finder);
         final text = paragraph.text.toPlainText();
         final lines = <double, String>{};
-        // Inspect actual glyph positions, including soft line breaks. The test
-        // font forces wrapping inside both paragraphs at this allocation.
         for (var offset = 0; offset < text.length; offset++) {
           final character = text.substring(offset, offset + 1);
           if (character.trim().isEmpty) continue;
@@ -2776,7 +2767,6 @@ void main() {
         expect(find.byType(SnackBar), findsNothing);
         expect(guide.guideHours, 2);
         expect(tester.takeException(), isNull);
-        // The persistent shell messenger still works after the Guide scope leaves.
         shellMessenger.currentState!.showSnackBar(
           const SnackBar(content: Text('Shell feedback')),
         );
@@ -3188,7 +3178,6 @@ void main() {
       expect(closes, beforeSearchEscape);
       expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
 
-      // Pointer inspection stays local; keyboard focus belongs to the grid.
       final program = guide.currentProgram(ready.id)!;
       await tester.tap(find.byKey(ValueKey(program.id)));
       await tester.pumpAndSettle();
@@ -3278,7 +3267,6 @@ void main() {
       await tester.pump();
       expect(guide.channels.single.id, 'channel-1');
 
-      // Editing values model an IME/caret update without platform IME acceptance.
       const editing = TextEditingValue(
         text: 'ChAnnel 0 ',
         selection: TextSelection(baseOffset: 2, extentOffset: 5),
@@ -3292,9 +3280,7 @@ void main() {
       lineup.notifyListeners();
       await tester.pumpAndSettle();
       expect(editor.value, editing);
-      guide.setSearchQuery(
-        'CHANNEL 0',
-      ); // Same normalized query remains a no-op.
+      guide.setSearchQuery('CHANNEL 0');
       await tester.pump();
       expect(editor.value, editing);
       guide.setSearchQuery('CHANNEL 1');
@@ -3681,7 +3667,6 @@ void main() {
     expect(guide.focusedChannelId, 'channel-1');
     expect(tester.widget<Text>(context).data, contains('Channel 0'));
 
-    // Remembering a channel is not evidence of current playback.
     await tester.pumpWidget(
       MaterialApp(
         builder: LineupCanvas.builder,

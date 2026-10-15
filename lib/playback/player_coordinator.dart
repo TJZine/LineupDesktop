@@ -281,8 +281,6 @@ class PlayerCoordinator extends ChangeNotifier {
     _busyIdentity = null;
   }
 
-  // All status publication passes here, including native events and tune/scope
-  // changes. Restart the delay only when the actual busy operation changes.
   @override
   void notifyListeners() {
     if (_disposed) return;
@@ -341,7 +339,6 @@ class PlayerCoordinator extends ChangeNotifier {
     );
   }
 
-  // Native position remains exact; only its UI publication is bucketed.
   Object get _eventVisibleFacts => (
     (
       _status.state,
@@ -494,8 +491,6 @@ class PlayerCoordinator extends ChangeNotifier {
               load.target ?? _nativePosition,
               Future.sync(recover),
             );
-            // A settled load has no caller waiting for its recovery. Pending
-            // loads instead settle through their shared part operation.
             if (!load.pending) {
               unawaited(_settleActiveAuthorization(recovery));
             }
@@ -585,8 +580,6 @@ class PlayerCoordinator extends ChangeNotifier {
               (playback == null
                   ? null
                   : playback.parts[load.partIndex].duration);
-          // Readiness clears the pending target after seeking. Until time-pos
-          // arrives, retain the live join's start as progress evidence.
           final position = load.lastPositivePosition > Duration.zero
               ? load.lastPositivePosition
               : load.startTarget ?? Duration.zero;
@@ -616,8 +609,6 @@ class PlayerCoordinator extends ChangeNotifier {
           break;
       }
     }
-    // Preserve the first readiness event itself, then let later state changes
-    // use the same presentation policy as a manually tuned program.
     if (_preservePresentation &&
         load != null &&
         (event.status.state == PlayerState.ready ||
@@ -637,9 +628,6 @@ class PlayerCoordinator extends ChangeNotifier {
     if (endedProgram == null) _clearTransientStatus();
     _resolvingProgram = null;
     final generation = ++_tuneGeneration;
-    // Automatic continuation changes media, not the user's current presentation.
-    // Keep this identity through the first readiness event; never restore a
-    // snapshot that could overwrite an overlay opened or closed during loading.
     _continuationGeneration = endedProgram == null ? null : generation;
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
@@ -732,7 +720,6 @@ class PlayerCoordinator extends ChangeNotifier {
         program = successor;
         fromBeginning = true;
       }
-      // A stale or incomplete schedule must never replay the item that ended.
       if (program.id == endedProgram.id) {
         _tuning = false;
         _retireEndedPlayback();
@@ -870,7 +857,6 @@ class PlayerCoordinator extends ChangeNotifier {
       authorizationRetried: authorizationRetried,
     );
     _activeLoad = load;
-    // Initial local media also supplies intent before dispatch.
     _displayMatching.cancelLoad();
     _updateDisplaySession();
     final startPaused = _displayMatching.beginLoad(load.generation, target);
@@ -967,8 +953,6 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       if (!_ownsLoad(load)) return null;
       if (failure != null) throw failure;
-      // New seek intents update this load's target while readiness or a seek
-      // is pending. Only this operation applies it, including retry loads.
       while (load.target != null) {
         final target = load.target!;
         if (_nativePosition != target) {
@@ -1200,9 +1184,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (nativeStop != null) {
       try {
         await nativeStop;
-      } catch (_) {
-        // The transition failure remains the useful error.
-      }
+      } catch (_) {}
     }
     if (_disposed || tuneGeneration != _tuneGeneration) return;
     _recordPlaybackFailure(error);
@@ -1504,8 +1486,6 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void showSleepTimer() {
-    // The picker belongs to the OSD presentation. Keep the mounted OSD (and
-    // its presentation generation) stable when it is opened from the OSD.
     if (_overlay != PlayerOverlay.osd) {
       _setOverlay(PlayerOverlay.osd, timed: false);
     } else {
@@ -1937,9 +1917,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (stop == null) return;
     try {
       await stop;
-    } catch (_) {
-      // The original tune failure remains the useful error.
-    }
+    } catch (_) {}
   }
 
   Future<void>? _beginNativeStop({bool force = false}) {
@@ -2023,7 +2001,8 @@ class PlayerCoordinator extends ChangeNotifier {
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
     _displayMatching.dispose();
-    _displaySubscription?.cancel();
+    unawaited(_cancelPlayerSubscription(_displaySubscription));
+    _displaySubscription = null;
     ++_tuneGeneration;
     ++_controlGeneration;
     ++_sleepEpoch;
@@ -2031,7 +2010,8 @@ class PlayerCoordinator extends ChangeNotifier {
     _tuning = false;
     lineup.removeListener(_lineupChanged);
     guide.removeListener(_guideChanged);
-    _subscription?.cancel();
+    unawaited(_cancelPlayerSubscription(_subscription));
+    _subscription = null;
     _cancelOverlayTimer();
     _sleepTimer?.cancel();
     _cursorTimer?.cancel();
@@ -2042,10 +2022,24 @@ class PlayerCoordinator extends ChangeNotifier {
     unawaited(fullscreenReset.catchError((_) {}));
     super.dispose();
   }
+
+  Future<void> _cancelPlayerSubscription(
+    StreamSubscription<Object?>? subscription,
+  ) async {
+    try {
+      await subscription?.cancel();
+    } catch (_) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: StateError('Native player subscription cleanup failed.'),
+          library: 'Lineup Desktop',
+          context: ErrorDescription('while cancelling native player events'),
+        ),
+      );
+    }
+  }
 }
 
-// The native identity, logical part, readiness, and mutable target travel
-// together. Tune, seek intent, and track confirmation retain separate identities.
 class _PlaybackLoad {
   _PlaybackLoad({
     required this.generation,

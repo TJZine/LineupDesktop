@@ -228,8 +228,6 @@ void main() {
       final build = worker.build(_channel);
       await spawned.future;
       await handshakeGate.timeout(const Duration(seconds: 1));
-      // Let the completed spawn future run its production continuation so
-      // disposal exercises the stored isolate, not only late-spawn cleanup.
       await Future<void>.delayed(Duration.zero);
       worker.dispose();
       worker.dispose();

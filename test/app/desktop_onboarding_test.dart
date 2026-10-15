@@ -722,6 +722,60 @@ void main() {
     expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
   });
 
+  testWidgets('unexpected PIN submission failure restores focus and retry', (
+    tester,
+  ) async {
+    final controller = _PinController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'profile', name: 'Test Profile', protected: true),
+        ],
+      ),
+    )..throwOnSubmit = true;
+    addTearDown(controller.dispose);
+    await show(tester, controller);
+    await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
+    await tester.pumpAndSettle();
+    for (final key in [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
+    await tester.pumpAndSettle();
+    expect(controller.submitted, ['1234']);
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text('The profile could not be selected. Try again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('private failure'), findsNothing);
+    expect(find.textContaining('1234'), findsNothing);
+    expect(find.bySemanticsLabel('Checking PIN'), findsNothing);
+    expect(find.bySemanticsLabel('0 of 4 digits entered'), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Profile PIN digit 1',
+    );
+
+    controller.throwOnSubmit = false;
+    for (final key in [
+      LogicalKeyboardKey.digit4,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit1,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
+    await tester.pumpAndSettle();
+    expect(controller.submitted, ['1234', '4321']);
+    expect(find.text('Incorrect PIN. Try again.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('server action semantics follow pending and error state', (
     tester,
   ) async {
@@ -982,14 +1036,11 @@ void main() {
           findsOneWidget,
         );
 
-        // The first pass uses profile Back and then the server Escape path.
         await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pump();
         expect(controller.stage, origin.stage);
         expect(controller.serverSelectionCanCancel, isFalse);
 
-        // Re-enter the same nested picker to cover profile Escape and the
-        // subsequent server Back path independently.
         controller
           ..fixtureActor.serverSelected(server)
           ..fixtureActor.present(LineupPresentation(stage: origin.stage))
@@ -1134,7 +1185,6 @@ void main() {
     await tester.pump();
     expect(controller.stage, SetupStage.profiles);
 
-    // A profile picker reached directly during linking has no origin.
     expect(controller.profileSelectionCanCancel, isFalse);
   });
 
@@ -1303,9 +1353,12 @@ class _PinController extends FixtureController {
   _PinController({super.scenario});
 
   final submitted = <String>[];
+  bool throwOnSubmit = false;
+
   @override
   Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
     submitted.add(pin ?? '');
+    if (throwOnSubmit) throw StateError('private failure: $pin');
     fixtureActor.present(
       LineupPresentation(error: ('Incorrect PIN. Try again.',)),
     );

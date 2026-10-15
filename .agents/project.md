@@ -151,14 +151,19 @@ obligation to retained evidence.
 | Interaction/accessibility | Affected widget tests; `test/support/ui_fixture.dart` | Focus, semantics, layout; physical Windows input/assistive technology remain separate when claimed |
 | Guide alpha | `test/app/guide_opacity_test.dart` on macOS | Required exact alpha behavior for the relevant Guide surface |
 | Visual comparisons | `tool/visual/`, `test/support/golden_test_support.dart` | Optional explicit visual suites; inspect their host restrictions |
-| Native encoding | `windows/runner/track_list_encoder_test.cpp` | Real encoder contract; opt-in CTest, not app or presentation proof |
+| Native encoding | `windows/runner/track_list_encoder_test.cpp` | Real encoder contract; explicitly selected Windows CI CTest, not app or presentation proof |
+| Native state/display contracts | `windows/runner/native_playback_state_test.cpp`, `display_dynamic_range_test.cpp`, `display_guardian_test.cpp` | Explicitly selected Windows CI CTests; controlled display inputs and real guardian process fixtures, not physical media or HDR proof |
 | Authenticated references | `windows/runner/authenticated_reference_test.cpp`, `tool/windows/authenticated-reference-test.py` | Production initialization/load path against the prepared DLL with synthetic HTTPS; no physical Plex or presentation claim |
 | Windows runtime/package | [Physical acceptance](../docs/windows-native-validation.md) | Record exact candidate, build/runtime identities, platform, display, scenario and result |
 
 At the inspected revision, `test_driver/ui_harness.dart` is synthetic and
 `test/app/product_spine_test.dart` uses fake Plex/native boundaries. CI does
-not launch a real application E2E campaign. Neither native CTest is in the
-default build or CI. Report their absence from a run accurately.
+not launch a real application E2E campaign. Native CTest targets remain
+excluded from the default application build. Windows CI explicitly builds and
+runs the encoder, playback-state, display-controller, and guardian suites after
+the stock-engine application build. Player-contract, runner-lifecycle, and
+authenticated-reference CTests remain separate explicit checks outside CI.
+Report the suites actually executed and their limits accurately.
 
 ### Commands and prerequisites
 
@@ -203,7 +208,7 @@ Native commands have additional prerequisites; consult
   and selects the intended engine.
 - `pwsh -File ./tool/windows/verify-release-policy.ps1` checks package policy
   on a supported PowerShell host; it does not execute the Windows package.
-- Native encoder and authenticated-reference CTest build/run commands are in
+- Native contract and authenticated-reference CTest build/run commands are in
   [current test tiers](../docs/DEVELOPMENT.md#current-test-tiers-and-gaps).
   Select these for relevant changes rather than running them for every edit.
 - Release builds use `tool/windows/build-release.ps1` and

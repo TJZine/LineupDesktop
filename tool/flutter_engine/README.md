@@ -35,5 +35,5 @@ https://github.com/edde746/flutter-plezy/tree/e721699fd4857afcd5a3414dccc55edc24
 
 The unchanged patch logic was contextually checked against Flutter 3.47.6
 framework `5fc346839b5d0eef006ed8404392afb4dfae428d` and engine
-`692136cb6582dbfc5af3fb33c2515a069f2f66d0`; only the identity marker and
-metadata were refreshed.
+`692136cb6582dbfc5af3fb33c2515a069f2f66d0`. The identity marker retains that
+engine revision; integrity metadata covers the comment-pruned patch and source.

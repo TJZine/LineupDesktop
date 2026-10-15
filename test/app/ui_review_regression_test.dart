@@ -853,7 +853,6 @@ void main() {
 
     controller.finishApply();
     await tester.pump();
-    // Completion and its action are available while the backdrop coasts to rest.
     expect(find.text('Your lineup is ready'), findsOneWidget);
     expect(find.text('View lineup'), findsOneWidget);
     await tester.pumpAndSettle();

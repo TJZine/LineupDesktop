@@ -104,8 +104,6 @@ class LineupSettings {
     'matchDisplayHdr': matchDisplayHdr,
     'nowWatchingBanner': nowWatchingBanner,
     'osdAutoHideSeconds': osdAutoHideSeconds,
-    // Retain the legacy canonical key so existing settings continue to load.
-    // It no longer gates onboarding and must not seed future passthrough state.
     'audioSetupComplete': true,
     'reduceMotion': reduceMotion,
     'largeFocusIndicators': largeFocusIndicators,
@@ -206,7 +204,6 @@ class LineupSettings {
     if (json.containsKey('libraryTabsEnabled')) {
       boolean('libraryTabsEnabled');
     }
-    // Validate and discard retired fields and the onboarding flag.
     boolean('audioSetupComplete');
     final persistedGuideHours = option('guideHours', [
       ...guideHoursOptions,

@@ -81,10 +81,8 @@ inline bool Has(const Map& map, const char* key, const Value& expected) {
   const auto* value = Find(map, key);
   return value && *value == expected;
 }
-}  // namespace native_test
+}
 
-// This friend seam does not run in the app. Transitions and platform messages
-// enter production code; field inspection observes order after synchronization.
 struct NativePlayerTestAccess {
   static lineup::NativePlaybackState& State(WindowsNativePlayer& player) {
     return player.playback_;
@@ -121,7 +119,11 @@ struct NativePlayerTestAccess {
     player.HandleMethodCall(flutter::MethodCall<native_test::Value>(
         method, std::make_unique<native_test::Value>(std::move(arguments))), std::move(result));
   }
-  static void OpenCommandClient(WindowsNativePlayer& player) {
+  static void OpenWorkerlessCommandClient(WindowsNativePlayer& player) {
+    native_test::Check(!player.event_thread_.joinable() &&
+                       player.worker_finished_.load(), "workerless command fixture");
+    native_test::Check(player.mpv_ == nullptr && !player.accepting_commands_,
+                       "OpenWorkerlessCommandClient client state");
     player.mpv_ = mpv_create();
     native_test::Check(player.mpv_ != nullptr, "command fixture client");
     native_test::Check(mpv_set_option_string(player.mpv_, "vo", "null") >= 0 &&
@@ -131,7 +133,11 @@ struct NativePlayerTestAccess {
                        mpv_initialize(player.mpv_) >= 0, "command fixture initialization");
     player.accepting_commands_ = true;
   }
-  static void CloseCommandClient(WindowsNativePlayer& player) {
+  static void CloseWorkerlessCommandClient(WindowsNativePlayer& player) {
+    native_test::Check(!player.event_thread_.joinable() &&
+                       player.worker_finished_.load(), "workerless command fixture");
+    native_test::Check(player.mpv_ != nullptr,
+                       "CloseWorkerlessCommandClient client state");
     player.accepting_commands_ = false;
     player.commands_.clear();
     player.queued_command_bytes_ = 0;
@@ -139,8 +145,11 @@ struct NativePlayerTestAccess {
     player.mpv_ = nullptr;
     player.playback_.Reset();
   }
-  static void RunQueued(WindowsNativePlayer& player) {
-    // Only used in the fixture with no worker: real parser/queue/dispatch/mpv.
+  static void DrainCommandsSynchronously(WindowsNativePlayer& player) {
+    native_test::Check(!player.event_thread_.joinable() &&
+                       player.worker_finished_.load(), "workerless command fixture");
+    native_test::Check(player.mpv_ != nullptr,
+                       "DrainCommandsSynchronously client state");
     while (!player.commands_.empty()) {
       auto command = std::move(player.commands_.front());
       player.commands_.pop_front();
@@ -149,4 +158,4 @@ struct NativePlayerTestAccess {
     player.queued_command_bytes_ = 0;
   }
 };
-#endif  // RUNNER_NATIVE_PLAYER_TEST_SUPPORT_H_
+#endif

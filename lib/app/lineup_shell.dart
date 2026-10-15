@@ -104,7 +104,6 @@ class _LineupShellState extends State<LineupShell> {
     _player.status.message,
     _player.currentChannel?.id,
     _player.currentProgram?.scheduled.item.title,
-    // Only Diagnostics consumes telemetry at the shell boundary.
     _selectedIndex == 3 ? _player.telemetry : null,
     _selectedIndex == 3 ? _player.displayReport : null,
   );
@@ -184,7 +183,6 @@ class _LineupShellState extends State<LineupShell> {
         } else if (index != 2 && index != 3) {
           _settingsReturnIndex = null;
         }
-        // Direct Diagnostics entry still has a real Settings origin.
         if (index == 3 && _settingsReturnIndex == null) {
           _settingsReturnIndex = _selectedIndex == 4
               ? 4
@@ -242,8 +240,6 @@ class _LineupShellState extends State<LineupShell> {
       return;
     }
     _player.showNowPlaying();
-    // Same-route menu dismissal restores its invoker on the next frame.
-    // Transfer focus to Player afterwards, not to the now-hidden OSD button.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted &&
           widget.controller.stage == SetupStage.ready &&

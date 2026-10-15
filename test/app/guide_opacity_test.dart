@@ -108,8 +108,6 @@ Future<void> _expectClassicOpacity(
     final right = allowed.right.floor() - 2;
     final top = allowed.top.ceil() + 1;
     final bottom = allowed.bottom.floor() - 2;
-    // The aperture is flush with the window on the left: those corners reveal
-    // video all the way to the edge. Only the interior right corners are masked.
     expect(alphaAt(left, top), 0, reason: 'Square top-left native corner');
     expect(
       alphaAt(left, bottom),

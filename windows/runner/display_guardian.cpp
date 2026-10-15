@@ -33,8 +33,6 @@ bool OptionalState(uint32_t state) {
   return state == static_cast<uint32_t>(DisplayState::unknown) ||
          KnownState(state);
 }
-// Anonymous pipes are synchronous. One tiny record is outstanding at a time,
-// so writes always fit in the empty 4 KiB pipe; reads occur only after Peek.
 template <typename T> bool WriteRecord(HANDLE pipe, const T &record) {
   DWORD written = 0;
   return WriteFile(pipe, &record, sizeof(record), &written, nullptr) &&
@@ -71,21 +69,16 @@ public:
     if (!recovery_ || !recovery_->Register(ownership, identity_))
       return Fail();
     if (!Launch() || !Send(GuardianKind::arm, ownership, deadline)) {
-      // No attempted state or Set yet: this unmutated registration is safe.
       recovery_->Resolve(identity_);
       return Fail();
     }
     return true;
   }
   bool Update(const DisplayOwnership &ownership) override {
-    // Durable intent precedes the helper acknowledgment and every Set.
     return recovery_->Update(identity_, ownership) &&
            Send(GuardianKind::update, ownership);
   }
   bool Disarm() override {
-    // Callers disarm only after verified restoration/external relinquishment.
-    // A dead helper does not prevent explicit safe resolution. Its delayed
-    // recovery checks this identity under the same gate and becomes a no-op.
     if (!recovery_->Resolve(identity_))
       return false;
     if (IsAlive())
@@ -205,7 +198,7 @@ private:
   uint32_t sequence_ = 0;
   bool started_ = false, lost_ = false, disarmed_ = false;
 };
-} // namespace
+}
 int RunDisplayGuardian(HANDLE commands, HANDLE acknowledgments, HANDLE parent,
                        DisplayConfigApi &api,
                        std::shared_ptr<DisplayRecoveryCoordinator> recovery,
@@ -230,8 +223,6 @@ int RunDisplayGuardian(HANDLE commands, HANDLE acknowledgments, HANDLE parent,
       auto ack = session.Accept(record);
       if (!ack)
         break;
-      // The parent has durably recorded arm/update before sending. A disarm
-      // may already have removed it; stale guardians never resurrect a hold.
       if (recovery &&
           record.kind != static_cast<uint32_t>(GuardianKind::disarm) &&
           !recovery->Contains(session.Identity(), *session.Ownership())) {
@@ -248,12 +239,10 @@ int RunDisplayGuardian(HANDLE commands, HANDLE acknowledgments, HANDLE parent,
     }
     const DWORD parent_state = WaitForSingleObject(parent, 10);
     if (parent_state == WAIT_OBJECT_0) {
-      // Consume records already queued before parent exit, including disarm.
       DWORD available = 0;
       if (PeekNamedPipe(commands, nullptr, 0, nullptr, &available, nullptr) &&
           available)
         continue;
-      // A partial record is malformed, even when parent death races EOF.
       if (received)
         session.Malformed();
       else
@@ -381,4 +370,4 @@ std::optional<int> DispatchDisplayGuardian(const wchar_t *command_line) {
   return RunDisplayGuardian(handles[0], handles[1], handles[2], *api,
                             ProductionDisplayRecovery());
 }
-} // namespace lineup
+}

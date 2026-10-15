@@ -233,8 +233,6 @@ class ChannelsViewState extends State<ChannelsView> {
           onTune: (id) async {
             final originatingStudio = _studioKey;
             final success = await widget.player.tune(id);
-            // Leaving Studio retires its navigation continuation, independently
-            // of the playback load which may still succeed on the newer route.
             if (success &&
                 mounted &&
                 _studioOpen &&
@@ -644,8 +642,6 @@ class ChannelsViewState extends State<ChannelsView> {
       textDirection: Directionality.of(context),
       textScaler: textScaler,
     );
-    // Keep two 44px arrows and the compact label on one line while allowing
-    // the active font and accessibility text scale to determine its width.
     final actionWidth = (88 + moveToTextWidth + 40 + 16)
         .clamp(216, 336)
         .toDouble();
@@ -1201,12 +1197,22 @@ class ChannelsViewState extends State<ChannelsView> {
       }
       _activeHealthLoads++;
       _activeHealth[channel.id] = signature;
-      widget.controller
-          .loadScheduleFor(channel)
-          .then(
-            (_) => _finishHealth(channel.id, signature, false, epoch),
-            onError: (_) => _finishHealth(channel.id, signature, true, epoch),
-          );
+      unawaited(_loadHealth(channel, signature, epoch));
+    }
+  }
+
+  Future<void> _loadHealth(
+    Channel channel,
+    _ChannelHealthSignature signature,
+    int epoch,
+  ) async {
+    var issue = false;
+    try {
+      await widget.controller.loadScheduleFor(channel);
+    } catch (_) {
+      issue = true;
+    } finally {
+      _finishHealth(channel.id, signature, issue, epoch);
     }
   }
 

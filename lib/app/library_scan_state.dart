@@ -36,8 +36,6 @@ class LibraryScanFact {
   final int? totalItems;
 }
 
-/// Items and enrichment are independent: a usable item result can still need
-/// a collection retry. Keeping them in one row preserves that relationship.
 class _LibraryScanRow {
   const _LibraryScanRow({
     required this.fact,
@@ -68,8 +66,6 @@ class _LibraryScanRow {
   );
 }
 
-/// A completed staged inventory belongs to a content lifetime. Request epochs
-/// and profile/server identifiers alone cannot protect an A-to-B-to-A return.
 class _ScanReadiness {
   const _ScanReadiness({
     required this.contentScope,
@@ -93,8 +89,6 @@ class _ScanAttempt {
   final bool retry;
 }
 
-/// Owns scan transitions and projections. IO authorization, operation
-/// currentness, durable commits, and runtime publication remain in controller.
 class _LibraryScanState {
   LibraryScanStatus status = LibraryScanStatus.idle;
   Map<String, _LibraryScanRow> rows = const {};
@@ -410,7 +404,6 @@ class _LibraryScanState {
     catalogUnavailable = previous.catalogUnavailable;
     failedPlaylistIds = previous.result.failedPlaylistIds;
     status = previous.result.status;
-    // Restoring usable readiness after an unverified refresh never proves absence.
     discoveryObsolete = true;
   }
 

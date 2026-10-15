@@ -68,7 +68,6 @@ void main() {
       () => sequential([extreme, parsedDuration(9007199254740991, 'second')]),
       invalidDuration,
     );
-    // Individually representable items must not wrap the cumulative duration.
     final long = parsedDuration(5000000000000000);
     expect(sequential([long]).loopDuration, long.duration);
     expect(() => sequential([long, long]), invalidDuration);

@@ -437,10 +437,6 @@ ScheduleWindowResult scheduleWindowResult(
   );
 }
 
-// PMS media IDs identify whole programs, including multipart media. Playlist
-// and mixed sources can intentionally repeat them, so sort occurrences without
-// deduplicating. Duration breaks ties for differing snapshots of the same media;
-// equal ID/duration occurrences are interchangeable for schedule timing.
 List<ChannelItem> _canonicalShuffleInput(List<ChannelItem> content) =>
     List<ChannelItem>.of(content)..sort((left, right) {
       final identity = left.id.compareTo(right.id);

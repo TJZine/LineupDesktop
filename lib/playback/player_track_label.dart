@@ -2,7 +2,6 @@ import 'package:language_code/language_code.dart';
 
 import 'native_player.dart';
 
-/// The complete display contract for one audio or subtitle track.
 class PlayerTrackDisplay {
   PlayerTrackDisplay({
     required this.primaryText,
@@ -19,7 +18,6 @@ class PlayerTrackDisplay {
   final String semanticsText;
 }
 
-/// A view-owned cache shared by compact controls and the track drawer.
 class PlayerTrackDisplayCache {
   PlayerTrackDisplayProjection? _projection;
 
@@ -367,7 +365,6 @@ String _semanticsDescription(_BaseDisplay base, List<String> secondaryFacts) {
     return (language: full, region: null);
   }
   final base = _language(parts.take(parts.length - 1).join('-'));
-  // Unknown tags retain the original label instead of inventing a region.
   if (full == _clean(value) || base == null || full == base) {
     return (language: full, region: null);
   }
@@ -379,7 +376,6 @@ String _semanticsDescription(_BaseDisplay base, List<String> secondaryFacts) {
   return (language: base, region: qualifier);
 }
 
-/// Canonical short video codec policy shared by runtime and Plex facts.
 String? formatPlayerVideoCodec(String? value) {
   final cleaned = _clean(value)?.toLowerCase();
   if (cleaned == null) return null;

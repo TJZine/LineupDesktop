@@ -1,5 +1,6 @@
 #include "native_player.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 #include <cstdlib>
@@ -8,8 +9,6 @@
 namespace {
 bool reject_stop = false;
 
-// Control only the DLL responses consumed by RunCommand. No fixture assigns
-// native correlation state: production must transfer the parsed load identity.
 struct LoadOutcome {
   std::string uri;
   int command_status;
@@ -60,24 +59,21 @@ void TestDestroy(mpv_handle* client) {
   mpv_terminate_destroy(client);
   ++destroyed_clients;
 }
-}  // namespace
+}
 
-// Like the authenticated-reference harness, compile the real owner. Only the
-// bounded load command/query responses, stop rejection and track/teardown
-// observations intercept DLL calls. The lifecycle cases use the real DLL.
-#define mpv_get_property TestGetProperty
-#define mpv_set_property TestSetProperty
-#define mpv_command TestCommand
-#define mpv_terminate_destroy TestDestroy
-#include "native_player.cpp"
-#undef mpv_get_property
-#undef mpv_set_property
-#undef mpv_command
-#undef mpv_terminate_destroy
 
 #include "native_player_test_support.h"
 
 namespace {
+WindowsNativePlayer::MpvOperations TestOperations() {
+  WindowsNativePlayer::MpvOperations operations;
+  operations.get_property = TestGetProperty;
+  operations.set_property = TestSetProperty;
+  operations.command = TestCommand;
+  operations.terminate_destroy = TestDestroy;
+  return operations;
+}
+
 using native_test::Check;
 using native_test::Has;
 using native_test::Map;
@@ -153,7 +149,7 @@ void ParsedLoad(WindowsNativePlayer& player, native_test::Messenger& messenger,
   messenger.Call("load", queued, {{Value("uri"), Value(uri)},
                                   {Value("loadId"), Value(load_id)}});
   Check(queued.successes == 1 && queued.errors == 0, "parsed load accepted into command queue");
-  NativePlayerTestAccess::RunQueued(player);
+  NativePlayerTestAccess::DrainCommandsSynchronously(player);
   Check(controlled_load->command_calls == 1, "RunCommand executes parsed load URI");
   Check(controlled_load->playlist_queries == (command_status >= 0 ? 1 : 0),
         "successful load queries playlist identity; failed load does not");
@@ -161,7 +157,7 @@ void ParsedLoad(WindowsNativePlayer& player, native_test::Messenger& messenger,
 }
 
 void CorrelationAndPressure(WindowsNativePlayer& player, native_test::Messenger& messenger) {
-  NativePlayerTestAccess::OpenCommandClient(player);
+  NativePlayerTestAccess::OpenWorkerlessCommandClient(player);
   const auto& state = NativePlayerTestAccess::State(player);
   ParsedLoad(player, messenger, 11, 101);
   Start(player, 101);
@@ -201,8 +197,8 @@ void CorrelationAndPressure(WindowsNativePlayer& player, native_test::Messenger&
         Has(messenger.events[1], "loadId", Value(int64_t{12})) &&
         Has(messenger.events[2], "loadId", Value(int64_t{12})),
         "late old START/property retain old identity for Dart rejection");
-  NativePlayerTestAccess::CloseCommandClient(player);
-  NativePlayerTestAccess::OpenCommandClient(player);
+  NativePlayerTestAccess::CloseWorkerlessCommandClient(player);
+  NativePlayerTestAccess::OpenWorkerlessCommandClient(player);
   messenger.events.clear();
   ParsedLoad(player, messenger, 21, std::nullopt);
   ParsedLoad(player, messenger, 22, std::nullopt);
@@ -238,8 +234,8 @@ void CorrelationAndPressure(WindowsNativePlayer& player, native_test::Messenger&
         Has(messenger.events[0], "failureCode", Value("correlation_error")) &&
         Has(messenger.events[0], "loadId", Value(int64_t{22})),
         "actual redirect overflow produces correlated failure");
-  NativePlayerTestAccess::CloseCommandClient(player);
-  NativePlayerTestAccess::OpenCommandClient(player);
+  NativePlayerTestAccess::CloseWorkerlessCommandClient(player);
+  NativePlayerTestAccess::OpenWorkerlessCommandClient(player);
   messenger.events.clear();
   ParsedLoad(player, messenger, 41, 401);
   Start(player, 401);
@@ -263,7 +259,7 @@ void CorrelationAndPressure(WindowsNativePlayer& player, native_test::Messenger&
         Has(messenger.events[1], "failureCode", Value("http_error")) &&
         Has(messenger.events[1], "httpStatus", Value(int64_t{401})),
         "failed replacement preserves observed predecessor property and detailed END failure");
-  NativePlayerTestAccess::CloseCommandClient(player);
+  NativePlayerTestAccess::CloseWorkerlessCommandClient(player);
   messenger.events.clear();
   const auto generation = NativePlayerTestAccess::Generation(player);
   NativePlayerTestAccess::Queue(player, generation + 1, {{Value("type"), Value("state")}});
@@ -307,14 +303,14 @@ void CorrelationAndPressure(WindowsNativePlayer& player, native_test::Messenger&
 }
 
 void Commands(WindowsNativePlayer& player, native_test::Messenger& messenger) {
-  NativePlayerTestAccess::OpenCommandClient(player);
+  NativePlayerTestAccess::OpenWorkerlessCommandClient(player);
   Reply queued;
   for (int i = 0; i < 64; ++i) messenger.Call("pause", queued);
   Check(queued.successes == 64, "command count capacity");
   Reply full;
   messenger.Call("play", full);
   Check(full.errors == 1, "command count bound rejects overflow");
-  NativePlayerTestAccess::RunQueued(player);
+  NativePlayerTestAccess::DrainCommandsSynchronously(player);
   Reply bytes;
   const Map load{{Value("uri"), Value(std::string(32768, 'x'))},
                  {Value("loadId"), Value(int64_t{3})}};
@@ -322,16 +318,15 @@ void Commands(WindowsNativePlayer& player, native_test::Messenger& messenger) {
   Reply byte_full;
   messenger.Call("load", byte_full, load);
   Check(bytes.successes == 4 && byte_full.errors == 1, "command byte bound");
-  // Clear the pending synthetic URIs; no network or private fixture is loaded.
-  NativePlayerTestAccess::CloseCommandClient(player);
-  NativePlayerTestAccess::OpenCommandClient(player);
+  NativePlayerTestAccess::CloseWorkerlessCommandClient(player);
+  NativePlayerTestAccess::OpenWorkerlessCommandClient(player);
   NativePlayerTestAccess::State(player).AcceptLoad(11, 101);
   const Map track{{Value("type"), Value("audio")}, {Value("loadId"), Value(int64_t{11})},
                   {Value("requestId"), Value(int64_t{701})}};
   Reply accepted;
   messenger.Call("selectTrack", accepted, track);
   Check(accepted.successes == 1, "track command queue acceptance");
-  NativePlayerTestAccess::RunQueued(player);
+  NativePlayerTestAccess::DrainCommandsSynchronously(player);
   NativePlayerTestAccess::Drain(player);
   Check(messenger.events.size() == 1 && Has(messenger.events[0], "success", Value(true)) &&
         Has(messenger.events[0], "loadId", Value(int64_t{11})) &&
@@ -343,7 +338,7 @@ void Commands(WindowsNativePlayer& player, native_test::Messenger& messenger) {
   numbered_track[Value("requestId")] = Value(int64_t{702});
   Reply numbered;
   messenger.Call("selectTrack", numbered, numbered_track);
-  NativePlayerTestAccess::RunQueued(player);
+  NativePlayerTestAccess::DrainCommandsSynchronously(player);
   NativePlayerTestAccess::Drain(player);
   Check(numbered.successes == 1 && selected_track == 7 && messenger.events.size() == 1 &&
         Has(messenger.events[0], "loadId", Value(int64_t{11})) &&
@@ -358,7 +353,7 @@ void Commands(WindowsNativePlayer& player, native_test::Messenger& messenger) {
   Reply late;
   messenger.Call("selectTrack", late, track);
   NativePlayerTestAccess::State(player).RetireLoad(11);
-  NativePlayerTestAccess::RunQueued(player);
+  NativePlayerTestAccess::DrainCommandsSynchronously(player);
   NativePlayerTestAccess::Drain(player);
   Check(messenger.events.size() == 1 && Has(messenger.events[0], "success", Value(false)) &&
         Has(messenger.events[0], "requestId", Value(int64_t{701})),
@@ -368,7 +363,7 @@ void Commands(WindowsNativePlayer& player, native_test::Messenger& messenger) {
   Reply stop;
   messenger.Call("stop", stop, {{Value("stopId"), Value(int64_t{801})}});
   Check(stop.successes == 1, "stop acceptance separate from execution");
-  NativePlayerTestAccess::RunQueued(player);
+  NativePlayerTestAccess::DrainCommandsSynchronously(player);
   NativePlayerTestAccess::Drain(player);
   Check(messenger.events.size() == 1 && Has(messenger.events[0], "stopId", Value(int64_t{801})) &&
         Has(messenger.events[0], "success", Value(false)), "real stop rejection belongs to stop id");
@@ -376,17 +371,15 @@ void Commands(WindowsNativePlayer& player, native_test::Messenger& messenger) {
   reject_stop = false;
   Reply retry;
   messenger.Call("stop", retry, {{Value("stopId"), Value(int64_t{802})}});
-  NativePlayerTestAccess::RunQueued(player);
+  NativePlayerTestAccess::DrainCommandsSynchronously(player);
   NativePlayerTestAccess::Drain(player);
   Check(messenger.events.empty() && NativePlayerTestAccess::State(player).pending_stop() == 802,
         "successful stop dispatch awaits idle observation");
-  NativePlayerTestAccess::CloseCommandClient(player);
+  NativePlayerTestAccess::CloseWorkerlessCommandClient(player);
 }
 
 void Lifecycle(WindowHarness& window, WindowsNativePlayer& player,
                native_test::Messenger& messenger) {
-  // A fake messenger does not certify the Flutter engine. The separate runner
-  // target must obtain this marker from the pinned real engine.
   ::SetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE",
                             L"692136cb6582dbfc5af3fb33c2515a069f2f66d0");
   Reply init;
@@ -433,14 +426,15 @@ void Lifecycle(WindowHarness& window, WindowsNativePlayer& player,
   Check(player.TakeWindowCloseReady() && !player.TakeWindowCloseReady(), "close readiness consumed once");
   Check(player.BeginWindowClose(), "disposed owner permits immediate close");
 }
-}  // namespace
+}
 
 int main() {
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   {
     WindowHarness window;
     native_test::Messenger messenger;
-    WindowsNativePlayer player(window.window, window.window, &messenger);
+    WindowsNativePlayer player(window.window, window.window, &messenger,
+                               TestOperations());
     window.player = &player;
     CorrelationAndPressure(player, messenger);
     Commands(player, messenger);

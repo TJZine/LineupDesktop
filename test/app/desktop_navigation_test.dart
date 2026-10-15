@@ -327,7 +327,6 @@ void main() {
       await tester.tap(find.text('Open Diagnostics'));
       await tester.pumpAndSettle();
       expect(find.text('‹ Settings · Support'), findsOneWidget);
-      // A menu selection has the same origin contract as the inline link.
       await openDestination(tester, 'Settings');
       expect(find.text('‹ Back to $name'), findsOneWidget);
       await tester.ensureVisible(find.text('Open Diagnostics'));

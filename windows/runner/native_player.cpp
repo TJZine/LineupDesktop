@@ -303,7 +303,7 @@ bool RestoreWindowState(HWND window, LONG_PTR style,
                             SWP_NOZORDER | SWP_NOOWNERZORDER);
 }
 
-}  // namespace
+}
 
 WindowsNativePlayer::PlexHeader::PlexHeader(std::string_view token) {
   constexpr std::string_view prefix = "X-Plex-Token: ";
@@ -351,7 +351,15 @@ void WindowsNativePlayer::PlexHeader::Clear() noexcept {
 WindowsNativePlayer::WindowsNativePlayer(
     HWND top_level_window, HWND flutter_view,
     flutter::BinaryMessenger* messenger)
-    : top_level_window_(top_level_window), flutter_view_(flutter_view) {
+    : WindowsNativePlayer(top_level_window, flutter_view, messenger,
+                          MpvOperations{}) {}
+
+WindowsNativePlayer::WindowsNativePlayer(
+    HWND top_level_window, HWND flutter_view,
+    flutter::BinaryMessenger* messenger, MpvOperations mpv_operations)
+    : mpv_operations_(mpv_operations),
+      top_level_window_(top_level_window),
+      flutter_view_(flutter_view) {
   channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           messenger, kChannelName,
@@ -360,7 +368,6 @@ WindowsNativePlayer::WindowsNativePlayer(
       [this](const auto& call, auto result) {
         HandleMethodCall(call, std::move(result));
       });
-  // Display writes require acknowledgment from the per-target guardian.
   display_ = std::make_unique<lineup::DisplayDynamicRange>(
       top_level_window_, lineup::MakeDisplayConfigApi(),
       lineup::MakeDisplayGuardianFactory(),
@@ -613,7 +620,7 @@ bool WindowsNativePlayer::Initialize(std::string& error,
     return false;
   }
 
-  mpv_ = mpv_create();
+  mpv_ = mpv_operations_.create();
   if (!mpv_) {
     error = "libmpv could not create a client.";
     ::DestroyWindow(video_host_);
@@ -645,15 +652,15 @@ bool WindowsNativePlayer::Initialize(std::string& error,
   int option_status = window_status;
   for (const auto& [name, value] : options) {
     if (option_status >= 0) {
-      option_status = mpv_set_option_string(mpv_, name, value);
+      option_status = mpv_operations_.set_option_string(mpv_, name, value);
     }
   }
   const int initialize_status =
-      option_status < 0 ? option_status : mpv_initialize(mpv_);
+      option_status < 0 ? option_status : mpv_operations_.initialize(mpv_);
   if (initialize_status < 0) {
     error = std::string("libmpv initialization failed: ") +
             mpv_error_string(initialize_status);
-    mpv_terminate_destroy(mpv_);
+    mpv_operations_.terminate_destroy(mpv_);
     mpv_ = nullptr;
     ::DestroyWindow(video_host_);
     video_host_ = nullptr;
@@ -686,7 +693,7 @@ bool WindowsNativePlayer::Initialize(std::string& error,
     if (observe_status < 0) {
       error = std::string("libmpv property observation failed for ") +
               observation.name + ": " + mpv_error_string(observe_status);
-      mpv_terminate_destroy(mpv_);
+      mpv_operations_.terminate_destroy(mpv_);
       mpv_ = nullptr;
       ::DestroyWindow(video_host_);
       video_host_ = nullptr;
@@ -912,12 +919,13 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
     using Payload = std::decay_t<decltype(payload)>;
     if constexpr (std::is_same_v<Payload, LoadCommand>) {
       int paused = payload.start_paused ? 1 : 0;
-      status = mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
+      status =
+          mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
       if (status >= 0) {
         if (payload.plex_header.empty()) {
           const char* value[] = {"loadfile", payload.uri.c_str(), "replace",
                                  nullptr};
-          status = mpv_command(mpv_, value);
+          status = mpv_operations_.command(mpv_, value);
         } else {
           char* command_name = const_cast<char*>("loadfile");
           char* uri = const_cast<char*>(payload.uri.c_str());
@@ -954,8 +962,8 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
         if (status >= 0) {
           int64_t playlist_entry_id = 0;
           const bool has_playlist_id =
-              mpv_get_property(mpv_, "playlist/0/id", MPV_FORMAT_INT64,
-                               &playlist_entry_id) >= 0;
+              mpv_operations_.get_property(mpv_, "playlist/0/id", MPV_FORMAT_INT64,
+                                           &playlist_entry_id) >= 0;
           if (!playback_.AcceptLoad(payload.load_id,
                   has_playlist_id ? std::optional<int64_t>(playlist_entry_id)
                                   : std::nullopt)) {
@@ -968,24 +976,25 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
       }
     } else if constexpr (std::is_same_v<Payload, PlayCommand>) {
       int paused = 0;
-      status = mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
+      status =
+          mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
     } else if constexpr (std::is_same_v<Payload, PauseCommand>) {
       int paused = 1;
-      status = mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
+      status =
+          mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
     } else if constexpr (std::is_same_v<Payload, SeekCommand>) {
       const std::string seconds = std::to_string(payload.seconds);
       const char* value[] = {"seek", seconds.c_str(), "absolute+exact",
                              nullptr};
-      status = mpv_command(mpv_, value);
+      status = mpv_operations_.command(mpv_, value);
     } else if constexpr (std::is_same_v<Payload, StopCommand>) {
       const char* value[] = {"stop", nullptr};
-      status = mpv_command(mpv_, value);
+      status = mpv_operations_.command(mpv_, value);
       if (status < 0) {
         QueueStopResult(generation, payload.stop_id, false);
       } else {
         playback_.AcceptStop(payload.stop_id);
       }
-      // Stop failures belong to the stop request, even after load retirement.
       return;
     } else if constexpr (std::is_same_v<Payload, TrackCommand>) {
       if (!playback_.TrackTargetsActiveLoad(payload.load_id)) {
@@ -997,15 +1006,16 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
         status = mpv_set_property_string(mpv_, payload.property.c_str(), "no");
       } else {
         int64_t id = *payload.selection_id;
-        status = mpv_set_property(mpv_, payload.property.c_str(), MPV_FORMAT_INT64,
-                                  &id);
+        status = mpv_operations_.set_property(
+            mpv_, payload.property.c_str(), MPV_FORMAT_INT64, &id);
       }
       QueueTrackResult(generation, payload.load_id, payload.request_id,
                        status >= 0);
       return;
     } else if constexpr (std::is_same_v<Payload, VolumeCommand>) {
       double volume = payload.volume;
-      status = mpv_set_property(mpv_, "volume", MPV_FORMAT_DOUBLE, &volume);
+      status =
+          mpv_operations_.set_property(mpv_, "volume", MPV_FORMAT_DOUBLE, &volume);
     }
   }, command);
   if (std::holds_alternative<StopCommand>(command) ||
@@ -1054,10 +1064,10 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
     if (playback_.pending_stop()) {
       int idle = 0;
       int64_t playlist_count = -1;
-      // A successful stop command requests teardown; idle confirms it finished.
-      if (mpv_get_property(mpv_, "idle-active", MPV_FORMAT_FLAG, &idle) >= 0 &&
-          mpv_get_property(mpv_, "playlist-count", MPV_FORMAT_INT64,
-                           &playlist_count) >= 0) {
+      if (mpv_operations_.get_property(mpv_, "idle-active", MPV_FORMAT_FLAG,
+                                       &idle) >= 0 &&
+          mpv_operations_.get_property(mpv_, "playlist-count", MPV_FORMAT_INT64,
+                                       &playlist_count) >= 0) {
         if (const auto stop = playback_.ObserveIdle(idle != 0, playlist_count)) {
           QueueStopResult(generation, *stop, true);
         }
@@ -1071,7 +1081,7 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
       HandleMpvEvent(*event, generation);
     }
   }
-  mpv_terminate_destroy(mpv_);
+  mpv_operations_.terminate_destroy(mpv_);
   mpv_ = nullptr;
   std::cerr << "[lineup-player] libmpv shutdown complete" << std::endl;
   dispose_ready_ = true;
@@ -1238,8 +1248,6 @@ void WindowsNativePlayer::QueueEvent(uint64_t generation,
                                      flutter::EncodableMap value) {
   {
     std::lock_guard lock(event_mutex_);
-    // Prefer evicting properties. Under all-non-property saturation the oldest
-    // event (including an acknowledgment) can be evicted; Dart owns timeout/retry.
     if (events_.size() >= kMaxQueuedEvents) {
       const auto* incoming_type = Find(value, "type");
       const auto* incoming_type_value =

@@ -44,8 +44,6 @@ struct FakeApi final : DisplayConfigApi {
 };
 GuardianRecord Arm() { return MakeGuardianRecord(GuardianKind::arm, 1, owned); }
 void RestoreCases() {
-  // Both EOF/broken command pipe and parent-handle signal enter this same
-  // production recovery method. No processes or real display APIs are used.
   {
     GuardianSession session;
     Check(session.Accept(Arm()).has_value(), "arm ack");
@@ -232,8 +230,6 @@ void AcknowledgmentCases() {
         "ordinary startup passes through");
 }
 void PipeLoopCases() {
-  // Exercise the production loop with real local pipes, but no process launch
-  // and no DisplayConfig calls. Parent death is a signaled event.
   for (int scenario = 0; scenario < 7; ++scenario) {
     HANDLE commands = nullptr, command_write = nullptr;
     HANDLE ack_read = nullptr, acknowledgments = nullptr;
@@ -275,7 +271,6 @@ void PipeLoopCases() {
                 read == sizeof(ack) && ValidGuardianAck(ack, record.sequence),
             "production ack");
     };
-    // Ensure assertion failures also close the pipe and join the worker.
     try {
       send(Arm(), true);
       if (scenario == 1)
@@ -302,8 +297,6 @@ void PipeLoopCases() {
         ack_read = nullptr;
         send(MakeGuardianRecord(GuardianKind::update, 2, owned), false);
       }
-      // Keep commands open in the parent-signal and failed-ack cases to prove
-      // that those triggers alone end the guardian.
       if (scenario != 1 && scenario != 6) {
         CloseHandle(command_write);
         command_write = nullptr;
@@ -332,7 +325,7 @@ void PipeLoopCases() {
     CloseHandle(signal);
   }
 }
-} // namespace
+}
 std::optional<int> DispatchDisplayAdmissionTestChild(int argc, char **argv);
 void RunDisplayAdmissionProcessTests();
 int main(int argc, char **argv) {

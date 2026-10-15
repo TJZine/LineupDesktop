@@ -1,7 +1,5 @@
 #Requires -Version 7.4
 
-# Inspect only the public owner/entry-point relationship. Input derivation,
-# invocation, cleanup and exit behavior are exercised below in real processes.
 function Assert-BuildInputWiring {
   param([string] $Path, [string[]] $Contracts)
 
@@ -98,8 +96,6 @@ $renamedLaunch = (Get-LineupLaunchInput -MpvRoot ($MpvRoot) -EngineSource ($Engi
     Assert-Rejected { Resolve-RequiredPath $directory MediaPath Leaf } 'directory as media'
     Assert-Rejected { Resolve-RequiredPath $media EngineSource Container } 'file as engine'
 
-    # Two real repositories make cross-repository HEAD/pubspec substitutions
-    # observable. The owner is copied to its actual repository-relative location.
     foreach ($scenario in @(@{ Name = 'first'; Version = '1.2.3+45'; Build = '45'; Label = '1.2.3' },
         @{ Name = 'second'; Version = '9.8.7+65'; Build = '65'; Label = '9.8.7' })) {
       $root = Join-Path $directory $scenario.Name
@@ -142,8 +138,6 @@ $renamedLaunch = (Get-LineupLaunchInput -MpvRoot ($MpvRoot) -EngineSource ($Engi
     Assert-Rejected { Get-LineupReleaseInput -EngineSource $engine } 'no actual HEAD'
     . $owner
 
-    # Release invocation consumes the same complete operation input that owns
-    # version/commit association; capture real delivery and its failure result.
     $releaseFixture = Join-Path $directory 'release fixture.ps1'
     @'
 $args | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'release arguments.json')
@@ -161,8 +155,6 @@ exit 0
     }
     if (-not $failed) { throw 'Canonical release invocation lost its failure status.' }
 
-    # Real child processes exercise the production operation's exit and cleanup.
-    # Windows platform executables alone are replaced; orchestration stays real.
     $runtime = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     $flutterFixture = Join-Path $directory 'flutter fixture.ps1'
     @'

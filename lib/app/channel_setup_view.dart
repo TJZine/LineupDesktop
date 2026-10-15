@@ -902,8 +902,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       _notice = null;
     });
     try {
-      // A row may have been unchecked since scanning. Retry its staged scan
-      // inventory without changing the person's current selection.
       final ids = {
         ..._selectedLibraries,
         if (retryLibraryIds != null) ...widget.controller.libraryScanFacts.keys,

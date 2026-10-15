@@ -381,7 +381,6 @@ void main() {
     now = now.add(const Duration(hours: 1));
     guide.refreshForPresentation();
     expect(guide.focusedProgramId, header);
-    // Replacing source data must retire retained inspection, not resurrect it.
     lineup.changeContentScope();
     guide.requestViewport(0, 2);
     await _settle();
@@ -419,7 +418,6 @@ void main() {
     now = now.add(const Duration(hours: 5));
     guide.refreshForPresentation();
     expect(guide.focusTime, retained);
-    // The explicit selection expires with its projection; pending focus does not.
     final selectionAfterRollover = (
       channelId: guide.selectedChannelId,
       programId: guide.selectedProgramId,
@@ -1067,6 +1065,52 @@ void main() {
     lineup.dispose();
   });
 
+  test(
+    'synchronous artwork failure settles null and advances queued work',
+    () async {
+      final lineup = _ArtworkLineup(_channels(1));
+      addTearDown(lineup.dispose);
+      final guide = GuideController(lineup: lineup);
+      addTearDown(guide.dispose);
+      final active = List.generate(
+        GuideController.maximumConcurrentArtworkLoads,
+        (_) => Completer<Uint8List?>(),
+      );
+      final paths = List.generate(
+        active.length + 2,
+        (index) => Uri.parse('/art/$index'),
+      );
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      lineup.artworkHandler = (path) {
+        final index = paths.indexOf(path);
+        if (index < active.length) return active[index].future;
+        if (index == active.length) {
+          throw StateError('Synchronous artwork failure');
+        }
+        return Future.value(bytes);
+      };
+      final results = [for (final path in paths) guide.artworkForPath(path)];
+      expect(lineup.artworkPaths, paths.take(active.length).toList());
+
+      active.first.complete(Uint8List(0));
+      expect(
+        await results[active.length].timeout(const Duration(seconds: 1)),
+        isNull,
+      );
+      expect(await results.last.timeout(const Duration(seconds: 1)), bytes);
+      expect(lineup.artworkPaths, paths);
+
+      for (final pending in active.skip(1)) {
+        pending.complete(Uint8List(0));
+      }
+      expect(
+        await Future.wait(results.take(active.length))
+            .timeout(const Duration(seconds: 1)),
+        everyElement(isNotNull),
+      );
+    },
+  );
+
   test('stale artwork is evicted so the same key can retry', () async {
     final lineup = _ArtworkLineup(_channels(1));
     addTearDown(lineup.dispose);
@@ -1391,41 +1435,56 @@ void main() {
     lineup.dispose();
   });
 
-  test('hung loader deadline releases capacity for queued work', () async {
+  test(
+    'hung loader deadline releases capacity and owns a late failure',
+    () async {
+      final lineup = _TestLineup(_channels(2));
+      final hung = Completer<ScheduleIndex>();
+      final started = <String>[];
+      final guide = GuideController(
+        lineup: lineup,
+        maximumConcurrentLoads: 1,
+        scheduleLoadTimeout: Duration.zero,
+        loadSchedule: (channel) {
+          started.add(channel.id);
+          return channel.id == 'channel-0'
+              ? hung.future
+              : Future.value(_schedule(channel));
+        },
+      );
+
+      guide.requestViewport(0, 1);
+      await _settle();
+
+      expect(started, ['channel-0', 'channel-1']);
+      expect(guide.row('channel-0').state, GuideLoadState.error);
+      expect(guide.row('channel-0').error, isA<TimeoutException>());
+      expect(guide.row('channel-1').state, GuideLoadState.ready);
+      expect(guide.activeLoadCount, 0);
+
+      hung.completeError(StateError('Late failure after timeout'));
+      await _settle();
+      expect(started, ['channel-0', 'channel-1']);
+      expect(guide.row('channel-0').error, isA<TimeoutException>());
+      expect(guide.row('channel-1').state, GuideLoadState.ready);
+      expect(guide.activeLoadCount, 0);
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('disposal settles an active loader and owns its late failure', () async {
     final lineup = _TestLineup(_channels(2));
     final hung = Completer<ScheduleIndex>();
     final started = <String>[];
     final guide = GuideController(
       lineup: lineup,
       maximumConcurrentLoads: 1,
-      scheduleLoadTimeout: Duration.zero,
       loadSchedule: (channel) {
         started.add(channel.id);
-        return channel.id == 'channel-0'
-            ? hung.future
-            : Future.value(_schedule(channel));
+        return hung.future;
       },
-    );
-
-    guide.requestViewport(0, 1);
-    await _settle();
-
-    expect(started, ['channel-0', 'channel-1']);
-    expect(guide.row('channel-0').state, GuideLoadState.error);
-    expect(guide.row('channel-0').error, isA<TimeoutException>());
-    expect(guide.row('channel-1').state, GuideLoadState.ready);
-    expect(guide.activeLoadCount, 0);
-
-    guide.dispose();
-    lineup.dispose();
-  });
-
-  test('disposal settles an active hung loader', () async {
-    final lineup = _TestLineup(_channels(1));
-    final hung = Completer<ScheduleIndex>();
-    final guide = GuideController(
-      lineup: lineup,
-      loadSchedule: (_) => hung.future,
     );
 
     guide.requestViewport(0, 1);
@@ -1435,6 +1494,14 @@ void main() {
     guide.dispose();
     await _settle();
     expect(guide.activeLoadCount, 0);
+    expect(started, ['channel-0']);
+    final retiredRow = guide.row('channel-0');
+
+    hung.completeError(StateError('Late failure after disposal'));
+    await _settle();
+    expect(guide.activeLoadCount, 0);
+    expect(started, ['channel-0']);
+    expect(guide.row('channel-0'), same(retiredRow));
 
     lineup.dispose();
   });
@@ -1974,9 +2041,10 @@ void main() {
     lineup.setSettings(const LineupSettings(guideHours: 2));
     guide.requestChannels([lineup.channels.last]);
     await _settle();
-    final current = guide.ensureCurrentProgram('channel-0');
     var completed = false;
-    current.whenComplete(() => completed = true);
+    final current = guide
+        .ensureCurrentProgram('channel-0')
+        .whenComplete(() => completed = true);
     await _settle();
 
     expect(guide.row('channel-0').state, GuideLoadState.retrying);
@@ -2195,12 +2263,15 @@ class _ArtworkLineup extends _TestLineup {
   final artworkPaths = <Uri>[];
   final artworkSizes = <({int? width, int? height})>[];
   int artworkLoads = 0;
+  Future<Uint8List?> Function(Uri path)? artworkHandler;
 
   @override
   Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) {
     artworkLoads++;
     artworkPaths.add(path);
     artworkSizes.add((width: width, height: height));
+    final handler = artworkHandler;
+    if (handler != null) return handler(path);
     final completer = Completer<Uint8List?>();
     _artwork.add(completer);
     return completer.future;

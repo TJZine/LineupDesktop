@@ -44,9 +44,6 @@ abstract final class GuideGeometry {
     if (totalRows <= 0 || rowHeight <= 0 || viewportHeight <= 0) {
       return (first: 0, count: 0);
     }
-    // This is the focus-safe viewport capacity, not every intersecting row.
-    // A trailing partial row is deliberately excluded so focusing it reveals
-    // the entire row instead of leaving it clipped at the viewport boundary.
     final first = (scrollOffset / rowHeight).floor().clamp(0, totalRows - 1);
     final count = (viewportHeight / rowHeight).floor().clamp(
       1,
@@ -119,8 +116,7 @@ class GuideController extends ChangeNotifier {
   final Duration currentProgramWaitTimeout;
   final LinkedHashMap<String, GuideRowData> _rows = LinkedHashMap();
   final LinkedHashMap<String, ScheduleIndex> _schedules = LinkedHashMap();
-  final LinkedHashMap<String, Future<Uint8List?>> _artwork = LinkedHashMap();
-  // Identity-only state survives projection eviction; payload caches stay bounded.
+  final LinkedHashMap<String, _ArtworkRequest> _artwork = LinkedHashMap();
   final Set<String> _failedChannelIds = {};
   final Set<String> _retryingChannelIds = {};
   final Map<String, int> _loadingGenerationByChannel = {};
@@ -143,8 +139,6 @@ class GuideController extends ChangeNotifier {
   String? _focusedProgramId;
   bool _followingLive = true;
   bool _inspectionActive = false;
-  // Retain one explicitly inspected airing for details after it leaves the
-  // projected window. Source invalidation and Now retire this snapshot.
   GuideProgram? _inspectedProgram;
   ({String channelId, DateTime time})? _pendingProgramFocus;
   String? _selectedChannelId;
@@ -337,21 +331,19 @@ class GuideController extends ChangeNotifier {
     final existing = _artwork.remove(key);
     if (existing != null) {
       _artwork[key] = existing;
-      return existing;
+      return existing.completer.future;
     }
     final completer = Completer<Uint8List?>();
-    final loading = completer.future;
-    _artwork[key] = loading;
-    _pendingArtwork.add(
-      _ArtworkRequest(
-        key,
-        path,
-        completer,
-        _generation,
-        width: width,
-        height: height,
-      ),
+    final request = _ArtworkRequest(
+      key,
+      path,
+      completer,
+      _generation,
+      width: width,
+      height: height,
     );
+    _artwork[key] = request;
+    _pendingArtwork.add(request);
     while (_artwork.length > maximumCachedArtworkEntries) {
       final evicted = _artwork.keys.first;
       _artwork.remove(evicted);
@@ -362,7 +354,7 @@ class GuideController extends ChangeNotifier {
       });
     }
     _pumpArtwork();
-    return loading;
+    return completer.future;
   }
 
   void _pumpArtwork() {
@@ -370,33 +362,36 @@ class GuideController extends ChangeNotifier {
     while (_activeArtworkLoads < maximumConcurrentArtworkLoads &&
         _pendingArtwork.isNotEmpty) {
       final request = _pendingArtwork.removeFirst();
-      if (!identical(_artwork[request.key], request.completer.future)) {
+      if (!identical(_artwork[request.key], request)) {
         if (!request.completer.isCompleted) request.completer.complete(null);
         continue;
       }
       _activeArtworkLoads++;
-      lineup
-          .artworkForPath(
-            request.path,
-            width: request.width,
-            height: request.height,
-          )
-          .then<Uint8List?>((value) => value, onError: (_) => null)
-          .then((value) {
-            final cached = identical(
-              _artwork[request.key],
-              request.completer.future,
-            );
-            final current = request.generation == _generation && cached;
-            if (!current && cached) _artwork.remove(request.key);
-            if (!request.completer.isCompleted) {
-              request.completer.complete(current ? value : null);
-            }
-          })
-          .whenComplete(() {
-            _activeArtworkLoads--;
-            if (!_disposed) _pumpArtwork();
-          });
+      unawaited(_loadArtwork(request));
+    }
+  }
+
+  Future<void> _loadArtwork(_ArtworkRequest request) async {
+    try {
+      Uint8List? value;
+      try {
+        value = await lineup.artworkForPath(
+          request.path,
+          width: request.width,
+          height: request.height,
+        );
+      } catch (_) {
+        value = null;
+      }
+      final cached = identical(_artwork[request.key], request);
+      final current = request.generation == _generation && cached;
+      if (!current && cached) _artwork.remove(request.key);
+      if (!request.completer.isCompleted) {
+        request.completer.complete(current ? value : null);
+      }
+    } finally {
+      _activeArtworkLoads--;
+      if (!_disposed) _pumpArtwork();
     }
   }
 
@@ -639,7 +634,6 @@ class GuideController extends ChangeNotifier {
       );
       return true;
     } catch (_) {
-      // LineupController owns rollback and persistence diagnostics.
       return false;
     }
   }
@@ -778,49 +772,55 @@ class GuideController extends ChangeNotifier {
           ? _loadScheduleWithTimeout(channel)
           : Future<ScheduleIndex>.value(cachedSchedule);
       if (cachedSchedule != null) _schedules[channel.id] = cachedSchedule;
-      loading
-          .then<void>((schedule) {
-            if (_disposed ||
-                generation != _generation ||
-                !_channelById.containsKey(channel.id)) {
-              return;
-            }
-            _loadingGenerationByChannel.remove(channel.id);
-            _failedChannelIds.remove(channel.id);
-            _retryingChannelIds.remove(channel.id);
-            _putSchedule(channel.id, schedule);
-            _putRow(channel.id, _projectedRow(channel, schedule));
-            _updateFocusAndSelection(channel.id);
-            notifyListeners();
-          })
-          .catchError((Object error) {
-            if (_disposed ||
-                generation != _generation ||
-                !_channelById.containsKey(channel.id)) {
-              return;
-            }
-            _loadingGenerationByChannel.remove(channel.id);
-            _retryingChannelIds.remove(channel.id);
-            _schedules.remove(channel.id);
-            _failedChannelIds.add(channel.id);
-            if (error is TimeoutException) {
-              lineup.diagnostics.add('guide', 'Guide schedule load timed out', {
-                'code': 'timeout',
-              });
-            }
-            _putRow(
-              channel.id,
-              GuideRowData(state: GuideLoadState.error, error: error),
-            );
-            notifyListeners();
-          })
-          .whenComplete(() {
-            _activeLoads--;
-            if (!_disposed) {
-              _pump();
-              notifyListeners();
-            }
-          });
+      unawaited(_loadRow(channel, generation, loading));
+    }
+  }
+
+  Future<void> _loadRow(
+    Channel channel,
+    int generation,
+    Future<ScheduleIndex> loading,
+  ) async {
+    try {
+      final schedule = await loading;
+      if (_disposed ||
+          generation != _generation ||
+          !_channelById.containsKey(channel.id)) {
+        return;
+      }
+      _loadingGenerationByChannel.remove(channel.id);
+      _failedChannelIds.remove(channel.id);
+      _retryingChannelIds.remove(channel.id);
+      _putSchedule(channel.id, schedule);
+      _putRow(channel.id, _projectedRow(channel, schedule));
+      _updateFocusAndSelection(channel.id);
+      notifyListeners();
+    } catch (error) {
+      if (_disposed ||
+          generation != _generation ||
+          !_channelById.containsKey(channel.id)) {
+        return;
+      }
+      _loadingGenerationByChannel.remove(channel.id);
+      _retryingChannelIds.remove(channel.id);
+      _schedules.remove(channel.id);
+      _failedChannelIds.add(channel.id);
+      if (error is TimeoutException) {
+        lineup.diagnostics.add('guide', 'Guide schedule load timed out', {
+          'code': 'timeout',
+        });
+      }
+      _putRow(
+        channel.id,
+        GuideRowData(state: GuideLoadState.error, error: error),
+      );
+      notifyListeners();
+    } finally {
+      _activeLoads--;
+      if (!_disposed) {
+        _pump();
+        notifyListeners();
+      }
     }
   }
 
@@ -840,19 +840,20 @@ class GuideController extends ChangeNotifier {
       _loadDeadlines.remove(deadline);
     }
 
-    result.future.then<void>(
-      (_) => releaseDeadline(),
-      onError: (Object _, StackTrace _) => releaseDeadline(),
-    );
-    Future<ScheduleIndex>.sync(() => _loadSchedule(channel)).then(
-      (schedule) {
-        if (!result.isCompleted) result.complete(schedule);
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        if (!result.isCompleted) result.completeError(error, stackTrace);
-      },
-    );
-    return result.future;
+    unawaited(_forwardScheduleResult(channel, result));
+    return result.future.whenComplete(releaseDeadline);
+  }
+
+  Future<void> _forwardScheduleResult(
+    Channel channel,
+    Completer<ScheduleIndex> result,
+  ) async {
+    try {
+      final schedule = await _loadSchedule(channel);
+      if (!result.isCompleted) result.complete(schedule);
+    } catch (error, stackTrace) {
+      if (!result.isCompleted) result.completeError(error, stackTrace);
+    }
   }
 
   void _putRow(String id, GuideRowData value) {
@@ -903,8 +904,6 @@ class GuideController extends ChangeNotifier {
   void _updateFocusAndSelection(String channelId) {
     final pending = _pendingProgramFocus;
     if (pending?.channelId == channelId && _focusedChannelId == channelId) {
-      // Presentation may have moved beyond the retained time while loading.
-      // Resolve the intended airing from the schedule, not the new window.
       final program = currentProgram(channelId, pending!.time);
       if (program != null) {
         _focusTime = pending.time;

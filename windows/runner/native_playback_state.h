@@ -13,8 +13,6 @@
 
 namespace lineup {
 
-// Worker-owned correlation. Command acceptance, observed file identity and idle
-// completion are separate transitions. There is no HWND, mpv or Flutter policy.
 class NativePlaybackState {
  public:
   static constexpr size_t kMaxPlaylistEntries = 1024;
@@ -169,5 +167,5 @@ class NativePlaybackState {
   std::optional<Failure> failure_;
 };
 
-}  // namespace lineup
-#endif  // RUNNER_NATIVE_PLAYBACK_STATE_H_
+}
+#endif

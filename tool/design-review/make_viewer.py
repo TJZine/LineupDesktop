@@ -1,4 +1,3 @@
-"""Builds build/design-review/index.html from the tracked capture inputs."""
 import json
 from pathlib import Path
 
@@ -29,6 +28,6 @@ for family, scenes in families:
                 items.append({'family': family, 'name': name,
                               'configs': [c for c in configs if name in available.get(c, ())]})
 html = template.read_text().replace(
-    '/*DATA*/', json.dumps({'configs': [c for c in configs if c in available], 'items': items}))
+    '__LINEUP_CAPTURE_DATA__', json.dumps({'configs': [c for c in configs if c in available], 'items': items}))
 (root / 'index.html').write_text(html)
 print(len(items), 'states,', sum(len(i['configs']) for i in items), 'captures')

@@ -26,8 +26,21 @@ class WindowsNativePlayer {
  public:
   static constexpr UINT kPlatformEventMessage = WM_APP + 0x31;
 
+  struct MpvOperations {
+    decltype(&::mpv_create) create = &::mpv_create;
+    decltype(&::mpv_initialize) initialize = &::mpv_initialize;
+    decltype(&::mpv_set_option_string) set_option_string = &::mpv_set_option_string;
+    decltype(&::mpv_get_property) get_property = &::mpv_get_property;
+    decltype(&::mpv_set_property) set_property = &::mpv_set_property;
+    decltype(&::mpv_command) command = &::mpv_command;
+    decltype(&::mpv_terminate_destroy) terminate_destroy = &::mpv_terminate_destroy;
+  };
+
   WindowsNativePlayer(HWND top_level_window, HWND flutter_view,
                       flutter::BinaryMessenger* messenger);
+  WindowsNativePlayer(HWND top_level_window, HWND flutter_view,
+                      flutter::BinaryMessenger* messenger,
+                      MpvOperations mpv_operations);
   ~WindowsNativePlayer();
 
   WindowsNativePlayer(const WindowsNativePlayer&) = delete;
@@ -93,7 +106,6 @@ class WindowsNativePlayer {
                                      SeekCommand, StopCommand, TrackCommand,
                                      VolumeCommand>;
 
-  // Bounded native harnesses inspect the actual owner, never a copied model.
   friend struct NativePlayerTestAccess;
 
   void HandleMethodCall(
@@ -123,6 +135,7 @@ class WindowsNativePlayer {
   flutter::EncodableValue EncodeVideoTargetParameters(const mpv_node& node) const;
   void QueueDisplayReport(const lineup::DisplayReport& report);
 
+  const MpvOperations mpv_operations_;
   HWND top_level_window_;
   HWND flutter_view_;
   HWND video_host_ = nullptr;
@@ -157,4 +170,4 @@ class WindowsNativePlayer {
   LONG_PTR window_style_ = 0;
 };
 
-#endif  // RUNNER_NATIVE_PLAYER_H_
+#endif

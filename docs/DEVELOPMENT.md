@@ -84,16 +84,26 @@ same analyzer configuration as `lib/`. There is no coverage-percentage floor;
 Optional visual suites run explicitly as described below. Native runtime and
 hardware proof follows [physical Windows acceptance](windows-native-validation.md).
 
-The assertion-based `track_list_encoder_test` CTest target exercises the real
-encoder, not the app. It is excluded from the default build and is not run in
-CI. After configuring the Windows build with the prerequisites below, run:
+Windows CI explicitly builds and runs `track_list_encoder_test`,
+`native_playback_state_test`, `display_dynamic_range_test`, and
+`display_guardian_test` after the stock-engine application build, using the
+prepared pinned libmpv runtime and Flutter-generated inputs. These targets
+remain excluded from the default application build. CTest runs serially, rejects
+an empty selection, and allows 30 seconds per suite except the guardian's
+60-second process-fixture budget. These contracts do not require a live Flutter
+engine or physical HDR changes; they do not establish media or presentation
+acceptance.
+
+The assertion-based `track_list_encoder_test` exercises the real encoder,
+not the app. After configuring the Windows build with the prerequisites below,
+run:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test
 ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
 ```
 
-Three additional opt-in targets cover native correlation and shutdown:
+Three additional targets cover native correlation and shutdown:
 
 - `native_playback_state_test` exercises the actual worker-owned correlation
   state, including replacement, redirects, retirement, and observed idle.
@@ -105,8 +115,11 @@ Three additional opt-in targets cover native correlation and shutdown:
   against installed candidate assets. A retained blank-widget Dart entry point
   avoids opening user state or credentials through the application bootstrap.
 
-All are `EXCLUDE_FROM_ALL`. Build/install the candidate with the pinned patched
-engine and prepared libmpv first, then build the targets and run their CTests:
+All are `EXCLUDE_FROM_ALL`; only `native_playback_state_test` is selected by
+CI. The state test does not require a live engine. The player-contract and
+runner-lifecycle targets remain explicit local checks. Build/install the
+candidate with the pinned patched engine and prepared libmpv first for those
+checks, then build the targets and run their CTests:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target native_playback_state_test native_player_contract_test runner_lifecycle_test
@@ -139,8 +152,9 @@ The gated `authenticated_reference_test` target compiles the production native
 player and drives its existing method channel against the exact prepared DLL.
 It is `EXCLUDE_FROM_ALL`, with no CI gate change. Python 3, an FFmpeg executable
 with the `libx264` encoder and DASH muxer, and OpenSSL are required. Put them on
-PATH before configuring/running CTest; the runner also recognizes Git for
-Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
+PATH before running CTest; Python is resolved when the test runs, so ordinary
+application configuration and builds do not require it. The runner also recognizes
+Git for Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
 No Python packages or system trust-store changes are needed.
 
 ```powershell
@@ -167,8 +181,9 @@ negative comparison locally, remove only the two reference-hardening options,
 rebuild the same test target, observe containment failure, then restore them and
 rebuild. Do not distribute or commit that unhardened configuration.
 
-The opt-in `display_dynamic_range_test` uses fake DisplayConfig/guardian/clock
-inputs, including failed-admission report and shutdown checks.
+The CI-selected `display_dynamic_range_test` uses fake
+DisplayConfig/guardian/clock inputs, including failed-admission report and
+shutdown checks.
 `display_guardian_test` retains protocol/pipe fixtures and also launches real
 Win32 predecessor, guardian and successor processes against isolated journals
 and controlled display effects. Event barriers pause recovery before gate
@@ -525,7 +540,12 @@ engine metadata, and rejects stale markers or modified build artifacts.
 [The workflow](../.github/workflows/ci.yml) runs portable Dart verification on
 Linux, the required macOS alpha suite and an application build on macOS, portable
 PowerShell release-policy validation, and focused widget tests plus a
-stock-engine C++/CMake application build on Windows Server 2022.
+stock-engine C++/CMake application build on Windows Server 2022 followed by
+the existing encoder, playback-state, display-controller, and guardian CTests.
+The native suites use real contract assertions and controlled fixtures; the
+guardian includes Win32 subprocess coverage. The player-contract,
+runner-lifecycle, and authenticated-reference CTests remain separate explicit
+checks and are not selected by CI.
 
 The expensive patched-engine/package job is conditional on engine and direct
 package-policy inputs selected by `release-inputs`. Ordinary `lib/` or

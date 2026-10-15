@@ -59,14 +59,12 @@ class _SetupResultAtmosphereState extends State<SetupResultAtmosphere>
     final previous = _lastTick;
     _lastTick = elapsed;
     if (previous == null) return;
-    // Hidden or suspended windows resume without jumping across the backdrop.
     final delta = math.min((elapsed - previous).inMicroseconds / 1e6, .05);
     if (widget.applying) {
       _time += delta;
     } else {
       final before = _settled;
       _settled = math.min(1, _settled + delta / 1.3);
-      // Integrate the declining speed so position and velocity remain continuous.
       _time += 1.3 / 3 * (math.pow(1 - before, 3) - math.pow(1 - _settled, 3));
     }
     _frame.value = (_time, _settled);
@@ -164,7 +162,6 @@ class _LightPainter extends CustomPainter {
       stops: const [.45, .53, .60, .69, .84],
     );
     canvas.restore();
-    // Keep the header and text legible while light flows through the canvas.
     final bounds = Offset.zero & size;
     canvas.drawRect(
       bounds,

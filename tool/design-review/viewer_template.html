@@ -42,7 +42,7 @@
   <div id="stage" class="fit"><div class="frame" id="frame"><img id="img" alt=""></div><p class="meta" id="meta"></p></div>
 </main>
 <script>
-const DATA = /*DATA*/;
+const DATA = __LINEUP_CAPTURE_DATA__;
 const state = { i: 0, config: '1920x1080', bg: 'dark', zoom: 'fit' };
 try { Object.assign(state, JSON.parse(localStorage.getItem('review') || '{}')); } catch {}
 const $ = id => document.getElementById(id);

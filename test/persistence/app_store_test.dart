@@ -50,7 +50,6 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final file = File('${directory.path}/state.json');
       final old = _canonicalJson();
-      // Literal settings from the pre-change schema, independent of new serialization.
       old['settings'] = {
         'theme': 'slate-pine',
         'guideHours': 3,
@@ -108,7 +107,6 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final file = File('${directory.path}/state.json');
       final old = _canonicalJson();
-      // Literal settings from the pre-change schema, independent of new serialization.
       old['settings'] = {
         'theme': 'slate-pine',
         'guideHours': 3,

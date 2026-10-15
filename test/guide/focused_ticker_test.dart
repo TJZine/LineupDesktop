@@ -37,7 +37,6 @@ void main() {
     );
     final initialX = tester.getTopLeft(textFinder).dx;
 
-    // Cross the 900 ms start delay without advancing the scroll first.
     await tester.pump(const Duration(milliseconds: 800));
     expect(tester.getTopLeft(textFinder).dx, initialX);
     await tester.pump(const Duration(milliseconds: 100));

@@ -207,8 +207,6 @@ class WindowsNativePlayer implements NativePlayer {
     await _lifecycle;
     _requireInitialized();
     if (request.revision <= _displayRevision) return;
-    // Set the expected revision before invoking native: a queued native
-    // controller may report synchronously while the method call is pending.
     _displayRevision = request.revision;
     await _invokeNative<void>('setDisplayMatching', request.toJson());
   }
@@ -302,7 +300,6 @@ class WindowsNativePlayer implements NativePlayer {
     _activeLoadId = null;
     _activeGeneration = null;
     Future<void> performStop() async {
-      // Queue acceptance is separate from native stop execution and idle proof.
       final completion = pending.future.then<Object?>(
         (_) => null,
         onError: (Object error) => error,

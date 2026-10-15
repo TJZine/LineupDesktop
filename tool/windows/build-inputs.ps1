@@ -68,8 +68,6 @@ function Get-PubspecVersion {
   }
 }
 
-# Package identity and default archive path use the same pubspec authority as
-# release build arguments. Resolve from this owner's repository, never a caller's cwd.
 function Get-LineupPackageInput {
   [CmdletBinding()]
   param(
@@ -288,8 +286,6 @@ function Get-BuildInputs {
   @($paths | Sort-Object -Unique)
 }
 
-# The script location is the source authority. Callers cannot supply an unrelated
-# pubspec/commit pair or silently use a parent repository's HEAD.
 function Get-LineupRepository {
   [IO.Path]::GetFullPath((Join-Path -Path $PSScriptRoot -ChildPath '../..'))
 }
@@ -390,8 +386,6 @@ function Invoke-NativeChecked {
   if ($exitCode) { throw "$FailureMessage Exit code $exitCode." }
 }
 
-# The canonical launcher calls this complete operation. Exit belongs here so a
-# wrapper cannot forget to forward Flutter's status after restoring cwd/env.
 function Invoke-LineupLaunch {
   [CmdletBinding()]
   param(

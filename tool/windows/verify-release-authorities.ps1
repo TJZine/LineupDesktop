@@ -38,8 +38,6 @@ function Assert-WindowsReleaseAuthorities {
         $input.BuildDirectory -cne (Join-Path $root 'build/windows/x64/runner/Release')) {
         throw 'Consumed package version, build path or archive destination changed.'
       }
-      # Run the actual package entry point in its copied repository. The existing
-      # destination guard stops before Git/build/runtime checks or artifact writes.
       New-Item -ItemType Directory -Path $input.BuildDirectory, $expected -Force | Out-Null
       Assert-AuthorityRejected { & $packageScript } "Package destination already exists: $expected"
       $custom = Get-LineupPackageInput -BuildDirectory 'build/custom' -Destination 'build/package/custom'
@@ -56,7 +54,6 @@ function Assert-WindowsReleaseAuthorities {
     }
     . $owner
 
-    # Real Git checkout and patch data exercise all pinned-checkout predicates.
     $flutter = Join-Path $directory 'flutter'
     New-Item -ItemType Directory -Path (Join-Path $flutter 'bin/internal') -Force | Out-Null
     $manager = Join-Path $flutter 'manager.txt'
@@ -111,7 +108,6 @@ function Assert-WindowsReleaseAuthorities {
     Invoke-AuthorityFixtureGit $flutter @('apply', $patch)
     & $check
     $PSNativeCommandUseErrorActionPreference = $preference
-    # Normalized manager hashes tolerate host line endings; Git still checks patch applicability.
     [IO.File]::WriteAllText($manager, "patched`r`n")
     if ((Get-NormalizedTextSha256 $manager) -ne $metadata.FlutterPatchedManagerSha256) { throw 'Manager normalization changed.' }
     [IO.File]::WriteAllText($manager, "patched`n")

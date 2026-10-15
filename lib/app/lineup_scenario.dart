@@ -257,7 +257,6 @@ class LineupFixtureActor {
   }
 }
 
-/// Presentation-only output of a synthetic onboarding operation.
 @immutable
 class LineupPresentation {
   const LineupPresentation({

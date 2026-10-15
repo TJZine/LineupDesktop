@@ -54,7 +54,6 @@ public:
       return;
     const DWORD result = WaitForSingleObject(handle_.Get(), timeout);
     locked_ = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
-    // Abandonment allows journal inspection, never grants admission itself.
   }
   ~Gate() {
     if (locked_)
@@ -128,9 +127,6 @@ bool Save(const std::wstring &path, Journal journal,
         written != sizeof(journal) || !FlushFileBuffers(file.Get()))
       return false;
   }
-  // Old bytes remain authoritative if replacement fails. No mutation follows
-  // an unsuccessful registration/update. A crash during recovery leaves the
-  // old unresolved record, which safely blocks future capture.
   if (!MoveFileExW(pending.c_str(), path.c_str(),
                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
     return false;
@@ -200,10 +196,6 @@ bool RetireUnmutatedOrphans(const std::wstring &path,
   bool changed = false;
   for (uint32_t i = 0; i < journal.count;) {
     const auto &entry = journal.entries[i];
-    // Register may precede helper launch/acknowledgment. No Set can precede a
-    // persisted attempted state, so exact dead owners with no intent/verified
-    // mutation need no display query. Access denied or a live owner is not
-    // safe.
     if (entry.verified || entry.attempted || !OwnerFinished(entry.identity)) {
       ++i;
       continue;
@@ -250,7 +242,7 @@ std::pair<std::wstring, std::wstring> ProductionScope() {
   return {directory + L"\\display-recovery-" + scope + L".bin",
           L"Local\\TJZine.LineupDesktop.DisplayRecovery-" + scope};
 }
-} // namespace
+}
 bool RestoreDisplayOwnership(const DisplayOwnership &own,
                              DisplayConfigApi &api) {
   const auto observed = api.Query(own.target, own.route);
@@ -315,8 +307,6 @@ bool DisplayRecoveryCoordinator::Admit(std::chrono::milliseconds timeout) {
       notified = true;
       admission_blocked_();
     }
-    // The event only wakes admission; explicit journal resolution grants it.
-    // Creating it before inspection avoids losing a resolution notification.
     const ULONGLONG now = GetTickCount64();
     if (now >= deadline)
       break;
@@ -324,7 +314,6 @@ bool DisplayRecoveryCoordinator::Admit(std::chrono::milliseconds timeout) {
         WaitForSingleObject(changed.Get(), static_cast<DWORD>(deadline - now));
     if (result != WAIT_OBJECT_0 && result != WAIT_TIMEOUT)
       break;
-    // Reinspect even at timeout: no scheduling delay substitutes for proof.
   }
   disabled_ = true;
   return false;
@@ -399,7 +388,6 @@ bool DisplayRecoveryCoordinator::Recover(RecoveryIdentity identity,
     return true;
   if (!RestoreDisplayOwnership(Ownership(*entry), api))
     return false;
-  // Original restored, or a known external state has relinquished our hold.
   return Remove(journal_path_, journal, identity, gate_name_);
 }
 std::shared_ptr<DisplayRecoveryCoordinator> ProductionDisplayRecovery() {
@@ -410,4 +398,4 @@ std::shared_ptr<DisplayRecoveryCoordinator> ProductionDisplayRecovery() {
   }();
   return shared;
 }
-} // namespace lineup
+}

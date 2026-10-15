@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -16,6 +17,52 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'disposal observes both delayed subscription cleanup failures',
+    () async {
+      final failures = <FlutterErrorDetails>[];
+      final previousErrorHandler = FlutterError.onError;
+      FlutterError.onError = failures.add;
+      addTearDown(() => FlutterError.onError = previousErrorHandler);
+      final lineup = _TestLineup();
+      final guide = GuideController(lineup: lineup);
+      final player = _CancellingPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      coordinator.dispose();
+      expect(player.eventStream.hasListener, isFalse);
+      expect(player.displayStream.hasListener, isFalse);
+      expect(failures, isEmpty);
+      for (final cancellation in [
+        player.eventCancellation,
+        player.displayCancellation,
+      ]) {
+        cancellation.completeError(
+          StateError('https://private.test/media?X-Plex-Token=secret-sentinel'),
+        );
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(failures, hasLength(2));
+      for (final failure in failures) {
+        expect(failure.exception, isA<StateError>());
+        expect(
+          failure.exceptionAsString(),
+          contains('subscription cleanup failed'),
+        );
+        expect(failure.toString(), isNot(contains('secret-sentinel')));
+      }
+      await player.eventStream.close();
+      await player.displayStream.close();
+    },
+  );
 
   testWidgets(
     'display hold local load projects busy without changing overlay or status',
@@ -621,7 +668,6 @@ void main() {
           );
           expect(fixture.coordinator.error, isNull);
           expect(fixture.coordinator.hasPlaybackIntent, isTrue);
-          // The successor starts from its beginning rather than seeking live.
           expect(fixture.player.seeks, [Duration(seconds: startSeconds)]);
         } else {
           expect(fixture.player.loads, hasLength(1));
@@ -6160,7 +6206,6 @@ class _ContinuationStatePlayer extends _EventPlayer {
   @override
   Future<void> stop() async {
     await super.stop();
-    // Native stop completion can publish idle status without a media load ID.
     emitStatus(PlayerState.stopped);
   }
 
@@ -6545,6 +6590,23 @@ class _Player implements NativePlayer {
 
   @override
   Future<void> dispose() async {}
+}
+
+class _CancellingPlayer extends _Player {
+  final eventCancellation = Completer<void>();
+  final displayCancellation = Completer<void>();
+  late final eventStream = StreamController<PlayerEvent>(
+    onCancel: () => eventCancellation.future,
+  );
+  late final displayStream = StreamController<DisplayMatchingReport>(
+    onCancel: () => displayCancellation.future,
+  );
+
+  @override
+  Stream<PlayerEvent> get events => eventStream.stream;
+
+  @override
+  Stream<DisplayMatchingReport> get displayReports => displayStream.stream;
 }
 
 class _FailingStopPlayer extends _Player {

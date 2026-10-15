@@ -6,8 +6,6 @@
 
 namespace lineup {
 enum class GuardianKind : uint32_t { arm = 1, update = 2, disarm = 3 };
-// All fields have fixed width; there are no native pointers or implicit
-// padding.
 struct GuardianRecord {
   uint32_t magic = 0x4c484452;
   uint32_t version = 2;
@@ -34,7 +32,6 @@ GuardianRecord MakeGuardianRecord(GuardianKind kind, uint32_t sequence,
                                   RecoveryIdentity identity = {});
 bool ValidGuardianAck(const GuardianAck &ack, uint32_t sequence);
 
-// Production protocol and recovery policy, shared with fake-backed CTest.
 class GuardianSession {
 public:
   std::optional<GuardianAck> Accept(const GuardianRecord &record);
@@ -57,8 +54,7 @@ private:
 };
 DisplayGuardianFactory MakeDisplayGuardianFactory(
     std::shared_ptr<DisplayRecoveryCoordinator> recovery = {});
-// Takes ownership of all three handles. Tests use pipes, an event in place of
-// the parent process, and a fake API; production supplies the same real API.
+// Takes ownership of all three handles.
 int RunDisplayGuardian(
     HANDLE commands, HANDLE acknowledgments, HANDLE parent,
     DisplayConfigApi &api,
@@ -66,5 +62,5 @@ int RunDisplayGuardian(
     std::function<void()> before_recovery = {});
 // nullopt means ordinary app startup; invalid guardian arguments fail closed.
 std::optional<int> DispatchDisplayGuardian(const wchar_t *command_line);
-} // namespace lineup
+}
 #endif

@@ -279,7 +279,6 @@ void RestoreFailureAndInheritance() {
         "restore retry");
   Fixture inherit;
   inherit.Request(1, true, DisplayState::hdr);
-  // A start arrives while a restore is blocked in the Windows setter.
   inherit.api.on_set = [&inherit](auto, auto) { inherit.restart = true; };
   inherit.Request(2, false, DisplayState::unknown);
   Check(inherit.api.writes.size() == 2 && inherit.engine.HasOwnership() &&
@@ -376,7 +375,6 @@ void TargetSessionReportEdges() {
     for (const auto& report : lost.reports)
       Check(report.revision == revision,
             "disappearance retains request revision");
-    // Repeated failure to map has no further target/session to retire.
     lost.reports.clear();
     lost.engine.Poll(true);
     for (const auto& report : lost.reports)
@@ -646,7 +644,7 @@ void WorkerOrderingAndIsolation(bool remap) {
             "queued remap restores old target then matches new");
   }
 }
-}  // namespace
+}
 int main() {
   try {
     MatchingAndRestore();

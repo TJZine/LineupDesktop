@@ -19,9 +19,7 @@ import '../../test/support/ui_fixture.dart';
 const _goldenKey = Key('guide-sparse-visual-boundary');
 const _viewport = Size(1920, 1080);
 final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
-// Keep this composition capture independent of asynchronous palette decoding:
-// empty artwork resolves to the same color before and after sampling.
-final Uint8List _artworkBytes = Uint8List(0);
+final Uint8List _emptyArtworkBytes = Uint8List(0);
 
 void main() {
   setUpAll(loadPinnedTestFonts);
@@ -162,5 +160,5 @@ class _ComparisonController extends FixtureController {
     Uri path, {
     int? width,
     int? height,
-  }) async => _artworkBytes;
+  }) async => _emptyArtworkBytes;
 }

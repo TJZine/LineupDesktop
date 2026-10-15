@@ -8,8 +8,6 @@ endif()
 # Define the application target. To change its name, change BINARY_NAME in the
 # top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
 # work.
-#
-# Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
@@ -25,22 +23,16 @@ add_executable(${BINARY_NAME} WIN32
   "runner.exe.manifest"
 )
 
-# Apply the standard set of build settings. This can be removed for applications
-# that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
-# Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MINOR=${FLUTTER_VERSION_MINOR}")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_PATCH=${FLUTTER_VERSION_PATCH}")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTTER_VERSION_BUILD}")
 
-# Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 
-# Add dependency libraries and include directories. Add any application-specific
-# dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "shell32.lib")
@@ -102,7 +94,6 @@ target_include_directories(${BINARY_NAME} PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(${BINARY_NAME} PRIVATE "${LINEUP_MPV_LIBRARY}")
 set(LINEUP_MPV_RUNTIME_LIBRARY "${LINEUP_MPV_DLL}" PARENT_SCOPE)
 
-# Exercise the production projection directly, without a live mpv instance.
 add_executable(track_list_encoder_test EXCLUDE_FROM_ALL
   "track_list_encoder.cpp"
   "track_list_encoder_test.cpp"
@@ -112,9 +103,9 @@ target_include_directories(track_list_encoder_test PRIVATE "${LINEUP_MPV_INCLUDE
 target_link_libraries(track_list_encoder_test PRIVATE flutter_wrapper_app)
 add_test(NAME track_list_encoder COMMAND track_list_encoder_test)
 
-# Explicit opt-in only: real pinned DLL, synthetic loopback HTTPS fixtures.
 add_executable(authenticated_reference_test EXCLUDE_FROM_ALL
   "authenticated_reference_test.cpp"
+  "native_player.cpp"
   "track_list_encoder.cpp"
   "display_recovery.cpp"
   "display_dynamic_range.cpp"
@@ -128,31 +119,23 @@ target_link_libraries(authenticated_reference_test PRIVATE
 add_custom_command(TARGET authenticated_reference_test POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${LINEUP_MPV_DLL}" "$<TARGET_FILE_DIR:authenticated_reference_test>")
-find_program(LINEUP_REFERENCE_PYTHON NAMES python python3)
-if(NOT LINEUP_REFERENCE_PYTHON)
-  # Keep production builds independent of test tools, but never silently omit
-  # the requested test when its Python prerequisite is missing.
-  set(LINEUP_REFERENCE_PYTHON "python")
-endif()
 add_test(NAME authenticated_reference
-  COMMAND "${LINEUP_REFERENCE_PYTHON}"
-    "${CMAKE_SOURCE_DIR}/../tool/windows/authenticated-reference-test.py"
-    --harness "$<TARGET_FILE:authenticated_reference_test>"
-    --dll "${LINEUP_MPV_DLL}")
+  COMMAND "${CMAKE_COMMAND}"
+    "-DLINEUP_REFERENCE_CHECKER=${CMAKE_SOURCE_DIR}/../tool/windows/authenticated-reference-test.py"
+    "-DLINEUP_REFERENCE_HARNESS=$<TARGET_FILE:authenticated_reference_test>"
+    "-DLINEUP_REFERENCE_DLL=${LINEUP_MPV_DLL}"
+    -P "${CMAKE_SOURCE_DIR}/../tool/windows/run-authenticated-reference-test.cmake")
 set_tests_properties(authenticated_reference PROPERTIES TIMEOUT 180)
 
-# Portable actual worker-state transitions; no Flutter, HWND or DLL required.
 add_executable(native_playback_state_test EXCLUDE_FROM_ALL
   "native_playback_state_test.cpp"
 )
 apply_standard_settings(native_playback_state_test)
 add_test(NAME native_playback_state COMMAND native_playback_state_test)
 
-# Actual parser/queue/correlation projection, pinned DLL worker and HWND pump.
-# The test compiles native_player.cpp as the authenticated-reference target does,
-# observing real teardown and deliberately rejecting one stop DLL call.
 add_executable(native_player_contract_test EXCLUDE_FROM_ALL
   "native_player_contract_test.cpp"
+  "native_player.cpp"
   "track_list_encoder.cpp"
   "display_recovery.cpp"
   "display_dynamic_range.cpp"
@@ -169,9 +152,6 @@ add_custom_command(TARGET native_player_contract_test POST_BUILD
 add_test(NAME native_player_contract COMMAND native_player_contract_test)
 set_tests_properties(native_player_contract PROPERTIES TIMEOUT 45)
 
-# Real FlutterWindow/engine/messenger lifetime. Build/install the candidate first
-# with the retained nativeRunnerLifecycleTestMain Dart entrypoint. This target
-# uses the installed assets but never runs Lineup account/store initialization.
 add_executable(runner_lifecycle_test EXCLUDE_FROM_ALL
   "runner_lifecycle_test.cpp"
   "flutter_window.cpp"
@@ -188,8 +168,6 @@ apply_standard_settings(runner_lifecycle_test)
 target_compile_definitions(runner_lifecycle_test PRIVATE "NOMINMAX")
 target_include_directories(runner_lifecycle_test PRIVATE
   "${CMAKE_SOURCE_DIR}" "${LINEUP_MPV_INCLUDE_DIR}")
-# RegisterPlugins is the actual runner registrant. CMake resolves this generated
-# plugin target after generated_plugins.cmake is included by the parent.
 target_link_libraries(runner_lifecycle_test PRIVATE
   flutter flutter_wrapper_app flutter_secure_storage_windows_plugin
   "${LINEUP_MPV_LIBRARY}" "dwmapi.lib" "ole32.lib" "shell32.lib")
@@ -226,10 +204,8 @@ target_link_libraries(display_guardian_test PRIVATE "user32.lib" "shell32.lib")
 add_test(NAME display_guardian COMMAND display_guardian_test)
 set_tests_properties(display_guardian PROPERTIES TIMEOUT 60)
 
-# Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
 
-# User/logon-scoped recovery journal and gate identity.
 foreach(target ${BINARY_NAME} authenticated_reference_test native_player_contract_test
     runner_lifecycle_test display_dynamic_range_test display_guardian_test)
   target_link_libraries(${target} PRIVATE "advapi32.lib" "shell32.lib")

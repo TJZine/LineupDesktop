@@ -4,8 +4,6 @@
 #include "display_dynamic_range.h"
 
 namespace lineup {
-// Process creation time prevents PID reuse from identifying a stale owner.
-// A record id distinguishes successive holds on the same physical target.
 struct RecoveryIdentity {
   uint32_t owner_pid = 0;
   uint32_t owner_created_low = 0;
@@ -51,8 +49,6 @@ private:
   std::atomic<bool> admitted_{false};
   std::function<void()> admission_blocked_;
 };
-// Shared across player recreation/hot restart; created lazily on native
-// workers.
 std::shared_ptr<DisplayRecoveryCoordinator> ProductionDisplayRecovery();
-} // namespace lineup
+}
 #endif

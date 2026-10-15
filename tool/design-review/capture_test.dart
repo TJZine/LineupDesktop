@@ -1,7 +1,4 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member
-// Local design-review capture harness. Not part of the project test suite.
-// Run: TZ=America/New_York flutter test --no-pub tool/design-review/capture_test.dart
-// Optional: --name '<scene> @ <config>' to narrow.
 @TestOn('mac-os')
 library;
 
@@ -66,7 +63,6 @@ typedef Shot = Future<void> Function(String state);
 typedef Scene = Future<void> Function(WidgetTester tester, Shot shot);
 
 final Map<String, Scene> _scenes = {
-  // ── Onboarding ──
   'onboarding': (tester, shot) async {
     await _pump(
       tester,
@@ -185,7 +181,6 @@ final Map<String, Scene> _scenes = {
     expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
   },
 
-  // ── Channel setup ──
   'setup-libraries': (tester, shot) async {
     await _pump(tester, _noTicker(_libraryOutcomeFixture().build()));
     await shot('scan-outcomes');
@@ -301,7 +296,6 @@ final Map<String, Scene> _scenes = {
     await shot('complete');
   },
 
-  // ── Guide ──
   'guide': (tester, shot) async {
     final f = _readyFixture(
       scenario: LineupScenario(
@@ -402,7 +396,6 @@ final Map<String, Scene> _scenes = {
     await shot('no-channels');
   },
 
-  // ── Shell ──
   'lineup-menu': (tester, shot) async {
     final f = _readyFixture(
       playerState: const PlayerStatus(
@@ -415,7 +408,6 @@ final Map<String, Scene> _scenes = {
     await shot('guide-invoker');
   },
 
-  // ── Player ──
   'player-osd': (tester, shot) async {
     final f = _readyFixture(
       playerState: const PlayerStatus(
@@ -670,7 +662,6 @@ final Map<String, Scene> _scenes = {
     await _playerMaterialShots(tester, shot, f, 'control-unavailable');
   },
 
-  // ── Channels + Studio ──
   'channels': (tester, shot) async {
     final f = _channelManagementFixture();
     await _pump(tester, f.build());
@@ -723,7 +714,6 @@ final Map<String, Scene> _scenes = {
     await shot('retained-empty-schedule');
   },
 
-  // ── Settings + Diagnostics ──
   'settings': (tester, shot) async {
     final f = _readyFixture();
     await _pump(tester, f.build());
@@ -839,6 +829,39 @@ final Map<String, Scene> _scenes = {
 
 void main() {
   setUpAll(loadPinnedTestFonts);
+  for (final preloaded in [false, true]) {
+    test('fixture load generations with preloaded=$preloaded', () async {
+      final player = preloaded ? FixturePlayer.preloaded() : FixturePlayer();
+      addTearDown(player.dispose);
+      final events = <PlayerEvent>[];
+      final subscription = player.events.listen(events.add);
+      addTearDown(subscription.cancel);
+
+      player.emit(
+        const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(events.single.generation, preloaded ? isNull : 0);
+
+      await player.load(Uri.parse('test://media'));
+      await Future<void>.delayed(Duration.zero);
+      expect(events.last.generation, 1);
+
+      await player.load(Uri.parse('test://media'), generation: 0);
+      await Future<void>.delayed(Duration.zero);
+      expect(events.last.generation, 0);
+
+      await player.load(Uri.parse('test://media'), generation: 7);
+      player.emit(
+        const PlayerStatus(state: PlayerState.ready, message: 'Stale'),
+        eventGeneration: 3,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(events[events.length - 2].generation, 7);
+      expect(events.last.generation, 3);
+      expect(player.generation, 7);
+    });
+  }
   final only = Platform.environment['SCENES']?.split(',').toSet();
   final configs = Platform.environment['CONFIGS']?.split(',').toSet();
   for (final config in _configs) {
@@ -1012,8 +1035,6 @@ List<Map<String, Object?>> _spanProbes(
   return runs;
 }
 
-// Deliberately distinguish usable title artwork from a missing-artwork fallback.
-// Both states must finish decoding before the first material-level capture.
 Future<void> _nowPlayingScene(
   WidgetTester tester,
   Shot shot, {
@@ -1130,23 +1151,9 @@ Future<void> _playerMaterialShots(
   await tester.pump();
 }
 
-// A preloaded synthetic status has no Dart load generation. Once load() is
-// requested, preserve the real generation so currentness guards still apply.
-class _CapturePlayer extends FixturePlayer {
-  @override
-  Stream<PlayerEvent> get events => super.events.map(
-    (event) => PlayerEvent(
-      status: event.status,
-      position: event.position,
-      duration: event.duration,
-      telemetry: event.telemetry,
-      tracks: event.tracks,
-      generation: event.generation == 0 ? null : event.generation,
-    ),
-  );
-}
+class _FailingCapturePlayer extends FixturePlayer {
+  _FailingCapturePlayer() : super.preloaded();
 
-class _FailingCapturePlayer extends _CapturePlayer {
   @override
   Future<void> pause() async =>
       throw const PlayerUnavailable('Synthetic control failure');
@@ -1365,7 +1372,7 @@ UiFixture _readyFixture({
   bool omitClearLogoArtwork = false,
   FixturePlayer? capturePlayer,
 }) {
-  final player = capturePlayer ?? _CapturePlayer();
+  final player = capturePlayer ?? FixturePlayer.preloaded();
   if (playerState != null) {
     player.emit(
       playerState,

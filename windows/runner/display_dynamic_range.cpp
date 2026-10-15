@@ -122,7 +122,7 @@ bool IsOurState(const DisplayOwnership& own, DisplayState state) {
   return state != DisplayState::unknown &&
          (state == own.attempted || state == own.verified);
 }
-}  // namespace
+}
 const char* DisplayStateName(DisplayState state) {
   switch (state) {
     case DisplayState::sdr:
@@ -269,7 +269,8 @@ void DisplayMatchingEngine::Suspend(Record& record) {
   Report(&record, "idle", false, "external_change");
 }
 bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
-                                  bool restore) {
+                                  WritePurpose purpose) {
+  const bool restore = purpose == WritePurpose::restoration;
   auto& own = record.ownership;
   if (!restore && (!record.guardian || !record.guardian->IsAlive() ||
                    record.guardian_lost)) {
@@ -283,15 +284,11 @@ bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
   }
   const auto previous_attempt = own.attempted;
   own.attempted = desired;
-  // Restoration remains best-effort after guardian loss. New matching writes
-  // require an acknowledged attempted-state update before touching Windows.
   if (record.guardian && !record.guardian->Update(own)) {
     record.guardian_lost = true;
     if (!restore) {
       own.attempted = previous_attempt;
       if (!record.owned) {
-        // No Set has ever run for this hold. The parent can explicitly cancel
-        // its durable registration even when the update acknowledgment failed.
         record.guardian->Disarm();
         record.guardian.reset();
       }
@@ -299,28 +296,13 @@ bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
       return false;
     }
   }
-  bool accepted = false, verified = false, executed = false;
+  WriteObservation observation;
+  bool executed = false;
   auto action = [&] {
     executed = true;
-    record.owned = true;
-    record.unobserved_attempt = true;
-    record.write_revision = request_.revision;
-    Report(&record, "pending", true);
-    accepted = api_.Set(own.target, own.route, desired);
-    const auto deadline = clock_.Now() + std::chrono::seconds(3);
-    do {
-      record.observed = api_.Query(own.target, own.route);
-      if (record.observed.state == desired) {
-        verified = true;
-        break;
-      }
-      if (!accepted || clock_.Now() >= deadline) break;
-      clock_.Sleep(std::chrono::milliseconds(50));
-    } while (true);
-    return verified;
+    observation = WriteAndObserve(record, desired);
+    return observation.verified;
   };
-  // The helper can recover on pipe loss while the parent remains alive. Its
-  // claim/removal and the parent's Set/verification use the same short gate.
   if (record.guardian)
     record.guardian->Execute(action);
   else
@@ -334,25 +316,46 @@ bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
     Report(&record, "failed", false, "guardian_unavailable");
     return false;
   }
-  if (verified) {
+  if (observation.verified) {
     own.verified = desired;
     record.unobserved_attempt = false;
   }
-  if (!restore && !verified) {
-    record.failure =
-        Record::Failure{request_, accepted ? "not_observed" : "set_rejected"};
+  if (!restore && !observation.verified) {
+    record.failure = Record::Failure{
+        request_, observation.accepted ? "not_observed" : "set_rejected"};
   }
-  // Never erase attempted on timeout: Windows may finish after our deadline.
   if (record.guardian && !record.guardian->Update(own))
     record.guardian_lost = true;
-  Report(&record, verified && !record.guardian_lost ? "matched" : "failed",
+  Report(&record,
+         observation.verified && !record.guardian_lost ? "matched" : "failed",
          true,
-         record.guardian_lost ? "guardian_unavailable"
-         : verified           ? nullptr
-         : restore            ? "restore_failed"
-         : accepted           ? "not_observed"
-                              : "set_rejected");
-  return verified;
+         record.guardian_lost    ? "guardian_unavailable"
+         : observation.verified ? nullptr
+         : restore              ? "restore_failed"
+         : observation.accepted ? "not_observed"
+                                : "set_rejected");
+  return observation.verified;
+}
+DisplayMatchingEngine::WriteObservation DisplayMatchingEngine::WriteAndObserve(
+    Record& record, DisplayState desired) {
+  const auto& own = record.ownership;
+  WriteObservation observation;
+  record.owned = true;
+  record.unobserved_attempt = true;
+  record.write_revision = request_.revision;
+  Report(&record, "pending", true);
+  observation.accepted = api_.Set(own.target, own.route, desired);
+  const auto deadline = clock_.Now() + std::chrono::seconds(3);
+  do {
+    record.observed = api_.Query(own.target, own.route);
+    if (record.observed.state == desired) {
+      observation.verified = true;
+      break;
+    }
+    if (!observation.accepted || clock_.Now() >= deadline) break;
+    clock_.Sleep(std::chrono::milliseconds(50));
+  } while (true);
+  return observation;
 }
 void DisplayMatchingEngine::Reconcile() {
   if (!active_) return;
@@ -380,7 +383,6 @@ void DisplayMatchingEngine::Reconcile() {
     if (record->guardian && !record->guardian->Update(own))
       record->guardian_lost = true;
   }
-  // Before any attempted change, even the original is the expected state.
   if (record->owned && record->guardian && !record->guardian->IsAlive()) {
     record->guardian_lost = true;
   }
@@ -396,8 +398,6 @@ void DisplayMatchingEngine::Reconcile() {
     Report(record, "matched", false);
     return;
   }
-  // Polling still observes late success/external changes, but a failed intent
-  // is attempted again only after changed intent or a display/settings notice.
   if (record->failure && record->failure->request.desired == request_.desired) {
     Report(record, "failed", false, record->failure->reason);
     return;
@@ -410,7 +410,15 @@ void DisplayMatchingEngine::Reconcile() {
       return;
     }
   }
-  Write(*record, request_.desired, false);
+  Write(*record, request_.desired, WritePurpose::matching);
+}
+bool DisplayMatchingEngine::RetainForRestartOnTarget(DisplayTarget target) {
+  if (!RetainForAnyRestart()) return false;
+  const auto mapping = api_.MapWindow(window_);
+  return mapping.target && *mapping.target == target;
+}
+bool DisplayMatchingEngine::RetainForAnyRestart() {
+  return restart_pending_ && restart_pending_();
 }
 void DisplayMatchingEngine::Release(Record& record) {
   if (!record.owned) return;
@@ -432,16 +440,11 @@ void DisplayMatchingEngine::Release(Record& record) {
     record.owned = false;
     return;
   }
-  if (restart_pending_ && restart_pending_()) {
-    const auto mapping = api_.MapWindow(window_);
-    if (mapping.target && *mapping.target == own.target)
-      return;
-  }
+  if (RetainForRestartOnTarget(own.target)) return;
   if (record.observed.state != own.original &&
-      !Write(record, own.original, true))
+      !Write(record, own.original, WritePurpose::restoration))
     return;
-  // A queued restart inherits the original even if it arrived during Set.
-  if (restart_pending_ && restart_pending_()) return;
+  if (RetainForAnyRestart()) return;
   if (record.guardian && !record.guardian->Disarm()) {
     record.guardian_lost = true;
     Report(&record, "failed", false, "restore_failed");
@@ -453,6 +456,19 @@ void DisplayMatchingEngine::Release(Record& record) {
 void DisplayMatchingEngine::ReleaseAll() {
   for (auto& record : records_) Release(*record);
 }
+void DisplayMatchingEngine::RestartForTargetChange(
+    std::optional<DisplayTarget> target) {
+  Record* retiring = active_ ? Find(*active_) : nullptr;
+  if (active_) {
+    session_ = "inactive";
+    Report(retiring, "idle", false);
+  }
+  active_.reset();
+  for (auto& record : records_) {
+    if (!target || !(record->ownership.target == *target)) Release(*record);
+  }
+  Start();
+}
 void DisplayMatchingEngine::Poll(bool remap, bool retry) {
   if (retry) {
     for (auto &record : records_)
@@ -461,27 +477,10 @@ void DisplayMatchingEngine::Poll(bool remap, bool retry) {
   if (request_.session && (remap || !active_)) {
     const auto mapping = api_.MapWindow(window_);
     if (!mapping.target || !active_ || !(*mapping.target == *active_)) {
-      Record* retiring = active_ ? Find(*active_) : nullptr;
-      // The same Dart revision can span a native target change. Publish the
-      // session edge before restoration or starting the incoming target, so
-      // the coordinator can distinguish it from ordinary active polling.
-      if (active_) {
-        session_ = "inactive";
-        Report(retiring, "idle", false);
-      }
-      active_.reset();
-      // The incoming target may already be owned from a disappearance or a
-      // failed release. It must inherit its record, not restore and recapture.
-      for (auto& record : records_) {
-        if (!mapping.target || !(record->ownership.target == *mapping.target))
-          Release(*record);
-      }
-      Start();
+      RestartForTargetChange(mapping.target);
       return;
     }
   }
-  // Capability/state may recover without the target identity changing.
-  // Retry only on display/settings notices; never revive external suspension.
   if (request_.session && retry && session_ == std::string("unavailable")) {
     Start();
   } else if (request_.session && session_ == std::string("active")) {
@@ -525,7 +524,6 @@ bool DisplayDynamicRange::Submit(DisplayRequest request) {
   std::lock_guard lock(mutex_);
   if (stopping_ || request.revision <= revision_) return false;
   revision_ = request.revision;
-  // Preserve edges; coalesce only consecutive desires within one session.
   if (!requests_.empty() && request.session && requests_.back().request.session)
     requests_.back() = {request, epoch_.load()};
   else
@@ -631,4 +629,4 @@ void DisplayDynamicRange::Run() {
   finished_ = true;
   changed_.notify_all();
 }
-}  // namespace lineup
+}
