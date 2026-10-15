@@ -1038,3 +1038,29 @@ idly or treat child completion as acceptance without inspecting source/evidence.
   Range-diff all`=`. Same child granted exclusive old-source work-count negative
   control, exact restoration, canonicalchecks/focused andfull. Expected1,645 is
   not observed proof; actual mapped count required. No other runtime granted.
+
+## U initial readiness and bounded artwork ownership
+
+U child01a13f32 verified actual HUMAN callback authority; test-onlya813cbbed35e96adb546b3922f02faa68b2f4723
+on product9d9ec78e adds NF23 unknown confirmation, three codec precedence
+controls, canonical SDR fixture; libdiff empty. Unexecuted scratch harness
+f6c5e6e08ebc5911c6d2f977c47e8529b8a757450e0f7119463eb0b4806c6589
+intends48 fixed-state Player/shell captures. No actual confirming/runtime/render
+result. Preparation and old-proof map `/tmp/lineup-cq-U/`.
+
+NF25 gitlog-L establishes intentional resets atb86693d926d21a508f08df1298a3c977ec4143cc,
+including keyboard/mouse sleep/menu regressions. Parent accepted preserve/document
+path; actual modality remains distinct from focus-paint visibility and Player
+pointeractivity remains independent.
+
+Parent inspected actual GuideController.artworkFor duplicate and APPROVED bounded
+U ownership extension: import shared pure artwork-path helper and replace only
+poster/backdrop/clearlogo switch. Preserve disposal/null/empty/cachekey/load/resize
+and fallback behavior. No wider GuideController edit granted. V notified;
+notification/selection/queue/viewport ownership stays V. Helper type/layer changes
+beyond this bounded consumer need separate concrete adjudication. U remains
+sourceprep only until actual NF23 controls and BEFORE renders are granted/run.
+
+W snapshot cursor6c8480fc-9561-43d7-8b1b-075716afb037:1 active: focused22 passed
+per child progress; analyzer-only testlintrepair being committed, exclusive full
+then required. Final exactSHA/logs/negativecontrol/results still await completion.
