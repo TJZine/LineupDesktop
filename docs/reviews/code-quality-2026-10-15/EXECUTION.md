@@ -33,8 +33,9 @@ pinnedformat114/analyze/focused105/full1,650 PASS; independent R1 CLOSED.
 Unchanged final rebaseb078944a8cc8b6999badb477f2401257a330bf53 integrated.
 S main-checkout gate PASSED at9b066698: format114/analyzeclean/full1,650;
 acceptedStasktree/fullyintegratedbranchremoved. Combinedreviewstillrequired.
-V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
-viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
+V test-only287571e2 actualBEFORE120tests117pass/3confirmingfail, controls
+passandprofilebaselinecaptured. ParentacceptedNF29/viewportfindings; sameVchild
+nowSOURCE-ONLYfullVrepairwhileYowns broad/fullruntime.
 Y reconstructed polling control/fourclock green, broad/analyze/full pending.
 D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
 tocd26d00d on2cf4570c. D reviewedcd26 actualfull1,657PASS; twoacceptedP2regressionsrepairedat
@@ -47,7 +48,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: V faithfulBEFORE/1000Guideprofilebaseline exclusively; NO Vproductionrepairyet. Otherqueuesheld. U prepares source/test/history; all other children queued.
+Runtime: Y rebasedbroad/full exclusively; Vsource-only fullapprovedrepair, Uqueueduntouched, K/Gnotdispatched. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -108,7 +109,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Acceptededd12307 reviewed/currentfull1,663/render14/main1,663green; candidate+baselineworktrees/taskbranchcleaned, proofarchived |
 | E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Six findings and immutable qualification SOURCE-CLOSED at8ff1574a; runtime/render/full unverified |
 | S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Acceptedb078944a independentclosure/105focused/1,650full/main1,650green; tasktree/fullyintegratedbranchremoved |
-| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Test-onlyf5a36482 rebaseon6f909a36 allpatches=; exclusiveactualNF29BEFORE/profilebaselinegranted, no productionrepair |
+| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | 287571e2 BEFORE120/117pass/3confirmingfail, staleactivity/contentcontrolspass/profilecaptured; source-onlyfullrepairauthorized |
 | W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalenta6a2d46f integrated; main1,645 green; tasktree/branchremoved |
 | W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
 | Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Source83b7aa04 + finite test seam507cb296; narrow faithful old-poll negative control/clock checks released; unintegrated |
@@ -1377,3 +1378,35 @@ D/E/sharedinputs; priorclockproofremainsoldattribution. U9d..a813cbbe onto17ae91
 onepatch`=`,a813cbbe→b0aac29df99b869787034eb7ee26f3f4df88c314. Uproductionstill
 untouched, scratchpreserved; futureinitialconfirm/baselineoncurrentacceptedUI.
 Bothsamechildrennotifiedruntime/sourcehold, noackcallbacksneeded. Vexclusive.
+
+## V actual confirming results/profile baseline and parallel source repair
+
+V clean287571e2dbe62b495143da9da7a5354f7664dfd1 (f5testprep+fixturetestroot/
+fakeasyncpump stabilization), productionGuideunchangedon6f909a36. Guardpin3.47.7.
+FinalfaithfulGuideController+GuideViewsuite exit1:120total/117pass/3newconfirming
+failures. Earlierinterruptedrootfixturefailureexcluded, correctedtest-onlyseam.
+`/tmp/lineup-cq-V/before-guide-rerun.log`, before-toolchain.log,before-query.log.
+ActualconfirmationsACCEPTEDbyparent beforeproductionrepair:
+- queryboundaryrowerrorbut0notificationsafterpump, expected1 (beforepump0correct);
+- onecompletedrowready/active0 publishes2, expected1;
+- unchangedviewportrebuildrequestcounter4, expected3.
+Stalefinalactivecountonepublication, stalepumpingcurrentqueueonepublication/
+active1/loading, sameIDcontentinvalidationreload/requestcontrolspassed; oldtests
+otherwisepass. These are mandatorymeaningfulobligations, notdiscardedasspam.
+
+Comparableexclusiveexistingprofilebaseline actualnumbers:
+CARDINALITY200: first53,936us/widgets1,778/loaded11;
+500:49,513us/1,778/11;1000:51,902us/1,778/11.
+PROFILE1000: first73,699us/navigation500579us/widgets1,746/cached25/
+rssDelta4,423,680bytes. FourhourPROFILE1000:rows5/first91,161us/widgets5,140/
+programCells40/scheduleLoads17/cached17. Workloadunchanged/pinnedhost/SDK/fonts/
+theme/size/exclusive; no improvement/physicalframeperformanceclaimed. AFTERmust
+reportcomparablefactsandinvestigatematerialregression, notincidentalnoise.
+
+SameVworker authorizedFULLVsource-onlyrepairinclnullablepairs/inspectiontriple
+preservation/guardedcoalescedpostframe/onceafterbookkeepingandpump/viewport
+channelsnapshot+content/schedulegeneration. NO Vruntimeuntilnextgrant; parentwill
+adjudicatesource/rebasecurrentthenAFTER/profile/full. Y sameLuna nowexclusive
+pinguard/format/analyze/bothonboarding+app suites/fullon1c196765 (actualbase17ae).
+ExpectedY1,667=E1,663+4clockcases, notobserved; originalnegativeproofkeepsold
+attribution. ExactPINgetterwriteboundary maintained, no otherruntime overlap.
