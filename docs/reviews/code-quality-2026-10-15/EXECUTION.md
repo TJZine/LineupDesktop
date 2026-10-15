@@ -44,12 +44,12 @@ tocd26d00d on2cf4570c. D reviewedcd26 actualfull1,657PASS; twoacceptedP2regressi
 full1,658PASS. SameDreviewer CLOSED bothfindings; equivalent final4615b7c0
 integrated. D main-checkout gate PASSED at9254e66d guard/format129/analyze/full1,658;
 acceptedtasktree/fullyintegratedcqDremoved; allrender/repairproofretained.
-U newly dispatched worker6.1/medium at9d9ec78e, INITIAL source/test/history and
-scratchbaseline preparation ONLY. No U production change until confirming
-unknownbadge test and baseline renders run. K/G undispatched; combined/final
+U a869b5ed actualUNKNOWNBEFOREconfirmed,4codec/HDRcontrolsPASS,26scenarios/
+48baselineimages+selfmatchPASS. FullUimplementation nowauthorizedSOURCE-ONLY
+whileV-R1BEFOREruntimeexecutes; Vunmergedsofuturecurrentcompositionrendersrequired. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: mainYreleased; Uinitialconfirmation/baselinegrantnext. Vsamechatnowworker6.1/medium test-onlyV-R1prep, NOrepairbeforeactualconfirmation; K/Gnotdispatched. U prepares source/test/history; all other children queued.
+Runtime: V-R1 confirmingBEFOREexclusively; Uworker6.1/medium fullsourceimplementationonly. K/Gnotdispatched, nootherFlutter. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -1508,3 +1508,36 @@ Likelypurecurrentdemandretained/inflight/queuedownershipquery interface remains
 proposaluntilactualconfirm/refute; failedrowsmuststayexplicitretryonly. Ucurrently
 exclusiveNF23/baseline, VqueuedforactualBEFOREgrantafterUrelease. Correct123total/
 120pass3failbaselinebookkeepingretained; sixoldVadditionsplusnewR1case maplater.
+
+## U observed confirmation/preproduction renders and full source implementation
+
+U a869b5edf2a0f661fd6f3faae8a3c04905be3660 actualNF23BEFOREexit1/onefailure:
+UNKNOWNText1vsfindsNothing, expectedpublicsurface/TV14controlspass. Codecprecedence
+three+canonicalSDRruntimeHDRcontrolfourPASS. Pin3.47.7/pubgetexit0, lib/lockdiffempty,
+trackedclean+taskscratchonly. /tmp/lineup-cq-U/initial-results.md exactcommands/logs.
+Finalbaselineattempt3actual26scenarios48imagesPASS +separateprocessNOupdates
+selfmatch26PASS/48exactcomparisons. Hashharness
+8c45957a6b71af120f6311324602ac8d405402f07e9fd5ce0b597209c012f002,
+immutablecopyu_render_test.baseline.dart; imagehashmanifest
+f7cf27dc380bc209e61c551ee89ed5681a82c39b7843d49463dae29490005065;
+fontmanifest079f77b33e80bc8f390f4abf6093b5cc18e61584192a7094c708e16a08d9b05a.
+Actual24directPlayerplaying/pausedOSD/NowPlaying/MiniGuidefocus2sizes+20fiveShell
+routesfocus2sizes+4UNKNOWN/3CHapproved-diffscenes. Physical1280x720DPR1usesexisting
+LineupCanvas1600x900logicalboundary;1920x1080rasterunchanged. ShellfakeStopped
+withProgramexplicitqualification; directplaying/pausedasserted. NotWindowsproof.
+
+Attempt1passedtestbutvisualinspectionfoundinvalidshellGuide/Playerempty/error,
+REJECTEDproofretained; scratch-onlydeterministicloadScheduleFor/buildSchedule+
+actuallytunesCoordinator/nonemptyassertionsfixedscene. Attempt2populatedbutartwork
+animationmidflight, REJECTED; scratch-onlypumpAndSettleafterrunAsyncdecoding.
+Attempt3+selfmatchaccepted. No productionfix/matcher/tolerance/goldencommit.
+Parentacceptsconfirmation/baselineandgrantsFULLUsource-onlyimplementation, all
+originalNF23–27/T7obligations inclCtrlallplatforms, intentionalmodalitypreserve,
+completepurekeyresolver+sideeffects, stableLayerLink/posterhelperboundedconsumer,
+coordinatorgetters andtypedShell/settings/menu. No sourceownershipexpansion;
+futureAFTER/currentsharedinputs/48renders/full/requiredUreviewBEFOREmerge remain.
+
+Vworker6.1 nowexclusive selectedbulkRetryevictionBEFOREtestat8bd, no repairyet;
+faithfulfixture-onlyfixifneeded notconfirmation. Reportsintendedvisiblemissing
+result/facts/bounds/order, no genericsetup/timeoutacceptance. Uonlysourceedits,
+allotherFlutterheld. SameparentadjudicatesactualV-R1resultthenrepairgrant.
