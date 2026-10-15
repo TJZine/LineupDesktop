@@ -43,7 +43,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Dispatched; Plex decoding, strict analysis, version consistency |
-| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Dispatched; checked toolchain guard; integrate after A |
+| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Candidate `1d6520b4c252d345572aa01ed8711977c100b252` inspected; rebase/check/integrate after A |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -94,10 +94,39 @@ Tests passing or a child declaring completion does not satisfy this requirement.
   not fully complete. Physical Windows acceptance remains separately pending
   until actually observed, even when deterministic checks pass.
 
-Review status: P0 evidence inspected and accepted; A/H implementation in progress.
-No product package review or final whole-branch review is claimed yet.
-Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:1`;
-H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:1`.
+Review status: P0 evidence inspected and accepted; A implementation in progress;
+H candidate controller review completed as described below, integration pending.
+No integrated product package or final whole-branch review is claimed yet.
+Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:2`;
+H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:2`.
+
+### H candidate inspection
+
+Reviewed exact range `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654` to
+`1d6520b4c252d345572aa01ed8711977c100b252`; worktree was clean. Seven files
+match H's ownership, including all four CI setup checks, explicit fixture
+opt-out, checked pin, and the one PowerShell consistency assertion. Existing
+CI dependency retries remain unchanged. No golden diff or whitespace errors.
+No material finding established in this candidate. This is controller review
+per §8.2, not a claim that combined strict-analysis checks have run.
+
+Child reported clean analysis/format (106 files), five new toolchain tests,
+all ten retained formatter tests, and **1,572** full-suite passes (+5 from its
+actual base). Parent inspected full-suite log tail and both actual 3.47.6
+rejection diagnostics. No tests moved/removed; existing formatter assertions
+remain intact, with the explicit fixture flag the only change. Pre-change
+absence of a guard is source evidence; a new pre-fix wrong-SDK run was not
+observed. Serialized 3.47.6 fixture tests passed after an initial concurrent
+native-asset startup race; no SDK mutation was made. PowerShell was unavailable:
+the policy assertion is source-inspected and still requires execution on a
+PowerShell host; future CI has not run and is not a pass.
+
+H remains unintegrated until A is accepted and H is rebased and checked under
+the resulting strict analyzer. Proposed sentence for G's DEVELOPMENT.md:
+“Run `dart tool/check_toolchain.dart` before repository checks; it verifies that
+the Flutter SDK on PATH matches `tool/flutter_version.json`.” Full suite and
+wrong-SDK logs are in `/tmp/lineup-cq-H/`. The callback header mistyped the child
+ID; the dispatch identity above is confirmed by supported thread retrieval.
 
 ## Evidence and limits
 
