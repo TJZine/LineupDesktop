@@ -224,6 +224,12 @@ Parent accepted the closure. H was rebased without conflict onto docs-only
 in range-diff (`9e2ea64a` → `5bb92ec9`, `885c4d58` → `2a785c45`). Fast-forward
 integration head is `2a785c456c7238fc1221202f6be5930681d02711`. Required main
 format/analyze/full gate runs with logs `/tmp/lineup-cq-integration/H/`.
+Main H format108 and strict analysis have passed. The full suite is still
+running in exec session `9533`, with stable product inputs at `2a785c45`.
+On next activation, collect its exit status using `write_stdin` and inspect
+`full-test.log`; do not claim this main full gate passed from candidate results.
+Retain H worktree/branch until the combined gate is accepted. Subsequent parent
+commits change this execution Markdown only, not tested product/check inputs.
 
 T was created from that exact current integration head and given full package
 contract, T5 trace, owner row, selected preset text, original human callback
