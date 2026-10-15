@@ -43,9 +43,10 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Accepted and integrated at `5990c0217b33d6d690b663f177fbe62e2635b557`; combined format/analyze/1,583 tests passed |
-| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; former `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Accepted/integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main format/analyze/1,588 tests passed; cleanup authorized |
+| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; former `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Accepted/integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main format/analyze/1,588 tests passed; task worktree/branch removed |
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
-| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Candidate `548b7ec36dbaa333126f1467294faf179229d65c` returned; independent review in progress |
+| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Independently reviewed; integrated at `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; main gate running |
+| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Dispatched; platform-neutral transport, malformed payloads, telemetry value semantics, protocol and macOS build |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -104,11 +105,11 @@ may use reviewer assistance and does not replace other required reviews.
 
 Review status: P0 accepted; corrected A and H independently reviewed, no unresolved
 material finding established. A integrated with combined gate green; corrected
-H independently closed and integrated, main combined gate green. T candidate
-independent review running. Final whole-branch review
+H independently closed and integrated, main combined gate green. T independently
+reviewed and integrated, main gate running. M implementation in flight. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
-Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:2`.
+Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:3`.
 T retrieval cursor: `f42cb099-62a0-4bc8-a48c-6e4332c0926f:1`.
 
 ### H candidate inspection
@@ -259,6 +260,39 @@ obligations and assertions. The one reported `loads == 1` → `hasLength(1)`
 adaptation (recorder now a list) is explicitly under review for equivalent
 count proof and adherence to T's preservation intent. T stays unintegrated
 pending verdict/adjudication; no new implementation package dispatched yet.
+
+### T acceptance and M dispatch
+
+Independent reviewer inspected T's complete15-file diff and caller/subclass
+behavior at `548b7ec3`: no material finding established. Controller accepts
+representation-only load-list length and `rects` → `videoRects` assertions as
+equivalent count/value proof, explicitly recording the textual departure from
+“assertions unchanged.” Do not claim the assertion text was literally untouched.
+The five Plex-helper consumers meet the ≥3 rule. All28 actual coordinator
+subclasses are retained; historical plan26 is not the actual source inventory.
+Reported fake state/emission/disposal/ID obligations and focused799/full1,588
+results were inspected by the reviewer, with no coverage loss established.
+
+T rebased conflict-free onto `46a45355bb1ba7d4ae4e60509104d354b9f0c695`.
+An initially mistyped original revision stopped the first range-diff/merge
+command before integration. Resolving original `548b7ec3` to its actual full SHA
+corrected the check; range-diff showed identical patch at
+`dbc4dea073cea9f4eec0eba500306f195c7b7f8c`, then fast-forward integration succeeded.
+An accidentally started prior-head check is not T evidence. The actual postmerge
+gate is exec session `31563` with logs `/tmp/lineup-cq-integration/T/
+integrated-{format,analyze,full-test}.log`; collect exit status on next activation.
+Keep T worktree/branch until that gate is accepted. Main product inputs remain
+stable; parent may update execution Markdown only.
+
+M was created from that exact integrated T head and dispatched with complete
+§7.M/T4, ownership, chosen interfaces, original human callback reference,
+responsibility text and return map. `worker_luna` remains suitable because the
+platform factory, unchanged wire/messages, malformed-value handling and protocol
+requirements are specified; unresolved cross-boundary decisions must return to
+the controller. It alone owns the assigned macOS build in its isolated tree;
+no native code/Windows/macOS media implementation is authorized. Parent retains
+the required main macOS build after M integration. M tests use the current
+shared doubles; source baselines/counts come from the actual T head.
 
 ## Evidence and limits
 
