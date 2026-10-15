@@ -9,19 +9,17 @@ dispatch, acceptance, and integration; it does not replace package contracts.
 
 All portable CODE packages A/H/T/M/B/L/C/W/S/D/E/Y/V/U/K integrated.
 Latest observed mainU§8.1 at9f1f25fd:pin3.47.7/format143/analyze/full1,687PASS.
-K final9c3c62e6 nowmerged; requiredmainKfreshU+Kgate dispatchnext, expected1,690
-=U1687+K3notyetobserved. No furthercodeedits/integrationuntilstablechecks/reviews.
+K final9c3c62e6 merged; freshmainKa620 actually1,690PASS
+=U1687+K3, format144/analyzeclean. BothfinalcodereviewsCLEAR/parentaccepted. No furthercodeedits/integrationuntilstablechecks/reviews.
 Koldcandidatea33 ownV/Ybasefull1,678excludedU; properattributionretained.
 Urequiredfull+targetedreviewCLOSED all2P1/compiler/lifecycle; actual375focused/
 1,687full and44exact/fourapprovedbadge-renderdifferences accepted. Otherrequired
 B/C/D/F/Lsource reviews andalladjudicationsbelow. Kfull17enum/20calls/storage-vs-
 export2354bytecontract+UIproofpasses, plannedcombinedreviewstillrequired.
 
-Dispatchnext(twoindependentread-onlyreviewers6.1/highonTHISfrozenrecordHEAD):
-requiredcombinedA/E/M/S/V/W/K/Ypostmergereview and finalwholebranchcomposition
-reviewbeforeG. ActualchildIDs willbeconversationdispatchmapwhileHEADfrozen,
-thenrecordedafterchecks/reviews. P0exclusive mainKruntime; reviewersnoruntime.
-GUNDISPATCHED untilallcodefindingsadjudicated. FinalmacOSbuildpending(Mbuildpassed).
+Bothindependentread-onlyreviewers6.1/highcompletedata620: combined01a13fa4
+andwholebranch01a13fa6CLEAR, attributedrecordsretained; freezeendedafterresults.
+Gnoweligiblefordispatch, nocodefindingunresolved. FinalmacOSbuildpending(Mbuildpassed).
 U/Kacceptedtasktreesretainedforpossiblefocusedcorrections, clean. Otherscleaned.
 F040e4a64 remainsUNVERIFIED/UNMERGED inretainedcq/F pendingWindowsCTests
 (display_dynamic_range/display_guardian/native_player_contract/runner_lifecycle),
@@ -1894,3 +1892,25 @@ untilsourcefreezeends; no HEAD-changingdispatchrecordduringchecks/review.
 Bothread-only/no tests/builds/delegation, distinctscope/priorvalidreviewcarrywith
 actualsourcecomparison, allmaterialfindingsparentadjudicates/sameownerfixes.
 AllnineCQregisterstillcompleteagreedscope: CQ08nativeFpendingnotforgotten.
+
+## Fresh combined gate and both final code-review closures
+
+P0mainKa620790e642d8c72fcdb2d76602a3a5f49bf16af unchanged/clean: pin3.47.7/
+Dart3.13.5, format144zeroexit0(2.42s), analyzecleanexit0(3.25s), full1,690exit0
+(85.58s). `/tmp/lineup-cq-integration/K/*`. CurrentU1687+K3 actuallyobserved,
+notoldK1678relabelled. ParentkeptHEADfrozenuntilP0andbothread-onlyreviewscompleted.
+
+Requiredcombinedreview01a13fa4-f163-7372-a865-c249b7d6767d6.1/high completedCLEAR,
+no actionablematerialfindings; source/oldproof/Kprivacybyte/UI/mappingchecked.
+Finalwholebranchreview01a13fa6-4f16-7d62-aa2a-62766c11f62c6.1/high completedCLEAR,
+no actionablematerialfinding; allcross-owner/scope/evidenceobligationschecked.
+Bothactualhumanconsentsretrieved, sourcea620 unchanged/clean, no reviewerruntime/
+writes. ParentACCEPTSbothclosures. Attributedretainedrecords
+IMPLEMENTATION_COMBINED_REVIEW.md andIMPLEMENTATION_FINAL_REVIEW.md writtenby
+parentAFTERfreezeended; rawfinalreportsremainretrievableintheirchats.
+
+Code review gates nowclosedforallportablecode. Gmaynowexecute; finalmacOSbuild/
+post-Gmaingate/cleanupremain. F040e4a64 UNMERGED/UNVERIFIED, fourWindowsCTestsand
+physicalW1–W12separate; localPowerShellassertionexecutionunavailable. FullplanNOT
+complete. No code findings require correction. Gmustpreserve allcurrentauthority/
+openobligations/rationale/source-buildidentities/attributedevidence beforearchive.
