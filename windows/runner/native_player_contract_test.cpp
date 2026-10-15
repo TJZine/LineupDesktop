@@ -425,6 +425,7 @@ void Lifecycle(WindowHarness& window, WindowsNativePlayer& player,
   native_test::PumpUntil([&]() { return NativePlayerTestAccess::Disposed(player); }, "window close shutdown");
   Check(player.TakeWindowCloseReady() && !player.TakeWindowCloseReady(), "close readiness consumed once");
   Check(player.BeginWindowClose(), "disposed owner permits immediate close");
+  Check(player.BeginWindowClose(), "repeated close preserves completed display release");
 }
 }
 
