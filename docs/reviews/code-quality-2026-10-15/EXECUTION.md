@@ -47,16 +47,17 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
 | T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; former `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Accepted/integrated `dbc4dea0`; serialized main gate1,588 green; task worktree/branch removed; original artwork failure remains recorded |
 | M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main format/analyze/1,593/macOS build passed; cleanup authorized |
-| B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Candidate5193906f full1602+1 failed; accepted reviewer P2 B-R1 identity repair returned to same child; unintegrated |
+| B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Corrected `2fa2ccd980f91e1d04fd3d99782ea0ac44be8fc6`; focused251/setup1 green, B-R1 closed by reviewer; exclusive full running; unintegrated |
 | B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | C0–C3 partial candidate `78475b9c93d5519e261e33b0994b51ac6f18dd67`; focused578 green; PAUSED until accepted B for same-chat C4, then full/review |
-| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1/D2 partial at `db92b8b91dc4fee68631ffcf0f2994cb17ba7b2f`, focused112 clean; D3 mandatory, baseline render slot queued |
+| D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1/D2 focused112, baseline14 renders green atdb92b8b9; D3 source work in progress |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
 | L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Candidate `2b594e6fcd3a95913299ded5ccd2a1f804348810`, focused224 green; required review running, full suite queued |
 | L review | `01a13ef8-7475-7a13-96d7-8d2e9d82c1a0` / local | reviewer, gpt-6.1-sol, high | L base2ae38b8e → 2b594e6f | Required matrix/pager/cancellation/copy review, read-only |
 | E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna, gpt-5.6-luna, xhigh | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Dispatched complete E1/E2 review/phase/step ownership and render evidence |
-| S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Dispatched full typed worker/series/facet contract; runtime checks temporarily held |
+| S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Source-only `b3893c97924f27dea32d0277a37b5369a44bb0df`, forwarding-export correction done; no runtime checks yet, stopped pending release |
+| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Dispatched full Guide notification/selection/viewport contract, runtime hold; BEFORE tests required before suspected repair |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -690,6 +691,36 @@ ref `origin/codex/code-quality-2026-10` atf77154ea, reflog “update by push”.
 controller issued no push command and has no evidence identifying the actor.
 Preserve this external-to-issued-actions state; no reset/delete/remote mutation
 or new push is authorized. Current task commits remain local ahead of it.
+
+### B-R1 focused closure/full rerun; S scope correction; V dispatch
+
+B correction `2fa2ccd9` focused-green: unchanged failed setup case1 passed,
+controller+persistence251 passed, format110/analyze/diff clean. New single
+identity/defensive-copy control increases B additions to11; full1,604 expected
+until actually observed. Parent granted corrected B an **exclusive full slot**
+for pinned Eastern concurrency2 and sent exact delta to original B reviewer.
+Reviewer closed B-R1: only private owned constructor calls are empty/withLibraryIds/
+withCurrentChannel, all external channel/ID inputs still frozen, genuine
+replacements unchanged, nullable current explicit, relevant actor/production
+paths use safe derivations. No assertion weakening/new finding. Controller
+accepts source closure; prior5193906f failed1602+1 remains attributed evidence.
+Actual corrected full result and main integration gate still required.
+
+S ownership correction completed at`b3893c97`: content_resolver facade change
+reverted, channel_builder directly imports owned library_facets helper. No
+behavior/test/schema change, clean source/light format/diff check. No runtime
+proof yet; stopped awaiting focused release. Cursor
+`9888fdd3-77a8-4bd5-a8ec-4eea631ff4ad:1`.
+
+V took the freed source-work slot at actual main656ebb5d (docs only after M).
+It received current worker_luna responsibility/model/effort, complete V/T7/row,
+original human callback and exact proof/return contract. All required BEFORE
+NF29 controls, comparable1000-channel GUIDE_PROFILE numbers, stale meaningful
+activity publication, post-frame query errors, correlated records, schedule/content
+viewport invalidation included; inspection triple/badges/UI unchanged. Runtime
+hold applies until focused release, no unconfirmed suspected repair authorized.
+Active implementation children now B/D/E/V; S/L/C stopped at resource/dependency
+queues. Full/render/build slot owned by corrected B; L full remains queued.
 
 ## Evidence and limits
 
