@@ -1724,3 +1724,20 @@ callerfixtureeditsONLY. Keepinlineexpectedtext/bytesEXACTUNCHANGED, no golden
 updates/producerlifetime/credential/wire/visibleUIchanges. Returncoherentcandidate+
 actualenum/call/per-key/oldproof/literalmapthenSTOPqueued; noKruntimeuntilnextgrant.
 Uboundedcompilerrepaircontinuesisolatedsource-only, nextverificationreadinesspending.
+
+## U bounded compiler repair actual identity and complete AFTER release
+
+ActualGitcleanUce11861d7d8e76429625c564055f2a44993d2e6a vsf6,3files55+/48-:
+sevenconstkeysets→runtimefinal exactmembers,20digitpairsprivatefinalmap,
+statusTextidenticalbodyrelocatedafterstyle, eightbraces. SourceequalityproofJSON
+checkssets/digits/Text+style/layoutconsumer; actualSHAverifiedtool, speculative
+unobservedchilddraftidentityignored. No runtimebeforegrant, baselinehashesunchanged.
+
+KBEFOREreleased, KfullSOURCE-ONLY. ParentgrantedUexclusiveguard/format/analyze/
+ALLfocused+CURRENT48render44exact/fourapprovedbadge-onlydiffs+fullnormalstable
+suite. No activeUreviewer now, causedruntimefixeswithinexactscopeauthorizedwith
+retainedfailedproof/unchangedassertions/contracts; consequentialscope/policyneed
+returnsparent. No baseline/golden/tolerancerelaxation, no scratchcasecountinflation.
+Expected1,687=V1,675+12Unewcasessourcemap, notresult. SameUreviewerfinaltargeted
+closuremustinspectcompiler/anyruntimefixdelta+actualfocus/render/fullbeforemerge.
+No extra sourcepermissionasked, no recursiveagents/childintegration/push/build.
