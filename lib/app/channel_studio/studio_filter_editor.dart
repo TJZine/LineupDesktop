@@ -8,6 +8,7 @@ class _StudioFilterEditor extends StatefulWidget {
     required this.libraries,
     required this.picker,
     required this.saving,
+    required this.active,
     required this.inventoryStatus,
     required this.sourceExplanation,
     required this.programmingError,
@@ -19,6 +20,7 @@ class _StudioFilterEditor extends StatefulWidget {
   final List<PlexLibrary> libraries;
   final _FilterPickerController picker;
   final bool saving;
+  final bool active;
   final Widget inventoryStatus;
   final String? sourceExplanation;
   final String? programmingError;
@@ -68,6 +70,7 @@ class _StudioFilterEditorState extends State<_StudioFilterEditor>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.active) return const SizedBox.shrink();
     final roles = LineupTheme.of(context);
     final facets = _facetOptions(_session.filterLibraryId);
     final matches = _filteredInventory(

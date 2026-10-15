@@ -188,13 +188,14 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
             ),
             SizedBox(height: 8),
             // Retain completed searches and browser filters across source switches.
-            // Hidden editors leave layout, semantics, and traversal together.
+            // Inactive editors retain State without building inventory-derived controls.
             Offstage(
               offstage: !libraryActive,
               child: ExcludeFocus(
                 excluding: !libraryActive,
                 child: _StudioFilterEditor(
                   draft: _session,
+                  active: libraryActive,
                   inventory: widget.inventory,
                   selectedLibraries: widget.selectedLibraries,
                   libraries: widget.libraries,

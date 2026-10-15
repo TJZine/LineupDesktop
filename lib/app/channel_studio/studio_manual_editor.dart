@@ -171,6 +171,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.active) return const SizedBox.shrink();
     final inventory = _playableInventory.byId.values;
     final inventoryById = _playableInventory.byId;
     final facets = _facetOptions(_manualLibraryId, inventory: inventory);
