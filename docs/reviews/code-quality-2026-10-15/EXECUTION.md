@@ -23,8 +23,9 @@ W SOURCE-CLOSED, actual negative control failed on intended count bounds,
 corrected5554d6d8 format114/analyze/focused22/full1,645 green. Equivalent final
 a6a2d46ff782c96f2cdcfbb34e277fc2a4fe4202 integrated; main W gate PASSED
 format114/analyze/full1,645 on stablea0cd5399, task tree/branch cleaned.
-S acceptedS-R1 correction rebased unchanged toc2f35887 ona0cd5399;
-exclusive two-control BEFORE, focused, andfull slot now granted.
+S c2f35887 actual two-control BEFORE reproduced pending/startupnonsettlement;
+pinnedformat114/analyze/focused105/full1,650 PASS. SameSreviewer targeted
+R1closure running beforeacceptance/integration.
 V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
 viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
 Y reconstructed polling control/fourclock green, broad/analyze/full pending.
@@ -34,7 +35,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: S exclusive BEFORE/focused/full; P0 W main gate passed and released. U prepares source/test/history; all other children queued.
+Runtime: D exclusive focused+matched14-render gate; S finished/released and reviewer source-only. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -1103,3 +1104,22 @@ range-diff all4`=`. Samechild grantedexclusive BEFORE unknownID pending/startup
 controls onoldf02/rebased2622790dsource withnewtests, exactrestore, guard/format/
 analyze/requiredfocused/full. Expected105focused/1,650full are notobserved.
 SameSreviewer must adjudicate finalrepair/proof beforeintegration. Otherqueuesheld.
+
+## S observed settlement controls and D verification release
+
+S candidatec2f358870702e79bbce4025ba70006f1503cec97 clean/stable. Faithful
+preR1 unknown-integer-return behavior withbothnewtests produced two1second
+TimeoutExceptions/Futurenotcompleted. Realisolate helpers printed handshake+
+unknown999 forpending andunknown999 forstartup, distinguishing reachedprotocol
+fromsetupfailure. `/tmp/lineup-cq-S/r1-before/unknown-id-tests.log`. Temporary
+printsremoved/correctedsourceexactlyrestored. Pinnedformat114/analyzeclean,
+focused105/full1,650 PASS atsameHEAD. Logs `/tmp/lineup-cq-S/rebased-*`.
+Sameindependentreviewer01a13ebb requestedtargeted2622790d..c2closure withactual
+BEFORE/AFTERproof, no runtime/mutation. S stillunintegrated untiladjudication.
+
+D samechild nowowns exclusive focused+matchedrender slot: commit/freezeD3source,
+pinformat/analyze/allDfocused, then exactpreD3scratch/14images withoutupdates.
+Verifyarchivedharness/manifests, preserveactualvisiblevalues/focus, repaircaused
+failureswithinrow. No fullsuiteyet; parentrebaseactualintegrationbeforefullgrant,
+thenrequiredindependentDreview. Noscratchdeleteuntilacceptedproofrecoverable.
+Allotherruntimequeuesheld.
