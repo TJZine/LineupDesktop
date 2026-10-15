@@ -46,7 +46,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; former `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Accepted/integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main format/analyze/1,588 tests passed; task worktree/branch removed |
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
 | T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; former `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Accepted/integrated `dbc4dea0`; serialized main gate1,588 green; task worktree/branch removed; original artwork failure remains recorded |
-| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Independently reviewed/M-R1 closed; integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main suite/macOS build running |
+| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main format/analyze/1,593/macOS build passed; cleanup authorized |
 | B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Dispatched B0–B6; source work only until checks release |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Dispatched C0–C3; C4 returns to same chat after accepted B |
 | D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Dispatched full D1/D2/D3 including temporary render comparisons |
@@ -111,8 +111,8 @@ Review status: P0 accepted; corrected A and H independently reviewed, no unresol
 material finding established. A integrated with combined gate green; corrected
 H and T independently reviewed/integrated with main gates green (T's original
 failure remains attributed separately). M independently reviewed/integrated,
-main suite/macOS build running. Four worker children B/C/D/F perform isolated
-source work with runtime checks held until release. Final whole-branch review
+main suite/macOS build green. Four worker children B/C/D/F perform isolated
+work; focused checks released, full/build slots remain serialized. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
 Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:5`.
@@ -436,6 +436,27 @@ keeps implementation parallel while serializing expensive verification.
 F has no Windows host established and must report source implementation as
 unverified/pending; unchanged Flutter full reruns cannot substitute for Win32
 CTest evidence. No Windows push/host guessing is authorized.
+
+### M accepted gate and focused-check release
+
+Main session7315 completed exit0: checked pin3.47.7, format110 zero changes,
+strict analyze clean, **1,593 tests passed** (2:17), then macOS release build
+successful. Artifact remains in main at
+`build/macos/Build/Products/Release/Lineup Desktop.app` (54.2MB), build inputs
+product `d2213d4d`; subsequent parent commits only execution Markdown.
+This is current main build/portable proof, not macOS media or physical Windows
+acceptance. M accepted; task worktree/fully integrated branch may be removed,
+with needed build artifact available in main.
+
+D reported its NF-12 characterization tests ready while honoring the runtime
+hold; no production undo repair or test run occurred before release.
+Parent sent **CHECKS_RELEASED** to B/C/D: focused before/after and format/analyze
+allowed, one Flutter process each, narrow diagnosis cases preferred. No
+acknowledgment callbacks requested. Full suites, app/native builds and D's heavy
+scratch render comparisons still require explicit exclusive slot. Heavy slot
+is now **available**, queue empty; grant the next meaningful ready request and
+record its owner/source/command. No idle polling or parallel broad gates.
+F's source-only native work remains pending actual Windows capability/checks.
 
 ## Evidence and limits
 
