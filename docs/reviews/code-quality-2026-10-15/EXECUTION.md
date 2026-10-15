@@ -36,7 +36,8 @@ acceptedStasktree/fullyintegratedbranchremoved. Combinedreviewstillrequired.
 V test-only287571e2 actualBEFORE120tests117pass/3confirmingfail, controls
 passandprofilebaselinecaptured. ParentacceptedNF29/viewportfindings; sameVchild
 nowSOURCE-ONLYfullVrepairwhileYowns broad/fullruntime.
-Y reconstructed polling control/fourclock green, broad/analyze/full pending.
+Y current1c196765 guard/format136/analyze/focused88/full1,667PASS;
+parentinspectedPINdiff, equivalentfinalf7ede071 integrated; mainYgate nowP0pending.
 D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
 tocd26d00d on2cf4570c. D reviewedcd26 actualfull1,657PASS; twoacceptedP2regressionsrepairedat
 6f66f331 actualBEFOREconfirmedR1, format129/analyze/focused114/render14/
@@ -48,7 +49,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: Y rebasedbroad/full exclusively; Vsource-only fullapprovedrepair, Uqueueduntouched, K/Gnotdispatched. U prepares source/test/history; all other children queued.
+Runtime: P0 mainY§8.1 exclusively; V2512sourcefrozenforearlyreview/AFTERqueued, Uproductionuntouched, K/Gnotdispatched. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -112,7 +113,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | 287571e2 BEFORE120/117pass/3confirmingfail, staleactivity/contentcontrolspass/profilecaptured; source-onlyfullrepairauthorized |
 | W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalenta6a2d46f integrated; main1,645 green; tasktree/branchremoved |
 | W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
-| Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Source83b7aa04 + finite test seam507cb296; narrow faithful old-poll negative control/clock checks released; unintegrated |
+| Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Current1c196765 focused88/full1,667green; equivalentf7ede071 integrated; mainY P0gatepending, plannedcombinedreviewstillrequired |
 
 | U | `01a13f32-18d0-7f21-ad48-6a25d94f8d3a` / local | worker, gpt-6.1-sol, medium |9d9ec78e; `/Users/tristan/Software/LineupDesktop-U`, `cq/U` | Initial source/test/history/scratch preparation; no production repair or runtime grant yet |
 
@@ -1427,3 +1428,24 @@ T7NF29 andactualBEFOREproof, no mutations/runtime/delegation. Sourcefrozenat2512
 focusgeneration/disposal/coalescing/activequeue/selection/viewportcurrentness and
 retainedproof. Earlyassistdoesnotwaiveplannedlatercombinedreview. SameVchildtold
 holdsource/runtimewhileYandreviewrun. AFTERevidence/full/profile/maingatesremain.
+
+## Y observed composition proof, acceptance, integration, main gate
+
+Y exact1c1967655bce7712d951b6fd65d70523e5969acf stable/clean: guard3.47.7,
+format1360changed, analyzeclean, fullonboarding+appfocused88PASS/full1,667PASS.
+`/tmp/lineup-cq-Y/rebased-*`; no source/dependency/configchangesduringchecks.
+E1663+4clockcases actualmap. Threeoldserver-action/error-reset/currentContinue
+casesretainedandpassed, onboardingkeyboard/humanflow/secureprofilePINflows
+untouchedandpassed. Priorold507poll-onlystrictisAfter negativeactual1pollvs0
+keepsownprovenance; current>=helperpassedsharedprojection/countdown/noPIN/
+securecancel/timercancel/exactexpirychecks. SealedServerAttemptallfourvariants,
+no onboardingDateTime.now/duplicateexpiry. ParentinspectedactualLC13linediff:
+clockdefaultsDateTime.now, onlyPINpolicy/gettersclockchanged, no persisted/wire.
+Childliteralmapno visiblecopychange; fullcombinedindependentreviewstillrequired.
+
+Finalparentrebaseoverdocsonly970a7503 all2patches`=`:
+609ad351→393dd086,1c196765→f7ede071eca92d82c72d02fbfb13b44aee1635f5.
+Ff integratedf7ede071,3files177+/34-, golden diffempty. P0exclusive mainY§8.1
+nowgrantedafterthisrecordcommit, logs `/tmp/lineup-cq-integration/Y/`;
+expected1,667notyetmainobserved. No othermergeuntilpass. Vsource2512stillfrozen
+forearlyreview, noAFTERproofyet; Uqueuedproductionuntouched, K/Gdependenciesheld.
