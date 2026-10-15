@@ -1674,7 +1674,8 @@ U exactf6a99892 unchanged/clean, scratch8c45957aarchivedfrozen-scratch,
 59issues. `/tmp/lineup-cq-U/after-analyze.log`, first-after-stop.md. NOfocused/
 render/fullran. Rootcompilerfailuresacceptedforboundedrepairafterfrozenreview:
 LogicalKeyboardKeycustomequalityinvalidatesconstsets/maps inresolver+test;
-PlayerViewstatusTextreferencesstylebeforedeclaration; onecurlybraceslint. Counts
+PlayerViewstatusTextreferencesstylebeforedeclaration; eightcurlybraceslints.
+Exact59categories28constset+20constmap+3statusscope/type+8braces, fromfullanalyzerlog. Counts
 arenot59independentbugs. Reviewer01a13f87informedactualevidence/nopassingclaims,
 sourcefreezecontinuesuntilwholeUreviewcomplete, thenbatchsameworkerrepairs.
 
