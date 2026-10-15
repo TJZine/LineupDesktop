@@ -28,14 +28,14 @@ productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
 U final4fe3733d compiler+LayerLinkrepairs:guard/format143/analyze/focused375/
 full1,687PASS. Current48render44exact/fourapprovedbadge-onlydiffsretained;
 sameUreviewer finaltargetedclosure running, Uunintegrated.
-Kworker6.1/medium a4033b3d BEFORE22PASS(19old+3new), exactreport/storage/UI
-contractsunchanged. FullKsource3682c24d ready/frozen;17enum/20producercalls/20contextkeypolicy
-map andfixedreportexpectedbytesstaticunchanged; AFTERruntimequeuedbehindU; Gafterwholebranchreview. RequiredUpremerge,
+Kworker6.1/medium finala33d6e32 actualguard/format137/analyze/focused22/
+producer528/full1,678PASS excludingU; fixed2354bytes+storageUIunchanged.
+Rebased3032d3ce ontoU/currentmain, notyetintegrated/currentcomposedfulluntested; Gafterwholebranchreview. RequiredUpremerge,
 plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
 FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
-Runtime: KcurrentAFTER/focused/full exclusivelyon11e0d216+approvedtoolAPIrepair;
-mainUgatequeueduntilKrelease. Othersheld; noextraFlutter. Ufocused/render/fullneedsfrozencandidate
+Runtime: P0mainU§8.1 exclusively afterKrelease. Krebase3032sourcefrozen/
+notintegrated; combinedU+KmainfreshgatewillfollowonlyaftermainUpasses. Ufocused/render/fullneedsfrozencandidate
 andexplicitexclusivegrant; currentcompositionrendersafterVrebasewillberequired.
 Atmostfourimplementationchildren, parentsoleGitintegration/acceptanceowner.
 
@@ -1846,3 +1846,36 @@ badgerulesretained. MainU§8.1 QUEUEDbehindKexclusiveAFTER/full; noothermergeunt
 mainUpasses. Utasktree retainedpendingmaingateacceptance. Ktoldownsource/base/head
 muststaystablethroughongoingchecks: currentKcandidateV1675+3K, notmainUassumption;
 parentlaterrebase/mainKcombinedsettlesactualU+Kcomposition. No sharedtreeoverlap.
+
+## K actual portable gates/byte identity and current U rebase; main U release
+
+Kexactcleana33d6e3201a798c8d48ab8b14259953b1d59f834 ownbase072(V/YUexcluded):
+guard3.47.7/format137/analyzeclean/focused22/full1,678PASS. ProducerLC-PC-Guide
+528PASSat11e0(allrelevantinputsunchangedbya33tool-onlyfix); finalfullalsoexecutes
+thosecases. `/tmp/lineup-cq-K/after-{toolchain,format,analyze,focused,producers}.log`,
+after-full-test.log. Initial7toolcompileissuesandprefixtoolmigrationoldfull1678
+preservedseparately, notrelabelledfinal. Tool3call+messagefindersonlyapprovedfix,
+all4shotnames/readerposition/arrivingeventHIDDENassertionsunchanged, no captures.
+
+ACTUALfixed_expectedReport2354UTF8bytes SHA256
+17140ebe2b0ea3700fed98a82eb336bea1823b92a73faf7d3c585a43f4ea2aa8
+BEFORE/AFTERliteral+byteequalityPASS. (Earlier7989753ehashwasSOURCEassignment,
+notrawreportbytes.) All17pairs/directforgedcontext/categoricalmixed/safeunknown/
+unsafe/primitiveproofandseparateUIstoredHTTP_ERROR/SEEK/opaque-safe/unexpected
+unchangedPASS. Actualproduction20/17enum, tests33fixtures/tool3freshsearchno old
+stringpairadd; keypolicies11categorical+9numericrangesunchanged. Oldredactioncase
+NAMEadaptedtofixedeventstoragebutrawredactfunction/result+credentialcontextproof
+retained;251evictionidentitycount1insteadarbitraryentry1;unknownnegative direct
+forgedsnapshotretained. Count/literalsetsnotpreservedincidentalfixtures; fullmap
+mustbeindependentlyadjudicatedinplannedcombinedreview, notblanketno-renamesclaim.
+
+Parentrebase072..a33ontomain18b8e239:5935a701→eaa3d31d,12ab1741→301cb308,
+11e0d216→8f618834(`!` ONLYGuideimportcontextnowincludesUchannel_artwork),
+a33d6e32→3032d3ceb928fc97706e54980dc0c2351fe43fe3; other3patches`=`. No
+Ksemantic/producerchange, Uhelperpreserved. Candidate3032CURRENTUcomposition
+NOTyettested, old1678keepsownscope. ParentwillintegrateonlyaftermainUgatepass,
+thenMANDATORYmainKfreshcombined(expected1690=U1687+K3). Ksourcefrozen.
+
+P0mainU§8.1nowexclusivegrantedatrecordHEADsuppliedaftercommit, logs
+`/tmp/lineup-cq-integration/U/`; expected1,687notyetmainobserved. Noothermerge
+untilpass; K/Uchildrenstopped, no sharedtreewriter. MainP0nocode/Gitmutations.
