@@ -5195,6 +5195,89 @@ void main() {
     },
   );
 
+  testWidgets('Now Playing omits unknown dynamic range', (tester) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richItemOverride: _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 1),
+        dynamicRange: 'unknown',
+      ),
+    );
+    addTearDown(fixture.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    // This assertion must fail on the unchanged production baseline if NF-23
+    // is confirmed. The surface assertion prevents an absent-panel false pass.
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+    expect(find.text('TV-14'), findsOneWidget);
+    expect(find.text('UNKNOWN'), findsNothing);
+    expect(find.bySemanticsLabel(RegExp(r'\. UNKNOWN\.')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final (videoFormat, catalogCodec, runtimeCodec, expected) in [
+    ('hevc', 'h264', 'vp9', 'HEVC'),
+    ('', 'h264', 'vp9', 'H.264'),
+    ('', null, 'vp9', 'VP9'),
+  ]) {
+    testWidgets(
+      'Now Playing codec precedence $videoFormat/$catalogCodec/$runtimeCodec',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richItemOverride: ChannelItem(
+            id: 'program',
+            title: 'Program',
+            duration: const Duration(hours: 1),
+            contentRating: 'TV-14',
+            videoCodec: catalogCodec,
+          ),
+          nativeTelemetry: PlayerTelemetry(
+            videoFormat: videoFormat,
+            videoCodec: runtimeCodec,
+          ),
+        );
+        addTearDown(fixture.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pump();
+        fixture.player.showNowPlaying();
+        await tester.pumpAndSettle();
+
+        final badges = find.byKey(const Key('player-now-playing-badges'));
+        expect(badges, findsOneWidget);
+        expect(
+          find.descendant(of: badges, matching: find.text(expected)),
+          findsOneWidget,
+        );
+        final displayedCodecs = tester
+            .widgetList<Text>(
+              find.descendant(of: badges, matching: find.byType(Text)),
+            )
+            .map((text) => text.data)
+            .where((text) => const {'HEVC', 'H.264', 'VP9'}.contains(text));
+        expect(displayedCodecs, [expected]);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('runtime HDR overrides stale catalog SDR', (tester) async {
     final fixture = _Fixture(
       PlayerState.playing,
@@ -5202,7 +5285,7 @@ void main() {
         0,
         rich: true,
         duration: const Duration(hours: 1),
-        dynamicRange: 'SDR',
+        dynamicRange: 'sdr',
       ),
       nativeTelemetry: const PlayerTelemetry(gamma: 'pq'),
     );
