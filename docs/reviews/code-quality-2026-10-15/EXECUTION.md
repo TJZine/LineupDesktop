@@ -62,6 +62,43 @@ in wave 1, followed by L/E/S/V/W as slots free; C4 returns to the same C chat
 after B; K/U/Y follow their owners; required scoped reviews and final composition
 review precede G. Required full gates run against stable integration inputs.
 
+## Review and completion contract
+
+The maintainer additionally required that all changes be properly reviewed for
+adherence to the plan and goals before this assignment is considered finished.
+Use the shared `review-code` skill for acceptance and finding adjudication.
+Tests passing or a child declaring completion does not satisfy this requirement.
+
+- Inspect every actual package diff against its complete §7 contract, matching
+  TRACES, revision-3 final-review corrections, approved behavior, and exclusions.
+  Record exact reviewed base/head and the evidence for every required step.
+- Independent reviewer chats are required before integrating B, C (after C4),
+  D, F, L, and U. Independently review A, E, M, S, V, W, K, and Y together after
+  their merges. The controller inspects H, T, and G, as specified by §8.2.
+- Run the independent whole-branch code review before G. Check composition,
+  including B/C supersession, M/C telemetry, B/L authorization, K producers,
+  U coordinator getters, and the complete agreed scope. Inspect G's subsequent
+  documentation diff and repair any contradictions with actual delivery.
+- Adjudicate each finding against current source: accepted, rejected with
+  evidence, or needs evidence. Send focused corrections to the original child;
+  verify and, where necessary, re-review the changed contract. No unresolved
+  material correctness, scope, privacy, or verification finding may silently
+  become an accepted package.
+- Require old-obligation → retained-evidence maps for test moves/removals and
+  classification of material literal changes. Counts and dead strings are not
+  substitutes for behavioral proof or visible-behavior preservation.
+- Complete stable combined format/analyze/full-test gates after each integration,
+  the specified macOS builds, and required platform gates. Record implemented,
+  tested, reviewed, integrated, and physically accepted as separate facts.
+- F remaining unmerged or missing its required Windows CTests means the plan is
+  not fully complete. Physical Windows acceptance remains separately pending
+  until actually observed, even when deterministic checks pass.
+
+Review status: P0 evidence inspected and accepted; A/H implementation in progress.
+No product package review or final whole-branch review is claimed yet.
+Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:1`;
+H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:1`.
+
 ## Evidence and limits
 
 Preparation `git diff --check` passed. P0's observed pinned Flutter identity was
@@ -86,7 +123,7 @@ until all required Windows CTests pass: `display_dynamic_range`,
 `display_guardian`, `native_player_contract`, and `runner_lifecycle`.
 Physical Windows checklist W1–W12 remains a separate acceptance obligation.
 
-With P0 running, completion/blocker callbacks are authorized only to the verified
+With children running, completion/blocker callbacks are authorized only to the verified
 parent. On the next activation, collect reports with nonblocking `wait_threads`
 (`timeoutMs: 0`) or bounded `read_thread`; retain returned cursors. Do not poll
 idly or treat child completion as acceptance without inspecting source/evidence.
