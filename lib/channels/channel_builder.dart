@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import '../plex/plex_models.dart';
 import 'channel.dart';
 import 'content_resolver.dart';
+import 'library_facets.dart';
 import 'scheduler.dart';
 
 enum BuilderStrategy {

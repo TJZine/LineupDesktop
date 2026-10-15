@@ -2,8 +2,7 @@ import '../plex/plex_models.dart';
 import 'channel.dart';
 import 'library_facets.dart';
 
-export 'library_facets.dart'
-    show channelDecadeForYear, libraryFacetValues, matchesLibraryFacets;
+export 'library_facets.dart' show channelDecadeForYear, matchesLibraryFacets;
 
 List<ChannelItem> resolveContent(
   ContentSource source,
