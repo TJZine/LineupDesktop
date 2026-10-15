@@ -899,6 +899,50 @@ void main() {
     },
   );
 
+  testWidgets('schedule failures render their typed recovery messages', (
+    tester,
+  ) async {
+    final controller = _AirController();
+    addTearDown(controller.dispose);
+    final retained = _channel(items: [_item('retained')]);
+    final nested = Channel.fromJson({
+      ...retained.toJson(),
+      'source': MixedSource(
+        sources: [
+          ManualSource([_item('retained')]),
+        ],
+      ).toJson(),
+    });
+    for (final (channel, failure, message) in [
+      (
+        _channel(items: const []),
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
+        'no playable programs',
+      ),
+      (
+        retained,
+        const ScheduleBuildException(ScheduleFailureReason.unsupportedSource),
+        'unsupported filter',
+      ),
+      (
+        retained,
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
+        'explicitly off air',
+      ),
+      (retained, StateError('synthetic worker failure'), 'could not verify'),
+      (
+        nested,
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
+        'explicitly off air',
+      ),
+    ]) {
+      controller.nextFailure = failure;
+      await tester.pumpWidget(_airCheck(controller, channel, key: UniqueKey()));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(message), findsOneWidget);
+    }
+  });
+
   testWidgets('failure states gate validity except retained manual off-air', (
     tester,
   ) async {
