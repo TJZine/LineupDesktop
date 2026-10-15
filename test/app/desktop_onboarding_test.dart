@@ -326,7 +326,7 @@ void main() {
 
   Future<void> show(
     WidgetTester tester,
-    FixtureController controller, {
+    LineupController controller, {
     Future<void> Function()? browser,
     bool accountOrigin = false,
     double textScale = 1,
@@ -586,6 +586,72 @@ void main() {
     expect(find.text('Open browser'), findsNothing);
     expect(find.text('Get a new code'), findsOneWidget);
     expect(controller.activePin?.id, 1);
+  });
+
+  for (final (label, offset, expired) in [
+    ('before', const Duration(seconds: -1), false),
+    ('exactly at', Duration.zero, true),
+    ('after', const Duration(seconds: 1), true),
+  ]) {
+    testWidgets('PIN clock $label expiration uses one boundary', (
+      tester,
+    ) async {
+      final expiresAt = DateTime.utc(2026, 10, 15, 12);
+      final now = expiresAt.add(offset);
+      final controller = LineupController(
+        store: MemoryAppStore(),
+        credentials: MemoryCredentialStore(),
+        plex: PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: testPlexHttpClient(),
+        ),
+        clock: () => now,
+        scenario: LineupScenario(
+          stage: SetupStage.linking,
+          activePin: PlexPin(id: 9, code: 'CLOCK', expiresAt: expiresAt),
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      expect(controller.pinExpired, expired);
+      expect(controller.pinUsable, !expired);
+      expect(controller.pinRemaining, expiresAt.difference(now));
+      await show(tester, controller);
+
+      if (expired) {
+        expect(
+          find.text('That code expired before sign-in finished.'),
+          findsOneWidget,
+        );
+        expect(find.text('Get a new code'), findsOneWidget);
+        expect(find.text('Open browser'), findsNothing);
+      } else {
+        expect(find.text('Open browser'), findsOneWidget);
+        expect(find.text('Get a new code'), findsNothing);
+      }
+    });
+  }
+
+  test('PIN polling expires at the exact injected clock boundary', () async {
+    final expiresAt = DateTime.utc(2026, 10, 15, 12);
+    final plex = _PinPollingPlex(
+      PlexPin(id: 10, code: 'POLL', expiresAt: expiresAt),
+    );
+    final controller = LineupController(
+      store: MemoryAppStore(),
+      credentials: MemoryCredentialStore(),
+      plex: plex,
+      clock: () => expiresAt,
+      pinPollInterval: Duration.zero,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.startLinking();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(plex.pollCalls, 0);
+    expect(controller.activePin, isNull);
+    expect(controller.error, 'The Plex link code expired. Request a new code.');
   });
 
   testWidgets('linking slots stay aligned across code and failure states', (
@@ -1400,6 +1466,29 @@ class _ServerController extends FixtureController {
     );
     notifyListeners();
   }
+}
+
+class _PinPollingPlex extends PlexClient {
+  _PinPollingPlex(this.pin)
+    : super(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: testPlexHttpClient(),
+      );
+
+  final PlexPin pin;
+  int pollCalls = 0;
+
+  @override
+  Future<PlexPin> createPin() async => pin;
+
+  @override
+  Future<String?> pollPin(PlexPin pin) async {
+    pollCalls++;
+    return null;
+  }
+
+  @override
+  Future<void> cancelPin(PlexPin pin) async {}
 }
 
 class _ProfileRecoveryStore extends MemoryAppStore {

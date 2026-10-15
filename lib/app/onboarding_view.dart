@@ -11,6 +11,45 @@ import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 import 'plex_link_launcher.dart';
 
+sealed class _ServerAttempt {
+  const _ServerAttempt();
+
+  String? get serverId => null;
+  String? get message => null;
+  bool get pending => false;
+}
+
+final class _NoServerAttempt extends _ServerAttempt {
+  const _NoServerAttempt();
+}
+
+final class _PendingServerAttempt extends _ServerAttempt {
+  const _PendingServerAttempt(this.serverId);
+
+  @override
+  final String serverId;
+
+  @override
+  bool get pending => true;
+}
+
+final class _FailedServerAttempt extends _ServerAttempt {
+  const _FailedServerAttempt(this.serverId, this.message);
+
+  @override
+  final String serverId;
+
+  @override
+  final String message;
+}
+
+final class _GeneralServerAttemptFailure extends _ServerAttempt {
+  const _GeneralServerAttemptFailure(this.message);
+
+  @override
+  final String message;
+}
+
 class UpstreamOnboardingView extends StatefulWidget {
   const UpstreamOnboardingView({
     required this.controller,
@@ -46,10 +85,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   int? _browserPinId;
   bool get _openingBrowser =>
       _browserPinId != null && _browserPinId == widget.controller.activePin?.id;
-  String? _connectingServerId;
-  String? _failedServerId;
-  String? _serverError;
-  int _serverAttempt = 0;
+  _ServerAttempt _serverAttempt = const _NoServerAttempt();
+  int _serverAttemptRevision = 0;
   PlexHomeUser? _pinUser;
   bool _pulse = true;
 
@@ -317,10 +354,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   }
 
   bool get _usableLink {
-    final pin = widget.controller.activePin;
-    return pin != null &&
-        pin.expiresAt.isAfter(DateTime.now()) &&
-        !widget.controller.secureCancellationRequired;
+    return widget.controller.pinUsable;
   }
 
   Future<void> _openBrowser() async {
@@ -381,11 +415,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final pin = controller.activePin;
     final usable = _usableLink && controller.error == null;
     final expired =
-        pin != null &&
-        !pin.expiresAt.isAfter(DateTime.now()) &&
-        !controller.secureCancellationRequired;
-    final remaining =
-        pin?.expiresAt.difference(DateTime.now()) ?? Duration.zero;
+        controller.pinExpired && !controller.secureCancellationRequired;
+    final remaining = controller.pinRemaining;
     final seconds = remaining.inSeconds.clamp(0, 3599);
     final time =
         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
@@ -872,14 +903,20 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                   ? widget.controller.connection
                   : null,
               onPressed:
-                  widget.controller.busy || _connectingServerId == server.id
+                  widget.controller.busy ||
+                      (_serverAttempt.pending &&
+                          _serverAttempt.serverId == server.id)
                   ? null
                   : widget.controller.server?.id == server.id
                   ? () => _continueServer(server)
                   : () => _connectServer(server),
               previouslyUsed: widget.controller.savedServerId == server.id,
-              pending: _connectingServerId == server.id,
-              error: _failedServerId == server.id ? _serverError : null,
+              pending:
+                  _serverAttempt.pending &&
+                  _serverAttempt.serverId == server.id,
+              error: _serverAttempt.serverId == server.id
+                  ? _serverAttempt.message
+                  : null,
             ),
           ),
         SizedBox(height: 12),
@@ -916,8 +953,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               ),
           ],
         ),
-        if ((_serverError ?? widget.controller.error) != null &&
-            _failedServerId == null)
+        if ((_serverAttempt.message ?? widget.controller.error) != null &&
+            _serverAttempt.serverId == null)
           Align(
             alignment: Alignment.center,
             child: Padding(
@@ -925,7 +962,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               child: Semantics(
                 liveRegion: true,
                 child: Text(
-                  _serverError ?? widget.controller.error!,
+                  _serverAttempt.message ?? widget.controller.error!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
@@ -937,10 +974,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
 
   void _clearServerError() {
     if (!mounted) return;
-    setState(() {
-      _failedServerId = null;
-      _serverError = null;
-    });
+    setState(() => _serverAttempt = const _NoServerAttempt());
   }
 
   Future<void> _refreshServers() async {
@@ -949,7 +983,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     await widget.controller.refreshServers();
     if (!mounted || widget.controller.stage != SetupStage.servers) return;
     if (widget.controller.error != null) {
-      setState(() => _serverError = widget.controller.error);
+      setState(
+        () => _serverAttempt = _GeneralServerAttemptFailure(
+          widget.controller.error!,
+        ),
+      );
     }
   }
 
@@ -961,20 +999,21 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
 
   Future<void> _connectServer(PlexServer server) async {
     if (widget.controller.busy) return;
-    final attempt = ++_serverAttempt;
+    final attempt = ++_serverAttemptRevision;
     setState(() {
-      _connectingServerId = server.id;
-      _failedServerId = null;
-      _serverError = null;
+      _serverAttempt = _PendingServerAttempt(server.id);
     });
     await widget.controller.selectServer(server);
-    if (!mounted || attempt != _serverAttempt) return;
+    if (!mounted || attempt != _serverAttemptRevision) return;
     setState(() {
-      _connectingServerId = null;
       if (widget.controller.stage == SetupStage.servers &&
           widget.controller.error != null) {
-        _failedServerId = server.id;
-        _serverError = widget.controller.error;
+        _serverAttempt = _FailedServerAttempt(
+          server.id,
+          widget.controller.error!,
+        );
+      } else {
+        _serverAttempt = const _NoServerAttempt();
       }
     });
   }

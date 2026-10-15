@@ -130,10 +130,12 @@ class LineupController extends ChangeNotifier {
     this.pinPollInterval = const Duration(seconds: 1),
     ScheduleWorkerFactory? scheduleWorkerFactory,
     DateTime Function()? scheduleClock,
+    DateTime Function()? clock,
     LineupScenario? scenario,
   }) : diagnostics = diagnostics ?? Diagnostics(),
        _scheduleWorkerFactory = scheduleWorkerFactory ?? ScheduleWorker.new,
        _scheduleClock = scheduleClock ?? DateTime.now,
+       _clock = clock ?? DateTime.now,
        _ownsDiagnostics = diagnostics == null {
     if (scenario != null) installScenario(scenario);
   }
@@ -281,6 +283,14 @@ class LineupController extends ChangeNotifier {
       );
   PlexPin? _activePin;
   PlexPin? get activePin => _activePin;
+  bool get pinExpired => _activePin != null && _isPinExpired(_activePin!);
+  bool get pinUsable =>
+      _activePin != null && !pinExpired && !_secureCancellationRequired;
+  Duration get pinRemaining =>
+      _activePin?.expiresAt.difference(_clock()) ?? Duration.zero;
+
+  bool _isPinExpired(PlexPin pin) => !_clock().isBefore(pin.expiresAt);
+
   SetupStage _stage = SetupStage.welcome;
   SetupStage get stage => _stage;
   bool _busy = false;
@@ -459,6 +469,7 @@ class LineupController extends ChangeNotifier {
   Map<String, PlexMediaItem> _playableById = const {};
   final ScheduleWorkerFactory _scheduleWorkerFactory;
   final DateTime Function() _scheduleClock;
+  final DateTime Function() _clock;
   Future<void> _credentialOperations = Future.value();
   Future<void> _stateOperations = Future.value();
   Future<bool>? _logoutFuture;
@@ -649,7 +660,7 @@ class LineupController extends ChangeNotifier {
 
   Future<void> _pollPin(int operation, PlexPin pin) async {
     if (busy || operation != _epoch) return;
-    if (DateTime.now().isAfter(pin.expiresAt)) {
+    if (_isPinExpired(pin)) {
       _pinTimer?.cancel();
       _activePin = null;
       _error = 'The Plex link code expired. Request a new code.';
