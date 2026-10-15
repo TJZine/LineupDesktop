@@ -349,12 +349,16 @@ class FileAppStore implements AppStore {
   @override
   Future<String> clientIdentifier() async {
     try {
-      final existing = (await _identityFile.readAsString()).trim();
+      final existing = utf8.decode(await _identityFile.readAsBytes()).trim();
       if (RegExp(r'^lineup-desktop-[a-z]+-[A-Za-z0-9_-]{20,}$')
           .hasMatch(existing)) {
         return existing;
       }
-    } catch (_) {}
+    } on PathNotFoundException {
+      // A missing identity is a first run.
+    } on FormatException {
+      // Invalid UTF-8 is malformed identity content, not a filesystem failure.
+    }
     final random = Random.secure();
     final bytes = List<int>.generate(24, (_) => random.nextInt(256));
     final id =

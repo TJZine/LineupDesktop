@@ -43,6 +43,56 @@ Future<void> _waitForTestState(
 
 void main() {
   test(
+    'clearing saved server persists runtime settings and retains scoped lineup',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      await controller.initialize();
+      controller.fixtureActor.publishSettings(
+        controller.settings.copyWith(guideHours: 4),
+      );
+      final channels = controller.channels;
+      await controller.clearSavedServer();
+      expect(fixture.store.state.settings.guideHours, 4);
+      expect(fixture.store.state.selectedServerByProfile, isEmpty);
+      expect(
+        fixture
+            .store
+            .state
+            .selectedLibraryIdsByProfileServer['owner']!['server'],
+        ['movies', 'tv'],
+      );
+      expect(
+        fixture.store.state.channelsByProfileServer['owner']!['server'],
+        channelValues(channels),
+      );
+      expect(controller.server, isNull);
+      expect(controller.channels, isEmpty);
+    },
+  );
+
+  test(
+    'clearing saved server does not publish after disposal during its save',
+    () async {
+      final store = _ControlledSaveStore();
+      final fixture = _reentryFixture(storeOverride: store);
+      final controller = fixture.controller;
+      await controller.initialize();
+      final server = controller.server;
+      final channels = controller.channels;
+      store.blockNext();
+      final clearing = controller.clearSavedServer();
+      await store.blockedSaveStarted.future;
+      controller.dispose();
+      store.releaseBlockedSave();
+      await clearing;
+      expect(store.state.selectedServerByProfile, isEmpty);
+      expect(controller.server, same(server));
+      expect(controller.channels, same(channels));
+    },
+  );
+
+  test(
     'NF-07 refresh during saved selection save cannot strand restore intent',
     () async {
       final store = _ControlledSaveStore();
@@ -7421,7 +7471,10 @@ void main() {
     );
     await store.blockedSaveStarted.future;
     final stale = controller.saveChannel(_channel('stale'), expectedBase: null);
-    final staleExpectation = expectLater(stale, throwsStateError);
+    final staleExpectation = expectLater(
+      stale,
+      throwsA(isA<LineupScopeSuperseded>()),
+    );
     final logout = controller.logout();
     store.releaseBlockedSave();
 
@@ -8274,7 +8327,10 @@ void main() {
         );
         final mutationResult = saveFails
             ? queuedMutation
-            : expectLater(queuedMutation, throwsStateError);
+            : expectLater(
+                queuedMutation,
+                throwsA(isA<LineupScopeSuperseded>()),
+              );
         final savesBeforeRelease = store.saveCalls;
         store.releaseBlockedSave();
         await selecting;
@@ -8403,7 +8459,10 @@ void main() {
           expectedLineup: [existing],
           orderedChannelIds: [existing.id],
         );
-        final denied = expectLater(queued, throwsStateError);
+        final denied = expectLater(
+          queued,
+          throwsA(isA<LineupScopeSuperseded>()),
+        );
         final logout = controller.logout();
         await Future<void>.delayed(Duration.zero);
         await expectLater(

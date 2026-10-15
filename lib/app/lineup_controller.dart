@@ -61,6 +61,10 @@ class _ProfileSelection {
   final String token;
 }
 
+final class LineupScopeSuperseded implements Exception {
+  const LineupScopeSuperseded();
+}
+
 class ChannelStateConflictException extends FormatException {
   const ChannelStateConflictException()
     : super('The lineup changed. Review the current channels and try again.');
@@ -935,7 +939,7 @@ class LineupController extends ChangeNotifier {
             rethrow;
           }
           if (_disposed) return;
-          _publishServerSelection(selection);
+          _publishServerSelection(selection, operation);
           notifyListeners();
         });
         if (!_isCurrent(operation)) return;
@@ -964,7 +968,7 @@ class LineupController extends ChangeNotifier {
     if (_serverTargetId == selected.id) _serverTargetId = null;
   }
 
-  void _publishServerSelection(_ServerSelection selection) {
+  void _publishServerSelection(_ServerSelection selection, int operation) {
     final access = selection.access;
     final committedAccess = _serverAccess[access.server.id] ?? access;
     _serverAccess = {..._serverAccess, access.server.id: committedAccess};
@@ -981,7 +985,10 @@ class LineupController extends ChangeNotifier {
     _stage = SetupStage.channelSetup;
     _channelSetupCanCancel = false;
     _resetSetupDiscovery();
+    // A started successful save still publishes, but obsolete requests cannot
+    // create restore work they will never execute.
     _restoringSavedLineup =
+        _isCurrent(operation) &&
         selection.lineup.libraryIds.isNotEmpty &&
         selection.lineup.channels.isNotEmpty;
     _contentGeneration++;
@@ -1066,7 +1073,8 @@ class LineupController extends ChangeNotifier {
     if (candidate == null || !libraryScanReadyIds.containsAll(ids)) {
       return false;
     }
-    return _run(
+    var committed = false;
+    await _run(
       () => _queueStateOperation(operation, () async {
         if (!_scan.isCurrent(candidate, _mutationScope)) return;
         _requireAvailablePlaylists(candidate.evidence.failedPlaylistIds);
@@ -1076,6 +1084,7 @@ class LineupController extends ChangeNotifier {
         );
         final media = candidate.media;
         final inventory = _buildPlayableInventory(media, candidate.playlists);
+        final previous = channels;
         final migrated = _migratedLegacyChannels(
           _scheduleClock().toUtc(),
           inventory: inventory,
@@ -1097,13 +1106,16 @@ class LineupController extends ChangeNotifier {
             currentChannelId: currentChannelId,
           ),
         );
+        _recordChannelChanges(previous);
         _scan.didCommit(candidate);
+        committed = true;
         _contentGeneration++;
         notifyListeners();
       }),
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
     );
+    return committed && _isCurrent(operation);
   }
 
   Future<_LibraryScanResult> _loadLibraries(
@@ -1686,7 +1698,7 @@ class LineupController extends ChangeNotifier {
       ),
     );
     if (!_isCurrentMutationScope(operation)) {
-      throw StateError('Channel mutation was superseded');
+      throw const LineupScopeSuperseded();
     }
     _publishChannelCommit(next, nextCurrent, previous);
   }
@@ -1757,7 +1769,7 @@ class LineupController extends ChangeNotifier {
       if (_isCurrentMutationScope(operation)) committed = savedChannel;
     });
     if (committed == null) {
-      throw StateError('Channel save was superseded');
+      throw const LineupScopeSuperseded();
     }
     return committed!;
   }
@@ -2158,7 +2170,7 @@ class LineupController extends ChangeNotifier {
         ),
       );
       if (!_isCurrentMutationScope(operation)) {
-        throw StateError('Current channel mutation was superseded');
+        throw const LineupScopeSuperseded();
       }
       _publishCurrentChannel(id);
     });
@@ -2355,7 +2367,7 @@ class LineupController extends ChangeNotifier {
       if (!_isCurrentMutationScope(scope) ||
           eligibility != _mutationEligibility ||
           _logoutFuture != null) {
-        throw StateError('State mutation was superseded');
+        throw const LineupScopeSuperseded();
       }
       await body();
     });

@@ -393,20 +393,6 @@ class _LibraryScanState {
     failedPlaylistIds = Set.unmodifiable(catalog.failedIds);
   }
 
-  LibraryScanStatus statusFor(Set<String> selectedIds) {
-    final statuses = selectedIds.map((id) => rows[id]?.fact.status).toSet();
-    if (statuses.contains(LibraryScanStatus.transientFailure)) {
-      return LibraryScanStatus.transientFailure;
-    }
-    if (statuses.contains(LibraryScanStatus.complete)) {
-      return LibraryScanStatus.complete;
-    }
-    if (statuses.contains(LibraryScanStatus.unsupported)) {
-      return LibraryScanStatus.unsupported;
-    }
-    return LibraryScanStatus.empty;
-  }
-
   _LibraryScanResult result(
     List<PlexMediaItem> media,
     List<PlexPlaylist> playlists,
