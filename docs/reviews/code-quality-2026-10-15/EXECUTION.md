@@ -110,8 +110,8 @@ reviewed and integrated, main gate failed one logo-widget case; original T child
 diagnosing. M candidate review in flight, integration held. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
-Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:3`.
-T retrieval cursor: `f42cb099-62a0-4bc8-a48c-6e4332c0926f:1`.
+Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:4`.
+T retrieval cursor: `f42cb099-62a0-4bc8-a48c-6e4332c0926f:2`.
 
 ### H candidate inspection
 
