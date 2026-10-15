@@ -163,7 +163,7 @@ jobs:
             engine_required=false
           fi
           if [[ "$engine_required" == "true" ]] ||
-             grep -Eq '^(\.github/workflows/ci\.yml|LICENSE|pubspec\.(lock|yaml)|docs/windows-runtime\.md|tool/flutter_engine/NOTICE|tool/windows/(build-inputs|build-release|package|prepare-mpv|verify-release-policy)\.ps1)$|^third_party/libmpv/' <<<"$changed_files"; then
+             grep -Eq '^(\.github/workflows/ci\.yml|LICENSE|pubspec\.(lock|yaml)|docs/windows-runtime\.md|tool/flutter_engine/NOTICE|tool/windows/(build-inputs|build-release|ninja-diagnostics|package|prepare-mpv|verify-release-policy)\.ps1)$|^third_party/libmpv/' <<<"$changed_files"; then
             package_required=true
           else
             package_required=false
@@ -222,7 +222,13 @@ jobs:
             --runtime-mode=release `
             --no-enable-unittests `
             --no-build-embedder-examples
-          ninja -C out\host_release
+          . (Join-Path $env:GITHUB_WORKSPACE 'tool/windows/ninja-diagnostics.ps1')
+          Write-LineupNinjaDiagnostics -BuildDirectory 'out/host_release' -Stage 'workflow-before' -InspectCommand
+          try {
+            ninja -C out\host_release -d explain
+          } finally {
+            Write-LineupNinjaDiagnostics -BuildDirectory 'out/host_release' -Stage 'workflow-after'
+          }
       - name: Compile Lineup against the patched engine
         shell: pwsh
         run: |

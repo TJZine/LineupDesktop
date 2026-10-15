@@ -9,6 +9,7 @@ $scripts = @(
   'tool/flutter_engine/apply.ps1',
   'tool/windows/build-inputs.ps1',
   'tool/windows/build-release.ps1',
+  'tool/windows/ninja-diagnostics.ps1',
   'tool/windows/package.ps1',
   'tool/windows/prepare-mpv.ps1',
   'tool/windows/run.ps1',

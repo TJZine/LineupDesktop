@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 . (Join-Path $PSScriptRoot 'build-inputs.ps1')
+. (Join-Path $PSScriptRoot 'ninja-diagnostics.ps1')
 $repository = Get-LineupRepository
 $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 $patchRelativePath = $metadata.FlutterEnginePatchPath
@@ -83,10 +84,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $engineOutput 'build.ninja') -PathTy
   throw 'Configure the pinned host_release engine before the application release build.'
 }
 Set-Location $EngineSource
-& {
-  $PSNativeCommandUseErrorActionPreference = $false
-  & ninja -C $engineOutput
-  if ($LASTEXITCODE) { throw 'Pinned host_release engine build failed.' }
+Write-LineupNinjaDiagnostics -BuildDirectory $engineOutput -Stage 'release-before' -InspectCommand
+try {
+  & {
+    $PSNativeCommandUseErrorActionPreference = $false
+    & ninja -C $engineOutput -d explain
+    if ($LASTEXITCODE) { throw 'Pinned host_release engine build failed.' }
+  }
+} finally {
+  Write-LineupNinjaDiagnostics -BuildDirectory $engineOutput -Stage 'release-after'
 }
 Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
 $engineLibrary = Join-Path $engineOutput 'flutter_windows.dll'
