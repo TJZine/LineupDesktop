@@ -457,6 +457,13 @@ scratch render comparisons still require explicit exclusive slot. Heavy slot
 is now **available**, queue empty; grant the next meaningful ready request and
 record its owner/source/command. No idle polling or parallel broad gates.
 F's source-only native work remains pending actual Windows capability/checks.
+Supported nonblocking snapshots confirm B/C/D received release and resumed
+BEFORE tests; their earlier resource-blocker callbacks raced with release and
+do not require duplicate messages. C's C0 test commit is `98cb771b` (seven new
+controls, no production edits at that stage). B's B0 tests were uncommitted at
+its resource report. Last cursors: B `e47d22d8-698e-4e5a-9449-35958b6ec70f:1`,
+C `7db1006e-46ee-4948-a60b-70ef1267d82d:1`, D
+`69e0e775-aee4-4b42-ba53-a8f38452b557:1`.
 
 ## Evidence and limits
 
