@@ -53,18 +53,18 @@ final class AppendChannelDigit extends PlayerCommand {
   bool get closesSleepPicker => true;
 }
 
-const _backKeys = {
+final _backKeys = {
   LogicalKeyboardKey.escape,
   LogicalKeyboardKey.backspace,
   LogicalKeyboardKey.goBack,
 };
-const _guideKeys = {LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2};
-const _enterKeys = {
+final _guideKeys = {LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2};
+final _enterKeys = {
   LogicalKeyboardKey.enter,
   LogicalKeyboardKey.numpadEnter,
   LogicalKeyboardKey.select,
 };
-const _mediaTransportKeys = {
+final _mediaTransportKeys = {
   LogicalKeyboardKey.mediaPlay,
   LogicalKeyboardKey.mediaPause,
   LogicalKeyboardKey.mediaPlayPause,
@@ -72,7 +72,7 @@ const _mediaTransportKeys = {
   LogicalKeyboardKey.mediaRewind,
   LogicalKeyboardKey.mediaFastForward,
 };
-const _keyboardTransportKeys = {
+final _keyboardTransportKeys = {
   LogicalKeyboardKey.space,
   LogicalKeyboardKey.keyJ,
   LogicalKeyboardKey.keyK,
@@ -80,8 +80,8 @@ const _keyboardTransportKeys = {
   LogicalKeyboardKey.arrowLeft,
   LogicalKeyboardKey.arrowRight,
 };
-const _fullscreenKeys = {LogicalKeyboardKey.keyF, LogicalKeyboardKey.f11};
-const _pageKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
+final _fullscreenKeys = {LogicalKeyboardKey.keyF, LogicalKeyboardKey.f11};
+final _pageKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
 
 /// Resolves in the same priority order as the public Player interaction:
 /// Back, transport availability, unsupported playback, overlay ownership, then
@@ -145,20 +145,25 @@ PlayerCommand resolvePlayerKey(
   if (_guideKeys.contains(key)) return PlayerAction.openGuide;
   final miniGuide = overlay == PlayerOverlay.miniGuide;
   final nowPlaying = overlay == PlayerOverlay.nowPlaying;
-  if (miniGuide && key == LogicalKeyboardKey.arrowUp)
+  if (miniGuide && key == LogicalKeyboardKey.arrowUp) {
     return PlayerAction.miniGuideUp;
-  if (miniGuide && key == LogicalKeyboardKey.arrowDown)
+  }
+  if (miniGuide && key == LogicalKeyboardKey.arrowDown) {
     return PlayerAction.miniGuideDown;
-  if (key == LogicalKeyboardKey.pageUp)
+  }
+  if (key == LogicalKeyboardKey.pageUp) {
     return miniGuide
         ? PlayerAction.miniGuidePageUp
         : PlayerAction.previousChannel;
-  if (key == LogicalKeyboardKey.pageDown)
+  }
+  if (key == LogicalKeyboardKey.pageDown) {
     return miniGuide
         ? PlayerAction.miniGuidePageDown
         : PlayerAction.nextChannel;
-  if (miniGuide && (enter || key == LogicalKeyboardKey.space))
+  }
+  if (miniGuide && (enter || key == LogicalKeyboardKey.space)) {
     return PlayerAction.tuneMiniGuide;
+  }
   if (enter) {
     return nowPlaying || overlay == PlayerOverlay.none
         ? PlayerAction.showOsd
@@ -191,10 +196,12 @@ PlayerCommand resolvePlayerKey(
         ? PlayerAction.showOsdFromInfo
         : PlayerAction.showNowPlaying;
   }
-  if (initialPress && _fullscreenKeys.contains(key))
+  if (initialPress && _fullscreenKeys.contains(key)) {
     return PlayerAction.toggleFullscreen;
-  if (initialPress && key == LogicalKeyboardKey.keyS)
+  }
+  if (initialPress && key == LogicalKeyboardKey.keyS) {
     return PlayerAction.showSleepTimer;
+  }
   return switch (key) {
     LogicalKeyboardKey.keyA => PlayerAction.showAudioTracks,
     LogicalKeyboardKey.keyC => PlayerAction.showSubtitleTracks,
@@ -211,28 +218,27 @@ PlayerCommand resolvePlayerKey(
   };
 }
 
-String? _digit(LogicalKeyboardKey key) {
-  const keys = {
-    LogicalKeyboardKey.digit0: '0',
-    LogicalKeyboardKey.digit1: '1',
-    LogicalKeyboardKey.digit2: '2',
-    LogicalKeyboardKey.digit3: '3',
-    LogicalKeyboardKey.digit4: '4',
-    LogicalKeyboardKey.digit5: '5',
-    LogicalKeyboardKey.digit6: '6',
-    LogicalKeyboardKey.digit7: '7',
-    LogicalKeyboardKey.digit8: '8',
-    LogicalKeyboardKey.digit9: '9',
-    LogicalKeyboardKey.numpad0: '0',
-    LogicalKeyboardKey.numpad1: '1',
-    LogicalKeyboardKey.numpad2: '2',
-    LogicalKeyboardKey.numpad3: '3',
-    LogicalKeyboardKey.numpad4: '4',
-    LogicalKeyboardKey.numpad5: '5',
-    LogicalKeyboardKey.numpad6: '6',
-    LogicalKeyboardKey.numpad7: '7',
-    LogicalKeyboardKey.numpad8: '8',
-    LogicalKeyboardKey.numpad9: '9',
-  };
-  return keys[key];
-}
+final _digits = <LogicalKeyboardKey, String>{
+  LogicalKeyboardKey.digit0: '0',
+  LogicalKeyboardKey.digit1: '1',
+  LogicalKeyboardKey.digit2: '2',
+  LogicalKeyboardKey.digit3: '3',
+  LogicalKeyboardKey.digit4: '4',
+  LogicalKeyboardKey.digit5: '5',
+  LogicalKeyboardKey.digit6: '6',
+  LogicalKeyboardKey.digit7: '7',
+  LogicalKeyboardKey.digit8: '8',
+  LogicalKeyboardKey.digit9: '9',
+  LogicalKeyboardKey.numpad0: '0',
+  LogicalKeyboardKey.numpad1: '1',
+  LogicalKeyboardKey.numpad2: '2',
+  LogicalKeyboardKey.numpad3: '3',
+  LogicalKeyboardKey.numpad4: '4',
+  LogicalKeyboardKey.numpad5: '5',
+  LogicalKeyboardKey.numpad6: '6',
+  LogicalKeyboardKey.numpad7: '7',
+  LogicalKeyboardKey.numpad8: '8',
+  LogicalKeyboardKey.numpad9: '9',
+};
+
+String? _digit(LogicalKeyboardKey key) => _digits[key];

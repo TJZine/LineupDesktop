@@ -291,8 +291,9 @@ void main() {
           : PlayerAction.fastForward,
     );
 
-    if (ordinary)
+    if (ordinary) {
       row(keyboardTransport, overlay, PlayerAction.consumed, dvr: false);
+    }
     if (!ordinary) {
       row(
         [LogicalKeyboardKey.keyK, LogicalKeyboardKey.keyJ],
@@ -428,12 +429,12 @@ void main() {
         (media.contains(c.key) ||
             keyboardTransport.contains(c.key) ||
             enter.contains(c.key) ||
-            const {
+            const [
               LogicalKeyboardKey.arrowUp,
               LogicalKeyboardKey.arrowDown,
               LogicalKeyboardKey.pageUp,
               LogicalKeyboardKey.pageDown,
-            }.contains(c.key))) {
+            ].contains(c.key))) {
       cases.add((
         key: c.key,
         overlay: c.overlay,

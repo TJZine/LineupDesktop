@@ -806,12 +806,6 @@ class _Osd extends StatelessWidget {
         ),
       ),
     ];
-    final playbackStatus = Text(
-      controller.presentedState == PlayerState.playing
-          ? 'Playing'
-          : _statusLabel(controller.presentedState) ?? 'Ready',
-      style: osdSecondaryStyle,
-    );
     final title = program?.scheduled.item.title ?? 'Nothing playing';
     final logoPath = program == null
         ? null
@@ -881,6 +875,12 @@ class _Osd extends StatelessWidget {
       color: roles.secondaryText,
       fontSize: 18,
       fontWeight: FontWeight.w400,
+    );
+    final playbackStatus = Text(
+      controller.presentedState == PlayerState.playing
+          ? 'Playing'
+          : _statusLabel(controller.presentedState) ?? 'Ready',
+      style: osdSecondaryStyle,
     );
     final progress = Row(
       key: const Key('player-osd-progress-block'),
