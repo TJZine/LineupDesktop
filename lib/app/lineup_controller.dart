@@ -49,6 +49,18 @@ class _ServerSelection {
   final ScopedLineup lineup;
 }
 
+@immutable
+class _ProfileSelection {
+  const _ProfileSelection({
+    required this.state,
+    required this.profile,
+    required this.token,
+  });
+  final PersistedState state;
+  final PlexHomeUser profile;
+  final String token;
+}
+
 class ChannelStateConflictException extends FormatException {
   const ChannelStateConflictException()
     : super('The lineup changed. Review the current channels and try again.');
@@ -489,9 +501,7 @@ class LineupController extends ChangeNotifier {
         : null;
     _settings = _persisted.settings;
     diagnostics.enabled = settings.diagnosticsEnabled;
-    _publishChannels = const [];
-    _currentChannelId = null;
-    _publishSelectedLibraryIds = const {};
+    _publishEmptyLineup();
     _resetSetupDiscovery();
     final token = await credentials.readAccountToken();
     if (!_isCurrent(operation)) return;
@@ -766,35 +776,20 @@ class LineupController extends ChangeNotifier {
           _profileSelectionCanCancel = false;
           _profilePickerOrigin = null;
           notifyListeners();
-          final next = _stateSnapshot(profileId: selected.id, serverId: null);
+          final selection = _ProfileSelection(
+            state: _persisted.withSettings(settings).withProfile(selected.id),
+            profile: selected,
+            token: token,
+          );
           try {
-            await _persistState(next);
+            await _persistState(selection.state);
           } catch (_) {
             _profileSelectionCanCancel = oldCanCancel;
             _profilePickerOrigin = oldProfileOrigin;
             rethrow;
           }
           if (_disposed) return;
-          _persisted = next;
-          _retireScope();
-          _profile = selected;
-          _profileToken = token;
-          _serverAccess = const {};
-          _pmsToken = null;
-          _invalidatePmsRefresh();
-          _publishServer = null;
-          _publishServers = const [];
-          _connection = null;
-          _serverSelectionCanCancel = false;
-          _serverPickerOrigin = null;
-          _publishLibraries = const [];
-          _publishSelectedLibraryIds = const {};
-          _publishAvailableMedia = const [];
-          _publishAvailablePlaylists = const [];
-          _publishChannels = const [];
-          _currentChannelId = null;
-          _resetSetupDiscovery();
-          _contentGeneration++;
+          _publishProfileSelection(selection);
           accepted = true;
           _stage = SetupStage.servers;
           notifyListeners();
@@ -811,6 +806,27 @@ class LineupController extends ChangeNotifier {
       );
     }
     return accepted;
+  }
+
+  void _publishProfileSelection(_ProfileSelection selection) {
+    _persisted = selection.state;
+    _retireScope();
+    _profile = selection.profile;
+    _profileToken = selection.token;
+    _serverAccess = const {};
+    _pmsToken = null;
+    _invalidatePmsRefresh();
+    _publishServer = null;
+    _publishServers = const [];
+    _connection = null;
+    _serverSelectionCanCancel = false;
+    _serverPickerOrigin = null;
+    _publishLibraries = const [];
+    _publishEmptyLineup();
+    _publishAvailableMedia = const [];
+    _publishAvailablePlaylists = const [];
+    _resetSetupDiscovery();
+    _contentGeneration++;
   }
 
   Future<void> _discover(int operation, {bool reconnectSaved = true}) async {
@@ -1486,20 +1502,9 @@ class LineupController extends ChangeNotifier {
       () => _queueStateOperation(operation, () async {
         final profileId = profile?.id ?? account?.id;
         if (profileId == null) return;
-        final selections = Map<String, String>.of(
-          _persisted.selectedServerByProfile,
-        )..remove(profileId);
-        final next = PersistedState(
-          settings: _persisted.settings,
-          profileId: _persisted.profileId,
-          selectedServerByProfile: selections,
-          selectedLibraryIdsByProfileServer:
-              _persisted.selectedLibraryIdsByProfileServer,
-          channelsByProfileServer: _persisted.channelsByProfileServer,
-          currentChannelByProfileServer:
-              _persisted.currentChannelByProfileServer,
-        );
+        final next = _persistedFromRuntime().withoutSelectedServer(profileId);
         await _persistState(next);
+        if (_disposed) return;
         _persisted = next;
         _clearServerRuntime();
         _serverSelectionCanCancel = false;
@@ -2234,9 +2239,7 @@ class LineupController extends ChangeNotifier {
       _scheduleWorker = null;
       _scheduleWorkerMedia = null;
       _scheduleWorkerPlaylists = null;
-      _publishSelectedLibraryIds = const {};
-      _publishChannels = const [];
-      _currentChannelId = null;
+      _publishEmptyLineup();
       _channelSetupCanCancel = false;
       _profileSelectionCanCancel = false;
       _serverSelectionCanCancel = false;
@@ -2262,6 +2265,33 @@ class LineupController extends ChangeNotifier {
     if (_disposed) return;
     _busy = false;
     notifyListeners();
+  }
+
+  void _publishEmptyLineup() {
+    _publishSelectedLibraryIds = const {};
+    _publishChannels = const [];
+    _currentChannelId = null;
+  }
+
+  PersistedState _persistedFromRuntime({
+    ScopedLineup? lineup,
+    LineupSettings? settings,
+  }) {
+    final base = _persisted
+        .withProfile(profile?.id)
+        .withSettings(settings ?? this.settings);
+    final profileKey = profile?.id ?? account?.id;
+    final serverId = server?.id;
+    if (profileKey == null || serverId == null) return base;
+    return base.withLineup(
+      LineupScope(profileKey: profileKey, serverId: serverId),
+      lineup ??
+          ScopedLineup(
+            libraryIds: selectedLibraryIds,
+            channels: channels,
+            currentChannelId: currentChannelId,
+          ),
+    );
   }
 
   Future<void> _save({
@@ -2455,12 +2485,10 @@ class LineupController extends ChangeNotifier {
     _serverTargetId = null;
     _invalidatePmsRefresh();
     _publishLibraries = const [];
-    _publishSelectedLibraryIds = const {};
+    _publishEmptyLineup();
     _publishAvailableMedia = const [];
     _publishAvailablePlaylists = const [];
     _resetSetupDiscovery();
-    _publishChannels = const [];
-    _currentChannelId = null;
     _scheduleWorker?.dispose();
     _scheduleWorker = null;
     _scheduleWorkerMedia = null;
