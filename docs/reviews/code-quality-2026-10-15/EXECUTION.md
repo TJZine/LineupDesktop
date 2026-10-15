@@ -32,14 +32,15 @@ V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
 viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
 Y reconstructed polling control/fourclock green, broad/analyze/full pending.
 D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
-tocd26d00d on2cf4570c. RequiredDreview01a13f48 foundtwoacceptedP2regressions; sameDchildwill
-finishfrozencd26fullthenconfirm/repair/reverify, targetedreviewclosurepending.
+tocd26d00d on2cf4570c. D reviewedcd26 actualfull1,657PASS; twoacceptedP2regressionsrepairedat
+6f66f331 actualBEFOREconfirmedR1, format129/analyze/focused114/render14/
+full1,658PASS. SameDreviewer targetedR1/R2closure running; notintegrated.
 U newly dispatched worker6.1/medium at9d9ec78e, INITIAL source/test/history and
 scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: D exclusively completesfrozencd26full, thenowns acceptedD-R1/R2 confirming/repair/checks; allotherqueuesheld. U prepares source/test/history; all other children queued.
+Runtime: E exclusively baseline-first/focused/pairedrender; Dsourcefrozenfortargetedreview, otherqueuesheld. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -1210,3 +1211,29 @@ renders/full. Oldfullatcd26doesnotpromote repair. Requiredsame-reviewertargeted
 closureandmainintegrationgateremain. Exact scratcharchived
 `/tmp/lineup-cq-D/rebased-scratch-ospY31/scratch`; restoreonlytemporarilyforrender,
 archiveoutsidedefaultfull/analyzetestdiscovery. Otherqueuesremainheld.
+
+## D actual review repairs returned and E exclusive runtime release
+
+D exactclean6f66f3310a8955481e9b79940becefbc43c913f8 vsreviewedcd26 changesonly
+AirCheckVerification/StudioManualEditor/AirChecktest,3files92+/32-, commits
+c21dcc94→15d4b4d6→792e8c30→6f66f331. Oldfrozencd26full1,657PASS. FaithfulR1
+BEFORE c21libidenticalcd26 latestfacts0/latestsemantics0/oldfacts1/loads1 exit1,
+AFTER1/1/0/1plusunchangedseed/anchor/canonicalidentity. Latestcurrentkeychannel
+usedonlyunderexistingversion/keygate, actualrequestschedule/capturedsourcelabel
+preserved. R2 onebuildsnapshot/rowclosures; Browse skipsrundownprojection; undo
+PREsnapshot/removalbeforeafter/focusmembership/movedialog map10readsites. Static
+copy-workimprovement, notmeasuredlatency. `/tmp/lineup-cq-D/review-repair-evidence.json`.
+
+Finalguard3.47.7/format129/analyze/focused114/render14/full1,658PASS at6f66;
++1R1caseover1,657, totalD+8overS1,650. `/tmp/lineup-cq-D/repaired-*`. Exact
+scratchharness/imagesarchived `/tmp/lineup-cq-D/repaired-scratch-kvjnAr/scratch`,
+originalhash/manifestsunchanged. SameDreviewer01a13f48targetedcd26..6fclosure now
+requestedwithactualproof, sourcefrozen; noacceptance/integrationuntilclosure.
+
+E sameworker6.1/mediumgrantedexclusiveBASELINE-FIRSTactualscratchcaptureon
+untoucheddetachedfdc, thencandidateformat/analyze/focusedinclrestore andmatched
+render. No fulluntilparentrebase. Chronologydeviationhonest; priorEimplementation
+precededreconstructedbaselinecapture. Scratchfixturefixesifneededidenticalboth,
+actualnonempty/stateassertions, no baselineproductionfix/candidategoldenupdates/
+tolerancerelaxation. E-onlyrepairswithinfullcontractallowedwithproof; allother
+runtimeheld. Matchingproof/actualstatecoveragecountrequired, noemptyrenderblessing.
