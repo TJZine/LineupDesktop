@@ -20,7 +20,8 @@ retainedcq/F pending all Windows CTests and separate physical acceptance.
 E sourcefindingsCLOSEDat8ff; cleanup02c0df1d actualformat117/analyze/
 focused67/render14PASS. Threepatchesrebasedunchanged tob8ac165f on95162600;
 sameEreviewer targetedcleanup/proofclosure COMPLETE no newfinding;
-rebasedfull andCURRENTHEAD14-rendercomparison required/running. Pairedfinal
+currentb8ac guard/format136/analyze/full1,663/14rendersPASS. Equivalent
+finaledd12307 integrated; mainEgate dispatchedP0, noothermergeuntilpass. Pairedfinal
 harnessa528cd1d exact14renders, baselinefdc untouched; chronologydeviationretained.
 W SOURCE-CLOSED, actual negative control failed on intended count bounds,
 corrected5554d6d8 format114/analyze/focused22/full1,645 green. Equivalent final
@@ -45,7 +46,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: E rebased full exclusively onfrozenb8ac165f; sameEreviewer source-only inparallel, otherqueuesheld. U prepares source/test/history; all other children queued.
+Runtime: P0 mainE§8.1 exclusively; otherqueuesheld. ComparisonEbaseline preserveduntilmainacceptance. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -103,7 +104,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
 | L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Accepted441950df plus consumerbc231cef; package/main1,610 green; task tree/fully integrated branch removed |
 | L review | `01a13ef8-7475-7a13-96d7-8d2e9d82c1a0` / local | reviewer, gpt-6.1-sol, high | L base2ae38b8e → 2b594e6f | Required matrix/pager/cancellation/copy review, read-only |
-| E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | 02c0df1d format/analyze/focused67/render14green; equivalentb8ac165f frozenfortargetedreview; fullpending |
+| E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Reviewedb8ac165f format/analyze/full1,663/currentrender14green; equivalentedd12307 integrated; mainP0gatepending |
 | E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Six findings and immutable qualification SOURCE-CLOSED at8ff1574a; runtime/render/full unverified |
 | S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Acceptedb078944a independentclosure/105focused/1,650full/main1,650green; tasktree/fullyintegratedbranchremoved |
 | V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Test-onlyd2fbdf3b prepared; actual NF29 BEFORE and matched GUIDE_PROFILE baseline queued, no production repair |
@@ -1324,3 +1325,23 @@ refs, no updates/tolerancechanges/newbaselinecapture. Restoreexactarchivedharnes
 onlytemporarilythenarchiveagain; no trackedchanges/redundantfullabsentfailures.
 Sourcefrozen; anyfailureSTOPto parentbeforeedit. MainEgate/combinedwholebranch
 reviewstillpending. Otherqueuesremainheld.
+
+## E current shared-input proof, acceptance, and integration
+
+Exactb8ac165f currentguard3.47.7/format1360changed/analyzeclean/full1,663PASS
+(~82s), observedmapD1658+4SetupReview+net1expandedfailure.12scratchcasesexcluded.
+ThenCURRENTHEADscratch12tests/14exactrendersPASSagainstsamebaseline06refs, no
+updates/newbaseline/tolerance/masking. `/tmp/lineup-cq-E/rebased-{toolchain,format,analyze,full,render}.log`
+andrebased-report.md. Headunchanged/clean, no source/testedits. Scratchagainarchived
+`/tmp/lineup-cq-E/rebased-scratch.wWFAr0/scratch`, exacta528cd1d hash+14references
+preserved. Detachedbaselinefdcproductionunchanged. This settlesreviewer'scurrent
+shared-inputqualification; older02c0proofkeepsownattribution. ParentacceptsEsource/
+proof, whileplannedcombinedreviewstillrequired.
+
+Finalparentrebase overexecutiondocsonly72304697 all3patches`=`:
+c4e78d87→ac792dd3,2d25f549→d3db235b,b8ac165f→edd123079c8bd8ebc929c3e768331e982c9a943c.
+Ff integratededd12307,10files4,437+/3,331-, golden diffempty. LiteralASTreview
+retained0simpledeleted/1internalnew/16classifiedinterpolations, no visiblecopy
+change/deadstringgate. P0exclusive mainE§8.1 nowgranted atrecordHEADsuppliedafter
+commit, logs `/tmp/lineup-cq-integration/E/`; expected1,663notyetmainobserved.
+Nootherpackageintegrationuntilpass. BothEtrees/proofretaineduntilmainacceptance.
