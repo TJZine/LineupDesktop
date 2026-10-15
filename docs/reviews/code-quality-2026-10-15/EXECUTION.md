@@ -7,36 +7,35 @@ dispatch, acceptance, and integration; it does not replace package contracts.
 
 ## Current checkpoint
 
-Accepted/integrated A/H/T/M/B/L plus the planned B/L authorization getter
-consumer. Stable main L gate at product `bc231cefcf8cd6ae12b8cf008b70f64b53b7ab2e`
-passed: pinned formatter112 unchanged, analyzer clean, full1,610; actual session
-`68553` exit0, logs `/tmp/lineup-cq-integration/L/`. L task tree/fully integrated
-branch removed; earlier source and proof remain recoverable in Git/logs.
-F remains source-reviewed, UNVERIFIED/UNMERGED at040e4a64 in retainedcq/F.
+Accepted/integrated A/H/T/M/B/L. Main L gate format112/analyze/full1,610 green.
+C independent source review CLOSED; rebased package13b935f9 actual pinned
+format112/analyze/full1,640 green. Parent's final rebase over documentation-only
+9fadb575 preserved all four patches (`range-diff` all `=`), then ff-integrated C
+at9d9ec78e79ef4de2e7fb0a1ca3c050d61ec90701. C main-checkout §8.1 gate RUNNING
+in actual session25853, logs`/tmp/lineup-cq-integration/C/`; main result pending.
+No further package integrates until collected/accepted. C task tree remains
+until main acceptance. F040e4a64 remains source-reviewed, UNVERIFIED/UNMERGED,
+retainedcq/F pending all Windows CTests and separate physical acceptance.
 
-C final independent review CLOSED C-R1 at8b114e44 with600 focused green.
-Parent rebased four commits unchanged (`range-diff` all `=`) onto actual main
-03a946f2: current C13b935f9a05036a1f68aac8d05b780efd0d55269.
-C now owns exclusive pinned format/analyze/full slot; expected1,640 is not
-an observed result. All C source remains unintegrated until the gate passes.
-E8ff1574a source findings CLOSED; no runtime acceptance. Identical baseline/
-candidate scratch harness hashb6ede3f3d1d787b83105d504bf32fc4017d6a4165d8e1f39722d7d137dfbc2ec
-now includes synthetic connection and actual nonempty/state/content assertions;
-both render comparisons unexecuted. Wb671ac62 performance repair SOURCE-CLOSED;
-actual negative/focused/full proof queued. S f02a1209 focused103 green, independent
-review found S-R1 malformed integer ID with no matching pending waiter can leave
-requests/startup unresolved; accepted and returned to same child for source/test
-repair only, actual BEFORE runtime proof still required. Y reconstructed poll
-control/four clock cases green; broad/analyze/full pending. D14-state preD3 render
-baseline captured; D3 source awaitingfocused/comparison/full/review. V only
-prepares faithful NF29 BEFORE tests/profilebaseline, no production repair yet.
-K/U/G undispatched; combined/final whole-branch reviews remain. No completion claim.
+E8ff1574a source findings CLOSED, all runtime/render/full pending; paired scratch
+harnessb6ede3f3 has actualstateassertions and credential-free syntheticconnection.
+Wb671ac62 performance repair SOURCE-CLOSED, negative/focused/full queued.
+S acceptedS-R1 source correction7f250270 ready; two new real-isolate tests for
+pending/startup unknown-malformedID require actual BEFORE/AFTER checks.
+V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
+viewportdedup/contentinvalidation; actual BEFORE/profilebaseline still unrun.
+Y reconstructed polling control/fourclock green, broad/analyze/full pending.
+D preD3 baseline14 states captured, D3 awaitingfocused/comparison/full/review.
+U newly dispatched worker6.1/medium at9d9ec78e, INITIAL source/test/history and
+scratchbaseline preparation ONLY. No U production change until confirming
+unknownbadge test and baseline renders run. K/G undispatched; combined/final
+whole-branch reviews remain. No plan completion claim.
 
-Runtime owner: C full only. S repair and V test preparation may edit their
-isolated source; E/W/Y/D are queued. No other Flutter commands until explicit
-release. At most four implementation children active. Next bounded work includes
-W negative/focused, Y broader checks, D/E focused and matched render, V BEFORE/
-profilebaseline. Rebase/counts/source acceptance follow actual integration state.
+Runtime: main C only. U prepares source/test/history; all other children queued.
+At most four implementation children active. Next exclusive queue includes W
+negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
+matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
+counts and source identity are rechecked before integration/full grants.
 
 ## Authority and source
 
@@ -82,20 +81,22 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; former `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Accepted/reviewed/integrated `d2213d4d7a06181cff341892d899f3b398627b2b`; main format/analyze/1,593/macOS build passed; cleanup authorized |
 | B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; former `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Accepted/reviewed/integrated `bf65e00ad1c99677a2a546da6a72f669056ade8b`; corrected/full/main1,604 green; task worktree/branch removed |
 | B review | `01a13ef5-2b22-7571-96f5-7893df867269` / local | reviewer, gpt-6.1-sol, high | B base`d2213d4d` → `5193906f` | Required full transactional/source/retained-proof review, read-only |
-| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Rebased onto B atd7497975; C4 uncommitted source reviewed; accepted C-R1 active-part reporting gap, BEFORE/focused repair in progress; unintegrated |
-| C review | `01a13f0e-4615-7161-a62c-e3ba4d6237d2` / local | reviewer, gpt-6.1-sol, high | B basebf65e00a → C HEADd7497975 plus frozen C4 patchb3fd73a7 | Full required C review complete with one P2 C-R1; targeted closure/final executed evidence pending |
+| C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Independent review CLOSED; package13b935f9 full1,640 green; equivalent final9d9ec78e integrated; main gate session25853 pending |
+| C review | `01a13f0e-4615-7161-a62c-e3ba4d6237d2` / local | reviewer, gpt-6.1-sol, high | B basebf65e00a → C HEADd7497975 plus frozen C4 patchb3fd73a7 | Required full review and targeted C-R1 closure complete at8b114e44; equivalent rebases retain verdict; full1,640 passed |
 | D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | D1/D2 focused112, baseline14 renders green atdb92b8b9; D3 source work in progress |
 | F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; source review closed, implemented/unverified, UNMERGED, retained pending Windows |
 | F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Complete: no material actionable source finding; Windows/physical proof still absent |
-| L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Reviewed/rebased/integrated441950df, package1,610 green; controller consumer atbc231cef; main combined gate queued after focused phase |
+| L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Accepted441950df plus consumerbc231cef; package/main1,610 green; task tree/fully integrated branch removed |
 | L review | `01a13ef8-7475-7a13-96d7-8d2e9d82c1a0` / local | reviewer, gpt-6.1-sol, high | L base2ae38b8e → 2b594e6f | Required matrix/pager/cancellation/copy review, read-only |
-| E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Source-onlyce913bd7 reviewed: six accepted compile/fixture/ownership/behavior findings; stronger worker repairing full E1/E2; unintegrated |
-| E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Complete: changes requested; runtime/render/full still unverified |
-| S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | Source-only `b3893c97924f27dea32d0277a37b5369a44bb0df`, forwarding-export correction done; no runtime checks yet, stopped pending release |
-| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Dispatched full Guide notification/selection/viewport contract, runtime hold; BEFORE tests required before suspected repair |
-| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Corrected6bc53422, pin/format/analyze and focused21 green; independent review running; full slot requested/ungranted |
-| W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full monitor/old policy/widget lifetime/test-map review, read-only |
+| E | `01a13ef2-210f-7a33-a8ff-fa0254a9a5ba` / local | worker_luna initially; reassigned same chat to worker, gpt-6.1-sol, medium | `fdc58fb9aad28e1f018f3721b5a80d1862d4f60c`; `/Users/tristan/Software/LineupDesktop-E`, `cq/E` | Corrected8ff1574a source findings CLOSED; paired scratch harness ready; all runtime/render/full pending |
+| E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Six findings and immutable qualification SOURCE-CLOSED at8ff1574a; runtime/render/full unverified |
+| S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | f02a1209 focused103 green; independent S-R1 accepted; correction7f250270 source/test ready, BEFORE/AFTER/full pending |
+| V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Test-onlyd2fbdf3b prepared; actual NF29 BEFORE and matched GUIDE_PROFILE baseline queued, no production repair |
+| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | W-R1 correctionb671ac62 SOURCE-CLOSED; actual old-source negative/newfocused/full pending; prior21 green only6bc53422 |
+| W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
 | Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Source83b7aa04 + finite test seam507cb296; narrow faithful old-poll negative control/clock checks released; unintegrated |
+
+| U | `01a13f32-18d0-7f21-ad48-6a25d94f8d3a` / local | worker, gpt-6.1-sol, medium |9d9ec78e; `/Users/tristan/Software/LineupDesktop-U`, `cq/U` | Initial source/test/history/scratch preparation; no production repair or runtime grant yet |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -1002,3 +1003,26 @@ idly or treat child completion as acceptance without inspecting source/evidence.
   parent grant; no speculative broader protocol changes authorized.
 - E/W acknowledged queue; V may prepare faithful BEFORE/profile source only,
   without repairs/runtime until confirming results. C exclusive runtime lease.
+
+## C package acceptance, integration, and U dispatch
+
+- C package exact13b935f9 final stable toolchain/format112/analyze/full1,640
+  passed, session68377 exit0. `/tmp/lineup-cq-C/rebased-{toolchain,format,analyze,full}.log`.
+  Source clean before/after, count1610+30 mapped; no post-rebase repairs.
+- Main had only one additional execution-record commit9fadb575. Parent rebased
+  C4 commits equivalently: d6e96ff4→59ef6c10,71f1d677→191a7076,
+  0457aabe→841840bb,13b935f9→9d9ec78e; all range-diff`=`. Net3files711+/130-.
+  Golden diff empty. Literal inspection changes only private supersession/report
+  messages, fixed context/library; no visible copy change. Ff integrated9d9ec78e.
+  Main §8.1 gate actual session25853 running; logs `/tmp/lineup-cq-integration/C/`.
+- S7f250270 source correction adds pending/startup malformed-unknown-ID proof;
+  no runtime yet. Vd2fbdf3b only adds six BEFORE/guard tests; no production change.
+- Parent reread current worker preset (gpt-6.1-sol/medium and responsibility),
+  queried actual list_projects, verified no cq/U/path conflict, created exact
+  sibling U tree from actual integration9d9ec78e. Child01a13f32 dispatched explicit
+  worker/model/effort for cross-boundary judgment. Handoff includes exact package,
+  T7, ownership, accepted2.2c/d, current C/M contracts, old-proof/literal/render
+  obligations, human authorization reference and verified-callback rule.
+  Initial source/test/history/scratch prep only; first actual NF23 test and
+  matched renders BEFORE production changes. Parent must adjudicate any needed
+  poster-path edit outside row. U review required before merge. No runtime overlap.
