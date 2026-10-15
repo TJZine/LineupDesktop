@@ -100,6 +100,150 @@ void main() {
     expect(guide.row(id).state, GuideLoadState.ready);
   });
 
+  testWidgets('NF-29 query projection failure publishes once after the frame', (
+    tester,
+  ) async {
+    final lineup = _TestLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    var now = DateTime.utc(2026, 1, 1);
+    final boundary = now.add(const Duration(days: 1));
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => buildSchedule(
+        [
+          const ChannelItem(
+            id: 'long',
+            title: 'Long',
+            duration: Duration(microseconds: 8640000000000000000),
+          ),
+        ],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+        transition: ScheduleTransition(
+          boundary: boundary,
+          legacyCycleItems: _schedule(channel).items,
+        ),
+      ),
+    );
+    addTearDown(guide.dispose);
+    final id = lineup.channels.single.id;
+    guide.requestChannels(lineup.channels);
+    await _settle();
+    var notifications = 0;
+    guide.addListener(() => notifications++);
+
+    now = boundary;
+    expect(guide.currentProgram(id), isNull);
+    expect(guide.row(id).state, GuideLoadState.error);
+    expect(notifications, 0);
+
+    await tester.pump();
+    expect(notifications, 1);
+  });
+
+  test('NF-29 one successful row load publishes once', () async {
+    final lineup = _TestLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    var notifications = 0;
+    guide.addListener(() => notifications++);
+
+    guide.requestViewport(0, 1);
+    await _settle();
+
+    expect(guide.row('channel-0').state, GuideLoadState.ready);
+    expect(guide.activeLoadCount, 0);
+    expect(notifications, 1);
+  });
+
+  test(
+    'NF-29 stale final load publishes its active-count change once',
+    () async {
+      final lineup = _TestLineup(_channels(1));
+      addTearDown(lineup.dispose);
+      final staleLoad = Completer<ScheduleIndex>();
+      final guide = GuideController(
+        lineup: lineup,
+        maximumConcurrentLoads: 1,
+        loadSchedule: (_) => staleLoad.future,
+      );
+      addTearDown(guide.dispose);
+      var notifications = 0;
+      guide.addListener(() => notifications++);
+
+      guide.requestViewport(0, 1);
+      expect(guide.activeLoadCount, 1);
+      lineup.changeContentScope();
+      notifications = 0;
+
+      staleLoad.complete(_schedule(lineup.channels.single));
+      await _settle();
+
+      expect(guide.activeLoadCount, 0);
+      expect(guide.row('channel-0').state, GuideLoadState.loading);
+      expect(notifications, 1);
+    },
+  );
+
+  test(
+    'NF-29 stale completion publishes after pumping current queued work',
+    () async {
+      final lineup = _TestLineup(_channels(2));
+      addTearDown(lineup.dispose);
+      final staleLoad = Completer<ScheduleIndex>();
+      final currentLoad = Completer<ScheduleIndex>();
+      final queuedLoad = Completer<ScheduleIndex>();
+      final attempts = <String, int>{};
+      final started = <String>[];
+      final guide = GuideController(
+        lineup: lineup,
+        maximumConcurrentLoads: 1,
+        loadSchedule: (channel) {
+          final attempt = attempts.update(
+            channel.id,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+          started.add(channel.id);
+          if (channel.id == 'channel-0' && attempt == 1) {
+            return staleLoad.future;
+          }
+          if (channel.id == 'channel-0') return currentLoad.future;
+          return queuedLoad.future;
+        },
+      );
+      addTearDown(guide.dispose);
+      var notifications = 0;
+      guide.addListener(() => notifications++);
+
+      guide.requestViewport(0, 1);
+      expect(started, ['channel-0']);
+      lineup.changeContentScope();
+      notifications = 0;
+      guide.requestViewport(0, 1);
+      expect(guide.activeLoadCount, 1);
+
+      staleLoad.complete(_schedule(lineup.channels.first));
+      await _settle();
+
+      expect(started, ['channel-0', 'channel-0']);
+      expect(guide.activeLoadCount, 1);
+      expect(guide.row('channel-0').state, GuideLoadState.loading);
+      expect(notifications, 1);
+
+      currentLoad.complete(_schedule(lineup.channels.first));
+      await _settle();
+      queuedLoad.complete(_schedule(lineup.channels[1]));
+      await _settle();
+      expect(guide.activeLoadCount, 0);
+    },
+  );
+
   test(
     'bulk retry includes offscreen failures and preserves concurrency bound',
     () async {

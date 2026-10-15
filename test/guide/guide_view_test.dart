@@ -1552,6 +1552,96 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets(
+    'Guide does not re-request unchanged viewport demand after a rebuild',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1280, 800);
+      addTearDown(tester.view.reset);
+      final lineup = _Lineup(
+        12,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      final guide = _CountingGuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final initialRequests = guide.viewportRequests;
+      expect(initialRequests, greaterThan(0));
+
+      lineup.notifyListeners();
+      await tester.pump();
+      await tester.pump();
+
+      expect(guide.viewportRequests, initialRequests);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'Guide re-requests the visible viewport after same-ID content invalidation',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1280, 800);
+      addTearDown(tester.view.reset);
+      final lineup = _Lineup(
+        12,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      var loads = 0;
+      final guide = _CountingGuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async {
+          loads++;
+          return _schedule(channel);
+        },
+      );
+      addTearDown(guide.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final initialLoads = loads;
+      final initialRequests = guide.viewportRequests;
+
+      lineup.fixtureActor.publishInventory();
+      await tester.pumpAndSettle();
+
+      expect(loads, greaterThan(initialLoads));
+      expect(guide.viewportRequests, greaterThan(initialRequests));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('loading, error, retry, and program semantics stay visible', (
     tester,
   ) async {
@@ -3987,6 +4077,21 @@ class _Lineup extends LineupController {
   Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     artworkLoads++;
     return artworkLoader == null ? artworkBytes : await artworkLoader!(path);
+  }
+}
+
+class _CountingGuideController extends GuideController {
+  _CountingGuideController({
+    required super.lineup,
+    required super.loadSchedule,
+  });
+
+  int viewportRequests = 0;
+
+  @override
+  void requestViewport(int firstIndex, int visibleCount) {
+    viewportRequests++;
+    super.requestViewport(firstIndex, visibleCount);
   }
 }
 
