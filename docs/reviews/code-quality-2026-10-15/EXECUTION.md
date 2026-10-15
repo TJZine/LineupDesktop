@@ -7,37 +7,27 @@ dispatch, acceptance, and integration; it does not replace package contracts.
 
 ## Current checkpoint
 
-Accepted/integrated A/H/T/M/B/L/C/W/S/D/E/Y. Latest mainY§8.1 at3a87d607
-passed pinnedformat136/analyze/full1,667; productf7ede071. Acceptedtasktrees/
-fullyintegratedbranches cleaned. E detachedbaseline's15scratchfiles preserved
-withverifiedhashes beforetaskcheckoutremoval. Allproof/Gitidentities below.
-F nativecandidate040e4a64 remains source-reviewed UNVERIFIED/UNMERGED inretained
-cq/F, pending allrequiredWindowsCTests and separatephysicalacceptance. No push.
+All portable CODE packages A/H/T/M/B/L/C/W/S/D/E/Y/V/U/K integrated.
+Latest observed mainU§8.1 at9f1f25fd:pin3.47.7/format143/analyze/full1,687PASS.
+K final9c3c62e6 nowmerged; requiredmainKfreshU+Kgate dispatchnext, expected1,690
+=U1687+K3notyetobserved. No furthercodeedits/integrationuntilstablechecks/reviews.
+Koldcandidatea33 ownV/Ybasefull1,678excludedU; properattributionretained.
+Urequiredfull+targetedreviewCLOSED all2P1/compiler/lifecycle; actual375focused/
+1,687full and44exact/fourapprovedbadge-renderdifferences accepted. Otherrequired
+B/C/D/F/Lsource reviews andalladjudicationsbelow. Kfull17enum/20calls/storage-vs-
+export2354bytecontract+UIproofpasses, plannedcombinedreviewstillrequired.
 
-V samechat nowworker6.1/medium: originalNF29+viewportconfirmations actual120PASS/
-3FAIL=123total; reviewV-R1 bulkRetryeviction actualBEFOREconfirmed. Finalsource
-b1744470 clean/currentYbase75fe, guard/format136/analyze/focused125/full1,675PASS.
-EightVnewcases mapped; matchedprofileworkcountsunchanged, samplesqualifiedbelow.
-SameVreviewer01a13ef8 CLOSED R1/queryrepair, no newfinding; equivalent
-finalb75a6ebb integrated, mainV9dedformat136/analyze/full1,675PASS;
-acceptedtasktree/fullyintegratedbranchremoved.
-U worker6.1/medium completedsource0b10b2fe, rebasedtof6a99892 oncurrentV9ded.
-RequiredUreview01a13f87 running, sourceFROZEN; firstAFTERchecksnowgranted. Initial
-productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
-26scenarios48images+selfmatchPASS; rejectedbadfixture/animationcapturespreserved.
-U final4fe3733d compiler+LayerLinkrepairs:guard/format143/analyze/focused375/
-full1,687PASS. Current48render44exact/fourapprovedbadge-onlydiffsretained;
-sameUreviewer finaltargetedclosure running, Uunintegrated.
-Kworker6.1/medium finala33d6e32 actualguard/format137/analyze/focused22/
-producer528/full1,678PASS excludingU; fixed2354bytes+storageUIunchanged.
-Rebased3032d3ce ontoU/currentmain, notyetintegrated/currentcomposedfulluntested; Gafterwholebranchreview. RequiredUpremerge,
-plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
-FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
-
-Runtime: P0mainU§8.1 exclusively afterKrelease. Krebase3032sourcefrozen/
-notintegrated; combinedU+KmainfreshgatewillfollowonlyaftermainUpasses. Ufocused/render/fullneedsfrozencandidate
-andexplicitexclusivegrant; currentcompositionrendersafterVrebasewillberequired.
-Atmostfourimplementationchildren, parentsoleGitintegration/acceptanceowner.
+Dispatchnext(twoindependentread-onlyreviewers6.1/highonTHISfrozenrecordHEAD):
+requiredcombinedA/E/M/S/V/W/K/Ypostmergereview and finalwholebranchcomposition
+reviewbeforeG. ActualchildIDs willbeconversationdispatchmapwhileHEADfrozen,
+thenrecordedafterchecks/reviews. P0exclusive mainKruntime; reviewersnoruntime.
+GUNDISPATCHED untilallcodefindingsadjudicated. FinalmacOSbuildpending(Mbuildpassed).
+U/Kacceptedtasktreesretainedforpossiblefocusedcorrections, clean. Otherscleaned.
+F040e4a64 remainsUNVERIFIED/UNMERGED inretainedcq/F pendingWindowsCTests
+(display_dynamic_range/display_guardian/native_player_contract/runner_lifecycle),
+plusseparatephysicalWindowsacceptance. No push/PR/mainmerge/publication/default
+branchrepair authorized/performed. Preflightunmergedprobebranchretainedasrequired.
+No entireplancompletionclaim, allnineCQ+additionalpackagesscopepreserved.
 
 ## Authority and source
 
@@ -1879,3 +1869,28 @@ thenMANDATORYmainKfreshcombined(expected1690=U1687+K3). Ksourcefrozen.
 P0mainU§8.1nowexclusivegrantedatrecordHEADsuppliedaftercommit, logs
 `/tmp/lineup-cq-integration/U/`; expected1,687notyetmainobserved. Noothermerge
 untilpass; K/Uchildrenstopped, no sharedtreewriter. MainP0nocode/Gitmutations.
+
+## U main gate acceptance and K final integration
+
+P0mainU9f1f25fde0b9f832d3eb8de967f7fb8216ae004e unchanged/clean, pin3.47.7/
+Dart3.13.5, format143zeroexit0(2.67s), analyzecleanexit0(3.32s), full1,687exit0
+(82.75s). `/tmp/lineup-cq-integration/U/*`. Uacceptedreview/currentruntimeproof;
+Utreekeptcleanforfinalreviewcorrectionsuntilterminalcleanup ratherthanrecreate.
+
+Kfinalparentrebaseoverexecutiondocsonly9f1f25fd all4patches`=`:
+eaa3d31d→fdd68289,301cb308→0fb93586,8f618834→4a90dfdb,
+3032d3ce→9c3c62e6645913bda54dfefadff810fcc6db87f7. Ff integrated9c3c62e6,
+8files532+/158-, golden diffempty. EarlierU-importcontextinterdiffwasinspected,
+allproducerchangesenumAPIonly andUposterhelperpreserved; no newsemanticmergefix.
+OldK1678keepscandidatebasewithoutU, currentfreshmainKfullrequiredtoestablishU+K.
+Expected1,690=actualU1687+3Knew, no incidentaltestcountgate. SameP0mainchecks
+willrunonrecordHEAD. No code/Gitmutationsbyverifier.
+
+Currentreviewerpreset reread6.1-sol/high/read-onlyresponsibility. Actualprojects
+resolved. Nextdispatch requiredonecombinedA/E/M/S/V/W/K/Yafteralltheirmerges and
+finalwholebranchcode/compositionreviewbeforeG, on frozenimmutablecode9c3c62e6+
+thisexecutionrecordonly. ExactIDs recordedconversationtools/createddirectives
+untilsourcefreezeends; no HEAD-changingdispatchrecordduringchecks/review.
+Bothread-only/no tests/builds/delegation, distinctscope/priorvalidreviewcarrywith
+actualsourcecomparison, allmaterialfindingsparentadjudicates/sameownerfixes.
+AllnineCQregisterstillcompleteagreedscope: CQ08nativeFpendingnotforgotten.
