@@ -7,53 +7,31 @@ dispatch, acceptance, and integration; it does not replace package contracts.
 
 ## Current checkpoint
 
-Accepted/integrated A/H/T/M/B/L. Main L gate format112/analyze/full1,610 green.
-C independent source review CLOSED; rebased package13b935f9 actual pinned
-format112/analyze/full1,640 green. Parent's final rebase over documentation-only
-9fadb575 preserved all four patches (`range-diff` all `=`), then ff-integrated C
-at9d9ec78e79ef4de2e7fb0a1ca3c050d61ec90701. C main-checkout §8.1 gate PASSED
-in actual session25853 exit0: format112 unchanged/analyze clean/full1,640.
-Logs`/tmp/lineup-cq-integration/C/`. Clean C task tree and fully integrated
-branch removed; accepted work remains recoverable in Git/proof logs. F040e4a64 remains source-reviewed, UNVERIFIED/UNMERGED,
-retainedcq/F pending all Windows CTests and separate physical acceptance.
+Accepted/integrated A/H/T/M/B/L/C/W/S/D/E/Y. Latest mainY§8.1 at3a87d607
+passed pinnedformat136/analyze/full1,667; productf7ede071. Acceptedtasktrees/
+fullyintegratedbranches cleaned. E detachedbaseline's15scratchfiles preserved
+withverifiedhashes beforetaskcheckoutremoval. Allproof/Gitidentities below.
+F nativecandidate040e4a64 remains source-reviewed UNVERIFIED/UNMERGED inretained
+cq/F, pending allrequiredWindowsCTests and separatephysicalacceptance. No push.
 
-E sourcefindingsCLOSEDat8ff; cleanup02c0df1d actualformat117/analyze/
-focused67/render14PASS. Threepatchesrebasedunchanged tob8ac165f on95162600;
-sameEreviewer targetedcleanup/proofclosure COMPLETE no newfinding;
-currentb8ac guard/format136/analyze/full1,663/14rendersPASS. Equivalent
-finaledd12307 integrated; mainEgate PASSED at6f909a36 format136/analyze/full1,663;
-acceptedEtrees/fullyintegratedbranchremovedafter15-filebaselinearchivehashcheck. Pairedfinal
-harnessa528cd1d exact14renders, baselinefdc untouched; chronologydeviationretained.
-W SOURCE-CLOSED, actual negative control failed on intended count bounds,
-corrected5554d6d8 format114/analyze/focused22/full1,645 green. Equivalent final
-a6a2d46ff782c96f2cdcfbb34e277fc2a4fe4202 integrated; main W gate PASSED
-format114/analyze/full1,645 on stablea0cd5399, task tree/branch cleaned.
-S c2f35887 two-control BEFORE reproduced pending/startupnonsettlement;
-pinnedformat114/analyze/focused105/full1,650 PASS; independent R1 CLOSED.
-Unchanged final rebaseb078944a8cc8b6999badb477f2401257a330bf53 integrated.
-S main-checkout gate PASSED at9b066698: format114/analyzeclean/full1,650;
-acceptedStasktree/fullyintegratedbranchremoved. Combinedreviewstillrequired.
-V test-only287571e2 actualBEFORE123tests120pass/3confirmingfail, controls
-passandprofilebaselinecaptured. ParentacceptedNF29/viewportfindings; sameVchild
-nowSOURCE-ONLYfullVrepairwhileYowns broad/fullruntime.
-Y acceptedf7ede071 main3a87d607 guard/format136/analyze/full1,667PASS;
-acceptedtasktree/fullyintegratedbranchremoved, plannedcombinedreviewstillrequired.
-D finalf33d639c actualfocused113/render14PASS; ninepatchesrebasedunchanged
-tocd26d00d on2cf4570c. D reviewedcd26 actualfull1,657PASS; twoacceptedP2regressionsrepairedat
-6f66f331 actualBEFOREconfirmedR1, format129/analyze/focused114/render14/
-full1,658PASS. SameDreviewer CLOSED bothfindings; equivalent final4615b7c0
-integrated. D main-checkout gate PASSED at9254e66d guard/format129/analyze/full1,658;
-acceptedtasktree/fullyintegratedcqDremoved; allrender/repairproofretained.
-U a869b5ed actualUNKNOWNBEFOREconfirmed,4codec/HDRcontrolsPASS,26scenarios/
-48baselineimages+selfmatchPASS. FullUimplementation nowauthorizedSOURCE-ONLY
-whileV-R1BEFOREruntimeexecutes; Vunmergedsofuturecurrentcompositionrendersrequired. K/G undispatched; combined/final
-whole-branch reviews remain. No plan completion claim.
+V samechat nowworker6.1/medium: originalNF29+viewportconfirmations actual120PASS/
+3FAIL=123total; reviewV-R1 bulkRetryeviction actualBEFOREconfirmed. Finalsource
+b1744470 clean/currentYbase75fe, guard/format136/analyze/focused125/full1,675PASS.
+EightVnewcases mapped; matchedprofileworkcountsunchanged, samplesqualifiedbelow.
+SameVreviewer01a13ef8 targetedR1/queryrepairclosure RUNNING, Vnotintegrated.
+U worker6.1/medium fullSOURCE-ONLYimplementationactive (uncommittedownedchanges),
+productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
+26scenarios48images+selfmatchPASS; rejectedbadfixture/animationcapturespreserved.
+No UAFTER/analyze/full/review yet; sourcecandidate/readycallbackpending.
+K/G undispatched (KafterVmerge, Gafterwholebranchreview); requiredUpremerge,
+plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
+FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
-Runtime: V-R1 confirmingBEFOREexclusively; Uworker6.1/medium fullsourceimplementationonly. K/Gnotdispatched, nootherFlutter. U prepares source/test/history; all other children queued.
-At most four implementation children active. Next exclusive queue includes W
-negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
-matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
-counts and source identity are rechecked before integration/full grants.
+Runtime slot FREE afterVfullrelease; Ucurrentlysource-only, allothersstopped.
+NextcollectVtargetedreview, integrateonlyafterclosure, thenP0mainV§8.1; dispatch
+KfromactualcurrentintegrationonceVmerged. Ufocused/render/fullneedsfrozencandidate
+andexplicitexclusivegrant; currentcompositionrendersafterVrebasewillberequired.
+Atmostfourimplementationchildren, parentsoleGitintegration/acceptanceowner.
 
 ## Authority and source
 
@@ -1562,3 +1540,35 @@ correct123baseline+newR1case. Beforeprofilefactsretained, matchedAFTERmustnot
 regressmaterially; investigatewithfaithfulcontrolsifneeded, no staticlatencyclaim.
 Parentwillreturnrepairdelta/proofsameVreviewerfortargetedclosurebeforeintegration.
 Usource-onlyfullimplementationcontinues; no otherFlutterresourceoverlap.
+
+## V final repaired current-input evidence and targeted closure request
+
+V exactcleanb17444709fd928f982b96bcd53f19e1e5df544a2 on75fe44ec, fivecommits
+7135af34/ba9e5d11/4840f5f8/55f6f4e0/b1744470, fourownedfiles573+/51-. R1
+needsViewportRefresh usesvisiblemissingretention/currentinflight/explicit+viewport
+queue/failure+retryownership, equalDemandreassertsonlymissingworkviaboundedpath.
+Samepublic40/cache16/concurrency2/no-scrollregressionAFTER1PASS. InitialAFTER
+focused123pass1failrevealedoriginalquerycallbackdidnotscheduleidleframe; actual
+samequeryassertionfixedbyensureVisualUpdate, plusnewdistinctcoalesce/postframe/
+invalidation/disposaltest3cases. No oldtest/fake removed/weakened,8newtotal.
+
+Finalguard3.47.7/format136/analyzeclean/focused125/full1,675PASS atb174stable,
+actualY1667+8. `/tmp/lineup-cq-V/report.md`, repaired-*-final.log,repaired-full.log,
+r1-after-test.log,r1-after-query.log. OldfailedAFTERlogrepaired-focused.logretained.
+
+Matchedfinalfocused1000PROFILEfirst64,974us/nav758/widgets1,746/cache25/
+RSSdelta8,404,992bytes;4hfirst75,279us/rows5/widgets5,140/cells40/loads17/cache17.
+Before73,699/nav579/RSS4,423,680;4h91,161, workcountsexact. Cardinality1000
+focused84,261/earlier79,336 vsbefore51,902, requiredfullindependent51,456;
+full20056,864/50055,948; all1,778widgets/11loads. FullPROFILE76,367/nav637/
+RSS7,372,800,4h97,513/samework. Isolatedcoldsubsetstartupoutliersretained, not
+substitutedformatchingworkload. No stablematerialtimingregressiondemonstrated,
+no improvement/equal-memoryclaim. RSSdeltasdifferent andworkcounts alone doNOT
+proveallocationperformance; sameVreviewer explicitlyaskedinspectretentionrisk.
+4hworkloadactualarrowright/down/pageDown, prior500-equivalentdescriptioncorrected.
+
+SameVreviewer01a13ef8 targetedR1+idlequeryrepair/proofs requestedREAD-ONLY atb174,
+sourcefrozen; mustinspectbothrow/scheduleeviction/currentownership/loopbounds,
+postframeguards andqualifiedprofiles. Noacceptance/integrationuntilclosure.
+Uremainsisolatedsource-only fullimplementation, no runtimeuntilfrozencandidate
+ready. RuntimeVreleased; noidlepolling, callbacksresumeparent.
