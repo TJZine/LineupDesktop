@@ -42,9 +42,9 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | Unit | Actual child / host | Executor | Source / worktree | State |
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
-| A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Candidate `24691ac05fb866c64ccf1467226b7cb9c8376388` inspected; focused structural-validation correction returned to same child |
+| A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Accepted and integrated at `5990c0217b33d6d690b663f177fbe62e2635b557`; combined format/analyze/1,583 tests passed |
 | H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Candidate `1d6520b4c252d345572aa01ed8711977c100b252` inspected; rebase/check/integrate after A |
-| Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Independent read-only review dispatched |
+| Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -101,11 +101,12 @@ may use reviewer assistance and does not replace other required reviews.
   not fully complete. Physical Windows acceptance remains separately pending
   until actually observed, even when deterministic checks pass.
 
-Review status: P0 evidence inspected and accepted; A implementation in progress;
-H candidate controller review completed as described below, integration pending.
-No integrated product package or final whole-branch review is claimed yet.
-Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:2`;
+Review status: P0 accepted; corrected A and H independently reviewed, no unresolved
+material finding established. A integrated with combined gate green; H must
+rebase onto accepted A and pass strict/combined checks. Final whole-branch review
+remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:2`.
+Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:1`.
 
 ### H candidate inspection
 
@@ -167,6 +168,25 @@ alongside H's stable candidate. Neither package is integrated pending verdicts.
 The reviewer received full exact A/H package contracts, respective T6/T5 traces,
 fixed source identities, observed evidence, ownership, and callback verification
 references. No repeated broad suite or source writes are authorized for review.
+
+Independent reviewer subsequently returned no unresolved material findings in
+either fixed candidate. A-R1 is accepted as closed, supported by source and
+targeted before/after observations; H's future strict rebase and PowerShell
+execution limits remain explicit. Corrected A results (1,583/218) are in child
+turn `01a13eb8-273b-7e43-99c8-98aed03c73fc`; original named temporary
+`full-suite.log`/`plex-suite.log` still contain 1,579/214 and must not be relabeled.
+
+### Integration observations
+
+A was rebased without conflict onto `943f39f36ba9fe46bab0eb10a80fd2812b13f00f`
+and fast-forwarded into the task branch at
+`5990c0217b33d6d690b663f177fbe62e2635b557`. Original commits `24691ac0` and
+`77fb3607` became `6ecc37c3` and `5990c021`. Product/test/analyzer content diff
+between the independently reviewed original A head and rebased head was empty.
+Combined gate at that product head passed: pinned canonical format106 with zero
+changes, strict analysis no issues, Eastern-timezone full suite **1,583 passed**
+at concurrency2. Logs are `/tmp/lineup-cq-integration/A/{format,analyze,full-test}.log`.
+A is accepted; no actual Windows/Plex/media/physical acceptance is implied.
 
 ## Evidence and limits
 
