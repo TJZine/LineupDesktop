@@ -19,18 +19,20 @@ V samechat nowworker6.1/medium: originalNF29+viewportconfirmations actual120PASS
 b1744470 clean/currentYbase75fe, guard/format136/analyze/focused125/full1,675PASS.
 EightVnewcases mapped; matchedprofileworkcountsunchanged, samplesqualifiedbelow.
 SameVreviewer01a13ef8 CLOSED R1/queryrepair, no newfinding; equivalent
-finalb75a6ebb integrated, P0mainV§8.1 gatepending. Vtreekeptuntilacceptance.
-U worker6.1/medium fullSOURCE-ONLYimplementationactive (uncommittedownedchanges),
+finalb75a6ebb integrated, mainV9dedformat136/analyze/full1,675PASS;
+acceptedtasktree/fullyintegratedbranchremoved.
+U worker6.1/medium completedsource0b10b2fe, rebasedtof6a99892 oncurrentV9ded.
+RequiredUreview01a13f87 running, sourceFROZEN; firstAFTERchecksnowgranted. Initial
 productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
 26scenarios48images+selfmatchPASS; rejectedbadfixture/animationcapturespreserved.
-No UAFTER/analyze/full/review yet; sourcecandidate/readycallbackpending.
+No UAFTERresult/fullaccepted yet; focused/renderactuals andfullrequired.
 K newlydispatchedworker6.1/medium afterVmerge atb75, initialinventory/inline
 fixed-reporttestprepONLY (no migration/runtimeuntilbaselinegrant); Gafterwholebranchreview. RequiredUpremerge,
 plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
 FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
-Runtime: P0mainV§8.1 exclusively. Ufullsource-only; Kinitialtest/inventoryonly.
-NootherFlutteruntilmainVrelease. NextKBEFOREorUfrozenfocuseddependsreadiness. Ufocused/render/fullneedsfrozencandidate
+Runtime: U firstAFTERguard/analyze/focused+48render exclusively onfrozenf6.
+Kinitialtest/inventoryonly; nootherFlutter. AnyUfailureSTOPbeforeeditingreviewinputs. Ufocused/render/fullneedsfrozencandidate
 andexplicitexclusivegrant; currentcompositionrendersafterVrebasewillberequired.
 Atmostfourimplementationchildren, parentsoleGitintegration/acceptanceowner.
 
@@ -96,6 +98,8 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Acceptedf7ede071 focused88/full/main1,667green; tasktree/branchremoved; combinedreviewpending |
 
 | U | `01a13f32-18d0-7f21-ad48-6a25d94f8d3a` / local | worker, gpt-6.1-sol, medium |9d9ec78e; `/Users/tristan/Software/LineupDesktop-U`, `cq/U` | Initial source/test/history/scratch preparation; no production repair or runtime grant yet |
+
+| U review | `01a13f87-43a9-72e2-b347-babedac17eb5` / local | reviewer, gpt-6.1-sol, high |9ded0693→f6a99892 inUtree | RequiredwholeUpremergereview onfrozencurrentVcomposition; firstAFTERruntimeparallel |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -1606,3 +1610,34 @@ Initialsource/testprepONLY: actualfixedsnapshotBEFOREmustpassbeforeenum/policy/
 producer migration. No runtimewhileP0mainV. Sameactualhumanreference/callback
 verification/fullscope/returncontract/currentpresetresponsibilityexplicit. Uisolated
 fullsource-onlycontinues; no recursiveagents, maxfourimplementationchildren.
+
+## U full source/current V rebase/required review and K bounded caller scope
+
+U0b10b2fe68717106172dedd20eb2d99f7e8dcd02 fullsource15files1543+/717-, no runtime
+onlylightformat/diff. Parentrebased46..0bontoactualV9ded: a869→898c35ba`=`,
+0b→f6a998920e6fc618f475e7b53e1d972db77f9de4 range-diff`!` ONLYGuideController
+hunkcontextfoundationimport→widgetsfromV. ParentinspectedactualcurrentGuideUdelta:
+helperimport+posterarmswitchreplacementONLY, allotherGuideVchangespreserved.
+No newenum/GuideAPIchange needed, boundedpureposterPathconsumerapproved.
+
+Currentreviewerpresetread, exactU/T7/ownership/history/48baseline/literaloldproof/
+actualunknownconfirmationpacket suppliedtoNEWrequiredUreview01a13f87-43a9-72e2-b347-babedac17eb5
+explicit6.1-sol/high/read-only. Sourcefrozen; AFTERevidencepending, expected12netnew
+Ucasesunobserved. Allkeypriority/aliases/sideeffects/focus/pendingtimer/literal/
+codec/modality/statusorphan/gettercomposition reviewedbeforemerge. No recursiveagents.
+
+Kactualinventory20produceraddinvocations LC16/PC2/Guide2, all17admittedpairs;
+historical~30notgate. Outside-row11directcallsintest/app/desktop_diagnostics_test.dart
+requiretypedAPI. ParentinspectedtwoSynthetic/Guide-refreshedfixtures256/284and
+APPROVEDexact11mechanicalcalls+importONLY, validDiagnosticEventforcount/layout
+fixtureswithALLactualassertionspreserved. Unknown/forgedstorage/exportproofstays
+ownedtest/diagnostics; no assertionweakening/deadstrings/broaderUIownership.
+KstillBEFOREtestprepONLY, no enum/policyproductionmigration/runtimeuntilgrant.
+
+P0mainV9ded069388eca2ebf8f8f256afaca74d2a514e25 unchanged/clean,pin3.47.7,
+format1360exit0(2.43s), analyzecleanexit0(3.28s), full1,675exit0(80.67s).
+AcceptedVtreeclean/ancestorverified, tasktree/fullyintegratedcqVremoved.
+U nowexclusivefirstAFTERguard/format/analyze/allfocused+current48renders under
+frozenreview:44MUSTexact/fourapprovedUNKNOWN/3CHimagesretaineddiffsinspectedonly,
+NOupdates/tolerance. FailureSTOPparentbeforeedit. No fulluntiladjudication; Kprep
+only andallotherFlutterheld. Scratcharchiveoutsideanalyzer/discoverythenrestoreexact.
