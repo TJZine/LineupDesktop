@@ -7,6 +7,73 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test('scoped access preserves absent scopes and isolates other lineups', () {
+    const absent = LineupScope(profileKey: 'absent', serverId: 'missing');
+    const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+    const original = PersistedState();
+    expect(original.lineupFor(absent).libraryIds, isEmpty);
+    expect(original.selectedLibraryIdsByProfileServer, isEmpty);
+    final changed = original.withLineup(
+      scope,
+      ScopedLineup(
+        libraryIds: {'movies'},
+        channels: const [],
+        currentChannelId: null,
+      ),
+    );
+    expect(changed.selectedServerByProfile, {'owner': 'server'});
+    expect(
+      changed.selectedLibraryIdsByProfileServer.containsKey('absent'),
+      isFalse,
+    );
+    expect(changed.currentChannelByProfileServer, isEmpty);
+    expect(original.selectedLibraryIdsByProfileServer, isEmpty);
+    final cleared = changed.withoutSelectedServer('owner');
+    expect(cleared.selectedServerByProfile, isEmpty);
+    expect(cleared.lineupFor(scope).libraryIds, {'movies'});
+  });
+
+  test(
+    'owner profileKey survives byte-identical stored JSON round trip',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-scoped-json',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final fixture = _canonicalJson()..['profileId'] = null;
+      fixture['channelsByProfileServer'] = {
+        'owner': {
+          'server': [Channel.fromJson(_channelJson()).toJson()],
+        },
+      };
+      fixture['currentChannelByProfileServer'] = {
+        'owner': {'server': 'channel'},
+      };
+      fixture['selectedServerByProfile'] = {'owner': 'server'};
+      fixture['selectedLibraryIdsByProfileServer'] = {
+        'owner': {
+          'server': ['movies'],
+        },
+      };
+      final bytes = utf8.encode('${_encodedState(fixture)}\n');
+      final file = File('${directory.path}/state.json');
+      await file.writeAsBytes(bytes);
+      final store = FileAppStore(directory);
+      final state = (await store.load()).state;
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      final unchanged = state
+          .withProfile(null)
+          .withSettings(state.settings)
+          .withLineup(scope, state.lineupFor(scope));
+      await store.save(unchanged);
+      expect(await file.readAsBytes(), bytes);
+      final reloaded = (await store.load()).state;
+      expect(reloaded.profileId, isNull);
+      expect(reloaded.lineupFor(scope).libraryIds, {'movies'});
+      expect(reloaded.selectedServerByProfile['owner'], 'server');
+    },
+  );
+
   test(
     'NF-16 unreadable identity propagates error without replacing identity',
     () async {

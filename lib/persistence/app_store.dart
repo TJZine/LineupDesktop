@@ -2,11 +2,43 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../channels/channel.dart';
 import '../settings/lineup_settings.dart';
+
+@immutable
+class LineupScope {
+  const LineupScope({required this.profileKey, required this.serverId});
+
+  final String profileKey;
+  final String serverId;
+}
+
+@immutable
+class ScopedLineup {
+  ScopedLineup({
+    required Set<String> libraryIds,
+    required List<Channel> channels,
+    required this.currentChannelId,
+  }) : libraryIds = Set.unmodifiable(libraryIds),
+       channels = List.unmodifiable(
+         channels.map((channel) => channel.immutableCopy()),
+       );
+
+  const ScopedLineup._empty()
+    : libraryIds = const {},
+      channels = const [],
+      currentChannelId = null;
+
+  static const empty = ScopedLineup._empty();
+
+  final Set<String> libraryIds;
+  final List<Channel> channels;
+  final String? currentChannelId;
+}
 
 class PersistedState {
   const PersistedState({
@@ -25,6 +57,90 @@ class PersistedState {
   selectedLibraryIdsByProfileServer;
   final Map<String, Map<String, List<Channel>>> channelsByProfileServer;
   final Map<String, Map<String, String>> currentChannelByProfileServer;
+
+  ScopedLineup lineupFor(LineupScope scope) => ScopedLineup(
+    libraryIds:
+        (selectedLibraryIdsByProfileServer[scope.profileKey]?[scope.serverId] ??
+                const <String>[])
+            .toSet(),
+    channels:
+        channelsByProfileServer[scope.profileKey]?[scope.serverId] ?? const [],
+    currentChannelId:
+        currentChannelByProfileServer[scope.profileKey]?[scope.serverId],
+  );
+
+  PersistedState withLineup(LineupScope scope, ScopedLineup lineup) {
+    final libraries = {
+      for (final profile in selectedLibraryIdsByProfileServer.entries)
+        profile.key: {
+          for (final server in profile.value.entries)
+            server.key: List<String>.of(server.value),
+        },
+    };
+    final channels = {
+      for (final profile in channelsByProfileServer.entries)
+        profile.key: {
+          for (final server in profile.value.entries)
+            server.key: List<Channel>.of(server.value),
+        },
+    };
+    final current = {
+      for (final profile in currentChannelByProfileServer.entries)
+        profile.key: Map<String, String>.of(profile.value),
+    };
+    libraries.putIfAbsent(scope.profileKey, () => {})[scope.serverId] = lineup
+        .libraryIds
+        .toList();
+    channels.putIfAbsent(scope.profileKey, () => {})[scope.serverId] = lineup
+        .channels
+        .toList();
+    final currentId = lineup.currentChannelId;
+    if (currentId == null) {
+      current[scope.profileKey]?.remove(scope.serverId);
+    } else {
+      current.putIfAbsent(scope.profileKey, () => {})[scope.serverId] =
+          currentId;
+    }
+    return PersistedState(
+      settings: settings,
+      profileId: profileId,
+      selectedServerByProfile: {
+        ...selectedServerByProfile,
+        scope.profileKey: scope.serverId,
+      },
+      selectedLibraryIdsByProfileServer: libraries,
+      channelsByProfileServer: channels,
+      currentChannelByProfileServer: current,
+    );
+  }
+
+  PersistedState withSettings(LineupSettings value) => PersistedState(
+    settings: value,
+    profileId: profileId,
+    selectedServerByProfile: selectedServerByProfile,
+    selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
+    channelsByProfileServer: channelsByProfileServer,
+    currentChannelByProfileServer: currentChannelByProfileServer,
+  );
+
+  PersistedState withProfile(String? value) => PersistedState(
+    settings: settings,
+    profileId: value,
+    selectedServerByProfile: selectedServerByProfile,
+    selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
+    channelsByProfileServer: channelsByProfileServer,
+    currentChannelByProfileServer: currentChannelByProfileServer,
+  );
+
+  PersistedState withoutSelectedServer(String profileKey) => PersistedState(
+    settings: settings,
+    profileId: profileId,
+    selectedServerByProfile: Map.of(selectedServerByProfile)
+      ..remove(profileKey),
+    selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
+    channelsByProfileServer: channelsByProfileServer,
+    currentChannelByProfileServer: currentChannelByProfileServer,
+  );
 
   Map<String, Object?> toJson() => {
     'settings': settings.toJson(),
