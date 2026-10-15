@@ -1,8 +1,6 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
@@ -13,6 +11,8 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+
+import '../support/test_doubles.dart';
 
 void main() {
   test(
@@ -25,7 +25,7 @@ void main() {
         if (await directory.exists()) await directory.delete(recursive: true);
       });
       final store = FileAppStore(directory);
-      final credentials = _Credentials();
+      final credentials = MemoryCredentialStore();
       final events = <String>[];
       final plex = _ProductPlex(events);
       var controller = LineupController(
@@ -106,7 +106,7 @@ void main() {
         isNot(contains('X-Plex-Token')),
       );
       expect(nativePlayer.loadedPlexToken, 'pms-token');
-      nativePlayer.emit(
+      nativePlayer.emitState(
         PlayerState.playing,
         generation: nativePlayer.generation,
         tracks: const [
@@ -135,7 +135,7 @@ void main() {
       await player.selectTrack(PlayerTrackType.subtitle, 2);
       expect(nativePlayer.selectedTracks, [(PlayerTrackType.subtitle, 2)]);
 
-      nativePlayer.emit(
+      nativePlayer.emitState(
         PlayerState.error,
         generation: nativePlayer.generation,
         message: 'failed https://plex.example/video?X-Plex-Token=secret',
@@ -263,9 +263,7 @@ class _ProductPlex extends PlexClient {
   _ProductPlex(this.events)
     : super(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: MockClient(
-          (_) async => throw StateError('unexpected HTTP'),
-        ),
+        httpClient: testPlexHttpClient(),
       );
 
   static final now = DateTime.utc(2026, 8, 13, 12);
@@ -423,42 +421,21 @@ class _ProductPlex extends PlexClient {
   void close() {}
 }
 
-class _ProductPlayer implements NativePlayer {
-  _ProductPlayer(this.eventLog);
+class _ProductPlayer extends FakeNativePlayer {
+  _ProductPlayer(this.eventLog)
+    : super(
+        initialStatus: const PlayerStatus(
+          state: PlayerState.idle,
+          message: 'Idle',
+        ),
+        duration: const Duration(minutes: 30),
+      );
 
   final List<String> eventLog;
-  final _events = StreamController<PlayerEvent>.broadcast();
-  final selectedTracks = <(PlayerTrackType, int?)>[];
-  Uri? loadedUri;
-  String? loadedPlexToken;
-  int generation = 0;
-  int stopCalls = 0;
-  PlayerStatus _status = const PlayerStatus(
-    state: PlayerState.idle,
-    message: 'Idle',
-  );
-  List<PlayerTrack> _tracks = const [];
-
-  @override
-  PlayerStatus get status => _status;
-  @override
-  Duration get position => Duration.zero;
-  @override
-  Duration get duration => const Duration(minutes: 30);
-  @override
-  PlayerTelemetry get telemetry => const PlayerTelemetry();
-  @override
-  List<PlayerTrack> get tracks => _tracks;
-  @override
-  Stream<PlayerEvent> get events => _events.stream;
-  @override
-  DisplayMatchingReport get displayReport =>
-      const DisplayMatchingReport.initial();
-  @override
-  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
-
-  @override
-  Future<void> initialize() async {}
+  Uri? get loadedUri => loads.isEmpty ? null : loads.last;
+  String? get loadedPlexToken =>
+      loadPlexTokens.isEmpty ? null : loadPlexTokens.last;
+  int get stopCalls => stops;
 
   @override
   Future<void> load(
@@ -467,80 +444,35 @@ class _ProductPlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
   }) async {
-    this.generation = generation ?? this.generation + 1;
-    loadedUri = media;
-    loadedPlexToken = plexToken;
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+    );
     eventLog.add('player:load');
   }
 
-  @override
-  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
-
-  void emit(
+  void emitState(
     PlayerState state, {
     required int generation,
     String? message,
     List<PlayerTrack> tracks = const [],
   }) {
-    _status = PlayerStatus(
-      state: state,
-      message: message ?? state.name,
-      recoverable: state == PlayerState.error,
-    );
-    _tracks = tracks;
-    _events.add(
-      PlayerEvent(
-        status: _status,
-        position: Duration.zero,
-        duration: const Duration(minutes: 30),
-        telemetry: const PlayerTelemetry(),
-        tracks: tracks,
-        generation: generation,
+    super.emit(
+      PlayerStatus(
+        state: state,
+        message: message ?? state.name,
+        recoverable: state == PlayerState.error,
       ),
+      eventGeneration: generation,
+      tracks: tracks,
     );
   }
 
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
-    selectedTracks.add((type, id));
+    await super.selectTrack(type, id);
     eventLog.add('player:track:${type.name}:$id');
-  }
-
-  @override
-  Future<void> play() async {}
-  @override
-  Future<void> pause() async {}
-  @override
-  Future<void> seek(Duration position) async {}
-  @override
-  Future<void> setVideoRect(PlayerVideoRect rect) async {}
-  @override
-  Future<void> setFullscreen(bool fullscreen) async {}
-  @override
-  Future<void> setVolume(double volume) async {}
-  @override
-  Future<void> stop() async => stopCalls++;
-  @override
-  Future<void> dispose() => _events.close();
-}
-
-class _Credentials implements CredentialStore {
-  String? accountToken;
-  final profileTokens = <String, String>{};
-
-  @override
-  Future<String?> readAccountToken() async => accountToken;
-  @override
-  Future<String?> readProfileToken(String profileId) async =>
-      profileTokens[profileId];
-  @override
-  Future<void> writeAccountToken(String token) async => accountToken = token;
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async =>
-      profileTokens[profileId] = token;
-  @override
-  Future<void> clear() async {
-    accountToken = null;
-    profileTokens.clear();
   }
 }

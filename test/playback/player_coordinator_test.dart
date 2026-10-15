@@ -12,13 +12,14 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
-import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/windows_native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+
+import '../support/test_doubles.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -6348,8 +6349,8 @@ class _TestLineup extends LineupController {
     this.useRealPlaybackRequest = false,
     this.playbackParts,
   }) : super(
-         store: _MemoryStore(),
-         credentials: _Credentials(),
+         store: MemoryAppStore(clientId: 'test'),
+         credentials: MemoryCredentialStore(),
          plex: PlexClient(
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
@@ -6520,81 +6521,16 @@ class _BlockingLineup extends _TestLineup {
   }
 }
 
-class _Player implements NativePlayer {
-  final loads = <Uri>[];
-  final loadPlexTokens = <String?>[];
-  final loadGenerations = <int?>[];
-  final seeks = <Duration>[];
-  final fullscreenValues = <bool>[];
-  final selectedTracks = <(PlayerTrackType, int?)>[];
-  int stops = 0;
-  int plays = 0;
-
-  @override
-  PlayerStatus status = const PlayerStatus(
-    state: PlayerState.playing,
-    message: 'Playing',
-  );
-  @override
-  Duration position = const Duration(minutes: 10);
-  @override
-  Duration duration = const Duration(hours: 1);
-  @override
-  PlayerTelemetry telemetry = const PlayerTelemetry();
-  @override
-  List<PlayerTrack> tracks = const [];
-  @override
-  Stream<PlayerEvent> get events => const Stream.empty();
-  @override
-  DisplayMatchingReport get displayReport =>
-      const DisplayMatchingReport.initial();
-  @override
-  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
-  @override
-  Future<void> initialize() async {}
-  @override
-  Future<void> load(
-    Uri media, {
-    String? plexToken,
-    int? generation,
-    bool startPaused = false,
-  }) async {
-    loads.add(media);
-    loadPlexTokens.add(plexToken);
-    loadGenerations.add(generation);
-  }
-
-  @override
-  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
-
-  @override
-  Future<void> play() async {
-    plays++;
-  }
-
-  @override
-  Future<void> pause() async {}
-  @override
-  Future<void> seek(Duration value) async => seeks.add(value);
-  @override
-  Future<void> setVideoRect(PlayerVideoRect rect) async {}
-  @override
-  Future<void> setFullscreen(bool fullscreen) async {
-    fullscreenValues.add(fullscreen);
-  }
-
-  @override
-  Future<void> selectTrack(PlayerTrackType type, int? id) async =>
-      selectedTracks.add((type, id));
-  @override
-  Future<void> setVolume(double volume) async {}
-  @override
-  Future<void> stop() async {
-    stops++;
-  }
-
-  @override
-  Future<void> dispose() async {}
+class _Player extends FakeNativePlayer {
+  _Player()
+    : super(
+        initialStatus: const PlayerStatus(
+          state: PlayerState.playing,
+          message: 'Playing',
+        ),
+        position: const Duration(minutes: 10),
+        duration: const Duration(hours: 1),
+      );
 }
 
 class _CancellingPlayer extends _Player {
@@ -7139,29 +7075,6 @@ class _BlockingSecondSeekPlayer extends _EventPlayer {
     secondSeekStarted.complete();
     await releaseSecondSeek.future;
   }
-}
-
-class _MemoryStore implements AppStore {
-  @override
-  Future<String> clientIdentifier() async => 'test';
-  @override
-  Future<AppStoreLoadResult> load() async =>
-      const AppStoreLoadResult(PersistedState());
-  @override
-  Future<void> save(PersistedState state) async {}
-}
-
-class _Credentials implements CredentialStore {
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<String?> readAccountToken() async => null;
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
 }
 
 String _supportReport(LineupController lineup, PlayerCoordinator coordinator) =>

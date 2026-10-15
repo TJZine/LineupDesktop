@@ -1,4 +1,5 @@
 import '../support/committed_state_matchers.dart';
+import '../support/test_doubles.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -8693,32 +8694,9 @@ class _MemoryStore implements AppStore {
   }
 }
 
-class _MemoryCredentials implements CredentialStore {
-  _MemoryCredentials({this.accountToken, Map<String, String>? profileTokens})
-    : profileTokens = profileTokens ?? {};
-
-  String? accountToken;
-  final Map<String, String> profileTokens;
-
-  @override
-  Future<void> clear() async {
-    accountToken = null;
-    profileTokens.clear();
-  }
-
-  @override
-  Future<String?> readAccountToken() async => accountToken;
-
-  @override
-  Future<String?> readProfileToken(String profileId) async =>
-      profileTokens[profileId];
-
-  @override
-  Future<void> writeAccountToken(String token) async => accountToken = token;
-
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async =>
-      profileTokens[profileId] = token;
+class _MemoryCredentials extends MemoryCredentialStore {
+  _MemoryCredentials({super.accountToken, Map<String, String>? profileTokens})
+    : super(profileTokens: profileTokens ?? {});
 }
 
 class _AmbiguousWriteCredentials extends _MemoryCredentials {
@@ -8915,9 +8893,7 @@ class _FakePlex extends PlexClient {
   _FakePlex()
     : super(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: MockClient(
-          (_) async => throw StateError('unexpected HTTP'),
-        ),
+        httpClient: testPlexHttpClient(),
       );
 
   PlexAccount accountResult = const PlexAccount(

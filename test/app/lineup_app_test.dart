@@ -834,7 +834,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
-    expect(player.loads, 1);
+    expect(player.loads, hasLength(1));
     expect(find.byKey(const Key('guide-picture-in-picture')), findsNothing);
     expect(find.byType(NativeVideoSurface), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
@@ -2086,106 +2086,9 @@ class _PreparedFileAppStore extends FileAppStore {
   }
 }
 
-class _MemoryStore implements AppStore {
-  @override
-  Future<String> clientIdentifier() async =>
-      'lineup-desktop-test-abcdefghijklmnopqrst';
-  @override
-  Future<AppStoreLoadResult> load() async =>
-      const AppStoreLoadResult(PersistedState());
-
-  @override
-  Future<void> save(PersistedState state) async {}
-}
-
-class _MemoryCredentials implements CredentialStore {
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<String?> readAccountToken() async => null;
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
-}
-
-class _FakePlayer implements NativePlayer {
-  bool disposed = false;
-  int loads = 0;
-
-  @override
-  PlayerStatus get status => const PlayerStatus(
-    state: PlayerState.idle,
-    message: 'Playback test backend ready',
-  );
-
-  @override
-  Duration get position => Duration.zero;
-
-  @override
-  Duration get duration => Duration.zero;
-
-  @override
-  PlayerTelemetry get telemetry => const PlayerTelemetry();
-
-  @override
-  List<PlayerTrack> get tracks => const [];
-
-  @override
-  Stream<PlayerEvent> get events => const Stream.empty();
-  @override
-  DisplayMatchingReport get displayReport =>
-      const DisplayMatchingReport.initial();
-  @override
-  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
-
-  @override
-  Future<void> initialize() async {}
-
-  @override
-  Future<void> load(
-    Uri media, {
-    String? plexToken,
-    int? generation,
-    bool startPaused = false,
-  }) async {
-    loads++;
-  }
-
-  @override
-  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
-
-  @override
-  Future<void> play() async {}
-
-  @override
-  Future<void> pause() async {}
-
-  @override
-  Future<void> seek(Duration position) async {}
-
-  @override
-  Future<void> setVideoRect(PlayerVideoRect rect) async {}
-
-  @override
-  Future<void> setFullscreen(bool fullscreen) async {}
-
-  @override
-  Future<void> selectTrack(PlayerTrackType type, int? id) async {}
-
-  @override
-  Future<void> setVolume(double volume) async {}
-
-  @override
-  Future<void> stop() async {}
-
-  @override
-  Future<void> dispose() async {
-    disposed = true;
-  }
-}
+typedef _MemoryStore = MemoryAppStore;
+typedef _MemoryCredentials = MemoryCredentialStore;
+typedef _FakePlayer = FakeNativePlayer;
 
 class _DelayedDisposalPlayer extends _FakePlayer {
   final finishDisposal = Completer<void>();
@@ -2214,7 +2117,12 @@ class _DelayedLoadPlayer extends _FakePlayer {
     int? generation,
     bool startPaused = false,
   }) async {
-    loads++;
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+    );
     loadStarted.complete();
     await _loadRelease.future;
   }

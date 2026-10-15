@@ -1052,7 +1052,7 @@ class _ReviewStudioController extends FixtureController {
   );
 }
 
-class _FailNextSaveStore extends FixtureStore {
+class _FailNextSaveStore extends MemoryAppStore {
   bool _failNextSave = true;
 
   @override

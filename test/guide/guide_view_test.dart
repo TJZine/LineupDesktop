@@ -21,6 +21,7 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 
 import '../support/ui_fixture.dart' show FixturePlayer;
+import '../support/test_doubles.dart';
 
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -3946,8 +3947,8 @@ class _Lineup extends LineupController {
     DateTime? anchor,
     AppStore? store,
   }) : super(
-         store: store ?? _Store(),
-         credentials: _Credentials(),
+         store: store ?? MemoryAppStore(clientId: 'test'),
+         credentials: MemoryCredentialStore(),
          plex: PlexClient(
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
@@ -3989,17 +3990,9 @@ class _Lineup extends LineupController {
   }
 }
 
-class _Store implements AppStore {
-  @override
-  Future<String> clientIdentifier() async => 'test';
-  @override
-  Future<AppStoreLoadResult> load() async =>
-      const AppStoreLoadResult(PersistedState());
-  @override
-  Future<void> save(PersistedState state) async {}
-}
+class _RetryStore extends MemoryAppStore {
+  _RetryStore() : super(clientId: 'test');
 
-class _RetryStore extends _Store {
   Completer<void>? saveGate;
   bool fail = true;
   int attempts = 0;
@@ -4011,20 +4004,8 @@ class _RetryStore extends _Store {
     await saveGate?.future;
     if (fail) throw StateError('Synthetic save failure');
     saved = state;
+    await super.save(state);
   }
-}
-
-class _Credentials implements CredentialStore {
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<String?> readAccountToken() async => null;
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
 }
 
 Rect _drawnRect(WidgetTester tester, Finder finder) {

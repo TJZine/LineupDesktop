@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/lineup_restore_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -82,7 +81,7 @@ void main() {
       final plex = _ProfileRecoveryPlex(failure);
       final controller = LineupController(
         store: store,
-        credentials: _ProfileRecoveryCredentials(),
+        credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
         plex: plex,
       );
       addTearDown(controller.dispose);
@@ -1403,20 +1402,7 @@ class _ServerController extends FixtureController {
   }
 }
 
-class _ProfileRecoveryCredentials implements CredentialStore {
-  @override
-  Future<String?> readAccountToken() async => 'synthetic-account';
-  @override
-  Future<String?> readProfileToken(String id) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String id, String token) async {}
-  @override
-  Future<void> clear() async {}
-}
-
-class _ProfileRecoveryStore extends FixtureStore {
+class _ProfileRecoveryStore extends MemoryAppStore {
   _ProfileRecoveryStore(this.failure);
   final String failure;
   final gate = Completer<void>();
@@ -1440,9 +1426,7 @@ class _ProfileRecoveryPlex extends PlexClient {
   _ProfileRecoveryPlex(this.failure)
     : super(
         clientIdentifier: 'synthetic-client',
-        httpClient: MockClient(
-          (_) async => throw StateError('unexpected HTTP'),
-        ),
+        httpClient: testPlexHttpClient(),
       );
   final String failure;
   final gate = Completer<void>();

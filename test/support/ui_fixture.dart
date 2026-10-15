@@ -1,15 +1,15 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
-import 'package:lineup_desktop/persistence/app_store.dart';
-import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+
+import 'test_doubles.dart';
+
+export 'test_doubles.dart';
 
 /// Deterministic UI states for widget tests. This file is not imported by the
 /// production composition root.
@@ -36,24 +36,22 @@ class UiFixture {
 
 class FixtureController extends LineupController {
   FixtureController({
-    FixtureStore? store,
+    MemoryAppStore? store,
     bool restoreOnInitialize = false,
     LineupScenario? scenario,
-  }) : this._(store ?? FixtureStore(), restoreOnInitialize, scenario);
+  }) : this._(store ?? MemoryAppStore(), restoreOnInitialize, scenario);
 
   FixtureController._(
-    FixtureStore store,
+    MemoryAppStore store,
     this.restoreOnInitialize,
     LineupScenario? scenario,
   ) : fixtureStore = store,
       super(
         store: store,
-        credentials: _MemoryCredentials(),
+        credentials: MemoryCredentialStore(),
         plex: _FixturePlex(
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-          httpClient: MockClient(
-            (_) async => throw StateError('unexpected HTTP'),
-          ),
+          httpClient: testPlexHttpClient(),
         ),
       ) {
     installScenario(
@@ -69,7 +67,7 @@ class FixtureController extends LineupController {
     );
   }
 
-  final FixtureStore fixtureStore;
+  final MemoryAppStore fixtureStore;
   final bool restoreOnInitialize;
 
   @override
@@ -100,124 +98,23 @@ Future<void> openDestination(WidgetTester tester, String destination) async {
   await tester.pumpAndSettle();
 }
 
-class FixturePlayer implements NativePlayer {
-  FixturePlayer() : _eventGeneration = 0;
-  FixturePlayer.preloaded() : _eventGeneration = null;
+class FixturePlayer extends FakeNativePlayer {
+  FixturePlayer()
+    : super(
+        initialStatus: const PlayerStatus(
+          state: PlayerState.idle,
+          message: 'Test player is idle',
+        ),
+        emitLoadingOnLoad: true,
+      );
 
-  final _events = StreamController<PlayerEvent>.broadcast();
-  int? _eventGeneration;
-  PlayerStatus _status = const PlayerStatus(
-    state: PlayerState.idle,
-    message: 'Test player is idle',
-  );
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
-  PlayerTelemetry _telemetry = const PlayerTelemetry();
-  List<PlayerTrack> _tracks = const [];
-
-  int get generation => _eventGeneration ?? 0;
-
-  @override
-  PlayerStatus get status => _status;
-
-  @override
-  Duration get position => _position;
-  @override
-  Duration get duration => _duration;
-  @override
-  PlayerTelemetry get telemetry => _telemetry;
-  @override
-  List<PlayerTrack> get tracks => _tracks;
-  @override
-  DisplayMatchingReport get displayReport =>
-      const DisplayMatchingReport.initial();
-  @override
-  Stream<PlayerEvent> get events => _events.stream;
-  @override
-  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
-  @override
-  Future<void> initialize() async {}
-  @override
-  Future<void> load(
-    Uri media, {
-    String? plexToken,
-    int? generation,
-    bool startPaused = false,
-  }) async {
-    _eventGeneration = generation ?? this.generation + 1;
-    emit(const PlayerStatus(state: PlayerState.loading, message: 'Loading'));
-  }
-
-  @override
-  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
-
-  @override
-  Future<void> pause() async {}
-  @override
-  Future<void> play() async {}
-  @override
-  Future<void> seek(Duration position) async {}
-  @override
-  Future<void> selectTrack(PlayerTrackType type, int? id) async {}
-  @override
-  Future<void> setFullscreen(bool fullscreen) async {}
-  @override
-  Future<void> setVideoRect(PlayerVideoRect rect) async {}
-  @override
-  Future<void> setVolume(double volume) async {}
-  @override
-  Future<void> stop() async {}
-  @override
-  Future<void> dispose() => _events.close();
-
-  void emit(
-    PlayerStatus status, {
-    Duration? position,
-    Duration? duration,
-    PlayerTelemetry? telemetry,
-    List<PlayerTrack>? tracks,
-    int? eventGeneration,
-  }) {
-    if (_events.isClosed) return;
-    _status = status;
-    _position = position ?? _position;
-    _duration = duration ?? _duration;
-    _telemetry = telemetry ?? _telemetry;
-    _tracks = List.unmodifiable(tracks ?? _tracks);
-    _events.add(
-      PlayerEvent(
-        status: _status,
-        position: _position,
-        duration: _duration,
-        telemetry: _telemetry,
-        tracks: _tracks,
-        generation: eventGeneration ?? _eventGeneration,
-      ),
-    );
-  }
-}
-
-class FixtureStore implements AppStore {
-  PersistedState state = const PersistedState();
-
-  @override
-  Future<String> clientIdentifier() async =>
-      'lineup-desktop-test-abcdefghijklmnopqrst';
-  @override
-  Future<AppStoreLoadResult> load() async => AppStoreLoadResult(state);
-  @override
-  Future<void> save(PersistedState value) async => state = value;
-}
-
-class _MemoryCredentials implements CredentialStore {
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<String?> readAccountToken() async => null;
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
+  FixturePlayer.preloaded()
+    : super(
+        initialStatus: const PlayerStatus(
+          state: PlayerState.idle,
+          message: 'Test player is idle',
+        ),
+        emitLoadingOnLoad: true,
+        initialGeneration: null,
+      );
 }

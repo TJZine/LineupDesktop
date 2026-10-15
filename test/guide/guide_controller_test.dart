@@ -12,6 +12,8 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
+import '../support/test_doubles.dart';
+
 void main() {
   test('successful load with failed projection owns error, evicts cache, and retries', () async {
     final lineup = _TestLineup(_channels(1));
@@ -2190,8 +2192,8 @@ class _TestLineup extends LineupController {
     AppStore? store,
     super.scheduleWorkerFactory,
   }) : super(
-         store: store ?? _MemoryStore(),
-         credentials: _MemoryCredentials(),
+         store: store ?? MemoryAppStore(clientId: 'test'),
+         credentials: MemoryCredentialStore(),
          plex: PlexClient(
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
@@ -2284,35 +2286,15 @@ class _ArtworkLineup extends _TestLineup {
   }
 }
 
-class _MemoryStore implements AppStore {
-  @override
-  Future<String> clientIdentifier() async => 'test';
-  @override
-  Future<AppStoreLoadResult> load() async =>
-      const AppStoreLoadResult(PersistedState());
-  @override
-  Future<void> save(PersistedState state) async {}
-}
+class _FailingStore extends MemoryAppStore {
+  _FailingStore() : super(clientId: 'test');
 
-class _FailingStore extends _MemoryStore {
   bool fail = true;
   PersistedState? saved;
   @override
   Future<void> save(PersistedState state) async {
     if (fail) throw StateError('Synthetic save failure');
     saved = state;
+    await super.save(state);
   }
-}
-
-class _MemoryCredentials implements CredentialStore {
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<String?> readAccountToken() async => null;
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
 }
