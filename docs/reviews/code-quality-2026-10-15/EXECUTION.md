@@ -43,7 +43,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Accepted and integrated at `5990c0217b33d6d690b663f177fbe62e2635b557`; combined format/analyze/1,583 tests passed |
-| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Candidate `1d6520b4c252d345572aa01ed8711977c100b252` inspected; rebase/check/integrate after A |
+| H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Reviewed candidate rebased to `9e2ea64ad6d6b7a0b2ffd055632d40218ecbc10a`; strict lint correction returned to same child; unintegrated |
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
@@ -187,6 +187,21 @@ Combined gate at that product head passed: pinned canonical format106 with zero
 changes, strict analysis no issues, Eastern-timezone full suite **1,583 passed**
 at concurrency2. Logs are `/tmp/lineup-cq-integration/A/{format,analyze,full-test}.log`.
 A is accepted; no actual Windows/Plex/media/physical acceptance is implied.
+
+A task worktree and fully integrated `cq/A` branch were removed after accepted
+work was recoverable on the integration branch. No pre-existing branch changed.
+H was rebased conflict-free onto docs-only follow-up `971a0aea`; range-diff of
+its one original commit versus replayed commit `9e2ea64a` was identical. Pinned
+premerge canonical format passed108 files with zero changes. Strict analysis
+then found exactly one `unnecessary_lambdas` info at
+`tool/check_toolchain.dart:198:37`, exiting1. The chained tool suite was not run.
+Logs: `/tmp/lineup-cq-integration/H/premerge-{format,analyze}.log`.
+
+H-R1 disposition: mechanical integration failure under A's new required lint;
+accepted correction request, returned to original H child at `9e2ea64a` with
+unchanged ownership/preset. Requested format/analyze/tool/full checks on its
+corrected stable A+H snapshot; no rule/assertion weakening. H stays unintegrated
+pending correction evidence, focused reviewer closure, and main combined gate.
 
 ## Evidence and limits
 
