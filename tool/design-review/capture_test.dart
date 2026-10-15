@@ -765,10 +765,10 @@ final Map<String, Scene> _scenes = {
   'diagnostics': (tester, shot) async {
     final f = _readyFixture();
     f.controller.diagnostics.enabled = true;
-    f.controller.diagnostics.add('playback', 'Playback request failed', {
+    f.controller.diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
       'code': 'unavailable',
     });
-    f.controller.diagnostics.add('guide', 'Schedule request timed out');
+    f.controller.diagnostics.add(DiagnosticEvent.guideScheduleLoadTimedOut);
     await _pump(tester, f.build());
     await _open(tester, 'Settings');
     await _tap(tester, find.text('Support').first);
@@ -777,22 +777,32 @@ final Map<String, Scene> _scenes = {
     await _tap(tester, find.text('Technical details'));
     await shot('technical-details');
     await tester.scrollUntilVisible(
-      find.text('Schedule request timed out'),
+      find.text(DiagnosticEvent.guideScheduleLoadTimedOut.message),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    await _tap(tester, find.text('Schedule request timed out'));
+    await _tap(
+      tester,
+      find.text(DiagnosticEvent.guideScheduleLoadTimedOut.message),
+    );
     await shot('expanded-event');
     final readerPosition = tester.getTopLeft(
-      find.text('Schedule request timed out'),
+      find.text(DiagnosticEvent.guideScheduleLoadTimedOut.message),
     );
-    f.controller.diagnostics.add('guide', 'Schedule refresh completed');
+    f.controller.diagnostics.add(
+      DiagnosticEvent.guideCurrentProgramWaitTimedOut,
+    );
     await _settle(tester);
     expect(
-      tester.getTopLeft(find.text('Schedule request timed out')),
+      tester.getTopLeft(
+        find.text(DiagnosticEvent.guideScheduleLoadTimedOut.message),
+      ),
       readerPosition,
     );
-    expect(find.text('Schedule refresh completed'), findsNothing);
+    expect(
+      find.text(DiagnosticEvent.guideCurrentProgramWaitTimedOut.message),
+      findsNothing,
+    );
     await shot('new-events-reserved');
   },
 
