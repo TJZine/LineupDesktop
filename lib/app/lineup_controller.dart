@@ -33,6 +33,22 @@ class _PickerOrigin {
   final bool canCancelSetup;
 }
 
+@immutable
+class _ServerSelection {
+  const _ServerSelection({
+    required this.state,
+    required this.access,
+    required this.connection,
+    required this.libraries,
+    required this.lineup,
+  });
+  final PersistedState state;
+  final PlexServerAccess access;
+  final PlexConnection connection;
+  final List<PlexLibrary> libraries;
+  final ScopedLineup lineup;
+}
+
 class ChannelStateConflictException extends FormatException {
   const ChannelStateConflictException()
     : super('The lineup changed. Review the current channels and try again.');
@@ -871,66 +887,42 @@ class LineupController extends ChangeNotifier {
         if (!_isCurrent(operation)) return;
         await _queueStateOperation(operation, () async {
           final access = _serverAccess[selected.id]!;
-          final profileId = profile?.id ?? account?.id;
-          final savedLibraries = profileId == null
-              ? const <String>[]
-              : _persisted
-                        .selectedLibraryIdsByProfileServer[profileId]?[selected
-                        .id] ??
-                    const <String>[];
+          final profileKey = profile?.id ?? account?.id;
+          final scope = profileKey == null
+              ? null
+              : LineupScope(profileKey: profileKey, serverId: selected.id);
+          final saved = scope == null
+              ? ScopedLineup.empty
+              : _persisted.lineupFor(scope);
           final availableIds = loadedLibraries
               .map((library) => library.id)
               .toSet();
-          final nextLibraryIds = Set<String>.unmodifiable(
-            savedLibraries.where(availableIds.contains),
+          final lineup = ScopedLineup(
+            libraryIds: saved.libraryIds.intersection(availableIds),
+            channels: saved.channels,
+            currentChannelId: saved.currentChannelId,
           );
-          final nextChannels = List<Channel>.unmodifiable(
-            profileId == null
-                ? const <Channel>[]
-                : _persisted.channelsByProfileServer[profileId]?[selected.id] ??
-                      const <Channel>[],
-          );
-          final nextCurrent = profileId == null
-              ? null
-              : _persisted.currentChannelByProfileServer[profileId]?[selected
-                    .id];
-          final next = _stateSnapshot(
-            profileId: profile?.id,
-            serverId: selected.id,
-            selectedLibraryIdsOverride: nextLibraryIds,
-            channelsOverride: nextChannels,
-            currentChannelOverride: (id: nextCurrent),
+          final base = _persisted
+              .withProfile(profile?.id)
+              .withSettings(settings);
+          final selection = _ServerSelection(
+            state: scope == null ? base : base.withLineup(scope, lineup),
+            access: access,
+            connection: workingConnection,
+            libraries: loadedLibraries,
+            lineup: lineup,
           );
           final oldCanCancel = serverSelectionCanCancel;
           _serverSelectionCanCancel = false;
           notifyListeners();
           try {
-            await _persistState(next);
+            await _persistState(selection.state);
           } catch (_) {
             _serverSelectionCanCancel = oldCanCancel;
             rethrow;
           }
           if (_disposed) return;
-          final committedAccess = _serverAccess[selected.id] ?? access;
-          _serverAccess = {..._serverAccess, selected.id: committedAccess};
-          _persisted = next;
-          _retireScope();
-          _serverPickerOrigin = null;
-          _publishServer = access.server;
-          _connection = workingConnection;
-          _pmsToken = committedAccess.token;
-          _publishLibraries = loadedLibraries;
-          _publishSelectedLibraryIds = nextLibraryIds;
-          _publishAvailableMedia = const [];
-          _publishAvailablePlaylists = const [];
-          _publishChannels = nextChannels;
-          _currentChannelId = nextCurrent;
-          _stage = SetupStage.channelSetup;
-          _channelSetupCanCancel = false;
-          _resetSetupDiscovery();
-          _restoringSavedLineup =
-              nextLibraryIds.isNotEmpty && nextChannels.isNotEmpty;
-          _contentGeneration++;
+          _publishServerSelection(selection);
           notifyListeners();
         });
         if (!_isCurrent(operation)) return;
@@ -957,6 +949,31 @@ class LineupController extends ChangeNotifier {
     );
     if (_isCurrent(operation)) _restoringSavedLineup = false;
     if (_serverTargetId == selected.id) _serverTargetId = null;
+  }
+
+  void _publishServerSelection(_ServerSelection selection) {
+    final access = selection.access;
+    final committedAccess = _serverAccess[access.server.id] ?? access;
+    _serverAccess = {..._serverAccess, access.server.id: committedAccess};
+    _persisted = selection.state;
+    _retireScope();
+    _serverPickerOrigin = null;
+    _publishServer = access.server;
+    _connection = selection.connection;
+    _pmsToken = committedAccess.token;
+    _publishLibraries = selection.libraries;
+    _publishSelectedLibraryIds = selection.lineup.libraryIds;
+    _publishAvailableMedia = const [];
+    _publishAvailablePlaylists = const [];
+    _publishChannels = selection.lineup.channels;
+    _currentChannelId = selection.lineup.currentChannelId;
+    _stage = SetupStage.channelSetup;
+    _channelSetupCanCancel = false;
+    _resetSetupDiscovery();
+    _restoringSavedLineup =
+        selection.lineup.libraryIds.isNotEmpty &&
+        selection.lineup.channels.isNotEmpty;
+    _contentGeneration++;
   }
 
   Future<bool> scanLibraries(Set<String> ids, {bool retryFailedOnly = false}) =>
