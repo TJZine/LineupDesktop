@@ -8,6 +8,7 @@ class _StudioRecovery extends StatefulWidget {
     required this.name,
     required this.number,
     required this.currentName,
+    required this.headingStyle,
     required this.onSaveAsNew,
     required this.onReturn,
     required this.onUseSaved,
@@ -20,6 +21,7 @@ class _StudioRecovery extends StatefulWidget {
   final String name;
   final String number;
   final String? currentName;
+  final TextStyle? headingStyle;
   final VoidCallback onSaveAsNew;
   final VoidCallback onReturn;
   final VoidCallback onUseSaved;
@@ -31,8 +33,10 @@ class _StudioRecovery extends StatefulWidget {
 class _StudioRecoveryState extends State<_StudioRecovery> {
   final _recoveryFocus = FocusNode(debugLabel: 'Use saved Studio version');
   final _saveFocus = FocusNode(debugLabel: 'Save channel');
-  void focusPrimary() =>
-      _focusStudioNode(widget.baseDeleted ? _saveFocus : _recoveryFocus);
+  void focusPrimary() => _focusStudioNode(
+    context,
+    widget.baseDeleted ? _saveFocus : _recoveryFocus,
+  );
   @override
   void dispose() {
     _recoveryFocus.dispose();
@@ -76,8 +80,7 @@ class _StudioRecoveryState extends State<_StudioRecovery> {
                         widget.baseDeleted
                             ? 'This channel was deleted'
                             : 'Another edit was saved first',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: widget.headingStyle,
                       ),
                       SizedBox(height: 4),
                       Text(

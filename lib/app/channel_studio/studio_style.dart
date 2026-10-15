@@ -48,11 +48,10 @@ Widget _studioSourceExplanation(BuildContext context, String? message) =>
         child: Text(message, style: _studioSupportStyle(context)),
       );
 
-void _focusStudioNode(FocusNode node) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    final focusContext = node.context;
-    if (focusContext == null) return;
-    node.requestFocus();
-    unawaited(Scrollable.ensureVisible(focusContext, alignment: 0.35));
-  });
+void _focusStudioNode(BuildContext owner, FocusNode node) {
+  if (!owner.mounted) return;
+  final focusContext = node.context;
+  if (focusContext == null) return;
+  node.requestFocus();
+  unawaited(Scrollable.ensureVisible(focusContext, alignment: 0.35));
 }

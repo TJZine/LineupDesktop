@@ -49,7 +49,7 @@ class _StudioTitle extends StatefulWidget {
 class _StudioTitleState extends State<_StudioTitle> {
   final _backFocus = FocusNode(debugLabel: 'Back to Channels');
   final _saveFocus = FocusNode(debugLabel: 'Save channel');
-  void focusSave() => _focusStudioNode(_saveFocus);
+  void focusSave() => _focusStudioNode(context, _saveFocus);
   @override
   void dispose() {
     _backFocus.dispose();

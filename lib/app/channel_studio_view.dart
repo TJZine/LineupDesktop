@@ -424,6 +424,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           name: _name.text,
                           number: _number.text,
                           currentName: _currentBase?.name,
+                          headingStyle: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                           onSaveAsNew: _prepareSaveAsNew,
                           onReturn: _reload,
                           onUseSaved: _confirmUseSaved,

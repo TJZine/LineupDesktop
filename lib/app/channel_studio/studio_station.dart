@@ -48,8 +48,12 @@ class _StudioStationState extends State<_StudioStation> {
   }
 
   String? _validateNumber(String? value) => widget.validateNumber(value);
-  void focusIdentity({required bool name}) =>
-      _focusStudioNode(name ? _nameFocus : _numberFocus);
+  void focusIdentity({required bool name}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusStudioNode(context, name ? _nameFocus : _numberFocus);
+    });
+  }
+
   @override
   void dispose() {
     _nameFocus.dispose();
