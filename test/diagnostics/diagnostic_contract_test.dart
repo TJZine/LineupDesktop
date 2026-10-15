@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/diagnostics_view.dart';
 import 'package:lineup_desktop/diagnostics/diagnostics.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
