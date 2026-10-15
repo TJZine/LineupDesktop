@@ -650,6 +650,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(plex.pollCalls, 0);
+    expect(plex.cancelPinCalls, 0);
     expect(controller.activePin, isNull);
     expect(controller.error, 'The Plex link code expired. Request a new code.');
   });
@@ -1477,6 +1478,7 @@ class _PinPollingPlex extends PlexClient {
 
   final PlexPin pin;
   int pollCalls = 0;
+  int cancelPinCalls = 0;
 
   @override
   Future<PlexPin> createPin() async => pin;
@@ -1484,11 +1486,13 @@ class _PinPollingPlex extends PlexClient {
   @override
   Future<String?> pollPin(PlexPin pin) async {
     pollCalls++;
-    return null;
+    throw const PlexException('poll-failed', 'Synthetic poll control failure');
   }
 
   @override
-  Future<void> cancelPin(PlexPin pin) async {}
+  Future<void> cancelPin(PlexPin pin) async {
+    cancelPinCalls++;
+  }
 }
 
 class _ProfileRecoveryStore extends MemoryAppStore {
