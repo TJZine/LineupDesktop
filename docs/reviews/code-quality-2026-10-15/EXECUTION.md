@@ -50,7 +50,9 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | B | `01a13ee8-b9bb-7f71-9934-23092457ef25` / local | worker, gpt-6.1-sol, medium | `d2213d4d7a06181cff341892d899f3b398627b2b`; `/Users/tristan/Software/LineupDesktop-B`, `cq/B` | Dispatched B0–B6; source work only until checks release |
 | C | `01a13ee8-c296-7a30-844c-e630e8fa768f` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-C`, `cq/C` | Dispatched C0–C3; C4 returns to same chat after accepted B |
 | D | `01a13ee8-d0b3-7310-9048-22b743ee6d4a` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-D`, `cq/D` | Dispatched full D1/D2/D3 including temporary render comparisons |
-| F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Dispatched native candidate; default retain unmerged pending all four Windows CTests |
+| F | `01a13ee8-e316-75c1-a0f0-95645bc6a9b9` / local | worker, gpt-6.1-sol, medium | same wave start; `/Users/tristan/Software/LineupDesktop-F`, `cq/F` | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3`; implemented/unverified, UNMERGED, retained; source review running |
+| F review | `01a13ef0-549f-7322-a638-693ccac00bdb` / local | reviewer, gpt-6.1-sol, high | F base`d2213d4d` → `040e4a64` | Required independent native source review; no compile/runtime proof or integration authority |
+| L | `01a13ef0-5c3c-7110-a837-7bfd26a3b184` / local | worker, gpt-6.1-sol, medium | `2ae38b8e52d7ea718c414a13470bf8495b3698af`; `/Users/tristan/Software/LineupDesktop-L`, `cq/L` | Dispatched full Plex pager/cancellation contract with endpoint-policy matrix |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -112,7 +114,9 @@ material finding established. A integrated with combined gate green; corrected
 H and T independently reviewed/integrated with main gates green (T's original
 failure remains attributed separately). M independently reviewed/integrated,
 main suite/macOS build green. Four worker children B/C/D/F perform isolated
-work; focused checks released, full/build slots remain serialized. Final whole-branch review
+work; F returned an unverified/unmerged candidate and L took its active slot.
+Current implementation children B/C/D/L; focused checks released, full/build
+slots remain serialized. F has a separate source reviewer. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
 Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:5`.
@@ -464,6 +468,41 @@ controls, no production edits at that stage). B's B0 tests were uncommitted at
 its resource report. Last cursors: B `e47d22d8-698e-4e5a-9449-35958b6ec70f:1`,
 C `7db1006e-46ee-4948-a60b-70ef1267d82d:1`, D
 `69e0e775-aee4-4b42-ba53-a8f38452b557:1`.
+
+### F candidate retained; L dispatched
+
+F returned clean `040e4a64` on `cq/F`,12 files entirely windows/runner, net
+377 additions/152 deletions. Parent verified actual status/head/diff stat and
+supported completion. Complete child step/obligation/literal report is
+`/tmp/lineup-cq-F/REPORT.md`, source audit `source-audit.txt`. Source-only claims:
+shared classifier/distinct live/durable inputs, explicit ordinals/assertions,
+Handle/Record/native lookup dedup, new constexpr/runtime decision cases and
+fixed1428-byte v1 journal fixture; actual queue-full sites are7 rather than
+historical6. No old test functions removed/moved. Only diff/status/source audit
+ran: no Win32 compile, static_assert compilation, fixture parsing, or CTest
+execution. Do not infer any native proof from source implementation.
+
+Required F reviewer `01a13ef0-549f-7322-a638-693ccac00bdb` received full exact
+F/T4, native ownership and preserved asymmetries, actual fixed snapshots/report,
+observed versus missing proof, original human consent reference and read-only
+return contract. It cannot integrate or substitute stubs for Windows checks.
+Retain `/Users/tristan/Software/LineupDesktop-F` and `cq/F` until Windows proof
+and acceptance; do not rebase/delete pending candidate casually. All four
+Windows CTests and physical W4–W6 (plus applicable media/input/package checks)
+remain pending. Whole plan is not complete with F unintegrated.
+
+F implementation child is stopped, so L is the fourth active implementation
+child alongside B/C/D. Its actual base `2ae38b8e` differs from integrated M only
+in execution Markdown. L received current worker preset/full L/T6/ownership,
+endpoint-policy matrix requirement, exception subtype/oversized/raw-offset/
+occurrence invariants, checks and callback proof map. B-controller authorization
+getter consumer remains a parent/B handoff, not an L cross-owner edit.
+Focused checks released; request exclusive full/build slot when ready. Slot
+currently available, no queued ready request. No new implementation beyond
+the four active children is dispatched until a slot frees.
+
+Latest cursors: F `1e9be9fb-ab71-45e2-9430-2da15d93af53:1`,
+B `e47d22d8-698e-4e5a-9449-35958b6ec70f:2`. C/D prior cursors retained above.
 
 ## Evidence and limits
 
