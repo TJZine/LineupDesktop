@@ -42,7 +42,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | Unit | Actual child / host | Executor | Source / worktree | State |
 | --- | --- | --- | --- | --- |
 | P0 | `01a13eaa-0f77-7ef1-a805-cbad67a3714a` / local | worker_luna, gpt-5.6-luna, xhigh | BASE_SHA; main checkout baseline, then `/Users/tristan/Software/LineupDesktop-preflight`, `cq/preflight` | Accepted: baseline and capability checks green |
-| A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Dispatched; Plex decoding, strict analysis, version consistency |
+| A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Candidate `24691ac05fb866c64ccf1467226b7cb9c8376388` inspected; focused structural-validation correction returned to same child |
 | H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Candidate `1d6520b4c252d345572aa01ed8711977c100b252` inspected; rebase/check/integrate after A |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
@@ -127,6 +127,28 @@ the resulting strict analyzer. Proposed sentence for G's DEVELOPMENT.md:
 the Flutter SDK on PATH matches `tool/flutter_version.json`.” Full suite and
 wrong-SDK logs are in `/tmp/lineup-cq-H/`. The callback header mistyped the child
 ID; the dispatch identity above is confirmed by supported thread retrieval.
+
+### A candidate inspection and focused correction
+
+Inspected exact original candidate range `056ffbeb` to
+`24691ac05fb866c64ccf1467226b7cb9c8376388`, clean worktree. All 23 changed files
+fit A ownership; non-Plex/version changes are mechanical lint fixes or narrow
+documented boundary-fixture ignores. Parent inspected the actual test diffs and
+pre-fix logs confirming structural type errors, TLS, invalid date, and empty-token
+failures. Child reported clean analysis/format, 214 Plex tests, and 1,579 full
+tests (+12: eleven Plex cases and one version-consistency case). No old tests
+were removed/moved or goldens changed. These are original-candidate results,
+not acceptance of the outstanding correction.
+
+Review finding A-R1: `_streamCodecs` is lazy; `_dynamicRange` returns immediately
+for explicit Dolby Vision fields, so a malformed first-selected-part `Stream`
+container can escape §7.A's typed structural failure rule. Disposition: source
+mechanism confirmed; same A child must reproduce before correction and validate
+the selected first container before the early return, preserving unused
+Media/Part selection behavior. Also requested explicit selected Part/Stream
+missing/null controls if not already covered. Do not integrate A until this
+focused correction and required evidence are inspected. Follow-up dispatched
+to the original child with unchanged model/effort and write ownership.
 
 ## Evidence and limits
 
