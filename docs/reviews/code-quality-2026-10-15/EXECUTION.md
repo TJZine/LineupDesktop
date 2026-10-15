@@ -1480,3 +1480,16 @@ Dart3.13.5, format136zeroexit0(2.91s), analyzecleanexit0(3.69s), full1,667exit0
 (81.50s). `/tmp/lineup-cq-integration/Y/`. Parentcollectedactualexit0, Ytreeclean/
 ancestorverified, acceptedtasktree/fullyintegratedcqYremoved. Runtimeavailablefor
 Uinitialconfirmation/preproductionbaseline whileVtest-onlypreparesregression.
+
+## U initial current-input baseline runtime release
+
+AfterYmainrelease, parentUtest-onlyrebase17ae..b0ontoactual46a595cb allonepatch`=`,
+b0aac29d→a869b5edf2a0f661fd6f3faae8a3c04905be3660. ProductionUuntouched,
+scratchpreserved. Sameworker6.1/medium nowexclusivepin/pubifneeded/NF23unknown
+actualconfirmation/3codec+HDRcontrols/48intendedpre-Urenderbaselinecapture.
+No productionrepairuntilactualconfirmationANDbaselineparentadjudication. Scratch
+fixture-onlyrepairsifneeded, actualstate/routeassertions, immutableinputs/hashes;
+updateflagONLYpreproductiontaskbaseline, notcommittedgoldens. Actual48countmust
+beobserved, notassumed. CurrentacceptedD/E/Yinputs, Vstillunmerged; affectedcurrent
+render/compositionafterfutureVrebaseexplicitlyrequired. Vsource/testprepONLY,
+noFlutter; othersheld. FullUandalllaterreviews/gatesremainpending.
