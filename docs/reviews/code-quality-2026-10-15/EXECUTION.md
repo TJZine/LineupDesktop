@@ -45,8 +45,8 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | A | `01a13ead-8f1e-70d3-a864-0592b60f5c58` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; `/Users/tristan/Software/LineupDesktop-A`, `cq/A` | Accepted and integrated at `5990c0217b33d6d690b663f177fbe62e2635b557`; combined format/analyze/1,583 tests passed |
 | H | `01a13ead-952d-7c01-87ef-22c7c8704d20` / local | worker_luna, gpt-5.6-luna, xhigh | `056ffbeb7ed71dcd58f9f63ae0a3f2c6442d9654`; former `/Users/tristan/Software/LineupDesktop-H`, `cq/H` | Accepted/integrated at `2a785c456c7238fc1221202f6be5930681d02711`; main format/analyze/1,588 tests passed; task worktree/branch removed |
 | Wave-zero review | `01a13ebb-ce39-7302-b966-ebab5c36b4d6` / local | reviewer, gpt-6.1-sol, high | H `1d6520b4`; corrected A `77fb3607`, both versus `056ffbeb` | Complete: no unresolved material findings; A-R1 closed |
-| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Independently reviewed; integrated at `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; main gate running |
-| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Dispatched; platform-neutral transport, malformed payloads, telemetry value semantics, protocol and macOS build |
+| T | `01a13ec4-fc5f-7372-b500-e8d5a1a8b4b3` / local | worker_luna, gpt-5.6-luna, xhigh | `2a785c456c7238fc1221202f6be5930681d02711`; `/Users/tristan/Software/LineupDesktop-T`, `cq/T` | Source reviewed/integrated at `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; main gate failed one logo-widget case; original child diagnosing |
+| M | `01a13ed3-6660-72d0-b27d-4d813a55d6bc` / local | worker_luna, gpt-5.6-luna, xhigh | `dbc4dea073cea9f4eec0eba500306f195c7b7f8c`; `/Users/tristan/Software/LineupDesktop-M`, `cq/M` | Candidate `b97df2cf33d9df0ec9c5ea13296f0beaf317d127`, 1,593 tests/macOS build reported green; independent review running; unintegrated |
 
 P0 exclusively owns Flutter checks while running. It first runs pinned
 `flutter --version`, `flutter pub get`, `dart tool/format.dart --check`,
@@ -106,7 +106,8 @@ may use reviewer assistance and does not replace other required reviews.
 Review status: P0 accepted; corrected A and H independently reviewed, no unresolved
 material finding established. A integrated with combined gate green; corrected
 H independently closed and integrated, main combined gate green. T independently
-reviewed and integrated, main gate running. M implementation in flight. Final whole-branch review
+reviewed and integrated, main gate failed one logo-widget case; original T child
+diagnosing. M candidate review in flight, integration held. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
 Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:3`.
@@ -293,6 +294,34 @@ the controller. It alone owns the assigned macOS build in its isolated tree;
 no native code/Windows/macOS media implementation is authorized. Parent retains
 the required main macOS build after M integration. M tests use the current
 shared doubles; source baselines/counts come from the actual T head.
+
+### T main failure and M candidate
+
+Session31563 completed exit1: actual T main format109/strict-analysis passed,
+full suite ended **1,587 passed / 1 failed**. Failure: existing
+`test/playback/player_view_test.dart` “OSD uses official title artwork with a
+text fallback”, line2438, expected one `player-osd-logo`, found0 (“loaded logo”).
+Exact log `/tmp/lineup-cq-integration/T/integrated-full-test.log`. This is a
+failed main gate despite the previously green candidate. Do not count T as
+fully accepted or advance integration based only on its candidate pass.
+Original T child received bounded verify-code diagnosis on stable `dbc4dea0`,
+comparison against actual preT base, no blind pump/retry/assertion weakening,
+and authority for a demonstrated fixture synchronization correction if needed.
+Production/cross-owner fixes must return evidence first. M's simultaneous
+isolated workload is a possible scheduling factor, not an established cause.
+
+M completed clean at `b97df2cf33d9df0ec9c5ea13296f0beaf317d127`:11 changed files,
+no native C++ changes, protocol doc and Dart rename/factory/checked decoding/
+telemetry semantics included. Child reports pinned format/analyze clean,
+focused532, full1,593 (+5), and successful macOS build. Parent inspected source
+identity/status, diff stat, full-suite and build log tails
+(`/tmp/lineup-cq-M/{full-suite,macos-build}.log`). Build is compile evidence;
+macOS playback unsupported, Windows/physical acceptance absent.
+Same independent reviewer received full M/T4/exact snapshots and the reported
+startup error-fixture adaptation for explicit obligation/ownership adjudication.
+Reviewer informed T main gate failed; it does not diagnose T in parallel.
+M remains unintegrated until T gate is resolved and its review is adjudicated.
+M retrieval cursor: `0af69a21-3777-4d4e-b463-f577a8f6ef98:1`.
 
 ## Evidence and limits
 
