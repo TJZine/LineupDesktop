@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -132,6 +133,7 @@ void main() {
     final id = lineup.channels.single.id;
     guide.requestChannels(lineup.channels);
     await tester.pump();
+    expect(guide.row(id).state, GuideLoadState.ready);
     var notifications = 0;
     guide.addListener(() => notifications++);
 
@@ -143,6 +145,81 @@ void main() {
     await tester.pump();
     expect(notifications, 1);
   });
+
+  testWidgets(
+    'build query failures coalesce and retire with invalidation or disposal',
+    (tester) async {
+      for (final retirement in ['none', 'invalidation', 'disposal']) {
+        await tester.pumpWidget(const SizedBox.shrink());
+        final lineup = _TestLineup(_channels(2));
+        var now = DateTime.utc(2026, 1, 1);
+        final boundary = now.add(const Duration(days: 1));
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => buildSchedule(
+            [
+              const ChannelItem(
+                id: 'long',
+                title: 'Long',
+                duration: Duration(microseconds: 8640000000000000000),
+              ),
+            ],
+            mode: PlaybackMode.sequential,
+            seed: 1,
+            transition: ScheduleTransition(
+              boundary: boundary,
+              legacyCycleItems: _schedule(channel).items,
+            ),
+          ),
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        guide.requestChannels(lineup.channels);
+        await tester.pump();
+        for (final channel in lineup.channels) {
+          expect(guide.row(channel.id).state, GuideLoadState.ready);
+        }
+        final publications = <SchedulerPhase>[];
+        guide.addListener(() {
+          publications.add(WidgetsBinding.instance.schedulerPhase);
+        });
+        now = boundary;
+        await tester.pumpWidget(
+          Builder(
+            builder: (context) {
+              for (final channel in lineup.channels) {
+                expect(guide.currentProgram(channel.id), isNull);
+                expect(guide.row(channel.id).state, GuideLoadState.error);
+              }
+              expect(
+                publications,
+                isEmpty,
+                reason: 'No publication during build',
+              );
+              if (retirement == 'invalidation') {
+                lineup.changeContentScope();
+                publications.clear();
+              } else if (retirement == 'disposal') {
+                guide.dispose();
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        );
+        expect(
+          publications,
+          retirement == 'none' ? [SchedulerPhase.postFrameCallbacks] : isEmpty,
+          reason: retirement,
+        );
+        await tester.pump();
+        expect(publications.length, retirement == 'none' ? 1 : 0);
+        await tester.pumpWidget(const SizedBox.shrink());
+        guide.dispose();
+        lineup.dispose();
+      }
+    },
+  );
 
   test('NF-29 one successful row load publishes once', () async {
     final lineup = _TestLineup(_channels(1));

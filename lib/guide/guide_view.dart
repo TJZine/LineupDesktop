@@ -552,7 +552,10 @@ class _GuideViewState extends State<GuideView>
       contentGeneration: widget.controller.lineup.contentGeneration,
       scheduleGeneration: widget.controller.scheduleGeneration,
     );
-    if (_lastViewportDemand?.matches(demand) ?? false) return;
+    if ((_lastViewportDemand?.matches(demand) ?? false) &&
+        !widget.controller.needsViewportRefresh(first, _visibleRows)) {
+      return;
+    }
     _lastViewportDemand = demand;
     widget.controller.requestViewport(first, _visibleRows);
     _syncActivityPulse();

@@ -399,6 +399,26 @@ class GuideController extends ChangeNotifier {
     }
   }
 
+  /// Cached viewport results can be evicted by explicit offscreen work without
+  /// changing the channel snapshot or schedule generation.
+  bool needsViewportRefresh(int firstIndex, int visibleCount) {
+    if (_disposed) return false;
+    final first = firstIndex.clamp(0, channels.length);
+    final last = (firstIndex + visibleCount).clamp(first, channels.length);
+    for (var index = first; index < last; index++) {
+      final id = channels[index].id;
+      if (!_rows.containsKey(id) &&
+          !_failedChannelIds.contains(id) &&
+          !_retryingChannelIds.contains(id) &&
+          _loadingGenerationByChannel[id] != _generation &&
+          !_explicitQueuedIds.contains(id) &&
+          !_viewportQueuedIds.contains(id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void requestViewport(int firstIndex, int visibleCount) {
     final visible = channels;
     _pendingViewport.clear();
@@ -913,6 +933,7 @@ class GuideController extends ChangeNotifier {
       }
       notifyListeners();
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   GuideRowData _projectedRow(Channel channel, ScheduleIndex schedule) {
