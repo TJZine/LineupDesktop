@@ -54,7 +54,10 @@ audience and purpose.
 - [Feature opportunity report](feature-opportunity-report.md) describes four
   proposed additions, comparable-app research, and additional backlog candidates.
   The [Opus validation request](opus-feature-research-request.md) asks for an
-  independent research pass before implementation planning.
+  independent research pass before implementation planning. The resulting
+  [feature validation findings](feature-validation-findings.md) record verdicts,
+  a peer matrix, a reconciled candidate register and maintainer questions; they
+  approve no implementation.
 - [Desktop UI Design Specification](desktop-ui-design-spec.md) contains the
   consolidated approved target. It does not authorize implementation or claim
   that the design has been implemented.
