@@ -15,12 +15,7 @@ void main() {
     ChannelStudioDraft draft, {
     String name = 'New',
     String number = '7',
-  }) => draft.signature(
-    name: name,
-    number: number,
-    libraries: const [],
-    manualItems: const [],
-  );
+  }) => draft.signature(name: name, number: number, libraries: const []);
 
   Channel project(ChannelStudioDraft draft, {required bool preview}) => draft
       .project(name: 'New', number: '7', programming: source, preview: preview);

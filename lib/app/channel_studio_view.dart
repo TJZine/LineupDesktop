@@ -12,6 +12,7 @@ import '../ui/app_ui.dart';
 import 'channel_air_check.dart';
 import 'channel_studio_draft.dart';
 import 'form_error.dart';
+import 'manual_rundown.dart';
 import 'lineup_controller.dart';
 
 enum ChannelStudioMode {
@@ -31,18 +32,6 @@ typedef _FacetOptions = ({
   Map<String, List<String>> values,
   Map<String, Map<String, String>> labels,
 });
-
-class _ManualEntry {
-  _ManualEntry({
-    required this.id,
-    required this.item,
-    required this.occurrence,
-  });
-
-  final String id;
-  ChannelItem item;
-  final int occurrence;
-}
 
 const _facetKeys = [
   'collection',
@@ -125,8 +114,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   late final TextEditingController _number;
   late final TextEditingController _search;
   late final ChannelStudioDraft _session;
-  late List<_ManualEntry> _manualEntries;
-  final _manualKeyCounts = <String, int>{};
+  ManualRundown get _rundown => _session.rundown;
+  List<ManualOccurrence> get _manualEntries => _rundown.occurrences;
   String? _activeFilterKey;
   BuildContext? _programmingContext;
   double _pickerMinimumHeight = 0;
@@ -145,8 +134,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   final Map<String, PlexMediaItem> _browseSelectionItems = {};
   bool _browseSelecting = false;
   bool _showBrowseSelected = false;
-  List<_ManualEntry> _lastAddedEntries = const [];
-  final _rundownFocus = <_ManualEntry, FocusNode>{};
+  final _rundownFocus = <ManualOccurrence, FocusNode>{};
   late final TextEditingController _rundownSearch;
   final _browseScroll = ScrollController();
   final _rundownScroll = ScrollController();
@@ -249,11 +237,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         }
       });
     }
-    _manualKeyCounts.clear();
-    _manualEntries = switch (source) {
-      ManualSource(:final items) => items.map(_newManualEntry).toList(),
-      _ => <_ManualEntry>[],
-    };
+    _rundown.replaceFrom(switch (source) {
+      ManualSource(:final items) => items,
+      _ => const <ChannelItem>[],
+    });
     _manualRundown = _manualEntries.isNotEmpty;
     _manualLibraryId = null;
     _manualMediaType = null;
@@ -313,9 +300,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     name: _name.text,
     number: _number.text,
     libraries: _selectedLibraries,
-    manualItems: _manualEntries
-        .map((entry) => entry.item)
-        .toList(growable: false),
   );
 
   void _selectSource(StudioSourceChoice? choice) {
@@ -1884,7 +1868,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       ),
                     ]
                   : [
-                      if (_lastAddedEntries.isNotEmpty)
+                      if (_rundown.canUndo)
                         TextButton(
                           onPressed: _undoLastAddition,
                           child: const Text('Undo last addition'),
@@ -2023,11 +2007,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       setState(() {});
       return;
     }
-    final entry = _newManualEntry(channelItemFor(current));
-    _changed(() {
-      _manualEntries.add(entry);
-      _lastAddedEntries = [entry];
-    });
+    _changed(() => _rundown.addCurrent(current.id, _playableInventory.byId));
   }
 
   void _toggleBrowseSelection(PlexMediaItem item) => setState(() {
@@ -2047,19 +2027,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   void _addBrowseSelected() {
-    final added = <_ManualEntry>[];
     _refreshPlayableInventory();
     _changed(() {
-      for (final id in _browseSelection) {
-        if (_manualEntries.any((entry) => entry.id == id)) continue;
-        if (_playableInventory.byId[id] ?? _browseSelectionItems[id]
-            case final item?) {
-          final entry = _newManualEntry(channelItemFor(item));
-          _manualEntries.add(entry);
-          added.add(entry);
-        }
-      }
-      _lastAddedEntries = List.unmodifiable(added);
+      _rundown.addBatch(
+        _browseSelection,
+        _playableInventory.byId,
+        _browseSelectionItems,
+      );
       _browseSelection.clear();
       _browseSelectionItems.clear();
       _browseSelecting = false;
@@ -2068,11 +2042,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   void _undoLastAddition() {
-    final undo = _lastAddedEntries.toSet();
-    _changed(() {
-      _removeManualEntriesWhere(undo.contains);
-      _lastAddedEntries = const [];
-    });
+    final previous = _manualEntries;
+    _changed(_rundown.undoLastAddition);
+    _retireRemovedFocus(previous);
   }
 
   void _refreshPlayableInventory() {
@@ -2265,7 +2237,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       '${_manualMatches.length} matching · ${_manualEntries.length} added';
 
   Widget _rundownRow(
-    _ManualEntry entry,
+    ManualOccurrence entry,
     int index,
     bool unavailable,
     Map<String, PlexMediaItem> inventoryById, {
@@ -2418,12 +2390,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   String _manualEntryTitle(
-    _ManualEntry entry,
+    ManualOccurrence entry,
     Map<String, PlexMediaItem> inventoryById,
   ) => inventoryById[entry.id]?.title ?? entry.item.title;
 
   String _manualEntrySearchText(
-    _ManualEntry entry,
+    ManualOccurrence entry,
     Map<String, PlexMediaItem> inventoryById,
   ) {
     final item = inventoryById[entry.id];
@@ -2440,14 +2412,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       ? 'new channel'
       : 'channel ${_name.text.trim()}';
 
-  void _moveManual(_ManualEntry entry, int delta) {
+  void _moveManual(ManualOccurrence entry, int delta) {
     if (_saving) return;
     final from = _manualEntries.indexOf(entry);
     final to = from + delta;
     if (from < 0 || to < 0 || to >= _manualEntries.length) return;
     _changed(() {
-      _manualEntries.removeAt(from);
-      _manualEntries.insert(to, entry);
+      _rundown.move(entry, delta);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _rundownFocus[entry]?.requestFocus();
@@ -2456,14 +2427,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   void _reorderManual(int from, int to) {
     if (_saving || from == to) return;
-    final entry = _manualEntries[from];
-    _changed(() {
-      _manualEntries.removeAt(from);
-      _manualEntries.insert(to, entry);
-    });
+    _changed(() => _rundown.reorder(from, to));
   }
 
-  Future<void> _moveManualTo(_ManualEntry entry) async {
+  Future<void> _moveManualTo(ManualOccurrence entry) async {
     final target = await showDialog<({int index, bool after})>(
       context: context,
       builder: (context) => _MoveProgramDialog(
@@ -2477,20 +2444,16 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final from = _manualEntries.indexOf(entry);
     if (from < 0) return;
     _changed(() {
-      _manualEntries.removeAt(from);
-      var destination = target.index;
-      if (from < destination) destination--;
-      if (target.after) destination++;
-      _manualEntries.insert(destination.clamp(0, _manualEntries.length), entry);
+      _rundown.moveTo(entry, target.index, after: target.after);
     });
   }
 
-  void _removeManual(_ManualEntry entry) {
+  void _removeManual(ManualOccurrence entry) {
     if (_saving) return;
     final index = _manualEntries.indexOf(entry);
     if (index < 0) return;
     _changed(() {
-      _manualEntries.removeAt(index);
+      _rundown.remove(entry);
       if (_manualEntries.isEmpty) _manualRundown = false;
     });
     final nextEntry = _manualEntries.isEmpty
@@ -2509,15 +2472,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
   }
 
-  _ManualEntry _newManualEntry(ChannelItem item) {
-    final count = (_manualKeyCounts[item.id] ?? 0) + 1;
-    _manualKeyCounts[item.id] = count;
-    return _ManualEntry(id: item.id, item: item, occurrence: count);
-  }
-
-  void _removeManualEntriesWhere(bool Function(_ManualEntry) test) {
-    final removed = _manualEntries.where(test).toList(growable: false);
-    _manualEntries.removeWhere(test);
+  void _retireRemovedFocus(List<ManualOccurrence> previous) {
+    final removed = previous.where((entry) => !_manualEntries.contains(entry));
     final removedFocus = removed
         .map(_rundownFocus.remove)
         .nonNulls
@@ -2809,18 +2765,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   ContentSource _editedSource() => _session.editedSource(
     libraries: _selectedLibraries,
-    manualItems: _manualItems(),
+    available: _playableInventory.byId,
   );
-
-  List<ChannelItem> _manualItems() {
-    final available = _playableInventory.byId;
-    return _manualEntries
-        .map((entry) {
-          final item = available[entry.id];
-          return item == null ? entry.item : channelItemFor(item);
-        })
-        .toList(growable: false);
-  }
 
   _DraftResolution _resolveDraftContent() {
     late final ContentSource source;
@@ -3030,11 +2976,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       );
       if (!mounted) return;
       setState(() {
-        if (committed.source case ManualSource(:final items)
-            when items.length == _manualEntries.length) {
-          for (var index = 0; index < items.length; index++) {
-            _manualEntries[index].item = items[index];
-          }
+        if (committed.source case ManualSource(:final items)) {
+          _rundown.acceptSaved(items);
         }
         _session.loadSaved(committed);
         _session.acceptBaseline(_draftSignature);
@@ -3314,16 +3257,16 @@ class _MoveProgramDialog extends StatefulWidget {
     required this.titleFor,
   });
 
-  final List<_ManualEntry> entries;
-  final _ManualEntry moving;
-  final String Function(_ManualEntry entry) titleFor;
+  final List<ManualOccurrence> entries;
+  final ManualOccurrence moving;
+  final String Function(ManualOccurrence entry) titleFor;
 
   @override
   State<_MoveProgramDialog> createState() => _MoveProgramDialogState();
 }
 
 class _MoveProgramDialogState extends State<_MoveProgramDialog> {
-  _ManualEntry? _target;
+  ManualOccurrence? _target;
   bool _after = false;
   final _search = TextEditingController();
 
@@ -3333,7 +3276,7 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
     super.dispose();
   }
 
-  String _label(_ManualEntry entry) {
+  String _label(ManualOccurrence entry) {
     final title = widget.titleFor(entry);
     final matches = widget.entries
         .where((candidate) => widget.titleFor(candidate) == title)
@@ -3374,13 +3317,13 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
             ),
             SizedBox(height: 8),
             Expanded(
-              child: RadioGroup<_ManualEntry>(
+              child: RadioGroup<ManualOccurrence>(
                 groupValue: _target,
                 onChanged: (value) => setState(() => _target = value),
                 child: ListView(
                   children: [
                     for (final entry in targets)
-                      RadioListTile<_ManualEntry>(
+                      RadioListTile<ManualOccurrence>(
                         value: entry,
 
                         minTileHeight: null,

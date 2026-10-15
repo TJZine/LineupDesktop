@@ -98,7 +98,12 @@ void main() {
         await tester.tap(find.textContaining('Channel programs · 2'));
         await tester.pump();
         for (var index = 0; index < (removeAll ? 2 : 1); index++) {
-          final button = find.byTooltip('Remove from channel').first;
+          final button = find
+              .ancestor(
+                of: find.byTooltip('Remove from channel').first,
+                matching: find.byType(IconButton),
+              )
+              .first;
           tester.widget<IconButton>(button).onPressed!();
           await tester.pump();
         }
@@ -107,6 +112,7 @@ void main() {
           await tester.tap(find.textContaining('Browse library'));
           await tester.pump();
           expect(find.text('Undo last addition'), findsOneWidget);
+          await tester.ensureVisible(find.text('Undo last addition'));
           await tester.tap(find.text('Undo last addition'));
           await tester.pump();
           expect(find.textContaining('Channel programs · 0'), findsOneWidget);
