@@ -323,6 +323,32 @@ Reviewer informed T main gate failed; it does not diagnose T in parallel.
 M remains unintegrated until T gate is resolved and its review is adjudicated.
 M retrieval cursor: `0af69a21-3777-4d4e-b463-f577a8f6ef98:1`.
 
+### M independent verdict and proof correction
+
+Independent full11-file/source/protocol review at `b97df2cf` established no
+production correctness/security/ownership regression, but found M-R1[P3]:
+`unsupported_native_player_test.dart` telemetry equality uses identical const
+objects and variants differing in many fields, so it does not prove value
+equality or independent field participation. The implementation itself compares
+and hashes all15 fields correctly. Controller ACCEPTS the concrete proof gap;
+returned to original M child to correct the existing test with distinct runtime
+instances and one-field-at-a-time changes. Focused negative controls, format and
+analysis requested; prior broad product/build proof stays attributed to its
+actual candidate and parent still owns required postintegration full/build gates.
+
+Reviewer ACCEPTS typed startup-fixture adaptation: both existing startup cases
+retain guidance/redaction and pending/later-completion obligations. Correct
+provenance: `_invokeNative` already normalized `required_engine_unavailable` at
+the M base. M preserves it and simplifies its startup consumer, rather than
+newly implementing normalization. The specific initialize/error mapping is
+source-checked; the UI fake does not execute the transport, and existing generic
+allowlisted transport error coverage does not claim that exact case.
+All five documented Dart/native differences are preexisting according to the
+review. Protocol/source, exact messages, rename references and no golden/native
+changes were checked. Canonical format110/analysis and focused532/full1,593,
+macOS build results remain candidate evidence; no physical/platform acceptance.
+M stays unintegrated pending M-R1 closure and T gate resolution.
+
 ## Evidence and limits
 
 Preparation `git diff --check` passed. P0's observed pinned Flutter identity was
