@@ -1064,6 +1064,56 @@ void main() {
     },
   );
 
+  testWidgets(
+    'pending Air Check publishes the latest same-key channel identity',
+    (tester) async {
+      final controller = _AirController(controlled: true);
+      addTearDown(controller.dispose);
+      final original = _channel(items: [_item('one'), _item('two')]);
+      await tester.pumpWidget(_airCheck(controller, original));
+      expect(controller.requests, 1);
+      final renamed = Channel.fromJson({
+        ...original.toJson(),
+        'name': 'Renamed while loading',
+        'number': 9,
+      });
+      await tester.pumpWidget(_airCheck(controller, renamed));
+      expect(controller.requests, 1);
+      controller.completeNext();
+      await tester.pumpAndSettle();
+      final preview = tester
+          .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+          .verification
+          .result
+          .preview!;
+      expect(preview.channel.anchor, original.anchor);
+      expect(preview.channel.shuffleSeed, original.shuffleSeed);
+      expect(
+        canonicalScheduleIdentity(preview.channel),
+        canonicalScheduleIdentity(original),
+      );
+      expect(
+        {
+          'latest facts': find.textContaining('Ch 9 ·').evaluate().length,
+          'latest program semantics': find
+              .bySemanticsLabel(
+                RegExp(r'Channel 9 Renamed while loading, .*current'),
+              )
+              .evaluate()
+              .length,
+          'old facts': find.textContaining('Ch 4 ·').evaluate().length,
+          'schedule loads': controller.requests,
+        },
+        {
+          'latest facts': 1,
+          'latest program semantics': 1,
+          'old facts': 0,
+          'schedule loads': 1,
+        },
+      );
+    },
+  );
+
   testWidgets('on-now warning is exact and ignores identity-only edits', (
     tester,
   ) async {
