@@ -19,8 +19,9 @@ retainedcq/F pending all Windows CTests and separate physical acceptance.
 
 E8ff1574a source findings CLOSED, all runtime/render/full pending; paired scratch
 harnessb6ede3f3 has actualstateassertions and credential-free syntheticconnection.
-Wb671ac62 performance repair SOURCE-CLOSED; unchanged rebasee5273248 onto
-actual728f284c ready for granted negative/focused/full gate.
+W SOURCE-CLOSED, actual negative control failed on intended count bounds,
+corrected5554d6d8 format114/analyze/focused22/full1,645 green. Equivalent final
+a6a2d46ff782c96f2cdcfbb34e277fc2a4fe4202 integrated; main W gate queued viaP0.
 S acceptedS-R1 source correction7f250270 ready; two new real-isolate tests for
 pending/startup unknown-malformedID require actual BEFORE/AFTER checks.
 V test-onlyd2fbdf3b ready: querypostframe, onecompletion, stalefinal/activity,
@@ -32,7 +33,7 @@ scratchbaseline preparation ONLY. No U production change until confirming
 unknownbadge test and baseline renders run. K/G undispatched; combined/final
 whole-branch reviews remain. No plan completion claim.
 
-Runtime: W exclusive negative/focused/full slot. U prepares source/test/history; all other children queued.
+Runtime: P0 verification child now owns W main-checkout gate once dispatched. U prepares source/test/history; all other children queued.
 At most four implementation children active. Next exclusive queue includes W
 negative/focused, S two-control BEFORE/AFTER, Y broader tests, D/E focused and
 matched renders, V BEFORE/profilebaseline, U baseline/confirmation. Actualbases,
@@ -93,7 +94,7 @@ The parent owns integration and worktree cleanup. Children cannot delegate.
 | E review | `01a13f08-7377-7003-b2c2-71cfbee04e37` / local | reviewer, gpt-6.1-sol, high | E basefdc58fb9 → ce913bd7, scratch excluded | Six findings and immutable qualification SOURCE-CLOSED at8ff1574a; runtime/render/full unverified |
 | S | `01a13ef8-82e0-7be2-888f-589e07c3cc60` / local | worker_luna, gpt-5.6-luna, xhigh | `f77154eac36783c76153415deafdf2404391d551`; `/Users/tristan/Software/LineupDesktop-S`, `cq/S` | f02a1209 focused103 green; independent S-R1 accepted; correction7f250270 source/test ready, BEFORE/AFTER/full pending |
 | V | `01a13f00-5210-7560-9c23-1e77072cdfe3` / local | worker_luna, gpt-5.6-luna, xhigh | `656ebb5da902b1ed5cffc9e23c3549ff13b15e88`; `/Users/tristan/Software/LineupDesktop-V`, `cq/V` | Test-onlyd2fbdf3b prepared; actual NF29 BEFORE and matched GUIDE_PROFILE baseline queued, no production repair |
-| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | W-R1 correctionb671ac62 SOURCE-CLOSED; actual old-source negative/newfocused/full pending; prior21 green only6bc53422 |
+| W | `01a13f0a-3769-7671-bf5b-469758d586c3` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-W`, `cq/W` | Accepted5554d6d8 negative/focused22/full1,645; equivalent a6a2d46f integrated; P0 main gate pending |
 | W review | `01a13f19-a2e0-79a1-9fb4-fd0489847ded` / local | reviewer, gpt-6.1-sol, high | B bf65e00a → W6bc53422 | Full review plus W-R1 targeted source closure complete; runtime/integration acceptance pending |
 | Y | `01a13f0a-3da8-70f3-b2e8-e0f5384a047c` / local | worker_luna, gpt-5.6-luna, xhigh | B bf65e00a; `/Users/tristan/Software/LineupDesktop-Y`, `cq/Y` | Source83b7aa04 + finite test seam507cb296; narrow faithful old-poll negative control/clock checks released; unintegrated |
 
@@ -1064,3 +1065,25 @@ sourceprep only until actual NF23 controls and BEFORE renders are granted/run.
 W snapshot cursor6c8480fc-9561-43d7-8b1b-075716afb037:1 active: focused22 passed
 per child progress; analyzer-only testlintrepair being committed, exclusive full
 then required. Final exactSHA/logs/negativecontrol/results still await completion.
+
+## W measured correction acceptance and main-checkout verification dispatch
+
+- Candidate5554d6d865c3475e72c1a00d72baf3e2c3fd4d59 clean, pinned guard/format114/
+  analyzeclean/focused22/full1,645 PASS. Extra lastcommit is only equivalent
+  superparameter constructor in newtest; parent inspectedactual3line delta.
+- Faithful old97a64916 monitor/new public1000-entry regression exit1: intended
+  listread <100 assertion actual20,041 listreads/20,020 revisionreads. Corrected
+  targeted exit0:21/20 respectively. Instrumentation removed, correctedsource
+  restored exactly. Logs `/tmp/lineup-cq-W/negative-control-old-counts.log`,
+  `rebased-postrepair-counts.log`, `rebased-full.log`. No latency benchmark claim.
+- Final parent rebase over executiondocs b901f6f4 all4patches unchanged:
+  3f452dd6→7de96b4d,97a64916→2ce94659,e5273248→03a5ee0e,
+  5554d6d8→a6a2d46f. Net3files513+/132-, no golden change, visibleliteral filter
+  empty. Ff integrateda6a2d46ff782c96f2cdcfbb34e277fc2a4fe4202.
+- P0 same bounded verification chat01a13eaa-0f77-7ef1-a805-cbad67a3714a is reused
+  for main-checkout W §8.1 command execution only (no Git/source/report mutation).
+  Current worker_luna preset reread: gpt-5.6-luna/xhigh with responsibility text.
+  Parent remains sole integration/acceptance owner. This permits an authorized
+  completion callback after the exclusive main gate instead of idle polling.
+  Actual head supplied after this record commit; logs `/tmp/lineup-cq-integration/W/`.
+  Expected1,645 is not yet an observed MAIN result. No other runtime authorized.
