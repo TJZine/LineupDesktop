@@ -2651,11 +2651,8 @@ class LineupController extends ChangeNotifier {
           ? server?.id == serverId
           : _serverTargetId == serverId);
 
-  static bool _isPmsAuthorizationError(PlexException exception) => const {
-    'auth-invalid',
-    'auth-required',
-    'access-denied',
-  }.contains(exception.code);
+  static bool _isPmsAuthorizationError(PlexException exception) =>
+      exception.isAuthorizationFailure;
 
   @override
   void notifyListeners() {
