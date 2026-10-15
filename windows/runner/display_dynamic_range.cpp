@@ -262,8 +262,7 @@ void DisplayMatchingEngine::Start() {
 }
 void DisplayMatchingEngine::Suspend(Record& record) {
   if (record.guardian) record.guardian->Disarm();
-  record.guardian.reset();
-  record.owned = false;
+  record.Relinquish();
   session_ = "suspended";
   session_reason_ = "external_change";
   Report(&record, "idle", false, "external_change");
@@ -274,27 +273,20 @@ bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
   auto& own = record.ownership;
   if (!restore && (!record.guardian || !record.guardian->IsAlive() ||
                    record.guardian_lost)) {
-    record.guardian_lost = true;
-    if (!record.owned && record.guardian) {
-      record.guardian->Disarm();
-      record.guardian.reset();
-    }
+    record.MarkGuardianLost();
     Report(&record, "failed", false, "guardian_unavailable");
     return false;
   }
   const auto previous_attempt = own.attempted;
   own.attempted = desired;
   if (record.guardian && !record.guardian->Update(own)) {
-    record.guardian_lost = true;
     if (!restore) {
       own.attempted = previous_attempt;
-      if (!record.owned) {
-        record.guardian->Disarm();
-        record.guardian.reset();
-      }
+      record.MarkGuardianLost();
       Report(&record, "failed", false, "guardian_unavailable");
       return false;
     }
+    record.guardian_lost = true;
   }
   WriteObservation observation;
   bool executed = false;
@@ -308,11 +300,7 @@ bool DisplayMatchingEngine::Write(Record& record, DisplayState desired,
   else
     action();
   if (!executed) {
-    record.guardian_lost = true;
-    if (!record.owned && record.guardian) {
-      record.guardian->Disarm();
-      record.guardian.reset();
-    }
+    record.MarkGuardianLost();
     Report(&record, "failed", false, "guardian_unavailable");
     return false;
   }
@@ -370,6 +358,9 @@ void DisplayMatchingEngine::Reconcile() {
     return;
   }
   auto& own = record->ownership;
+  // During an active session, original outside our remembered write states
+  // suspends matching unless an outstanding attempt can still land. Release
+  // instead treats already-original as safe to relinquish.
   if (!(record->owned ? IsOurState(own, record->observed.state) ||
                             (record->unobserved_attempt &&
                              record->observed.state == own.original)
@@ -424,24 +415,26 @@ void DisplayMatchingEngine::Release(Record& record) {
   if (!record.owned) return;
   auto& own = record.ownership;
   record.observed = api_.Query(own.target, own.route);
-  if (record.observed.state == DisplayState::unknown) {
-    Report(&record, "failed", false, "target_lost");
-    return;
-  }
-  if (record.unobserved_attempt && record.observed.state == own.original &&
-      own.attempted != own.original) {
-    Report(&record, "failed", false, "restore_failed");
-    return;
-  }
-  if (record.observed.state != own.original &&
-      !IsOurState(own, record.observed.state)) {
-    if (record.guardian) record.guardian->Disarm();
-    record.guardian.reset();
-    record.owned = false;
-    return;
+  const auto decision = ClassifyRestoration(
+      {own, record.unobserved_attempt}, record.observed.state);
+  switch (decision) {
+    case RestorationDecision::target_unknown:
+      Report(&record, "failed", false, "target_lost");
+      return;
+    case RestorationDecision::unresolved_attempt:
+      Report(&record, "failed", false, "restore_failed");
+      return;
+    case RestorationDecision::external_change:
+      // Preserve L3: disarm is best effort and release sends no report.
+      if (record.guardian) record.guardian->Disarm();
+      record.Relinquish();
+      return;
+    case RestorationDecision::already_original:
+    case RestorationDecision::restore_original:
+      break;
   }
   if (RetainForRestartOnTarget(own.target)) return;
-  if (record.observed.state != own.original &&
+  if (decision == RestorationDecision::restore_original &&
       !Write(record, own.original, WritePurpose::restoration))
     return;
   if (RetainForAnyRestart()) return;
@@ -450,8 +443,7 @@ void DisplayMatchingEngine::Release(Record& record) {
     Report(&record, "failed", false, "restore_failed");
     return;
   }
-  record.guardian.reset();
-  record.owned = false;
+  record.Relinquish();
 }
 void DisplayMatchingEngine::ReleaseAll() {
   for (auto& record : records_) Release(*record);

@@ -1,4 +1,5 @@
 #include "display_dynamic_range.h"
+#include "display_recovery.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -26,7 +27,7 @@ struct FakeClock : DisplayClock {
   }
 };
 struct GuardianFacts {
-  bool arm = true, update = true, alive = true, disarm = true;
+  bool arm = true, update = true, alive = true, disarm = true, execute = true;
   int arms = 0, updates = 0, disarms = 0;
   DisplayOwnership last;
 };
@@ -48,7 +49,9 @@ struct FakeGuardian : DisplayGuardianLink {
     return facts->disarm;
   }
   bool IsAlive() override { return facts->alive; }
-  bool Execute(const std::function<bool()>& action) override { return action(); }
+  bool Execute(const std::function<bool()>& action) override {
+    return facts->execute && action();
+  }
 };
 struct FakeApi : DisplayConfigApi {
   DisplayMapping mapping{a, nullptr};
@@ -97,6 +100,123 @@ struct Fixture {
     engine.Process({revision, session, desired});
   }
 };
+constexpr DisplayOwnership History(DisplayState original, DisplayState verified,
+                                   DisplayState attempted) {
+  return {{}, DisplayRoute::hdr_state, original, verified, attempted};
+}
+constexpr bool RestorationDecisionTable() {
+  using S = DisplayState;
+  using D = RestorationDecision;
+  struct Row {
+    DisplayOwnership ownership;
+    bool late;
+    DisplayState observed;
+    RestorationDecision expected;
+  };
+  const Row rows[] = {
+      {History(S::sdr, S::hdr, S::hdr), false, S::unknown, D::target_unknown},
+      {History(S::sdr, S::unknown, S::hdr), true, S::sdr, D::unresolved_attempt},
+      {History(S::sdr, S::sdr, S::hdr), true, S::sdr, D::unresolved_attempt},
+      {History(S::sdr, S::unknown, S::hdr), false, S::sdr, D::already_original},
+      {History(S::sdr, S::hdr, S::hdr), false, S::sdr, D::already_original},
+      {History(S::sdr, S::hdr, S::sdr), true, S::sdr, D::already_original},
+      {History(S::sdr, S::sdr, S::sdr), false, S::hdr, D::external_change},
+      {History(S::sdr, S::unknown, S::unknown), false, S::hdr, D::external_change},
+      {History(S::sdr, S::hdr, S::unknown), false, S::hdr, D::restore_original},
+      {History(S::sdr, S::unknown, S::hdr), true, S::hdr, D::restore_original},
+      {History(S::sdr, S::hdr, S::sdr), true, S::hdr, D::restore_original},
+      {History(S::hdr, S::sdr, S::sdr), false, S::sdr, D::restore_original},
+      {History(S::hdr, S::sdr, S::sdr), false, S::hdr, D::already_original},
+  };
+  for (const auto& row : rows) {
+    if (ClassifyRestoration({row.ownership, row.late}, row.observed) != row.expected)
+      return false;
+  }
+  return true;
+}
+static_assert(RestorationDecisionTable());
+static_assert(DurableAttemptMayLandLate(
+    History(DisplayState::sdr, DisplayState::sdr, DisplayState::hdr)));
+static_assert(!DurableAttemptMayLandLate(
+    History(DisplayState::sdr, DisplayState::hdr, DisplayState::sdr)));
+static_assert(!DurableAttemptMayLandLate(
+    History(DisplayState::sdr, DisplayState::hdr, DisplayState::hdr)));
+static_assert(!DurableAttemptMayLandLate(
+    History(DisplayState::sdr, DisplayState::hdr, DisplayState::unknown)));
+
+void ReleaseDecisionEdges() {
+  Fixture unresolved;
+  unresolved.api.apply = false;
+  unresolved.Request(1, true, DisplayState::hdr);
+  unresolved.engine.ReleaseAll();
+  Check(unresolved.engine.HasOwnership() && unresolved.guardian->disarms == 0 &&
+            unresolved.api.writes.size() == 1 &&
+            Text(unresolved.Last().reason, "restore_failed"),
+        "L2 keeps original observation armed while attempted HDR may land late");
+
+  // Both remembered write states are now SDR; HDR is a genuine external state.
+  Fixture external;
+  external.Request(1, true, DisplayState::hdr);
+  external.Request(2, true, DisplayState::sdr);
+  external.api.displays[1].state = DisplayState::hdr;
+  external.guardian->disarm = false;
+  const auto reports = external.reports.size();
+  external.engine.ReleaseAll();
+  Check(!external.engine.HasOwnership() && external.guardian->disarms == 1 &&
+            external.api.writes.size() == 2 && external.reports.size() == reports,
+        "L3 relinquishes external state without writes or reports even if Disarm fails");
+
+  Fixture disarm;
+  disarm.Request(1, true, DisplayState::hdr);
+  disarm.guardian->disarm = false;
+  disarm.engine.ReleaseAll();
+  Check(disarm.engine.HasOwnership() && disarm.guardian->disarms == 1 &&
+            disarm.api.writes.size() == 2 &&
+            Text(disarm.Last().reason, "restore_failed"),
+        "L7 retains restored ownership when Disarm fails");
+  disarm.engine.Poll(false);
+  Check(disarm.api.writes.size() == 2 &&
+            Text(disarm.Last().reason, "guardian_unavailable"),
+        "L7 marks guardian lost and prevents further matching writes");
+  disarm.guardian->disarm = true;
+  disarm.engine.ReleaseAll();
+  Check(!disarm.engine.HasOwnership(), "L7 release can retry safe disarm");
+}
+void ExecuteRefusalKeepsLiveHistoryDistinct() {
+  Fixture f;
+  f.guardian->execute = false;
+  f.Request(1, true, DisplayState::hdr);
+  Check(f.api.writes.empty() && !f.engine.HasOwnership() &&
+            f.guardian->disarms == 1 &&
+            Text(f.Last().reason, "guardian_unavailable"),
+        "Execute refusal never acts or invents live ownership");
+  const auto durable = f.guardian->last;
+  Check(durable.attempted == DisplayState::hdr &&
+            DurableAttemptMayLandLate(durable) &&
+            ClassifyRestoration({durable, false}, DisplayState::sdr) ==
+                RestorationDecision::already_original &&
+            ClassifyRestoration({durable, DurableAttemptMayLandLate(durable)},
+                                DisplayState::sdr) ==
+                RestorationDecision::unresolved_attempt,
+        "divergence 1 keeps journal uncertainty separate from refused live action");
+  f.engine.ReleaseAll();
+  Check(f.api.writes.empty() && f.guardian->disarms == 1,
+        "L0 skips release after refused action");
+}
+void ReconcileOriginalSuspendsWithoutOutstandingAttempt() {
+  Fixture f;
+  f.Request(1, true, DisplayState::hdr);
+  f.api.displays[1].state = DisplayState::sdr;
+  f.engine.Poll(false);
+  Check(Text(f.Last().session, "suspended") &&
+            Text(f.Last().reason, "external_change") &&
+            !f.engine.HasOwnership() && f.guardian->disarms == 1 &&
+            f.api.writes.size() == 1,
+        "Reconcile suspends at original without an outstanding attempt");
+  f.Request(2, true, DisplayState::hdr);
+  Check(f.api.writes.size() == 1, "suspended session does not reverse user change");
+}
+
 void MatchingAndRestore() {
   Fixture f;
   f.Request(1, true, DisplayState::sdr);
@@ -647,6 +767,9 @@ void WorkerOrderingAndIsolation(bool remap) {
 }
 int main() {
   try {
+    ReleaseDecisionEdges();
+    ExecuteRefusalKeepsLiveHistoryDistinct();
+    ReconcileOriginalSuspendsWithoutOutstandingAttempt();
     MatchingAndRestore();
     FailedAndLateWrites();
     FailedIntentRetryGates();

@@ -54,6 +54,25 @@ const flutter::EncodableValue* Find(const flutter::EncodableMap& map,
   return found == map.end() ? nullptr : &found->second;
 }
 
+const std::string* FindString(const flutter::EncodableMap* map,
+                              const char* key) {
+  const auto* value = map ? Find(*map, key) : nullptr;
+  return value ? std::get_if<std::string>(value) : nullptr;
+}
+const bool* FindBool(const flutter::EncodableMap* map, const char* key) {
+  const auto* value = map ? Find(*map, key) : nullptr;
+  return value ? std::get_if<bool>(value) : nullptr;
+}
+void QueueFullError(flutter::MethodResult<flutter::EncodableValue>& result) {
+  result.Error("command_queue_full", "The native command queue is full.");
+}
+std::string AsciiLower(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char byte) {
+    return static_cast<char>(std::tolower(byte));
+  });
+  return value;
+}
+
 std::optional<double> AsNumber(const flutter::EncodableValue* value) {
   if (!value) {
     return std::nullopt;
@@ -85,11 +104,7 @@ std::string UriScheme(std::string_view uri) {
   if (separator == std::string_view::npos || separator == 0) {
     return {};
   }
-  std::string scheme(uri.substr(0, separator));
-  std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](char byte) {
-    return static_cast<char>(std::tolower(static_cast<unsigned char>(byte)));
-  });
-  return scheme;
+  return AsciiLower(std::string(uri.substr(0, separator)));
 }
 
 bool IsHttpsUri(std::string_view uri) {
@@ -164,13 +179,7 @@ const mpv_node* FindNode(const mpv_node& map, const char* key) {
   if (map.format != MPV_FORMAT_NODE_MAP || !map.u.list) {
     return nullptr;
   }
-  for (int index = 0; index < map.u.list->num; ++index) {
-    if (map.u.list->keys[index] &&
-        std::string(map.u.list->keys[index]) == key) {
-      return &map.u.list->values[index];
-    }
-  }
-  return nullptr;
+  return lineup::FindTrackNode(*map.u.list, key);
 }
 
 flutter::EncodableValue EncodeWhitelistedNode(const mpv_node* node,
@@ -233,15 +242,6 @@ flutter::EncodableMap FailureStateEvent(
   return event;
 }
 
-std::string LowerAscii(const char* input) {
-  std::string value = BoundedUtf8(input, kMaxMetadataStringBytes);
-  std::transform(value.begin(), value.end(), value.begin(), [](char byte) {
-    return static_cast<char>(
-        std::tolower(static_cast<unsigned char>(byte)));
-  });
-  return value;
-}
-
 struct ClassifiedFailure {
   std::string code;
   std::optional<int64_t> http_status;
@@ -249,8 +249,10 @@ struct ClassifiedFailure {
 
 std::optional<ClassifiedFailure> ClassifyMpvFailure(
     const mpv_event_log_message& message) {
-  const std::string prefix = LowerAscii(message.prefix);
-  const std::string text = LowerAscii(message.text);
+  const std::string prefix =
+      AsciiLower(BoundedUtf8(message.prefix, kMaxMetadataStringBytes));
+  const std::string text =
+      AsciiLower(BoundedUtf8(message.text, kMaxMetadataStringBytes));
   const auto contains = [&](const char* value) {
     return text.find(value) != std::string::npos;
   };
@@ -405,8 +407,7 @@ void WindowsNativePlayer::HandleMethodCall(
     {
       std::lock_guard lock(event_mutex_);
       events_.erase(std::remove_if(events_.begin(), events_.end(), [](const auto& event) {
-        const auto* type = Find(event.value, "type");
-        const auto* text = type ? std::get_if<std::string>(type) : nullptr;
+        const auto* text = FindString(&event.value, "type");
         return text && *text == "display";
       }), events_.end());
     }
@@ -444,10 +445,8 @@ void WindowsNativePlayer::HandleMethodCall(
   const auto* arguments = AsMap(call.arguments());
   if (method == "setDisplayMatching") {
     const auto revision = arguments ? AsInt(Find(*arguments, "revision")) : std::nullopt;
-    const auto* session_value = arguments ? Find(*arguments, "session") : nullptr;
-    const auto* session = session_value ? std::get_if<bool>(session_value) : nullptr;
-    const auto* desired_value = arguments ? Find(*arguments, "desired") : nullptr;
-    const auto* desired = desired_value ? std::get_if<std::string>(desired_value) : nullptr;
+    const auto* session = FindBool(arguments, "session");
+    const auto* desired = FindString(arguments, "desired");
     if (!revision || *revision < 0 || !session || !desired ||
         (*desired != "hdr" && *desired != "sdr" && *desired != "unknown")) {
       result->Error("invalid_argument", "A valid display matching request is required.");
@@ -460,8 +459,7 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
   } else if (method == "load") {
-    const auto* uri_value = arguments ? Find(*arguments, "uri") : nullptr;
-    const auto* uri = uri_value ? std::get_if<std::string>(uri_value) : nullptr;
+    const auto* uri = FindString(arguments, "uri");
     const auto load_id =
         arguments ? AsInt(Find(*arguments, "loadId")) : std::nullopt;
     if (!uri || uri->empty() || uri->size() > 32768) {
@@ -477,7 +475,7 @@ void WindowsNativePlayer::HandleMethodCall(
     const bool token_supplied =
         token_value && !std::holds_alternative<std::monostate>(*token_value);
     const auto* plex_token =
-        token_supplied ? std::get_if<std::string>(token_value) : nullptr;
+        FindString(arguments, "plexToken");
     if (token_supplied &&
         (!plex_token || !IsValidPlexToken(*plex_token))) {
       result->Error("invalid_argument", "The Plex token is invalid.");
@@ -491,7 +489,7 @@ void WindowsNativePlayer::HandleMethodCall(
     LoadCommand command{*load_id, *uri, {}};
     const auto* paused_value = Find(*arguments, "startPaused");
     if (paused_value) {
-      const auto* paused = std::get_if<bool>(paused_value);
+      const auto* paused = FindBool(arguments, "startPaused");
       if (!paused) {
         result->Error("invalid_argument", "startPaused must be a boolean.");
         return;
@@ -502,17 +500,17 @@ void WindowsNativePlayer::HandleMethodCall(
       command.plex_header = PlexHeader(*plex_token);
     }
     if (!QueueCommand(std::move(command))) {
-      result->Error("command_queue_full", "The native command queue is full.");
+      QueueFullError(*result);
       return;
     }
   } else if (method == "play") {
     if (!QueueCommand(PlayCommand{})) {
-      result->Error("command_queue_full", "The native command queue is full.");
+      QueueFullError(*result);
       return;
     }
   } else if (method == "pause") {
     if (!QueueCommand(PauseCommand{})) {
-      result->Error("command_queue_full", "The native command queue is full.");
+      QueueFullError(*result);
       return;
     }
   } else if (method == "seek") {
@@ -523,7 +521,7 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
     if (!QueueCommand(SeekCommand{*seconds})) {
-      result->Error("command_queue_full", "The native command queue is full.");
+      QueueFullError(*result);
       return;
     }
   } else if (method == "stop") {
@@ -534,7 +532,7 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
     if (!QueueCommand(StopCommand{*stop_id})) {
-      result->Error("command_queue_full", "The native command queue is full.");
+      QueueFullError(*result);
       return;
     }
   } else if (method == "setVideoRect") {
@@ -547,8 +545,7 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
   } else if (method == "setFullscreen") {
-    const auto* value = arguments ? Find(*arguments, "fullscreen") : nullptr;
-    const auto* fullscreen = value ? std::get_if<bool>(value) : nullptr;
+    const auto* fullscreen = FindBool(arguments, "fullscreen");
     if (!fullscreen) {
       result->Error("invalid_argument", "Fullscreen must be a boolean.");
       return;
@@ -570,7 +567,7 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
     if (!QueueCommand(std::move(*command))) {
-      result->Error("command_queue_full", "The native command queue is full.");
+      QueueFullError(*result);
       return;
     }
   } else if (method == "setVolume") {
@@ -581,7 +578,7 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
     if (!QueueCommand(VolumeCommand{*volume})) {
-      result->Error("command_queue_full", "The native command queue is full.");
+      QueueFullError(*result);
       return;
     }
   } else {
@@ -846,9 +843,7 @@ bool WindowsNativePlayer::SetFullscreen(bool fullscreen, std::string& error) {
 
 std::optional<WindowsNativePlayer::TrackCommand> WindowsNativePlayer::ParseTrack(
     const flutter::EncodableMap& arguments) {
-  const auto* type_value = Find(arguments, "type");
-  const auto* type =
-      type_value ? std::get_if<std::string>(type_value) : nullptr;
+  const auto* type = FindString(&arguments, "type");
   if (!type) {
     return std::nullopt;
   }
@@ -1249,13 +1244,10 @@ void WindowsNativePlayer::QueueEvent(uint64_t generation,
   {
     std::lock_guard lock(event_mutex_);
     if (events_.size() >= kMaxQueuedEvents) {
-      const auto* incoming_type = Find(value, "type");
-      const auto* incoming_type_value =
-          incoming_type ? std::get_if<std::string>(incoming_type) : nullptr;
+      const auto* incoming_type_value = FindString(&value, "type");
       const auto property = std::find_if(
           events_.begin(), events_.end(), [](const QueuedEvent& event) {
-            const auto* type = Find(event.value, "type");
-            const auto* value = type ? std::get_if<std::string>(type) : nullptr;
+            const auto* value = FindString(&event.value, "type");
             return value && *value == "property";
           });
       if (property != events_.end()) {
@@ -1410,9 +1402,7 @@ flutter::EncodableValue WindowsNativePlayer::EncodeVideoTargetParameters(
     const mpv_node* value = FindNode(node, key);
     std::string normalized;
     if (value && value->format == MPV_FORMAT_STRING && value->u.string) {
-      normalized = BoundedUtf8(value->u.string, 64);
-      std::transform(normalized.begin(), normalized.end(), normalized.begin(),
-          [](unsigned char byte) { return static_cast<char>(std::tolower(byte)); });
+      normalized = AsciiLower(BoundedUtf8(value->u.string, 64));
       if (normalized.empty() || !std::all_of(normalized.begin(), normalized.end(),
           [](unsigned char byte) {
             return (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
