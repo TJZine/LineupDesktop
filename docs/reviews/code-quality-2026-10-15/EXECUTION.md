@@ -25,14 +25,15 @@ U worker6.1/medium completedsource0b10b2fe, rebasedtof6a99892 oncurrentV9ded.
 RequiredUreview01a13f87 running, sourceFROZEN; firstAFTERchecksnowgranted. Initial
 productionbaselinea869 on46a595cb: UNKNOWNconfirmed/fourcodec-HDRcontrolsPASS,
 26scenarios48images+selfmatchPASS; rejectedbadfixture/animationcapturespreserved.
-No UAFTERresult/fullaccepted yet; focused/renderactuals andfullrequired.
+UfirstAFTERguard/format143PASS, analyzer59issues/exit1; STOPPEDbeforefocused/
+render/full. Frozenreviewer informed; compilerroots+reviewfindingsbatchrepairlater.
 Kworker6.1/medium test-only40d14dd9 ready:3exact-report/storage/UItests,
 20producercalls/all17pairsinventoried, BEFOREunrun/no productionmigration; Gafterwholebranchreview. RequiredUpremerge,
 plannedcombinedA/E/M/S/V/W/K/Y and finalwholebranchcompositionreviews remain.
 FinalmacOSbuildpending (Mbuildpassed earlier). No taskcompletionclaim.
 
-Runtime: U firstAFTERguard/analyze/focused+48render exclusively onfrozenf6.
-Kinitialtest/inventoryonly; nootherFlutter. AnyUfailureSTOPbeforeeditingreviewinputs. Ufocused/render/fullneedsfrozencandidate
+Runtime: K BEFORE diagnostics+desktopbaseline exclusively, productionlibuntouched.
+Ustopped/frozenforrequiredreview; anyrepairawaitsreviewcompletion, nootherFlutter. Ufocused/render/fullneedsfrozencandidate
 andexplicitexclusivegrant; currentcompositionrendersafterVrebasewillberequired.
 Atmostfourimplementationchildren, parentsoleGitintegration/acceptanceowner.
 
@@ -1665,3 +1666,20 @@ Historical~30notpreserved. Eventset/map willbeactualenumreviewevidence.
 Olddiagnostics/redaction/bounds/retention/metadata/export/copyretry/readerlayout
 proofretained. Approvedmechanical11desktopdiagnosticscallsmigrationstillunperformed.
 KSTOPqueued, UexclusivefrozenAFTERchecks+requiredreviewactive. NootherFlutter.
+
+## U frozen analyzer stop and K baseline runtime release
+
+U exactf6a99892 unchanged/clean, scratch8c45957aarchivedfrozen-scratch,
+48refs/hashunchanged. Guardexit0/format1430changedexit0; analyzer--no-pubexit1/
+59issues. `/tmp/lineup-cq-U/after-analyze.log`, first-after-stop.md. NOfocused/
+render/fullran. Rootcompilerfailuresacceptedforboundedrepairafterfrozenreview:
+LogicalKeyboardKeycustomequalityinvalidatesconstsets/maps inresolver+test;
+PlayerViewstatusTextreferencesstylebeforedeclaration; onecurlybraceslint. Counts
+arenot59independentbugs. Reviewer01a13f87informedactualevidence/nopassingclaims,
+sourcefreezecontinuesuntilwholeUreviewcomplete, thenbatchsameworkerrepairs.
+
+Kactual40d14dd9 productionlibuntouched nowexclusiveBEFOREpinguard/pubifneeded/
+old+newdiagnostics+desktopdiagnosticsfocused. Newtest-fixture-onlycorrectionsif
+necessarymustpreservecontractandreportinitialfailure, no actual-outputblessing.
+NOenum/sharedpolicy/producer migrationuntilactualBEFOREPASS/parentadjudication.
+Logs `/tmp/lineup-cq-K/before-*`; actualcount/exits/sourceidentityrequired. Othersheld.
