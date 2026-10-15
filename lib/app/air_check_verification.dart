@@ -296,10 +296,12 @@ class AirCheckVerification extends ChangeNotifier {
       if (request.publishes &&
           request.key == _targetKey &&
           request.version == _requestVersion) {
+        // Name/number edits do not reload schedules. Publish their latest text
+        // with this request's verified schedule and captured source label.
         final preview = _project(
           schedule,
           request.key,
-          request.channel,
+          _channel,
           sourceLabel: request.sourceLabel,
         );
         _preview = preview;
