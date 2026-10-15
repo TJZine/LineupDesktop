@@ -110,8 +110,8 @@ reviewed and integrated, main gate failed one logo-widget case; original T child
 diagnosing. M candidate review in flight, integration held. Final whole-branch review
 remains pending. Last nonblocking retrieval cursors: A `7a625c8f-d873-43ca-a476-3b06e68f099e:3`;
 H `34f64ba8-fcf2-4b68-8753-676d07b6c59b:3`.
-Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:4`.
-T retrieval cursor: `f42cb099-62a0-4bc8-a48c-6e4332c0926f:2`.
+Wave-zero reviewer cursor: `f8719467-752a-4168-b924-2b678e14ed88:5`.
+T retrieval cursor: `f42cb099-62a0-4bc8-a48c-6e4332c0926f:3`.
 
 ### H candidate inspection
 
@@ -374,6 +374,31 @@ count change or production edit. Negative logs are
 `/tmp/lineup-cq-M/telemetry-{identity,omitted-field}-negative.log`.
 Same reviewer received exact correction/evidence for M-R1 closure; prior broad
 1,593/build evidence remains attributed to original M candidate, not rerun.
+
+### T gate acceptance and M-R1 closure
+
+Reviewer independently accepted T's no-demonstrated-regression disposition:
+the fixture's artwork bytes/path are independent of the changed store and
+credentials. Unchanged `ClearLogoImage` performs a separate alpha decode after
+image sizing; `precacheImage` does not wait for that decode. The fixed80ms wait
+makes workload sensitivity plausible, not proven by the available failure log.
+If repeated, observe decoder/logo state rather than rerun blindly. No speculative
+source edit or assertion weakening is justified from these controls.
+
+Parent serialized main session23766 completed **exit0 / 1,588 passed**, elapsed
+2:42, canonical format109 zero changes and strict analysis clean. Product inputs
+match `dbc4dea0`; rerun start head `6effc513` and subsequent commits affect only
+execution Markdown. Logs `/tmp/lineup-cq-integration/T/serial-rerun/` preserve
+this fresh gate separately from the original failed run. T is accepted, with
+cause of original single failure unresolved. Task worktree/fully integrated
+branch may now be removed; no behavioral correction was made.
+
+Reviewer closed M-R1 at `78177ac4`: exact test-only diff faithfully observes
+distinct equal runtime objects and all15 independent fields; both negative
+controls fail as intended, production restored. No new finding. Controller
+accepts closure and original M source/protocol verdict. Corrected full count
+1,593 remains expected until actually observed on the new integrated gate;
+original M1,593/build proof remains attributed to `b97df2cf`.
 
 ## Evidence and limits
 
