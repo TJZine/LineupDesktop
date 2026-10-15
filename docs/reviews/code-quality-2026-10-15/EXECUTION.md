@@ -349,6 +349,32 @@ changes were checked. Canonical format110/analysis and focused532/full1,593,
 macOS build results remain candidate evidence; no physical/platform acceptance.
 M stays unintegrated pending M-R1 closure and T gate resolution.
 
+### Focused corrections and serialized T rerun
+
+T diagnosis completed with no source changes at clean `dbc4dea0`: current exact
+case1/1, Player suite112/112, clean preT exact control1/1, current full1,588,
+pin/format109/analyze all passed. Artwork test/local Native/precache/80ms wait/
+assertion are unchanged by T; only store/credential boilerplate migrated in
+that file. No responsible T code path or deterministic regression demonstrated.
+Original failure remains unexplained, not definitively classified as flaky.
+Logs `/tmp/lineup-cq-T/diagnosis-{exact,player-view,preT-exact,full-final}.log`.
+Same reviewer received source/controls for independent adjudication.
+Parent serial main rerun started at docs-only head
+`6effc51349d49fc4df8b61abaa605f255af7d2bf` (product `dbc4dea0`), session`23766`,
+logs `/tmp/lineup-cq-integration/T/serial-rerun/{format,analyze,full-test}.log`.
+Collect its exit status on next activation; no other broad suite/app build is
+assigned. No speculative test/production edits or weakened assertion accepted.
+
+M-R1 test-only correction returned at `78177ac458bf14e20198ff19b1e1d6450be029fa`.
+Child reports distinct runtime equal instances and exactly one changed field in
+each of15 full variants. Temporary identity-only and omitted-colorMatrix
+negative controls both failed for the intended assertions, then production
+source restored with zero diff. Focused3 tests, format/analyze passed; no test
+count change or production edit. Negative logs are
+`/tmp/lineup-cq-M/telemetry-{identity,omitted-field}-negative.log`.
+Same reviewer received exact correction/evidence for M-R1 closure; prior broad
+1,593/build evidence remains attributed to original M candidate, not rerun.
+
 ## Evidence and limits
 
 Preparation `git diff --check` passed. P0's observed pinned Flutter identity was
