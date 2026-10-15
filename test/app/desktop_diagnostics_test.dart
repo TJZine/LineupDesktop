@@ -74,27 +74,26 @@ void main() {
       );
       addTearDown(controller.dispose);
       controller.diagnostics.enabled = true;
-      controller.diagnostics.add('plex-auth', 'PIN cancellation failed', {
+      controller.diagnostics.add(DiagnosticEvent.pinCancellationFailed, {
         'code': 'auth-denied',
       });
-      controller.diagnostics.add('playback', 'Playback request failed', {
+      controller.diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
         'operation': 'audio_track',
         'code': 'command_error',
       });
-      controller.diagnostics.add('playback', 'Native playback failed', {
+      controller.diagnostics.add(DiagnosticEvent.nativePlaybackFailed, {
         'failureCode': 'safe-looking-private-sentinel',
       });
       controller.diagnostics.add(
-        'plex-library',
-        'Some collections could not be loaded',
+        DiagnosticEvent.someCollectionsCouldNotBeLoaded,
         {'count': 2},
       );
-      controller.diagnostics.add('plex', 'Cast portrait unavailable', {
+      controller.diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
         'code': 'portrait_https',
         'failureCode': 'unavailable',
         'count': 1,
       });
-      controller.diagnostics.add('plex', 'Cast portrait unavailable', {
+      controller.diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
         'code': 'portrait_unknown_secret',
         'failureCode': 'private-failure',
         'count': 1,
@@ -168,7 +167,7 @@ void main() {
       final controller = FixtureController();
       addTearDown(controller.dispose);
       controller.diagnostics.enabled = true;
-      controller.diagnostics.add('application', 'Operation failed', {
+      controller.diagnostics.add(DiagnosticEvent.operationFailed, {
         'code': 'unexpected',
       });
       final semantics = tester.ensureSemantics();
@@ -197,7 +196,7 @@ void main() {
       final reservedSlot = tester.getRect(
         find.byKey(const ValueKey('diagnostics-new-events-slot')),
       );
-      controller.diagnostics.add('plex-auth', 'PIN cancellation failed');
+      controller.diagnostics.add(DiagnosticEvent.pinCancellationFailed);
       await tester.pumpAndSettle();
       expect(find.text('1 new event'), findsOneWidget);
       expect(
@@ -234,7 +233,7 @@ void main() {
         final controller = FixtureController();
         addTearDown(controller.dispose);
         controller.diagnostics.enabled = true;
-        controller.diagnostics.add('application', 'Operation failed', {
+        controller.diagnostics.add(DiagnosticEvent.operationFailed, {
           'code': 'unexpected',
         });
         await show(tester, controller);
@@ -253,7 +252,7 @@ void main() {
         expect(initialSlot.height, greaterThan(0));
 
         for (var count = 1; count <= 10; count++) {
-          controller.diagnostics.add('plex-auth', 'Synthetic event $count');
+          controller.diagnostics.add(DiagnosticEvent.pinCancellationFailed);
           await tester.pumpAndSettle();
           expect(
             find.text('$count new ${count == 1 ? 'event' : 'events'}'),
@@ -281,7 +280,7 @@ void main() {
     final controller = FixtureController();
     addTearDown(controller.dispose);
     controller.diagnostics.enabled = true;
-    controller.diagnostics.add('guide', 'Guide refreshed');
+    controller.diagnostics.add(DiagnosticEvent.guideScheduleLoadTimedOut);
     await show(tester, controller);
     await tester.tap(find.text('Technical details'));
     await tester.pumpAndSettle();

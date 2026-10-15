@@ -555,7 +555,7 @@ class PlayerCoordinator extends ChangeNotifier {
           )
           .firstOrNull
           ?.codec;
-      lineup.diagnostics.add('playback', 'Native playback failed', {
+      lineup.diagnostics.add(DiagnosticEvent.nativePlaybackFailed, {
         'failureCode': event.status.failureCode,
         'httpStatus': event.status.httpStatus,
         'videoCodec': event.telemetry.videoCodec,
@@ -2074,7 +2074,7 @@ class PlayerCoordinator extends ChangeNotifier {
       _ => 'unexpected',
     };
     final code = Diagnostics.failureCategory(rawCode) ?? 'unexpected';
-    lineup.diagnostics.add('playback', 'Playback request failed', {
+    lineup.diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
       if (operation != 'request') 'operation': operation,
       'code': code,
     });

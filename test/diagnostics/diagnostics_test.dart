@@ -105,7 +105,7 @@ void main() {
         'playlist-scale-exceeded',
       ];
       for (final category in categories) {
-        diagnostics.add('playback', 'Playback request failed', {
+        diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
           'code': category,
         });
       }
@@ -200,15 +200,19 @@ void main() {
     d.dispose();
   });
 
-  test('redacts tokens, URLs, credentials, and paths before storage', () {
+  test('redacts sensitive text and stores only fixed event messages', () {
     final diagnostics = Diagnostics();
     diagnostics.enabled = true;
-    diagnostics.add(
-      'plex',
+    final redacted = Diagnostics.redact(
       'Bearer abc https://plex.test/file?X-Plex-Token=secret /Users/person/movie.mkv',
-      {'container': 'mpeg-ts', 'authorization': 'secret'},
     );
+    expect(redacted, 'Bearer [REDACTED] [URL] [PATH]');
+    diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
+      'container': 'mpeg-ts',
+      'authorization': 'secret',
+    });
     final entry = diagnostics.entries.single;
+    expect(entry.message, 'Cast portrait unavailable');
     expect(entry.message, isNot(contains('abc')));
     expect(entry.message, isNot(contains('secret')));
     expect(entry.message, isNot(contains('/Users/person')));
@@ -217,7 +221,7 @@ void main() {
 
   test('stores only bounded structured context', () {
     final diagnostics = Diagnostics()..enabled = true;
-    diagnostics.add('playback', 'Playback facts', {
+    diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
       'code': 'offline',
       'failureCode': 'http_error',
       'operation': 'seek',
@@ -255,7 +259,7 @@ void main() {
     'replaces invalid or oversized strings and drops invalid primitives',
     () {
       final diagnostics = Diagnostics()..enabled = true;
-      diagnostics.add('playback', 'Playback facts', {
+      diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
         'code': 'opaque secret sentinel',
         'failureCode': 'x' * 65,
         'container': true,
@@ -291,12 +295,12 @@ void main() {
     final diagnostics = Diagnostics();
     var notifications = 0;
     diagnostics.addListener(() => notifications++);
-    diagnostics.add('plex', 'not retained');
+    diagnostics.add(DiagnosticEvent.castPortraitUnavailable);
     expect(diagnostics.entries, isEmpty);
     expect(notifications, 0);
 
     diagnostics.enabled = true;
-    diagnostics.add('plex', 'retained');
+    diagnostics.add(DiagnosticEvent.castPortraitUnavailable);
     expect(diagnostics.entries, hasLength(1));
     expect(notifications, 2);
 
@@ -311,7 +315,7 @@ void main() {
     expect(diagnostics.enabled, isFalse);
     expect(notifications, 3);
 
-    diagnostics.add('plex', 'ignored after disposal');
+    diagnostics.add(DiagnosticEvent.castPortraitUnavailable);
     expect(diagnostics.entries, isEmpty);
     expect(notifications, 3);
   });
@@ -319,20 +323,22 @@ void main() {
   test('retention remains bounded', () {
     final diagnostics = Diagnostics()..enabled = true;
     for (var index = 0; index < 251; index++) {
-      diagnostics.add('plex', 'entry $index');
+      diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
+        'count': index,
+      });
     }
 
     expect(diagnostics.entries, hasLength(250));
-    expect(diagnostics.entries.first.message, 'entry 1');
+    expect(diagnostics.entries.first.context, {'count': 1});
   });
 
   test('support report exports only typed facts and known producer events', () {
     final diagnostics = Diagnostics()..enabled = true;
-    diagnostics.add('playback', 'Playback request failed', {
+    diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
       'operation': 'seek',
       'code': 'http_error',
     });
-    diagnostics.add('safe-looking-area', 'safe-looking-secret-sentinel', {
+    diagnostics.add(DiagnosticEvent.nativePlaybackFailed, {
       'videoCodec': 'safe-looking-secret-sentinel',
     });
     final snapshot = diagnostics.snapshot(
@@ -358,7 +364,30 @@ void main() {
       ),
     );
 
-    final report = diagnostics.buildSupportReport(snapshot);
+    // An external snapshot still cannot admit an unknown event, even with
+    // otherwise recognized context. Typed producers do not replace this gate.
+    final report = diagnostics.buildSupportReport(
+      DiagnosticSupportSnapshot(
+        reportTime: snapshot.reportTime,
+        timeZone: snapshot.timeZone,
+        appVersion: snapshot.appVersion,
+        appBuild: snapshot.appBuild,
+        platform: snapshot.platform,
+        recordingEnabled: snapshot.recordingEnabled,
+        plexServerSelected: snapshot.plexServerSelected,
+        plexConnectionVerified: snapshot.plexConnectionVerified,
+        playback: snapshot.playback,
+        events: [
+          ...snapshot.events,
+          DiagnosticEntry(
+            snapshot.reportTime,
+            'safe-looking-area',
+            'safe-looking-secret-sentinel',
+            const {'videoCodec': 'h264'},
+          ),
+        ],
+      ),
+    );
     expect(report, contains('Time zone: Pacific Standard Time'));
     expect(report, contains('Playback method: Unknown'));
     expect(report, contains('Plex server selected: Yes'));
@@ -385,10 +414,10 @@ void main() {
     'support report includes safe collection and portrait producer facts',
     () {
       final diagnostics = Diagnostics()..enabled = true;
-      diagnostics.add('plex-library', 'Some collections could not be loaded', {
+      diagnostics.add(DiagnosticEvent.someCollectionsCouldNotBeLoaded, {
         'count': 2,
       });
-      diagnostics.add('plex-library', 'Collection discovery unavailable', {
+      diagnostics.add(DiagnosticEvent.collectionDiscoveryUnavailable, {
         'count': 1,
       });
       const portraitSources = [
@@ -406,14 +435,14 @@ void main() {
       ];
       for (final source in portraitSources) {
         for (final failure in portraitFailures) {
-          diagnostics.add('plex', 'Cast portrait unavailable', {
+          diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
             'code': source,
             'failureCode': failure,
             'count': 1,
           });
         }
       }
-      diagnostics.add('plex', 'Cast portrait unavailable', {
+      diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
         'code': 'portrait_unknown_secret',
         'failureCode': 'private-failure',
         'count': 1,
@@ -467,7 +496,7 @@ void main() {
 
   test('library scan timing keeps only bounded redacted scan facts', () {
     final diagnostics = Diagnostics()..enabled = true;
-    diagnostics.add('plex-library', 'Library scan timing', {
+    diagnostics.add(DiagnosticEvent.libraryScanTiming, {
       'scanPath': 'launch',
       'libraryType': 'show',
       'itemsMs': 1200,
@@ -479,7 +508,7 @@ void main() {
       'shows': 80,
       'title': 'Private Collection',
     });
-    diagnostics.add('plex-library', 'Library scan timing', {
+    diagnostics.add(DiagnosticEvent.libraryScanTiming, {
       'scanPath': 'Private Path',
       'itemsMs': -1,
       'collectionsMs': 86400001,

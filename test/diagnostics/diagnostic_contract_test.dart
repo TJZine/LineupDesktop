@@ -141,6 +141,10 @@ void main() {
     () {
       final diagnostics = Diagnostics();
       addTearDown(diagnostics.dispose);
+      expect(
+        DiagnosticEvent.values.map((event) => (event.area, event.message)),
+        _eventPairs,
+      );
       final time = DateTime.utc(2026, 10, 15, 11, 59);
       final stringKeys = _mixedCaseContext.keys.take(11);
       final snapshot = _snapshot([
@@ -196,8 +200,7 @@ void main() {
       final diagnostics = Diagnostics()..enabled = true;
       addTearDown(diagnostics.dispose);
       diagnostics.add(
-        'application',
-        'Credential cleanup failed',
+        DiagnosticEvent.credentialCleanupFailed,
         _mixedCaseContext,
       );
       expect(diagnostics.entries.single.context, _mixedCaseContext);
@@ -206,20 +209,20 @@ void main() {
         throwsUnsupportedError,
       );
       for (final key in _mixedCaseContext.keys.take(11)) {
-        diagnostics.add('playback', 'Playback request failed', {
+        diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
           key: 'opaque-safe',
         });
         expect(diagnostics.entries.last.context, {key: 'opaque-safe'});
         for (final value in ['', 'unsafe synthetic value', 'x' * 65]) {
-          diagnostics.add('playback', 'Playback request failed', {key: value});
+          diagnostics.add(DiagnosticEvent.playbackRequestFailed, {key: value});
           expect(diagnostics.entries.last.context, {key: 'unexpected'});
         }
         for (final value in <Object?>[null, true, 1, 1.5, <String>[]]) {
-          diagnostics.add('playback', 'Playback request failed', {key: value});
+          diagnostics.add(DiagnosticEvent.playbackRequestFailed, {key: value});
           expect(diagnostics.entries.last.context, isEmpty);
         }
       }
-      diagnostics.add('playback', 'Playback request failed', {
+      diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
         'code': 'unsafe synthetic value',
         'container': 'unsafe synthetic value',
         'videoCodec': 'opaque-safe',
@@ -265,7 +268,7 @@ void main() {
     final controller = FixtureController();
     addTearDown(controller.dispose);
     controller.diagnostics.enabled = true;
-    controller.diagnostics.add('playback', 'Playback request failed', {
+    controller.diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
       'code': 'HTTP_ERROR',
       'operation': 'SEEK',
       'videoCodec': 'opaque-safe',

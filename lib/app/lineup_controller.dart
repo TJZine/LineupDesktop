@@ -612,7 +612,7 @@ class LineupController extends ChangeNotifier {
       await _clearCredentials();
     } catch (exception) {
       cleanupFailure = exception;
-      diagnostics.add('application', 'Credential cleanup failed', {
+      diagnostics.add(DiagnosticEvent.credentialCleanupFailed, {
         'code': 'credential-cleanup-failed',
       });
     }
@@ -623,7 +623,7 @@ class LineupController extends ChangeNotifier {
         if (exception is! PlexException ||
             exception.code != 'resource-not-found') {
           pinFailure = exception;
-          diagnostics.add('plex-auth', 'PIN cancellation failed', {
+          diagnostics.add(DiagnosticEvent.pinCancellationFailed, {
             'code': _linkFailureCode(exception),
           });
         }
@@ -686,7 +686,7 @@ class LineupController extends ChangeNotifier {
         if (operation != _epoch) return;
         _secureCancellationRequired = true;
         _error = 'Lineup could not confirm secure credential storage. Retry secure cancellation before signing in again.';
-        diagnostics.add('plex-auth', 'Credential write failed', {
+        diagnostics.add(DiagnosticEvent.credentialWriteFailed, {
           'code': 'credential-write-failed',
         });
         notifyListeners();
@@ -715,13 +715,13 @@ class LineupController extends ChangeNotifier {
       _activePin = null;
       final code = _linkFailureCode(exception);
       _error = _linkFailureMessage(code);
-      diagnostics.add('plex-auth', 'PIN poll failed', {'code': code});
+      diagnostics.add(DiagnosticEvent.pinPollFailed, {'code': code});
       notifyListeners();
       try {
         await plex.cancelPin(pin);
       } catch (cancelException) {
         if (operation != _epoch) return;
-        diagnostics.add('plex-auth', 'PIN cancellation failed', {
+        diagnostics.add(DiagnosticEvent.pinCancellationFailed, {
           'code': _linkFailureCode(cancelException),
         });
       }
@@ -1060,7 +1060,7 @@ class LineupController extends ChangeNotifier {
           _error = failure is PlexException
               ? failure.message
               : 'Lineup could not complete that request.';
-          diagnostics.add('application', 'Operation failed', {
+          diagnostics.add(DiagnosticEvent.operationFailed, {
             'code': failure is PlexException ? failure.code : 'unexpected',
           });
         }
@@ -1192,7 +1192,7 @@ class LineupController extends ChangeNotifier {
             if (!_isCurrent(operation)) return;
             final items = scanned.items;
             if (scanned.timing case final timing?) {
-              diagnostics.add('plex-library', 'Library scan timing', {
+              diagnostics.add(DiagnosticEvent.libraryScanTiming, {
                 'scanPath': settleFailures ? 'setup' : 'launch',
                 'libraryType': library.type.name,
                 'itemsMs': timing.items.inMilliseconds,
@@ -1261,7 +1261,7 @@ class LineupController extends ChangeNotifier {
           rethrow;
         }
         catalogUnavailable = true;
-        diagnostics.add('plex-library', 'Playlist discovery unavailable', {
+        diagnostics.add(DiagnosticEvent.playlistDiscoveryUnavailable, {
           'code': exception.code,
         });
         if (_requiredPlaylistIds().isNotEmpty) {
@@ -1285,7 +1285,7 @@ class LineupController extends ChangeNotifier {
       _scan.playlistProgress = null;
       _scan.completeCatalog(catalog, unavailable: catalogUnavailable);
       if (catalog.failedIds.isNotEmpty) {
-        diagnostics.add('plex-library', 'Some playlists could not be loaded', {
+        diagnostics.add(DiagnosticEvent.somePlaylistsCouldNotBeLoaded, {
           'count': catalog.failedIds.length,
         });
       }
@@ -1297,14 +1297,12 @@ class LineupController extends ChangeNotifier {
           .intersection(ids)
           .length;
       if (failedTitleCount > 0) {
-        diagnostics.add(
-          'plex-library',
-          'Some collections could not be loaded',
-          {'count': failedTitleCount},
-        );
+        diagnostics.add(DiagnosticEvent.someCollectionsCouldNotBeLoaded, {
+          'count': failedTitleCount,
+        });
       }
       if (unavailableCount > 0) {
-        diagnostics.add('plex-library', 'Collection discovery unavailable', {
+        diagnostics.add(DiagnosticEvent.collectionDiscoveryUnavailable, {
           'count': unavailableCount,
         });
       }
@@ -2054,7 +2052,7 @@ class LineupController extends ChangeNotifier {
     int operation,
   ) {
     final descriptor = plex.playbackDescriptor(server: endpoint, item: item);
-    diagnostics.add('playback', 'Plex playback selected', {
+    diagnostics.add(DiagnosticEvent.plexPlaybackSelected, {
       'container': item.container,
       'videoCodec': item.videoCodec,
       'audioCodec': item.audioCodec,
@@ -2157,7 +2155,7 @@ class LineupController extends ChangeNotifier {
               _ => 'transport',
             }
           : 'transport';
-      diagnostics.add('plex', 'Cast portrait unavailable', {
+      diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
         'code': 'portrait_$source',
         'failureCode': failure,
         'count': 1,
@@ -2248,7 +2246,7 @@ class LineupController extends ChangeNotifier {
       } catch (exception) {
         if (_disposed) return false;
         _error = 'Lineup could not securely sign out. Check system credential storage and try again.';
-        diagnostics.add('application', 'Credential cleanup failed', {
+        diagnostics.add(DiagnosticEvent.credentialCleanupFailed, {
           'code': exception is PlexException ? exception.code : 'unexpected',
         });
         return false;
@@ -2334,7 +2332,7 @@ class LineupController extends ChangeNotifier {
     try {
       await store.save(state);
     } catch (_) {
-      diagnostics.add('application', 'State save failed', {
+      diagnostics.add(DiagnosticEvent.stateSaveFailed, {
         'code': 'write-failed',
       });
       rethrow;
@@ -2634,7 +2632,7 @@ class LineupController extends ChangeNotifier {
           : 'Lineup could not complete that request.';
       _restoringSavedLineup = false;
       _stage = fallbackStage;
-      diagnostics.add('application', 'Operation failed', {
+      diagnostics.add(DiagnosticEvent.operationFailed, {
         'code': exception is PlexException ? exception.code : 'unexpected',
       });
       return false;

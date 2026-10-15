@@ -8,6 +8,7 @@ import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
 import '../channels/channel_artwork.dart';
 import '../channels/scheduler.dart';
+import '../diagnostics/diagnostics.dart';
 import '../settings/lineup_settings.dart';
 
 typedef GuideScheduleLoader = Future<ScheduleIndex> Function(Channel channel);
@@ -288,7 +289,7 @@ class GuideController extends ChangeNotifier {
     try {
       await completer.future.timeout(currentProgramWaitTimeout);
     } on TimeoutException {
-      lineup.diagnostics.add('guide', 'Guide current program wait timed out', {
+      lineup.diagnostics.add(DiagnosticEvent.guideCurrentProgramWaitTimedOut, {
         'code': 'wait_timeout',
       });
       return null;
@@ -826,7 +827,7 @@ class GuideController extends ChangeNotifier {
       _schedules.remove(channel.id);
       _failedChannelIds.add(channel.id);
       if (error is TimeoutException) {
-        lineup.diagnostics.add('guide', 'Guide schedule load timed out', {
+        lineup.diagnostics.add(DiagnosticEvent.guideScheduleLoadTimedOut, {
           'code': 'timeout',
         });
       }
