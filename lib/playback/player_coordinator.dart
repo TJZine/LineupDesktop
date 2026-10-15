@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
@@ -689,6 +691,7 @@ class PlayerCoordinator extends ChangeNotifier {
       if (_disposed || generation != _tuneGeneration) return;
       await _stopQuietly();
       if (_disposed || generation != _tuneGeneration) return;
+      _reportUnexpectedPlaybackFailure(error, 'while loading initial media');
       _recordPlaybackFailure(error);
       _error = _safePlaybackError(error);
       _canRetry = false;
@@ -763,6 +766,21 @@ class PlayerCoordinator extends ChangeNotifier {
         generation == _tuneGeneration &&
         contentGeneration == lineup.contentGeneration;
     final previousChannelId = lineup.currentChannelId;
+    Future<bool> fail(Object error) async {
+      _invalidateAuthorizationRecovery();
+      if (active != null && identical(_active, active)) _releaseActive();
+      if (request != null) _releaseActive(ifRequest: request);
+      if (replaced != null) _releaseActive(ifRequest: replaced);
+      if (request != null) await _stopQuietly();
+      if (!ownsTune()) return false;
+      _tuning = false;
+      _canRetry = true;
+      _recordPlaybackFailure(error);
+      _error = _safePlaybackError(error);
+      _setOverlay(PlayerOverlay.error, timed: false);
+      return false;
+    }
+
     try {
       request = lineup.playbackFor(program.scheduled.item.id);
       replaced = _active?.request;
@@ -813,19 +831,15 @@ class PlayerCoordinator extends ChangeNotifier {
           lineup.currentChannelId == channelId &&
           !_tuning &&
           _error == null;
+    } on LineupScopeSuperseded catch (error) {
+      return await fail(error);
+    } on _PlaybackSuperseded catch (error) {
+      return await fail(error);
     } catch (error) {
-      _invalidateAuthorizationRecovery();
-      if (active != null && identical(_active, active)) _releaseActive();
-      if (request != null) _releaseActive(ifRequest: request);
-      if (replaced != null) _releaseActive(ifRequest: replaced);
-      if (request != null) await _stopQuietly();
-      if (!ownsTune()) return false;
-      _tuning = false;
-      _canRetry = true;
-      _recordPlaybackFailure(error);
-      _error = _safePlaybackError(error);
-      _setOverlay(PlayerOverlay.error, timed: false);
-      return false;
+      if (ownsTune()) {
+        _reportUnexpectedPlaybackFailure(error, 'while tuning a channel');
+      }
+      return await fail(error);
     } finally {
       if (generation == _tuneGeneration) _resolvingProgram = null;
     }
@@ -1014,6 +1028,10 @@ class PlayerCoordinator extends ChangeNotifier {
                 _ownsLoad(recovery.replacement ?? recovery.rejected);
       if (!ownsFailure) return null;
       if (identical(_active?.request, load.request)) {
+        _reportUnexpectedPlaybackFailure(
+          error,
+          'while completing a playback part load',
+        );
         await _failTransition(error, load.tuneGeneration);
         return null;
       }
@@ -1044,7 +1062,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (!_ownsLoad(rejected) ||
         !identical(_authorizationRecovery, recovery) ||
         (wasActive && !identical(_active?.request, rejected.request))) {
-      throw StateError('Playback request was superseded.');
+      throw const _PlaybackSuperseded();
     }
     final loaded = await _loadPartAtPosition(
       next,
@@ -1056,7 +1074,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (loaded == null ||
         !_ownsLoad(recovery.replacement!) ||
         (wasActive && !identical(_active?.request, rejected.request))) {
-      throw StateError('Playback request was superseded.');
+      throw const _PlaybackSuperseded();
     }
     if (wasActive) _replaceActiveRequest(next);
     return next;
@@ -1091,13 +1109,25 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> _settleActiveAuthorization(
     _AuthorizationRecovery recovery,
   ) async {
+    Future<void> fail(Object error) async {
+      if (!_ownsAuthorizationRecoveryFailure(recovery)) return;
+      await _failTransition(error, recovery.rejected.tuneGeneration);
+    }
+
     try {
       await recovery.result;
       _clearAuthorizationRecovery(recovery);
       if (!_disposed) notifyListeners();
+    } on _PlaybackSuperseded catch (error) {
+      await fail(error);
     } catch (error) {
-      if (!_ownsAuthorizationRecoveryFailure(recovery)) return;
-      await _failTransition(error, recovery.rejected.tuneGeneration);
+      if (_ownsAuthorizationRecoveryFailure(recovery)) {
+        _reportUnexpectedPlaybackFailure(
+          error,
+          'while recovering playback authorization',
+        );
+      }
+      await fail(error);
     }
   }
 
@@ -1319,6 +1349,13 @@ class PlayerCoordinator extends ChangeNotifier {
         ? null
         : _interactivePartForPosition(playback, position);
     final load = _activeLoad;
+    void fail(Object error) {
+      if (_ownsSeek(seekGeneration, tuneGeneration)) {
+        _publishControlFailure('seek', error);
+      }
+      return;
+    }
+
     try {
       if (playback != null && target != null && load != null) {
         if (target.$1 != load.partIndex) {
@@ -1340,10 +1377,14 @@ class PlayerCoordinator extends ChangeNotifier {
       } else {
         await player.seek(target?.$2 ?? position);
       }
+    } on _PlaybackSuperseded catch (error) {
+      fail(error);
+      return;
     } catch (error) {
       if (_ownsSeek(seekGeneration, tuneGeneration)) {
-        _publishControlFailure('seek', error);
+        _reportUnexpectedPlaybackFailure(error, 'while seeking playback');
       }
+      fail(error);
       return;
     }
     if (!_ownsSeek(seekGeneration, tuneGeneration)) return;
@@ -1984,6 +2025,29 @@ class PlayerCoordinator extends ChangeNotifier {
     _releaseActive();
   }
 
+  void _reportUnexpectedPlaybackFailure(Object error, String context) {
+    switch (error) {
+      case PlayerUnavailable() ||
+          PlexException() ||
+          LineupScopeSuperseded() ||
+          _PlaybackSuperseded() ||
+          TimeoutException() ||
+          PlatformException() ||
+          FileSystemException():
+        return;
+      default:
+        // Caught values and stacks may contain media URLs or credentials. The
+        // report is deliberately new, fixed data, just like cleanup reporting.
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: StateError('Unexpected playback operation failure.'),
+            library: 'Lineup Desktop',
+            context: ErrorDescription(context),
+          ),
+        );
+    }
+  }
+
   void _recordPlaybackFailure(Object error, {String operation = 'request'}) {
     final rawCode = switch (error) {
       PlexException(:final code) => code,
@@ -2060,6 +2124,10 @@ class PlayerCoordinator extends ChangeNotifier {
       );
     }
   }
+}
+
+final class _PlaybackSuperseded implements Exception {
+  const _PlaybackSuperseded();
 }
 
 // Authorization refresh and channel metadata updates retain this session identity.

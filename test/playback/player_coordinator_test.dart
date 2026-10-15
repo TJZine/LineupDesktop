@@ -2072,6 +2072,231 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.error);
   });
 
+  for (final failure in <Object>[
+    const FileSystemException('Synthetic save IO failure.'),
+    const LineupScopeSuperseded(),
+    const PlayerUnavailable('Synthetic native failure.'),
+    const PlexException(
+      'authorization-unavailable',
+      'Authorization unavailable.',
+    ),
+    TimeoutException('Synthetic timeout.'),
+    PlatformException(code: 'synthetic'),
+  ]) {
+    test(
+      'expected tune failure does not report: ${failure.runtimeType}',
+      () async {
+        final reports = <FlutterErrorDetails>[];
+        final previousHandler = FlutterError.onError;
+        FlutterError.onError = reports.add;
+        addTearDown(() => FlutterError.onError = previousHandler);
+        final lineup = _FailingPersistenceLineup(failure: failure);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        )..requestViewport(0, 2);
+        await Future<void>.delayed(Duration.zero);
+        final player = _Player();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+
+        expect(await coordinator.tune('channel-b'), isFalse);
+
+        expect(reports, isEmpty);
+        expect(coordinator.tuning, isFalse);
+        expect(
+          coordinator.error,
+          failure is PlexException
+              ? failure.message
+              : 'Playback could not start. Retry or choose another channel.',
+        );
+        expect(lineup.currentChannelId, 'channel-0');
+        expect(player.stops, 1);
+      },
+    );
+  }
+
+  for (final operation in ['initial media', 'tune', 'recovery', 'seek']) {
+    for (final privatePayload in [false, true]) {
+      test(
+        'unexpected $operation reports fixed data (private=$privatePayload)',
+        () async {
+          const sentinel = 'private-operation-token';
+          final failure = privatePayload
+              ? const FormatException(
+                  'https://private.test/media?X-Plex-Token=$sentinel',
+                )
+              : StateError('Synthetic programming failure.');
+          final reports = <FlutterErrorDetails>[];
+          final previousHandler = FlutterError.onError;
+          FlutterError.onError = reports.add;
+          addTearDown(() => FlutterError.onError = previousHandler);
+          final lineup = operation == 'tune'
+              ? _FailingPersistenceLineup(failure: failure)
+              : _TestLineup(
+                  recoverAuthorization: operation == 'recovery',
+                  failAuthorizationRecovery: operation == 'recovery',
+                  authorizationRecoveryFailure: failure,
+                );
+          lineup.diagnostics.enabled = true;
+          final guide = GuideController(
+            lineup: lineup,
+            loadSchedule: (channel) async => _schedule(channel),
+          )..requestViewport(0, 2);
+          await Future<void>.delayed(Duration.zero);
+          final _Player player = switch (operation) {
+            'initial media' => _LoadFailurePlayer(failure: failure),
+            'seek' => _FailingSeekPlayer(failure),
+            _ => _EventPlayer(),
+          };
+          if (player is _EventPlayer) addTearDown(player.close);
+          final coordinator = PlayerCoordinator(
+            player: player,
+            lineup: lineup,
+            guide: guide,
+          );
+          addTearDown(lineup.dispose);
+          addTearDown(guide.dispose);
+          addTearDown(coordinator.dispose);
+
+          switch (operation) {
+            case 'initial media':
+              await coordinator.loadInitialMedia(
+                Uri.parse('https://synthetic.test/local'),
+              );
+            case 'tune':
+              expect(await coordinator.tune('channel-b'), isFalse);
+            case 'recovery':
+              expect(await coordinator.tune('channel-b'), isTrue);
+              final events = player as _EventPlayer;
+              events.emitError(
+                recoverable: true,
+                generation: events.loadGenerations.single,
+                failureCode: 'http_error',
+                httpStatus: 401,
+              );
+              await pumpEventQueue(times: 5);
+            case 'seek':
+              await coordinator.seekTo(const Duration(seconds: 5));
+          }
+
+          expect(reports, hasLength(1));
+          final report = reports.single;
+          expect(report.exception, isA<StateError>());
+          expect(
+            (report.exception as StateError).message,
+            'Unexpected playback operation failure.',
+          );
+          expect(report.library, 'Lineup Desktop');
+          expect(report.stack, isNull);
+          expect(report.context.toString(), switch (operation) {
+            'initial media' => 'while loading initial media',
+            'tune' => 'while tuning a channel',
+            'recovery' => 'while recovering playback authorization',
+            _ => 'while seeking playback',
+          });
+          expect(lineup.diagnostics.entries.last.context['code'], 'unexpected');
+          final evidence =
+              '${report.toString()} ${_supportReport(lineup, coordinator)} '
+              '${coordinator.error} ${coordinator.notice}';
+          expect(evidence, isNot(contains(sentinel)));
+          expect(evidence, isNot(contains('private.test')));
+          expect(evidence, isNot(contains('Synthetic programming failure.')));
+        },
+      );
+    }
+  }
+
+  for (final operation in [
+    'cross seek load',
+    'cross seek target',
+    'part advance',
+    'active recovery',
+  ]) {
+    for (final expected in [false, true]) {
+      test(
+        'active multipart failure reports once: $operation expected=$expected',
+        () async {
+          const sentinel = 'multipart-private-token';
+          final Object failure = expected
+              ? const PlayerUnavailable('Synthetic native load failure.')
+              : StateError('https://private.test/media?X-Plex-Token=$sentinel');
+          final reports = <FlutterErrorDetails>[];
+          final previousHandler = FlutterError.onError;
+          FlutterError.onError = reports.add;
+          addTearDown(() => FlutterError.onError = previousHandler);
+          final player = _SecondLoadFailurePlayer(
+            failure: failure,
+            failSeek: operation == 'cross seek target',
+          );
+          final f = _ContinuationFixture(
+            parts: _parts(
+              first: const Duration(seconds: 60),
+              second: const Duration(seconds: 60),
+            ),
+            player: player,
+            recoverAuthorization: operation == 'active recovery',
+          );
+          addTearDown(f.close);
+          f.lineup.diagnostics.enabled = true;
+          expect(await f.coordinator.tune('channel-b'), isTrue);
+
+          if (operation.startsWith('cross seek')) {
+            await f.coordinator.seekTo(const Duration(seconds: 70));
+          } else if (operation == 'part advance') {
+            f.endNaturally();
+          } else {
+            player.emitError(
+              recoverable: true,
+              generation: player.loadGenerations.single,
+              failureCode: 'http_error',
+              httpStatus: 401,
+            );
+          }
+          await pumpEventQueue(times: 5);
+
+          expect(reports, hasLength(expected ? 0 : 1));
+          if (!expected) {
+            final report = reports.single;
+            expect(
+              (report.exception as StateError).message,
+              'Unexpected playback operation failure.',
+            );
+            expect(report.stack, isNull);
+            expect(
+              report.context.toString(),
+              operation == 'active recovery'
+                  ? 'while recovering playback authorization'
+                  : 'while completing a playback part load',
+            );
+          }
+          expect(f.coordinator.tuning, isFalse);
+          expect(f.coordinator.overlay, PlayerOverlay.error);
+          expect(
+            f.coordinator.error,
+            'Playback could not start. Retry or choose another channel.',
+          );
+          expect(player.stops, 1);
+          expect(
+            f.lineup.diagnostics.entries.last.context['code'],
+            expected ? 'player_unavailable' : 'unexpected',
+          );
+          final evidence =
+              '${reports.toString()} ${_supportReport(f.lineup, f.coordinator)} '
+              '${f.coordinator.error} ${f.coordinator.notice}';
+          expect(evidence, isNot(contains(sentinel)));
+          expect(evidence, isNot(contains('private.test')));
+        },
+      );
+    }
+  }
+
   test('scope change stops playback and clears its intent', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
@@ -5502,6 +5727,10 @@ void main() {
 
   for (final operation in ['cross seek', 'part advance']) {
     test('stale $operation failure cannot mutate a newer load', () async {
+      final reports = <FlutterErrorDetails>[];
+      final previousHandler = FlutterError.onError;
+      FlutterError.onError = reports.add;
+      addTearDown(() => FlutterError.onError = previousHandler);
       final lineup = _TestLineup(
         playbackParts: _parts(
           first: const Duration(hours: 2),
@@ -5546,6 +5775,7 @@ void main() {
         '/part-2.mkv',
         '/part-1.mkv',
       ]);
+      expect(reports, isEmpty);
       expect(coordinator.error, isNull);
       expect(coordinator.overlay, isNot(PlayerOverlay.error));
       await coordinator.stop();
@@ -6182,6 +6412,10 @@ void main() {
   });
 
   test('part transition failure stops and settles playback', () async {
+    final reports = <FlutterErrorDetails>[];
+    final previousHandler = FlutterError.onError;
+    FlutterError.onError = reports.add;
+    addTearDown(() => FlutterError.onError = previousHandler);
     final lineup = _TestLineup(
       playbackParts: _parts(
         first: const Duration(hours: 2),
@@ -6211,6 +6445,15 @@ void main() {
     );
     await pumpEventQueue(times: 2);
 
+    expect(reports, hasLength(1));
+    expect(
+      (reports.single.exception as StateError).message,
+      'Unexpected playback operation failure.',
+    );
+    expect(
+      reports.single.context.toString(),
+      'while completing a playback part load',
+    );
     expect(player.loads, hasLength(2));
     expect(player.stops, 1);
     expect(coordinator.overlay, PlayerOverlay.error);
@@ -6675,9 +6918,17 @@ class _LogoutLineup extends _TestLineup {
 }
 
 class _FailingPersistenceLineup extends _TestLineup {
+  _FailingPersistenceLineup({
+    this.failure = const FileSystemException('persistence failed'),
+  });
+
+  final Object failure;
+
   @override
   Future<void> setCurrentChannel(String? id) async {
-    if (id == 'channel-b') throw StateError('persistence failed');
+    if (id == 'channel-b') {
+      Error.throwWithStackTrace(failure, StackTrace.current);
+    }
     await super.setCurrentChannel(id);
   }
 }
@@ -6859,6 +7110,11 @@ class _PreemptibleLoadPlayer extends _EventPlayer {
 }
 
 class _LoadFailurePlayer extends _Player {
+  _LoadFailurePlayer({Object? failure})
+    : failure = failure ?? StateError('load failed after dispatch');
+
+  final Object failure;
+
   @override
   Future<void> load(
     Uri media, {
@@ -6867,7 +7123,7 @@ class _LoadFailurePlayer extends _Player {
     bool startPaused = false,
   }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
-    throw StateError('load failed after dispatch');
+    Error.throwWithStackTrace(failure, StackTrace.current);
   }
 }
 
@@ -6951,6 +7207,20 @@ class _EventPlayer extends _Player {
 }
 
 class _SecondLoadFailurePlayer extends _EventPlayer {
+  _SecondLoadFailurePlayer({Object? failure, this.failSeek = false})
+    : failure = failure ?? StateError('part transition failed');
+
+  final Object failure;
+  final bool failSeek;
+
+  @override
+  Future<void> seek(Duration position) async {
+    if (failSeek && loads.length == 2) {
+      Error.throwWithStackTrace(failure, StackTrace.current);
+    }
+    await super.seek(position);
+  }
+
   @override
   Future<void> load(
     Uri media, {
@@ -6959,7 +7229,9 @@ class _SecondLoadFailurePlayer extends _EventPlayer {
     bool startPaused = false,
   }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
-    if (loads.length == 2) throw StateError('part transition failed');
+    if (loads.length == 2 && !failSeek) {
+      Error.throwWithStackTrace(failure, StackTrace.current);
+    }
   }
 }
 
@@ -7192,6 +7464,17 @@ class _BlockingControlPlayer extends _EventPlayer {
     selectedTracks.add((type, id));
     if (!selectStarted.isCompleted) selectStarted.complete();
     await releaseSelect.future;
+  }
+}
+
+class _FailingSeekPlayer extends _Player {
+  _FailingSeekPlayer(this.failure);
+
+  final Object failure;
+
+  @override
+  Future<void> seek(Duration position) async {
+    Error.throwWithStackTrace(failure, StackTrace.current);
   }
 }
 
