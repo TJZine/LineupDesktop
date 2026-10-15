@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -103,6 +104,7 @@ void main() {
   testWidgets('NF-29 query projection failure publishes once after the frame', (
     tester,
   ) async {
+    await tester.pumpWidget(const SizedBox.shrink());
     final lineup = _TestLineup(_channels(1));
     addTearDown(lineup.dispose);
     var now = DateTime.utc(2026, 1, 1);
@@ -129,7 +131,7 @@ void main() {
     addTearDown(guide.dispose);
     final id = lineup.channels.single.id;
     guide.requestChannels(lineup.channels);
-    await _settle();
+    await tester.pump();
     var notifications = 0;
     guide.addListener(() => notifications++);
 
