@@ -49,6 +49,10 @@ class PlexClient {
   static const maximumLibraryCollections = 100000;
   static const maximumLibraryCollectionMembers = 100000;
   static const maximumLibraryMetadataPages = 1000;
+  static const maximumLibraryItemPages = 1000;
+  static const maximumPlaylistCatalogPages = 1000;
+  static const maximumPlaylistItemPages = 1000;
+  static const maximumLibraryMetadataEntries = 100000;
   final _collectionRequests = _CollectionRequestPool(8);
 
   Map<String, String> _headers([String? token]) => {
@@ -274,8 +278,7 @@ class PlexClient {
                 authorizationError: null as PlexException?,
               );
             } on PlexException catch (error) {
-              if (error.code != 'auth-required' &&
-                  error.code != 'access-denied') {
+              if (!error.isAuthorizationFailure) {
                 rethrow;
               }
               return (
@@ -390,74 +393,49 @@ class PlexClient {
     required void Function(PlexLibraryPageProgress progress) onProgress,
     Future<void>? cancelled,
   }) async {
-    final output = <PlexMediaItem>[];
     final seenIds = <String>{};
-    var start = 0;
-    var rawConsumed = 0;
-    int? knownTotal;
-    const pageSize = 100;
-    for (var page = 0; page < 1000; page++) {
-      if (!isCurrent()) {
-        throw const PlexException('cancelled', 'Library scan cancelled.');
-      }
-      final uri = server
+    void checkCurrent() {
+      if (!isCurrent()) throw _scanCancelledException;
+    }
+
+    return _pageMetadata(
+      request: (start) => server
           .resolve('/library/sections/$libraryId/all')
           .replace(
             queryParameters: {
               'type': libraryType == PlexLibraryType.show ? '4' : '1',
               'X-Plex-Container-Start': '$start',
-              'X-Plex-Container-Size': '$pageSize',
+              'X-Plex-Container-Size': '100',
             },
-          );
-      final json = await _serverJson(uri, token, cancelled: cancelled);
-      if (!isCurrent()) {
-        throw const PlexException('cancelled', 'Library scan cancelled.');
-      }
-      final validated = _validatePageEnvelope(
-        json,
-        start: start,
-        pageSize: pageSize,
-        rawConsumed: rawConsumed,
-        knownTotal: knownTotal,
-        invalid: _libraryPageException,
-        oversized: const PlexException(
-          'library-page-too-large',
-          'Plex returned more library items than requested.',
-        ),
-      );
-      knownTotal = validated.knownTotal;
-      final metadata = validated.metadata;
-      final pageItems = <PlexMediaItem>[];
-      for (final raw in metadata) {
-        final item = parseMediaItem(raw, libraryId: libraryId);
-        if (!seenIds.add(item.id)) {
-          throw const PlexException(
-            'library-page-not-progressing',
-            'Plex returned a library page without progress.',
-          );
+          ),
+      token: token,
+      cancelled: cancelled,
+      checkCurrent: checkCurrent,
+      maximumPages: maximumLibraryItemPages,
+      invalid: _libraryPageException,
+      oversized: const PlexException(
+        'library-page-too-large',
+        'Plex returned more library items than requested.',
+      ),
+      pageLimit: () => const PlexException(
+        'library-scale-exceeded',
+        'This library is too large to scan safely.',
+      ),
+      parsePage: (metadata) {
+        final pageItems = <PlexMediaItem>[];
+        for (final raw in metadata) {
+          final item = parseMediaItem(raw, libraryId: libraryId);
+          if (!seenIds.add(item.id)) {
+            throw const PlexException(
+              'library-page-not-progressing',
+              'Plex returned a library page without progress.',
+            );
+          }
+          pageItems.add(item);
         }
-        pageItems.add(item);
-      }
-      output.addAll(pageItems);
-      rawConsumed += metadata.length;
-      if (!isCurrent()) {
-        throw const PlexException('cancelled', 'Library scan cancelled.');
-      }
-      onProgress((
-        completedPages: page + 1,
-        completedItems: output.length,
-        totalItems: knownTotal,
-      ));
-      if (knownTotal != null) {
-        if (rawConsumed == knownTotal) return output;
-      } else if (metadata.isEmpty) {
-        return output;
-      }
-      start += metadata.length;
-    }
-    throw const PlexException(
-      'library-scale-exceeded',
-      'This library is too large to scan safely.',
+        return pageItems;
+      },
+      onProgress: onProgress,
     );
   }
 
@@ -566,15 +544,14 @@ class PlexClient {
     final abort = Completer<void>();
     var callerCancelled = false;
     var finished = false;
-    if (cancelled != null) {
-      unawaited(
-        cancelled.then((_) {
-          if (finished) return;
-          callerCancelled = true;
-          if (!abort.isCompleted) abort.complete();
-        }),
-      );
-    }
+    unawaited(
+      _joinCancellation(
+        cancelled,
+        abort,
+        isFinished: () => finished,
+        onCallerCancelled: () => callerCancelled = true,
+      ),
+    );
     void checkCurrent() {
       if (!isCurrent() || callerCancelled || abort.isCompleted) {
         if (!abort.isCompleted) abort.complete();
@@ -624,19 +601,13 @@ class PlexClient {
       return result;
     }
 
-    const fatalCodes = {
-      'auth-invalid',
-      'auth-required',
-      'access-denied',
-      'cancelled',
-    };
     try {
       checkCurrent();
       final List<({String key, String title})> records;
       try {
         records = await list();
       } on PlexException catch (error) {
-        if (fatalCodes.contains(error.code)) rethrow;
+        if (error.isAuthorizationFailure || error.isCancellation) rethrow;
         return PlexCollectionMembership(
           failure: error is _LibraryMetadataPageLimitException
               ? PlexCollectionFailure.pagingLimitExceeded
@@ -716,7 +687,7 @@ class PlexClient {
               (members[id] ??= {}).add(record.title);
             }
           } on PlexException catch (error, stack) {
-            if (fatalCodes.contains(error.code)) {
+            if (error.isAuthorizationFailure || error.isCancellation) {
               if (!abort.isCompleted || callerCancelled || !isCurrent()) {
                 fatal ??= error;
                 fatalStack ??= stack;
@@ -774,78 +745,61 @@ class PlexClient {
     required T Function(Object? row) parseRow,
     Future<void>? cancelled,
     bool allowOversizedComplete = false,
-    int maximumEntries = 100000,
+    int maximumEntries = maximumLibraryMetadataEntries,
     void Function(int count)? onPage,
   }) async {
-    var wasCancelled = false;
+    final abort = Completer<void>();
     var finished = false;
-    if (cancelled != null) {
-      unawaited(
-        cancelled.then((_) {
-          if (!finished) wasCancelled = true;
-        }),
-      );
-    }
+    final cancellation = _joinCancellation(
+      cancelled,
+      abort,
+      isFinished: () => finished,
+    );
     void check() {
       checkCurrent();
-      if (wasCancelled) throw _scanCancelledException;
+      if (abort.isCompleted) throw _scanCancelledException;
     }
 
+    final seen = <String>{};
     try {
-      final rows = <T>[];
-      final seen = <String>{};
-      int? total;
-      for (var page = 0; page < maximumLibraryMetadataPages; page++) {
-        check();
-        final start = rows.length;
-        final json = await _serverJson(
-          base.replace(
-            queryParameters: {
-              ...base.queryParameters,
-              'X-Plex-Container-Start': '$start',
-              'X-Plex-Container-Size': '100',
-            },
-          ),
-          token,
-          cancelled: cancelled,
-        );
-        check();
-        final validated = _validatePageEnvelope(
-          json,
-          start: start,
-          pageSize: 100,
-          rawConsumed: start,
-          knownTotal: total,
-          invalid: _libraryPageException,
-          oversized: _libraryPageException,
-          allowOversizedComplete: allowOversizedComplete,
-          validateDeclaredTotal: (declaredTotal) {
-            if (declaredTotal > maximumEntries) throw _libraryScaleException;
+      return await _pageMetadata(
+        request: (start) => base.replace(
+          queryParameters: {
+            ...base.queryParameters,
+            'X-Plex-Container-Start': '$start',
+            'X-Plex-Container-Size': '100',
           },
-        );
-        total = validated.knownTotal;
-        final metadata = validated.metadata;
-        final end = start + metadata.length;
-        if (end > maximumEntries) throw _libraryScaleException;
-        for (final raw in metadata) {
-          final id = _id(
-            _record(raw, 'library metadata')['ratingKey'],
-            'metadata id',
-          );
-          if (!seen.add(id)) {
-            throw const PlexException(
-              'library-page-not-progressing',
-              'Plex returned a library page without progress.',
+        ),
+        token: token,
+        cancelled: cancellation,
+        checkCurrent: check,
+        maximumPages: maximumLibraryMetadataPages,
+        maximumEntries: maximumEntries,
+        entryLimit: () => _libraryScaleException,
+        invalid: _libraryPageException,
+        oversized: _libraryPageException,
+        allowOversizedComplete: allowOversizedComplete,
+        pageLimit: () => const _LibraryMetadataPageLimitException(),
+        // Metadata callbacks may stop sibling work; retain their original
+        // ordering without introducing a new currentness check after parsing.
+        checkAfterPage: false,
+        parsePage: (metadata) {
+          for (final raw in metadata) {
+            final id = _id(
+              _record(raw, 'library metadata')['ratingKey'],
+              'metadata id',
             );
+            if (!seen.add(id)) {
+              throw const PlexException(
+                'library-page-not-progressing',
+                'Plex returned a library page without progress.',
+              );
+            }
           }
-        }
-        onPage?.call(metadata.length);
-        rows.addAll(metadata.map(parseRow));
-        if (total == rows.length || (total == null && metadata.isEmpty)) {
-          return rows;
-        }
-      }
-      throw const _LibraryMetadataPageLimitException();
+          onPage?.call(metadata.length);
+          return metadata.map(parseRow);
+        },
+      );
     } finally {
       finished = true;
     }
@@ -860,7 +814,7 @@ class PlexClient {
   }) async {
     void checkCurrent() {
       if (!isCurrent()) {
-        throw const PlexException('cancelled', 'Library scan cancelled.');
+        throw _scanCancelledException;
       }
     }
 
@@ -873,29 +827,16 @@ class PlexClient {
       if (!attemptAbort.isCompleted) attemptAbort.complete();
     }
 
-    final Future<void> attemptCancelled;
-    final callerCancelled = cancelled;
-    if (callerCancelled == null) {
-      attemptCancelled = attemptAbort.future;
-    } else {
-      final combined = Completer<void>();
-      unawaited(
-        callerCancelled.then((_) {
-          if (!combined.isCompleted) combined.complete();
-        }),
-      );
-      unawaited(
-        attemptAbort.future.then((_) {
-          if (!combined.isCompleted) combined.complete();
-        }),
-      );
-      attemptCancelled = combined.future;
-    }
+    final attemptCancelled = _joinCancellation(
+      cancelled,
+      attemptAbort,
+      callerAbortsLocal: false,
+    );
 
     void checkAttemptCurrent() {
       checkCurrent();
       if (attemptAbort.isCompleted) {
-        throw const PlexException('cancelled', 'Library scan cancelled.');
+        throw _scanCancelledException;
       }
     }
 
@@ -911,7 +852,6 @@ class PlexClient {
     );
     final output = <PlexPlaylist>[];
     final failed = <String>{};
-    const fatalCodes = {'auth-invalid', 'auth-required', 'access-denied'};
     for (var start = 0; start < catalogRecords.length; start += 4) {
       checkCurrent();
       final batch = catalogRecords.skip(start).take(4).map((record) async {
@@ -935,11 +875,11 @@ class PlexClient {
               : PlexPlaylist(id: id, title: title, items: items);
         } on PlexException catch (exception, stack) {
           checkCurrent();
-          if (exception.code == 'cancelled') {
+          if (exception.isCancellation) {
             if (fatal == null) rethrow;
             return null;
           }
-          if (fatalCodes.contains(exception.code)) {
+          if (exception.isAuthorizationFailure) {
             fatal ??= exception;
             fatalStack ??= stack;
             signalAttemptAbort();
@@ -991,76 +931,53 @@ class PlexClient {
     required void Function() checkCurrent,
     Future<void>? cancelled,
   }) async {
-    const pageSize = 100;
     const invalidRow = PlexException(
       'playlist-page-invalid',
       'Plex returned an invalid playlist page.',
     );
-    final records = <({String id, Map<String, Object?> playlist})>[];
     final seenIds = <String>{};
-    var start = 0;
-    var rawConsumed = 0;
-    int? knownTotal;
-    for (var page = 0; page < 1000; page++) {
-      checkCurrent();
-      final json = await _serverJson(
-        server
-            .resolve('/playlists/all')
-            .replace(
-              queryParameters: {
-                'playlistType': 'video',
-                'X-Plex-Container-Start': '$start',
-                'X-Plex-Container-Size': '$pageSize',
-              },
-            ),
-        token,
-        cancelled: cancelled,
-      );
-      checkCurrent();
-      final validated = _validatePageEnvelope(
-        json,
-        start: start,
-        pageSize: pageSize,
-        rawConsumed: rawConsumed,
-        knownTotal: knownTotal,
-        invalid: _playlistPageException,
-        oversized: const PlexException(
-          'playlist-page-too-large',
-          'Plex returned more playlist items than requested.',
-        ),
-      );
-      knownTotal = validated.knownTotal;
-      for (final raw in validated.metadata) {
-        if (raw is! Map) throw invalidRow;
-        late final Map<String, Object?> playlist;
-        try {
-          playlist = Map<String, Object?>.from(raw);
-        } catch (_) {
-          throw invalidRow;
+    return _pageMetadata(
+      request: (start) => server
+          .resolve('/playlists/all')
+          .replace(
+            queryParameters: {
+              'playlistType': 'video',
+              'X-Plex-Container-Start': '$start',
+              'X-Plex-Container-Size': '100',
+            },
+          ),
+      token: token,
+      cancelled: cancelled,
+      checkCurrent: checkCurrent,
+      maximumPages: maximumPlaylistCatalogPages,
+      invalid: _playlistPageException,
+      oversized: _playlistOversizedException,
+      pageLimit: () => const PlexException(
+        'playlist-scale-exceeded',
+        'This playlist catalog is too large to load safely.',
+      ),
+      parsePage: (metadata) {
+        final records = <({String id, Map<String, Object?> playlist})>[];
+        for (final raw in metadata) {
+          if (raw is! Map) throw invalidRow;
+          late final Map<String, Object?> playlist;
+          try {
+            playlist = Map<String, Object?>.from(raw);
+          } catch (_) {
+            throw invalidRow;
+          }
+          final id = _optionalId(playlist['ratingKey']);
+          if (id == null) throw invalidRow;
+          if (!seenIds.add(id)) {
+            throw const PlexException(
+              'playlist-page-not-progressing',
+              'Plex returned a playlist page without progress.',
+            );
+          }
+          records.add((id: id, playlist: playlist));
         }
-        final id = _optionalId(playlist['ratingKey']);
-        if (id == null) throw invalidRow;
-        if (!seenIds.add(id)) {
-          throw const PlexException(
-            'playlist-page-not-progressing',
-            'Plex returned a playlist page without progress.',
-          );
-        }
-        records.add((id: id, playlist: playlist));
-      }
-      rawConsumed += validated.metadata.length;
-      checkCurrent();
-      final known = knownTotal;
-      if (known != null) {
-        if (rawConsumed == known) return records;
-      } else if (validated.metadata.isEmpty) {
         return records;
-      }
-      start += validated.metadata.length;
-    }
-    throw const PlexException(
-      'playlist-scale-exceeded',
-      'This playlist catalog is too large to load safely.',
+      },
     );
   }
 
@@ -1080,66 +997,106 @@ class PlexClient {
     required void Function() checkCurrent,
     Future<void>? cancelled,
   }) async {
-    const pageSize = 100;
     const invalidOccurrence = PlexException(
       'playlist-page-invalid',
       'Plex returned an invalid playlist page.',
     );
-    final raws = <Object?>[];
     final seenOccurrences = <String>{};
-    var start = 0;
+    return _pageMetadata(
+      request: (start) => server
+          .resolve('/playlists/${Uri.encodeComponent(playlistId)}/items')
+          .replace(
+            queryParameters: {
+              'X-Plex-Container-Start': '$start',
+              'X-Plex-Container-Size': '100',
+            },
+          ),
+      token: token,
+      cancelled: cancelled,
+      checkCurrent: checkCurrent,
+      maximumPages: maximumPlaylistItemPages,
+      invalid: _playlistPageException,
+      oversized: _playlistOversizedException,
+      pageLimit: () => const PlexException(
+        'playlist-scale-exceeded',
+        'This playlist is too large to load safely.',
+      ),
+      parsePage: (metadata) {
+        for (final raw in metadata) {
+          final occurrence = raw is Map ? raw['playlistItemID'] : null;
+          if (occurrence == null) continue;
+          if (!seenOccurrences.add(_playlistOccurrenceId(occurrence))) {
+            throw invalidOccurrence;
+          }
+        }
+        return metadata;
+      },
+    );
+  }
+
+  /// Owns envelope validation and raw-row progress, leaving identity and error
+  /// classification to each endpoint. Parsed/filtered output never sets offsets.
+  Future<List<T>> _pageMetadata<T>({
+    required Uri Function(int start) request,
+    required String token,
+    required void Function() checkCurrent,
+    required int maximumPages,
+    required PlexException invalid,
+    required PlexException oversized,
+    required PlexException Function() pageLimit,
+    required Iterable<T> Function(List<Object?> metadata) parsePage,
+    Future<void>? cancelled,
+    int? maximumEntries,
+    PlexException Function()? entryLimit,
+    bool allowOversizedComplete = false,
+    bool checkAfterPage = true,
+    void Function(PlexLibraryPageProgress progress)? onProgress,
+  }) async {
+    final rows = <T>[];
     var rawConsumed = 0;
     int? knownTotal;
-    for (var page = 0; page < 1000; page++) {
+    void validateEntries(int count) {
+      if (maximumEntries != null && count > maximumEntries) {
+        throw entryLimit!();
+      }
+    }
+
+    for (var page = 0; page < maximumPages; page++) {
       checkCurrent();
       final json = await _serverJson(
-        server
-            .resolve('/playlists/${Uri.encodeComponent(playlistId)}/items')
-            .replace(
-              queryParameters: {
-                'X-Plex-Container-Start': '$start',
-                'X-Plex-Container-Size': '$pageSize',
-              },
-            ),
+        request(rawConsumed),
         token,
         cancelled: cancelled,
       );
       checkCurrent();
       final validated = _validatePageEnvelope(
         json,
-        start: start,
-        pageSize: pageSize,
+        start: rawConsumed,
+        pageSize: 100,
         rawConsumed: rawConsumed,
         knownTotal: knownTotal,
-        invalid: _playlistPageException,
-        oversized: const PlexException(
-          'playlist-page-too-large',
-          'Plex returned more playlist items than requested.',
-        ),
+        invalid: invalid,
+        oversized: oversized,
+        allowOversizedComplete: allowOversizedComplete,
+        validateDeclaredTotal: validateEntries,
       );
       knownTotal = validated.knownTotal;
-      for (final raw in validated.metadata) {
-        final occurrence = raw is Map ? raw['playlistItemID'] : null;
-        if (occurrence == null) continue;
-        if (!seenOccurrences.add(_playlistOccurrenceId(occurrence))) {
-          throw invalidOccurrence;
-        }
+      final metadata = validated.metadata;
+      validateEntries(rawConsumed + metadata.length);
+      rows.addAll(parsePage(metadata));
+      rawConsumed += metadata.length;
+      if (checkAfterPage) checkCurrent();
+      onProgress?.call((
+        completedPages: page + 1,
+        completedItems: rows.length,
+        totalItems: knownTotal,
+      ));
+      if (rawConsumed == knownTotal ||
+          (knownTotal == null && metadata.isEmpty)) {
+        return rows;
       }
-      raws.addAll(validated.metadata);
-      rawConsumed += validated.metadata.length;
-      checkCurrent();
-      final known = knownTotal;
-      if (known != null) {
-        if (rawConsumed == known) return raws;
-      } else if (validated.metadata.isEmpty) {
-        return raws;
-      }
-      start += validated.metadata.length;
     }
-    throw const PlexException(
-      'playlist-scale-exceeded',
-      'This playlist is too large to load safely.',
-    );
+    throw pageLimit();
   }
 
   List<PlexPlaybackPartDescriptor> playbackDescriptor({
@@ -1300,13 +1257,7 @@ class PlexClient {
       if (!abort.isCompleted) abort.complete();
     }
 
-    if (cancelled != null) {
-      unawaited(
-        cancelled.then((_) {
-          if (!finished) abortRequest();
-        }),
-      );
-    }
+    unawaited(_joinCancellation(cancelled, abort, isFinished: () => finished));
     final request =
         http.AbortableRequest(method, uri, abortTrigger: abort.future)
           ..followRedirects = false
@@ -1372,7 +1323,7 @@ class PlexClient {
         'Plex did not respond in time. Try again.',
       );
     } on http.RequestAbortedException {
-      throw const PlexException('cancelled', 'Library scan cancelled.');
+      throw _scanCancelledException;
     } on TlsException {
       throw const PlexException(
         'network-unavailable',
@@ -1452,6 +1403,40 @@ const _scanCancelledException = PlexException(
   'cancelled',
   'Library scan cancelled.',
 );
+
+/// Joins caller cancellation and a local abort signal, retaining each
+/// operation's policy for whether caller cancellation also aborts local work.
+Future<void> _joinCancellation(
+  Future<void>? caller,
+  Completer<void> localAbort, {
+  bool callerAbortsLocal = true,
+  bool Function()? isFinished,
+  void Function()? onCallerCancelled,
+}) {
+  if (caller == null) return localAbort.future;
+  final joined = callerAbortsLocal ? localAbort : Completer<void>();
+  void complete() {
+    if (!joined.isCompleted) joined.complete();
+  }
+
+  if (!callerAbortsLocal) {
+    unawaited(localAbort.future.then((_) => complete()));
+  }
+  unawaited(
+    caller.then((_) {
+      if (isFinished?.call() ?? false) return;
+      onCallerCancelled?.call();
+      complete();
+    }),
+  );
+  return joined.future;
+}
+
+const _playlistOversizedException = PlexException(
+  'playlist-page-too-large',
+  'Plex returned more playlist items than requested.',
+);
+
 const _libraryPageException = PlexException(
   'library-page-invalid',
   'Plex returned an invalid library page.',
@@ -1509,38 +1494,8 @@ PlexMediaItem _annotateLibraryItem(
     ...item.genres,
     if (item.type == 'episode') ...?showGenres[item.grandparentRatingKey],
   };
-  return PlexMediaItem(
-    id: item.id,
-    title: item.title,
-    type: item.type,
-    duration: item.duration,
-    libraryId: item.libraryId,
-    parentTitle: item.parentTitle,
-    grandparentTitle: item.grandparentTitle,
-    parentRatingKey: item.parentRatingKey,
-    grandparentRatingKey: item.grandparentRatingKey,
-    thumbPath: item.thumbPath,
-    grandparentThumbPath: item.grandparentThumbPath,
-    artPath: item.artPath,
-    clearLogoPath: item.clearLogoPath,
-    parts: item.parts,
-    container: item.container,
-    videoCodec: item.videoCodec,
-    audioCodec: item.audioCodec,
-    dynamicRange: item.dynamicRange,
-    directors: item.directors,
-    actors: item.actors,
-    cast: item.cast,
-    studio: item.studio,
-    year: item.year,
-    summary: item.summary,
-    contentRating: item.contentRating,
-    seasonNumber: item.seasonNumber,
-    episodeNumber: item.episodeNumber,
-    videoResolution: item.videoResolution,
-    audioChannels: item.audioChannels,
-    addedAt: item.addedAt,
-    viewed: item.viewed,
+  return PlexMediaItem.withTags(
+    item,
     collections: List.unmodifiable(collections),
     genres: List.unmodifiable(genres),
   );
