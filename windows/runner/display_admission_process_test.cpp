@@ -173,8 +173,15 @@ HANDLE Launch(const std::wstring &role, const std::wstring &journal,
 void ExitResult(HANDLE process, DWORD expected) {
   Wait(process, "bounded fixture process exit");
   DWORD code = EXIT_FAILURE;
-  Check(GetExitCodeProcess(process, &code) && code == expected,
-        "fixture child returned expected recovery result");
+  if (!GetExitCodeProcess(process, &code)) {
+    const DWORD error = GetLastError();
+    throw std::runtime_error("query fixture child exit code: Win32 error " +
+                             std::to_string(error));
+  }
+  if (code != expected)
+    throw std::runtime_error("fixture child returned exit code " +
+                             std::to_string(code) + ", expected " +
+                             std::to_string(expected));
 }
 void ExitSuccess(HANDLE process) { ExitResult(process, EXIT_SUCCESS); }
 void Send(HANDLE commands, HANDLE acknowledgments,
@@ -451,8 +458,10 @@ public:
     ExitSuccess(successor);
   }
   HANDLE Guardian(int index) {
-    HANDLE process = OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE, FALSE,
-                                 EffectsState().guardian_pid[index]);
+    HANDLE process =
+        OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE |
+                        PROCESS_QUERY_LIMITED_INFORMATION,
+                    FALSE, EffectsState().guardian_pid[index]);
     Check(process != nullptr, "exact fixture guardian process");
     return process;
   }
