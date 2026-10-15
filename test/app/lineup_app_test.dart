@@ -1736,7 +1736,7 @@ void main() {
     );
     await tester.pumpWidget(
       LineupBootstrap(
-        player: _RequiredEngineFailingPlayer(),
+        player: _TypedRequiredEngineFailingPlayer(),
         controller: controller,
       ),
     );
@@ -2140,16 +2140,6 @@ class _FailingPlayer extends _FakePlayer {
     throw PlatformException(
       code: 'initialize_failed',
       message: _nativeInitializeFailureMessage,
-    );
-  }
-}
-
-class _RequiredEngineFailingPlayer extends _FakePlayer {
-  @override
-  Future<void> initialize() async {
-    throw PlatformException(
-      code: 'required_engine_unavailable',
-      message: _requiredEngineNativeFailureMessage,
     );
   }
 }

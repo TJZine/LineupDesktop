@@ -14,7 +14,7 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
-import 'package:lineup_desktop/playback/windows_native_player.dart';
+import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -1695,7 +1695,7 @@ void main() {
           lineup: lineup,
           loadSchedule: (channel) async => _schedule(channel),
         );
-        final player = WindowsNativePlayer(
+        final player = MethodChannelNativePlayer(
           loadTimeout: failure == 'timeout' ? Duration.zero : null,
         );
         await player.initialize();
@@ -1798,7 +1798,7 @@ void main() {
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
       );
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       await player.initialize();
       final coordinator = PlayerCoordinator(
         player: player,

@@ -3,12 +3,24 @@ import 'dart:async';
 import 'native_player.dart';
 
 class UnsupportedNativePlayer implements NativePlayer {
-  UnsupportedNativePlayer.macos();
+  UnsupportedNativePlayer({required this.message});
 
-  static const _unsupported = PlayerStatus(
-    state: PlayerState.unsupported,
-    message: 'Playback is not implemented on macOS',
-  );
+  UnsupportedNativePlayer.macos() : this(message: macOSMessage);
+
+  static const macOSMessage = 'Playback is not implemented on macOS';
+  static const platformMessage = 'Playback is not implemented on this platform';
+  static const macOSFailureMessage =
+      'Native playback is not implemented on macOS.';
+  static const platformFailureMessage =
+      'Native playback is not implemented on this platform.';
+
+  final String message;
+
+  PlayerStatus get _unsupported =>
+      PlayerStatus(state: PlayerState.unsupported, message: message);
+
+  String get _failureMessage =>
+      message == macOSMessage ? macOSFailureMessage : platformFailureMessage;
 
   @override
   PlayerStatus get status => _unsupported;
@@ -38,9 +50,7 @@ class UnsupportedNativePlayer implements NativePlayer {
   @override
   Future<void> initialize() async {}
 
-  Never _unavailable() => throw const PlayerUnavailable(
-    'Native playback is not implemented on macOS.',
-  );
+  Never _unavailable() => throw PlayerUnavailable(_failureMessage);
 
   @override
   Future<void> load(
