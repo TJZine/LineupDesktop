@@ -396,7 +396,7 @@ void main() {
     final durable =
         store.state.channelsByProfileServer['owner']!['server']!.single;
     expect((durable.source as ManualSource).items.single.genres, ['Comedy']);
-    expect(() => committed.genres.clear(), throwsUnsupportedError);
+    expect(committed.genres.clear, throwsUnsupportedError);
   });
 
   test(
@@ -574,17 +574,14 @@ void main() {
     expect(committedMedia.single.parts.single.path, '/movie');
     expect(committedMedia.single.actors, ['Drama']);
     expect(committedPlaylists.single.items.single.genres, ['Drama']);
+    expect(library.filters[LibraryFilter.genre]!.clear, throwsUnsupportedError);
+    expect(manual.items.single.genres.clear, throwsUnsupportedError);
+    expect(source.sources.clear, throwsUnsupportedError);
     expect(
-      () => library.filters[LibraryFilter.genre]!.clear(),
+      committed.single.scheduleTransition!.legacyCycleItems.clear,
       throwsUnsupportedError,
     );
-    expect(() => manual.items.single.genres.clear(), throwsUnsupportedError);
-    expect(() => source.sources.clear(), throwsUnsupportedError);
-    expect(
-      () => committed.single.scheduleTransition!.legacyCycleItems.clear(),
-      throwsUnsupportedError,
-    );
-    expect(() => committedMedia.single.parts.clear(), throwsUnsupportedError);
+    expect(committedMedia.single.parts.clear, throwsUnsupportedError);
     expect(
       () => committedMedia.single.collections.clear(),
       throwsUnsupportedError,
@@ -9056,6 +9053,8 @@ class _FakePlex extends PlexClient {
     cancelPinCalls++;
     final failure = cancelPinFailure;
     cancelPinFailure = null;
+    // The fixture injects arbitrary failures to exercise propagation.
+    // ignore: only_throw_errors
     if (failure != null) throw failure;
   }
 

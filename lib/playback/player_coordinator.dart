@@ -942,17 +942,21 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<LineupPlaybackRequest?> _completePartLoad(_PlaybackLoad load) async {
     try {
       Object? failure;
+      StackTrace? failureStack;
       try {
         await load.readiness;
-      } catch (error) {
+      } catch (error, stack) {
         failure = error;
+        failureStack = stack;
       }
       final recovery = load.recovery;
       if (recovery != null) {
         return await _completeLoadRecovery(recovery);
       }
       if (!_ownsLoad(load)) return null;
-      if (failure != null) throw failure;
+      if (failure != null) {
+        Error.throwWithStackTrace(failure, failureStack!);
+      }
       while (load.target != null) {
         final target = load.target!;
         if (_nativePosition != target) {
@@ -1075,9 +1079,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   bool _usesAggregateCoordinates(LineupPlaybackRequest request) =>
       request.parts.length == _partDurations.length &&
-      request.parts.asMap().keys.every(
-        (index) => _partDurations.containsKey(index),
-      );
+      request.parts.asMap().keys.every(_partDurations.containsKey);
 
   Duration? _partOffset(int partIndex) {
     var offset = Duration.zero;

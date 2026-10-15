@@ -306,6 +306,8 @@ class WindowsNativePlayer implements NativePlayer {
       );
       await _invoke('stop', {'stopId': stopId});
       final failure = await completion;
+      // The completion future intentionally carries only the failure value.
+      // ignore: only_throw_errors
       if (failure != null) throw failure;
       if (_pendingStop?.$1 != stopId) return;
       _resetMediaState();
@@ -607,42 +609,42 @@ class WindowsNativePlayer implements NativePlayer {
       type: type,
       selected: selected,
       title: switch (item['title']) {
-        String value => value,
+        final String value => value,
         _ => null,
       },
       language: switch (item['lang']) {
-        String value => value,
+        final String value => value,
         _ => null,
       },
       codec: switch (item['codec']) {
-        String value => value,
+        final String value => value,
         _ => null,
       },
       channelCount: channelCount is int && channelCount > 0
           ? channelCount
           : null,
       channelLayout: switch (item['demux-channels']) {
-        String value => value,
+        final String value => value,
         _ => null,
       },
       forced: switch (item['forced']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
       external: switch (item['external']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
       hearingImpaired: switch (item['hearing-impaired']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
       visualImpaired: switch (item['visual-impaired']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
       commentary: switch (item['commentary']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
     );

@@ -1997,7 +1997,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 itemCount: rundownEntries.length,
                 onReorderItem: _saving || rundownQuery.isNotEmpty
                     ? (_, _) {}
-                    : (from, to) => _reorderManual(from, to),
+                    : _reorderManual,
                 itemBuilder: (context, visibleIndex) {
                   final item = rundownEntries[visibleIndex];
                   return _rundownRow(

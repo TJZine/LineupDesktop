@@ -1,3 +1,6 @@
+// MethodCall.arguments is intentionally dynamic in these protocol fixtures.
+// ignore_for_file: avoid_dynamic_calls
+
 import 'dart:async';
 
 import 'package:flutter/services.dart';
@@ -129,7 +132,7 @@ void main() {
       expect(events, hasLength(2));
       expect(identical(events.first.tracks, tracks), isTrue);
       expect(identical(events.last.tracks, tracks), isTrue);
-      expect(() => tracks.clear(), throwsUnsupportedError);
+      expect(tracks.clear, throwsUnsupportedError);
     });
 
     test('old fields do not fabricate new facts', () async {
@@ -270,8 +273,8 @@ void main() {
           {...identity, ...facts},
         ]);
         final previous = player.tracks;
-        expect(() => previous.clear(), throwsUnsupportedError);
-        expect(() => events.last.tracks.clear(), throwsUnsupportedError);
+        expect(previous.clear, throwsUnsupportedError);
+        expect(events.last.tracks.clear, throwsUnsupportedError);
         await snapshot([identity]);
         expect(readFacts(player.tracks.single).values, everyElement(isNull));
         expect(

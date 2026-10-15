@@ -2079,6 +2079,8 @@ class _PreparedFileAppStore extends FileAppStore {
 
   @override
   Future<AppStoreLoadResult> load() async {
+    // The fixture injects arbitrary failures to exercise propagation.
+    // ignore: only_throw_errors
     if (_error case final error?) throw error;
     return _result!;
   }

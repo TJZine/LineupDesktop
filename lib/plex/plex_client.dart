@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
+import '../app_version.dart';
 import '../channels/channel.dart';
 import 'plex_models.dart';
 
@@ -54,7 +55,7 @@ class PlexClient {
     'Accept': 'application/json',
     'X-Plex-Client-Identifier': clientIdentifier,
     'X-Plex-Product': 'Lineup Desktop',
-    'X-Plex-Version': '0.1.0',
+    'X-Plex-Version': lineupVersion,
     'X-Plex-Platform': Platform.operatingSystem,
     'X-Plex-Device': 'Desktop',
     'X-Plex-Device-Name': 'Lineup Desktop',
@@ -71,7 +72,7 @@ class PlexClient {
     return PlexPin(
       id: _integer(json['id'], 'PIN id'),
       code: _text(json['code'], 'PIN code'),
-      expiresAt: DateTime.parse(_text(json['expiresAt'], 'PIN expiration')),
+      expiresAt: _parsePinExpiration(json['expiresAt']),
     );
   }
 
@@ -203,7 +204,7 @@ class PlexClient {
       final resourceToken = _optionalText(json['accessToken']);
       if (resourceToken == null) continue;
       final connections = <PlexConnection>[];
-      for (final rawConnection in json['connections'] as List? ?? const []) {
+      for (final rawConnection in _optionalList(json['connections'])) {
         final connection = _record(rawConnection, 'connection');
         final uri = Uri.tryParse(_optionalText(connection['uri']) ?? '');
         if (uri == null ||
@@ -1372,6 +1373,11 @@ class PlexClient {
       );
     } on http.RequestAbortedException {
       throw const PlexException('cancelled', 'Library scan cancelled.');
+    } on TlsException {
+      throw const PlexException(
+        'network-unavailable',
+        'Plex could not be reached.',
+      );
     } on SocketException {
       throw const PlexException(
         'network-unavailable',
@@ -1576,17 +1582,17 @@ String? _identityId(String body) {
 PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final json = _record(raw, 'media item');
   final cast = _castMembers(json['Role']);
-  final media = (json['Media'] as List? ?? const [])
-      .whereType<Map>()
-      .firstOrNull;
-  final parts = (media?['Part'] as List? ?? const [])
-      .whereType<Map>()
+  final media = _structuralList(
+    json['Media'],
+    'Media',
+  ).whereType<Map<Object?, Object?>>().firstOrNull;
+  final rawParts = _structuralList(media?['Part'], 'Part');
+  final parts = rawParts
+      .whereType<Map<Object?, Object?>>()
       .map(_parseMediaPart)
       .nonNulls
       .toList(growable: false);
-  final firstPart = (media?['Part'] as List? ?? const [])
-      .whereType<Map>()
-      .firstOrNull;
+  final firstPart = rawParts.whereType<Map<Object?, Object?>>().firstOrNull;
   return PlexMediaItem(
     id: _id(json['ratingKey'], 'media id'),
     title: _text(json['title'], 'media title'),
@@ -1626,7 +1632,7 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   );
 }
 
-PlexMediaPart? _parseMediaPart(Map raw) {
+PlexMediaPart? _parseMediaPart(Map<Object?, Object?> raw) {
   final path = _optionalText(raw['key']);
   if (path == null) return null;
   final milliseconds = _optionalInteger(raw['duration']);
@@ -1638,8 +1644,8 @@ PlexMediaPart? _parseMediaPart(Map raw) {
   );
 }
 
-Iterable<String> _streamCodecs(Map? part) sync* {
-  for (final rawStream in part?['Stream'] as List? ?? const []) {
+Iterable<String> _streamCodecs(Map<Object?, Object?>? part) sync* {
+  for (final rawStream in _structuralList(part?['Stream'], 'Stream')) {
     if (rawStream case {'codec': final String codec}) yield codec;
   }
 }
@@ -1656,7 +1662,7 @@ String? _clearLogoPath(Object? raw) {
 
 List<String> _tagNames(Object? raw) {
   final names = <String>[];
-  for (final value in raw as List? ?? const []) {
+  for (final value in _optionalList(raw)) {
     if (value is Map) {
       final name = _optionalText(value['tag']);
       if (name != null) names.add(name);
@@ -1677,7 +1683,7 @@ List<String> _personNames(Object? raw) {
 List<PlexCastMember> _castMembers(Object? raw) {
   final members = <PlexCastMember>[];
   final names = <String>{};
-  for (final value in raw as List? ?? const []) {
+  for (final value in _optionalList(raw)) {
     if (value is! Map) continue;
     final name = _optionalText(value['tag']);
     if (name == null || !names.add(name.toLowerCase())) continue;
@@ -1720,7 +1726,7 @@ List<PlexHomeUser> _parseHomeUsers(String body) {
       for (final entry in value.entries) {
         if (entry.key.toString().toLowerCase() == 'user') {
           entry.value is List
-              ? rawUsers.addAll(entry.value as List)
+              ? rawUsers.addAll(List<Object?>.from(entry.value as List))
               : rawUsers.add(entry.value);
         } else {
           visit(entry.value, depth + 1);
@@ -1828,6 +1834,21 @@ Map<String, Object?> _record(Object? value, String label) {
 String _text(Object? value, String label) =>
     _optionalText(value) ??
     (throw PlexException('parse-error', '$label was missing.'));
+DateTime _parsePinExpiration(Object? value) {
+  final parsed = DateTime.tryParse(_text(value, 'PIN expiration'));
+  if (parsed != null) return parsed;
+  throw const PlexException('parse-error', 'PIN expiration was invalid.');
+}
+
+List<Object?> _optionalList(Object? raw) =>
+    raw is List ? List<Object?>.from(raw) : const [];
+
+List<Object?> _structuralList(Object? raw, String label) {
+  if (raw == null) return const [];
+  if (raw is List) return List<Object?>.from(raw);
+  throw PlexException('parse-error', '$label was invalid.');
+}
+
 String _id(Object? value, String label) =>
     value is num ? value.toString() : _text(value, label);
 String? _optionalText(Object? value) =>
@@ -1896,8 +1917,8 @@ String _playlistOccurrenceId(Object? value) {
     'Plex returned an invalid playlist page.',
   );
   final number = switch (value) {
-    num number => number,
-    String text => num.tryParse(text.trim()),
+    final num number => number,
+    final String text => num.tryParse(text.trim()),
     _ => null,
   };
   if (number == null ||
@@ -1912,8 +1933,8 @@ String _playlistOccurrenceId(Object? value) {
 int? _pageCount(Object? value, PlexException invalid) {
   if (value == null) return null;
   final number = switch (value) {
-    num number => number,
-    String text => num.tryParse(text.trim()),
+    final num number => number,
+    final String text => num.tryParse(text.trim()),
     _ => null,
   };
   if (number == null ||
@@ -1928,8 +1949,8 @@ int? _pageCount(Object? value, PlexException invalid) {
 
 int? _optionalInteger(Object? value) {
   final number = switch (value) {
-    num number => number,
-    String text => num.tryParse(text.trim()),
+    final num number => number,
+    final String text => num.tryParse(text.trim()),
     _ => null,
   };
   return number != null &&
@@ -1989,7 +2010,8 @@ String? _findTokenInXml(String body) {
           'authenticationtoken',
           'token',
         }.contains(attribute.name.local.toLowerCase())) {
-          return attribute.value;
+          final token = _optionalText(attribute.value);
+          if (token != null) return token;
         }
       }
     }
@@ -1997,7 +2019,10 @@ String? _findTokenInXml(String body) {
   return null;
 }
 
-DynamicRange _dynamicRange(Map? media, Iterable<String> streamCodecs) {
+DynamicRange _dynamicRange(
+  Map<Object?, Object?>? media,
+  Iterable<String> streamCodecs,
+) {
   if (_boolean(media?['DOVIPresent']) || media?['DOVIProfile'] != null) {
     return DynamicRange.dolbyVision;
   }

@@ -3,6 +3,9 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'dart:async';
 import 'dart:ui' show SemanticsAction;
 
+// Clock fixtures intentionally reassign their local time source.
+// ignore_for_file: prefer_final_locals
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -140,7 +143,9 @@ void main() {
       expect(find.text('Two'), findsWidgets);
 
       now = boundary;
+      // The widget's state is private to the production library.
       final dynamic state = tester.state(find.byType(ChannelAirCheck));
+      // ignore: avoid_dynamic_calls
       WidgetsBinding.instance.addPostFrameCallback((_) => state.retry());
       await tester.pumpWidget(surface());
       now = boundary.subtract(const Duration(days: 1));
@@ -577,7 +582,7 @@ void main() {
   testWidgets('Air Check preserves inspection after successful recalculation', (
     tester,
   ) async {
-    var now = DateTime.utc(2026, 1, 1, 0, 10);
+    final now = DateTime.utc(2026, 1, 1, 0, 10);
     final controller = _AirController();
     addTearDown(controller.dispose);
     final channel = _channel(items: [_item('one'), _item('two')]);

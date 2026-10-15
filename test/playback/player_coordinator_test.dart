@@ -1,3 +1,8 @@
+// MethodCall.arguments is intentionally dynamic in these protocol fixtures.
+// ignore_for_file: avoid_dynamic_calls
+// The cancellation fixtures own stream closure through their teardown path.
+// ignore_for_file: close_sinks
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';

@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -105,6 +109,140 @@ void main() {
     expect(item.audioChannels, 6);
   });
 
+  test('keeps absent and null list controls empty', () {
+    final item = parseMediaItem({
+      'ratingKey': 'control',
+      'title': 'Control',
+      'type': 'movie',
+      'Media': null,
+      'Genre': null,
+      'Collection': null,
+      'Director': null,
+      'Role': null,
+    });
+
+    expect(item.parts, isEmpty);
+    expect(item.genres, isEmpty);
+    expect(item.collections, isEmpty);
+    expect(item.directors, isEmpty);
+    expect(item.actors, isEmpty);
+  });
+
+  test('treats non-list enrichment containers as empty', () {
+    final item = parseMediaItem({
+      'ratingKey': 'enrichment',
+      'title': 'Enrichment',
+      'type': 'movie',
+      'Genre': {'tag': 'Drama'},
+      'Collection': {'tag': 'Collection'},
+      'Director': {'tag': 'Director'},
+      'Role': {'tag': 'Actor'},
+    });
+
+    expect(item.genres, isEmpty);
+    expect(item.collections, isEmpty);
+    expect(item.directors, isEmpty);
+    expect(item.actors, isEmpty);
+    expect(item.cast, isEmpty);
+  });
+
+  for (final entry in <String, Map<String, Object?>>{
+    'Media': {
+      'ratingKey': 'invalid-media',
+      'title': 'Invalid media',
+      'type': 'movie',
+      'Media': {'Part': <Object?>[]},
+    },
+    'Part': {
+      'ratingKey': 'invalid-part',
+      'title': 'Invalid part',
+      'type': 'movie',
+      'Media': [
+        {
+          'Part': {'key': '/library/parts/invalid.mkv'},
+        },
+      ],
+    },
+    'Stream': {
+      'ratingKey': 'invalid-stream',
+      'title': 'Invalid stream',
+      'type': 'movie',
+      'Media': [
+        {
+          'Part': <Object?>[
+            {
+              'key': '/library/parts/invalid-stream.mkv',
+              'Stream': {'codec': 'dovi'},
+            },
+          ],
+        },
+      ],
+    },
+  }.entries) {
+    test('rejects non-list structural ${entry.key} container', () {
+      expect(
+        () => parseMediaItem(entry.value),
+        throwsA(
+          isA<PlexException>().having((e) => e.code, 'code', 'parse-error'),
+        ),
+      );
+    });
+  }
+
+  test('preserves first media and part selection for enrichment', () {
+    final item = parseMediaItem({
+      'ratingKey': 'first-selection',
+      'title': 'First selection',
+      'type': 'movie',
+      'Media': [
+        {
+          'videoCodec': 'h264',
+          'Part': [
+            {
+              'key': '/library/parts/first.mkv',
+              'Stream': [
+                {'codec': 'dovi'},
+              ],
+            },
+            {'key': '/library/parts/second.mkv', 'Stream': 42},
+          ],
+        },
+        {'Part': 42},
+      ],
+    });
+
+    expect(item.videoCodec, 'h264');
+    expect(item.dynamicRange, DynamicRange.dolbyVision);
+    expect(item.parts.map((part) => part.path), [
+      '/library/parts/first.mkv',
+      '/library/parts/second.mkv',
+    ]);
+  });
+
+  test('ignores a malformed connections container', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode([
+            {
+              'provides': 'server',
+              'accessToken': 'resource-token',
+              'clientIdentifier': 'server-id',
+              'name': 'Server',
+              'owned': true,
+              'connections': {'uri': 'https://synthetic.invalid'},
+            },
+          ]),
+          200,
+        ),
+      ),
+    );
+    addTearDown(client.close);
+
+    expect(await client.discoverServers('account-token'), isEmpty);
+  });
+
   test('normalizes numeric grandparent rating keys', () {
     final item = parseMediaItem({
       'ratingKey': 'episode-42',
@@ -180,7 +318,7 @@ void main() {
       'Media': [
         {
           'Part': [
-            {},
+            <String, Object?>{},
             {'key': ''},
           ],
         },

@@ -469,10 +469,8 @@ String? _equivalenceKey(String? value) {
   return cleaned?.replaceAll(RegExp(r'[\s_-]+'), ' ').trim().toLowerCase();
 }
 
-String _visibleKey(String primary, Iterable<String> secondary) => <String>[
-  primary,
-  ...secondary,
-].map((value) => _equivalenceKey(value)).join('|');
+String _visibleKey(String primary, Iterable<String> secondary) =>
+    <String>[primary, ...secondary].map(_equivalenceKey).join('|');
 
 String _fallbackTrackLabel(PlayerTrackType type, int id) {
   final kind = _typeName(type);

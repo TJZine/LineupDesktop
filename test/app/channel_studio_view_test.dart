@@ -3931,7 +3931,7 @@ void main() {
     final publishedItems = (observed.source as ManualSource).items;
     mutableInput.clear();
     expect(publishedItems, hasLength(1));
-    expect(() => publishedItems.clear(), throwsUnsupportedError);
+    expect(publishedItems.clear, throwsUnsupportedError);
     final fixture = UiFixture(controller: controller);
     addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
@@ -5365,9 +5365,15 @@ class _RecordingSaveController extends FixtureController {
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async {
     loaded = channel;
-    if (scheduleFailure case final failure?) throw failure;
+    if (scheduleFailure case final failure?) {
+      // The fixture injects arbitrary failures to exercise propagation.
+      // ignore: only_throw_errors
+      throw failure;
+    }
     if (nextScheduleFailure case final failure?) {
       nextScheduleFailure = null;
+      // The fixture injects arbitrary failures to exercise propagation.
+      // ignore: only_throw_errors
       throw failure;
     }
     return _testSchedule(channel, this);
