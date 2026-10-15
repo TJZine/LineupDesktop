@@ -1,17 +1,32 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'check_toolchain.dart' as toolchain;
+
 /// Formats Git-owned Dart inputs, including new source but excluding ignored output.
 Future<void> main(List<String> arguments) async {
-  if (arguments.length > 1 ||
-      (arguments.isNotEmpty && arguments.single != '--check')) {
-    stderr.writeln('Usage: dart tool/format.dart [--check]');
+  final skipToolchainCheck = arguments.contains('--skip-toolchain-check');
+  final formatArguments = arguments
+      .where((argument) => argument != '--skip-toolchain-check')
+      .toList();
+  if (formatArguments.length > 1 ||
+      (formatArguments.isNotEmpty && formatArguments.single != '--check')) {
+    stderr.writeln(
+      'Usage: dart tool/format.dart [--check] [--skip-toolchain-check]',
+    );
     exitCode = 64;
     return;
   }
 
   try {
-    exitCode = await _format(check: arguments.isNotEmpty);
+    if (!skipToolchainCheck) {
+      final toolchainExitCode = await toolchain.runToolchainCheck();
+      if (toolchainExitCode != 0) {
+        exitCode = toolchainExitCode;
+        return;
+      }
+    }
+    exitCode = await _format(check: formatArguments.isNotEmpty);
   } on ProcessException catch (error) {
     stderr.writeln('Unable to execute ${error.executable}: ${error.message}');
     exitCode = 1;

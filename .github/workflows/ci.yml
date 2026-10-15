@@ -27,6 +27,7 @@ jobs:
           flutter-version: 3.47.7
           channel: stable
           cache: true
+      - run: dart tool/check_toolchain.dart
       - run: flutter pub get
       - run: dart tool/format.dart --check
       - run: flutter analyze
@@ -47,6 +48,7 @@ jobs:
           flutter-version: 3.47.7
           channel: stable
           cache: true
+      - run: dart tool/check_toolchain.dart
       - name: Run required Guide alpha checks
         env:
           TZ: America/New_York
@@ -78,6 +80,7 @@ jobs:
           flutter-version: 3.47.7
           channel: stable
           cache: true
+      - run: dart tool/check_toolchain.dart
       - name: Verify portable UI on Windows
         run: >-
           flutter test
@@ -188,6 +191,7 @@ jobs:
           flutter-version: 3.47.7
           channel: stable
           cache: true
+      - run: dart tool/check_toolchain.dart
       - name: Validate exact Flutter and engine sources and build the patched engine
         shell: pwsh
         run: |

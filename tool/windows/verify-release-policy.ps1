@@ -43,6 +43,11 @@ Assert-WindowsReleaseAuthorities
 
 $metadataPath = Join-Path $repository 'tool/windows/build-metadata.psd1'
 $metadata = Import-PowerShellDataFile -LiteralPath $metadataPath
+$flutterVersion = Get-Content -Raw -LiteralPath (Join-Path $repository 'tool/flutter_version.json') |
+  ConvertFrom-Json
+if ($flutterVersion.frameworkRevision -ne $metadata.FlutterFrameworkRevision) {
+  throw 'tool/flutter_version.json does not match FlutterFrameworkRevision.'
+}
 $requiredMetadata = @(
   'FlutterFrameworkRevision',
   'FlutterEngineRevision',
