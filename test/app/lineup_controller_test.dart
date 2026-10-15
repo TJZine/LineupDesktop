@@ -43,6 +43,72 @@ Future<void> _waitForTestState(
 
 void main() {
   test(
+    'partial lineup publications retain unchanged owned collections',
+    () async {
+      final first = _channel('first');
+      final second = Channel.fromJson({
+        ..._channel('second').toJson(),
+        'number': 2,
+      });
+      final store = _MemoryStore();
+      const movies = PlexLibrary(
+        id: 'movies',
+        title: 'Movies',
+        type: PlexLibraryType.movie,
+      );
+      const tv = PlexLibrary(id: 'tv', title: 'TV', type: PlexLibraryType.show);
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+        scenario: LineupScenario(
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          server: _server('server'),
+          libraries: const [movies, tv],
+          selectedLibraryIds: const {'movies'},
+          channels: [first, second],
+          currentChannelId: first.id,
+        ),
+      );
+      addTearDown(controller.dispose);
+      final channels = controller.channels;
+      final libraryIds = controller.selectedLibraryIds;
+      final revision = controller.channelRevision(first.id);
+
+      await controller.setCurrentChannel(second.id);
+      expect(controller.channels, same(channels));
+      expect(controller.selectedLibraryIds, same(libraryIds));
+      expect(controller.currentChannelId, second.id);
+      expect(
+        store.state.currentChannelByProfileServer['owner']!['server'],
+        second.id,
+      );
+
+      final selected = {'movies', 'tv'};
+      controller.fixtureActor.publishInventory(selectedLibraryIds: selected);
+      selected.clear();
+      expect(controller.selectedLibraryIds, {'movies', 'tv'});
+      expect(controller.channels, same(channels));
+      controller.fixtureActor.discoverLibraries(const [movies]);
+      expect(controller.selectedLibraryIds, {'movies'});
+      expect(controller.channels, same(channels));
+      expect(controller.currentChannelId, second.id);
+      expect(controller.channelRevision(first.id), revision);
+
+      final filteredIds = controller.selectedLibraryIds;
+      await controller.setCurrentChannel(null);
+      expect(controller.channels, same(channels));
+      expect(controller.selectedLibraryIds, same(filteredIds));
+      expect(controller.currentChannelId, isNull);
+      expect(() => controller.channels.clear(), throwsUnsupportedError);
+      expect(
+        () => controller.selectedLibraryIds.clear(),
+        throwsUnsupportedError,
+      );
+    },
+  );
+
+  test(
     'clearing saved server persists runtime settings and retains scoped lineup',
     () async {
       final fixture = _reentryFixture();

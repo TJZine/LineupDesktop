@@ -2162,13 +2162,7 @@ class LineupController extends ChangeNotifier {
           (id != null && !channels.any((channel) => channel.id == id))) {
         return;
       }
-      await _commitLineup(
-        ScopedLineup(
-          libraryIds: selectedLibraryIds,
-          channels: channels,
-          currentChannelId: id,
-        ),
-      );
+      await _commitLineup(_lineup.withCurrentChannel(id));
       if (!_isCurrentMutationScope(operation)) {
         throw const LineupScopeSuperseded();
       }
@@ -2194,13 +2188,7 @@ class LineupController extends ChangeNotifier {
   }
 
   void _publishCurrentChannel(String? id) {
-    _publishLineup(
-      ScopedLineup(
-        libraryIds: selectedLibraryIds,
-        channels: channels,
-        currentChannelId: id,
-      ),
-    );
+    _publishLineup(_lineup.withCurrentChannel(id));
     notifyListeners();
   }
 

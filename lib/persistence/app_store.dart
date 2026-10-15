@@ -28,12 +28,30 @@ class ScopedLineup {
          channels.map((channel) => channel.immutableCopy()),
        );
 
-  const ScopedLineup._empty()
-    : libraryIds = const {},
-      channels = const [],
-      currentChannelId = null;
+  // Only derivations of this value may reuse its already frozen collections.
+  const ScopedLineup._owned({
+    required this.libraryIds,
+    required this.channels,
+    required this.currentChannelId,
+  });
 
-  static const empty = ScopedLineup._empty();
+  static const empty = ScopedLineup._owned(
+    libraryIds: {},
+    channels: [],
+    currentChannelId: null,
+  );
+
+  ScopedLineup withLibraryIds(Set<String> value) => ScopedLineup._owned(
+    libraryIds: Set.unmodifiable(value),
+    channels: channels,
+    currentChannelId: currentChannelId,
+  );
+
+  ScopedLineup withCurrentChannel(String? value) => ScopedLineup._owned(
+    libraryIds: libraryIds,
+    channels: channels,
+    currentChannelId: value,
+  );
 
   final Set<String> libraryIds;
   final List<Channel> channels;

@@ -119,11 +119,7 @@ class LineupFixtureActor {
     if (playlists != null) controller._publishAvailablePlaylists = playlists;
     if (selectedLibraryIds != null) {
       controller._publishLineup(
-        ScopedLineup(
-          libraryIds: selectedLibraryIds,
-          channels: controller.channels,
-          currentChannelId: controller.currentChannelId,
-        ),
+        controller._lineup.withLibraryIds(selectedLibraryIds),
       );
     }
     controller._contentGeneration++;
@@ -183,14 +179,11 @@ class LineupFixtureActor {
     final controller = _controller;
     controller._publishLibraries = libraries;
     controller._publishLineup(
-      ScopedLineup(
-        libraryIds:
-            selectedLibraryIds ??
+      controller._lineup.withLibraryIds(
+        selectedLibraryIds ??
             controller.selectedLibraryIds.intersection(
               libraries.map((library) => library.id).toSet(),
             ),
-        channels: controller.channels,
-        currentChannelId: controller.currentChannelId,
       ),
     );
     controller._contentGeneration++;
