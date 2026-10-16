@@ -240,7 +240,7 @@ class PlayerCoordinator extends ChangeNotifier {
     return index == null ? null : _indexedChannels[index];
   }
 
-  /// The selected channel is watching only after tuning settles into a live
+  /// The active channel is watching only after tuning settles into a live
   /// playback state. A deleted/orphaned active program has no visible channel.
   String? get watchingChannelId =>
       !tuning &&
@@ -251,7 +251,7 @@ class PlayerCoordinator extends ChangeNotifier {
             PlayerState.buffering,
             PlayerState.seeking,
           }.contains(status.state)
-      ? currentChannel?.id
+      ? _active?.channel?.id
       : null;
 
   /// A display hold presents loading while preserving the native state used

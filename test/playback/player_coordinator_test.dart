@@ -2256,7 +2256,9 @@ void main() {
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.overlay, PlayerOverlay.osd);
       expect(tuned, isTrue);
+      expect(coordinator.watchingChannelId, 'channel-b');
       await coordinator.stop();
+      expect(coordinator.watchingChannelId, isNull);
     },
   );
 
@@ -4354,6 +4356,7 @@ void main() {
     expect(coordinator.error, isNull);
     expect(coordinator.currentChannel?.id, 'channel-0');
     expect(coordinator.currentProgram?.channelId, 'channel-b');
+    expect(coordinator.watchingChannelId, isNull);
     expect(coordinator.hasPlaybackIntent, isTrue);
     expect(player.stops, 0);
     await coordinator.stop();
@@ -5305,6 +5308,7 @@ void main() {
         addTearDown(coordinator.dispose);
 
         await coordinator.loadInitialMedia(Uri.parse('lineup-test://initial'));
+        expect(coordinator.watchingChannelId, isNull);
         final generation = player.loadGenerations.single;
         player.emitStatus(terminal, generation: generation);
         await Future<void>.delayed(Duration.zero);

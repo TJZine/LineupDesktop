@@ -45,6 +45,8 @@ void main() {
       for (final state in PlayerState.values) {
         final fixture = _Fixture(state);
         expect(fixture.player.presentedState, state);
+        expect(fixture.player.watchingChannelId, isNull);
+        expect(await fixture.player.tune('channel'), isTrue);
         expect(
           fixture.player.watchingChannelId,
           const {
