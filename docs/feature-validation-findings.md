@@ -43,14 +43,14 @@ new everyday-use candidate.
 
 ### F3 Last-channel recall — proceed to planning
 
-**Gap (confirmed).** [PlayerCoordinator.previousChannel](../lib/playback/player_coordinator.dart:1214)
+**Gap (confirmed).** [PlayerCoordinator.previousChannel](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/playback/player_coordinator.dart#L1214)
 calls `_tuneOffset(-1)`, which moves to the neighboring index. The OSD labels this
 "Previous channel", and Page Up is bound to it. No history of watched channels
 exists. The Guide, Mini Guide, number entry, search, and OSD all reach
 `tune()`, so one owner can record history.
 
 **What "success" already means.** `_performTune` persists the current channel
-through [setCurrentChannel](../lib/app/lineup_controller.dart:2133) only after
+through [setCurrentChannel](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/app/lineup_controller.dart#L2133) only after
 `player.load` readiness. If a newer generation supersedes the tune, it restores
 the previous ID, and it returns `true` only when generation, active request,
 channel, and error state all agree. History should be promoted **on that `true`
@@ -74,9 +74,9 @@ result**, not when the tune is requested.
   Guide affordance later. Adding an OSD button is a protected-layout change.
 
 **Shortcut collision analysis (source).** `Backspace`/`Esc`/Back are the Player
-and Guide Back action ([player_view.dart:197](../lib/playback/player_view.dart:197)).
+and Guide Back action ([player_view.dart:197](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/playback/player_view.dart#L197)).
 Digits, including `0` and `numpad0`, start channel-number entry
-([player_view.dart:3483](../lib/playback/player_view.dart:3483)). `A`, `C`, `S`,
+([player_view.dart:3483](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/playback/player_view.dart#L3483)). `A`, `C`, `S`,
 `F`, `G`, `I`, `J`, `K`, `L`, `P`, F2/F3/F11, and arrows are taken. Kodi's
 documented convention is `0` to switch between the two last live channels
 ([Kodi keyboard controls](https://kodi.wiki/view/Keyboard_controls), wiki
@@ -98,13 +98,13 @@ default is yes.
 
 **Gap (confirmed, larger than reported).**
 
-- [PersistedState](../lib/persistence/app_store.dart:11) has **no format version**.
-  Both it and [LineupSettings.fromJson](../lib/settings/lineup_settings.dart:116)
+- [PersistedState](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/persistence/app_store.dart#L11) has **no format version**.
+  Both it and [LineupSettings.fromJson](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/settings/lineup_settings.dart#L116)
   reject unknown fields. An older build reading a newer `state.json` treats it as
   corrupt, moves it to quarantine, and starts empty. The transcoding plan already
   records this downgrade risk for its P4 settings. Every feature in this register
   that adds a field (favorites, track preferences, series sources) widens it.
-- `.pre-desktop-ui` ([app_store.dart:225](../lib/persistence/app_store.dart:225))
+- `.pre-desktop-ui` ([app_store.dart:225](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/persistence/app_store.dart#L225))
   is a one-time migration copy. Quarantine keeps bytes after corruption, but no
   user-visible path restores them.
 - [Product Parity](product-parity.md) classifies channel import/export as
@@ -167,8 +167,8 @@ the reviewed-application path.
 
 1. **Lineup currently ignores the user's Plex preferences.** Direct Play hands the
    part to libmpv with no `alang`/`slang`. Track selection is per load, and each
-   new load clears it ([player_coordinator.dart:881](../lib/playback/player_coordinator.dart:881)).
-   [parseMediaItem](../lib/plex/plex_client.dart:1609) keeps only the first
+   new load clears it ([player_coordinator.dart:881](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/playback/player_coordinator.dart#L881)).
+   [parseMediaItem](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/plex/plex_client.dart#L1609) keeps only the first
    `Media`, and library scans do not fetch per-item streams. Pinned mpv then
    prefers default-flagged tracks
    ([`compare_track`](https://github.com/mpv-player/mpv/blob/14f2d48cbc7dda61adb4bd181e107a1f3f76e533/player/loadfile.c#L561)).
@@ -224,7 +224,7 @@ Consider B's accessibility preferences as an optional layer on top. In
 sessions, do not apply automatic preferences by PUT: let PMS's own selection
 stand, and reserve PUT for an explicit user change as already decided. Keep
 requested, commanded, and observed-confirmed selection distinct, using the
-existing [selectTrack](../lib/playback/player_coordinator.dart:1339) contract.
+existing [selectTrack](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/playback/player_coordinator.dart#L1339) contract.
 
 **Investigation spike (portable plus a live read-only check).**
 
@@ -251,10 +251,10 @@ session work. Physical Windows media and live PMS are required for acceptance.
 
 **Gap (confirmed).** [ChannelStudioDraft.configureSource](../lib/app/channel_studio_draft.dart)
 maps `MixedSource` to no choice. Studio shows "This mixed source is preserved
-exactly" and offers only replacement. [MixedSource](../lib/channels/channel.dart:134)
+exactly" and offers only replacement. [MixedSource](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/channels/channel.dart#L134)
 already exists, nesting is validated to depth 25, and the
-[resolver](../lib/channels/content_resolver.dart:22) concatenates or does
-round-robin [interleave](../lib/channels/content_resolver.dart:165). The
+[resolver](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/channels/content_resolver.dart#L22) concatenates or does
+round-robin [interleave](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/channels/content_resolver.dart#L165). The
 **Channel Builder already generates** mixed sources: cross-library "Combine
 matching …" proposals are `MixedSource(interleave: true)` with
 `PlaybackMode.shuffle`.
@@ -262,11 +262,11 @@ matching …" proposals are `MixedSource(interleave: true)` with
 **Corrections to the report's premise (source).**
 
 - **Source order and interleave only matter for "In order".** The
-  [scheduler](../lib/channels/scheduler.dart:189) sorts shuffle input by media ID
-  ([`_canonicalShuffleInput`](../lib/channels/scheduler.dart:444)). "Mix it up"
+  [scheduler](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/channels/scheduler.dart#L189) sorts shuffle input by media ID
+  ([`_canonicalShuffleInput`](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/channels/scheduler.dart#L444)). "Mix it up"
   therefore gives the same schedule for concatenate and interleave and weights
   each source by item count. A 200-episode show swamps a 20-episode show.
-  [`blockOrder`](../lib/channels/scheduler.dart:470) ("Mini-marathons") already
+  [`blockOrder`](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/channels/scheduler.dart#L470) ("Mini-marathons") already
   rotates series in seeded order regardless of source structure. The builder's
   `interleave: true` flag on shuffle channels has no schedule effect.
 - **"Alternate two sitcoms" lacks a dynamic source.** No series/whole-show
@@ -357,8 +357,8 @@ ErsatzTV, or dizqueTV server/streaming architecture is a Lineup requirement.
 | Timed / weekly programming blocks | **Defer** | High value, but it rewrites the schedule domain (timezone/DST, lateness, gaps, migration). Requires F1 first |
 | Bumpers / filler | **Defer** | Depends on timed blocks; filler-in-Guide and overrun policy unresolved |
 | Remembered builder configuration | **Investigate (small)** | Setup reentry plan is implemented (`LineupRestoreView`). Builder strategy choices are not persisted. Value mainly for "Refresh matching generated channels" |
-| Durable diagnostic export | **Defer** | **Copy redacted report** exists ([diagnostics_view.dart:107](../lib/app/diagnostics_view.dart:107)). A file save adds little beyond the clipboard. Product Parity rows 338/368 ("Flutter only displays session entries") are stale |
-| Actor/studio combine mode | **Already implemented** | "Combine matching genres/studios/actors/directors" controls ([channel_setup_view.dart:1547](../lib/app/channel_setup_view.dart:1547)) with builder, projection, and controller tests. Product Parity row 216 (`MISSING`) is stale |
+| Durable diagnostic export | **Defer** | **Copy redacted report** exists ([diagnostics_view.dart:107](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/app/diagnostics_view.dart#L107)). A file save adds little beyond the clipboard. Product Parity rows 338/368 ("Flutter only displays session entries") are stale |
+| Actor/studio combine mode | **Already implemented** | "Combine matching genres/studios/actors/directors" controls ([channel_setup_view.dart:1547](https://github.com/TJZine/LineupDesktop/blob/eede9bb395054a54c64ff4263b861786bb907a08/lib/app/channel_setup_view.dart#L1547)) with builder, projection, and controller tests. Product Parity row 216 (`MISSING`) is stale |
 | Single-instance restore/focus | **Already implemented (native)** | [main.cpp](../windows/runner/main.cpp) uses a named mutex and focuses the existing window. Product Parity row 365 ("Flutter has no owner, blocked by decision") is stale. Multi-window remains unrequested |
 | Launch destination / start fullscreen | **Defer** | No evidence of need; must not disturb saved-lineup startup |
 | In-app mute/volume | **Investigate (small)** | `setVolume` exists in the native transport with **no Dart consumer**. OS volume works. Mute is a common TV expectation, but needs an entry point without OSD change |

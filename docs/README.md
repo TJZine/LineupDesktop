@@ -69,8 +69,9 @@ and physical acceptance are different states.
 ## Active plans and investigations
 
 - [Code-quality implementation plan](code-quality-implementation-plan.md):
-  portable packages integrated and reviewed; F retained unmerged/unverified,
-  G pending integration, full plan not complete. Its native contract and review
+  portable packages and documentation consolidation (G) integrated and reviewed;
+  native restoration work (F) merged for Windows testing, with validation still
+  pending. The full plan is not complete. Its native contract and review
   conditions remain live. The closure table records actual integration SHAs.
 - [Plex transcoding plan](plex-transcoding-implementation-plan.md): production
   packages, P0b evidence and Settings/product gates remain pending. Headless
