@@ -18,6 +18,7 @@ class _StudioProgramming extends StatefulWidget {
     required this.onChanged,
     required this.onPendingChanged,
     required this.onOpenChannel,
+    super.key,
   });
   final ChannelStudioDraft draft;
   final _StudioInventory inventory;

@@ -121,6 +121,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   GlobalKey<FormState> _form = GlobalKey<FormState>();
   final _titleKey = GlobalKey<_StudioTitleState>();
   var _stationKey = GlobalKey<_StudioStationState>();
+  var _programmingKey = GlobalKey<_StudioProgrammingState>();
   final _recoveryKey = GlobalKey<_StudioRecoveryState>();
   late final TextEditingController _name;
   late final TextEditingController _number;
@@ -443,6 +444,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final programming = _StudioProgramming(
+                            key: _programmingKey,
                             draft: _session,
                             inventory: _playableInventory,
                             readInventory: () =>
@@ -923,6 +925,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     setState(() {
       _form = GlobalKey<FormState>();
       _stationKey = GlobalKey<_StudioStationState>();
+      _programmingKey = GlobalKey<_StudioProgrammingState>();
       _session.loadSaved(current);
       _configureSource();
       _session.acceptBaseline(_draftSignature);
