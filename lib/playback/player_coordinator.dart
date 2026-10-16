@@ -115,6 +115,8 @@ class PlayerCoordinator extends ChangeNotifier {
   int? _continuationGeneration;
   bool get _preservePresentation => _continuationGeneration == _tuneGeneration;
   int _controlGeneration = 0;
+  int _playbackIntentRevision = 0;
+  bool _userPaused = false;
   int _trackSelectionGeneration = 0;
   int _seekGeneration = 0;
   int _fullscreenEpoch = 0;
@@ -385,7 +387,7 @@ class PlayerCoordinator extends ChangeNotifier {
         fullGuide: _overlay == PlayerOverlay.fullGuide,
         error: _error != null || _overlay == PlayerOverlay.error,
       ),
-      paused: _status.state == PlayerState.paused,
+      userPaused: _userPaused,
     );
   }
 
@@ -673,6 +675,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (deadline != null && !_clock().isBefore(deadline)) {
       return _expireSleepTimer(_sleepEpoch).then((_) => false);
     }
+    _userPaused = false;
     if (endedProgram == null) _clearTransientStatus();
     _resolvingProgram = null;
     final generation = ++_tuneGeneration;
@@ -699,6 +702,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> loadInitialMedia(Uri media) async {
     if (_initialMediaRequested) return;
     _initialMediaRequested = true;
+    _userPaused = false;
     if (await _expireSleepIfNeeded()) return;
     _clearTransientStatus();
     final generation = ++_tuneGeneration;
@@ -921,7 +925,11 @@ class PlayerCoordinator extends ChangeNotifier {
     _activeLoad = load;
     _displayMatching.cancelLoad();
     _updateDisplaySession();
-    final startPaused = _displayMatching.beginLoad(load.generation, target);
+    final startPaused = _displayMatching.beginLoad(
+      load.generation,
+      target,
+      userPaused: _userPaused,
+    );
     _nativeCleanupRequired = true;
     _nativePosition = Duration.zero;
     _telemetry = const PlayerTelemetry();
@@ -1285,21 +1293,16 @@ class PlayerCoordinator extends ChangeNotifier {
     await tune(channels[next < 0 ? next + channels.length : next].id);
   }
 
-  Future<void> togglePlayback() =>
-      (displayHoldActive || _status.state == PlayerState.playing)
-      ? pause()
-      : play();
-
-  Future<void> play() async {
-    if (await _expireSleepIfNeeded()) return;
-    _displayMatching.userPlay();
-    await _runPlaybackControl('play', player.play);
+  Future<void> togglePlayback() {
+    final playing = displayHoldActive || _activeLoad?.pending == true
+        ? !_userPaused
+        : _status.state == PlayerState.playing;
+    return playing ? pause() : play();
   }
 
-  Future<void> pause() {
-    _displayMatching.userPause();
-    return _runPlaybackControl('pause', player.pause);
-  }
+  Future<void> play() => _setPlaybackPaused(false);
+
+  Future<void> pause() => _setPlaybackPaused(true);
 
   Future<void> stop() async {
     _clearSleepTimer();
@@ -1509,21 +1512,40 @@ class PlayerCoordinator extends ChangeNotifier {
     return operation;
   }
 
-  Future<void> _runPlaybackControl(
-    String operation,
-    Future<void> Function() command,
-  ) async {
+  Future<void> _setPlaybackPaused(bool paused) async {
+    if (_disposed) return;
+    final intentRevision = ++_playbackIntentRevision;
     final controlGeneration = ++_controlGeneration;
     final tuneGeneration = _tuneGeneration;
+    final load = _activeLoad;
+    _userPaused = paused;
+    if (paused) {
+      _displayMatching.userPause();
+    } else {
+      _displayMatching.userPlay();
+    }
+    bool current() =>
+        !_disposed &&
+        intentRevision == _playbackIntentRevision &&
+        tuneGeneration == _tuneGeneration &&
+        identical(load, _activeLoad);
     try {
-      await command();
+      if (!paused && await _expireSleepIfNeeded()) return;
+      // Load applies its captured pause flag on the native worker. A control
+      // must follow it, and only the latest intent may survive this wait.
+      if (load != null) await load.readiness;
+      if (!current()) return;
+      await (paused ? player.pause() : player.play());
     } catch (error) {
-      if (_ownsPlaybackControl(controlGeneration, tuneGeneration)) {
-        _publishControlFailure(operation, error);
+      if (current() &&
+          _ownsPlaybackControl(controlGeneration, tuneGeneration)) {
+        _publishControlFailure(paused ? 'pause' : 'play', error);
       }
       return;
     }
-    if (_ownsPlaybackControl(controlGeneration, tuneGeneration)) showOsd();
+    if (current() && _ownsPlaybackControl(controlGeneration, tuneGeneration)) {
+      showOsd();
+    }
   }
 
   bool _ownsPlaybackControl(int controlGeneration, int tuneGeneration) =>

@@ -60,7 +60,7 @@ class DisplayMatching {
             DisplayMatchingSessionState.suspended,
           }.contains(report.session));
 
-  void updateSession(bool next, {required bool paused}) {
+  void updateSession(bool next, {required bool userPaused}) {
     if (next == session) return;
     ++_operationEpoch;
     session = next;
@@ -68,7 +68,7 @@ class DisplayMatching {
     _send();
     if (next) _sessionRevision = revision;
     if (next && _load != null) {
-      _userPaused = paused && !_suppressTransition;
+      _userPaused = userPaused;
       _hold = _DisplayHold(false);
       _requestDecision();
       _schedule();
@@ -100,7 +100,7 @@ class DisplayMatching {
     );
   }
 
-  bool beginLoad(int generation, Duration? target) {
+  bool beginLoad(int generation, Duration? target, {bool userPaused = false}) {
     cancelLoad();
     _load = generation;
     _target = target;
@@ -109,7 +109,7 @@ class DisplayMatching {
     _positionReached = null;
     _decided = false;
     _transferKnown = false;
-    _userPaused = false;
+    _userPaused = userPaused;
     if (desired != DisplayMatchingState.unknown) {
       desired = DisplayMatchingState.unknown;
       if (session) _send();
@@ -119,7 +119,7 @@ class DisplayMatching {
       _hold = _DisplayHold(true);
       _suppressTransition = true;
     }
-    return paused;
+    return paused || userPaused;
   }
 
   void ready(int generation) {

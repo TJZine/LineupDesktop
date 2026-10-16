@@ -71,6 +71,256 @@ void main() {
     },
   );
 
+  for (final fullscreen in [false, true]) {
+    for (final paused in [false, true]) {
+      testWidgets(
+        'multipart seek preserves intent: fullscreen=$fullscreen paused=$paused',
+        (tester) async {
+          final p = _DisplayPlayer();
+          final f = _ContinuationFixture(
+            player: p,
+            parts: _parts(
+              first: const Duration(seconds: 60),
+              second: const Duration(seconds: 90),
+            ),
+          );
+          addTearDown(f.close);
+          if (fullscreen) await f.coordinator.toggleFullscreen();
+          expect(await f.coordinator.tune('channel-b'), isTrue);
+          if (paused) await f.coordinator.pause();
+
+          for (final target in [70, 20]) {
+            final plays = p.plays;
+            await f.coordinator.seekTo(Duration(seconds: target));
+            expect(
+              p.loads.last.path,
+              target == 70 ? '/part-2.mkv' : '/part-1.mkv',
+            );
+            expect(p.seeks.last, Duration(seconds: target == 70 ? 10 : 20));
+            expect(p.pausedStarts.last, paused || fullscreen);
+            if (fullscreen) {
+              expect(f.coordinator.displayHoldActive, isTrue);
+              p.decode();
+              p.report(DisplayMatchingOutcome.matched, wrote: true);
+              f.now = f.now.add(const Duration(milliseconds: 1500));
+              await tester.pump(const Duration(milliseconds: 1500));
+              expect(f.coordinator.displayHoldActive, isFalse);
+              expect(p.plays, plays + (paused ? 0 : 1));
+            }
+            expect(
+              f.coordinator.status.state,
+              paused ? PlayerState.paused : PlayerState.playing,
+            );
+          }
+          if (fullscreen && paused) {
+            final plays = p.plays;
+            await f.coordinator.toggleFullscreen();
+            await f.coordinator.toggleFullscreen();
+            p.report(DisplayMatchingOutcome.pending);
+            p.report(DisplayMatchingOutcome.matched);
+            await tester.pump();
+            expect(p.plays, plays);
+            expect(f.coordinator.status.state, PlayerState.paused);
+          }
+          // A new tune joins live, even when the previous program was paused.
+          expect(await f.coordinator.tune('channel-0'), isTrue);
+          expect(p.pausedStarts.last, fullscreen);
+          if (fullscreen) {
+            p.decode();
+            p.report(DisplayMatchingOutcome.matched);
+            await tester.pump();
+          }
+          expect(f.coordinator.status.state, PlayerState.playing);
+          f.coordinator.dispose();
+        },
+      );
+    }
+  }
+
+  for (final pauseLast in [false, true]) {
+    testWidgets(
+      'multipart display hold honors controls during replacement: pause=$pauseLast',
+      (tester) async {
+        final p = _BlockingDisplayPlayer();
+        final f = _ContinuationFixture(
+          player: p,
+          parts: _parts(
+            first: const Duration(seconds: 60),
+            second: const Duration(seconds: 90),
+          ),
+        );
+        addTearDown(f.close);
+        await f.coordinator.toggleFullscreen();
+        await f.coordinator.tune('channel-b');
+        p.decode();
+        p.report(DisplayMatchingOutcome.matched);
+        await tester.pump();
+        if (!pauseLast) await f.coordinator.pause();
+        final replacement = f.coordinator.seekTo(const Duration(seconds: 70));
+        await tester.pump();
+        expect(p.secondLoadStarted.isCompleted, isTrue);
+        expect(f.coordinator.displayHoldActive, isTrue);
+        p.decode();
+        // Repeated toggles use intent while observed state still reflects the
+        // display hold. The final explicit control wins before readiness.
+        final first = f.coordinator.togglePlayback();
+        final second = f.coordinator.togglePlayback();
+        final last = pauseLast ? f.coordinator.pause() : f.coordinator.play();
+        p.releaseSecondLoad.complete();
+        await tester.pump();
+        await Future.wait([replacement, first, second, last]);
+        final plays = p.plays;
+        expect(
+          f.coordinator.status.state,
+          pauseLast ? PlayerState.paused : PlayerState.playing,
+        );
+        p.report(DisplayMatchingOutcome.matched, wrote: true);
+        f.now = f.now.add(const Duration(seconds: 6));
+        await tester.pump(const Duration(seconds: 6));
+        expect(f.coordinator.displayHoldActive, isFalse);
+        expect(p.plays, plays);
+        expect(
+          f.coordinator.status.state,
+          pauseLast ? PlayerState.paused : PlayerState.playing,
+        );
+        // A subsequent replacement must also inherit the latest control.
+        await f.coordinator.seekTo(const Duration(seconds: 20));
+        p.decode();
+        p.report(DisplayMatchingOutcome.matched);
+        await tester.pump();
+        expect(
+          f.coordinator.status.state,
+          pauseLast ? PlayerState.paused : PlayerState.playing,
+        );
+        f.coordinator.dispose();
+      },
+    );
+  }
+
+  for (final replacement in ['part', 'tune']) {
+    test(
+      'multipart pending pause cannot command a newer $replacement',
+      () async {
+        final p = _BlockingDisplayPlayer();
+        final f = _ContinuationFixture(
+          player: p,
+          parts: _parts(
+            first: const Duration(seconds: 60),
+            second: const Duration(seconds: 90),
+          ),
+        );
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-b');
+        final seek = f.coordinator.seekTo(const Duration(seconds: 70));
+        await p.secondLoadStarted.future;
+        final pause = f.coordinator.pause();
+        if (replacement == 'part') {
+          await f.coordinator.seekTo(const Duration(seconds: 20));
+          expect(p.pausedStarts.last, isTrue);
+        } else {
+          expect(await f.coordinator.tune('channel-0'), isTrue);
+          expect(p.pausedStarts.last, isFalse);
+        }
+        p.releaseSecondLoad.complete();
+        await Future.wait([seek, pause]);
+        expect(p.pauses, 0);
+        expect(
+          f.coordinator.status.state,
+          replacement == 'part' ? PlayerState.paused : PlayerState.playing,
+        );
+      },
+    );
+  }
+
+  for (final pauseLast in [false, true]) {
+    test(
+      'multipart replacement applies latest control after native load dispatch: pause=$pauseLast',
+      () async {
+        const channel = MethodChannel('lineup/native_player');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        final calls = <MethodCall>[];
+        int? loadId;
+        var nativePaused = false;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          if (call.method == 'load') {
+            loadId = call.arguments['loadId'] as int;
+            nativePaused = call.arguments['startPaused'] as bool;
+          } else if (call.method == 'play' || call.method == 'pause') {
+            nativePaused = call.method == 'pause';
+            await _nativeEvent({
+              'type': 'property',
+              'loadId': loadId,
+              'name': 'pause',
+              'value': nativePaused,
+            });
+          }
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final lineup = _TestLineup(
+          playbackParts: _parts(
+            first: const Duration(hours: 2),
+            second: const Duration(hours: 1),
+          ),
+        );
+        final now = lineup.channels.last.anchor;
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = MethodChannelNativePlayer();
+        await player.initialize();
+        final c = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+          clock: () => now,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(player.dispose);
+        addTearDown(c.dispose);
+        final tune = c.tune('channel-b');
+        await pumpEventQueue();
+        await _nativeEvent({
+          'type': 'state',
+          'loadId': loadId,
+          'state': 'playing',
+        });
+        expect(await tune, isTrue);
+        if (!pauseLast) await c.pause();
+        calls.clear();
+        final seek = c.seekTo(const Duration(hours: 2, minutes: 5));
+        // Issue controls before the adapter has dispatched the replacement and
+        // withhold readiness. Native load applies its captured startPaused flag.
+        final first = pauseLast ? c.play() : c.pause();
+        final last = pauseLast ? c.pause() : c.play();
+        await pumpEventQueue();
+        expect(calls.where((call) => call.method == 'load'), hasLength(1));
+        await _nativeEvent({
+          'type': 'property',
+          'loadId': loadId,
+          'name': 'pause',
+          'value': nativePaused,
+        });
+        await _nativeEvent({
+          'type': 'state',
+          'loadId': loadId,
+          'state': 'playing',
+        });
+        await Future.wait([seek, first, last]);
+        expect(nativePaused, pauseLast);
+        expect(
+          c.status.state,
+          pauseLast ? PlayerState.paused : PlayerState.playing,
+        );
+      },
+    );
+  }
+
   testWidgets(
     'display hold local load projects busy without changing overlay or status',
     (tester) async {
@@ -5452,9 +5702,9 @@ void main() {
 
       final seek = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
       await player.secondLoadStarted.future;
-      await coordinator.pause();
+      final pause = coordinator.pause();
       player.releaseSecondLoad.complete();
-      await seek;
+      await Future.wait([seek, pause]);
 
       expect(player.seeks.last, const Duration(minutes: 5));
       expect(coordinator.error, isNull);
@@ -7684,5 +7934,29 @@ class _DisplayPlayer extends _EventPlayer {
   Future<void> close() async {
     await _reports.close();
     await super.close();
+  }
+}
+
+/// Native has applied the load command, but has not signalled readiness yet.
+class _BlockingDisplayPlayer extends _DisplayPlayer {
+  final secondLoadStarted = Completer<void>();
+  final releaseSecondLoad = Completer<void>();
+
+  @override
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+    );
+    if (loads.length != 2) return;
+    secondLoadStarted.complete();
+    await releaseSecondLoad.future;
   }
 }
