@@ -148,18 +148,27 @@ Future<int> runToolchainCheck({String? repositoryRoot}) async {
     return 1;
   }
 
-  final result = await Process.run(
-    'flutter',
+  // Windows Flutter bootstrap can write package progress to stdout. Finish
+  // that initialization before requesting a strictly JSON machine report.
+  late ProcessResult result;
+  for (final arguments in const [
+    ['--version'],
     ['--version', '--machine'],
-    workingDirectory: root,
-    runInShell: Platform.isWindows,
-  );
-  if (result.exitCode != 0) {
-    stderr.writeln(
-      'Unable to query Flutter SDK with `flutter --version --machine`.',
+  ]) {
+    result = await Process.run(
+      'flutter',
+      arguments,
+      workingDirectory: root,
+      runInShell: Platform.isWindows,
     );
-    stderr.write(result.stderr);
-    return result.exitCode;
+    if (result.exitCode != 0) {
+      stderr.writeln(
+        'Unable to query Flutter SDK with `flutter ${arguments.join(' ')}`.',
+      );
+      stderr.write(result.stdout);
+      stderr.write(result.stderr);
+      return result.exitCode;
+    }
   }
 
   final FlutterToolchain actual;
