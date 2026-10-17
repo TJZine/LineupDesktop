@@ -166,6 +166,7 @@ class Diagnostics extends ChangeNotifier {
 
   String buildSupportReport(DiagnosticSupportSnapshot snapshot) {
     final telemetry = snapshot.playback.receivedTelemetry;
+    final isMacOS = isMacOSPlatform(snapshot.platform);
     final lines = <String>[
       'Lineup Desktop support report',
       'Report time: ${snapshot.reportTime.toIso8601String()}',
@@ -175,10 +176,16 @@ class Diagnostics extends ChangeNotifier {
       'Diagnostic recording: ${snapshot.recordingEnabled ? 'On' : 'Off'}',
       'Playback state: ${snapshot.playback.state.name}',
       'Playback method: ${_methodLabel(snapshot.playback.method)}',
-      'Windows display: ${windowsDisplayFact(snapshot.playback.displayReport)}',
-      'HDR matching: ${hdrMatchingFact(snapshot.playback.displayReport)}',
-      'Renderer output: ${rendererOutputFact(telemetry)}',
-      "Display state is reported by Windows; it does not verify the TV's picture.",
+      if (isMacOS) ...[
+        'HDR output: $macOSHdrOutputFact',
+        'Renderer output: ${rendererOutputFact(telemetry)}',
+        macOSDisplayStateNote,
+      ] else ...[
+        'Windows display: ${windowsDisplayFact(snapshot.playback.displayReport)}',
+        'HDR matching: ${hdrMatchingFact(snapshot.playback.displayReport)}',
+        'Renderer output: ${rendererOutputFact(telemetry)}',
+        windowsDisplayStateNote,
+      ],
       'Plex server selected: ${snapshot.plexServerSelected ? 'Yes' : 'No'}',
       'Plex connection verified: ${snapshot.plexConnectionVerified ? 'Yes' : 'No'}',
       if (telemetry?.width case final width? when width > 0)
@@ -226,6 +233,14 @@ class Diagnostics extends ChangeNotifier {
     }
     return '${lines.join('\n')}\n';
   }
+
+  /// [platform] is `TargetPlatform.name` as carried by the snapshot.
+  static bool isMacOSPlatform(String platform) => platform == 'macOS';
+  static const macOSHdrOutputFact = 'Managed by macOS';
+  static const macOSDisplayStateNote =
+      'macOS manages HDR output; Lineup does not change display modes.';
+  static const windowsDisplayStateNote =
+      "Display state is reported by Windows; it does not verify the TV's picture.";
 
   static String windowsDisplayFact(DisplayMatchingReport report) =>
       '${report.observed.name} · ${report.route.name}'

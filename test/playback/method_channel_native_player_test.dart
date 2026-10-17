@@ -1095,6 +1095,31 @@ void main() {
     },
   );
 
+  test('missing required engine uses platform-neutral wording', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'play') {
+        throw PlatformException(code: 'required_engine_unavailable');
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = MethodChannelNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+
+    await expectLater(
+      player.play(),
+      throwsA(
+        isA<PlayerUnavailable>().having(
+          (error) => error.message,
+          'message',
+          'The required video engine is unavailable.',
+        ),
+      ),
+    );
+  });
+
   test('authenticated loads require an HTTPS authority in Dart', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {

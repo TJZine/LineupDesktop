@@ -541,7 +541,7 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   static String _nativeCommandFailureMessage(String code) => switch (code) {
     'required_engine_unavailable' =>
-      'The required Windows video engine is unavailable.',
+      'The required video engine is unavailable.',
     'initialize_failed' => 'The native player could not initialize.',
     'dispose_in_progress' => 'The native player is shutting down.',
     'not_initialized' => 'The native player is not initialized.',

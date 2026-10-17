@@ -1,10 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 enum ShellDestination { guide, channels, settings, diagnostics, player }
 
-/// Command chords use Ctrl on every platform today. Keep the platform policy
-/// here; deciding whether macOS should use Command is a separate product choice.
-bool commandModifier(HardwareKeyboard keyboard) => keyboard.isControlPressed;
+/// Command chords use Command on macOS and Ctrl on every other platform. Keep
+/// the platform policy here. Guards that reject any modifier for plain-key
+/// shortcuts must stay modifier-agnostic and not use this.
+bool commandModifier(HardwareKeyboard keyboard) =>
+    defaultTargetPlatform == TargetPlatform.macOS
+    ? keyboard.isMetaPressed
+    : keyboard.isControlPressed;
 
 ShellDestination? navigationShortcutDestination(LogicalKeyboardKey key) {
   if (!commandModifier(HardwareKeyboard.instance)) return null;
