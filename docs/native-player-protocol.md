@@ -301,8 +301,16 @@ the shared core, with these platform-specific values:
   when AppKit does not start the transition within one second or complete
   the request within five. A request for the window's current state succeeds
   immediately, even when a transition is running or pending.
-- Closing the window or quitting synchronously completes disposal: commands
-  stop, libmpv terminates on its worker, then the video layer is removed.
+- Closing the window or quitting starts asynchronous native disposal after
+  the existing close/Flutter quit approval. The window and video owners stay
+  alive while the main run loop handles wakeups. libmpv terminates on its
+  worker, then the platform thread joins and removes the layer before allowing
+  window/app teardown. Repeated close/quit requests coalesce, and a concurrent
+  Dart `dispose` keeps its reply. Runner shutdown rejects subsequent commands
+  except `dispose`, including reinitialization. If disposal does not finish
+  within five seconds, a fixed diagnostic is logged and the process exits with
+  failure without running destructors or removing a live worker's layer.
+  Synchronous shutdown is reserved for emergency/destructor cleanup.
 
 ## Dart/C++ differences recorded at this revision
 

@@ -15,7 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// `videoHost` must be a flipped view that fills the window's content area
 /// below the FlutterView. The adapter observes `window` for fullscreen,
-/// minimize, occlusion, and close transitions; the video view itself follows
+/// minimize and occlusion transitions; the video view itself follows
 /// backing-scale changes (viewDidChangeBackingProperties).
 - (instancetype)initWithMessenger:(id<FlutterBinaryMessenger>)messenger
                         videoHost:(NSView*)videoHost
@@ -23,11 +23,17 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
 
-/// Synchronously completes disposal in the documented order: stop accepting
-/// commands, terminate libmpv on its worker (which releases the swapchain),
-/// then remove the video view. Pending Dart calls are not answered. Safe to
-/// call repeatedly; the window-close and application-terminate observers call
-/// it automatically.
+/// Permanently stops this adapter for runner shutdown. Returns immediately;
+/// completions run on the main queue only after the worker has terminated,
+/// been joined, and its presentation has been released. Repeated requests
+/// coalesce; an in-flight Dart disposal keeps its original reply. The adapter
+/// retains itself and the window/view owners until completion. If the worker
+/// misses the five-second deadline, a fixed diagnostic is logged and the
+/// process exits with failure without running destructors or releasing output.
+- (void)beginShutdownWithCompletion:(dispatch_block_t)completion;
+
+/// Emergency synchronous cleanup for destruction only. Normal close/quit
+/// must use beginShutdownWithCompletion: while the main run loop is alive.
 - (void)shutdown;
 
 @end

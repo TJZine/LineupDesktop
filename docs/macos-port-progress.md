@@ -126,6 +126,32 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | K2 macOS core-contract CI | `01a14bc1-7787-75f2-841a-48b715f3b209` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Primary checkout; only `.github/workflows/ci.yml`, one new job | Complete and independently approved; controller integrates |
 | K2 adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow diff against `61d475c4`; unrelated controller docs excluded | Complete: approved; hosted execution still outstanding |
 | M12-R5 targeted re-review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen six-file candidate working diff at `0857c906`, including new scheme/config | Complete: approved; reviewed aggregate SHA-256 `49054e38cfb471d1e60315dc4aa40411bfddad87f4c1c302be979c894ade6ec0` |
+| M3a asynchronous termination | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Primary checkout at `a93aefe35391a90897fbbdb5b86564e6ef1b9e9c`; macOS lifecycle source/tests and focused existing docs; no core/Windows/Git changes | Complete, reviewed and accepted; frozen 12-file aggregate `4f3a88a7128fdcce3579a07f3e488b53aeae890ea7a6662e7aba3ceaabac9561` |
+| M3a adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen M3a manifest; excludes controller record and disjoint R1a script work | Complete: approved; controller integrates exact reviewed files |
+| R1a embed cleanup and timestamps | `01a14bc1-7787-75f2-841a-48b715f3b209` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Only runtime embed script, isolated production-script integration tests, and runtime documentation; no shared app builds or signing services | Running; independent review required before integration |
+
+M3a is the lifecycle portion of M3, independent of the unresolved P6
+fullscreen product decision. It must preserve the pinned Flutter superclass's
+quit approval (including cancellation), then keep the main loop and native
+presentation owners alive while the worker disposes asynchronously. Repeated
+quit/close, concurrent Dart disposal, and timeout/completion races need
+faithful evidence. The exact timeout behavior and any acceptance limits must
+be returned for review. Synchronous `Shutdown()` is an emergency ownership
+fallback, not the normal quit/close path. Fullscreen events/Dart synchronization
+remain a separate M3b slice.
+
+M3a's approved timeout policy uses a fixed five-second
+deadline reports failed shutdown and exits the process without destructors or
+live-layer teardown if disposal is still incomplete. The implementer reports
+16 native test passes plus one intentionally skipped destructive probe, a
+separate real timeout subprocess exiting with failure, a meaningful early-reply
+negative control, and synthetic playback quit/close observations exiting
+successfully. The independent reviewer inspected those checks, the manifest,
+production ownership and pinned Flutter handshake; it approved without a
+material finding. The controller accepted that exact source. The deadline
+requires a functioning main queue; it does not claim to recover a pre-existing
+main-thread freeze. R1a addresses only the accepted stale-dylib and timestamp issues;
+full provisioning, signing-account inputs, notices UI, and C1 remain open.
 
 Next engineering slices are M3 (termination and fullscreen contract), the
 remaining U1 wiring, R1 (provisioning, embed/sign correctness, notices), and

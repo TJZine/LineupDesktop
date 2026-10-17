@@ -398,16 +398,39 @@ flutter build macos
 
 ### Native unit tests
 
-`macos/RunnerTests` holds unhosted XCTests for the Foundation/`Value`
-conversion and the video rectangle rules. They need an application build
-first (for the generated Flutter configuration) and the runtime setting:
+`macos/RunnerTests` holds unhosted XCTests for Foundation/`Value`
+conversion, video geometry, fullscreen requests, and runner/native shutdown.
+The shutdown tests use the real adapter and core with controlled libmpv worker
+operations and window/application boundaries; they do not launch Flutter or
+establish physical playback. Use the generated Flutter configuration from an
+application build and the accepted `LINEUP_MPV_RUNTIME` setting:
 
 ```sh
 flutter build macos --debug
-cd macos
-xcodebuild test -workspace Runner.xcworkspace -scheme Runner \
-  -destination 'platform=macOS' -only-testing:RunnerTests
+xcodebuild test -project macos/Runner.xcodeproj -scheme NativePlayerTests \
+  -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath /tmp/lineup-native-tests CODE_SIGNING_ALLOWED=NO
 ```
+
+The independent scheme builds only the unhosted tests. The normal suite skips
+one process-exit probe intentionally. Run it separately against that test
+bundle to observe the real five-second timeout policy:
+
+```sh
+LINEUP_SHUTDOWN_TIMEOUT_PROBE=1 xcrun xctest \
+  -XCTest NativeShutdownTests/testRealTimeoutExitProbe \
+  /tmp/lineup-native-tests/Build/Products/Debug/RunnerTests.xctest
+```
+
+That probe must exit **1** after logging `native shutdown exceeded five
+seconds; exiting with failure`; exit 0, an XCTest assertion/skip, or an external
+watchdog killing it is not a pass. Its worker is deliberately held inside
+`terminate_destroy`. The production deadline calls `_Exit(EXIT_FAILURE)`
+without destructor cleanup, additional blocking waits, or releasing the live
+layer. Other lifecycle tests cover main-loop progress, retained output/owners,
+Flutter approval, repeated close/quit, concurrent Dart disposal, and both sides
+of the completion/deadline race. Real playback quit/close still needs observation
+with the current app and accepted runtime.
 
 ### Real-protocol harness
 

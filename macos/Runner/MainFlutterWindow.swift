@@ -3,6 +3,23 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   private var nativePlayer: LineupNativePlayer?
+  private lazy var lifecycle = LineupPlayerLifecycle(player: nativePlayer)
+
+  func applicationShouldTerminate(
+    after approval: NSApplication.TerminateReply, reply: @escaping (Bool) -> Void
+  ) -> NSApplication.TerminateReply {
+    lifecycle.applicationShouldTerminate(afterApproval: approval, reply: reply)
+  }
+
+  override func close() {
+    // performClose has already asked the existing window delegate for approval.
+    // Keep this window and its Flutter controller alive until native completion.
+    lifecycle.close(whenReady: { [self] in finishClose() })
+  }
+
+  private func finishClose() {
+    super.close()
+  }
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()

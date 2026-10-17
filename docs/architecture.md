@@ -185,11 +185,22 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
 - **Fullscreen:** native `toggleFullScreen:`, completed from the window's
   did-enter/did-exit notifications. A toggle AppKit does not start within one
   second, or a request not settled within five, fails with `window_error`.
-- **Lifetime:** window close and application termination call
-  `PlayerCore::Shutdown()` synchronously: stop accepting commands, terminate
-  libmpv on the worker, join it, then remove the layer. Asynchronous
-  `applicationShouldTerminate:` sequencing and the native fullscreen event are
-  port package M3.
+- **Lifetime:** `AppDelegate` preserves `FlutterAppDelegate`'s quit approval
+  (including a Dart cancellation) before returning `terminateLater` and
+  starting native shutdown. `MainFlutterWindow.close()` defers the actual
+  close after the existing window delegate's approval; close-last-window
+  still quits. `LineupPlayerLifecycle` coalesces repeated runner requests.
+  The adapter starts `PlayerCore::BeginDispose()` and retains itself, the
+  window/Flutter controller, and video host while the main run loop services
+  worker wakeups. `ProcessWakeup()` joins after worker completion and releases
+  the output; only the core's resulting `disposed()` state permits close/quit
+  completion. An in-flight Dart `dispose` keeps its reply. Runner shutdown
+  permanently rejects reinitialization. After five seconds without completion,
+  a fixed diagnostic is logged and `_Exit(EXIT_FAILURE)` ends the process
+  without destructors, a second blocking wait, or live-layer teardown. This
+  is failed termination; the OS reclaims the resources. Synchronous `Shutdown()`
+  remains emergency/destructor cleanup only. Native fullscreen event/Dart
+  reconciliation remains separate port work.
 - **Display matching:** always reported unavailable (`unsupported_api`), as
   [the protocol](native-player-protocol.md#macos-backend) records.
 

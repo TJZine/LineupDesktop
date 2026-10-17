@@ -32,6 +32,9 @@ NSString* const kChannelName = @"lineup/native_player";
 // kFullscreenTimeoutSeconds is reported as a window error.
 constexpr int64_t kFullscreenStartMilliseconds = 1000;
 constexpr int64_t kFullscreenTimeoutSeconds = 5;
+constexpr int64_t kShutdownTimeoutSeconds = 5;
+
+enum class ShutdownState { idle, waiting, complete, timedOut };
 
 void SendResult(FlutterResult result, const CallResult& outcome) {
   if (outcome.error) {
@@ -83,6 +86,10 @@ struct FullscreenRequest {
 - (std::optional<CallError>)prepareOutput:(OutputConfig&)output;
 - (void)removeOutput;
 - (void)processWakeup;
+- (lineup::player::MpvOperations)mpvOperations;
+- (void)completeShutdownIfReady;
+- (void)shutdownTimedOut;
+- (void)terminateAfterShutdownTimeout;
 @end
 
 namespace {
@@ -225,6 +232,13 @@ class MacCoreHost final : public lineup::player::CoreHost {
   NSMutableArray<id>* _observers;
   NSTimer* _presentationLogTimer;
   NSString* _lastPresentationFacts;
+  ShutdownState _shutdownState;
+  std::vector<dispatch_block_t> _shutdownCompletions;
+  // Keep the wakeup recipient, window, Flutter engine, and video host alive
+  // until the worker has stopped referencing presentation.
+  LineupNativePlayer* _shutdownKeepAlive;
+  NSWindow* _shutdownWindow;
+  NSView* _shutdownVideoHost;
 }
 
 - (instancetype)initWithMessenger:(id<FlutterBinaryMessenger>)messenger
@@ -235,8 +249,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
     _videoHost = videoHost;
     _window = window;
     _host = std::make_unique<MacCoreHost>(self);
-    _core = std::make_unique<PlayerCore>(lineup::player::LibmpvOperations(),
-                                         *_host);
+    _core = std::make_unique<PlayerCore>([self mpvOperations], *_host);
     _channel = [FlutterMethodChannel methodChannelWithName:kChannelName
                                            binaryMessenger:messenger];
     __weak LineupNativePlayer* weakSelf = self;
@@ -252,6 +265,82 @@ class MacCoreHost final : public lineup::player::CoreHost {
     [self observeWindow:window];
   }
   return self;
+}
+
+// The operations boundary is also used by native tests to hold the real core's
+// worker inside terminate_destroy without loading media or a Flutter engine.
+- (lineup::player::MpvOperations)mpvOperations {
+  return lineup::player::LibmpvOperations();
+}
+
+- (void)beginShutdownWithCompletion:(dispatch_block_t)completion {
+  NSAssert(NSThread.isMainThread, @"Shutdown is main-thread only.");
+  if (_shutdownState == ShutdownState::complete) {
+    dispatch_async(dispatch_get_main_queue(), completion);
+    return;
+  }
+  if (_shutdownState == ShutdownState::timedOut) return;
+  _shutdownCompletions.push_back([completion copy]);
+  if (_shutdownState == ShutdownState::waiting) return;
+
+  _shutdownState = ShutdownState::waiting;
+  _shutdownKeepAlive = self;
+  _shutdownWindow = _window;
+  _shutdownVideoHost = _videoHost;
+  [self failFullscreenRequests:@"The player window is closing."];
+  _core->BeginDispose();
+  __weak LineupNativePlayer* weakSelf = self;
+  dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW, kShutdownTimeoutSeconds * NSEC_PER_SEC),
+      dispatch_get_main_queue(), ^{ [weakSelf shutdownTimedOut]; });
+  // Even an unused/already-disposed player replies on a later main-queue turn,
+  // after applicationShouldTerminate has returned NSTerminateLater.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [weakSelf completeShutdownIfReady];
+  });
+}
+
+- (void)completeShutdownIfReady {
+  if (_shutdownState == ShutdownState::idle || !_core->disposed()) return;
+  if (_shutdownState == ShutdownState::complete) return;
+  const bool succeeded = _shutdownState == ShutdownState::waiting;
+  if (succeeded) _shutdownState = ShutdownState::complete;
+  auto completions = std::move(_shutdownCompletions);
+  _shutdownCompletions.clear();
+  // Keep owners through callbacks, including a callback that closes the window.
+  __attribute__((objc_precise_lifetime)) LineupNativePlayer* keepAlive =
+      _shutdownKeepAlive;
+  __attribute__((objc_precise_lifetime)) NSWindow* window = _shutdownWindow;
+  __attribute__((objc_precise_lifetime)) NSView* videoHost = _shutdownVideoHost;
+  _shutdownKeepAlive = nil;
+  _shutdownWindow = nil;
+  _shutdownVideoHost = nil;
+  if (succeeded) {
+    for (dispatch_block_t completion : completions) completion();
+  }
+  (void)keepAlive;
+  (void)window;
+  (void)videoHost;
+}
+
+- (void)shutdownTimedOut {
+  if (_shutdownState != ShutdownState::waiting) return;
+  // Disposal may already be finished while a callback is deferred/reentrant.
+  // A late deadline must observe that success instead of forcing an exit.
+  if (_core->disposed()) {
+    [self completeShutdownIfReady];
+    return;
+  }
+  _shutdownState = ShutdownState::timedOut;
+  NSLog(@"[lineup-player] native shutdown exceeded five seconds; "
+         @"exiting with failure");
+  [self terminateAfterShutdownTimeout];
+}
+
+- (void)terminateAfterShutdownTimeout {
+  // Do not run destructors, block in Shutdown(), or tear down a live layer.
+  // The OS reclaims process resources; this is failed termination, not success.
+  std::_Exit(EXIT_FAILURE);
 }
 
 - (void)dealloc {
@@ -273,6 +362,13 @@ class MacCoreHost final : public lineup::player::CoreHost {
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   NSString* method = call.method;
+  if (_shutdownState != ShutdownState::idle &&
+      ![method isEqualToString:@"dispose"]) {
+    result([FlutterError errorWithCode:@"not_initialized"
+                              message:@"The native player is shutting down."
+                              details:nil]);
+    return;
+  }
   if ([method isEqualToString:@"initialize"]) {
     _displayRevisions.Reset();
     _core->DiscardQueuedEvents("display");
@@ -326,6 +422,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
     [self logVideoParameters:event];
     [_channel invokeMethod:@"event" arguments:lineup::ToFoundationMap(event)];
   });
+  [self completeShutdownIfReady];
 }
 
 #pragma mark - Display matching
@@ -582,16 +679,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
       [player applyVideoPresentation];
     });
   }
-  // Closing the window or quitting stops libmpv before AppKit tears down the
-  // views and the process exits.
-  observe(NSWindowWillCloseNotification, window,
-          ^(LineupNativePlayer* player) {
-            [player shutdown];
-          });
-  observe(NSApplicationWillTerminateNotification, nil,
-          ^(LineupNativePlayer* player) {
-            [player shutdown];
-          });
+
 }
 
 #pragma mark - Presentation diagnostics
