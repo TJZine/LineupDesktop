@@ -1,4 +1,4 @@
-#include "native_playback_state.h"
+#include "player_core/native_playback_state.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -13,7 +13,7 @@ void Check(bool condition, const char* obligation) {
 }
 
 void ReplacementAndRetirement() {
-  lineup::NativePlaybackState state;
+  lineup::player::NativePlaybackState state;
   Check(state.AcceptLoad(11, 100), "first accepted load");
   Check(state.StartFile(100).within_capacity, "first observed start");
   state.RecordFailure("network_error", std::nullopt);
@@ -43,7 +43,7 @@ void ReplacementAndRetirement() {
 }
 
 void FifoAndRedirects() {
-  lineup::NativePlaybackState state;
+  lineup::player::NativePlaybackState state;
   state.AcceptLoad(31, std::nullopt);
   state.AcceptLoad(32, std::nullopt);
   state.StartFile(301);
@@ -72,7 +72,7 @@ void FifoAndRedirects() {
 }
 
 void CapacityAndReset() {
-  lineup::NativePlaybackState state;
+  lineup::player::NativePlaybackState state;
   for (int64_t i = 0; i < 1024; ++i) Check(state.AcceptLoad(i + 1, i), "map capacity");
   Check(!state.AcceptLoad(2000, 1024), "map bound");
   Check(state.active_load() == 2000, "capacity failure retains accepted load");
@@ -99,7 +99,7 @@ void CapacityAndReset() {
 }
 
 void StopObservation() {
-  lineup::NativePlaybackState state;
+  lineup::player::NativePlaybackState state;
   state.AcceptLoad(5, 9);
   state.AcceptStop(81);
   Check(!state.ObserveIdle(false, 0), "stop acceptance is not idle completion");

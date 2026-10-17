@@ -1,5 +1,5 @@
-#ifndef RUNNER_NATIVE_PLAYBACK_STATE_H_
-#define RUNNER_NATIVE_PLAYBACK_STATE_H_
+#ifndef LINEUP_PLAYER_CORE_NATIVE_PLAYBACK_STATE_H_
+#define LINEUP_PLAYER_CORE_NATIVE_PLAYBACK_STATE_H_
 
 #include <algorithm>
 #include <cstddef>
@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace lineup {
+namespace lineup::player {
 
 class NativePlaybackState {
  public:
@@ -167,5 +167,6 @@ class NativePlaybackState {
   std::optional<Failure> failure_;
 };
 
-}
+}  // namespace lineup::player
+
 #endif

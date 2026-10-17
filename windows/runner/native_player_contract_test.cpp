@@ -66,7 +66,7 @@ void TestDestroy(mpv_handle* client) {
 
 namespace {
 WindowsNativePlayer::MpvOperations TestOperations() {
-  WindowsNativePlayer::MpvOperations operations;
+  auto operations = lineup::player::LibmpvOperations();
   operations.get_property = TestGetProperty;
   operations.set_property = TestSetProperty;
   operations.command = TestCommand;

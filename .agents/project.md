@@ -104,7 +104,8 @@ unfamiliar areas.
 | Plex boundary | `lib/plex/plex_client.dart`, `plex_models.dart` | Validate external values; cancel obsolete IO where possible; preserve authentication and redaction |
 | Playback policy and state | `lib/playback/player_coordinator.dart` (including `_ActiveProgram`), `native_player.dart` | Dart owns product decisions; command acceptance is not observed playback or track confirmation |
 | Dart/native transport | `lib/playback/method_channel_native_player.dart`, `native_player_factory.dart`; [protocol](../docs/native-player-protocol.md) | Typed bounded payloads, correct lifetime/load/stop correlation, late-event rejection, explicit cleanup |
-| Windows media/presentation | `windows/runner/native_player.*`, `flutter_window.*` | Native owner manages libmpv and platform objects; platform-thread and worker-thread responsibilities remain coherent |
+| Shared native player core | `native/player_core/` | Platform-neutral libmpv lifetime, bounded queues, correlation, token handling, and event encoding; no platform or Flutter types |
+| Windows media/presentation | `windows/runner/native_player.*`, `flutter_window.*` | Windows adapter manages the channel, codec conversion, and platform objects; platform-thread and worker-thread responsibilities remain coherent |
 | Studio draft, verification and Setup review | `lib/app/manual_rundown.dart`, `air_check_verification.dart`, `setup_review.dart` | Draft occurrences, verified schedule identity and immutable reviewed application remain distinct |
 | Channel health and diagnostics | `lib/app/channel_health_monitor.dart`, `lib/diagnostics/diagnostics.dart` | Health jobs are owned outside build; typed events retain separate storage and export privacy policy |
 | Flutter surface and interaction | `lib/playback/native_video_surface.dart`, `player_view.dart`, affected `lib/app/` views | Flutter owns focus, semantics, input, overlays, and accessible interaction |
@@ -153,8 +154,9 @@ obligation to retained evidence.
 | Interaction/accessibility | Affected widget tests; `test/support/ui_fixture.dart` | Focus, semantics, layout; physical Windows input/assistive technology remain separate when claimed |
 | Guide alpha | `test/app/guide_opacity_test.dart` on macOS | Required exact alpha behavior for the relevant Guide surface |
 | Visual comparisons | `tool/visual/`, `test/support/golden_test_support.dart` | Optional explicit visual suites; inspect their host restrictions |
-| Native encoding | `windows/runner/track_list_encoder_test.cpp` | Real encoder contract; explicitly selected Windows CI CTest, not app or presentation proof |
-| Native state/display contracts | `windows/runner/native_playback_state_test.cpp`, `display_dynamic_range_test.cpp`, `display_guardian_test.cpp` | Explicitly selected Windows CI CTests; controlled display inputs and real guardian process fixtures, not physical media or HDR proof |
+| Native encoding | `native/player_core/track_list_encoder_test.cpp` | Real encoder contract; Windows CI CTest and portable CTest, not app or presentation proof |
+| Shared player core | `native/player_core/native_playback_state_test.cpp`, `player_core_contract_test.cpp` | Portable CTest (`cmake -S native/player_core`) with fake libmpv operations: correlation, bounds, eviction, token handling, lifecycle; not real media |
+| Native display contracts | `windows/runner/display_dynamic_range_test.cpp`, `display_guardian_test.cpp` | Explicitly selected Windows CI CTests; controlled display inputs and real guardian process fixtures, not physical media or HDR proof |
 | Authenticated references | `windows/runner/authenticated_reference_test.cpp`, `tool/windows/authenticated-reference-test.py` | Production initialization/load path against the prepared DLL with synthetic HTTPS; no physical Plex or presentation claim |
 | Windows runtime/package | [Physical acceptance](../docs/windows-native-validation.md) | Record exact candidate, build/runtime identities, platform, display, scenario and result |
 
@@ -162,9 +164,10 @@ At the inspected revision, `test_driver/ui_harness.dart` is synthetic and
 `test/app/product_spine_test.dart` uses fake Plex/native boundaries. CI does
 not launch a real application E2E campaign. Native CTest targets remain
 excluded from the default application build. Windows CI explicitly builds and
-runs the encoder, playback-state, display-controller, and guardian suites after
-the stock-engine application build. Player-contract, runner-lifecycle, and
-authenticated-reference CTests remain separate explicit checks outside CI.
+runs the encoder, playback-state, core-contract, codec-conversion,
+display-controller, and guardian suites after the stock-engine application
+build. The Windows player-contract, runner-lifecycle, and authenticated-reference
+CTests remain separate explicit checks outside CI.
 Report the suites actually executed and their limits accurately.
 
 ### Commands and prerequisites

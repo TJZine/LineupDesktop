@@ -44,6 +44,13 @@ and fullscreen completion. `MethodChannelNativePlayer` owns transport;
 `createPlatformNativePlayer` selects the platform implementation. Dart owns playback
 policy; native backends implement media and platform mechanisms.
 
+The libmpv mechanics behind the protocol live in the platform-neutral
+[player core](../native/player_core/player_core.h): the mpv client lifetime,
+the bounded command queue and worker, load/stop/track correlation, the bounded
+event queue and generation filtering, token handling, and telemetry encoding.
+A platform adapter owns the channel and codec conversion, presentation, and
+window lifecycle; the Windows adapter is `windows/runner/native_player.*`.
+
 macOS is a development surface; native playback is not yet implemented.
 A future backend must meet the protocol and the [macOS decision and presentation
 obligations](code-quality-implementation-plan.md#9-macos-strategy-and-deferred-port-backlog).
@@ -149,7 +156,8 @@ OS shutdown that cuts recovery short. The runner destroys the native owner
 before the Flutter controller/messenger. Preserve this ordering when changing
 close or recreation; the destructor's five-second wait and termination fallback
 is emergency cleanup, not the normal path. See
-[native player lifetime](../windows/runner/native_player.cpp) and
+[native player lifetime](../native/player_core/player_core.cpp), the
+[Windows adapter](../windows/runner/native_player.cpp), and
 [runner message handling](../windows/runner/flutter_window.cpp).
 
 ## Implemented now
@@ -281,7 +289,7 @@ is emergency cleanup, not the normal path. See
   physical Windows acceptance.
   Preserve native header-buffer clearing after command execution and queue
   cleanup. See [Dart load validation](../lib/playback/method_channel_native_player.dart),
-  [native load options](../windows/runner/native_player.cpp), and the
+  [native load options](../native/player_core/player_core.cpp), and the
   [physical redirect scenarios](windows-native-validation.md#6-plex-end-to-end-campaign).
 - Profile and selected-server state remains scoped by Plex profile. The
   application controller serializes whole state mutations through

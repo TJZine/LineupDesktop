@@ -95,19 +95,26 @@ engine or physical HDR changes; they do not establish media or presentation
 acceptance.
 
 The assertion-based `track_list_encoder_test` exercises the real encoder,
-not the app. After configuring the Windows build with the prerequisites below,
-run:
+not the app. It is defined with the shared player core in
+`native/player_core/`, which the Windows runner build includes. After
+configuring the Windows build with the prerequisites below, run:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test
 ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
 ```
 
-Three additional targets cover native correlation and shutdown:
+Additional targets cover native correlation and shutdown:
 
 - `native_playback_state_test` exercises the actual worker-owned correlation
   state, including replacement, redirects, retirement, and observed idle.
-- `native_player_contract_test` drives the production parser, command queue,
+- `player_core_contract_test` drives the shared core's parser, command queue,
+  bounds, event projection and eviction, token header, and worker lifecycle
+  through fake libmpv operations. It needs mpv headers but not libmpv.
+- `encodable_value_conversion_test` checks the Windows adapter's conversion
+  between Flutter codec values and the core's neutral values, including
+  unchanged event bytes.
+- `native_player_contract_test` drives the Windows adapter, codec, parser, command queue,
   load-to-state handoff, event projection, and real libmpv worker through a
   bounded HWND/message pump. Test-local DLL responses make selected load
   command/query outcomes deterministic; lifecycle scenarios use the real DLL.
@@ -115,8 +122,16 @@ Three additional targets cover native correlation and shutdown:
   against installed candidate assets. A retained blank-widget Dart entry point
   avoids opening user state or credentials through the application bootstrap.
 
-All are `EXCLUDE_FROM_ALL`; only `native_playback_state_test` is selected by
-CI. The state test does not require a live engine. The player-contract and
+All are `EXCLUDE_FROM_ALL`; CI explicitly selects `native_playback_state_test`,
+`player_core_contract_test`, and `encodable_value_conversion_test`. These tests
+do not require a live engine or the patched engine:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target player_core_contract_test encodable_value_conversion_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^(player_core_contract|encodable_value_conversion)$' --output-on-failure --timeout 45
+```
+
+The player-contract and
 runner-lifecycle targets remain explicit local checks. Build/install the
 candidate with the pinned patched engine and prepared libmpv first for those
 checks, then build the targets and run their CTests:
@@ -132,14 +147,17 @@ application's installed `data` directory. Stock-engine compilation does not
 provide the runner test's required composition marker. Keep encoder and
 authenticated-reference checks as distinct obligations.
 
-The state component is also portable with a C++17 compiler:
+The shared player core and its encoder, state, and contract tests are portable.
+On macOS with Homebrew mpv headers (`/opt/homebrew/include` by default, or set
+`-DLINEUP_MPV_INCLUDE_DIR=<dir>`):
 
 ```sh
-clang++ -std=c++17 -Wall -Wextra -Werror -pedantic windows/runner/native_playback_state_test.cpp -o /tmp/lineup-native-playback-state-test
-/tmp/lineup-native-playback-state-test
+cmake -S native/player_core -B build/player_core
+cmake --build build/player_core
+ctest --test-dir build/player_core --output-on-failure
 ```
 
-Portable state proof does not compile or execute the Windows parser/runner.
+Portable core proof does not compile or execute the Windows adapter/runner.
 Blank-widget runner proof does not establish physical media, HDR, composition,
 input, or package acceptance. Queue pressure preferentially removes property
 events; an all-non-property saturated queue can evict an old acknowledgment,
