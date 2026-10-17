@@ -567,3 +567,15 @@ the added instrumentation. The crash report identifies that probe-only read;
 the worker removed it before rebuilding. Those attempts establish no product
 regression or presentation result. Model-layer facts, generic presentation
 geometry and mpv swapchain logs remain the intended diagnostic evidence.
+
+The corrected instrumented run did not reproduce the dim output: the human
+judged held HDR phase C normally bright. Logs showed PQ/bt2020 target selection,
+actual HDR swapchain recreation at unchanged 1600×1200 extent, and model-layer
+PQ/EDR/metadata enabled. These facts apply to the successful diagnostic run and
+do not explain the original failing process. A reduced-logging variant also
+received a normally-bright physical judgment. It removed polling,
+presentation-layer reads and mpv debug options, and reused the original
+`App.framework`; engine and runtime hashes matched. Event logging could still
+perturb timing. The worker is next comparing a fresh launch of the unchanged
+original binary with the same endpoint sequence. No production correction,
+causal conclusion or HDR acceptance follows from these non-reproductions.
