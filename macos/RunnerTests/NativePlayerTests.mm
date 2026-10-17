@@ -5,6 +5,7 @@
 
 #include "FoundationValueConversion.h"
 #include "VideoGeometry.h"
+#import "LineupNativePlayer.h"
 
 using lineup::player::Value;
 using lineup::player::ValueList;
@@ -194,6 +195,113 @@ using lineup::player::ValueMap;
   XCTAssertEqual(size.width, lineup::kMaxDrawableDimension);
   size = lineup::DrawableSize(CGSizeMake(10, 10), 0);
   XCTAssertEqual(size.width, 10);
+}
+
+@end
+
+// Exercise the adapter's production request method without initializing media
+// or launching a Flutter engine. The window boundary controls AppKit's observed
+// style and notifications so both sides of a transition are deterministic.
+@interface LineupNativePlayer (FullscreenTests)
+- (void)setFullscreen:(bool)fullscreen result:(FlutterResult)result;
+@end
+
+@interface FullscreenTestWindow : NSObject
+@property(nonatomic) NSWindowStyleMask styleMask;
+@property(nonatomic) NSUInteger toggleCount;
+- (void)toggleFullScreen:(id)sender;
+@end
+
+@implementation FullscreenTestWindow
+- (void)toggleFullScreen:(id)sender {
+  self.toggleCount += 1;
+}
+@end
+
+@interface FullscreenTestMessenger : NSObject <FlutterBinaryMessenger>
+@end
+
+@implementation FullscreenTestMessenger
+- (void)sendOnChannel:(NSString*)channel message:(NSData*)message {}
+- (void)sendOnChannel:(NSString*)channel
+             message:(NSData*)message
+         binaryReply:(FlutterBinaryReply)callback {}
+- (FlutterBinaryMessengerConnection)
+    setMessageHandlerOnChannel:(NSString*)channel
+          binaryMessageHandler:(FlutterBinaryMessageHandler)handler {
+  return 1;
+}
+- (void)cleanUpConnection:(FlutterBinaryMessengerConnection)connection {}
+@end
+
+@interface FullscreenRequestTests : XCTestCase
+@end
+
+@implementation FullscreenRequestTests
+
+- (void)checkMatchingRequestsDuringTransition:(BOOL)started {
+  XCTAssertTrue(NSThread.isMainThread);
+  for (NSNumber* initialState in @[ @NO, @YES ]) {
+    const bool current = initialState.boolValue;
+    FullscreenTestWindow* window = [FullscreenTestWindow new];
+    window.styleMask = current ? NSWindowStyleMaskFullScreen : 0;
+    FullscreenTestMessenger* messenger = [FullscreenTestMessenger new];
+    NSView* videoHost = [[NSView alloc] initWithFrame:NSZeroRect];
+    LineupNativePlayer* player = [[LineupNativePlayer alloc]
+        initWithMessenger:messenger
+                videoHost:videoHost
+                   window:(NSWindow*)window];
+
+    // A real nonmatching request creates the pending toggle and must remain
+    // outstanding while subsequent requests for the current state succeed.
+    __block NSUInteger outstandingReplies = 0;
+    [player setFullscreen:!current result:^(id result) {
+      XCTAssertNil(result);
+      outstandingReplies += 1;
+    }];
+    XCTAssertEqual(window.toggleCount, 1u);
+    XCTAssertEqual(outstandingReplies, 0u);
+    if (started) {
+      [NSNotificationCenter.defaultCenter
+          postNotificationName:current ? NSWindowWillExitFullScreenNotification
+                                       : NSWindowWillEnterFullScreenNotification
+                        object:window];
+    }
+    NSNumber* requestId = [player valueForKey:@"nextFullscreenRequest"];
+    __block NSUInteger matchingReplies = 0;
+    [player setFullscreen:current result:^(id result) {
+      XCTAssertNil(result);
+      matchingReplies += 1;
+    }];
+    // Assert before any notification/run-loop work: this reply is synchronous.
+    XCTAssertEqual(matchingReplies, 1u);
+    XCTAssertEqualObjects([player valueForKey:@"nextFullscreenRequest"],
+                          requestId);
+    XCTAssertEqual(window.toggleCount, 1u);
+    XCTAssertEqual(outstandingReplies, 0u);
+
+    // Completing the original transition must settle only that request,
+    // without a queued matching request reversing it or replying again.
+    window.styleMask = current ? 0 : NSWindowStyleMaskFullScreen;
+    [NSNotificationCenter.defaultCenter
+        postNotificationName:current ? NSWindowDidExitFullScreenNotification
+                                     : NSWindowDidEnterFullScreenNotification
+                      object:window];
+    XCTAssertEqual(outstandingReplies, 1u);
+    XCTAssertEqual(matchingReplies, 1u);
+    XCTAssertEqual(window.toggleCount, 1u);
+    [player shutdown];
+    XCTAssertEqual(outstandingReplies, 1u);
+    XCTAssertEqual(matchingReplies, 1u);
+  }
+}
+
+- (void)testMatchingRequestsCompleteWhileToggleIsPending {
+  [self checkMatchingRequestsDuringTransition:NO];
+}
+
+- (void)testMatchingRequestsCompleteWhileTransitionIsActive {
+  [self checkMatchingRequestsDuringTransition:YES];
 }
 
 @end

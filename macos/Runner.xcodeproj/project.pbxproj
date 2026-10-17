@@ -37,16 +37,14 @@
 		5A1E0C00000000000D00D019 /* VideoGeometry.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D006 /* VideoGeometry.mm */; };
 		5A1E0C00000000000D00D01A /* NativePlayerTests.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D011 /* NativePlayerTests.mm */; };
 		5A1E0C00000000000D00E003 /* platform_arguments.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00E001 /* platform_arguments.cpp */; };
+		5A1E0C00000000000D00D030 /* LineupNativePlayer.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D002 /* LineupNativePlayer.mm */; };
+		5A1E0C00000000000D00D031 /* player_core.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D00A /* player_core.cpp */; };
+		5A1E0C00000000000D00D032 /* libmpv_operations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D00C /* libmpv_operations.cpp */; };
+		5A1E0C00000000000D00D033 /* track_list_encoder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D00E /* track_list_encoder.cpp */; };
+		5A1E0C00000000000D00D034 /* platform_arguments.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00E001 /* platform_arguments.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		331C80D9294CF71000263BE5 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 33CC10E52044A3C60003C045 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 33CC10EC2044A3C60003C045;
-			remoteInfo = Runner;
-		};
 		33CC111F2044C79F0003C045 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 33CC10E52044A3C60003C045 /* Project object */;
@@ -107,6 +105,7 @@
 		5A1E0C00000000000D00D011 /* NativePlayerTests.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NativePlayerTests.mm; sourceTree = "<group>"; };
 		5A1E0C00000000000D00E001 /* platform_arguments.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = platform_arguments.cpp; sourceTree = "<group>"; };
 		5A1E0C00000000000D00E002 /* platform_arguments.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = platform_arguments.h; sourceTree = "<group>"; };
+		5A1E0C00000000000D00D035 /* NativePlayerTests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = NativePlayerTests.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,6 +131,7 @@
 			isa = PBXGroup;
 			children = (
 				5A1E0C00000000000D00D011 /* NativePlayerTests.mm */,
+				5A1E0C00000000000D00D035 /* NativePlayerTests.xcconfig */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -267,7 +267,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				331C80DA294CF71000263BE5 /* PBXTargetDependency */,
 			);
 			name = RunnerTests;
 			productName = RunnerTests;
@@ -459,6 +458,11 @@
 				5A1E0C00000000000D00D018 /* FoundationValueConversion.mm in Sources */,
 				5A1E0C00000000000D00D019 /* VideoGeometry.mm in Sources */,
 				5A1E0C00000000000D00D01A /* NativePlayerTests.mm in Sources */,
+				5A1E0C00000000000D00D030 /* LineupNativePlayer.mm in Sources */,
+				5A1E0C00000000000D00D031 /* player_core.cpp in Sources */,
+				5A1E0C00000000000D00D032 /* libmpv_operations.cpp in Sources */,
+				5A1E0C00000000000D00D033 /* track_list_encoder.cpp in Sources */,
+				5A1E0C00000000000D00D034 /* platform_arguments.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -482,11 +486,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		331C80DA294CF71000263BE5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 33CC10EC2044A3C60003C045 /* Runner */;
-			targetProxy = 331C80D9294CF71000263BE5 /* PBXContainerItemProxy */;
-		};
 		33CC11202044C79F0003C045 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 33CC111A2044C6BA0003C045 /* Flutter Assemble */;
@@ -509,6 +508,7 @@
 /* Begin XCBuildConfiguration section */
 		331C80DB294CF71000263BE5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5A1E0C00000000000D00D035 /* NativePlayerTests.xcconfig */;
 			buildSettings = {
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CURRENT_PROJECT_VERSION = 1;
@@ -531,6 +531,7 @@
 		};
 		331C80DC294CF71000263BE5 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5A1E0C00000000000D00D035 /* NativePlayerTests.xcconfig */;
 			buildSettings = {
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CURRENT_PROJECT_VERSION = 1;
@@ -553,6 +554,7 @@
 		};
 		331C80DD294CF71000263BE5 /* Profile */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5A1E0C00000000000D00D035 /* NativePlayerTests.xcconfig */;
 			buildSettings = {
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CURRENT_PROJECT_VERSION = 1;

@@ -296,11 +296,11 @@ the shared core, with these platform-specific values:
   points; the layer's `contentsScale` and `drawableSize` follow the window's
   backing scale. Video is hidden for a zero rectangle and while the window is
   minimized or occluded; the layer keeps a non-empty frame while hidden.
-- `setFullscreen` uses the window's native fullscreen and completes after
-  AppKit reports the transition. It fails with `window_error` when AppKit
-  does not start the transition within one second or complete the request
-  within five. A request for the window's current state succeeds
-  immediately when no transition is running or pending.
+- `setFullscreen` uses the window's native fullscreen. Nonmatching requests
+  complete after AppKit reports the transition. It fails with `window_error`
+  when AppKit does not start the transition within one second or complete
+  the request within five. A request for the window's current state succeeds
+  immediately, even when a transition is running or pending.
 - Closing the window or quitting synchronously completes disposal: commands
   stop, libmpv terminates on its worker, then the video layer is removed.
 

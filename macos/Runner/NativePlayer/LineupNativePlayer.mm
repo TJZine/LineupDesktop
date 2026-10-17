@@ -433,15 +433,15 @@ class MacCoreHost final : public lineup::player::CoreHost {
   return (_window.styleMask & NSWindowStyleMaskFullScreen) != 0;
 }
 
-// Completes only after AppKit reports the transition (protocol obligation 5).
+// Nonmatching requests complete after AppKit reports the transition.
 - (void)setFullscreen:(bool)fullscreen result:(FlutterResult)result {
   if (!_window) {
     result(WindowError(@"The player window is unavailable."));
     return;
   }
-  // Nothing is moving the window, so its current state is final.
-  if (!_fullscreenTransitioning && _pendingFullscreenToggle == 0 &&
-      static_cast<bool>([self windowIsFullscreen]) == fullscreen) {
+  // Matching the observed state is an immediate no-op, even during a
+  // transition. Do not enqueue it behind requests for a different state.
+  if (static_cast<bool>([self windowIsFullscreen]) == fullscreen) {
     result(nil);
     return;
   }
