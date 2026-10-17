@@ -51,6 +51,38 @@ void main() {
     }
   }
 
+  testWidgets('native app menu openSettings opens Settings when ready', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      player: FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    _expectDestination('Guide');
+
+    await _sendAppMenu(tester, 'openSettings');
+    _expectDestination('Settings');
+  });
+
+  testWidgets('native app menu openSettings is ignored before setup is ready', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.welcome),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    expect(fixture.controller.stage, SetupStage.welcome);
+
+    await _sendAppMenu(tester, 'openSettings');
+    expect(fixture.controller.stage, SetupStage.welcome);
+    expect(find.byKey(const Key('settings-app-menu')), findsNothing);
+    expect(find.byKey(const Key('classic-guide')), findsNothing);
+  });
+
   testWidgets(
     'route chords from a focused Studio field retain the leave guard',
     (tester) async {
@@ -763,4 +795,14 @@ void _expectDestination(String destination) {
     _ => throw ArgumentError.value(destination),
   };
   expect(finder, findsOneWidget);
+}
+
+Future<void> _sendAppMenu(WidgetTester tester, String method) async {
+  const codec = StandardMethodCodec();
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    'lineup/app_menu',
+    codec.encodeMethodCall(MethodCall(method)),
+    (_) {},
+  );
+  await tester.pumpAndSettle();
 }

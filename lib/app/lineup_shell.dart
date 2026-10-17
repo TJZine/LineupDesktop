@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -64,6 +65,7 @@ class _LineupShellState extends State<LineupShell> {
   bool _selectionPending = false;
   bool _keyboardInput = false;
   ({Rect anchor, FocusNode invokerFocus})? _appMenu;
+  static const _appMenuChannel = MethodChannel('lineup/app_menu');
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
   bool _guideOpenedFromPlayer = false;
@@ -73,6 +75,7 @@ class _LineupShellState extends State<LineupShell> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
+    _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
     _guide = GuideController(
       lineup: widget.controller,
       clock: widget.guideClock,
@@ -138,6 +141,7 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
+    _appMenuChannel.setMethodCallHandler(null);
     widget.controller.removeListener(_changed);
     _player.removeListener(_playerChanged);
     _player.dispose();
@@ -317,6 +321,13 @@ class _LineupShellState extends State<LineupShell> {
         _restoreRouteFocus();
       }
     });
+  }
+
+  /// Native application-menu commands (macOS Settings…, Command-comma).
+  Future<void> _handleAppMenuCall(MethodCall call) async {
+    if (call.method != 'openSettings') throw MissingPluginException();
+    if (!mounted || widget.controller.stage != SetupStage.ready) return;
+    await _select(ShellDestination.settings);
   }
 
   Future<void> _openAccount() async {
@@ -1300,18 +1311,19 @@ class _SettingsViewState extends State<SettingsView> {
                   onChanged: onChanged,
                 ),
               ),
-              ..._settingControl<bool>(
-                _SettingKey.matchDisplayHdr,
-                (current, item) => current.copyWith(matchDisplayHdr: item),
-                (onChanged) => _SettingsSwitchTile(
-                  title: const Text('Match display HDR in fullscreen'),
-                  subtitle: const Text(
-                    'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+              if (defaultTargetPlatform != TargetPlatform.macOS)
+                ..._settingControl<bool>(
+                  _SettingKey.matchDisplayHdr,
+                  (current, item) => current.copyWith(matchDisplayHdr: item),
+                  (onChanged) => _SettingsSwitchTile(
+                    title: const Text('Match display HDR in fullscreen'),
+                    subtitle: const Text(
+                      'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+                    ),
+                    value: value.matchDisplayHdr,
+                    onChanged: onChanged,
                   ),
-                  value: value.matchDisplayHdr,
-                  onChanged: onChanged,
                 ),
-              ),
             ],
             SettingsCategory.accessibility => [
               ..._settingControl<bool>(

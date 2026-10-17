@@ -1,4 +1,6 @@
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -58,6 +60,35 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('macOS technical details report HDR output as OS-managed', (
+    tester,
+  ) async {
+    final controller = FixtureController();
+    addTearDown(controller.dispose);
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      await show(tester, controller);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Technical details'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('HDR output'), findsOneWidget);
+      expect(find.text('Managed by macOS'), findsOneWidget);
+      expect(find.text('Renderer output'), findsOneWidget);
+      expect(find.text('Windows display'), findsNothing);
+      expect(find.text('HDR matching'), findsNothing);
+      expect(
+        find.text(
+          'macOS manages HDR output; Lineup does not change display modes.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('reported by Windows'), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets(

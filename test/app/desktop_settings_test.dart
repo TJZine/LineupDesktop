@@ -3,6 +3,8 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -141,6 +143,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.settings.matchDisplayHdr, isFalse);
     expect(tester.widget<Switch>(toggle).value, isFalse);
+  });
+
+  testWidgets('fullscreen HDR switch is omitted on macOS only', (tester) async {
+    final controller = FixtureController();
+    addTearDown(controller.dispose);
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      await _showSettings(tester, controller);
+      await _openCategory(tester, SettingsCategory.playback);
+      expect(find.text('Match display HDR in fullscreen'), findsNothing);
+      expect(find.text('DVR playback controls'), findsOneWidget);
+      expect(controller.settings.matchDisplayHdr, isTrue);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      await _showSettings(tester, controller);
+      await _openCategory(tester, SettingsCategory.playback);
+      expect(find.text('Match display HDR in fullscreen'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('Settings categories and theme control remain accessible', (
