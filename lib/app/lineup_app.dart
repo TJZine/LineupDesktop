@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../playback/native_player.dart';
 import '../settings/lineup_settings.dart';
@@ -188,10 +187,8 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
             final error = snapshot.error;
             return _StartupFailureBody(
               requiredEngineFailure:
-                  (error is PlatformException &&
-                      error.code == 'required_engine_unavailable') ||
-                  (error is PlayerUnavailable &&
-                      error.failureCode == 'required_engine_unavailable'),
+                  error is PlayerUnavailable &&
+                  error.failureCode == 'required_engine_unavailable',
             );
           }
           if (snapshot.connectionState != ConnectionState.done &&

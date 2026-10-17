@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../app_version.dart';
 import '../diagnostics/diagnostics.dart';
 import '../playback/native_player.dart';
 import '../ui/app_theme.dart';
@@ -76,10 +77,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     return widget.controller.diagnostics.snapshot(
       reportTime: now,
       timeZone: now.timeZoneName,
-      appVersion: const String.fromEnvironment(
-        'LINEUP_VERSION',
-        defaultValue: 'Unavailable',
-      ),
+      appVersion: lineupVersionDefined ? lineupVersion : 'Unavailable',
       appBuild: const String.fromEnvironment(
         'LINEUP_BUILD',
         defaultValue: 'Unavailable',

@@ -3,11 +3,15 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'dart:async';
 import 'dart:ui' show SemanticsAction;
 
+// Clock fixtures intentionally reassign their local time source.
+// ignore_for_file: prefer_final_locals
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
+import 'package:lineup_desktop/app/air_check_verification.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
@@ -101,7 +105,7 @@ void main() {
   );
 
   testWidgets(
-    'deferred comparison failure cannot retire a newer retry request',
+    'synchronous comparison failure recovers through revision-bound retry',
     (tester) async {
       final controller = _AirController(controlled: true);
       addTearDown(controller.dispose);
@@ -124,39 +128,39 @@ void main() {
           legacyCycleItems: [_item('one')],
         ),
       );
-      Widget surface() => _airCheck(
-        controller,
-        draft,
-        originalChannel: original,
+      final verification = AirCheckVerification(
+        loadSchedule: controller.loadScheduleFor,
         clock: () => now,
       );
-      await tester.pumpWidget(surface());
+      verification.update(draft, original, 0, null);
       controller.scheduleOverride = null;
       controller.completeNext();
       await tester.pump();
       controller.completeNext();
       await tester.pump();
-      await tester.pump();
-      expect(find.text('Two'), findsWidgets);
-
+      expect(verification.result.preview, isNotNull);
       now = boundary;
-      final dynamic state = tester.state(find.byType(ChannelAirCheck));
-      WidgetsBinding.instance.addPostFrameCallback((_) => state.retry());
-      await tester.pumpWidget(surface());
+      await tester.pump(const Duration(seconds: 30));
+      expect(verification.result.preview, isNull);
+      expect(verification.result.validity, ChannelAirCheckValidity.unknown);
+      expect(verification.result.error, isA<ScheduleBuildException>());
       now = boundary.subtract(const Duration(days: 1));
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-      expect(find.text('Two'), findsWidgets);
-      expect(find.text('Retry Air Check'), findsNothing);
-      expect(controller.requests, 2);
+      verification.retry();
       await tester.pump(
         channelAirCheckDebounce + const Duration(milliseconds: 1),
       );
       controller.completeNext();
       await tester.pump();
-      expect(controller.requests, 3);
-      expect(find.text('Two'), findsWidgets);
-      expect(find.text('Retry Air Check'), findsNothing);
+      controller.completeNext();
+      await tester.pump();
+      expect(
+        verification.result.preview!.channel.source.toJson(),
+        draft.source.toJson(),
+      );
+      expect(verification.result.validity, ChannelAirCheckValidity.valid);
+      expect(controller.requests, 4);
+      expect(tester.takeException(), isNull);
+      verification.dispose();
     },
   );
 
@@ -299,31 +303,35 @@ void main() {
   ) async {
     final controller = _AirController(controlled: true);
     addTearDown(controller.dispose);
-    final first = _channel(items: [_item('one')]);
-    final second = _channel(items: [_item('two')]);
-    final latest = _channel(items: [_item('three')]);
-
-    await tester.pumpWidget(_airCheck(controller, first));
+    final verification = AirCheckVerification(
+      loadSchedule: controller.loadScheduleFor,
+      clock: () => DateTime.utc(2026, 1, 1, 0, 10),
+    );
+    void update(String id) =>
+        verification.update(_channel(items: [_item(id)]), null, 0, null);
+    update('one');
     expect(controller.requests, 1);
-    await tester.pumpWidget(_airCheck(controller, second));
+    update('two');
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
-    await tester.pumpWidget(_airCheck(controller, latest));
+    update('three');
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
     expect(controller.requests, 1);
-
     controller.completeNext();
     await tester.pump();
     expect(controller.requests, 2);
     controller.completeNext();
     await tester.pump();
     expect(controller.requests, 2);
-    expect(find.text('Three'), findsWidgets);
-    expect(find.text('One'), findsNothing);
-    expect(find.text('Two'), findsNothing);
+    expect(
+      verification.result.preview!.channel.source.toJson(),
+      ManualSource([_item('three')]).toJson(),
+    );
+    expect(verification.result.validity, ChannelAirCheckValidity.valid);
+    verification.dispose();
   });
 
   testWidgets('same-key source recovery keeps the newest pending request', (
@@ -331,24 +339,30 @@ void main() {
   ) async {
     final controller = _AirController(controlled: true);
     addTearDown(controller.dispose);
-    final channel = _channel(items: [_item('latest')]);
-    await tester.pumpWidget(_airCheck(controller, channel));
-    await tester.pumpWidget(
-      _airCheck(controller, channel, sourceIssue: 'Incomplete source choice'),
+    final verification = AirCheckVerification(
+      loadSchedule: controller.loadScheduleFor,
+      clock: () => DateTime.utc(2026, 1, 1, 0, 10),
     );
-    await tester.pumpWidget(_airCheck(controller, channel));
+    final channel = _channel(items: [_item('latest')]);
+    verification.update(channel, null, 0, null);
+    verification.update(channel, null, 0, 'Incomplete source choice');
+    verification.update(channel, null, 0, null);
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
-
     expect(controller.requests, 1);
     controller.completeNext();
     await tester.pump();
     expect(controller.requests, 2);
     controller.completeNext();
     await tester.pump();
-    expect(find.text('Latest'), findsWidgets);
+    expect(
+      verification.result.preview!.channel.source.toJson(),
+      channel.source.toJson(),
+    );
+    expect(verification.result.validity, ChannelAirCheckValidity.valid);
     expect(controller.requests, 2);
+    verification.dispose();
   });
 
   testWidgets('content generation, retry, and disposal reject stale results', (
@@ -356,10 +370,13 @@ void main() {
   ) async {
     final controller = _AirController(controlled: true);
     addTearDown(controller.dispose);
+    final verification = AirCheckVerification(
+      loadSchedule: controller.loadScheduleFor,
+      clock: () => DateTime.utc(2026, 1, 1, 0, 10),
+    );
     final channel = _channel(items: [_item('one')]);
-    await tester.pumpWidget(_airCheck(controller, channel));
-    controller.generation++;
-    await tester.pumpWidget(_airCheck(controller, channel));
+    verification.update(channel, null, 0, null);
+    verification.update(channel, null, 1, null);
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
@@ -369,16 +386,19 @@ void main() {
     expect(controller.requests, 2);
     controller.failNext(StateError('synthetic worker failure'));
     await tester.pump();
-    expect(find.textContaining('could not verify'), findsOneWidget);
-
-    await tester.tap(find.text('Retry Air Check'));
+    expect(verification.result.error, isA<StateError>());
+    expect(verification.result.validity, ChannelAirCheckValidity.unknown);
+    verification.retry();
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
     expect(controller.requests, 3);
-    await tester.pumpWidget(const SizedBox.shrink());
+    var notifications = 0;
+    verification.addListener(() => notifications++);
+    verification.dispose();
     controller.completeNext();
     await tester.pump();
+    expect(notifications, 0);
     expect(tester.takeException(), isNull);
   });
 
@@ -577,7 +597,7 @@ void main() {
   testWidgets('Air Check preserves inspection after successful recalculation', (
     tester,
   ) async {
-    var now = DateTime.utc(2026, 1, 1, 0, 10);
+    final now = DateTime.utc(2026, 1, 1, 0, 10);
     final controller = _AirController();
     addTearDown(controller.dispose);
     final channel = _channel(items: [_item('one'), _item('two')]);
@@ -879,62 +899,90 @@ void main() {
     },
   );
 
+  testWidgets('schedule failures render their typed recovery messages', (
+    tester,
+  ) async {
+    final controller = _AirController();
+    addTearDown(controller.dispose);
+    final retained = _channel(items: [_item('retained')]);
+    final nested = Channel.fromJson({
+      ...retained.toJson(),
+      'source': MixedSource(
+        sources: [
+          ManualSource([_item('retained')]),
+        ],
+      ).toJson(),
+    });
+    for (final (channel, failure, message) in [
+      (
+        _channel(items: const []),
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
+        'no playable programs',
+      ),
+      (
+        retained,
+        const ScheduleBuildException(ScheduleFailureReason.unsupportedSource),
+        'unsupported filter',
+      ),
+      (
+        retained,
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
+        'explicitly off air',
+      ),
+      (retained, StateError('synthetic worker failure'), 'could not verify'),
+      (
+        nested,
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
+        'explicitly off air',
+      ),
+    ]) {
+      controller.nextFailure = failure;
+      await tester.pumpWidget(_airCheck(controller, channel, key: UniqueKey()));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(message), findsOneWidget);
+    }
+  });
+
   testWidgets('failure states gate validity except retained manual off-air', (
     tester,
   ) async {
     final controller = _AirController();
     addTearDown(controller.dispose);
-    var validity = ChannelAirCheckValidity.valid;
-    await tester.pumpWidget(
-      _airCheck(
-        controller,
-        _channel(items: const []),
-        onValidityChanged: (value) => validity = value,
+    final verification = AirCheckVerification(
+      loadSchedule: controller.loadScheduleFor,
+      clock: () => DateTime.utc(2026, 1, 1, 0, 10),
+    );
+    verification.update(_channel(items: const []), null, 0, null);
+    await tester.pump();
+    expect(verification.result.error, isA<ScheduleBuildException>());
+    expect(verification.result.validity, ChannelAirCheckValidity.unknown);
+    for (final (id, failure, expected) in [
+      (
+        'unsupported',
+        const ScheduleBuildException(ScheduleFailureReason.unsupportedSource),
+        ChannelAirCheckValidity.unknown,
       ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.textContaining('no playable programs'), findsOneWidget);
-    expect(validity, ChannelAirCheckValidity.unknown);
-
-    controller.nextFailure = const ScheduleBuildException(
-      ScheduleFailureReason.unsupportedSource,
-    );
-    await tester.pumpWidget(
-      _airCheck(
-        controller,
-        _channel(items: [_item('unsupported')]),
-        onValidityChanged: (value) => validity = value,
+      (
+        'missing',
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
+        ChannelAirCheckValidity.retainedOffAir,
       ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.textContaining('unsupported filter'), findsOneWidget);
-    expect(validity, ChannelAirCheckValidity.unknown);
-
-    controller.nextFailure = const ScheduleBuildException(
-      ScheduleFailureReason.noContent,
-    );
-    await tester.pumpWidget(
-      _airCheck(
-        controller,
-        _channel(items: [_item('missing')]),
-        onValidityChanged: (value) => validity = value,
+      (
+        'worker',
+        StateError('synthetic worker failure'),
+        ChannelAirCheckValidity.unknown,
       ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.textContaining('explicitly off air'), findsOneWidget);
-    expect(validity, ChannelAirCheckValidity.retainedOffAir);
-
-    controller.nextFailure = StateError('Schedule worker is unavailable');
-    await tester.pumpWidget(
-      _airCheck(
-        controller,
-        _channel(items: [_item('retained')]),
-        onValidityChanged: (value) => validity = value,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.textContaining('could not verify'), findsOneWidget);
-    expect(validity, ChannelAirCheckValidity.unknown);
+    ]) {
+      controller.nextFailure = failure;
+      verification.update(_channel(items: [_item(id)]), null, 0, null);
+      expect(verification.result.validity, ChannelAirCheckValidity.unknown);
+      await tester.pump(
+        channelAirCheckDebounce + const Duration(milliseconds: 1),
+      );
+      expect(verification.result.error, same(failure));
+      expect(verification.result.validity, expected);
+    }
+    verification.dispose();
   });
 
   testWidgets(
@@ -942,7 +990,6 @@ void main() {
     (tester) async {
       final controller = _AirController();
       addTearDown(controller.dispose);
-      var validity = ChannelAirCheckValidity.valid;
       final channel = Channel.fromJson({
         ..._channel(items: [_item('retained')]).toJson(),
         'source': MixedSource(
@@ -959,33 +1006,27 @@ void main() {
         ),
         isFalse,
       );
-
+      final verification = AirCheckVerification(
+        loadSchedule: controller.loadScheduleFor,
+        clock: () => DateTime.utc(2026, 1, 1, 0, 10),
+      );
       controller.nextFailure = const ScheduleBuildException(
         ScheduleFailureReason.noContent,
       );
-      await tester.pumpWidget(
-        _airCheck(
-          controller,
-          channel,
-          onValidityChanged: (value) => validity = value,
-        ),
+      verification.update(channel, null, 0, null);
+      await tester.pump();
+      expect(
+        verification.result.validity,
+        ChannelAirCheckValidity.retainedOffAir,
       );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('explicitly off air'), findsOneWidget);
-      expect(validity, ChannelAirCheckValidity.retainedOffAir);
-
       controller.nextFailure = StateError('synthetic worker failure');
-      await tester.pumpWidget(
-        _airCheck(
-          controller,
-          channel,
-          key: UniqueKey(),
-          onValidityChanged: (value) => validity = value,
-        ),
+      verification.retry();
+      await tester.pump(
+        channelAirCheckDebounce + const Duration(milliseconds: 1),
       );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('could not verify'), findsOneWidget);
-      expect(validity, ChannelAirCheckValidity.unknown);
+      expect(verification.result.validity, ChannelAirCheckValidity.unknown);
+      expect(verification.result.error, isA<StateError>());
+      verification.dispose();
     },
   );
 
@@ -1019,6 +1060,56 @@ void main() {
       expect(
         find.bySemanticsLabel(RegExp('3 unavailable hand-picked items')),
         findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'pending Air Check publishes the latest same-key channel identity',
+    (tester) async {
+      final controller = _AirController(controlled: true);
+      addTearDown(controller.dispose);
+      final original = _channel(items: [_item('one'), _item('two')]);
+      await tester.pumpWidget(_airCheck(controller, original));
+      expect(controller.requests, 1);
+      final renamed = Channel.fromJson({
+        ...original.toJson(),
+        'name': 'Renamed while loading',
+        'number': 9,
+      });
+      await tester.pumpWidget(_airCheck(controller, renamed));
+      expect(controller.requests, 1);
+      controller.completeNext();
+      await tester.pumpAndSettle();
+      final preview = tester
+          .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+          .verification
+          .result
+          .preview!;
+      expect(preview.channel.anchor, original.anchor);
+      expect(preview.channel.shuffleSeed, original.shuffleSeed);
+      expect(
+        canonicalScheduleIdentity(preview.channel),
+        canonicalScheduleIdentity(original),
+      );
+      expect(
+        {
+          'latest facts': find.textContaining('Ch 9 ·').evaluate().length,
+          'latest program semantics': find
+              .bySemanticsLabel(
+                RegExp(r'Channel 9 Renamed while loading, .*current'),
+              )
+              .evaluate()
+              .length,
+          'old facts': find.textContaining('Ch 4 ·').evaluate().length,
+          'schedule loads': controller.requests,
+        },
+        {
+          'latest facts': 1,
+          'latest program semantics': 1,
+          'old facts': 0,
+          'schedule loads': 1,
+        },
       );
     },
   );
@@ -1325,7 +1416,7 @@ Widget _airCheck(
         alignment: Alignment.topCenter,
         child: SizedBox(
           width: 520,
-          child: ChannelAirCheck(
+          child: _VerificationSurface(
             key: key,
             controller: controller,
             channel: channel,
@@ -1334,14 +1425,84 @@ Widget _airCheck(
             compact: compact,
             inclusionReason: inclusionReason,
             sourceIssue: sourceIssue,
-            onValidityChanged: (status) =>
-                onValidityChanged?.call(status.validity),
+            onValidityChanged: onValidityChanged,
           ),
         ),
       ),
     ),
   ),
 );
+
+class _VerificationSurface extends StatefulWidget {
+  const _VerificationSurface({
+    required this.controller,
+    required this.channel,
+    required this.clock,
+    required this.compact,
+    required this.inclusionReason,
+    this.originalChannel,
+    this.sourceIssue,
+    this.onValidityChanged,
+    super.key,
+  });
+  final _AirController controller;
+  final Channel channel;
+  final Channel? originalChannel;
+  final DateTime Function() clock;
+  final bool compact;
+  final String inclusionReason;
+  final String? sourceIssue;
+  final ValueChanged<ChannelAirCheckValidity>? onValidityChanged;
+  @override
+  State<_VerificationSurface> createState() => _VerificationSurfaceState();
+}
+
+class _VerificationSurfaceState extends State<_VerificationSurface> {
+  late final AirCheckVerification verification;
+  @override
+  void initState() {
+    super.initState();
+    verification = AirCheckVerification(
+      loadSchedule: widget.controller.loadScheduleFor,
+      clock: () => widget.clock(),
+    );
+    verification.addListener(_observed);
+    _update();
+  }
+
+  void _observed() =>
+      widget.onValidityChanged?.call(verification.result.validity);
+  void _update() => verification.update(
+    widget.channel,
+    widget.originalChannel,
+    widget.controller.contentGeneration,
+    widget.sourceIssue,
+    sourceLabel: widget.inclusionReason,
+  );
+  @override
+  void didUpdateWidget(_VerificationSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _update();
+  }
+
+  @override
+  void dispose() {
+    verification.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ChannelAirCheck(
+    controller: widget.controller,
+    channel: widget.channel,
+    originalChannel: widget.originalChannel,
+    clock: widget.clock,
+    compact: widget.compact,
+    inclusionReason: widget.inclusionReason,
+    sourceIssue: widget.sourceIssue,
+    verification: verification,
+  );
+}
 
 Channel _channel({
   required List<ChannelItem> items,

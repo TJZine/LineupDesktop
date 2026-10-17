@@ -4,7 +4,7 @@
 October 11, 2026. Physical
 Windows 10, Windows 11, and portable-package acceptance remain pending. It implements the
 [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) using the
-[Windows 10 discovery result](fullscreen-hdr-discovery-plan.md#discovery-result-october-9-2026).
+[Windows 10 discovery result](open-obligations.md#archive-recovery-and-preservation-map).
 The user approved the product decisions below. Two rounds of independent
 read-only review against `cd2c08f6` found two blockers and a number of gaps;
 this revision incorporates all of them. Physical acceptance happens in the user's final full-app

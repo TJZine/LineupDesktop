@@ -1,7 +1,7 @@
 From: Lineup Desktop contributors
 Subject: [PATCH] windows: require opt-in DirectComposition presentation
 
-Adapted for Flutter 3.47.6 / engine 692136cb6582dbfc5af3fb33c2515a069f2f66d0
+Adapted for Flutter 3.47.7 / engine deb287481e3ce9468f3434937ced4240a70539ca
 from edde746/flutter-plezy commit e721699fd4857afcd5a3414dccc55edc24c6680f.
 See NOTICE for the applicable BSD-3-Clause terms.
 
@@ -54,7 +54,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/egl/manager.cc b/engine/s
 +  if (use_direct_composition) {
 +    ::SetEnvironmentVariableW(
 +        L"LINEUP_FLUTTER_DCOMP_ACTIVE",
-+        L"692136cb6582dbfc5af3fb33c2515a069f2f66d0");
++        L"deb287481e3ce9468f3434937ced4240a70539ca");
    }
  
    return std::make_unique<WindowSurface>(display_, render_context_->GetHandle(),

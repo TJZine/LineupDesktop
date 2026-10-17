@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
@@ -73,7 +75,6 @@ class PlayerCoordinator extends ChangeNotifier {
   final GuideController guide;
   final Duration? overlayTimeout;
   final DateTime Function() _clock;
-  GuideProgram? _loadedProgram;
   GuideProgram? _resolvingProgram;
   late PlayerStatus _status;
   late Duration _position;
@@ -92,7 +93,6 @@ class PlayerCoordinator extends ChangeNotifier {
   String? _busyLabel;
   (int, bool, PlayerState)? _busyIdentity;
 
-  Timer? _trackConfirmationTimer;
   int _overlayEpoch = 0;
   int _overlayPresentationGeneration = 0;
   bool _overlayFocusSuspended = false;
@@ -110,13 +110,13 @@ class PlayerCoordinator extends ChangeNotifier {
   Duration? _sleepDuration;
   DateTime? _sleepDeadline;
   bool _sleepPickerOpen = false;
-  PlayerTrackType? _pendingTrackType;
-  int? _pendingTrackId;
-  String? _trackSelectionError;
+  _TrackConfirmation _trackConfirmation = _TrackConfirmation();
   int _tuneGeneration = 0;
   int? _continuationGeneration;
   bool get _preservePresentation => _continuationGeneration == _tuneGeneration;
   int _controlGeneration = 0;
+  int _playbackIntentRevision = 0;
+  bool _userPaused = false;
   int _trackSelectionGeneration = 0;
   int _seekGeneration = 0;
   int _fullscreenEpoch = 0;
@@ -126,6 +126,8 @@ class PlayerCoordinator extends ChangeNotifier {
   int get _activePartIndex => _activeLoad?.partIndex ?? 0;
   final Map<int, Duration> _partDurations = {};
   int? _advancingGeneration;
+  // Tunes run serially: a losing tune can clean up only its own load or
+  // the pending stop, never a newer tune's load.
   Future<void> _tuneOperations = Future.value();
   Future<void>? _nativeStopOperation;
   bool _nativeCleanupRequired = false;
@@ -133,10 +135,11 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> _fullscreenOperations = Future.value();
   bool _scopeCleanupPending = false;
   bool _disposed = false;
+  bool _publishing = false;
+  bool _republish = false;
   bool _initialMediaRequested = false;
-  LineupPlaybackRequest? _activePlayback;
+  _ActiveProgram? _active;
   _AuthorizationRecovery? _authorizationRecovery;
-  Channel? _activeChannel;
   String? _retryChannelId;
   List<Channel> _indexedChannels = const [];
   late int _contentGeneration;
@@ -209,7 +212,7 @@ class PlayerCoordinator extends ChangeNotifier {
   bool get hasPlaybackIntent =>
       _tuning ||
       _activeLoad != null ||
-      _activePlayback != null ||
+      _active != null ||
       switch (_status.state) {
         PlayerState.loading ||
         PlayerState.ready ||
@@ -229,24 +232,43 @@ class PlayerCoordinator extends ChangeNotifier {
     return remaining.isNegative ? Duration.zero : remaining;
   }
 
-  PlayerTrackType? get pendingTrackType => _pendingTrackType;
-  int? get pendingTrackId => _pendingTrackId;
-  String? get trackSelectionError => _trackSelectionError;
+  PlayerTrackType? get pendingTrackType => _trackConfirmation.type;
+  int? get pendingTrackId => _trackConfirmation.id;
+  String? get trackSelectionError => _trackConfirmation.error;
   Channel? get currentChannel {
     final index = _channelIndexById[lineup.currentChannelId];
     return index == null ? null : _indexedChannels[index];
   }
 
+  /// The active channel is watching only after tuning settles into a live
+  /// playback state. A deleted/orphaned active program has no visible channel.
+  String? get watchingChannelId =>
+      !tuning &&
+          error == null &&
+          const {
+            PlayerState.playing,
+            PlayerState.paused,
+            PlayerState.buffering,
+            PlayerState.seeking,
+          }.contains(status.state)
+      ? _active?.channel?.id
+      : null;
+
+  /// A display hold presents loading while preserving the native state used
+  /// for playback intent, including the ability to pause during preparation.
+  PlayerState get presentedState =>
+      displayHoldActive ? PlayerState.loading : status.state;
+
   GuideProgram? get currentProgram {
     final id = lineup.currentChannelId;
     return _resolvingProgram ??
-        _loadedProgram ??
+        _active?.program ??
         (id == null ? null : guide.currentProgram(id));
   }
 
   GuideProgram? get nextProgram {
     final id = lineup.currentChannelId;
-    final represented = _resolvingProgram ?? _loadedProgram;
+    final represented = _resolvingProgram ?? _active?.program;
     if (represented != null) {
       return guide.currentProgram(
         represented.channelId,
@@ -276,15 +298,46 @@ class PlayerCoordinator extends ChangeNotifier {
     _channelNumber = '';
     _noticeTimer?.cancel();
     _notice = null;
-    _busyTimer?.cancel();
-    _busyLabel = null;
-    _busyIdentity = null;
+    _reconcileBusy(clear: true);
   }
 
+  /// Reconciles display and busy state before publishing. Reconciliation-origin
+  /// requests join that publication; listener-origin requests get another round.
+  /// Late callbacks and further rounds after disposal are ignored.
   @override
   void notifyListeners() {
     if (_disposed) return;
+    if (_publishing) {
+      _republish = true;
+      return;
+    }
+    _publishing = true;
+    try {
+      do {
+        if (_disposed) break;
+        _reconcile();
+        if (_disposed) break;
+        _republish = false;
+        super.notifyListeners();
+      } while (!_disposed && _republish);
+    } finally {
+      _publishing = false;
+    }
+  }
+
+  void _reconcile() {
     _updateDisplaySession();
+    _reconcileBusy();
+  }
+
+  void _reconcileBusy({bool clear = false}) {
+    if (clear) {
+      _busyTimer?.cancel();
+      _busyTimer = null;
+      _busyLabel = null;
+      _busyIdentity = null;
+      return;
+    }
     final busy =
         !_scopeCleanupPending &&
         _error == null &&
@@ -318,7 +371,6 @@ class PlayerCoordinator extends ChangeNotifier {
         });
       }
     }
-    super.notifyListeners();
   }
 
   void _updateDisplaySession() {
@@ -335,7 +387,7 @@ class PlayerCoordinator extends ChangeNotifier {
         fullGuide: _overlay == PlayerOverlay.fullGuide,
         error: _error != null || _overlay == PlayerOverlay.error,
       ),
-      paused: _status.state == PlayerState.paused,
+      userPaused: _userPaused,
     );
   }
 
@@ -371,8 +423,8 @@ class PlayerCoordinator extends ChangeNotifier {
     _overlay,
     _overlayPresentationGeneration,
     _error,
-    _pendingTrackType,
-    _pendingTrackId,
+    _trackConfirmation.type,
+    _trackConfirmation.id,
   );
 
   void _event(PlayerEvent event) {
@@ -414,7 +466,7 @@ class PlayerCoordinator extends ChangeNotifier {
         _nativePosition == Duration.zero) {
       _nativePosition = event.position;
     }
-    final playback = _activeLoad?.request ?? _activePlayback;
+    final playback = _activeLoad?.request ?? _active?.request;
     if (playback != null &&
         _activePartIndex < playback.parts.length &&
         _usesAggregateCoordinates(playback)) {
@@ -447,14 +499,14 @@ class PlayerCoordinator extends ChangeNotifier {
       _telemetry = const PlayerTelemetry();
       _tracks = const [];
     }
-    if (_pendingTrackType case final type?) {
+    if (_trackConfirmation.type case final type?) {
       final confirmed =
-          type == PlayerTrackType.subtitle && _pendingTrackId == null
+          type == PlayerTrackType.subtitle && _trackConfirmation.id == null
           ? !_tracks.any((track) => track.type == type && track.selected)
           : _tracks.any(
               (track) =>
                   track.type == type &&
-                  track.id == _pendingTrackId &&
+                  track.id == _trackConfirmation.id &&
                   track.selected,
             );
       if (confirmed) {
@@ -487,7 +539,7 @@ class PlayerCoordinator extends ChangeNotifier {
             load.recovery = recovery;
             recovery.result = _recoverAuthorization(
               recovery,
-              identical(playback, _activePlayback),
+              identical(playback, _active?.request),
               load.target ?? _nativePosition,
               Future.sync(recover),
             );
@@ -505,7 +557,7 @@ class PlayerCoordinator extends ChangeNotifier {
           )
           .firstOrNull
           ?.codec;
-      lineup.diagnostics.add('playback', 'Native playback failed', {
+      lineup.diagnostics.add(DiagnosticEvent.nativePlaybackFailed, {
         'failureCode': event.status.failureCode,
         'httpStatus': event.status.httpStatus,
         'videoCodec': event.telemetry.videoCodec,
@@ -518,9 +570,7 @@ class PlayerCoordinator extends ChangeNotifier {
       _error = 'Playback failed. Retry or choose another channel.';
       _tuning = false;
       _canRetry = event.status.recoverable && _retryChannelId != null;
-      _activePlayback = null;
-      _activeChannel = null;
-      _loadedProgram = null;
+      _releaseActive();
       _setOverlay(PlayerOverlay.error, timed: false);
     } else {
       switch (event.status.state) {
@@ -553,7 +603,7 @@ class PlayerCoordinator extends ChangeNotifier {
         case PlayerState.ended:
         case PlayerState.stopped:
           final generation = _activeLoadGeneration;
-          final request = _activePlayback;
+          final request = _active?.request;
           if (request == null && playback == null) {
             _activeLoad = null;
             if (!_preservePresentation) {
@@ -625,6 +675,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (deadline != null && !_clock().isBefore(deadline)) {
       return _expireSleepTimer(_sleepEpoch).then((_) => false);
     }
+    _userPaused = false;
     if (endedProgram == null) _clearTransientStatus();
     _resolvingProgram = null;
     final generation = ++_tuneGeneration;
@@ -651,6 +702,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> loadInitialMedia(Uri media) async {
     if (_initialMediaRequested) return;
     _initialMediaRequested = true;
+    _userPaused = false;
     if (await _expireSleepIfNeeded()) return;
     _clearTransientStatus();
     final generation = ++_tuneGeneration;
@@ -662,6 +714,7 @@ class PlayerCoordinator extends ChangeNotifier {
       if (_disposed || generation != _tuneGeneration) return;
       await _stopQuietly();
       if (_disposed || generation != _tuneGeneration) return;
+      _reportUnexpectedPlaybackFailure(error, 'while loading initial media');
       _recordPlaybackFailure(error);
       _error = _safePlaybackError(error);
       _canRetry = false;
@@ -729,10 +782,31 @@ class PlayerCoordinator extends ChangeNotifier {
     _resolvingProgram = program;
     LineupPlaybackRequest? request;
     LineupPlaybackRequest? replaced;
+    _ActiveProgram? active;
+    final contentGeneration = lineup.contentGeneration;
+    bool ownsTune() =>
+        !_disposed &&
+        generation == _tuneGeneration &&
+        contentGeneration == lineup.contentGeneration;
     final previousChannelId = lineup.currentChannelId;
+    Future<bool> fail(Object error) async {
+      _invalidateAuthorizationRecovery();
+      if (active != null && identical(_active, active)) _releaseActive();
+      if (request != null) _releaseActive(ifRequest: request);
+      if (replaced != null) _releaseActive(ifRequest: replaced);
+      if (request != null) await _stopQuietly();
+      if (!ownsTune()) return false;
+      _tuning = false;
+      _canRetry = true;
+      _recordPlaybackFailure(error);
+      _error = _safePlaybackError(error);
+      _setOverlay(PlayerOverlay.error, timed: false);
+      return false;
+    }
+
     try {
       request = lineup.playbackFor(program.scheduled.item.id);
-      replaced = _activePlayback;
+      replaced = _active?.request;
       final elapsed = _clock().difference(program.scheduled.start);
       request = await _loadPlayback(
         request,
@@ -741,53 +815,28 @@ class PlayerCoordinator extends ChangeNotifier {
             : null,
       );
       _invalidateAuthorizationRecovery();
-      if (identical(_activePlayback, replaced)) {
-        _activePlayback = null;
-        _activeChannel = null;
-        _loadedProgram = null;
-      }
+      if (replaced != null) _releaseActive(ifRequest: replaced);
       if (generation != _tuneGeneration) {
-        if (_tuning || _disposed) await _stopQuietly();
+        if (_supersededByTune) await _stopQuietly();
         return false;
       }
-      _activePlayback = request;
-      _loadedProgram = program;
-      _activeChannel = lineup.channels
-          .where((channel) => channel.id == channelId)
-          .firstOrNull;
-      if (generation != _tuneGeneration) {
-        if (identical(_activePlayback, request)) {
-          _activePlayback = null;
-          _activeChannel = null;
-          _loadedProgram = null;
-        }
-        if (_tuning || _disposed) await _stopQuietly();
-        return false;
-      }
-      if (!identical(_activePlayback, request)) {
-        await _stopQuietly();
-        return false;
-      }
+      active = _commitActive(request, program, channelId);
       await lineup.setCurrentChannel(channelId);
-      if (generation != _tuneGeneration) {
-        if (identical(_activePlayback, request)) {
-          _activePlayback = null;
-          _activeChannel = null;
-          _loadedProgram = null;
-        }
-        if (lineup.currentChannelId == channelId &&
-            previousChannelId != channelId) {
-          await lineup.setCurrentChannel(previousChannelId);
-        }
-        if (_tuning || _disposed) await _stopQuietly();
+      if (!ownsTune()) {
+        if (identical(_active, active)) _releaseActive();
+        if (_supersededByTune) await _stopQuietly();
         return false;
       }
-      if (!identical(_activePlayback, request)) {
+      // Authorization recovery replaces the request within this session. A
+      // released session instead means that playback failed during the save.
+      if (!identical(_active, active)) {
+        _tuning = false;
         if (lineup.currentChannelId == channelId &&
             previousChannelId != channelId) {
           await lineup.setCurrentChannel(previousChannelId);
         }
         await _stopQuietly();
+        if (ownsTune()) notifyListeners();
         return false;
       }
       _tuning = false;
@@ -800,34 +849,51 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       return !_disposed &&
           generation == _tuneGeneration &&
-          identical(_activePlayback, request) &&
-          _activeChannel?.id == channelId &&
+          identical(_active, active) &&
+          _active?.channel?.id == channelId &&
           lineup.currentChannelId == channelId &&
           !_tuning &&
           _error == null;
+    } on LineupScopeSuperseded catch (error) {
+      return await fail(error);
+    } on _PlaybackSuperseded catch (error) {
+      return await fail(error);
     } catch (error) {
-      _invalidateAuthorizationRecovery();
-      if (identical(_activePlayback, request)) {
-        _activePlayback = null;
-        _activeChannel = null;
-        _loadedProgram = null;
+      if (ownsTune()) {
+        _reportUnexpectedPlaybackFailure(error, 'while tuning a channel');
       }
-      if (identical(_activePlayback, replaced)) {
-        _activePlayback = null;
-        _activeChannel = null;
-        _loadedProgram = null;
-      }
-      if (request != null) await _stopQuietly();
-      if (generation != _tuneGeneration) return false;
-      _tuning = false;
-      _canRetry = true;
-      _recordPlaybackFailure(error);
-      _error = _safePlaybackError(error);
-      _setOverlay(PlayerOverlay.error, timed: false);
-      return false;
+      return await fail(error);
     } finally {
       if (generation == _tuneGeneration) _resolvingProgram = null;
     }
+  }
+
+  bool get _supersededByTune => _tuning || _disposed;
+
+  _ActiveProgram _commitActive(
+    LineupPlaybackRequest request,
+    GuideProgram program,
+    String channelId,
+  ) => _active = _ActiveProgram(
+    request: request,
+    program: program,
+    channel: lineup.channels
+        .where((channel) => channel.id == channelId)
+        .firstOrNull,
+  );
+
+  void _releaseActive({LineupPlaybackRequest? ifRequest}) {
+    if (ifRequest == null || identical(_active?.request, ifRequest)) {
+      _active = null;
+    }
+  }
+
+  void _replaceActiveRequest(LineupPlaybackRequest request) {
+    _active?.request = request;
+  }
+
+  void _refreshActiveChannel(Channel channel) {
+    _active?.channel = channel;
   }
 
   Future<void> retry() async {
@@ -859,7 +925,11 @@ class PlayerCoordinator extends ChangeNotifier {
     _activeLoad = load;
     _displayMatching.cancelLoad();
     _updateDisplaySession();
-    final startPaused = _displayMatching.beginLoad(load.generation, target);
+    final startPaused = _displayMatching.beginLoad(
+      load.generation,
+      target,
+      userPaused: _userPaused,
+    );
     _nativeCleanupRequired = true;
     _nativePosition = Duration.zero;
     _telemetry = const PlayerTelemetry();
@@ -942,17 +1012,21 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<LineupPlaybackRequest?> _completePartLoad(_PlaybackLoad load) async {
     try {
       Object? failure;
+      StackTrace? failureStack;
       try {
         await load.readiness;
-      } catch (error) {
+      } catch (error, stack) {
         failure = error;
+        failureStack = stack;
       }
       final recovery = load.recovery;
       if (recovery != null) {
         return await _completeLoadRecovery(recovery);
       }
       if (!_ownsLoad(load)) return null;
-      if (failure != null) throw failure;
+      if (failure != null) {
+        Error.throwWithStackTrace(failure, failureStack!);
+      }
       while (load.target != null) {
         final target = load.target!;
         if (_nativePosition != target) {
@@ -980,7 +1054,11 @@ class PlayerCoordinator extends ChangeNotifier {
           : identical(_authorizationRecovery, recovery) &&
                 _ownsLoad(recovery.replacement ?? recovery.rejected);
       if (!ownsFailure) return null;
-      if (identical(_activePlayback, load.request)) {
+      if (identical(_active?.request, load.request)) {
+        _reportUnexpectedPlaybackFailure(
+          error,
+          'while completing a playback part load',
+        );
         await _failTransition(error, load.tuneGeneration);
         return null;
       }
@@ -1010,8 +1088,8 @@ class PlayerCoordinator extends ChangeNotifier {
     final next = await replacement;
     if (!_ownsLoad(rejected) ||
         !identical(_authorizationRecovery, recovery) ||
-        (wasActive && !identical(_activePlayback, rejected.request))) {
-      throw StateError('Playback request was superseded.');
+        (wasActive && !identical(_active?.request, rejected.request))) {
+      throw const _PlaybackSuperseded();
     }
     final loaded = await _loadPartAtPosition(
       next,
@@ -1022,10 +1100,10 @@ class PlayerCoordinator extends ChangeNotifier {
     );
     if (loaded == null ||
         !_ownsLoad(recovery.replacement!) ||
-        (wasActive && !identical(_activePlayback, rejected.request))) {
-      throw StateError('Playback request was superseded.');
+        (wasActive && !identical(_active?.request, rejected.request))) {
+      throw const _PlaybackSuperseded();
     }
-    if (wasActive) _activePlayback = next;
+    if (wasActive) _replaceActiveRequest(next);
     return next;
   }
 
@@ -1058,26 +1136,36 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> _settleActiveAuthorization(
     _AuthorizationRecovery recovery,
   ) async {
+    Future<void> fail(Object error) async {
+      if (!_ownsAuthorizationRecoveryFailure(recovery)) return;
+      await _failTransition(error, recovery.rejected.tuneGeneration);
+    }
+
     try {
       await recovery.result;
       _clearAuthorizationRecovery(recovery);
       if (!_disposed) notifyListeners();
+    } on _PlaybackSuperseded catch (error) {
+      await fail(error);
     } catch (error) {
-      if (!_ownsAuthorizationRecoveryFailure(recovery)) return;
-      await _failTransition(error, recovery.rejected.tuneGeneration);
+      if (_ownsAuthorizationRecoveryFailure(recovery)) {
+        _reportUnexpectedPlaybackFailure(
+          error,
+          'while recovering playback authorization',
+        );
+      }
+      await fail(error);
     }
   }
 
   bool _ownsAuthorizationRecoveryFailure(_AuthorizationRecovery recovery) =>
       identical(_authorizationRecovery, recovery) &&
-      identical(_activePlayback, recovery.rejected.request) &&
+      identical(_active?.request, recovery.rejected.request) &&
       _ownsLoad(recovery.replacement ?? recovery.rejected);
 
   bool _usesAggregateCoordinates(LineupPlaybackRequest request) =>
       request.parts.length == _partDurations.length &&
-      request.parts.asMap().keys.every(
-        (index) => _partDurations.containsKey(index),
-      );
+      request.parts.asMap().keys.every(_partDurations.containsKey);
 
   Duration? _partOffset(int partIndex) {
     var offset = Duration.zero;
@@ -1134,7 +1222,7 @@ class PlayerCoordinator extends ChangeNotifier {
   ) async {
     final tuneGeneration = _tuneGeneration;
     if (_disposed ||
-        !identical(_activePlayback, request) ||
+        !identical(_active?.request, request) ||
         _activeLoadGeneration != completedGeneration) {
       if (_advancingGeneration == completedGeneration) {
         _advancingGeneration = null;
@@ -1142,8 +1230,8 @@ class PlayerCoordinator extends ChangeNotifier {
       return;
     }
     if (_activePartIndex == request.parts.length - 1) {
-      final ended = _loadedProgram;
-      final channelId = _activeChannel?.id;
+      final ended = _active?.program;
+      final channelId = _active?.channel?.id;
       if (ended != null && channelId != null) {
         await _tune(channelId, endedProgram: ended);
       } else {
@@ -1187,6 +1275,7 @@ class PlayerCoordinator extends ChangeNotifier {
       } catch (_) {}
     }
     if (_disposed || tuneGeneration != _tuneGeneration) return;
+    _tuning = false;
     _recordPlaybackFailure(error);
     _error = _safePlaybackError(error);
     _canRetry = true;
@@ -1204,21 +1293,16 @@ class PlayerCoordinator extends ChangeNotifier {
     await tune(channels[next < 0 ? next + channels.length : next].id);
   }
 
-  Future<void> togglePlayback() =>
-      (displayHoldActive || _status.state == PlayerState.playing)
-      ? pause()
-      : play();
-
-  Future<void> play() async {
-    if (await _expireSleepIfNeeded()) return;
-    _displayMatching.userPlay();
-    await _runPlaybackControl('play', player.play);
+  Future<void> togglePlayback() {
+    final playing = displayHoldActive || _activeLoad?.pending == true
+        ? !_userPaused
+        : _status.state == PlayerState.playing;
+    return playing ? pause() : play();
   }
 
-  Future<void> pause() {
-    _displayMatching.userPause();
-    return _runPlaybackControl('pause', player.pause);
-  }
+  Future<void> play() => _setPlaybackPaused(false);
+
+  Future<void> pause() => _setPlaybackPaused(true);
 
   Future<void> stop() async {
     _clearSleepTimer();
@@ -1282,11 +1366,18 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> seekTo(Duration position) async {
     final seekGeneration = ++_seekGeneration;
     final tuneGeneration = _tuneGeneration;
-    final playback = _activePlayback;
+    final playback = _active?.request;
     final target = playback == null
         ? null
         : _interactivePartForPosition(playback, position);
     final load = _activeLoad;
+    void fail(Object error) {
+      if (_ownsSeek(seekGeneration, tuneGeneration)) {
+        _publishControlFailure('seek', error);
+      }
+      return;
+    }
+
     try {
       if (playback != null && target != null && load != null) {
         if (target.$1 != load.partIndex) {
@@ -1308,10 +1399,14 @@ class PlayerCoordinator extends ChangeNotifier {
       } else {
         await player.seek(target?.$2 ?? position);
       }
+    } on _PlaybackSuperseded catch (error) {
+      fail(error);
+      return;
     } catch (error) {
       if (_ownsSeek(seekGeneration, tuneGeneration)) {
-        _publishControlFailure('seek', error);
+        _reportUnexpectedPlaybackFailure(error, 'while seeking playback');
       }
+      fail(error);
       return;
     }
     if (!_ownsSeek(seekGeneration, tuneGeneration)) return;
@@ -1323,8 +1418,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final tuneGeneration = _tuneGeneration;
     final loadGeneration = _activeLoadGeneration;
     _clearTrackSelection();
-    _pendingTrackType = type;
-    _pendingTrackId = id;
+    _trackConfirmation = _TrackConfirmation(type: type, id: id);
     notifyListeners();
     try {
       await player.selectTrack(type, id);
@@ -1333,18 +1427,18 @@ class PlayerCoordinator extends ChangeNotifier {
             tuneGeneration,
             loadGeneration,
           ) ||
-          _pendingTrackType != type ||
-          _pendingTrackId != id) {
+          _trackConfirmation.type != type ||
+          _trackConfirmation.id != id) {
         return;
       }
-      _trackConfirmationTimer = Timer(_trackConfirmationTimeout, () {
+      _trackConfirmation.timer = Timer(_trackConfirmationTimeout, () {
         if (!_ownsTrackSelection(
               trackSelectionGeneration,
               tuneGeneration,
               loadGeneration,
             ) ||
-            _pendingTrackType != type ||
-            _pendingTrackId != id) {
+            _trackConfirmation.type != type ||
+            _trackConfirmation.id != id) {
           return;
         }
         _clearTrackSelection(error: 'Could not change this track. Try again.');
@@ -1365,8 +1459,8 @@ class PlayerCoordinator extends ChangeNotifier {
             tuneGeneration,
             loadGeneration,
           ) &&
-          _pendingTrackType == type &&
-          _pendingTrackId == id) {
+          _trackConfirmation.type == type &&
+          _trackConfirmation.id == id) {
         _clearTrackSelection(error: 'Could not change this track. Try again.');
         _recordPlaybackFailure(
           error,
@@ -1390,11 +1484,8 @@ class PlayerCoordinator extends ChangeNotifier {
       loadGeneration == _activeLoadGeneration;
 
   void _clearTrackSelection({String? error}) {
-    _trackConfirmationTimer?.cancel();
-    _trackConfirmationTimer = null;
-    _pendingTrackType = null;
-    _pendingTrackId = null;
-    _trackSelectionError = error;
+    _trackConfirmation.timer?.cancel();
+    _trackConfirmation = _TrackConfirmation(error: error);
   }
 
   Future<void> toggleFullscreen() {
@@ -1421,21 +1512,40 @@ class PlayerCoordinator extends ChangeNotifier {
     return operation;
   }
 
-  Future<void> _runPlaybackControl(
-    String operation,
-    Future<void> Function() command,
-  ) async {
+  Future<void> _setPlaybackPaused(bool paused) async {
+    if (_disposed) return;
+    final intentRevision = ++_playbackIntentRevision;
     final controlGeneration = ++_controlGeneration;
     final tuneGeneration = _tuneGeneration;
+    final load = _activeLoad;
+    _userPaused = paused;
+    if (paused) {
+      _displayMatching.userPause();
+    } else {
+      _displayMatching.userPlay();
+    }
+    bool current() =>
+        !_disposed &&
+        intentRevision == _playbackIntentRevision &&
+        tuneGeneration == _tuneGeneration &&
+        identical(load, _activeLoad);
     try {
-      await command();
+      if (!paused && await _expireSleepIfNeeded()) return;
+      // Load applies its captured pause flag on the native worker. A control
+      // must follow it, and only the latest intent may survive this wait.
+      if (load != null) await load.readiness;
+      if (!current()) return;
+      await (paused ? player.pause() : player.play());
     } catch (error) {
-      if (_ownsPlaybackControl(controlGeneration, tuneGeneration)) {
-        _publishControlFailure(operation, error);
+      if (current() &&
+          _ownsPlaybackControl(controlGeneration, tuneGeneration)) {
+        _publishControlFailure(paused ? 'pause' : 'play', error);
       }
       return;
     }
-    if (_ownsPlaybackControl(controlGeneration, tuneGeneration)) showOsd();
+    if (current() && _ownsPlaybackControl(controlGeneration, tuneGeneration)) {
+      showOsd();
+    }
   }
 
   bool _ownsPlaybackControl(int controlGeneration, int tuneGeneration) =>
@@ -1672,9 +1782,7 @@ class PlayerCoordinator extends ChangeNotifier {
         tuneGeneration != _tuneGeneration) {
       return;
     }
-    _activePlayback = null;
-    _activeChannel = null;
-    _loadedProgram = null;
+    _releaseActive();
     _telemetry = const PlayerTelemetry();
     _tracks = const [];
     _status = const PlayerStatus(
@@ -1770,7 +1878,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _lineupChanged() {
-    final activeChannel = _activeChannel;
+    final activeChannel = _active?.channel;
     final replacement = activeChannel == null
         ? null
         : lineup.channels
@@ -1782,7 +1890,7 @@ class PlayerCoordinator extends ChangeNotifier {
             canonicalScheduleIdentity(replacement) !=
                 canonicalScheduleIdentity(activeChannel));
     if (activeChannel != null && replacement != null && !activeChannelChanged) {
-      _activeChannel = replacement;
+      _refreshActiveChannel(replacement);
     }
     if (_contentGeneration != lineup.contentGeneration ||
         activeChannelChanged) {
@@ -1790,7 +1898,7 @@ class PlayerCoordinator extends ChangeNotifier {
       ++_controlGeneration;
       ++_seekGeneration;
       final fullscreenCleanup = _queueFullscreenReset();
-      if (_activePlayback != null || _tuning || _nativeCleanupRequired) {
+      if (_active != null || _tuning || _nativeCleanupRequired) {
         ++_tuneGeneration;
         _tuning = false;
         _canRetry = false;
@@ -1903,8 +2011,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _miniGuideChannelId = null;
     _miniGuideWindowStart = null;
     _retryChannelId = null;
-    _activeChannel = null;
-    _loadedProgram = null;
+    _releaseActive();
     _error = null;
   }
 
@@ -1956,9 +2063,30 @@ class PlayerCoordinator extends ChangeNotifier {
     _activeLoad = null;
     _resolvingProgram = null;
     _advancingGeneration = null;
-    _activePlayback = null;
-    _activeChannel = null;
-    _loadedProgram = null;
+    _releaseActive();
+  }
+
+  void _reportUnexpectedPlaybackFailure(Object error, String context) {
+    switch (error) {
+      case PlayerUnavailable() ||
+          PlexException() ||
+          LineupScopeSuperseded() ||
+          _PlaybackSuperseded() ||
+          TimeoutException() ||
+          PlatformException() ||
+          FileSystemException():
+        return;
+      default:
+        // Caught values and stacks may contain media URLs or credentials. The
+        // report is deliberately new, fixed data, just like cleanup reporting.
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: StateError('Unexpected playback operation failure.'),
+            library: 'Lineup Desktop',
+            context: ErrorDescription(context),
+          ),
+        );
+    }
   }
 
   void _recordPlaybackFailure(Object error, {String operation = 'request'}) {
@@ -1968,7 +2096,7 @@ class PlayerCoordinator extends ChangeNotifier {
       _ => 'unexpected',
     };
     final code = Diagnostics.failureCategory(rawCode) ?? 'unexpected';
-    lineup.diagnostics.add('playback', 'Playback request failed', {
+    lineup.diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
       if (operation != 'request') 'operation': operation,
       'code': code,
     });
@@ -2016,8 +2144,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _sleepTimer?.cancel();
     _cursorTimer?.cancel();
     _clearTrackSelection();
-    _activePlayback = null;
-    _loadedProgram = null;
+    _releaseActive();
     _resolvingProgram = null;
     unawaited(fullscreenReset.catchError((_) {}));
     super.dispose();
@@ -2038,6 +2165,32 @@ class PlayerCoordinator extends ChangeNotifier {
       );
     }
   }
+}
+
+final class _PlaybackSuperseded implements Exception {
+  const _PlaybackSuperseded();
+}
+
+// Authorization refresh and channel metadata updates retain this session identity.
+final class _ActiveProgram {
+  _ActiveProgram({
+    required this.request,
+    required this.channel,
+    required this.program,
+  });
+
+  LineupPlaybackRequest request;
+  Channel? channel;
+  final GuideProgram program;
+}
+
+final class _TrackConfirmation {
+  _TrackConfirmation({this.type, this.id, this.error});
+
+  final PlayerTrackType? type;
+  final int? id;
+  final String? error;
+  Timer? timer;
 }
 
 class _PlaybackLoad {

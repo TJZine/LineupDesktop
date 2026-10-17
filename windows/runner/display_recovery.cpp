@@ -1,4 +1,5 @@
 #include "display_recovery.h"
+#include "win32_handle.h"
 
 #include <sddl.h>
 #include <shlobj.h>
@@ -31,20 +32,6 @@ struct Journal {
   std::array<Entry, kCapacity> entries{};
 };
 static_assert(sizeof(Journal) == 20 + 44 * kCapacity);
-class Handle {
-public:
-  explicit Handle(HANDLE value) : value_(value) {}
-  ~Handle() {
-    if (value_ && value_ != INVALID_HANDLE_VALUE)
-      CloseHandle(value_);
-  }
-  Handle(const Handle &) = delete;
-  Handle &operator=(const Handle &) = delete;
-  HANDLE Get() const { return value_; }
-
-private:
-  HANDLE value_;
-};
 class Gate {
 public:
   Gate(const std::wstring &name, DWORD timeout)
@@ -73,6 +60,13 @@ uint32_t Checksum(Journal journal) {
            16777619u;
   return hash;
 }
+// The version-1 journal stores these literal ordinals, including optional zero.
+static_assert(static_cast<uint32_t>(DisplayState::unknown) == 0);
+static_assert(static_cast<uint32_t>(DisplayState::sdr) == 1);
+static_assert(static_cast<uint32_t>(DisplayState::hdr) == 2);
+static_assert(static_cast<uint32_t>(DisplayRoute::none) == 0);
+static_assert(static_cast<uint32_t>(DisplayRoute::hdr_state) == 1);
+static_assert(static_cast<uint32_t>(DisplayRoute::advanced_color) == 2);
 bool Known(uint32_t value) { return value == 1 || value == 2; }
 bool ValidOwnership(const DisplayOwnership &own) {
   return Known(static_cast<uint32_t>(own.original)) &&
@@ -246,14 +240,18 @@ std::pair<std::wstring, std::wstring> ProductionScope() {
 bool RestoreDisplayOwnership(const DisplayOwnership &own,
                              DisplayConfigApi &api) {
   const auto observed = api.Query(own.target, own.route);
-  if (observed.state == DisplayState::unknown ||
-      (observed.state == own.original &&
-       own.attempted != DisplayState::unknown &&
-       own.attempted != own.original && own.verified != own.attempted))
-    return false;
-  if (observed.state == own.original ||
-      (observed.state != own.verified && observed.state != own.attempted))
-    return true;
+  switch (ClassifyRestoration({own, DurableAttemptMayLandLate(own)},
+                             observed.state)) {
+    case RestorationDecision::target_unknown:
+    case RestorationDecision::unresolved_attempt:
+      return false;
+    case RestorationDecision::already_original:
+    case RestorationDecision::external_change:
+      return true;
+    case RestorationDecision::restore_original:
+      break;
+  }
+  // Recovery deliberately makes one unjournaled write and one verification.
   api.Set(own.target, own.route, own.original);
   return api.Query(own.target, own.route).state == own.original;
 }

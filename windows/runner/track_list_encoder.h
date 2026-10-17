@@ -9,6 +9,9 @@
 
 namespace lineup {
 
+// Looks up a key in an already validated MPV_FORMAT_NODE_MAP list.
+const mpv_node* FindTrackNode(const mpv_node_list& map, const char* key);
+
 flutter::EncodableValue EncodeTrackList(const mpv_node& node);
 
 // Telemetry retains replacement-character handling. Track metadata supplies

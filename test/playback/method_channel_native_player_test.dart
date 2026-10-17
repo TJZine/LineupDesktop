@@ -1,9 +1,14 @@
+// MethodCall.arguments is intentionally dynamic in these protocol fixtures.
+// ignore_for_file: avoid_dynamic_calls
+
+// Dart-side protocol conformance suite for `lineup/native_player`.
+
 import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
-import 'package:lineup_desktop/playback/windows_native_player.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -13,7 +18,7 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
   group('typed track snapshots', () {
-    late WindowsNativePlayer player;
+    late MethodChannelNativePlayer player;
     late int loadId;
     const identity = <String, Object?>{
       'id': 7,
@@ -64,7 +69,7 @@ void main() {
         return null;
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-      player = WindowsNativePlayer();
+      player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final load = player.load(Uri(scheme: 'lineup-test'));
@@ -129,7 +134,7 @@ void main() {
       expect(events, hasLength(2));
       expect(identical(events.first.tracks, tracks), isTrue);
       expect(identical(events.last.tracks, tracks), isTrue);
-      expect(() => tracks.clear(), throwsUnsupportedError);
+      expect(tracks.clear, throwsUnsupportedError);
     });
 
     test('old fields do not fabricate new facts', () async {
@@ -270,8 +275,8 @@ void main() {
           {...identity, ...facts},
         ]);
         final previous = player.tracks;
-        expect(() => previous.clear(), throwsUnsupportedError);
-        expect(() => events.last.tracks.clear(), throwsUnsupportedError);
+        expect(previous.clear, throwsUnsupportedError);
+        expect(events.last.tracks.clear, throwsUnsupportedError);
         await snapshot([identity]);
         expect(readFacts(player.tracks.single).values, everyElement(isNull));
         expect(
@@ -325,7 +330,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final load = player.load(
@@ -417,6 +422,110 @@ void main() {
     },
   );
 
+  test('drops a property event with a malformed name', () async {
+    var loadId = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'load') {
+        loadId = (call.arguments as Map<Object?, Object?>)['loadId'] as int;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = MethodChannelNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    final events = <PlayerEvent>[];
+    final subscription = player.events.listen(events.add);
+    addTearDown(subscription.cancel);
+    final load = player.load(Uri.parse('file:///malformed-property.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+    });
+    await load;
+    final eventCount = events.length;
+
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 42,
+      'value': 'ignored',
+    });
+
+    expect(events, hasLength(eventCount));
+    expect(player.telemetry, const PlayerTelemetry());
+  });
+
+  test('uses a safe fallback for a malformed state message', () async {
+    var loadId = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'load') {
+        loadId = (call.arguments as Map<Object?, Object?>)['loadId'] as int;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = MethodChannelNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    final load = player.load(Uri.parse('file:///malformed-state.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+      'message': 42,
+    });
+
+    expect(player.status.state, PlayerState.playing);
+    expect(player.status.message, 'playing');
+    await load;
+  });
+
+  test(
+    'drops malformed direct telemetry values without clearing valid facts',
+    () async {
+      var loadId = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'load') {
+          loadId = (call.arguments as Map<Object?, Object?>)['loadId'] as int;
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(Uri.parse('file:///malformed-telemetry.mp4'));
+      await Future<void>.delayed(Duration.zero);
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+      });
+      await load;
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId,
+        'name': 'video-codec',
+        'value': 'h264',
+      });
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId,
+        'name': 'video-codec',
+        'value': 42,
+      });
+
+      expect(player.telemetry.videoCodec, 'h264');
+    },
+  );
+
   test(
     'encodes startPaused and keeps raw playing readiness separate',
     () async {
@@ -427,7 +536,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final load = player.load(
@@ -462,7 +571,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       final reports = <DisplayMatchingReport>[];
       final subscription = player.displayReports.listen(reports.add);
@@ -529,7 +638,7 @@ void main() {
   test('admission fallback is typed, current and player scoped', () async {
     messenger.setMockMethodCallHandler(channel, (_) async => null);
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     final reports = <DisplayMatchingReport>[];
     final subscription = player.displayReports.listen(reports.add);
@@ -587,7 +696,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     await player.setDisplayMatching(
@@ -626,7 +735,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     final events = <PlayerEvent>[];
     final subscription = player.events.listen(events.add);
@@ -665,7 +774,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final load = player.load(Uri.parse('file:///stopped.mp4'));
@@ -711,7 +820,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     final load = player.load(
@@ -811,7 +920,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final load = player.load(
@@ -849,7 +958,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     final load = player.load(
@@ -918,7 +1027,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer(
+    final player = MethodChannelNativePlayer(
       trackTimeout: const Duration(milliseconds: 1),
     );
     addTearDown(player.dispose);
@@ -963,7 +1072,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
 
@@ -994,7 +1103,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
 
@@ -1036,7 +1145,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     const messages = {
@@ -1083,7 +1192,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       final events = <PlayerEvent>[];
       final subscription = player.events.listen(events.add);
@@ -1133,7 +1242,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final load = player.load(Uri.parse('https://plex.example/media'));
@@ -1174,7 +1283,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     final load = player.load(Uri.parse('file:///broken.mp4'));
@@ -1204,7 +1313,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     final load = player.load(Uri.parse('file:///broken.mp4'));
@@ -1246,7 +1355,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final first = player.load(Uri.parse('file:///one.mp4'));
@@ -1297,7 +1406,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final video = player.load(Uri.parse('file:///video.mp4'));
@@ -1361,7 +1470,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       final initialize = player.initialize();
       final dispose = player.dispose();
@@ -1384,7 +1493,7 @@ void main() {
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final load = player.load(Uri.parse('file:///pending.mp4'));
@@ -1412,7 +1521,7 @@ void main() {
         return null;
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       var settled = false;
@@ -1459,7 +1568,7 @@ void main() {
         return null;
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-      final player = WindowsNativePlayer(
+      final player = MethodChannelNativePlayer(
         stopTimeout: const Duration(milliseconds: 20),
       );
       final initialization = player.initialize();
@@ -1523,7 +1632,7 @@ void main() {
         return null;
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       addTearDown(player.dispose);
       await player.initialize();
       final stop = player.stop();
@@ -1551,7 +1660,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     var loadSettled = false;
@@ -1637,7 +1746,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     final first = player.load(Uri.parse('file:///first.mp4'), generation: 1);
@@ -1697,7 +1806,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     await expectLater(
@@ -1732,7 +1841,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer(loadTimeout: Duration.zero);
+    final player = MethodChannelNativePlayer(loadTimeout: Duration.zero);
     addTearDown(player.dispose);
     await player.initialize();
     await expectLater(
@@ -1766,7 +1875,7 @@ void main() {
 
       final uncaught = <Object>[];
       await runZonedGuarded(() async {
-        final player = WindowsNativePlayer();
+        final player = MethodChannelNativePlayer();
         addTearDown(player.dispose);
         await player.initialize();
         final first = player.load(Uri.parse('file:///first.mp4'));
@@ -1801,7 +1910,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     final load = player.load(Uri.parse('file:///hdr.mp4'));
@@ -1863,7 +1972,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final player = WindowsNativePlayer();
+    final player = MethodChannelNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
     final first = player.load(Uri.parse('file:///first.mp4'));
@@ -1925,9 +2034,9 @@ void main() {
     messenger.setMockMethodCallHandler(channel, (call) async => null);
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final first = WindowsNativePlayer();
+    final first = MethodChannelNativePlayer();
     addTearDown(first.dispose);
-    final second = WindowsNativePlayer();
+    final second = MethodChannelNativePlayer();
     addTearDown(second.dispose);
     await first.initialize();
     await expectLater(second.initialize(), throwsA(isA<PlayerUnavailable>()));

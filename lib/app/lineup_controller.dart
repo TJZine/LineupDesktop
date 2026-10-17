@@ -33,6 +33,38 @@ class _PickerOrigin {
   final bool canCancelSetup;
 }
 
+@immutable
+class _ServerSelection {
+  const _ServerSelection({
+    required this.state,
+    required this.access,
+    required this.connection,
+    required this.libraries,
+    required this.lineup,
+  });
+  final PersistedState state;
+  final PlexServerAccess access;
+  final PlexConnection connection;
+  final List<PlexLibrary> libraries;
+  final ScopedLineup lineup;
+}
+
+@immutable
+class _ProfileSelection {
+  const _ProfileSelection({
+    required this.state,
+    required this.profile,
+    required this.token,
+  });
+  final PersistedState state;
+  final PlexHomeUser profile;
+  final String token;
+}
+
+final class LineupScopeSuperseded implements Exception {
+  const LineupScopeSuperseded();
+}
+
 class ChannelStateConflictException extends FormatException {
   const ChannelStateConflictException()
     : super('The lineup changed. Review the current channels and try again.');
@@ -98,10 +130,12 @@ class LineupController extends ChangeNotifier {
     this.pinPollInterval = const Duration(seconds: 1),
     ScheduleWorkerFactory? scheduleWorkerFactory,
     DateTime Function()? scheduleClock,
+    DateTime Function()? clock,
     LineupScenario? scenario,
   }) : diagnostics = diagnostics ?? Diagnostics(),
        _scheduleWorkerFactory = scheduleWorkerFactory ?? ScheduleWorker.new,
        _scheduleClock = scheduleClock ?? DateTime.now,
+       _clock = clock ?? DateTime.now,
        _ownsDiagnostics = diagnostics == null {
     if (scenario != null) installScenario(scenario);
   }
@@ -155,8 +189,13 @@ class LineupController extends ChangeNotifier {
     _scenarioInstalled = true;
     _settings = scenario.settings ?? const LineupSettings();
     diagnostics.enabled = settings.diagnosticsEnabled;
-    _publishChannels = scenario.channels ?? const [];
-    _currentChannelId = scenario.currentChannelId;
+    _publishLineup(
+      ScopedLineup(
+        libraryIds: scenario.selectedLibraryIds ?? const {},
+        channels: scenario.channels ?? const [],
+        currentChannelId: scenario.currentChannelId,
+      ),
+    );
     _account = scenario.account;
     _profile = scenario.profile;
     _publishProfiles = scenario.profiles ?? const [];
@@ -164,7 +203,6 @@ class LineupController extends ChangeNotifier {
     _publishServer = scenario.server;
     _connection = scenario.connection;
     _publishLibraries = scenario.libraries ?? const [];
-    _publishSelectedLibraryIds = scenario.selectedLibraryIds ?? const {};
     _publishAvailableMedia = scenario.availableMedia ?? const [];
     _publishAvailablePlaylists = scenario.availablePlaylists ?? const [];
     _activePin = scenario.activePin;
@@ -207,13 +245,9 @@ class LineupController extends ChangeNotifier {
 
   LineupSettings _settings = const LineupSettings();
   LineupSettings get settings => _settings;
-  List<Channel> _channels = const [];
-  List<Channel> get channels => _channels;
-  set _publishChannels(List<Channel> value) => _channels = List.unmodifiable(
-    value.map((channel) => channel.immutableCopy()),
-  );
-  String? _currentChannelId;
-  String? get currentChannelId => _currentChannelId;
+  ScopedLineup _lineup = ScopedLineup.empty;
+  List<Channel> get channels => _lineup.channels;
+  String? get currentChannelId => _lineup.currentChannelId;
   PlexAccount? _account;
   PlexAccount? get account => _account;
   PlexHomeUser? _profile;
@@ -236,10 +270,7 @@ class LineupController extends ChangeNotifier {
   List<PlexLibrary> get libraries => _libraries;
   set _publishLibraries(List<PlexLibrary> value) =>
       _libraries = List.unmodifiable(value);
-  Set<String> _selectedLibraryIds = const {};
-  Set<String> get selectedLibraryIds => _selectedLibraryIds;
-  set _publishSelectedLibraryIds(Set<String> value) =>
-      _selectedLibraryIds = Set.unmodifiable(value);
+  Set<String> get selectedLibraryIds => _lineup.libraryIds;
   List<PlexMediaItem> _availableMedia = const [];
   List<PlexMediaItem> get availableMedia => _availableMedia;
   set _publishAvailableMedia(List<PlexMediaItem> value) => _availableMedia =
@@ -252,6 +283,14 @@ class LineupController extends ChangeNotifier {
       );
   PlexPin? _activePin;
   PlexPin? get activePin => _activePin;
+  bool get pinExpired => _activePin != null && _isPinExpired(_activePin!);
+  bool get pinUsable =>
+      _activePin != null && !pinExpired && !_secureCancellationRequired;
+  Duration get pinRemaining =>
+      _activePin?.expiresAt.difference(_clock()) ?? Duration.zero;
+
+  bool _isPinExpired(PlexPin pin) => !_clock().isBefore(pin.expiresAt);
+
   SetupStage _stage = SetupStage.welcome;
   SetupStage get stage => _stage;
   bool _busy = false;
@@ -277,7 +316,7 @@ class LineupController extends ChangeNotifier {
   bool _secureCancellationRequired = false;
   bool get secureCancellationRequired => _secureCancellationRequired;
   final _LibraryScanState _scan = _LibraryScanState();
-  LibraryScanStatus get libraryScanStatus => _scan.status;
+  LibraryScanStatus get libraryScanStatus => _scan.currentStatus;
   int get libraryScanCompletedPages => _scan.completedPages;
   int get libraryScanCompletedItems => _scan.completedItems;
   int? get libraryScanTotalItems => _scan.totalItems;
@@ -299,8 +338,8 @@ class LineupController extends ChangeNotifier {
   bool isGeneratedSourceConfirmedGone(Channel channel) {
     if (channel.builderKey == null ||
         _scan.discoveryObsolete ||
-        _scan.status == LibraryScanStatus.scanning ||
-        _scan.status == LibraryScanStatus.cancelled ||
+        _scan.currentStatus == LibraryScanStatus.scanning ||
+        _scan.currentStatus == LibraryScanStatus.cancelled ||
         !_sourceDiscoveryComplete(channel.source)) {
       return false;
     }
@@ -416,7 +455,7 @@ class LineupController extends ChangeNotifier {
   Future<PlexConnection>? _pmsRefresh;
   int? _pmsRefreshOperation;
   String? _pmsRefreshServerId;
-  PersistedState _persisted = const PersistedState();
+  PersistedState _persisted = PersistedState.empty;
   Timer? _pinTimer;
   int? _busyOperation;
   List<PlexMediaItem>? _scheduleWorkerMedia;
@@ -430,6 +469,7 @@ class LineupController extends ChangeNotifier {
   Map<String, PlexMediaItem> _playableById = const {};
   final ScheduleWorkerFactory _scheduleWorkerFactory;
   final DateTime Function() _scheduleClock;
+  final DateTime Function() _clock;
   Future<void> _credentialOperations = Future.value();
   Future<void> _stateOperations = Future.value();
   Future<bool>? _logoutFuture;
@@ -473,9 +513,7 @@ class LineupController extends ChangeNotifier {
         : null;
     _settings = _persisted.settings;
     diagnostics.enabled = settings.diagnosticsEnabled;
-    _publishChannels = const [];
-    _currentChannelId = null;
-    _publishSelectedLibraryIds = const {};
+    _publishEmptyLineup();
     _resetSetupDiscovery();
     final token = await credentials.readAccountToken();
     if (!_isCurrent(operation)) return;
@@ -574,7 +612,7 @@ class LineupController extends ChangeNotifier {
       await _clearCredentials();
     } catch (exception) {
       cleanupFailure = exception;
-      diagnostics.add('application', 'Credential cleanup failed', {
+      diagnostics.add(DiagnosticEvent.credentialCleanupFailed, {
         'code': 'credential-cleanup-failed',
       });
     }
@@ -585,7 +623,7 @@ class LineupController extends ChangeNotifier {
         if (exception is! PlexException ||
             exception.code != 'resource-not-found') {
           pinFailure = exception;
-          diagnostics.add('plex-auth', 'PIN cancellation failed', {
+          diagnostics.add(DiagnosticEvent.pinCancellationFailed, {
             'code': _linkFailureCode(exception),
           });
         }
@@ -622,7 +660,7 @@ class LineupController extends ChangeNotifier {
 
   Future<void> _pollPin(int operation, PlexPin pin) async {
     if (busy || operation != _epoch) return;
-    if (DateTime.now().isAfter(pin.expiresAt)) {
+    if (_isPinExpired(pin)) {
       _pinTimer?.cancel();
       _activePin = null;
       _error = 'The Plex link code expired. Request a new code.';
@@ -648,7 +686,7 @@ class LineupController extends ChangeNotifier {
         if (operation != _epoch) return;
         _secureCancellationRequired = true;
         _error = 'Lineup could not confirm secure credential storage. Retry secure cancellation before signing in again.';
-        diagnostics.add('plex-auth', 'Credential write failed', {
+        diagnostics.add(DiagnosticEvent.credentialWriteFailed, {
           'code': 'credential-write-failed',
         });
         notifyListeners();
@@ -677,13 +715,13 @@ class LineupController extends ChangeNotifier {
       _activePin = null;
       final code = _linkFailureCode(exception);
       _error = _linkFailureMessage(code);
-      diagnostics.add('plex-auth', 'PIN poll failed', {'code': code});
+      diagnostics.add(DiagnosticEvent.pinPollFailed, {'code': code});
       notifyListeners();
       try {
         await plex.cancelPin(pin);
       } catch (cancelException) {
         if (operation != _epoch) return;
-        diagnostics.add('plex-auth', 'PIN cancellation failed', {
+        diagnostics.add(DiagnosticEvent.pinCancellationFailed, {
           'code': _linkFailureCode(cancelException),
         });
       }
@@ -750,35 +788,20 @@ class LineupController extends ChangeNotifier {
           _profileSelectionCanCancel = false;
           _profilePickerOrigin = null;
           notifyListeners();
-          final next = _stateSnapshot(profileId: selected.id, serverId: null);
+          final selection = _ProfileSelection(
+            state: _persisted.withSettings(settings).withProfile(selected.id),
+            profile: selected,
+            token: token,
+          );
           try {
-            await _persistState(next);
+            await _persistState(selection.state);
           } catch (_) {
             _profileSelectionCanCancel = oldCanCancel;
             _profilePickerOrigin = oldProfileOrigin;
             rethrow;
           }
           if (_disposed) return;
-          _persisted = next;
-          _retireScope();
-          _profile = selected;
-          _profileToken = token;
-          _serverAccess = const {};
-          _pmsToken = null;
-          _invalidatePmsRefresh();
-          _publishServer = null;
-          _publishServers = const [];
-          _connection = null;
-          _serverSelectionCanCancel = false;
-          _serverPickerOrigin = null;
-          _publishLibraries = const [];
-          _publishSelectedLibraryIds = const {};
-          _publishAvailableMedia = const [];
-          _publishAvailablePlaylists = const [];
-          _publishChannels = const [];
-          _currentChannelId = null;
-          _resetSetupDiscovery();
-          _contentGeneration++;
+          _publishProfileSelection(selection);
           accepted = true;
           _stage = SetupStage.servers;
           notifyListeners();
@@ -795,6 +818,27 @@ class LineupController extends ChangeNotifier {
       );
     }
     return accepted;
+  }
+
+  void _publishProfileSelection(_ProfileSelection selection) {
+    _persisted = selection.state;
+    _retireScope();
+    _profile = selection.profile;
+    _profileToken = selection.token;
+    _serverAccess = const {};
+    _pmsToken = null;
+    _invalidatePmsRefresh();
+    _publishServer = null;
+    _publishServers = const [];
+    _connection = null;
+    _serverSelectionCanCancel = false;
+    _serverPickerOrigin = null;
+    _publishLibraries = const [];
+    _publishEmptyLineup();
+    _publishAvailableMedia = const [];
+    _publishAvailablePlaylists = const [];
+    _resetSetupDiscovery();
+    _contentGeneration++;
   }
 
   Future<void> _discover(int operation, {bool reconnectSaved = true}) async {
@@ -871,73 +915,49 @@ class LineupController extends ChangeNotifier {
         if (!_isCurrent(operation)) return;
         await _queueStateOperation(operation, () async {
           final access = _serverAccess[selected.id]!;
-          final profileId = profile?.id ?? account?.id;
-          final savedLibraries = profileId == null
-              ? const <String>[]
-              : _persisted
-                        .selectedLibraryIdsByProfileServer[profileId]?[selected
-                        .id] ??
-                    const <String>[];
+          final profileKey = profile?.id ?? account?.id;
+          final scope = profileKey == null
+              ? null
+              : LineupScope(profileKey: profileKey, serverId: selected.id);
+          final saved = scope == null
+              ? ScopedLineup.empty
+              : _persisted.lineupFor(scope);
           final availableIds = loadedLibraries
               .map((library) => library.id)
               .toSet();
-          final nextLibraryIds = Set<String>.unmodifiable(
-            savedLibraries.where(availableIds.contains),
+          final lineup = ScopedLineup(
+            libraryIds: saved.libraryIds.intersection(availableIds),
+            channels: saved.channels,
+            currentChannelId: saved.currentChannelId,
           );
-          final nextChannels = List<Channel>.unmodifiable(
-            profileId == null
-                ? const <Channel>[]
-                : _persisted.channelsByProfileServer[profileId]?[selected.id] ??
-                      const <Channel>[],
-          );
-          final nextCurrent = profileId == null
-              ? null
-              : _persisted.currentChannelByProfileServer[profileId]?[selected
-                    .id];
-          final next = _stateSnapshot(
-            profileId: profile?.id,
-            serverId: selected.id,
-            selectedLibraryIdsOverride: nextLibraryIds,
-            channelsOverride: nextChannels,
-            currentChannelOverride: (id: nextCurrent),
+          final base = _persisted
+              .withProfile(profile?.id)
+              .withSettings(settings);
+          final selection = _ServerSelection(
+            state: scope == null ? base : base.withLineup(scope, lineup),
+            access: access,
+            connection: workingConnection,
+            libraries: loadedLibraries,
+            lineup: lineup,
           );
           final oldCanCancel = serverSelectionCanCancel;
           _serverSelectionCanCancel = false;
           notifyListeners();
           try {
-            await _persistState(next);
+            await _persistState(selection.state);
           } catch (_) {
             _serverSelectionCanCancel = oldCanCancel;
             rethrow;
           }
           if (_disposed) return;
-          final committedAccess = _serverAccess[selected.id] ?? access;
-          _serverAccess = {..._serverAccess, selected.id: committedAccess};
-          _persisted = next;
-          _retireScope();
-          _serverPickerOrigin = null;
-          _publishServer = access.server;
-          _connection = workingConnection;
-          _pmsToken = committedAccess.token;
-          _publishLibraries = loadedLibraries;
-          _publishSelectedLibraryIds = nextLibraryIds;
-          _publishAvailableMedia = const [];
-          _publishAvailablePlaylists = const [];
-          _publishChannels = nextChannels;
-          _currentChannelId = nextCurrent;
-          _stage = SetupStage.channelSetup;
-          _channelSetupCanCancel = false;
-          _resetSetupDiscovery();
-          _restoringSavedLineup =
-              nextLibraryIds.isNotEmpty && nextChannels.isNotEmpty;
-          _contentGeneration++;
+          _publishServerSelection(selection, operation);
           notifyListeners();
         });
         if (!_isCurrent(operation)) return;
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
           final loaded = await _loadLibraries(operation, selectedLibraryIds);
           if (operation != _epoch) return;
-          _scan.status = loaded.status;
+          _scan.restoreStatus(loaded.status);
           _requireAvailablePlaylists(loaded.failedPlaylistIds);
           _requireAvailableCollections(loaded);
           _publishAvailableMedia = loaded.media;
@@ -957,6 +977,32 @@ class LineupController extends ChangeNotifier {
     );
     if (_isCurrent(operation)) _restoringSavedLineup = false;
     if (_serverTargetId == selected.id) _serverTargetId = null;
+  }
+
+  void _publishServerSelection(_ServerSelection selection, int operation) {
+    final access = selection.access;
+    final committedAccess = _serverAccess[access.server.id] ?? access;
+    _serverAccess = {..._serverAccess, access.server.id: committedAccess};
+    _persisted = selection.state;
+    _retireScope();
+    _serverPickerOrigin = null;
+    _publishServer = access.server;
+    _connection = selection.connection;
+    _pmsToken = committedAccess.token;
+    _publishLibraries = selection.libraries;
+    _publishAvailableMedia = const [];
+    _publishAvailablePlaylists = const [];
+    _publishLineup(selection.lineup);
+    _stage = SetupStage.channelSetup;
+    _channelSetupCanCancel = false;
+    _resetSetupDiscovery();
+    // A started successful save still publishes, but obsolete requests cannot
+    // create restore work they will never execute.
+    _restoringSavedLineup =
+        _isCurrent(operation) &&
+        selection.lineup.libraryIds.isNotEmpty &&
+        selection.lineup.channels.isNotEmpty;
+    _contentGeneration++;
   }
 
   Future<bool> scanLibraries(Set<String> ids, {bool retryFailedOnly = false}) =>
@@ -1014,7 +1060,7 @@ class LineupController extends ChangeNotifier {
           _error = failure is PlexException
               ? failure.message
               : 'Lineup could not complete that request.';
-          diagnostics.add('application', 'Operation failed', {
+          diagnostics.add(DiagnosticEvent.operationFailed, {
             'code': failure is PlexException ? failure.code : 'unexpected',
           });
         }
@@ -1030,50 +1076,57 @@ class LineupController extends ChangeNotifier {
   Future<bool> _commitScannedLibraries(Set<String> ids) async {
     final operation = _epoch;
     final scope = _mutationScope;
-    final pending = _scan.readiness;
-    if (pending == null ||
-        _scan.readinessScope != _mutationScope ||
-        ids.isEmpty ||
-        !_scan.ids.containsAll(ids) ||
-        !libraryScanReadyIds.containsAll(ids)) {
+    final candidate = _scan.candidateFor(
+      ids,
+      scope,
+      libraries.map((library) => library.id),
+    );
+    if (candidate == null || !libraryScanReadyIds.containsAll(ids)) {
       return false;
     }
-    return _run(
+    var committed = false;
+    await _run(
       () => _queueStateOperation(operation, () async {
-        if (_scan.readinessScope != _mutationScope ||
-            !identical(_scan.readiness, pending)) {
-          return;
-        }
-        _requireAvailablePlaylists(pending.failedPlaylistIds);
-        _requireAvailableCollections(pending, libraryIds: ids);
-        final media = List<PlexMediaItem>.unmodifiable([
-          for (final library in libraries)
-            if (ids.contains(library.id))
-              ...?_scan.rows[library.id]?.items?.where(
-                (item) => item.isPlayable,
-              ),
-        ]);
-        final inventory = _buildPlayableInventory(media, pending.playlists);
+        if (!_scan.isCurrent(candidate, _mutationScope)) return;
+        _requireAvailablePlaylists(candidate.evidence.failedPlaylistIds);
+        _requireAvailableCollections(
+          candidate.evidence,
+          libraryIds: candidate.libraryIds,
+        );
+        final media = candidate.media;
+        final inventory = _buildPlayableInventory(media, candidate.playlists);
+        final previous = channels;
         final migrated = _migratedLegacyChannels(
           _scheduleClock().toUtc(),
           inventory: inventory,
         );
-        await _save(
-          channelsOverride: migrated,
-          selectedLibraryIdsOverride: ids,
+        await _commitLineup(
+          ScopedLineup(
+            libraryIds: candidate.libraryIds,
+            channels: migrated,
+            currentChannelId: currentChannelId,
+          ),
         );
         if (!_isCurrentMutationScope(scope)) return;
-        _publishSelectedLibraryIds = Set.unmodifiable(ids);
         _publishAvailableMedia = media;
-        _publishAvailablePlaylists = pending.playlists;
-        _publishChannels = migrated;
-        _scan.status = _scan.statusFor(ids);
+        _publishAvailablePlaylists = candidate.playlists;
+        _publishLineup(
+          ScopedLineup(
+            libraryIds: candidate.libraryIds,
+            channels: migrated,
+            currentChannelId: currentChannelId,
+          ),
+        );
+        _recordChannelChanges(previous);
+        _scan.didCommit(candidate);
+        committed = true;
         _contentGeneration++;
         notifyListeners();
       }),
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
     );
+    return committed && _isCurrent(operation);
   }
 
   Future<_LibraryScanResult> _loadLibraries(
@@ -1139,7 +1192,7 @@ class LineupController extends ChangeNotifier {
             if (!_isCurrent(operation)) return;
             final items = scanned.items;
             if (scanned.timing case final timing?) {
-              diagnostics.add('plex-library', 'Library scan timing', {
+              diagnostics.add(DiagnosticEvent.libraryScanTiming, {
                 'scanPath': settleFailures ? 'setup' : 'launch',
                 'libraryType': library.type.name,
                 'itemsMs': timing.items.inMilliseconds,
@@ -1180,11 +1233,7 @@ class LineupController extends ChangeNotifier {
           status: LibraryScanStatus.cancelled,
         );
       }
-      final items = selected
-          .map((library) => _scan.rows[library.id]?.items)
-          .whereType<List<PlexMediaItem>>()
-          .expand((items) => items)
-          .toList();
+      final items = _scan.inventoryFor(selected.map((library) => library.id));
       _scan.playlistProgress = const PlexPlaylistProgress();
       notifyListeners();
       PlexPlaylistCatalog catalog;
@@ -1212,7 +1261,7 @@ class LineupController extends ChangeNotifier {
           rethrow;
         }
         catalogUnavailable = true;
-        diagnostics.add('plex-library', 'Playlist discovery unavailable', {
+        diagnostics.add(DiagnosticEvent.playlistDiscoveryUnavailable, {
           'code': exception.code,
         });
         if (_requiredPlaylistIds().isNotEmpty) {
@@ -1236,7 +1285,7 @@ class LineupController extends ChangeNotifier {
       _scan.playlistProgress = null;
       _scan.completeCatalog(catalog, unavailable: catalogUnavailable);
       if (catalog.failedIds.isNotEmpty) {
-        diagnostics.add('plex-library', 'Some playlists could not be loaded', {
+        diagnostics.add(DiagnosticEvent.somePlaylistsCouldNotBeLoaded, {
           'count': catalog.failedIds.length,
         });
       }
@@ -1248,14 +1297,12 @@ class LineupController extends ChangeNotifier {
           .intersection(ids)
           .length;
       if (failedTitleCount > 0) {
-        diagnostics.add(
-          'plex-library',
-          'Some collections could not be loaded',
-          {'count': failedTitleCount},
-        );
+        diagnostics.add(DiagnosticEvent.someCollectionsCouldNotBeLoaded, {
+          'count': failedTitleCount,
+        });
       }
       if (unavailableCount > 0) {
-        diagnostics.add('plex-library', 'Collection discovery unavailable', {
+        diagnostics.add(DiagnosticEvent.collectionDiscoveryUnavailable, {
           'count': unavailableCount,
         });
       }
@@ -1263,7 +1310,7 @@ class LineupController extends ChangeNotifier {
       return _scan.result(playable, catalog.playlists);
     } catch (_) {
       if (_isCurrent(operation)) {
-        _scan.status = LibraryScanStatus.transientFailure;
+        _scan.restoreStatus(LibraryScanStatus.transientFailure);
         notifyListeners();
       }
       rethrow;
@@ -1469,20 +1516,9 @@ class LineupController extends ChangeNotifier {
       () => _queueStateOperation(operation, () async {
         final profileId = profile?.id ?? account?.id;
         if (profileId == null) return;
-        final selections = Map<String, String>.of(
-          _persisted.selectedServerByProfile,
-        )..remove(profileId);
-        final next = PersistedState(
-          settings: _persisted.settings,
-          profileId: _persisted.profileId,
-          selectedServerByProfile: selections,
-          selectedLibraryIdsByProfileServer:
-              _persisted.selectedLibraryIdsByProfileServer,
-          channelsByProfileServer: _persisted.channelsByProfileServer,
-          currentChannelByProfileServer:
-              _persisted.currentChannelByProfileServer,
-        );
+        final next = _persistedFromRuntime().withoutSelectedServer(profileId);
         await _persistState(next);
+        if (_disposed) return;
         _persisted = next;
         _clearServerRuntime();
         _serverSelectionCanCancel = false;
@@ -1663,12 +1699,15 @@ class LineupController extends ChangeNotifier {
         : next.isEmpty
         ? null
         : next[oldIndex.clamp(0, next.length - 1)].id;
-    await _save(
-      channelsOverride: next,
-      currentChannelOverride: (id: nextCurrent),
+    await _commitLineup(
+      ScopedLineup(
+        libraryIds: selectedLibraryIds,
+        channels: next,
+        currentChannelId: nextCurrent,
+      ),
     );
     if (!_isCurrentMutationScope(operation)) {
-      throw StateError('Channel mutation was superseded');
+      throw const LineupScopeSuperseded();
     }
     _publishChannelCommit(next, nextCurrent, previous);
   }
@@ -1678,8 +1717,13 @@ class LineupController extends ChangeNotifier {
     String? currentId,
     List<Channel> previous,
   ) {
-    _publishChannels = next;
-    _currentChannelId = currentId;
+    _publishLineup(
+      ScopedLineup(
+        libraryIds: selectedLibraryIds,
+        channels: next,
+        currentChannelId: currentId,
+      ),
+    );
     _recordChannelChanges(previous);
     notifyListeners();
   }
@@ -1734,7 +1778,7 @@ class LineupController extends ChangeNotifier {
       if (_isCurrentMutationScope(operation)) committed = savedChannel;
     });
     if (committed == null) {
-      throw StateError('Channel save was superseded');
+      throw const LineupScopeSuperseded();
     }
     return committed!;
   }
@@ -1886,13 +1930,21 @@ class LineupController extends ChangeNotifier {
           .every((index) => identical(old[index], migrated[index]))) {
         return;
       }
-      try {
-        await _save(channelsOverride: migrated);
-      } catch (_) {
-        rethrow;
-      }
+      await _commitLineup(
+        ScopedLineup(
+          libraryIds: selectedLibraryIds,
+          channels: migrated,
+          currentChannelId: currentChannelId,
+        ),
+      );
       if (_isCurrentMutationScope(scope)) {
-        _publishChannels = migrated;
+        _publishLineup(
+          ScopedLineup(
+            libraryIds: selectedLibraryIds,
+            channels: migrated,
+            currentChannelId: currentChannelId,
+          ),
+        );
         _recordChannelChanges(old);
       }
     });
@@ -2000,7 +2052,7 @@ class LineupController extends ChangeNotifier {
     int operation,
   ) {
     final descriptor = plex.playbackDescriptor(server: endpoint, item: item);
-    diagnostics.add('playback', 'Plex playback selected', {
+    diagnostics.add(DiagnosticEvent.plexPlaybackSelected, {
       'container': item.container,
       'videoCodec': item.videoCodec,
       'audioCodec': item.audioCodec,
@@ -2103,7 +2155,7 @@ class LineupController extends ChangeNotifier {
               _ => 'transport',
             }
           : 'transport';
-      diagnostics.add('plex', 'Cast portrait unavailable', {
+      diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
         'code': 'portrait_$source',
         'failureCode': failure,
         'count': 1,
@@ -2119,9 +2171,9 @@ class LineupController extends ChangeNotifier {
           (id != null && !channels.any((channel) => channel.id == id))) {
         return;
       }
-      await _save(currentChannelOverride: (id: id));
+      await _commitLineup(_lineup.withCurrentChannel(id));
       if (!_isCurrentMutationScope(operation)) {
-        throw StateError('Current channel mutation was superseded');
+        throw const LineupScopeSuperseded();
       }
       _publishCurrentChannel(id);
     });
@@ -2132,7 +2184,7 @@ class LineupController extends ChangeNotifier {
   ) async {
     await _queueGlobalStateOperation(() async {
       final proposed = change(settings);
-      await _save(settingsOverride: proposed);
+      await _commitSettings(proposed);
       if (_disposed) return;
       _publishSettingsCommit(proposed);
     });
@@ -2145,7 +2197,7 @@ class LineupController extends ChangeNotifier {
   }
 
   void _publishCurrentChannel(String? id) {
-    _currentChannelId = id;
+    _publishLineup(_lineup.withCurrentChannel(id));
     notifyListeners();
   }
 
@@ -2194,7 +2246,7 @@ class LineupController extends ChangeNotifier {
       } catch (exception) {
         if (_disposed) return false;
         _error = 'Lineup could not securely sign out. Check system credential storage and try again.';
-        diagnostics.add('application', 'Credential cleanup failed', {
+        diagnostics.add(DiagnosticEvent.credentialCleanupFailed, {
           'code': exception is PlexException ? exception.code : 'unexpected',
         });
         return false;
@@ -2217,9 +2269,7 @@ class LineupController extends ChangeNotifier {
       _scheduleWorker = null;
       _scheduleWorkerMedia = null;
       _scheduleWorkerPlaylists = null;
-      _publishSelectedLibraryIds = const {};
-      _publishChannels = const [];
-      _currentChannelId = null;
+      _publishEmptyLineup();
       _channelSetupCanCancel = false;
       _profileSelectionCanCancel = false;
       _serverSelectionCanCancel = false;
@@ -2247,85 +2297,42 @@ class LineupController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _save({
-    LineupSettings? settingsOverride,
-    List<Channel>? channelsOverride,
-    Set<String>? selectedLibraryIdsOverride,
-    ({String? id})? currentChannelOverride,
-  }) async {
-    final next = _stateSnapshot(
-      profileId: profile?.id,
-      serverId: server?.id,
-      settingsOverride: settingsOverride,
-      channelsOverride: channelsOverride,
-      selectedLibraryIdsOverride: selectedLibraryIdsOverride,
-      currentChannelOverride: currentChannelOverride,
+  void _publishEmptyLineup() => _publishLineup(ScopedLineup.empty);
+
+  void _publishLineup(ScopedLineup lineup) => _lineup = lineup;
+
+  PersistedState _persistedFromRuntime({
+    ScopedLineup? lineup,
+    LineupSettings? settings,
+  }) {
+    final base = _persisted
+        .withProfile(profile?.id)
+        .withSettings(settings ?? this.settings);
+    final profileKey = profile?.id ?? account?.id;
+    final serverId = server?.id;
+    if (profileKey == null || serverId == null) return base;
+    return base.withLineup(
+      LineupScope(profileKey: profileKey, serverId: serverId),
+      lineup ?? _lineup,
     );
-    await _persistState(next);
-    if (!_disposed) _persisted = next;
   }
 
-  PersistedState _stateSnapshot({
-    required String? profileId,
-    required String? serverId,
-    LineupSettings? settingsOverride,
-    List<Channel>? channelsOverride,
-    Set<String>? selectedLibraryIdsOverride,
-    ({String? id})? currentChannelOverride,
-  }) {
-    final scopeProfileId = profileId ?? account?.id;
-    final selectedServers = Map<String, String>.of(
-      _persisted.selectedServerByProfile,
-    );
-    final librarySelections = {
-      for (final entry in _persisted.selectedLibraryIdsByProfileServer.entries)
-        entry.key: {
-          for (final selection in entry.value.entries)
-            selection.key: List<String>.of(selection.value),
-        },
-    };
-    final channelSelections = {
-      for (final entry in _persisted.channelsByProfileServer.entries)
-        entry.key: {
-          for (final selection in entry.value.entries)
-            selection.key: List<Channel>.of(selection.value),
-        },
-    };
-    final currentSelections = {
-      for (final entry in _persisted.currentChannelByProfileServer.entries)
-        entry.key: Map<String, String>.of(entry.value),
-    };
-    if (scopeProfileId != null && serverId != null) {
-      selectedServers[scopeProfileId] = serverId;
-      librarySelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
-          (selectedLibraryIdsOverride ?? selectedLibraryIds).toList();
-      channelSelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
-          (channelsOverride ?? channels).toList();
-      final current = currentChannelOverride == null
-          ? currentChannelId
-          : currentChannelOverride.id;
-      if (current == null) {
-        currentSelections[scopeProfileId]?.remove(serverId);
-      } else {
-        currentSelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
-            current;
-      }
-    }
-    return PersistedState(
-      settings: settingsOverride ?? settings,
-      profileId: profileId,
-      selectedServerByProfile: selectedServers,
-      selectedLibraryIdsByProfileServer: librarySelections,
-      channelsByProfileServer: channelSelections,
-      currentChannelByProfileServer: currentSelections,
-    );
+  Future<void> _commitLineup(ScopedLineup lineup) =>
+      _commitPersistedState(_persistedFromRuntime(lineup: lineup));
+
+  Future<void> _commitSettings(LineupSettings settings) =>
+      _commitPersistedState(_persistedFromRuntime(settings: settings));
+
+  Future<void> _commitPersistedState(PersistedState next) async {
+    await _persistState(next);
+    if (!_disposed) _persisted = next;
   }
 
   Future<void> _persistState(PersistedState state) async {
     try {
       await store.save(state);
     } catch (_) {
-      diagnostics.add('application', 'State save failed', {
+      diagnostics.add(DiagnosticEvent.stateSaveFailed, {
         'code': 'write-failed',
       });
       rethrow;
@@ -2357,7 +2364,7 @@ class LineupController extends ChangeNotifier {
       if (!_isCurrentMutationScope(scope) ||
           eligibility != _mutationEligibility ||
           _logoutFuture != null) {
-        throw StateError('State mutation was superseded');
+        throw const LineupScopeSuperseded();
       }
       await body();
     });
@@ -2438,12 +2445,10 @@ class LineupController extends ChangeNotifier {
     _serverTargetId = null;
     _invalidatePmsRefresh();
     _publishLibraries = const [];
-    _publishSelectedLibraryIds = const {};
+    _publishEmptyLineup();
     _publishAvailableMedia = const [];
     _publishAvailablePlaylists = const [];
     _resetSetupDiscovery();
-    _publishChannels = const [];
-    _currentChannelId = null;
     _scheduleWorker?.dispose();
     _scheduleWorker = null;
     _scheduleWorkerMedia = null;
@@ -2627,7 +2632,7 @@ class LineupController extends ChangeNotifier {
           : 'Lineup could not complete that request.';
       _restoringSavedLineup = false;
       _stage = fallbackStage;
-      diagnostics.add('application', 'Operation failed', {
+      diagnostics.add(DiagnosticEvent.operationFailed, {
         'code': exception is PlexException ? exception.code : 'unexpected',
       });
       return false;
@@ -2655,11 +2660,8 @@ class LineupController extends ChangeNotifier {
           ? server?.id == serverId
           : _serverTargetId == serverId);
 
-  static bool _isPmsAuthorizationError(PlexException exception) => const {
-    'auth-invalid',
-    'auth-required',
-    'access-denied',
-  }.contains(exception.code);
+  static bool _isPmsAuthorizationError(PlexException exception) =>
+      exception.isAuthorizationFailure;
 
   @override
   void notifyListeners() {

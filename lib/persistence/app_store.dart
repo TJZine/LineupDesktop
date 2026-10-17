@@ -2,13 +2,65 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../channels/channel.dart';
 import '../settings/lineup_settings.dart';
 
+@immutable
+class LineupScope {
+  const LineupScope({required this.profileKey, required this.serverId});
+
+  final String profileKey;
+  final String serverId;
+}
+
+@immutable
+class ScopedLineup {
+  ScopedLineup({
+    required Set<String> libraryIds,
+    required List<Channel> channels,
+    required this.currentChannelId,
+  }) : libraryIds = Set.unmodifiable(libraryIds),
+       channels = List.unmodifiable(
+         channels.map((channel) => channel.immutableCopy()),
+       );
+
+  // Only derivations of this value may reuse its already frozen collections.
+  const ScopedLineup._owned({
+    required this.libraryIds,
+    required this.channels,
+    required this.currentChannelId,
+  });
+
+  static const empty = ScopedLineup._owned(
+    libraryIds: {},
+    channels: [],
+    currentChannelId: null,
+  );
+
+  ScopedLineup withLibraryIds(Set<String> value) => ScopedLineup._owned(
+    libraryIds: Set.unmodifiable(value),
+    channels: channels,
+    currentChannelId: currentChannelId,
+  );
+
+  ScopedLineup withCurrentChannel(String? value) => ScopedLineup._owned(
+    libraryIds: libraryIds,
+    channels: channels,
+    currentChannelId: value,
+  );
+
+  final Set<String> libraryIds;
+  final List<Channel> channels;
+  final String? currentChannelId;
+}
+
 class PersistedState {
+  static const empty = PersistedState();
+
   const PersistedState({
     this.settings = const LineupSettings(),
     this.profileId,
@@ -25,6 +77,90 @@ class PersistedState {
   selectedLibraryIdsByProfileServer;
   final Map<String, Map<String, List<Channel>>> channelsByProfileServer;
   final Map<String, Map<String, String>> currentChannelByProfileServer;
+
+  ScopedLineup lineupFor(LineupScope scope) => ScopedLineup(
+    libraryIds:
+        (selectedLibraryIdsByProfileServer[scope.profileKey]?[scope.serverId] ??
+                const <String>[])
+            .toSet(),
+    channels:
+        channelsByProfileServer[scope.profileKey]?[scope.serverId] ?? const [],
+    currentChannelId:
+        currentChannelByProfileServer[scope.profileKey]?[scope.serverId],
+  );
+
+  PersistedState withLineup(LineupScope scope, ScopedLineup lineup) {
+    final libraries = {
+      for (final profile in selectedLibraryIdsByProfileServer.entries)
+        profile.key: {
+          for (final server in profile.value.entries)
+            server.key: List<String>.of(server.value),
+        },
+    };
+    final channels = {
+      for (final profile in channelsByProfileServer.entries)
+        profile.key: {
+          for (final server in profile.value.entries)
+            server.key: List<Channel>.of(server.value),
+        },
+    };
+    final current = {
+      for (final profile in currentChannelByProfileServer.entries)
+        profile.key: Map<String, String>.of(profile.value),
+    };
+    libraries.putIfAbsent(scope.profileKey, () => {})[scope.serverId] = lineup
+        .libraryIds
+        .toList();
+    channels.putIfAbsent(scope.profileKey, () => {})[scope.serverId] = lineup
+        .channels
+        .toList();
+    final currentId = lineup.currentChannelId;
+    if (currentId == null) {
+      current[scope.profileKey]?.remove(scope.serverId);
+    } else {
+      current.putIfAbsent(scope.profileKey, () => {})[scope.serverId] =
+          currentId;
+    }
+    return PersistedState(
+      settings: settings,
+      profileId: profileId,
+      selectedServerByProfile: {
+        ...selectedServerByProfile,
+        scope.profileKey: scope.serverId,
+      },
+      selectedLibraryIdsByProfileServer: libraries,
+      channelsByProfileServer: channels,
+      currentChannelByProfileServer: current,
+    );
+  }
+
+  PersistedState withSettings(LineupSettings value) => PersistedState(
+    settings: value,
+    profileId: profileId,
+    selectedServerByProfile: selectedServerByProfile,
+    selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
+    channelsByProfileServer: channelsByProfileServer,
+    currentChannelByProfileServer: currentChannelByProfileServer,
+  );
+
+  PersistedState withProfile(String? value) => PersistedState(
+    settings: settings,
+    profileId: value,
+    selectedServerByProfile: selectedServerByProfile,
+    selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
+    channelsByProfileServer: channelsByProfileServer,
+    currentChannelByProfileServer: currentChannelByProfileServer,
+  );
+
+  PersistedState withoutSelectedServer(String profileKey) => PersistedState(
+    settings: settings,
+    profileId: profileId,
+    selectedServerByProfile: Map.of(selectedServerByProfile)
+      ..remove(profileKey),
+    selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
+    channelsByProfileServer: channelsByProfileServer,
+    currentChannelByProfileServer: currentChannelByProfileServer,
+  );
 
   Map<String, Object?> toJson() => {
     'settings': settings.toJson(),
@@ -231,12 +367,16 @@ class FileAppStore implements AppStore {
   @override
   Future<String> clientIdentifier() async {
     try {
-      final existing = (await _identityFile.readAsString()).trim();
+      final existing = utf8.decode(await _identityFile.readAsBytes()).trim();
       if (RegExp(r'^lineup-desktop-[a-z]+-[A-Za-z0-9_-]{20,}$')
           .hasMatch(existing)) {
         return existing;
       }
-    } catch (_) {}
+    } on PathNotFoundException {
+      // A missing identity is a first run.
+    } on FormatException {
+      // Invalid UTF-8 is malformed identity content, not a filesystem failure.
+    }
     final random = Random.secure();
     final bytes = List<int>.generate(24, (_) => random.nextInt(256));
     final id =

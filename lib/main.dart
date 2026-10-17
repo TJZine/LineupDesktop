@@ -6,8 +6,7 @@ import 'package:flutter/material.dart';
 import 'app/lineup_app.dart';
 import 'app/lineup_controller.dart';
 import 'persistence/app_store.dart';
-import 'playback/unsupported_native_player.dart';
-import 'playback/windows_native_player.dart';
+import 'playback/native_player_factory.dart';
 import 'plex/plex_client.dart';
 
 @pragma('vm:entry-point')
@@ -52,9 +51,10 @@ void main(List<String> arguments) {
             credentials: const KeychainCredentialStore(),
             plex: PlexClient(clientIdentifier: clientIdentifier),
           ),
-          player: Platform.isWindows
-              ? WindowsNativePlayer()
-              : UnsupportedNativePlayer.macos(),
+          player: createPlatformNativePlayer(
+            isWindows: Platform.isWindows,
+            isMacOS: Platform.isMacOS,
+          ),
           initialMediaPath: mediaArgument,
         );
       },

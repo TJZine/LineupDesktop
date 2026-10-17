@@ -10,6 +10,8 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
+import '../support/test_doubles.dart';
+
 void main() {
   final sources = [
     '/library/metadata/1/thumb',
@@ -139,8 +141,13 @@ Future<LineupController> _controller(
 ) async {
   final plex = _PortraitPlex(handler);
   final controller = LineupController(
-    store: _Store(),
-    credentials: _Credentials(),
+    store: MemoryAppStore(
+      initial: const PersistedState(
+        selectedServerByProfile: {'owner': 'a'},
+        settings: LineupSettings(diagnosticsEnabled: true),
+      ),
+    ),
+    credentials: MemoryCredentialStore(accountToken: 'account-token'),
     plex: plex,
   );
   addTearDown(controller.dispose);
@@ -188,31 +195,4 @@ class _PortraitPlex extends PlexClient {
   @override
   Future<List<PlexLibrary>> libraries(Uri server, String token) async =>
       const [];
-}
-
-class _Store implements AppStore {
-  PersistedState state = const PersistedState(
-    selectedServerByProfile: {'owner': 'a'},
-    settings: LineupSettings(diagnosticsEnabled: true),
-  );
-  @override
-  Future<AppStoreLoadResult> load() async => AppStoreLoadResult(state);
-  @override
-  Future<void> save(PersistedState value) async => state = value;
-  @override
-  Future<String> clientIdentifier() async =>
-      'lineup-desktop-test-abcdefghijklmnopqrst';
-}
-
-class _Credentials implements CredentialStore {
-  @override
-  Future<String?> readAccountToken() async => 'account-token';
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
-  @override
-  Future<void> clear() async {}
 }

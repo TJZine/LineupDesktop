@@ -268,41 +268,50 @@ class PlexMediaItem {
     this.viewed = false,
   }) : _frozen = false;
 
-  PlexMediaItem._immutable(PlexMediaItem original)
-    : _frozen = true,
-      id = original.id,
-      title = original.title,
-      type = original.type,
-      duration = original.duration,
-      libraryId = original.libraryId,
-      parentTitle = original.parentTitle,
-      grandparentTitle = original.grandparentTitle,
-      parentRatingKey = original.parentRatingKey,
-      grandparentRatingKey = original.grandparentRatingKey,
-      thumbPath = original.thumbPath,
-      grandparentThumbPath = original.grandparentThumbPath,
-      artPath = original.artPath,
-      clearLogoPath = original.clearLogoPath,
-      parts = List.unmodifiable(original.parts),
-      container = original.container,
-      videoCodec = original.videoCodec,
-      audioCodec = original.audioCodec,
-      dynamicRange = original.dynamicRange,
-      genres = List.unmodifiable(original.genres),
-      collections = List.unmodifiable(original.collections),
-      directors = List.unmodifiable(original.directors),
-      actors = List.unmodifiable(original.actors),
-      cast = List.unmodifiable(original.cast),
-      studio = original.studio,
-      year = original.year,
-      summary = original.summary,
-      contentRating = original.contentRating,
-      seasonNumber = original.seasonNumber,
-      episodeNumber = original.episodeNumber,
-      videoResolution = original.videoResolution,
-      audioChannels = original.audioChannels,
-      addedAt = original.addedAt,
-      viewed = original.viewed;
+  PlexMediaItem.withTags(
+    PlexMediaItem original, {
+    List<String>? collections,
+    List<String>? genres,
+  }) : this._immutable(original, collections: collections, genres: genres);
+
+  PlexMediaItem._immutable(
+    PlexMediaItem original, {
+    List<String>? collections,
+    List<String>? genres,
+  }) : _frozen = true,
+       id = original.id,
+       title = original.title,
+       type = original.type,
+       duration = original.duration,
+       libraryId = original.libraryId,
+       parentTitle = original.parentTitle,
+       grandparentTitle = original.grandparentTitle,
+       parentRatingKey = original.parentRatingKey,
+       grandparentRatingKey = original.grandparentRatingKey,
+       thumbPath = original.thumbPath,
+       grandparentThumbPath = original.grandparentThumbPath,
+       artPath = original.artPath,
+       clearLogoPath = original.clearLogoPath,
+       parts = List.unmodifiable(original.parts),
+       container = original.container,
+       videoCodec = original.videoCodec,
+       audioCodec = original.audioCodec,
+       dynamicRange = original.dynamicRange,
+       genres = List.unmodifiable(genres ?? original.genres),
+       collections = List.unmodifiable(collections ?? original.collections),
+       directors = List.unmodifiable(original.directors),
+       actors = List.unmodifiable(original.actors),
+       cast = List.unmodifiable(original.cast),
+       studio = original.studio,
+       year = original.year,
+       summary = original.summary,
+       contentRating = original.contentRating,
+       seasonNumber = original.seasonNumber,
+       episodeNumber = original.episodeNumber,
+       videoResolution = original.videoResolution,
+       audioChannels = original.audioChannels,
+       addedAt = original.addedAt,
+       viewed = original.viewed;
 
   PlexMediaItem immutableCopy() =>
       _frozen ? this : PlexMediaItem._immutable(this);
@@ -353,6 +362,12 @@ class PlexException implements Exception {
 
   final String code;
   final String message;
+
+  bool get isAuthorizationFailure =>
+      code == 'auth-invalid' ||
+      code == 'auth-required' ||
+      code == 'access-denied';
+  bool get isCancellation => code == 'cancelled';
 
   @override
   String toString() => message;

@@ -45,7 +45,11 @@ class LineupRestoreView extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                LibraryScanPhaseStatus(controller: controller),
+                                LibraryScanPhaseStatus(
+                                  progress: LibraryScanProgress.fromController(
+                                    controller,
+                                  ),
+                                ),
                                 const SizedBox(height: 32),
                                 TextButton(
                                   key: const ValueKey('restore-switch-server'),
@@ -71,20 +75,43 @@ class LineupRestoreView extends StatelessWidget {
   }
 }
 
+/// Immutable progress input shared by restoration and setup presentation.
+class LibraryScanProgress {
+  const LibraryScanProgress({
+    required this.phase,
+    required this.playlist,
+    required this.completedItems,
+    required this.totalItems,
+  });
+
+  factory LibraryScanProgress.fromController(LineupController controller) =>
+      LibraryScanProgress(
+        phase: controller.libraryScanPhase,
+        playlist: controller.playlistScanProgress,
+        completedItems: controller.libraryScanCompletedItems,
+        totalItems: controller.libraryScanTotalItems,
+      );
+
+  final PlexLibraryScanPhase phase;
+  final PlexPlaylistProgress? playlist;
+  final int completedItems;
+  final int? totalItems;
+}
+
 class LibraryScanPhaseStatus extends StatelessWidget {
   const LibraryScanPhaseStatus({
-    required this.controller,
+    required this.progress,
     this.centered = true,
     super.key,
   });
 
-  final LineupController controller;
+  final LibraryScanProgress progress;
   final bool centered;
 
   @override
   Widget build(BuildContext context) {
-    final phase = controller.libraryScanPhase;
-    final playlist = controller.playlistScanProgress;
+    final phase = progress.phase;
+    final playlist = progress.playlist;
     final label = playlist != null
         ? playlist.totalPlaylists == null
               ? 'Finding playlists'
@@ -94,8 +121,8 @@ class LibraryScanPhaseStatus extends StatelessWidget {
             PlexLibraryScanPhase.collections => 'Loading collections',
             PlexLibraryScanPhase.showGenres => 'Loading show details',
           };
-    final count = _formatCount(controller.libraryScanCompletedItems);
-    final total = controller.libraryScanTotalItems;
+    final count = _formatCount(progress.completedItems);
+    final total = progress.totalItems;
     final text = playlist != null
         ? '$label${playlist.totalPlaylists == null ? '' : ' · ${_formatCount(playlist.completedPlaylists)} of ${_formatCount(playlist.totalPlaylists!)}'}'
         : phase == PlexLibraryScanPhase.items

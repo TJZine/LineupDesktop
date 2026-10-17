@@ -44,9 +44,7 @@ final _nowPlayingArtwork = <Uri, Uint8List>{
 void main() {
   setUpAll(loadPinnedTestFonts);
 
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized();
-  });
+  setUp(TestWidgetsFlutterBinding.ensureInitialized);
 
   testWidgets('player OSD at 1920x1080', (tester) async {
     final fixture = _readyFixture(

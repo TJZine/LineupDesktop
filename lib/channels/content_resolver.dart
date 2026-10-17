@@ -10,7 +10,7 @@ List<ChannelItem> resolveContent(
   List<PlexPlaylist> playlists = const [],
 ]) {
   final resolved = switch (source) {
-    LibrarySource source => _library(source, media),
+    final LibrarySource source => _library(source, media),
     ManualSource(:final items) => _manual(items, media, playlists),
     PlaylistSource(:final playlistId) =>
       playlists

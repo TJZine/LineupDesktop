@@ -381,7 +381,7 @@ void Commands(WindowsNativePlayer& player, native_test::Messenger& messenger) {
 void Lifecycle(WindowHarness& window, WindowsNativePlayer& player,
                native_test::Messenger& messenger) {
   ::SetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE",
-                            L"692136cb6582dbfc5af3fb33c2515a069f2f66d0");
+                            L"deb287481e3ce9468f3434937ced4240a70539ca");
   Reply init;
   messenger.Call("initialize", init);
   Check(init.successes == 1, "real production mpv initialization");

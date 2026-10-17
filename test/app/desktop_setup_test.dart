@@ -1071,10 +1071,14 @@ void main() {
       addTearDown(controller.dispose);
       await _pump(tester, controller);
       await _advanceToReview(tester);
+      expect(find.text('3 Review'), findsOneWidget);
+      expect(find.text('✓ Review'), findsNothing);
       expect(find.text('+ Added'), findsWidgets);
       expect(find.text('＋ Added'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
       await tester.pump();
+      expect(find.text('3 Review'), findsOneWidget);
+      expect(find.text('✓ Review'), findsNothing);
       expect(find.text('Creating 6 channels'), findsOneWidget);
       expect(
         tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
@@ -1559,33 +1563,111 @@ void main() {
     expect(controller.applyCalls, 0);
   });
 
-  testWidgets('failed apply keeps the committed lineup and review choices', (
-    tester,
-  ) async {
-    final original = [_generated('retired', 40, builderKey: 'retired')];
-    final controller = _SetupController(channels: original, failApply: true);
-    addTearDown(controller.dispose);
-    final committedBefore = controller.channels;
-    await _pump(tester, controller);
-    await _advanceToReview(tester);
+  for (final replace in [false, true]) {
+    testWidgets(
+      'fast failed apply retains confirmed review choices (replace: $replace)',
+      (tester) async {
+        final original = [_missingChannel];
+        final controller = _SetupController(
+          channels: original,
+          failApply: true,
+        );
+        addTearDown(controller.dispose);
+        final committedBefore = controller.channels;
+        await _pump(tester, controller);
+        await _advanceToReview(tester);
+        if (replace) {
+          await tester.tap(find.text('Replace generated channels'));
+        } else {
+          final choice = find.byKey(
+            const ValueKey('missing-source-choice-missing'),
+          );
+          await tester.ensureVisible(choice);
+          await tester.tap(
+            find.descendant(of: choice, matching: find.text('Remove')),
+          );
+        }
+        await tester.pumpAndSettle();
+        final confirmation = find.byKey(
+          const ValueKey('channel-setup-replace-confirmation'),
+        );
+        await tester.ensureVisible(confirmation);
+        await tester.tap(confirmation);
+        await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
-    await tester.pumpAndSettle();
-    expect(find.text('We couldn’t update your lineup'), findsOneWidget);
-    expect(
-      tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
-      isTrue,
+        await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+        await tester.pumpAndSettle();
+        expect(find.text('We couldn’t update your lineup'), findsOneWidget);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Back to review'),
+              )
+              .focusNode!
+              .hasPrimaryFocus,
+          isTrue,
+        );
+        expect(find.text('3 Review'), findsOneWidget);
+        expect(find.text('✓ Review'), findsNothing);
+        expect(
+          tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
+          isTrue,
+        );
+        expect(
+          find.text('Your existing lineup hasn’t changed.'),
+          findsOneWidget,
+        );
+        expect(find.text('Your setup choices are still here.'), findsOneWidget);
+        expect(find.text('The lineup could not be saved.'), findsOneWidget);
+        expect(controller.channels, same(committedBefore));
+
+        if (replace) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        } else {
+          await tester.tap(find.text('Back to review'));
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Review your lineup'), findsOneWidget);
+        expect(find.text('Update and add'), findsOneWidget);
+        expect(find.text('The lineup could not be saved.'), findsOneWidget);
+        expect(tester.widget<CheckboxListTile>(confirmation).value, isTrue);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.byKey(const ValueKey('apply-reviewed-lineup')),
+              )
+              .onPressed,
+          isNotNull,
+        );
+        expect(
+          tester
+              .widget<LineupSegmentedControl<ChannelBuildMode>>(
+                find.byKey(const ValueKey('review-build-method')),
+              )
+              .selected,
+          {replace ? ChannelBuildMode.replace : ChannelBuildMode.merge},
+        );
+        if (!replace) {
+          final choice = find.byKey(
+            const ValueKey('missing-source-choice-missing'),
+          );
+          await tester.scrollUntilVisible(
+            choice,
+            150,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('channel-setup-review-roster')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          expect(tester.widget<LineupSegmentedControl<bool>>(choice).selected, {
+            true,
+          });
+        }
+      },
     );
-    expect(find.text('Your existing lineup hasn’t changed.'), findsOneWidget);
-    expect(find.text('Your setup choices are still here.'), findsOneWidget);
-    expect(find.text('The lineup could not be saved.'), findsOneWidget);
-    expect(controller.channels, same(committedBefore));
-
-    await tester.tap(find.text('Back to review'));
-    await tester.pumpAndSettle();
-    expect(find.text('Review your lineup'), findsOneWidget);
-    expect(find.text('Update and add'), findsOneWidget);
-  });
+  }
 
   testWidgets('review search reports and clears an empty result', (
     tester,
@@ -1633,6 +1715,15 @@ void main() {
 
       expect(find.text('Your lineup is ready'), findsOneWidget);
       expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'View lineup'),
+            )
+            .focusNode!
+            .hasPrimaryFocus,
+        isTrue,
+      );
+      expect(
         tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
         isFalse,
       );
@@ -1640,10 +1731,12 @@ void main() {
         expect(find.text(label), findsOneWidget);
       }
       expect(find.textContaining('in your lineup'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(viewed, 1);
       await tester.tap(find.text('Add a custom channel'));
       await tester.tap(find.text('View lineup'));
       expect(added, 1);
-      expect(viewed, 1);
+      expect(viewed, 2);
     },
   );
   testWidgets(

@@ -35,10 +35,20 @@ lifetime and commands, decoded-frame presentation, Windows platform objects,
 DirectComposition, and native media telemetry. Native handles, mpv internals,
 and token-bearing URLs do not enter ordinary Flutter UI state.
 
-The `NativePlayer` Dart interface exists because native platform code and test
-doubles are a genuine seam. Its Windows contract covers lifecycle, replacement
-loads, transport, seeking, volume, track selection, presentation bounds,
-fullscreen, playback events, and bounded decoder/output/video metadata.
+## Platform-neutral native player protocol
+
+The `NativePlayer` Dart interface is the application-facing platform seam.
+[The native player protocol](native-player-protocol.md) owns method/event shapes,
+bounds, token safety, lifecycle/load/stop/track correlation, passive presentation
+and fullscreen completion. `MethodChannelNativePlayer` owns transport;
+`createPlatformNativePlayer` selects the platform implementation. Dart owns playback
+policy; native backends implement media and platform mechanisms.
+
+macOS is a development surface; native playback is not yet implemented.
+A future backend must meet the protocol and the [macOS decision and presentation
+obligations](code-quality-implementation-plan.md#9-macos-strategy-and-deferred-port-backlog).
+The following section describes the current Windows implementation, not a
+requirement to copy Win32 mechanisms to another platform.
 
 ## Windows presentation and ownership
 
@@ -56,7 +66,7 @@ regions reveal it. Frames do not cross the Dart boundary and are not copied
 through a Flutter texture. The native baseline explicitly requests
 `vo=gpu-next`, the D3D11 GPU API/context, and `hwdec=auto`.
 
-Stock Flutter 3.47.6 does not request ANGLE's DirectComposition EGL window
+Stock Flutter 3.47.7 does not request ANGLE's DirectComposition EGL window
 surface mode, so it cannot provide the required transparent composition
 reliably. Lineup therefore owns the single-file patch in
 `tool/flutter_engine`, targeting the exact framework and engine identities in
@@ -270,7 +280,7 @@ is emergency cleanup, not the normal path. See
   establishes headless HLS feasibility, not implemented transcoding or
   physical Windows acceptance.
   Preserve native header-buffer clearing after command execution and queue
-  cleanup. See [Dart load validation](../lib/playback/windows_native_player.dart),
+  cleanup. See [Dart load validation](../lib/playback/method_channel_native_player.dart),
   [native load options](../windows/runner/native_player.cpp), and the
   [physical redirect scenarios](windows-native-validation.md#6-plex-end-to-end-campaign).
 - Profile and selected-server state remains scoped by Plex profile. The
@@ -337,6 +347,61 @@ is emergency cleanup, not the normal path. See
   application builds, focused Windows widget tests, pinned LGPL libmpv
   application builds, conditional patched-engine builds, packaging rejection
   checks, and portable Windows package uploads in CI.
+
+## Canonical source and schedule contracts
+
+These accepted contracts were frozen during the desktop campaign; the complete
+[dated decisions, R1 corrections and evidence](open-obligations.md#archive-recovery-and-preservation-map)
+remain recoverable. They constrain current data and projection behavior without
+prescribing the old campaign's classes or execution procedure.
+
+- `LibrarySource.filters` is `Map<LibraryFilter, List<String>>`; the enum
+  covers genre, collection, studio, actor, director and decade. `LibraryOrder`
+  separates supplied, title and addedDescending sequencing from membership.
+  JSON accepts legacy singleton strings; canonical values are sorted, deduplicated
+  lists. The sole valid legacy sort (`added:desc`) migrates to addedDescending.
+  Empty selection removes a restriction; malformed/unknown values reject.
+  People matching/identity uses trimmed lowercase values. Membership is OR within
+  each criterion, AND between criteria, deduplicated by media identity for Library
+  results. Manual and playlist occurrences and Mixed child order remain significant.
+- Supplied order preserves legacy/generated behavior. New custom Library In order
+  uses deterministic movie-title or show/season/episode order with identity ties;
+  playlist/manual order remains supplied. No new sorting menu.
+- Export canonical source and schedule identity from the channel model. Consumers
+  include controller validation/stale-base checks, builder source keys, Guide cache
+  reconciliation and Air Check recipe identity. Schedule identity includes anchor,
+  seed, mode, block size, specials, version and transition; runtime coverage adds
+  content generation. Categorical selection order is not a semantic edit.
+- Algorithm version 1 is decoded when absent; newly constructed recipes use v2.
+  Embed `ScheduleTransition` on Channel with fixed UTC boundary and full ordered
+  legacy `ChannelItem` cycle, retaining duration and occurrence multiplicity.
+  At first successful legacy resolution, use exactly the old algorithm and compute
+  the next boundary with floor-modulo from the original anchor. Persist snapshot
+  and boundary together before publishing the migrated schedule. Unresolved sources
+  remain legacy until successful resolution; no invented boundary or empty snapshot.
+- Project times before the boundary using the frozen periodic cycle phase-aligned
+  to that boundary. At the boundary start revised cycle zero. Retain the transition
+  on restarts and metadata-only saves. Explicit programming saves/builder updates
+  apply the reviewed recipe immediately and retire the transition. A timestamp
+  alone is insufficient. Existing library/playlist inventories were never persisted,
+  so this reproduces the legacy algorithm over the first available inventory; it
+  cannot reconstruct external Plex changes made before migration.
+- v2 Shuffle derives each permutation from stable seed/version/signed cycle integer
+  context, never runtime hashCode, clock randomness or tuning. Lookup computes the
+  cycle directly and bounds cached permutations. Cross-boundary repeat avoidance
+  must remain deterministic with bounded work (no recursive historical traversal);
+  preserve all occurrences and accept unavoidable tiny-pool limitations.
+- Mini-marathons use media kind and stable series identity from Plex metadata,
+  regular season/episode chronology, shortened season-end blocks, then specials
+  when enabled, then unknown chronology in supplied occurrence order. Movies get
+  individual turns. Unknown season is never Season 0. Existing block recipes retain
+  specials=true; new configuration defaults false. Sequential/block repeat their
+  fixed pattern. Projection retains its 1,000-occurrence bound and honest end.
+
+Source and schedule identity drive controller stale-base checks, Guide cache
+reconciliation and Air Check verification. Use current model/resolver/scheduler
+owners rather than introducing a second policy. Worker and synchronous projection
+must agree at identical clocks. Private transition snapshots never enter reports.
 
 ## Changing asynchronous and persisted state
 
@@ -421,6 +486,39 @@ cycle, and explicit programming edits retire the transition. Sequential and
 block schedules continue using their existing ordering policies; the
 canonicalization change applies to shuffled input.
 The private backup and embedded media snapshot never belong in diagnostic reports.
+Recovery is deliberate: stop the application, preserve current state separately,
+and restore the backup only after deciding to discard subsequent changes. Never
+automatically restore it over newer state; older binaries are not declared
+compatible with newer fields. Preserve an existing backup across saves/restarts.
+
+## Interaction and asynchronous surface contracts
+
+The retained [design specification](desktop-ui-design-spec.md), [later approvals](desktop-ui-surface-approvals.md)
+and [Player/Guide supersessions](player-guide-polish-plan.md) own composition.
+The archived delivery matrix also established these operational constraints:
+
+- Editable fields consume Backspace; PIN's fourth digit submits and empty PIN
+  Backspace does nothing. Guide search uses Ctrl+F, Escape clears a nonempty
+  query, then returns focus from an empty field without cascading into route Back.
+- Menus/dialogs/pickers contain focus, restore the exact invoker and dismiss only
+  the top scope. A dismissing outside click is consumed. Player contextual Back
+  opens Guide; fullscreen retains its own controls. Settings Back returns to its
+  origin and Account cancellation returns to Account.
+- Guide click inspects; double-click/Enter/remote OK tunes only a currently airing
+  occurrence, rechecked on activation. Mini Guide Up/Down and inside wheel browse,
+  without hover selection or an inactivity timeout.
+- Dirty Studio/management has an explicit leave guard with the noncommitting
+  action initially focused; pending picker choices resolve before Save/Tune.
+  Pending mutations reject duplicate submit, retain drafts on failure and report
+  cleanup/rollback outcomes truthfully.
+- Async work publishes only to its matching request/source/profile/server/load/
+  draft context. It must not reclaim focus or auto-tune after navigation. Guide
+  retry revalidates the failed source/range without discarding valid sibling work
+  or adding an automatic competing retry layer. Extension failure preserves valid
+  prior preview coverage; a 1,000-occurrence cap must expose its honest end.
+- Ctrl+1/2/3/4/5 remain Guide/Channels/Settings/Diagnostics/Player. Preserve
+  supported letter/remote/media mappings; generic gamepad support and macOS
+  command-modifier changes require their own decision.
 
 ## Integration and acceptance status
 

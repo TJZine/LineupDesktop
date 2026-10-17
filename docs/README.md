@@ -1,196 +1,154 @@
 # Lineup Desktop Documentation
 
-This index separates user guidance, contributor instructions, architecture
-records, and platform-acceptance evidence so each document has one clear
-audience and purpose.
+Start with the current owner for the question. Dated audits and archived campaign
+results retain their original source, build and platform limits.
 
 ## Choose a starting point
 
 | Audience or task | Start here | Continue with |
 | --- | --- | --- |
-| Private tester or future end user | [User Guide](user-guide.md) | [Windows Native Acceptance](windows-native-validation.md) when participating in hardware testing |
-| New contributor | [Contributing](../CONTRIBUTING.md) | [Development](DEVELOPMENT.md) and [Architecture](architecture.md) |
-| Agent-assisted work | [Agent entry](../AGENTS.md) | [Project profile](../.agents/project.md), then only the affected technical authorities |
-| Product, parity, or release planning | [Product Parity](product-parity.md) | [Architecture](architecture.md) and [Portable UI Parity](ui-parity.md) |
-| Application or UI work | [Architecture](architecture.md) | [Approved interface system](../.interface-design/system.md), [Product Parity](product-parity.md), and the affected source/tests; historical parity records only when relevant |
-| Async, persistence, or credential work | [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Credential/diagnostic contracts in [Implemented now](architecture.md#implemented-now) and the linked owner tests |
-| Channel Studio implementation or investigation | [Desktop UI target specification](desktop-ui-design-spec.md) | [Architecture](architecture.md), current source/tests and the design-only [delivery plan](desktop-ui-implementation-plan.md); historical Studio documents are absent from this checkout |
-| Windows media, runner, or packaging work | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Architecture](architecture.md#windows-presentation-and-ownership), [Windows Runtime Provenance](windows-runtime.md), and relevant [physical acceptance](windows-native-validation.md) scenarios |
-| Authenticated libmpv reference investigation | [Windows reference investigation](libmpv-authenticated-reference-investigation.md) | [Windows Runtime Provenance](windows-runtime.md) and [Windows Native Acceptance](windows-native-validation.md); investigation evidence is not release acceptance |
-| Planned or deferred audio passthrough work | [Architecture](architecture.md) and current source | [Windows Native Acceptance](windows-native-validation.md) and [Windows Runtime Provenance](windows-runtime.md); the previously indexed passthrough specification is absent, so do not infer an approved plan from this index |
-| Planned automatic fullscreen HDR work | [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) | [Fullscreen HDR Discovery Plan](fullscreen-hdr-discovery-plan.md), [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
-| Deferred Guide freshness / collection investigation | [Guide Freshness and Collection Revalidation Investigation](guide-freshness-collection-investigation.md) | [Architecture](architecture.md), the current source, and its cited upstream evidence |
-| Guide/PiP implementation or investigation | [Desktop UI target specification](desktop-ui-design-spec.md) | [Architecture](architecture.md), [interface system](../.interface-design/system.md) and current source; target design is not implemented evidence |
-| Security report | [Security Policy](../SECURITY.md) | Use the private reporting route; never open a public issue containing secrets |
+| User or private tester | [User Guide](user-guide.md) | [Windows Native Acceptance](windows-native-validation.md) for hardware testing |
+| Contributor | [Contributing](../CONTRIBUTING.md) | [Development](DEVELOPMENT.md), [Architecture](architecture.md) |
+| Agent-assisted work | [Agent entry](../AGENTS.md) | [Project profile](../.agents/project.md), then affected authorities |
+| Pending work or release planning | [Open obligations](open-obligations.md) | Current plans below; [August 23, 2026 product-parity audit](product-parity.md) for dated context |
+| Application, async, persistence or credential work | [Architecture](architecture.md) | Current source and linked owner tests |
+| UI, Guide, PiP or Studio | [Desktop UI specification](desktop-ui-design-spec.md) | [Interface system](../.interface-design/system.md), retained decision records, current source |
+| Native media protocol or macOS port planning | [Native-player protocol](native-player-protocol.md) | [Platform ownership](architecture.md#platform-neutral-native-player-protocol), [macOS backlog](open-obligations.md#macos-media-backlog) |
+| Windows media, runner or packaging | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Windows presentation](architecture.md#windows-presentation-and-ownership), [runtime provenance](windows-runtime.md), [physical acceptance](windows-native-validation.md) |
+| Security report | [Security Policy](../SECURITY.md) | Private reporting route; never include secrets in a public issue |
 
-## Current operational documents
+## Current operational authorities
 
-### User and tester documentation
+- [User Guide](user-guide.md): setup, navigation, controls, settings, recovery,
+  privacy and limitations.
+- [Development](DEVELOPMENT.md): canonical toolchain configuration, commands,
+  prerequisites, test tiers, native builds and package evidence boundaries.
+- [Architecture](architecture.md): current ownership, platform-neutral seam,
+  Windows mechanisms, data, source/schedule, async and privacy contracts.
+- [Native-player protocol](native-player-protocol.md): methods, events,
+  correlation, lifetime, bounds, token safety and presentation obligations.
+  macOS is a development surface; native playback is not yet implemented.
+- [Windows Native Acceptance](windows-native-validation.md): exact-candidate
+  physical-machine scenarios and safety requirements; a procedure, not proof.
+- [Windows Runtime Provenance](windows-runtime.md): pinned libmpv/FFmpeg sources,
+  hashes, licenses, package policy and redistribution obligations.
+- [Open obligations](open-obligations.md): unfinished acceptance and product work,
+  the active F gate, macOS decisions, and full-commit campaign recovery.
+- [Agent entry](../AGENTS.md) and [project profile](../.agents/project.md): shared
+  workflow routing and repository-specific constraints. `CLAUDE.md` imports the
+  same entry; historical dispatch prompts are not current workflow policy.
 
-- [User Guide](user-guide.md) explains installation of a private portable build,
-  first-run setup, navigation, keyboard/remote controls, settings, diagnostics,
-  known limitations, and safe issue reporting.
-- [Windows Native Acceptance](windows-native-validation.md) defines the
-  physical-machine campaign that must be executed before Windows playback,
-  HDR, packaging, or release-readiness claims are promoted.
+## Product and design decisions
 
-### Contributor documentation
+These records retain approval authority; later explicit supersessions govern
+older requirements. Design agreement, implementation, deterministic verification
+and physical acceptance are different states.
 
-- [Agent entry](../AGENTS.md) selects the shared workflow responsibilities;
-  [the project profile](../.agents/project.md) owns Lineup-specific routing and
-  evidence limits. Root `CLAUDE.md` imports the same entry.
-- [Contributing](../CONTRIBUTING.md) covers branch targeting, architecture
-  constraints, security expectations, validation, commits, pull requests, and
-  documentation standards.
-- [Development](DEVELOPMENT.md) is the toolchain and build authority, including
-  the exact Flutter revision, native Windows prerequisites, pinned libmpv
-  preparation, and local-engine commands.
-- [Architecture](architecture.md) is the current ownership and dependency
-  authority for Flutter/Dart, C++, libmpv, DirectComposition, persistence,
-  diagnostics, and application state.
+- [Desktop UI specification](desktop-ui-design-spec.md), [surface approvals](desktop-ui-surface-approvals.md)
+  and [second-pass decisions](desktop-ui-second-pass.md) retain the approved
+  compositions, including protected Player/OSD/Now Playing layouts.
+- [Startup and setup reentry](setup-reentry-startup-plan.md) and
+  [Player/Guide polish](player-guide-polish-plan.md) retain October 7 decisions
+  and render refinements. Their portable implementation landed; physical
+  acceptance remains open. They are retained because they uniquely record live
+  approvals and supersessions.
+- [Desktop visual evidence](design/desktop-ui/README.md) and the
+  [portable 1080p packet](design/desktop-ui/review-packets/README.md) identify
+  synthetic evidence for the recorded states, not current Windows acceptance.
+- [Fullscreen HDR specification](fullscreen-hdr-spec.md) and
+  [implementation plan](fullscreen-hdr-implementation-plan.md) own the enabled
+  matching/session/hold/restoration contract. Hardware and package acceptance
+  remain pending; the October 9 discovery is archived feasibility evidence.
+- [OSD and collection plan](osd-autohide-and-collection-membership-plan.md) and
+  [scheduled continuation plan](schedule-continuation-plan.md) retain implemented
+  product contracts and outstanding live/physical acceptance.
+- [Track-label plan](audio-subtitle-track-label-implementation-plan.md) retains
+  accepted P0–P3 evidence, later Player/Guide supersessions and pending P4
+  visual, label-to-output and Narrator acceptance.
 
-### Evidence and design records
+## Active plans and investigations
 
-- [Desktop UI Design Specification](desktop-ui-design-spec.md) contains the
-  consolidated approved target. It does not authorize implementation or claim
-  that the design has been implemented.
-- [Desktop UI Implementation Plan](desktop-ui-implementation-plan.md) records
-  campaign delivery packages, owners and migration safeguards. Check its scope
-  and status against current source before resuming unfinished product work;
-  its worker/reviewer procedure does not override the current shared workflow.
-- [Desktop UI readiness review](desktop-ui-readiness-review.md) records the
-  independent reviewer findings, corrections and P0-ready/P1-gated verdict.
-- [Desktop UI execution record](desktop-ui-execution.md) retains the concrete
-  migration, source and schedule contracts resolved during preparation.
-- [Desktop surface approvals](desktop-ui-surface-approvals.md) and the
-  [October second-pass decisions](desktop-ui-second-pass.md) retain explicit
-  visual approvals and later amendments, including the protected Player layout.
-- [Desktop scaling evidence](desktop-ui-scaling-progress.md) distinguishes
-  portable layout checks from outstanding physical Windows acceptance.
-- [Desktop UI visual evidence](design/desktop-ui/README.md) identifies approved
-  synthetic compositions and later refinements. The
-  [portable 1080p packet](design/desktop-ui/review-packets/README.md) remains
-  evidence for its recorded state, not a newly verified baseline.
+- [Code-quality implementation plan](code-quality-implementation-plan.md):
+  portable packages and documentation consolidation (G) integrated and reviewed;
+  native restoration work (F) merged for Windows testing, with validation still
+  pending. The full plan is not complete. Its native contract and review
+  conditions remain live. The closure table records actual integration SHAs.
+- [Plex transcoding plan](plex-transcoding-implementation-plan.md): production
+  packages, P0b evidence and Settings/product gates remain pending. Headless
+  feasibility does not establish integrated playback.
+- [Guide freshness/collection investigation](guide-freshness-collection-investigation.md):
+  source-order shuffle resolved deterministically; live-session refresh and
+  actual membership-change policy remain deferred.
+- [Authenticated-reference investigation](libmpv-authenticated-reference-investigation.md):
+  pinned native containment and per-load HLS feasibility evidence, with explicit
+  production restrictions and physical limits.
+- [UX/functionality audit](ux-functionality-audit.md): original observations plus
+  dated dispositions, implementations and remaining walkthrough/live acceptance.
+- [Feature opportunity report](feature-opportunity-report.md), [Opus research
+  request](opus-feature-research-request.md) and [validation findings](feature-validation-findings.md):
+  retained feature-track inputs, evidence and maintainer questions; no
+  implementation approval.
+- [Product Parity — August 23, 2026](product-parity.md): historical audit with
+  explicitly dated later updates, not an authoritative current classification.
 
-- [Product Parity](product-parity.md) is the authoritative current
-  bidirectional product-parity, UX/UI, evidence-gap, and release-readiness
-  audit. Use it for current classifications and backlog priority.
-- [Portable UI Parity](ui-parity.md) is a detailed historical evidence record
-  for the portable UI campaigns. Its classifications belong to the named
-  campaign sections and must not be generalized into Windows support claims.
-- Historical `guide-pip-composition-spec.md`, `channel-studio-spec.md` and
-  `channel-studio-implementation-plan.md` were previously indexed but are absent
-  from this checkout. Use current source and architecture for baseline behavior,
-  and the Desktop UI specification for the approved future direction. Do not
-  treat missing documents as evidence of implementation or validation.
-- [Windows Runtime Provenance](windows-runtime.md) records exact native runtime
-  sources, hashes, licenses, package policy, and unresolved redistribution
-  gates.
-- Historical `audio-passthrough-spec.md` is also absent. Its former index entry
-  is not an executable plan or proof of compressed-bitstream support; investigate
-  current source and physical Windows evidence before any such work.
-- [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) records
-  the planned automatic HDR/SDR fullscreen contract, composition decision gate,
-  ownership boundary, and required physical Windows evidence.
-- [Scheduled Program Continuation Plan](schedule-continuation-plan.md) records
-  the approved next-program continuation behavior, implementation units, and
-  physical acceptance rows.
-- [Fullscreen HDR Discovery Plan](fullscreen-hdr-discovery-plan.md) is the
-  Windows 10 discovery procedure, pinned-source pre-analysis, and Codex
-  handoff that precede the HDR implementation plan.
-- [Guide Freshness and Collection Revalidation Investigation](guide-freshness-collection-investigation.md)
-  records two deferred, evidence-led Guide risks: collection/source freshness
-  after cold start or automation, and shuffled schedule continuity across Plex
-  response reorderings. Its upstream references are investigation context, not
-  a Desktop porting mandate.
-- [Plex transcoding plan](plex-transcoding-implementation-plan.md) retains
-  pending product packages and their discovery and design gates; consult the
-  project profile for the current implementation boundary.
-- [Track-label plan](audio-subtitle-track-label-implementation-plan.md),
-  [setup/reentry plan](setup-reentry-startup-plan.md),
-  [Player/Guide polish plan](player-guide-polish-plan.md), and
-  [OSD/collection plan](osd-autohide-and-collection-membership-plan.md) retain
-  approved contracts and targeted acceptance that have not been fully closed.
-
-### Review records with open obligations
+## Review records with unfinished obligations
 
 - [October 7 review](reviews/comprehensive-review-2026-10-07/REPORT.md) and
-  [remediation](reviews/comprehensive-review-2026-10-07/REMEDIATION.md) retain
-  deferred buffering work and physical acceptance requirements.
+  [remediation](reviews/comprehensive-review-2026-10-07/REMEDIATION.md): buffering
+  hypothesis and physical acceptance context.
 - [October 10 review](reviews/comprehensive-review-2026-10-10/REPORT.md),
-  [implementation](reviews/comprehensive-review-2026-10-10/IMPLEMENTATION.md),
-  and [Windows handoff](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md)
-  retain the ancestor-junction policy decision, native CTest gate and targeted
-  physical observations. Evidence, probe recipes and frozen identities remain
-  alongside them.
+  [implementation](reviews/comprehensive-review-2026-10-10/IMPLEMENTATION.md) and
+  [Windows handoff](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md):
+  ancestor-junction policy, native gates and targeted physical observations.
 - [Workflow remediation](reviews/workflow-remediation-2026-10-04/REPORT.md),
-  [maintainability remediation](reviews/maintainability-remediation-2026-10-12/EXECUTION.md),
-  and [audit follow-up](reviews/audit-followup-2026-10-12/IMPLEMENTATION.md)
-  retain scoped implementation evidence and unperformed platform checks.
+  [maintainability execution](reviews/maintainability-remediation-2026-10-12/EXECUTION.md)
+  and [audit follow-up](reviews/audit-followup-2026-10-12/IMPLEMENTATION.md):
+  scoped evidence and unperformed platform checks.
+- [Code-quality execution](reviews/code-quality-2026-10-15/EXECUTION.md),
+  [combined review](reviews/code-quality-2026-10-15/IMPLEMENTATION_COMBINED_REVIEW.md)
+  and [final review](reviews/code-quality-2026-10-15/IMPLEMENTATION_FINAL_REVIEW.md):
+  attributed package histories and clear portable code-review closure; no F
+  integration or physical acceptance claim.
 
 ## Historical material in Git
 
-Completed dispatch prompts and handoffs, superseded design discussion, the
-October 2 test inventory, October 3 workflow snapshots, October 10 reviewer and
-calibration drafts, and the old dependency-refresh log are available in Git
-history. Their current decisions, adjudicated findings and open acceptance gates
-are retained in the documents above. Historical workspace lists and hash
-manifests describe their recorded checkout; they are not current file dependencies.
+[The archive recovery and preservation map](open-obligations.md#archive-recovery-and-preservation-map)
+provides verified full-commit `git show` commands for the completed desktop UI
+implementation/execution/readiness/scaling, portable parity, HDR discovery,
+Windows collaborative prompt and code-quality assessment documents. Their live
+contracts, open obligations and useful rationale remain in named current owners
+or the recoverable snapshots. Links within `docs/reviews/` are historical and
+exempt from live dangling-link checks; those records are not rewritten.
 
-The redundant 1080p review-packet ZIP is also available in history. Every archived
-file matched the retained extracted packet byte for byte before cleanup.
-
-To inspect a removed document without restoring it to the active tree, use the
-pre-cleanup commit and its original repository path, for example:
+Earlier completed prompts, superseded design discussions and the redundant 1080p
+packet ZIP also remain in Git. The extracted packet was checked byte for byte
+before that earlier cleanup. For example:
 
 ```sh
 git show 13d711e02b7fa5d4bb3687e138429baa0a768c97:docs/desktop-ui-design-history.md
 ```
 
-This history preserves the original context; it does not activate old execution
-instructions or promote dated observations into current acceptance.
+Historical workspace inventories and hash manifests describe their recorded
+checkout, not current dependencies. Old execution procedures do not select
+models, prescribe review panels, or override current repository instructions.
 
-## Documentation authority
+## Documentation authority and standards
 
-Current source and freshly observed evidence outrank old prompts, screenshots,
-commit descriptions, and historical audit sections.
-Completed plans, old model rosters, and issue-specific implementation
-restrictions do not prescribe execution for a new task. Agent workflow is
-defined by [AGENTS.md](../AGENTS.md), the [project profile](../.agents/project.md),
-and the shared skills. Preserve still-approved product/design contracts,
-including the [protected Player layouts](../.interface-design/system.md#player-protected-baseline).
+Current source and observed evidence outrank old prompts and screenshots.
+Preserve approved product/design contracts, including the [protected Player
+baseline](../.interface-design/system.md#player-protected-baseline).
 
-Use these terms precisely:
+- **Implemented:** behavior exists in current source.
+- **Deterministically tested:** an automated check exercised the named contract.
+- **Platform validated:** observed on the recorded OS, hardware and commit.
+- **Supported:** a user-facing commitment with documented prerequisites/recovery.
 
-- **Implemented**: the current source contains the behavior.
-- **Deterministically tested**: an automated test exercised the relevant public
-  contract.
-- **Platform validated**: the behavior was observed on the named operating
-  system, hardware, and commit.
-- **Supported**: the project is prepared to make a user-facing compatibility
-  commitment and has documented prerequisites and recovery guidance.
+Compilation, fake-boundary tests and synthetic images do not establish native
+media, HDR, hardware decode, composition, physical input/AT or package execution.
+Use the [evidence reuse rules](../.agents/project.md#native-evidence-and-reuse);
+never relabel an old run as a newly tested candidate.
 
-An implemented or compiling path is not automatically platform validated or
-supported. Native video, HDR, hardware decode, DirectComposition, packaging,
-focus, and input claims require physical Windows evidence with its actual
-tested identity. Follow the [profile's evidence reuse rules](../.agents/project.md#native-evidence-and-reuse)
-when assessing a later candidate; never relabel an earlier run as a new run.
-
-## Documentation standards
-
-Documentation changes should:
-
-1. Name the intended audience and current status.
-2. Link to the authoritative owner instead of duplicating volatile version pins
-   or long setup procedures.
-3. Distinguish current behavior from planned, historical, or unverified work.
-4. Use exact commands only when they have an observable success condition.
-5. Describe failure and recovery behavior, not only the happy path.
-6. Avoid credentials, tokenized URLs, private media metadata, personal paths,
-   and unredacted logs or screenshots.
-7. Update navigation links when files are added, renamed, superseded, or
-   archived.
-
-Before adding a new document, prefer improving an existing authoritative
-document unless the new material serves a genuinely different audience or
-lifecycle.
+Name the audience/status, link current owners for volatile commands and pins,
+describe failure/recovery, preserve exact evidence limits, redact private data,
+and update navigation when archiving. Prefer the existing authoritative owner
+unless new material has a distinct audience or lifecycle.

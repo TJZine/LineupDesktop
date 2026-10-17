@@ -9,6 +9,7 @@ $scripts = @(
   'tool/flutter_engine/apply.ps1',
   'tool/windows/build-inputs.ps1',
   'tool/windows/build-release.ps1',
+  'tool/windows/ninja-diagnostics.ps1',
   'tool/windows/package.ps1',
   'tool/windows/prepare-mpv.ps1',
   'tool/windows/run.ps1',
@@ -42,6 +43,11 @@ Assert-WindowsReleaseAuthorities
 
 $metadataPath = Join-Path $repository 'tool/windows/build-metadata.psd1'
 $metadata = Import-PowerShellDataFile -LiteralPath $metadataPath
+$flutterVersion = Get-Content -Raw -LiteralPath (Join-Path $repository 'tool/flutter_version.json') |
+  ConvertFrom-Json
+if ($flutterVersion.frameworkRevision -ne $metadata.FlutterFrameworkRevision) {
+  throw 'tool/flutter_version.json does not match FlutterFrameworkRevision.'
+}
 $requiredMetadata = @(
   'FlutterFrameworkRevision',
   'FlutterEngineRevision',

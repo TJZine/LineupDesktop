@@ -1,0 +1,294 @@
+# `lineup/native_player` protocol
+
+This document specifies the Dart/native boundary used by `NativePlayer`. The
+wire is platform-neutral even though the current native implementation uses
+libmpv and Windows presentation APIs. A future platform backend may implement
+the same Dart contract without copying the Windows implementation's private
+types.
+
+The specification was cross-checked against:
+
+- `lib/playback/native_player.dart`
+- `lib/playback/method_channel_native_player.dart`
+- `lib/playback/unsupported_native_player.dart`
+- `windows/runner/native_player.cpp` and `.h`
+- `windows/runner/track_list_encoder.cpp`
+- `windows/runner/display_dynamic_range.*`
+
+## Channel and call shape
+
+The method channel name is `lineup/native_player`. Dart calls native methods
+with Flutter's standard method codec. Native sends asynchronous callbacks by
+invoking the method `event` on the same channel with a map argument. Unknown
+native methods call Flutter's `NotImplemented` result. The Dart method-channel
+client does not remap that result: Flutter surfaces it as
+`MissingPluginException`, which is a version-skew signal.
+
+Every native command except `initialize` and `dispose` returns
+`not_initialized` until initialization has completed. The Dart transport also
+rejects commands locally when it has no initialized backend.
+
+## Dart to native methods
+
+The native result is `null` unless a result map is shown.
+
+| Method | Arguments and bounds | Result and errors |
+| --- | --- | --- |
+| `initialize` | None | `{clientApiVersion: int}`. Errors: `required_engine_unavailable`, `initialize_failed`. Initialization advances the native lifecycle generation, resets display matching revision, and purges queued display events. |
+| `dispose` | None | `null` after the worker has finished. `dispose_in_progress` if another disposal is pending. Repeated disposal is successful. |
+| `setDisplayMatching` | `revision: int >= 0`, `session: bool`, `desired: "hdr"`, `"sdr"`, or `"unknown"` | `null`; `invalid_argument` for malformed data or a native revision that is not strictly increasing. Dart ignores a revision that is not newer before making the call. |
+| `load` | `uri: String`, 1–32,768 bytes; `loadId: int >= 0`; `plexToken: String?`, either null or 1–8,192 printable ASCII bytes from `0x21`–`0x7e`; `startPaused: bool?` | `null`; `invalid_argument`, `insecure_media_uri`, or `command_queue_full`. An authenticated load requires an HTTPS URI with an authority. |
+| `play` | None | `null` or `command_queue_full`. |
+| `pause` | None | `null` or `command_queue_full`. |
+| `seek` | `seconds: num`, finite and >= 0 | `null`, `invalid_argument`, or `command_queue_full`. |
+| `stop` | `stopId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `stopResult`. |
+| `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The native implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
+| `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
+| `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
+| `setVolume` | `volume: num`, finite and 0–100 inclusive | `null`, `invalid_argument`, or `command_queue_full`. |
+
+`loadId` is non-negative in the native `load` parser, while Dart-generated
+load IDs start at 1. `selectTrack` deliberately has the stricter positive
+load-ID rule. Native command admission also has a capacity of 64 queued
+commands and a combined URI/header budget of 128 KiB; rejection uses
+`command_queue_full`.
+
+### Command error mapping in Dart
+
+For a `PlatformException`, the transport preserves these native command codes:
+
+`required_engine_unavailable`, `initialize_failed`, `dispose_in_progress`,
+`not_initialized`, `invalid_argument`, `insecure_media_uri`,
+`command_queue_full`, and `window_error`.
+
+Any other `PlatformException` from a command becomes
+`PlayerUnavailable(failureCode: "native_command_error")`. The unknown-method
+`MissingPluginException` path is intentionally outside that mapping.
+
+The transport synthesizes these additional failure codes while correlating
+asynchronous work: `load_timeout`, `stop_timeout`, `stop_failed`,
+`wait_timeout`, `native_playback_error`, and `native_error`. The coordinator
+may synthesize higher-level policy codes; those are not native wire values.
+
+## Native to Dart events
+
+Events are maps with a required `type` key. The Dart transport drops malformed
+events and events whose load identity is not current. A native lifecycle
+generation is attached to queued events internally; during draining, events
+from an older native generation are dropped before invocation. The generation
+is not serialized as an event key. Dart projects its own active load generation
+onto `PlayerEvent` for coordinator currentness checks.
+
+### `state`
+
+Keys:
+
+- `state`: `idle`, `loading`, `playing`, `ended`, `stopped`, or `error` from
+  the native implementation. Dart also understands `paused` as a defensive
+  value, but the current native backend represents pause through the `pause`
+  property instead.
+- `message`: a bounded diagnostic/status string.
+- `loadId`: optional for load-scoped events; the initialization-ready `idle`
+  event has no `loadId`.
+- `failureCode`: present for an error state.
+- `httpStatus`: optional integer, used with `http_error` for 4xx/5xx status.
+
+The stable native status messages are `Native libmpv player ready`, `Loading
+media`, `Playing`, `Playback ended`, and `Playback stopped`. Dart preserves
+native error messages where appropriate and uses its existing safe status
+messages for command, timeout, and local lifecycle failures.
+
+### `property`
+
+Keys:
+
+- `name`: one of the forwarded property names below.
+- `value`: the property value, or null when the property is unavailable.
+- `loadId`: optional while a media load is active.
+
+The Dart transport silently drops a property event with a non-string `name`.
+It drops malformed values for typed telemetry fields without replacing the
+last valid fact.
+
+Forwarded properties are:
+
+| Name | Wire value |
+| --- | --- |
+| `pause` | bool |
+| `time-pos`, `duration` | finite mpv doubles; Dart clamps missing, negative, or non-finite values to zero duration |
+| `track-list` | list of at most 256 track maps |
+| `video-format`, `video-codec`, `current-vo`, `hwdec-current` | bounded strings, at most 4,096 bytes each |
+| `video-params` | map with `w`, `h`, `pixelformat`, `hw-pixelformat`, `primaries`, `gamma`, `colormatrix`, and `sig-peak` |
+| `video-target-params` | map with `gamma`, `primaries`, and `pixelformat`; each value is null or a lower-cased string using `[a-z0-9._-]`, at most 64 bytes |
+
+Each valid track map contains `id: int > 0`, `type: "video"`, `"audio"`,
+or **`"sub"`**, and `selected: bool`. The Dart model exposes the native
+`sub` value as `PlayerTrackType.subtitle`; `selectTrack` uses the request wire
+value `subtitle`. Optional track keys are `title`, `lang`, `codec`,
+`demux-channels` (strings), `demux-channel-count` (positive integer), and
+`forced`, `external`, `hearing-impaired`, `visual-impaired`, and `commentary`
+(bools). Invalid track entries and invalid optional facts are omitted.
+
+The video-parameter numeric fields `w` and `h` are integers; `sig-peak` is a
+number. The other fields are strings or null. The native encoder bounds the
+aggregate metadata node to 64 KiB in addition to the per-string bound.
+
+### `stopResult`
+
+Keys are `stopId: int` and `success: bool`. Dart accepts the result only when
+`stopId` matches the currently pending stop. A false result completes the stop
+with `stop_failed`; a late result cannot complete a later stop or replacement
+load.
+
+### `trackResult`
+
+Keys are `loadId: int`, `requestId: int`, and `success: bool`. Dart accepts the
+result only when both IDs match the pending track request. A false result is a
+`command_error`; an event for a retired load or request is dropped.
+
+### `display`
+
+Keys are:
+
+- `revision: int >= 0`
+- `session`: `inactive`, `active`, `suspended`, or `unavailable`
+- `observed`: `hdr`, `sdr`, or `unknown`
+- `outcome`: `idle`, `pending`, `matched`, or `failed`
+- `wrote: bool`
+- `owned: bool`
+- `reason`: null or `unsupported_api`, `not_hdr_capable`, `ambiguous_target`,
+  `state_unknown`, `guardian_unavailable`, `set_rejected`, `not_observed`,
+  `external_change`, `restore_failed`, or `target_lost`
+- `route`: `hdr_state`, `advanced_color`, or `none`
+- `activeColorMode`: `sdr`, `wcg`, `hdr`, or `unknown`, or null when absent
+
+Dart accepts only a fully typed report for the current display revision. Display
+reports are not associated with a media load and use a separate broadcast
+stream.
+
+## Playback failure codes
+
+The current native failure vocabulary is:
+
+- `http_error` (with an optional 4xx/5xx `httpStatus`)
+- `network_error`
+- `audio_decode_error`
+- `video_decode_error`
+- `audio_output_error`
+- `video_output_error`
+- `source_open_error`
+- `container_error`
+- `correlation_error`
+- `command_error`
+- `event_queue_overflow`
+- `mpv_error`
+
+Native `command_error` is used when a queued mpv command fails. Native
+`correlation_error` is used when bounded load/redirect tracking cannot preserve
+an association. `event_queue_overflow` reports an mpv queue overflow. Dart
+normalizes an unrecognized state `failureCode` to `native_error` and an error
+state without a code to `native_playback_error`.
+
+## Correlation and lifetime rules
+
+### Loads
+
+The Dart transport creates a monotonically increasing `loadId` for each load,
+retires the previous load before replacement, and accepts only events whose
+`loadId` equals the active ID. A load completes when its matching `playing`
+state arrives. A matching error, timeout, explicit stop, or replacement settles
+the pending load and retires its active ID. The caller's product generation is
+kept in Dart and projected onto `PlayerEvent`; it is not sent as a native
+argument.
+
+### Stops
+
+`stop()` immediately retires the Dart active load and settles pending load and
+track waiters, then sends a positive `stopId`. The stop future completes only
+after the matching `stopResult`, not when the command is accepted. A failed or
+timed-out stop retains cleanup responsibility; a retry receives a new ID.
+
+### Track requests
+
+`selectTrack` uses the current positive `loadId` plus a monotonically increasing
+positive `requestId`. Native completion must echo both IDs. Completion means
+that the native command ran, not that mpv's observed `track-list` confirms the
+requested selection. A replacement load invalidates pending track requests.
+
+### Native generations
+
+Each initialized native worker captures a lifecycle generation. Dispose bumps
+the generation before stopping the worker; queued events carry the old
+generation and are dropped by the native drain. Initialization also purges
+queued display events and resets display revision. Dart independently resets
+its report and media state on initialize/dispose.
+
+## Queue capacity and eviction
+
+The native event queue holds 256 events. When it is full, the policy in
+`native_player.cpp:1254-1267` is:
+
+1. Find and evict the oldest queued `property` event, regardless of the type
+   of the incoming event.
+2. If no queued property exists, drop an incoming `property` event.
+3. If no queued property exists and the incoming event is not a property, evict
+   the oldest event of any type and admit the incoming event.
+
+This policy protects state, stop, track, and display completions when property
+telemetry is under pressure. It is separate from the native command queue's
+64-entry/128-KiB admission limit.
+
+## Presentation obligations
+
+Any platform implementation must preserve these obligations:
+
+1. Render real alpha compositing beneath transparent Flutter routes, including
+   the approved Guide alpha.
+2. Interpret the video rectangle in logical units with a top-left origin.
+   Windows multiplies by `scale`; a bottom-left-origin platform must account
+   for its view coordinate system.
+3. Keep the rectangle across load and stop. Hide video for a zero rectangle or
+   while minimized.
+4. Keep video passive: it has no hit-testing, focus, or accessibility surface.
+5. Complete `setFullscreen` only after the platform transition has completed.
+6. Enforce the token-safety contract documented on `NativePlayer.load`:
+   HTTPS, scoped headers, no unsafe redirects, no logging, and no implicit
+   unvalidated nested references.
+
+## Windows-specific diagnostics and portability
+
+The following fields describe Windows mechanisms rather than portable product
+policy and may be unavailable on another backend:
+
+- the DirectComposition engine marker checked during `initialize`;
+- the native child presentation window (`wid`/host window);
+- display `route` (`hdr_state` or `advanced_color`) and `activeColorMode`
+  (`sdr`, `wcg`, or `hdr`);
+- the Windows-style fullscreen transition and its `window_error` diagnostics;
+- libmpv's `current-vo`, `hwdec-current`, and the Windows-specific pixel/output
+  facts in telemetry.
+
+A backend without equivalent information should report unavailable/unknown
+values truthfully (`DisplayMatchingSessionState.unavailable`, an appropriate
+`reason`, `route: none`, `activeColorMode: null` or `unknown`, and null
+telemetry facts) rather than fabricating Windows values. macOS currently uses
+the explicit unsupported backend; this document does not authorize a macOS
+media implementation.
+
+## Dart/C++ differences recorded at this revision
+
+- Native initialization queues an `idle` event with message `Native libmpv
+  player ready` and no `loadId`. Dart's event handler requires a current load
+  ID for load-scoped events, so that wire event is dropped; Dart sets the same
+  ready status locally after the initialize method returns. This is harmless
+  but is a real difference in event consumption.
+- Dart understands a `paused` state value defensively, while the current C++
+  producer emits pause changes as the `pause` property and does not emit a
+  `paused` state event.
+- The wire uses track type `sub` in native track snapshots but `subtitle` in
+  track-selection requests. Dart deliberately translates between them.
+- `DisplayMatchingReport.unavailable` uses null for `activeColorMode` in Dart;
+  a native report may use the explicit `unknown` string. Both represent an
+  unavailable/unknown diagnostic, but they are not the same serialized value.
+- Dart-generated load IDs start at 1 although the native `load` parser also
+  accepts 0. The stricter positive rule remains required for `selectTrack`.

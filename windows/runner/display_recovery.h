@@ -4,6 +4,40 @@
 #include "display_dynamic_range.h"
 
 namespace lineup {
+enum class RestorationDecision {
+  target_unknown,
+  unresolved_attempt,
+  already_original,
+  external_change,
+  restore_original,
+};
+// Live history uses unobserved_attempt; durable history derives uncertainty
+// from the journal. They can diverge when Execute refuses after journaling,
+// Update journals but its pipe send fails and memory rolls attempted back, or
+// Reconcile observes the attempt but its guardian Update fails.
+struct RestorationHistory {
+  DisplayOwnership ownership;
+  bool attempt_may_land_late;
+};
+constexpr bool DurableAttemptMayLandLate(const DisplayOwnership& own) {
+  return own.attempted != DisplayState::unknown &&
+         own.attempted != own.original && own.verified != own.attempted;
+}
+constexpr RestorationDecision ClassifyRestoration(
+    const RestorationHistory& history, DisplayState observed) {
+  const auto& own = history.ownership;
+  if (observed == DisplayState::unknown)
+    return RestorationDecision::target_unknown;
+  if (observed == own.original) {
+    if (history.attempt_may_land_late && own.attempted != own.original)
+      return RestorationDecision::unresolved_attempt;
+    return RestorationDecision::already_original;
+  }
+  if (observed != own.verified && observed != own.attempted)
+    return RestorationDecision::external_change;
+  return RestorationDecision::restore_original;
+}
+
 struct RecoveryIdentity {
   uint32_t owner_pid = 0;
   uint32_t owner_created_low = 0;

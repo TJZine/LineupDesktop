@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_restore_view.dart';
@@ -536,7 +535,7 @@ Future<void> _waitForRestore(WidgetTester tester, _RestorePlex plex) async {
   await tester.pump();
 }
 
-({LineupController controller, _RestorePlex plex, FixtureStore store})
+({LineupController controller, _RestorePlex plex, MemoryAppStore store})
 _realRestoreFixture() {
   final channel = Channel(
     id: 'saved',
@@ -550,7 +549,7 @@ _realRestoreFixture() {
     anchor: DateTime.utc(2026),
     shuffleSeed: 1,
   );
-  final store = FixtureStore()
+  final store = MemoryAppStore()
     ..state = PersistedState(
       settings: const LineupSettings(reduceMotion: true),
       selectedServerByProfile: const {'owner': 'server'},
@@ -568,7 +567,7 @@ _realRestoreFixture() {
   final plex = _RestorePlex();
   final controller = LineupController(
     store: store,
-    credentials: _Credentials(),
+    credentials: MemoryCredentialStore(accountToken: 'synthetic-token'),
     plex: plex,
   );
   addTearDown(controller.dispose);
@@ -581,26 +580,11 @@ class _GatedPlayer extends FixturePlayer {
   Future<void> initialize() => finish.future;
 }
 
-class _Credentials implements CredentialStore {
-  @override
-  Future<String?> readAccountToken() async => 'synthetic-token';
-  @override
-  Future<String?> readProfileToken(String id) async => null;
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String id, String token) async {}
-}
-
 class _RestorePlex extends PlexClient {
   _RestorePlex()
     : super(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: MockClient(
-          (_) async => throw StateError('unexpected HTTP'),
-        ),
+        httpClient: testPlexHttpClient(),
       );
   final finish = Completer<void>();
   int scans = 0;

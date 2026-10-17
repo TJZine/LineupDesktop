@@ -16,7 +16,6 @@ import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
-import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
@@ -27,6 +26,7 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../support/golden_test_support.dart';
+import '../support/test_doubles.dart';
 
 final _fixtureArtwork = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -39,6 +39,34 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  testWidgets(
+    'presentation getters distinguish watching from selected and held state',
+    (tester) async {
+      for (final state in PlayerState.values) {
+        final fixture = _Fixture(state);
+        expect(fixture.player.presentedState, state);
+        expect(fixture.player.watchingChannelId, isNull);
+        expect(await fixture.player.tune('channel'), isTrue);
+        expect(
+          fixture.player.watchingChannelId,
+          const {
+                PlayerState.playing,
+                PlayerState.paused,
+                PlayerState.buffering,
+                PlayerState.seeking,
+              }.contains(state)
+              ? 'channel'
+              : null,
+          reason: '$state',
+        );
+        fixture.dispose();
+      }
+      final empty = _Fixture(PlayerState.playing, channelCount: 0);
+      expect(empty.player.watchingChannelId, isNull);
+      empty.dispose();
+    },
+  );
+
   for (final overlay in [PlayerOverlay.osd, PlayerOverlay.nowPlaying]) {
     testWidgets('display hold projects preparing and loading in $overlay', (
       tester,
@@ -58,6 +86,8 @@ void main() {
         Uri.parse('https://synthetic.test/local'),
       );
       expect(f.player.displayHoldActive, isTrue);
+      expect(f.player.presentedState, PlayerState.loading);
+      expect(f.player.status.state, PlayerState.paused);
       if (overlay == PlayerOverlay.nowPlaying) f.player.showNowPlaying();
       await tester.pumpWidget(
         MaterialApp(
@@ -71,6 +101,8 @@ void main() {
       );
       await tester.pump();
       expect(f.player.displayHoldActive, isTrue);
+      expect(f.player.presentedState, PlayerState.loading);
+      expect(f.player.status.state, PlayerState.paused);
       expect(
         find.byWidgetPredicate(
           (widget) =>
@@ -1546,6 +1578,8 @@ void main() {
   testWidgets('player errors remain named live regions', (tester) async {
     final fixture = _Fixture(PlayerState.playing, failLoad: true);
     await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
+    expect(fixture.player.error, isNotNull);
+    expect(fixture.player.watchingChannelId, isNull);
     await tester.pumpWidget(
       MaterialApp(
         builder: LineupCanvas.builder,
@@ -1581,6 +1615,8 @@ void main() {
     final tuning = fixture.player.tune('channel');
     await tester.pump();
     await fixture.native.loadStarted.future;
+    expect(fixture.player.tuning, isTrue);
+    expect(fixture.player.watchingChannelId, isNull);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -5195,6 +5231,89 @@ void main() {
     },
   );
 
+  testWidgets('Now Playing omits unknown dynamic range', (tester) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richItemOverride: _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 1),
+        dynamicRange: 'unknown',
+      ),
+    );
+    addTearDown(fixture.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    // This assertion must fail on the unchanged production baseline if NF-23
+    // is confirmed. The surface assertion prevents an absent-panel false pass.
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+    expect(find.text('TV-14'), findsOneWidget);
+    expect(find.text('UNKNOWN'), findsNothing);
+    expect(find.bySemanticsLabel(RegExp(r'\. UNKNOWN\.')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final (videoFormat, catalogCodec, runtimeCodec, expected) in [
+    ('hevc', 'h264', 'vp9', 'HEVC'),
+    ('', 'h264', 'vp9', 'H.264'),
+    ('', null, 'vp9', 'VP9'),
+  ]) {
+    testWidgets(
+      'Now Playing codec precedence $videoFormat/$catalogCodec/$runtimeCodec',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richItemOverride: ChannelItem(
+            id: 'program',
+            title: 'Program',
+            duration: const Duration(hours: 1),
+            contentRating: 'TV-14',
+            videoCodec: catalogCodec,
+          ),
+          nativeTelemetry: PlayerTelemetry(
+            videoFormat: videoFormat,
+            videoCodec: runtimeCodec,
+          ),
+        );
+        addTearDown(fixture.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pump();
+        fixture.player.showNowPlaying();
+        await tester.pumpAndSettle();
+
+        final badges = find.byKey(const Key('player-now-playing-badges'));
+        expect(badges, findsOneWidget);
+        expect(
+          find.descendant(of: badges, matching: find.text(expected)),
+          findsOneWidget,
+        );
+        final displayedCodecs = tester
+            .widgetList<Text>(
+              find.descendant(of: badges, matching: find.byType(Text)),
+            )
+            .map((text) => text.data)
+            .where((text) => const {'HEVC', 'H.264', 'VP9'}.contains(text));
+        expect(displayedCodecs, [expected]);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('runtime HDR overrides stale catalog SDR', (tester) async {
     final fixture = _Fixture(
       PlayerState.playing,
@@ -5202,7 +5321,7 @@ void main() {
         0,
         rich: true,
         duration: const Duration(hours: 1),
-        dynamicRange: 'SDR',
+        dynamicRange: 'sdr',
       ),
       nativeTelemetry: const PlayerTelemetry(gamma: 'pq'),
     );
@@ -6087,8 +6206,8 @@ class _Lineup extends LineupController {
     ChannelItem? richItemOverride,
     DateTime? anchorNow,
   }) : super(
-         store: _Store(),
-         credentials: _Credentials(),
+         store: MemoryAppStore(clientId: 'test'),
+         credentials: MemoryCredentialStore(),
          plex: PlexClient(
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
@@ -6395,7 +6514,7 @@ class _Native implements NativePlayer {
     bool startPaused = false,
   }) async {
     loadCalls++;
-    if (failLoad) throw StateError('synthetic load failure');
+    if (failLoad) throw const PlayerUnavailable('synthetic load failure');
     if (blockLoad) {
       if (!loadStarted.isCompleted) loadStarted.complete();
       await _loadCompletion.future;
@@ -6489,29 +6608,6 @@ class _Native implements NativePlayer {
     await _events.close();
     await _displayReports.close();
   }
-}
-
-class _Store implements AppStore {
-  @override
-  Future<String> clientIdentifier() async => 'test';
-  @override
-  Future<AppStoreLoadResult> load() async =>
-      const AppStoreLoadResult(PersistedState());
-  @override
-  Future<void> save(PersistedState state) async {}
-}
-
-class _Credentials implements CredentialStore {
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<String?> readAccountToken() async => null;
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
 }
 
 Rect _drawnRect(WidgetTester tester, Finder finder) {

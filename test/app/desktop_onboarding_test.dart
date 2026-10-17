@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/lineup_restore_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -82,7 +81,7 @@ void main() {
       final plex = _ProfileRecoveryPlex(failure);
       final controller = LineupController(
         store: store,
-        credentials: _ProfileRecoveryCredentials(),
+        credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
         plex: plex,
       );
       addTearDown(controller.dispose);
@@ -327,7 +326,7 @@ void main() {
 
   Future<void> show(
     WidgetTester tester,
-    FixtureController controller, {
+    LineupController controller, {
     Future<void> Function()? browser,
     bool accountOrigin = false,
     double textScale = 1,
@@ -587,6 +586,73 @@ void main() {
     expect(find.text('Open browser'), findsNothing);
     expect(find.text('Get a new code'), findsOneWidget);
     expect(controller.activePin?.id, 1);
+  });
+
+  for (final (label, offset, expired) in [
+    ('before', const Duration(seconds: -1), false),
+    ('exactly at', Duration.zero, true),
+    ('after', const Duration(seconds: 1), true),
+  ]) {
+    testWidgets('PIN clock $label expiration uses one boundary', (
+      tester,
+    ) async {
+      final expiresAt = DateTime.utc(2026, 10, 15, 12);
+      final now = expiresAt.add(offset);
+      final controller = LineupController(
+        store: MemoryAppStore(),
+        credentials: MemoryCredentialStore(),
+        plex: PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: testPlexHttpClient(),
+        ),
+        clock: () => now,
+        scenario: LineupScenario(
+          stage: SetupStage.linking,
+          activePin: PlexPin(id: 9, code: 'CLOCK', expiresAt: expiresAt),
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      expect(controller.pinExpired, expired);
+      expect(controller.pinUsable, !expired);
+      expect(controller.pinRemaining, expiresAt.difference(now));
+      await show(tester, controller);
+
+      if (expired) {
+        expect(
+          find.text('That code expired before sign-in finished.'),
+          findsOneWidget,
+        );
+        expect(find.text('Get a new code'), findsOneWidget);
+        expect(find.text('Open browser'), findsNothing);
+      } else {
+        expect(find.text('Open browser'), findsOneWidget);
+        expect(find.text('Get a new code'), findsNothing);
+      }
+    });
+  }
+
+  test('PIN polling expires at the exact injected clock boundary', () async {
+    final expiresAt = DateTime.utc(2026, 10, 15, 12);
+    final plex = _PinPollingPlex(
+      PlexPin(id: 10, code: 'POLL', expiresAt: expiresAt),
+    );
+    final controller = LineupController(
+      store: MemoryAppStore(),
+      credentials: MemoryCredentialStore(),
+      plex: plex,
+      clock: () => expiresAt,
+      pinPollInterval: Duration.zero,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.startLinking();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(plex.pollCalls, 0);
+    expect(plex.cancelPinCalls, 0);
+    expect(controller.activePin, isNull);
+    expect(controller.error, 'The Plex link code expired. Request a new code.');
   });
 
   testWidgets('linking slots stay aligned across code and failure states', (
@@ -1403,20 +1469,33 @@ class _ServerController extends FixtureController {
   }
 }
 
-class _ProfileRecoveryCredentials implements CredentialStore {
+class _PinPollingPlex extends PlexClient {
+  _PinPollingPlex(this.pin)
+    : super(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: testPlexHttpClient(),
+      );
+
+  final PlexPin pin;
+  int pollCalls = 0;
+  int cancelPinCalls = 0;
+
   @override
-  Future<String?> readAccountToken() async => 'synthetic-account';
+  Future<PlexPin> createPin() async => pin;
+
   @override
-  Future<String?> readProfileToken(String id) async => null;
+  Future<String?> pollPin(PlexPin pin) async {
+    pollCalls++;
+    throw const PlexException('poll-failed', 'Synthetic poll control failure');
+  }
+
   @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String id, String token) async {}
-  @override
-  Future<void> clear() async {}
+  Future<void> cancelPin(PlexPin pin) async {
+    cancelPinCalls++;
+  }
 }
 
-class _ProfileRecoveryStore extends FixtureStore {
+class _ProfileRecoveryStore extends MemoryAppStore {
   _ProfileRecoveryStore(this.failure);
   final String failure;
   final gate = Completer<void>();
@@ -1440,9 +1519,7 @@ class _ProfileRecoveryPlex extends PlexClient {
   _ProfileRecoveryPlex(this.failure)
     : super(
         clientIdentifier: 'synthetic-client',
-        httpClient: MockClient(
-          (_) async => throw StateError('unexpected HTTP'),
-        ),
+        httpClient: testPlexHttpClient(),
       );
   final String failure;
   final gate = Completer<void>();

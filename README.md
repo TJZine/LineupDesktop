@@ -46,7 +46,7 @@ the Windows media boundary deliberately narrow.
 | Platform | Current status |
 | --- | --- |
 | Windows 10/11 x64 | Primary target. Flutter UI, libmpv playback, native video presentation, and portable packaging are implemented. Final real-hardware and release acceptance remains pending. |
-| macOS 12 or newer | Portable Flutter UI, onboarding, channel management, Guide, settings, and secure-storage development flows build successfully. Playback is intentionally reported as unsupported. |
+| macOS 12 or newer | Portable Flutter UI, onboarding, channel management, Guide, settings, and secure-storage development flows build successfully. Native playback is not yet implemented; see [the protocol](docs/native-player-protocol.md). |
 | Linux | Not currently targeted. |
 
 See [Architecture](docs/architecture.md) for the ownership model and
@@ -104,7 +104,8 @@ unpinned components; follow the exact Windows procedure in
 | [Architecture](docs/architecture.md) | Component ownership, implemented state, and dependency decisions |
 | [Windows Native Acceptance](docs/windows-native-validation.md) | Physical-machine test campaign and Codex handoff |
 | [Windows Runtime Provenance](docs/windows-runtime.md) | libmpv/FFmpeg/libplacebo provenance and redistribution obligations |
-| [Portable UI Parity](docs/ui-parity.md) | Detailed source, test, and visual-parity evidence record |
+| [Open obligations and historical evidence](docs/open-obligations.md) | Pending product/platform work and recoverable campaign evidence |
+| [Product Parity — August 23, 2026 audit](docs/product-parity.md) | Dated audit with explicitly dated updates |
 | [Desktop UI target specification](docs/desktop-ui-design-spec.md) | Approved Guide/PiP composition target; implementation and physical acceptance remain separate evidence |
 | [Security Policy](SECURITY.md) | Private vulnerability reporting and secret-handling rules |
 

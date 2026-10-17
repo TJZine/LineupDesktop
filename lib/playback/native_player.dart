@@ -31,10 +31,10 @@ abstract interface class NativePlayer {
   /// perform network media loads must require HTTPS and send it only as an
   /// `X-Plex-Token` request header. They must not follow redirects while the
   /// header is attached unless every target is proven to retain the original
-  /// HTTPS origin. They must never log it or append it to [media].
-  /// Windows disables libmpv reference following and automatic external-file
-  /// loading. Nested-reference media (including same-server HLS, DASH, MOV
-  /// references, and external-segment ordered chapters) is unsupported.
+  /// HTTPS origin. They must never log it, include it in diagnostics, or append
+  /// it to [media]. Backends must also prevent media from implicitly loading
+  /// nested or external references unless the target and its credential scope
+  /// have been explicitly validated by the owning playback policy.
   Future<void> load(
     Uri media, {
     String? plexToken,
@@ -455,6 +455,44 @@ class PlayerTelemetry {
     final transfer = gamma?.toLowerCase();
     return transfer == 'pq' || transfer == 'hlg' || transfer == 'smpte-st-2084';
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlayerTelemetry &&
+      videoOutput == other.videoOutput &&
+      hardwareDecoder == other.hardwareDecoder &&
+      videoCodec == other.videoCodec &&
+      videoFormat == other.videoFormat &&
+      width == other.width &&
+      height == other.height &&
+      pixelFormat == other.pixelFormat &&
+      hardwarePixelFormat == other.hardwarePixelFormat &&
+      primaries == other.primaries &&
+      gamma == other.gamma &&
+      targetGamma == other.targetGamma &&
+      targetPrimaries == other.targetPrimaries &&
+      targetPixelFormat == other.targetPixelFormat &&
+      colorMatrix == other.colorMatrix &&
+      signalPeak == other.signalPeak;
+
+  @override
+  int get hashCode => Object.hash(
+    videoOutput,
+    hardwareDecoder,
+    videoCodec,
+    videoFormat,
+    width,
+    height,
+    pixelFormat,
+    hardwarePixelFormat,
+    primaries,
+    gamma,
+    targetGamma,
+    targetPrimaries,
+    targetPixelFormat,
+    colorMatrix,
+    signalPeak,
+  );
 }
 
 class PlayerUnavailable implements Exception {
