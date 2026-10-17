@@ -437,9 +437,10 @@ upstream sources. No MPVKit or media-kit artifacts or scripts are used.
 FFmpeg 9.0.2 (LGPL 2.1+), libplacebo 7.360.1, MoltenVK 1.4.2, curl 8.23.0
 with OpenSSL 3.5.9 and Apple SecTrust, and the subtitle and AV1 stack. A
 clean build passes. Every dylib is `@rpath` and links only the runtime and
-the OS. VideoToolbox decode, HDR10, HLG, and Dolby Vision profile 5
+the OS, and no shipped file contains a build-machine path. VideoToolbox
+decode, HDR10, HLG, and Dolby Vision profiles 5 and 8.1
 (`colormatrix=dolbyvision`) work through `gpu-next` on `macvk` into a host
-`CAMetalLayer`. `tls-verify=yes` accepts valid certificates and rejects bad
+`CAMetalLayer`, as do AV1, TrueHD, DTS, ASS, and PGS decode. `tls-verify=yes` accepts valid certificates and rejects bad
 ones through the system trust store. Identity, licenses, the TLS decision, and
 evidence are in [macos-runtime.md](macos-runtime.md). Still open:
 authenticated-reference parity, sandbox and hardened-runtime loading (R1),
