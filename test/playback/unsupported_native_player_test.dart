@@ -32,9 +32,10 @@ void main() {
         createPlatformNativePlayer(isWindows: true, isMacOS: false),
         isA<MethodChannelNativePlayer>(),
       );
-      final macOS = createPlatformNativePlayer(isWindows: false, isMacOS: true);
-      expect(macOS, isA<UnsupportedNativePlayer>());
-      expect(macOS.status.message, 'Playback is not implemented on macOS');
+      expect(
+        createPlatformNativePlayer(isWindows: false, isMacOS: true),
+        isA<MethodChannelNativePlayer>(),
+      );
 
       final other = createPlatformNativePlayer(
         isWindows: false,

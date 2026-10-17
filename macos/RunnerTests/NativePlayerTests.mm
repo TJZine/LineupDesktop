@@ -1,0 +1,222 @@
+#import <XCTest/XCTest.h>
+
+#include <cmath>
+#include <limits>
+#include <string>
+#include <variant>
+
+#include "FoundationValueConversion.h"
+#include "VideoGeometry.h"
+
+using lineup::player::Value;
+using lineup::player::ValueList;
+using lineup::player::ValueMap;
+
+@interface FoundationValueConversionTests : XCTestCase
+@end
+
+@implementation FoundationValueConversionTests
+
+// The standard codec decodes Dart bool, int, and double into NSNumbers that
+// differ only in their CoreFoundation type. The protocol's typed lookups
+// (stopId, loadId, revision versus seconds and volume) depend on keeping
+// them distinct.
+- (void)testNumbersKeepBoolIntegerAndDoubleDistinct {
+  const Value yes = lineup::ToValue(@YES);
+  const Value no = lineup::ToValue(@NO);
+  XCTAssertTrue(std::holds_alternative<bool>(yes));
+  XCTAssertTrue(std::get<bool>(yes));
+  XCTAssertTrue(std::holds_alternative<bool>(no));
+  XCTAssertFalse(std::get<bool>(no));
+
+  // 0 and 1 integers must not be mistaken for booleans.
+  for (NSNumber* number in @[ @0, @1, @(int64_t{1} << 40), @(-7) ]) {
+    const Value value = lineup::ToValue(number);
+    XCTAssertTrue(std::holds_alternative<int64_t>(value), @"%@", number);
+    XCTAssertEqual(std::get<int64_t>(value), number.longLongValue);
+  }
+
+  // A whole-valued double stays a double, so an integer-only field rejects it.
+  const Value whole = lineup::ToValue(@1.0);
+  XCTAssertTrue(std::holds_alternative<double>(whole));
+  XCTAssertEqual(std::get<double>(whole), 1.0);
+  const Value fraction = lineup::ToValue(@2.5);
+  XCTAssertEqual(std::get<double>(fraction), 2.5);
+  XCTAssertFalse(lineup::player::AsInt(&whole).has_value());
+}
+
+- (void)testNullStringAndUnsupportedObjects {
+  XCTAssertTrue(std::holds_alternative<std::monostate>(lineup::ToValue(nil)));
+  XCTAssertTrue(std::holds_alternative<std::monostate>(
+      lineup::ToValue([NSNull null])));
+
+  const Value text = lineup::ToValue(@"café ☃");
+  XCTAssertTrue(std::get<std::string>(text) == "caf\xc3\xa9 \xe2\x98\x83");
+  XCTAssertTrue(std::get<std::string>(lineup::ToValue(@"")).empty());
+
+  // Embedded NUL bytes are kept, so validation sees the whole string.
+  NSString* withNul = [[NSString alloc] initWithBytes:"a\0b"
+                                               length:3
+                                             encoding:NSUTF8StringEncoding];
+  XCTAssertEqual(std::get<std::string>(lineup::ToValue(withNul)).size(), 3u);
+
+  // An unpaired surrogate has no UTF-8 form; it must not become a string.
+  const unichar lone = 0xD800;
+  NSString* invalid = [NSString stringWithCharacters:&lone length:1];
+  const Value invalidValue = lineup::ToValue(invalid);
+  XCTAssertFalse(std::holds_alternative<std::string>(invalidValue));
+  XCTAssertFalse(std::holds_alternative<std::monostate>(invalidValue));
+
+  // Objects outside the protocol become a non-null placeholder that fails
+  // every typed lookup.
+  const Value data = lineup::ToValue([NSData dataWithBytes:"x" length:1]);
+  XCTAssertTrue(std::holds_alternative<ValueList>(data));
+  XCTAssertTrue(std::get<ValueList>(data).empty());
+}
+
+- (void)testNestedCollectionsAndNonStringKeys {
+  NSDictionary* arguments = @{
+    @"type" : @"audio",
+    @"id" : [NSNull null],
+    @"nested" : @{@"list" : @[ @1, @2.5, @YES, @"x", [NSNull null] ]},
+    @7 : @"numeric key",
+    @[ @1 ] : @"list key",
+  };
+  const auto map = lineup::ToValueMap(arguments);
+  XCTAssertTrue(map.has_value());
+  XCTAssertEqual(map->size(), 3u);
+  XCTAssertTrue(*lineup::player::FindString(&*map, "type") == "audio");
+  XCTAssertTrue(std::holds_alternative<std::monostate>(map->at("id")));
+
+  const ValueMap* nested = lineup::player::AsMap(&map->at("nested"));
+  XCTAssertTrue(nested != nullptr);
+  const auto& list = std::get<ValueList>(nested->at("list"));
+  XCTAssertEqual(list.size(), 5u);
+  XCTAssertTrue(std::holds_alternative<int64_t>(list[0]));
+  XCTAssertTrue(std::holds_alternative<double>(list[1]));
+  XCTAssertTrue(std::holds_alternative<bool>(list[2]));
+  XCTAssertTrue(std::holds_alternative<std::string>(list[3]));
+  XCTAssertTrue(std::holds_alternative<std::monostate>(list[4]));
+
+  XCTAssertFalse(lineup::ToValueMap(@[ @1 ]).has_value());
+  XCTAssertFalse(lineup::ToValueMap(nil).has_value());
+}
+
+// Events go back through the standard codec, which distinguishes bool from
+// numbers by CFBoolean identity, and Dart's report parser requires every key
+// to be present even when its value is null.
+- (void)testEventsEncodeTypedFoundationValuesAndKeepNullKeys {
+  const ValueMap event{
+      {"type", Value("display")},
+      {"revision", Value(int64_t{3})},
+      {"wrote", Value(false)},
+      {"peak", Value(10.5)},
+      {"activeColorMode", Value()},
+      {"tracks", Value(ValueList{Value(ValueMap{{"id", Value(1)}})})},
+  };
+  NSDictionary* encoded = lineup::ToFoundationMap(event);
+  XCTAssertEqual(encoded.count, 6u);
+  XCTAssertEqualObjects(encoded[@"type"], @"display");
+  XCTAssertEqual(CFGetTypeID((__bridge CFTypeRef)encoded[@"wrote"]),
+                 CFBooleanGetTypeID());
+  XCTAssertEqual(encoded[@"wrote"], (__bridge id)kCFBooleanFalse);
+  XCTAssertNotEqual(CFGetTypeID((__bridge CFTypeRef)encoded[@"revision"]),
+                    CFBooleanGetTypeID());
+  XCTAssertFalse(CFNumberIsFloatType((__bridge CFNumberRef)encoded[@"revision"]));
+  XCTAssertEqual([encoded[@"revision"] longLongValue], 3);
+  XCTAssertTrue(CFNumberIsFloatType((__bridge CFNumberRef)encoded[@"peak"]));
+  XCTAssertEqual(encoded[@"activeColorMode"], [NSNull null]);
+  XCTAssertEqualObjects(encoded[@"tracks"], (@[ @{@"id" : @1} ]));
+
+  // A round trip preserves the value kinds.
+  const auto decoded = lineup::ToValueMap(encoded);
+  XCTAssertTrue(decoded.has_value());
+  XCTAssertTrue(*decoded == event);
+}
+
+@end
+
+@interface VideoGeometryTests : XCTestCase
+@end
+
+@implementation VideoGeometryTests
+
+- (ValueMap)rectLeft:(Value)left
+                 top:(Value)top
+               width:(Value)width
+              height:(Value)height
+               scale:(Value)scale {
+  return ValueMap{{"left", left},
+                  {"top", top},
+                  {"width", width},
+                  {"height", height},
+                  {"scale", scale}};
+}
+
+- (void)testParsesLogicalPointsAndIgnoresScale {
+  const auto rect = lineup::ParseVideoRect(
+      [self rectLeft:Value(10.5) top:Value(20) width:Value(640) height:Value(360.25)
+               scale:Value(2.0)]);
+  XCTAssertTrue(rect.has_value());
+  // The frame is in points with a top-left origin; the backing scale is
+  // applied to the layer, not to the frame.
+  const CGRect frame = lineup::VideoFrame(*rect);
+  XCTAssertEqual(frame.origin.x, 10.5);
+  XCTAssertEqual(frame.origin.y, 20);
+  XCTAssertEqual(frame.size.width, 640);
+  XCTAssertEqual(frame.size.height, 360.25);
+}
+
+- (void)testRejectsInvalidRectangles {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  const ValueMap invalid[] = {
+      [self rectLeft:Value(nan) top:Value(0) width:Value(1) height:Value(1) scale:Value(1)],
+      [self rectLeft:Value(0) top:Value(inf) width:Value(1) height:Value(1) scale:Value(1)],
+      [self rectLeft:Value(0) top:Value(0) width:Value(-1) height:Value(1) scale:Value(1)],
+      [self rectLeft:Value(0) top:Value(0) width:Value(1) height:Value(-0.5) scale:Value(1)],
+      [self rectLeft:Value(0) top:Value(0) width:Value(1) height:Value(1) scale:Value(0)],
+      [self rectLeft:Value(0) top:Value(0) width:Value(1) height:Value(1) scale:Value(-2)],
+      [self rectLeft:Value("0") top:Value(0) width:Value(1) height:Value(1) scale:Value(1)],
+      [self rectLeft:Value(0) top:Value(0) width:Value(true) height:Value(1) scale:Value(1)],
+      [self rectLeft:Value(0) top:Value(0) width:Value(1) height:Value() scale:Value(1)],
+      ValueMap{{"left", Value(0)}, {"top", Value(0)}, {"width", Value(1)}, {"height", Value(1)}},
+  };
+  for (const auto& arguments : invalid) {
+    XCTAssertFalse(lineup::ParseVideoRect(arguments).has_value());
+  }
+  // A zero-sized rectangle is valid; it hides the video.
+  XCTAssertTrue(lineup::ParseVideoRect(
+      [self rectLeft:Value(5) top:Value(5) width:Value(0) height:Value(0) scale:Value(1)])
+                    .has_value());
+}
+
+- (void)testVisibilityRequiresAreaAndAVisibleWindow {
+  const lineup::VideoRect area{0, 0, 320, 180};
+  XCTAssertTrue(lineup::VideoVisible(area, false, false));
+  XCTAssertFalse(lineup::VideoVisible(std::nullopt, false, false));
+  XCTAssertFalse(lineup::VideoVisible(lineup::VideoRect{0, 0, 0, 180}, false, false));
+  XCTAssertFalse(lineup::VideoVisible(lineup::VideoRect{0, 0, 320, 0}, false, false));
+  XCTAssertFalse(lineup::VideoVisible(area, true, false));
+  XCTAssertFalse(lineup::VideoVisible(area, false, true));
+}
+
+- (void)testDrawableSizeIsBoundsTimesBackingScale {
+  CGSize size = lineup::DrawableSize(CGSizeMake(640, 360), 2);
+  XCTAssertEqual(size.width, 1280);
+  XCTAssertEqual(size.height, 720);
+  size = lineup::DrawableSize(CGSizeMake(100.3, 50.7), 1);
+  XCTAssertEqual(size.width, 100);
+  XCTAssertEqual(size.height, 51);
+  // Never empty, never beyond the Metal texture limit, and a bad scale is
+  // treated as 1.
+  size = lineup::DrawableSize(CGSizeMake(0, 0), 2);
+  XCTAssertEqual(size.width, 1);
+  XCTAssertEqual(size.height, 1);
+  size = lineup::DrawableSize(CGSizeMake(1e9, 10), 2);
+  XCTAssertEqual(size.width, lineup::kMaxDrawableDimension);
+  size = lineup::DrawableSize(CGSizeMake(10, 10), 0);
+  XCTAssertEqual(size.width, 10);
+}
+
+@end
