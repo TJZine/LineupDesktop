@@ -89,16 +89,17 @@ Windows native code, split by what macOS needs:
 | HDR | Required in the first macOS release, including Dolby Vision profiles 5 and 8. Not negotiable. |
 | Presentation and HDR route | Route C: `gpu-next` on MoltenVK, embedded in our view through one LGPL mpv patch (§4.3). Spike S1 verified HDR10, HLG, and Dolby Vision profiles 5 and 8.1. Route A is ruled out because its renderer cannot render Dolby Vision profile 5. Route B (Flutter texture) is ruled out because it cannot output HDR. |
 | Distribution | Mac App Store, free to download with a paid full-feature tier. The free tier limits the number of channels. |
+| P1: platform status | Approved first-release target: macOS becomes a supported playback platform after the port's acceptance gates pass. This is not a claim that the present build is release-ready. |
+| P3: minimum OS / architecture | Apple Silicon only for the first release; keep macOS 12.0 as the deployment target. Only macOS 27 has been tested so far; older-OS compatibility remains a release gate. Intel/universal support is outside this first target. |
+| P5: command modifier / Settings | Adopt native Mac command shortcuts and `Settings… ⌘,`. Preserve other platforms' behavior and the approved Player layout. |
+| P6: fullscreen | One observed native fullscreen state for the Player button, green button, View menu and ⌃⌘F, reconciled in Dart through the protocol extension in §4.6. |
+| P7: bundle ID | Keep `com.tjzine.lineupDesktop`. |
+| Purchase implementation timing | Finish playback first; defer purchase/entitlement/upsell design and implementation. This does not approve a purchase model or channel limit. |
 
 ### Product decisions still needed (recommendation first)
 
 | # | Decision | Recommendation | Why |
 | --- | --- | --- | --- |
-| P1 | Is macOS a supported playback platform? | Yes, once spike S1 passes. | This reverses the profile's "development surface" statement. It needs an explicit yes and then the doc updates in §9. |
-| P3 | Minimum macOS and architectures | Keep the current 12.0 target unless the libmpv runtime chosen in S2 needs newer. Build universal (arm64 + x86_64) if that runtime provides both slices; otherwise arm64 only. | Lets the runtime's real requirement drive the minimum. |
-| P5 | Command modifier | Use ⌘ on macOS for command chords, and wire `Settings… ⌘,` to Settings. | This is platform convention, and `commandModifier` is already the single seam. |
-| P6 | Fullscreen | Support the green button, the View menu, and ⌃⌘F as well as the Player button, all in one native fullscreen state. | Users expect the system controls. This needs the protocol extension in §4.6. |
-| P7 | Bundle ID | Keep `com.tjzine.lineupDesktop`. | A new ID starts with empty data and an empty Keychain. |
 | M1 | Purchase model | One app: a free download plus a one-time, non-consumable in-app purchase ("Lineup Pro") that unlocks everything. | Apple prefers in-app purchase unlocks to separate "Lite" apps. One app keeps one review, one listing, and one data store, and lets users upgrade without losing anything. |
 | M2 | Free-tier limit | A fixed channel count (for example 3). Existing channels beyond the limit stay saved but cannot be watched or edited until upgrade. | Never deletes user data on a downgrade or a restore from another device. |
 | M3 | Source visibility | Decide before the paid release: keep the repository public (the paid tier is a convenience anyone could rebuild) or make future development private. | Apache-2.0 code that is already published stays available under Apache-2.0. As the copyright holder you can license future versions differently. Get legal advice. |
@@ -627,7 +628,7 @@ ordering constraints, and independent packages can run in parallel.
 
 | ID | Package | Depends on | Output |
 | --- | --- | --- | --- |
-| D0 | Product decisions P1, P3, P5–P7, M1–M3 | — | Answers recorded in this plan |
+| D0 | Product decisions P1, P3, P5–P7, M1–M3 | — | Platform/interaction target approved; purchases deferred until playback is finished; unresolved purchase/source decisions remain open |
 | L0 | Legal review: LGPL on the App Store, Plex terms and trademark, source visibility | M3 | Written go/no-go before the first paid submission |
 | S1 | Route C prototype: patched mpv embedded under Flutter, full HDR and Dolby Vision matrix (§4.3) | — (uses a local build) | **Done 2026-10-17**: results in §4.3; E1 decided for C |
 | S2 | Reproducible self-built runtime with the patch series (§4.4) | S1 patch drafted (done) | Build script, runtime identity, `macos-runtime.md` |

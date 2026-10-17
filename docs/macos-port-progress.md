@@ -157,6 +157,8 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | C1b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow only | Complete: approved; exact Bash failure propagation/path probes and actual system-OpenSSL fixture certificate generation passed |
 | R1c native runtime resource packaging | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Existing embed script/fixture and runtime/Development docs; package existing licenses, notices, patches and BUILD-INFO under owned Resources subtree; no UI/API | Complete, independently approved and integrated as `48e93064`; actual Release bundle/resource/signature checks pass |
 | R1c adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen four-file packaging source; isolated fixtures/read-only app evidence | Complete: approved exact four files; independent real-runtime fixture and additional recovery/path probes passed |
+| M3b fullscreen observation/reconciliation | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Native adapter player-scoped events, Dart playback interface/transport/coordinator, affected fakes/tests and protocol docs; no app/menu files | Running after P6 approval; independent review and Windows CI required |
+| U1 native command delivery | `01a14bfd-7a31-7e50-9de6-e6318b5c1aac` (`local`) | `worker`: `gpt-6.1-sol`, medium | App/Guide keyboard routing, Mac app/window/menu files and focused test/app coverage only; excludes M3b playback/native-player files | Investigation running; distinguish real defect from automation/focus limits before correcting |
 
 M3a is the lifecycle portion of M3, independent of the unresolved P6
 fullscreen product decision. It must preserve the pinned Flutter superclass's
@@ -316,3 +318,41 @@ purchase design until playback is finished. These are pending, not approvals.
 No further child implementation is active. The next slice depends on those
 answers; Licenses UI design/wording, signing accounts, legal/source distribution,
 hosted CI and physical acceptance remain open as described above.
+
+## Approved playback target (2026-10-17)
+
+The human accepted the proposed first-release target: supported macOS playback
+once acceptance passes, Apple Silicon only, existing bundle ID
+`com.tjzine.lineupDesktop`, and current macOS 12.0 deployment target. Only macOS
+27 has been tested; older-OS compatibility remains a release gate. They explicitly
+approved native Mac interactions: command shortcuts, Settings via Command-comma,
+and synchronized native fullscreen from the Player button, green button, View
+menu and Control-Command-F. The approved Player layout remains unchanged.
+They chose to finish playback before purchase design; no purchase model, free
+channel limit or upsell UI is approved. These answers supersede the corresponding
+pending decisions above and are recorded in the plan's resolved table.
+
+The next M3b slice implements player-scoped observed fullscreen events and Dart
+reconciliation, preserving native transition error/lifetime bounds and the M12-R5
+immediate-current-state contract. Windows must emit the same additive event
+without changing its fullscreen mechanism; Windows CI remains required. Existing
+U1 command/Settings implementation is verified against the now-approved behavior
+before making further changes. Parent owns plan/progress and Git integration.
+
+U1 controller check on the already-built credential-free Debug harness:
+Command-comma opened Settings, Escape returned to Guide, and F3 opened Settings.
+Command-3 in Guide and Command-1 in Settings did not navigate. Control-3 also
+had no effect. This is an observed input-path gap, not an established production
+cause: CUA synthesis/focus/window context and AppKit/Flutter routing need to be
+distinguished. All 44 existing focused shortcut/navigation tests pass with the
+pinned SDK (`/tmp/lineup-u1-approved-shortcuts-tests.log`); those tests do not
+establish actual macOS chord delivery. U1 owns exclusive CUA use and may use
+isolated, source-bound experiments; M3b has isolated native test resources and
+neither may build changing shared app inputs. The parent quit the harness
+before handing off UI access.
+
+The controller has proposed the required Licenses surface at Settings → Support
+with the existing theme and a standard Flutter component list/text viewer for
+Dart dependencies plus native resources. The human's direction choice is pending;
+no UI implementation is assigned. Legal wording, source hosting and signed
+release gates remain separate. Purchase work stays deferred.
