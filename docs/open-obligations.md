@@ -78,7 +78,8 @@ calling the old item open or closed.
 
 [The code-quality plan](code-quality-implementation-plan.md) §9 and
 [the protocol](native-player-protocol.md) remain live authorities. macOS is a
-development surface; native playback is not yet implemented.
+development surface; native playback is not yet implemented. The proposed
+resolutions and work packages are in the [macOS port plan](macos-port-plan.md).
 
 | Obligation | Source § | Platform | Status | Evidence |
 | --- | --- | --- | --- | --- |
