@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -9,15 +8,12 @@ import '../guide/guide_controller.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
-
-const channelAirCheckDebounce = Duration(milliseconds: 80);
-
-enum ChannelAirCheckValidity { unknown, valid, retainedOffAir }
-
-typedef ChannelAirCheckStatus = ({
-  String snapshotKey,
-  ChannelAirCheckValidity validity,
-});
+import 'air_check_verification.dart';
+export 'air_check_verification.dart'
+    show
+        ChannelAirCheckValidity,
+        channelAirCheckDebounce,
+        channelAirCheckSnapshotKey;
 
 class ChannelAirCheck extends StatefulWidget {
   const ChannelAirCheck({
@@ -26,7 +22,7 @@ class ChannelAirCheck extends StatefulWidget {
     required this.clock,
     required this.compact,
     required this.inclusionReason,
-    required this.onValidityChanged,
+    required this.verification,
     this.originalChannel,
     this.sourceIssue,
     this.sourceIssueExplained = false,
@@ -43,35 +39,22 @@ class ChannelAirCheck extends StatefulWidget {
   final String? sourceIssue;
   final bool sourceIssueExplained;
   final Map<String, Object?>? playableById;
-  final ValueChanged<ChannelAirCheckStatus> onValidityChanged;
+  final AirCheckVerification verification;
 
   @override
   State<ChannelAirCheck> createState() => _ChannelAirCheckState();
 }
 
 class _ChannelAirCheckState extends State<ChannelAirCheck> {
-  static const _tick = Duration(seconds: 30);
-
-  Timer? _debounce;
-  Timer? _clockTimer;
-  _AirCheckRequest? _active;
-  _AirCheckRequest? _pending;
-  _AirCheckPreview? _preview;
-  ScheduleIndex? _originalSchedule;
-  String? _originalScheduleKey;
-  Object? _originalScheduleError;
-  String? _originalScheduleErrorKey;
-  String? _originalOffAirKey;
-  Object? _error;
   String? _selectedId;
   bool _selectionFollowsNow = true;
-  bool _disposed = false;
-  int _futureHours = 6;
   bool _synopsisExpanded = false;
-  int _requestVersion = 0;
-  ChannelAirCheckStatus? _reportedStatus;
-  late String _targetKey;
-  String? _wantedOriginalKey;
+  AirCheckPreview? get _preview => widget.verification.result.preview;
+  Object? get _error => widget.verification.result.error;
+  bool get _comparisonFailed => widget.verification.comparisonFailed;
+  bool get _stale => widget.verification.stale;
+  int get _futureHours => widget.verification.futureHours;
+  void retry() => widget.verification.retry();
 
   TextStyle _airCheckButtonTextStyle({Color? color, FontWeight? fontWeight}) {
     final base =
@@ -89,284 +72,42 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   @override
   void initState() {
     super.initState();
-    _targetKey = _snapshotKey(widget);
-    _wantedOriginalKey = _originalKey(widget);
-    _clockTimer = Timer.periodic(_tick, (_) => _advanceClock());
-    _scheduleLoad(initial: true);
+    widget.verification.addListener(_verificationChanged);
+    if (_preview case final preview?) {
+      _preserveSelection(preview, widget.clock());
+    }
   }
 
   @override
   void didUpdateWidget(ChannelAirCheck oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextKey = _snapshotKey(widget);
-    final nextOriginalKey = _originalKey(widget);
-    if (_targetKey != nextKey ||
-        _wantedOriginalKey != nextOriginalKey ||
-        oldWidget.sourceIssue != widget.sourceIssue) {
-      _targetKey = nextKey;
-      _wantedOriginalKey = nextOriginalKey;
-      _reportValidity(ChannelAirCheckValidity.unknown);
-      _scheduleLoad();
-    } else if (_preview case final preview?
-        when preview.key == nextKey &&
-            (preview.channel.name != widget.channel.name ||
-                preview.channel.number != widget.channel.number)) {
-      _preview = preview.withChannel(widget.channel);
+    if (oldWidget.verification != widget.verification) {
+      oldWidget.verification.removeListener(_verificationChanged);
+      widget.verification.addListener(_verificationChanged);
     }
+  }
+
+  void _verificationChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_preview case final preview?) {
+        _preserveSelection(preview, widget.clock());
+      }
+    });
   }
 
   @override
   void dispose() {
-    _disposed = true;
-    _debounce?.cancel();
-    _clockTimer?.cancel();
+    widget.verification.removeListener(_verificationChanged);
     super.dispose();
   }
 
-  void _scheduleLoad({bool initial = false}) {
-    _debounce?.cancel();
-    final version = ++_requestVersion;
-    _pending = null;
-    final issue = widget.sourceIssue;
-    if (issue != null) {
-      _error = _AirCheckSourceIssue(issue);
-      _reportValidity(
-        _canRetainOffAir(_error!)
-            ? ChannelAirCheckValidity.retainedOffAir
-            : ChannelAirCheckValidity.unknown,
-      );
-      if (mounted) setState(() {});
-      return;
-    }
-    _reportValidity(ChannelAirCheckValidity.unknown);
-    if (initial) {
-      _enqueueRequired(version);
-    } else {
-      _debounce = Timer(
-        channelAirCheckDebounce,
-        () => _enqueueRequired(version),
-      );
-    }
-  }
-
-  void _enqueueRequired(int version) {
-    if (_disposed || version != _requestVersion) return;
-    final target = _AirCheckRequest(
-      key: _targetKey,
-      channel: widget.channel,
-      sourceLabel: widget.inclusionReason,
-      baseline: false,
-      publishes: true,
-      version: version,
-    );
-    final original = widget.originalChannel;
-    final originalKey = _wantedOriginalKey;
-    if (original != null &&
-        originalKey != null &&
-        _originalScheduleKey != originalKey) {
-      _enqueue(
-        _AirCheckRequest(
-          key: originalKey,
-          channel: original,
-          sourceLabel: widget.inclusionReason,
-          baseline: true,
-          publishes: originalKey == _targetKey,
-          version: version,
-          followUp: originalKey == _targetKey ? null : target,
-        ),
-      );
-      return;
-    }
-    _enqueue(target);
-  }
-
-  void retry() {
-    _error = null;
-    _scheduleLoad();
-    if (mounted) setState(() {});
-  }
-
-  void _enqueue(_AirCheckRequest request) {
-    if (_disposed) return;
-    if (_active != null) {
-      _pending = request;
-      setState(() {});
-      return;
-    }
-    _start(request);
-  }
-
-  void _start(_AirCheckRequest request) {
-    _active = request;
-    _error = null;
-    if (request.baseline && request.key == _wantedOriginalKey) {
-      _originalScheduleError = null;
-      _originalScheduleErrorKey = null;
-      _originalOffAirKey = null;
-    }
-    if (mounted) setState(() {});
-    unawaited(_load(request));
-  }
-
-  Future<void> _load(_AirCheckRequest request) async {
-    try {
-      final schedule = await widget.controller.loadScheduleFor(request.channel);
-      if (_disposed) return;
-      if (request.baseline && request.key == _wantedOriginalKey) {
-        programAt(widget.clock(), request.channel.anchor, schedule);
-        _originalSchedule = schedule;
-        _originalScheduleKey = request.key;
-        _originalScheduleError = null;
-        _originalScheduleErrorKey = null;
-        _originalOffAirKey = null;
-      }
-      if (request.publishes &&
-          request.key == _targetKey &&
-          request.version == _requestVersion) {
-        final preview = _project(
-          schedule,
-          request.key,
-          request.channel,
-          sourceLabel: request.sourceLabel,
-        );
-        _preview = preview;
-        _error = null;
-        _preserveSelection(preview, widget.clock());
-        final validity = _comparisonReady
-            ? ChannelAirCheckValidity.valid
-            : ChannelAirCheckValidity.unknown;
-        _reportValidity(validity, snapshotKey: request.key);
-      }
-    } catch (error) {
-      if (_disposed || request.version != _requestVersion) return;
-      if (request.baseline && request.key == _wantedOriginalKey) {
-        _originalSchedule = null;
-        _originalScheduleKey = null;
-        if (_isNoContentFailure(error)) {
-          _originalOffAirKey = request.key;
-          _originalScheduleError = null;
-          _originalScheduleErrorKey = null;
-        } else {
-          _originalOffAirKey = null;
-          _originalScheduleError = error;
-          _originalScheduleErrorKey = request.key;
-        }
-      }
-      if (request.key != _targetKey) return;
-      _error = error;
-      _reportValidity(
-        _canRetainOffAir(error)
-            ? ChannelAirCheckValidity.retainedOffAir
-            : ChannelAirCheckValidity.unknown,
-        snapshotKey: request.key,
-      );
-    } finally {
-      if (!_disposed) {
-        if (identical(_active, request)) _active = null;
-        final pending =
-            _pending ??
-            (request.version == _requestVersion ? request.followUp : null);
-        _pending = null;
-        if (pending != null) {
-          _start(pending);
-        } else if (mounted) {
-          setState(() {});
-        }
-      }
-    }
-  }
-
-  _AirCheckPreview _project(
-    ScheduleIndex schedule,
-    String key,
-    Channel channel, {
-    int? futureHours,
-    required String sourceLabel,
-  }) {
-    final now = widget.clock().toUtc();
-    final current = programAt(now, channel.anchor, schedule);
-    final start = current.start;
-    final requestedEnd = now.add(Duration(hours: futureHours ?? _futureHours));
-    final projected = scheduleWindowResult(
-      start,
-      requestedEnd,
-      channel.anchor,
-      schedule,
-    );
-    final programs = projected.programs
-        .where(
-          (program) =>
-              program.start == current.start ||
-              !program.end.isAfter(requestedEnd),
-        )
-        .toList(growable: false);
-    final result = ScheduleWindowResult(
-      programs: programs,
-      truncated: projected.truncated,
-      lastProjectedEnd: programs.lastOrNull?.end,
-    );
-    return _AirCheckPreview(
-      schedule: schedule,
-      sourceLabel: sourceLabel,
-      channel: channel,
-      window: result,
-      key: key,
-      windowStart: start,
-      windowEnd: requestedEnd,
-      ribbonStart: now,
-      ribbonEnd: now.add(const Duration(hours: 2)),
-    );
-  }
-
-  void _advanceClock() {
-    if (_disposed || _preview == null || _error != null) return;
-    try {
-      _refreshClockProjection();
-    } on ScheduleBuildException catch (error) {
-      _projectionFailed(error);
-      setState(() {});
-    }
-  }
-
-  void _projectionFailed(ScheduleBuildException error) {
-    _preview = null;
-    _originalSchedule = null;
-    _originalScheduleKey = null;
-    _error = error;
-    _reportValidity(ChannelAirCheckValidity.unknown);
-  }
-
-  void _refreshClockProjection() {
-    final previous = _preview!;
-    final now = widget.clock();
-    final previousCurrentIndex = previous.programs.indexWhere(
-      (item) => item.isCurrentAt(now),
-    );
-    final needsRollover =
-        previousCurrentIndex < 0 ||
-        previousCurrentIndex + 1 >= previous.programs.length ||
-        now.isBefore(previous.ribbonStart) ||
-        !now.isBefore(previous.ribbonEnd);
-    final next = needsRollover
-        ? _project(
-            previous.schedule,
-            previous.key,
-            previous.channel,
-            sourceLabel: previous.sourceLabel,
-          )
-        : previous;
-    setState(() {
-      _preview = next;
-      _preserveSelection(next, now);
-    });
-  }
-
-  List<GuideProgram> _visiblePrograms(_AirCheckPreview preview, DateTime now) =>
+  List<GuideProgram> _visiblePrograms(AirCheckPreview preview, DateTime now) =>
       preview.programs
           .where((program) => program.scheduled.end.isAfter(now))
           .toList(growable: false);
 
-  void _preserveSelection(_AirCheckPreview preview, DateTime now) {
+  void _preserveSelection(AirCheckPreview preview, DateTime now) {
     final visible = _visiblePrograms(preview, now);
     final current = visible
         .where((program) => program.isCurrentAt(now))
@@ -381,38 +122,9 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
 
   bool _canRetainOffAir(Object error) {
     if (!hasNonemptyRetainedManualContent(widget.channel.source)) return false;
-    return _isNoContentFailure(error);
+    return error is ScheduleBuildException &&
+        error.reason == ScheduleFailureReason.noContent;
   }
-
-  bool get _comparisonReady =>
-      widget.originalChannel == null ||
-      _originalScheduleKey == _wantedOriginalKey ||
-      _originalOffAirKey == _wantedOriginalKey;
-
-  bool get _comparisonFailed =>
-      _originalScheduleError != null &&
-      _originalScheduleErrorKey == _wantedOriginalKey;
-
-  void _reportValidity(
-    ChannelAirCheckValidity validity, {
-    String? snapshotKey,
-  }) {
-    final status = (snapshotKey: snapshotKey ?? _targetKey, validity: validity);
-    if (_reportedStatus == status) return;
-    _reportedStatus = status;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_disposed) widget.onValidityChanged(status);
-    });
-  }
-
-  bool get _stale =>
-      _preview != null &&
-      (_active != null ||
-          _pending != null ||
-          _error != null ||
-          _previewKey != _targetKey);
-
-  String? get _previewKey => _preview?.key;
 
   @override
   Widget build(BuildContext context) {
@@ -487,7 +199,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                                 LineupInlineLink(
                                   onPressed: _stale
                                       ? null
-                                      : () => _extendPreview(preview),
+                                      : widget.verification.extendHorizon,
                                   child: const Text('Show next 6 hours'),
                                 ),
                             ],
@@ -505,7 +217,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                             Text(
                               '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
                             ),
-                          if (_changesOnNow(preview, now))
+                          if (widget.verification.changesOnNow)
                             const Text(
                               'Saving these programming changes may change what is on now',
                               key: Key('air-check-on-now-warning'),
@@ -529,31 +241,6 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         ),
       ),
     );
-  }
-
-  void _extendPreview(_AirCheckPreview preview) {
-    final nextHours = (_futureHours + 6).clamp(6, 24);
-    try {
-      final expanded = _project(
-        preview.schedule,
-        preview.key,
-        preview.channel,
-        futureHours: nextHours,
-        sourceLabel: preview.sourceLabel,
-      );
-      setState(() {
-        _futureHours = nextHours;
-        _preview = expanded;
-        _error = null;
-        _preserveSelection(expanded, widget.clock());
-      });
-    } on ScheduleBuildException catch (error) {
-      _projectionFailed(error);
-      setState(() {});
-    } catch (error) {
-      _reportValidity(ChannelAirCheckValidity.unknown);
-      setState(() => _error = error);
-    }
   }
 
   Widget _monitorHeader(DateTime now) {
@@ -629,12 +316,12 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     child: child,
   );
 
-  Widget _facts(_AirCheckPreview preview) => Text(
+  Widget _facts(AirCheckPreview preview) => Text(
     'Ch ${preview.channel.number} · ${preview.schedule.items.length} playable · ${_duration(preview.schedule.loopDuration)} cycle · ${_rhythm(preview.channel.playbackMode, preview.channel.blockSize)}',
     style: TextStyle(color: LineupTheme.of(context).secondaryText),
   );
 
-  Widget _verticalSchedule(_AirCheckPreview preview, DateTime now) {
+  Widget _verticalSchedule(AirCheckPreview preview, DateTime now) {
     final programs = _visiblePrograms(preview, now);
     return ConstrainedBox(
       constraints: BoxConstraints(
@@ -741,7 +428,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     return '${local.month}/${local.day}';
   }
 
-  Widget _selection(_AirCheckPreview preview, DateTime now) {
+  Widget _selection(AirCheckPreview preview, DateTime now) {
     final visible = _visiblePrograms(preview, now);
     final selected = visible
         .where((program) => program.id == _selectedId)
@@ -844,7 +531,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   Widget _errorView(Object error) {
     final message = switch (error) {
       _ when _canRetainOffAir(error) => 'No retained hand-picked programs are currently available. They remain saved and explicitly off air.',
-      _AirCheckSourceIssue(:final message) => message,
+      AirCheckSourceIssue(:final message) => message,
       ScheduleBuildException(reason: ScheduleFailureReason.unsupportedSource) => 'This source uses an unsupported filter. Replace it with supported programming.',
       ScheduleBuildException(reason: ScheduleFailureReason.noContent) =>
         'This source has no playable programs. Choose available programming.',
@@ -858,7 +545,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
 
   bool get _retryableError =>
       _error != null &&
-      _error is! _AirCheckSourceIssue &&
+      _error is! AirCheckSourceIssue &&
       !(_error is ScheduleBuildException &&
           ((_error as ScheduleBuildException).reason ==
                   ScheduleFailureReason.noContent ||
@@ -884,59 +571,6 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     ),
     LibrarySource() || PlaylistSource() => 0,
   };
-
-  bool _changesOnNow(_AirCheckPreview preview, DateTime now) {
-    final original = widget.originalChannel;
-    final originalSchedule = _originalSchedule;
-    if (original == null ||
-        _recipeKey(original) == _recipeKey(widget.channel)) {
-      return false;
-    }
-    if (_originalOffAirKey == _wantedOriginalKey) return true;
-    if (originalSchedule == null ||
-        _originalScheduleKey != _wantedOriginalKey) {
-      return false;
-    }
-    try {
-      return programAt(now, original.anchor, originalSchedule).item.id !=
-          programAt(now, preview.channel.anchor, preview.schedule).item.id;
-    } on ScheduleBuildException catch (error) {
-      final version = _requestVersion;
-      final originalKey = _originalScheduleKey;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_disposed ||
-            version != _requestVersion ||
-            !identical(_preview, preview) ||
-            !identical(_originalSchedule, originalSchedule) ||
-            _originalScheduleKey != originalKey) {
-          return;
-        }
-        _projectionFailed(error);
-        setState(() {});
-      });
-      return false;
-    }
-  }
-}
-
-class _AirCheckRequest {
-  const _AirCheckRequest({
-    required this.key,
-    required this.channel,
-    required this.baseline,
-    required this.publishes,
-    required this.version,
-    required this.sourceLabel,
-    this.followUp,
-  });
-
-  final String key;
-  final Channel channel;
-  final bool baseline;
-  final bool publishes;
-  final int version;
-  final String sourceLabel;
-  final _AirCheckRequest? followUp;
 }
 
 class _AirCheckArtwork extends StatefulWidget {
@@ -980,72 +614,6 @@ class _AirCheckArtworkState extends State<_AirCheckArtwork> {
     },
   );
 }
-
-class _AirCheckPreview {
-  const _AirCheckPreview({
-    required this.schedule,
-    required this.sourceLabel,
-    required this.channel,
-    required this.window,
-    required this.key,
-    required this.windowStart,
-    required this.windowEnd,
-    required this.ribbonStart,
-    required this.ribbonEnd,
-  });
-
-  final ScheduleIndex schedule;
-  final String sourceLabel;
-  final Channel channel;
-  final ScheduleWindowResult window;
-  final String key;
-  final DateTime windowStart;
-  final DateTime windowEnd;
-  final DateTime ribbonStart;
-  final DateTime ribbonEnd;
-
-  _AirCheckPreview withChannel(Channel value) => _AirCheckPreview(
-    schedule: schedule,
-    sourceLabel: sourceLabel,
-    channel: value,
-    window: window,
-    key: key,
-    windowStart: windowStart,
-    windowEnd: windowEnd,
-    ribbonStart: ribbonStart,
-    ribbonEnd: ribbonEnd,
-  );
-  List<GuideProgram> get programs => window.programs
-      .map(
-        (scheduled) =>
-            GuideProgram(channelId: 'air-check', scheduled: scheduled),
-      )
-      .toList(growable: false);
-}
-
-class _AirCheckSourceIssue {
-  const _AirCheckSourceIssue(this.message);
-  final String message;
-}
-
-bool _isNoContentFailure(Object error) =>
-    error is ScheduleBuildException &&
-    error.reason == ScheduleFailureReason.noContent;
-
-String channelAirCheckSnapshotKey(Channel channel, int contentGeneration) =>
-    '${_recipeKey(channel)}|$contentGeneration';
-
-String _snapshotKey(ChannelAirCheck widget) => channelAirCheckSnapshotKey(
-  widget.channel,
-  widget.controller.contentGeneration,
-);
-
-String? _originalKey(ChannelAirCheck widget) => widget.originalChannel == null
-    ? null
-    : channelAirCheckSnapshotKey(
-        widget.originalChannel!,
-        widget.controller.contentGeneration,
-      );
 
 String _recipeKey(Channel channel) => canonicalScheduleIdentity(channel);
 

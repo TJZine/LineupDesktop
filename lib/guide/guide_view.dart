@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
+import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
@@ -249,6 +250,29 @@ class _GuideRowScrollPhysics extends ScrollPhysics {
   }
 }
 
+class _GuideViewportDemand {
+  const _GuideViewportDemand({
+    required this.first,
+    required this.count,
+    required this.channels,
+    required this.contentGeneration,
+    required this.scheduleGeneration,
+  });
+
+  final int first;
+  final int count;
+  final List<Channel> channels;
+  final int contentGeneration;
+  final int scheduleGeneration;
+
+  bool matches(_GuideViewportDemand other) =>
+      first == other.first &&
+      count == other.count &&
+      identical(channels, other.channels) &&
+      contentGeneration == other.contentGeneration &&
+      scheduleGeneration == other.scheduleGeneration;
+}
+
 class GuideView extends StatefulWidget {
   const GuideView({
     required this.controller,
@@ -300,6 +324,8 @@ class _GuideViewState extends State<GuideView>
   double? _effectiveRowHeight;
   bool _rowHeightAdjustmentScheduled = false;
   bool _revealScheduled = false;
+  bool _viewportRequestScheduled = false;
+  _GuideViewportDemand? _lastViewportDemand;
   String? _lastFocusedChannelId;
 
   @override
@@ -320,7 +346,7 @@ class _GuideViewState extends State<GuideView>
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _refreshClock();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _requestViewport());
+    _scheduleViewportRequest();
   }
 
   void _refreshClock() {
@@ -424,7 +450,7 @@ class _GuideViewState extends State<GuideView>
               .verticalOffsetFor(currentRowHeight)
               .clamp(0.0, existing.position.maxScrollExtent),
         );
-        _requestViewport();
+        _scheduleViewportRequest();
       });
     }
     return existing;
@@ -474,7 +500,7 @@ class _GuideViewState extends State<GuideView>
         );
         scroll.jumpTo(target);
       }
-      _requestViewport();
+      _scheduleViewportRequest();
     });
   }
 
@@ -493,7 +519,16 @@ class _GuideViewState extends State<GuideView>
 
   void _scrolled() {
     if (mounted) setState(() {});
-    _requestViewport();
+    _scheduleViewportRequest();
+  }
+
+  void _scheduleViewportRequest() {
+    if (!mounted || _viewportRequestScheduled) return;
+    _viewportRequestScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _viewportRequestScheduled = false;
+      if (mounted) _requestViewport();
+    });
   }
 
   void _requestViewport() {
@@ -511,6 +546,18 @@ class _GuideViewState extends State<GuideView>
     if (scroll.hasClients) {
       widget.controller.rememberVerticalOffset(scroll.offset, rowHeight);
     }
+    final demand = _GuideViewportDemand(
+      first: first,
+      count: _visibleRows,
+      channels: widget.controller.channels,
+      contentGeneration: widget.controller.lineup.contentGeneration,
+      scheduleGeneration: widget.controller.scheduleGeneration,
+    );
+    if ((_lastViewportDemand?.matches(demand) ?? false) &&
+        !widget.controller.needsViewportRefresh(first, _visibleRows)) {
+      return;
+    }
+    _lastViewportDemand = demand;
     widget.controller.requestViewport(first, _visibleRows);
     _syncActivityPulse();
   }
@@ -658,9 +705,7 @@ class _GuideViewState extends State<GuideView>
                             widget.controller.row(channel.id).state ==
                             GuideLoadState.error,
                       );
-              WidgetsBinding.instance.addPostFrameCallback(
-                (_) => _requestViewport(),
-              );
+              _scheduleViewportRequest();
               final timelineWidth =
                   constraints.maxWidth -
                   policy.channelRailWidth -
@@ -2775,7 +2820,7 @@ class _ProgramDetails extends StatelessWidget {
       ?_episodeCode(item),
       if (item.showTitle != null) item.title,
     ].join(' · ');
-    final badges = _mediaBadges(item);
+    final badges = mediaBadges(item, surface: MediaBadgeSurface.guide);
     return LayoutBuilder(
       builder: (context, box) {
         final dense = box.maxHeight < 270 || enlarged;
@@ -2963,27 +3008,6 @@ String? _episodeCode(ChannelItem item) {
   if (season == null || episode == null) return null;
   return 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}';
 }
-
-List<String> _mediaBadges(ChannelItem item) => [
-  item.contentRating,
-  item.resolution?.toUpperCase(),
-  switch (item.dynamicRange) {
-    'hdr10' => 'HDR10',
-    'hlg' => 'HLG',
-    'dolbyVision' => 'DOLBY VISION',
-    _ => null,
-  },
-  item.audioCodec?.toUpperCase(),
-  if (item.audioChannels != null) _audioChannels(item.audioChannels!),
-].nonNulls.toList();
-
-String _audioChannels(int channels) => switch (channels) {
-  1 => 'MONO',
-  2 => 'STEREO',
-  6 => '5.1',
-  8 => '7.1',
-  _ => '$channels CH',
-};
 
 String _duration(Duration duration) {
   final totalMinutes = duration.inMinutes;

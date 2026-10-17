@@ -1,6 +1,8 @@
 # Player and Guide Polish Plan (October 7, 2026)
 
-**Status:** approved for implementation.
+**Status:** implemented (October 7, 2026 review closeout); retained product
+decisions, supersessions and render approvals. Physical Windows acceptance remains
+pending in [the obligation register](open-obligations.md#product-plans-and-earlier-campaigns).
 
 **Source:** `codex/desktop-ui-second-pass` at `c5fccffe`.
 

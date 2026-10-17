@@ -26,9 +26,7 @@ final _syntheticArtwork = File('assets/branding/lineup-logo-mark.png')
 void main() {
   setUpAll(loadPinnedTestFonts);
 
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized();
-  });
+  setUp(TestWidgetsFlutterBinding.ensureInitialized);
 
   testWidgets('Guide without playback remains opaque outside its aperture', (
     tester,

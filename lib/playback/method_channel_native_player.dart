@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'native_player.dart';
 
-class WindowsNativePlayer implements NativePlayer {
+class MethodChannelNativePlayer implements NativePlayer {
   static const _channel = MethodChannel('lineup/native_player');
   static const _nativePlaybackFailureCodes = {
     'http_error',
@@ -30,9 +30,9 @@ class WindowsNativePlayer implements NativePlayer {
     'command_queue_full',
     'window_error',
   };
-  static WindowsNativePlayer? _handlerOwner;
+  static MethodChannelNativePlayer? _handlerOwner;
 
-  WindowsNativePlayer({
+  MethodChannelNativePlayer({
     Duration? loadTimeout,
     Duration? stopTimeout,
     Duration? trackTimeout,
@@ -101,7 +101,7 @@ class WindowsNativePlayer implements NativePlayer {
     _displayReport = const DisplayMatchingReport.initial();
     if (_handlerOwner != null && !identical(_handlerOwner, this)) {
       throw const PlayerUnavailable(
-        'Another Windows native player already owns the platform channel.',
+        'Another native player already owns the platform channel.',
       );
     }
     _handlerOwner = this;
@@ -306,6 +306,8 @@ class WindowsNativePlayer implements NativePlayer {
       );
       await _invoke('stop', {'stopId': stopId});
       final failure = await completion;
+      // The completion future intentionally carries only the failure value.
+      // ignore: only_throw_errors
       if (failure != null) throw failure;
       if (_pendingStop?.$1 != stopId) return;
       _resetMediaState();
@@ -455,7 +457,9 @@ class WindowsNativePlayer implements NativePlayer {
       case 'state':
         _handleState(event);
       case 'property':
-        _handleProperty(event['name'] as String?, event['value']);
+        final name = event['name'];
+        if (name is! String) return;
+        _handleProperty(name, event['value']);
     }
   }
 
@@ -474,20 +478,25 @@ class WindowsNativePlayer implements NativePlayer {
       'error' => PlayerState.error,
       _ => PlayerState.idle,
     };
-    final failureCode = event['failureCode'] is String
-        ? _normalizedPlaybackFailureCode(event['failureCode'] as String)
-        : null;
+    final failureCode = switch (event['failureCode']) {
+      final String code => _normalizedPlaybackFailureCode(code),
+      _ => null,
+    };
     final message = failureCode != null
         ? _nativeFailureMessage(event, failureCode)
-        : event['message'] as String? ?? state.name;
+        : switch (event['message']) {
+            final String message => message,
+            _ => state.name,
+          };
     _setStatus(
       state == PlayerState.playing && _paused ? PlayerState.paused : state,
       state == PlayerState.playing && _paused ? 'Paused' : message,
       recoverable: state == PlayerState.error,
       failureCode: failureCode,
-      httpStatus: event['httpStatus'] is int
-          ? event['httpStatus'] as int
-          : null,
+      httpStatus: switch (event['httpStatus']) {
+        final int status => status,
+        _ => null,
+      },
     );
     if (state == PlayerState.playing) {
       final pending = _pendingLoad;
@@ -509,9 +518,10 @@ class WindowsNativePlayer implements NativePlayer {
     Map<Object?, Object?> event,
     String failureCode,
   ) => switch (failureCode) {
-    'http_error' when event['httpStatus'] is int =>
-      'Media server returned HTTP ${event['httpStatus']}',
-    'http_error' => 'Media server rejected the request',
+    'http_error' => switch (event['httpStatus']) {
+      final int status => 'Media server returned HTTP $status',
+      _ => 'Media server rejected the request',
+    },
     'network_error' => 'Media server connection failed',
     'audio_decode_error' => 'Audio decoding failed',
     'video_decode_error' => 'Video decoding failed',
@@ -522,7 +532,10 @@ class WindowsNativePlayer implements NativePlayer {
     'correlation_error' => 'Media load tracking failed',
     'command_error' => 'Media player command failed',
     'event_queue_overflow' => 'Media player event queue overflowed',
-    'mpv_error' when event['message'] is String => event['message'] as String,
+    'mpv_error' => switch (event['message']) {
+      final String message => message,
+      _ => 'Media playback failed',
+    },
     _ => 'Media playback failed',
   };
 
@@ -607,42 +620,42 @@ class WindowsNativePlayer implements NativePlayer {
       type: type,
       selected: selected,
       title: switch (item['title']) {
-        String value => value,
+        final String value => value,
         _ => null,
       },
       language: switch (item['lang']) {
-        String value => value,
+        final String value => value,
         _ => null,
       },
       codec: switch (item['codec']) {
-        String value => value,
+        final String value => value,
         _ => null,
       },
       channelCount: channelCount is int && channelCount > 0
           ? channelCount
           : null,
       channelLayout: switch (item['demux-channels']) {
-        String value => value,
+        final String value => value,
         _ => null,
       },
       forced: switch (item['forced']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
       external: switch (item['external']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
       hearingImpaired: switch (item['hearing-impaired']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
       visualImpaired: switch (item['visual-impaired']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
       commentary: switch (item['commentary']) {
-        bool value => value,
+        final bool value => value,
         _ => null,
       },
     );
@@ -743,46 +756,107 @@ class WindowsNativePlayer implements NativePlayer {
     Object? colorMatrix = _unchanged,
     Object? signalPeak = _unchanged,
   }) {
+    bool validString(Object? value) =>
+        value == _unchanged || value == null || value is String;
+    bool validInt(Object? value) =>
+        value == _unchanged || value == null || value is int;
+    bool validNumber(Object? value) =>
+        value == _unchanged || value == null || value is num;
+    if (![
+      videoOutput,
+      hardwareDecoder,
+      videoCodec,
+      videoFormat,
+      pixelFormat,
+      hardwarePixelFormat,
+      primaries,
+      gamma,
+      targetGamma,
+      targetPrimaries,
+      targetPixelFormat,
+      colorMatrix,
+    ].every(validString)) {
+      return _telemetry;
+    }
+    if (![width, height].every(validInt) || !validNumber(signalPeak)) {
+      return _telemetry;
+    }
     return PlayerTelemetry(
       videoOutput: videoOutput == _unchanged
           ? _telemetry.videoOutput
-          : videoOutput as String?,
+          : videoOutput is String
+          ? videoOutput
+          : null,
       hardwareDecoder: hardwareDecoder == _unchanged
           ? _telemetry.hardwareDecoder
-          : hardwareDecoder as String?,
+          : hardwareDecoder is String
+          ? hardwareDecoder
+          : null,
       videoCodec: videoCodec == _unchanged
           ? _telemetry.videoCodec
-          : videoCodec as String?,
+          : videoCodec is String
+          ? videoCodec
+          : null,
       videoFormat: videoFormat == _unchanged
           ? _telemetry.videoFormat
-          : videoFormat as String?,
-      width: width == _unchanged ? _telemetry.width : width as int?,
-      height: height == _unchanged ? _telemetry.height : height as int?,
+          : videoFormat is String
+          ? videoFormat
+          : null,
+      width: width == _unchanged
+          ? _telemetry.width
+          : width is int
+          ? width
+          : null,
+      height: height == _unchanged
+          ? _telemetry.height
+          : height is int
+          ? height
+          : null,
       pixelFormat: pixelFormat == _unchanged
           ? _telemetry.pixelFormat
-          : pixelFormat as String?,
+          : pixelFormat is String
+          ? pixelFormat
+          : null,
       hardwarePixelFormat: hardwarePixelFormat == _unchanged
           ? _telemetry.hardwarePixelFormat
-          : hardwarePixelFormat as String?,
+          : hardwarePixelFormat is String
+          ? hardwarePixelFormat
+          : null,
       primaries: primaries == _unchanged
           ? _telemetry.primaries
-          : primaries as String?,
-      gamma: gamma == _unchanged ? _telemetry.gamma : gamma as String?,
+          : primaries is String
+          ? primaries
+          : null,
+      gamma: gamma == _unchanged
+          ? _telemetry.gamma
+          : gamma is String
+          ? gamma
+          : null,
       targetGamma: targetGamma == _unchanged
           ? _telemetry.targetGamma
-          : targetGamma as String?,
+          : targetGamma is String
+          ? targetGamma
+          : null,
       targetPrimaries: targetPrimaries == _unchanged
           ? _telemetry.targetPrimaries
-          : targetPrimaries as String?,
+          : targetPrimaries is String
+          ? targetPrimaries
+          : null,
       targetPixelFormat: targetPixelFormat == _unchanged
           ? _telemetry.targetPixelFormat
-          : targetPixelFormat as String?,
+          : targetPixelFormat is String
+          ? targetPixelFormat
+          : null,
       colorMatrix: colorMatrix == _unchanged
           ? _telemetry.colorMatrix
-          : colorMatrix as String?,
+          : colorMatrix is String
+          ? colorMatrix
+          : null,
       signalPeak: signalPeak == _unchanged
           ? _telemetry.signalPeak
-          : (signalPeak as num?)?.toDouble(),
+          : signalPeak is num
+          ? signalPeak.toDouble()
+          : null,
     );
   }
 

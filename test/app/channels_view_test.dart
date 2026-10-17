@@ -267,6 +267,8 @@ void main() {
     expect(find.text('Delete…'), findsOneWidget);
     expect(find.byType(LineupDropdownMenuRow), findsNWidgets(2));
     final menu = tester.widget<Widget>(actionButton) as dynamic;
+    // PopupMenuButton's private state is intentionally inspected for layout.
+    // ignore: avoid_dynamic_calls
     expect(menu.menuPadding, EdgeInsets.zero);
 
     await tester.tap(find.text('Delete…'));

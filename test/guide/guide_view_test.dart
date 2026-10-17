@@ -21,6 +21,7 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 
 import '../support/ui_fixture.dart' show FixturePlayer;
+import '../support/test_doubles.dart';
 
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -1550,6 +1551,200 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'Guide does not re-request unchanged viewport demand after a rebuild',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1280, 800);
+      addTearDown(tester.view.reset);
+      final lineup = _Lineup(
+        12,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      final guide = _CountingGuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final initialRequests = guide.viewportRequests;
+      expect(initialRequests, greaterThan(0));
+
+      lineup.notifyListeners();
+      await tester.pump();
+      await tester.pump();
+
+      expect(guide.viewportRequests, initialRequests);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'bulk Retry restores an evicted visible schedule without scrolling',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1280, 800);
+      addTearDown(tester.view.reset);
+      final lineup = _Lineup(
+        40,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      final attempts = <String, int>{};
+      final retryLoads = <String, Completer<ScheduleIndex>>{};
+      final retryOrder = <String>[];
+      final guide = GuideController(
+        lineup: lineup,
+        maximumCachedRows: 16,
+        maximumConcurrentLoads: 2,
+        loadSchedule: (channel) {
+          final attempt = attempts.update(
+            channel.id,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+          if (attempt == 1) {
+            return Future.error(StateError('Synthetic offline schedule'));
+          }
+          if (attempt == 2) {
+            retryOrder.add(channel.id);
+            return (retryLoads[channel.id] = Completer<ScheduleIndex>()).future;
+          }
+          return Future.value(_schedule(channel));
+        },
+      );
+      addTearDown(guide.dispose);
+      guide.requestChannels(lineup.channels);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(attempts.length, 40);
+      expect(attempts.values, everyElement(1));
+      expect(guide.activeLoadCount, 0);
+      expect(find.text("Schedules couldn't load"), findsOneWidget);
+      final scroll = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('guide-schedule-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scroll.position.pixels, 0);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Retry'));
+      await tester.pump();
+      // Finish the early visible batch first, followed by more offscreen
+      // schedules than the cache can retain. Completers establish the order;
+      // elapsed time and scrolling play no part in admitting the retry work.
+      for (var index = 0; index < lineup.channels.length; index++) {
+        final channel = lineup.channels[index];
+        expect(
+          retryLoads.containsKey(channel.id),
+          isTrue,
+          reason: 'Bulk Retry must admit ${channel.id}',
+        );
+        retryLoads[channel.id]!.complete(_schedule(channel));
+        await tester.pump();
+        expect(guide.activeLoadCount, lessThanOrEqualTo(2));
+        expect(guide.cachedRowCount, lessThanOrEqualTo(16));
+        if (index == 0) {
+          expect(
+            guide.currentProgram(channel.id),
+            isNotNull,
+            reason: 'The visible schedule must actually finish first',
+          );
+        }
+      }
+      await tester.pumpAndSettle();
+
+      expect(retryOrder, lineup.channels.map((channel) => channel.id).toList());
+      expect(guide.activeLoadCount, 0);
+      expect(guide.cachedRowCount, lessThanOrEqualTo(16));
+      expect(scroll.position.pixels, 0);
+      for (var index = 0; index < 5; index++) {
+        expect(
+          guide.row('channel-$index').state,
+          GuideLoadState.ready,
+          reason: 'Visible demand must recover after offscreen eviction',
+        );
+        expect(guide.currentProgram('channel-$index'), isNotNull);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'Guide re-requests the visible viewport after same-ID content invalidation',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1280, 800);
+      addTearDown(tester.view.reset);
+      final lineup = _Lineup(
+        12,
+        scenario: LineupScenario(
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      var loads = 0;
+      final guide = _CountingGuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async {
+          loads++;
+          return _schedule(channel);
+        },
+      );
+      addTearDown(guide.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final initialLoads = loads;
+      final initialRequests = guide.viewportRequests;
+
+      lineup.fixtureActor.publishInventory();
+      await tester.pumpAndSettle();
+
+      expect(loads, greaterThan(initialLoads));
+      expect(guide.viewportRequests, greaterThan(initialRequests));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('loading, error, retry, and program semantics stay visible', (
     tester,
@@ -3946,8 +4141,8 @@ class _Lineup extends LineupController {
     DateTime? anchor,
     AppStore? store,
   }) : super(
-         store: store ?? _Store(),
-         credentials: _Credentials(),
+         store: store ?? MemoryAppStore(clientId: 'test'),
+         credentials: MemoryCredentialStore(),
          plex: PlexClient(
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
@@ -3989,17 +4184,24 @@ class _Lineup extends LineupController {
   }
 }
 
-class _Store implements AppStore {
+class _CountingGuideController extends GuideController {
+  _CountingGuideController({
+    required super.lineup,
+    required super.loadSchedule,
+  });
+
+  int viewportRequests = 0;
+
   @override
-  Future<String> clientIdentifier() async => 'test';
-  @override
-  Future<AppStoreLoadResult> load() async =>
-      const AppStoreLoadResult(PersistedState());
-  @override
-  Future<void> save(PersistedState state) async {}
+  void requestViewport(int firstIndex, int visibleCount) {
+    viewportRequests++;
+    super.requestViewport(firstIndex, visibleCount);
+  }
 }
 
-class _RetryStore extends _Store {
+class _RetryStore extends MemoryAppStore {
+  _RetryStore() : super(clientId: 'test');
+
   Completer<void>? saveGate;
   bool fail = true;
   int attempts = 0;
@@ -4011,20 +4213,8 @@ class _RetryStore extends _Store {
     await saveGate?.future;
     if (fail) throw StateError('Synthetic save failure');
     saved = state;
+    await super.save(state);
   }
-}
-
-class _Credentials implements CredentialStore {
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<String?> readAccountToken() async => null;
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
 }
 
 Rect _drawnRect(WidgetTester tester, Finder finder) {

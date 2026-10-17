@@ -2,6 +2,48 @@ import 'package:flutter/foundation.dart';
 
 import '../playback/native_player.dart';
 
+/// Fixed producer events. Export also checks these definitions for snapshots
+/// constructed directly, without passing through [Diagnostics.add].
+enum DiagnosticEvent {
+  credentialCleanupFailed('application', 'Credential cleanup failed'),
+  stateSaveFailed('application', 'State save failed'),
+  operationFailed('application', 'Operation failed'),
+  pinCancellationFailed('plex-auth', 'PIN cancellation failed'),
+  credentialWriteFailed('plex-auth', 'Credential write failed'),
+  pinPollFailed('plex-auth', 'PIN poll failed'),
+  playlistDiscoveryUnavailable(
+    'plex-library',
+    'Playlist discovery unavailable',
+  ),
+  somePlaylistsCouldNotBeLoaded(
+    'plex-library',
+    'Some playlists could not be loaded',
+  ),
+  someCollectionsCouldNotBeLoaded(
+    'plex-library',
+    'Some collections could not be loaded',
+  ),
+  collectionDiscoveryUnavailable(
+    'plex-library',
+    'Collection discovery unavailable',
+  ),
+  libraryScanTiming('plex-library', 'Library scan timing'),
+  castPortraitUnavailable('plex', 'Cast portrait unavailable'),
+  guideCurrentProgramWaitTimedOut(
+    'guide',
+    'Guide current program wait timed out',
+  ),
+  guideScheduleLoadTimedOut('guide', 'Guide schedule load timed out'),
+  nativePlaybackFailed('playback', 'Native playback failed'),
+  playbackRequestFailed('playback', 'Playback request failed'),
+  plexPlaybackSelected('playback', 'Plex playback selected');
+
+  const DiagnosticEvent(this.area, this.message);
+
+  final String area;
+  final String message;
+}
+
 class DiagnosticEntry {
   const DiagnosticEntry(this.time, this.area, this.message, this.context);
 
@@ -72,37 +114,20 @@ class Diagnostics extends ChangeNotifier {
     notifyListeners();
   }
 
-  void add(
-    String area,
-    String message, [
-    Map<String, Object?> context = const {},
-  ]) {
+  void add(DiagnosticEvent event, [Map<String, Object?> context = const {}]) {
     if (_disposed || !enabled) return;
     final safe = <String, Object>{};
     for (final entry in context.entries) {
-      final value = entry.value;
-      if (_stringKeys.contains(entry.key) && value is String) {
-        safe[entry.key] = _safeToken.hasMatch(value) ? value : 'unexpected';
-      } else if (entry.key == 'httpStatus' &&
-          value is int &&
-          value >= 100 &&
-          value <= 599) {
-        safe[entry.key] = value;
-      } else if (entry.key == 'count' &&
-          value is int &&
-          value >= 0 &&
-          value <= 1000000) {
-        safe[entry.key] = value;
-      } else if (_boundedIntegers[entry.key] case final maximum?
-          when value is int && value >= 0 && value <= maximum) {
+      if (_contextPolicies[entry.key]?.sanitizeForStorage(entry.value)
+          case final value?) {
         safe[entry.key] = value;
       }
     }
     _entries.add(
       DiagnosticEntry(
         DateTime.now().toUtc(),
-        area,
-        redact(message),
+        event.area,
+        redact(event.message),
         Map.unmodifiable(safe),
       ),
     );
@@ -182,10 +207,15 @@ class Diagnostics extends ChangeNotifier {
       'Recent events:',
     ];
     for (final entry in snapshot.events) {
-      if (!_allowedEvents.contains((entry.area, entry.message))) continue;
+      if (!DiagnosticEvent.values.any(
+        (event) => event.area == entry.area && event.message == entry.message,
+      )) {
+        continue;
+      }
       final facts = <String>[];
       for (final fact in entry.context.entries) {
-        if (_reportContextValue(fact.key, fact.value) case final value?) {
+        if (_contextPolicies[fact.key]?.admitForExport(fact.value)
+            case final value?) {
           facts.add('${fact.key}=$value');
         }
       }
@@ -239,27 +269,28 @@ class Diagnostics extends ChangeNotifier {
         '[PATH]',
       );
 
-  static const _stringKeys = {
-    'code',
-    'failureCode',
-    'operation',
-    'container',
-    'videoCodec',
-    'audioCodec',
-    'dynamicRange',
-    'videoOutput',
-    'hardwareDecoder',
-    'scanPath',
-    'libraryType',
-  };
-  static const _boundedIntegers = {
-    'itemsMs': 86400000,
-    'collectionsMs': 86400000,
-    'showGenresMs': 86400000,
-    'items': 1000000,
-    'collections': 1000000,
-    'members': 1000000,
-    'shows': 1000000,
+  // One definition per key, with intentionally distinct storage/export rules.
+  static const _contextPolicies = <String, _ContextPolicy>{
+    'code': _CategoricalContextPolicy(_failureCategories),
+    'failureCode': _CategoricalContextPolicy(_failureCategories),
+    'operation': _CategoricalContextPolicy(_operations),
+    'container': _CategoricalContextPolicy(_containers),
+    'videoCodec': _CategoricalContextPolicy(_videoCodecs),
+    'audioCodec': _CategoricalContextPolicy(_audioCodecs),
+    'dynamicRange': _CategoricalContextPolicy(_dynamicRanges),
+    'videoOutput': _CategoricalContextPolicy(_videoOutputs),
+    'hardwareDecoder': _CategoricalContextPolicy(_hardwareDecoders),
+    'scanPath': _CategoricalContextPolicy(_scanPaths),
+    'libraryType': _CategoricalContextPolicy(_libraryTypes),
+    'httpStatus': _IntegerContextPolicy(100, 599),
+    'count': _IntegerContextPolicy(0, 1000000),
+    'itemsMs': _IntegerContextPolicy(0, 86400000),
+    'collectionsMs': _IntegerContextPolicy(0, 86400000),
+    'showGenresMs': _IntegerContextPolicy(0, 86400000),
+    'items': _IntegerContextPolicy(0, 1000000),
+    'collections': _IntegerContextPolicy(0, 1000000),
+    'members': _IntegerContextPolicy(0, 1000000),
+    'shows': _IntegerContextPolicy(0, 1000000),
   };
   static const _scanPaths = {'launch', 'setup'};
   static const _libraryTypes = {'movie', 'show'};
@@ -299,54 +330,6 @@ class Diagnostics extends ChangeNotifier {
         : null;
   }
 
-  static String? _reportContextValue(String key, Object value) {
-    if (_boundedIntegers[key] case final maximum?) {
-      return value is int && value >= 0 && value <= maximum ? '$value' : null;
-    }
-    return _reportNamedContextValue(key, value);
-  }
-
-  static String? _reportNamedContextValue(
-    String key,
-    Object value,
-  ) => switch (key) {
-    'httpStatus' when value is int && value >= 100 && value <= 599 => '$value',
-    'count' when value is int && value >= 0 && value <= 1000000 => '$value',
-    'scanPath' when value is String => _recognized(_scanPaths, value),
-    'libraryType' when value is String => _recognized(_libraryTypes, value),
-    'operation' when value is String => _recognized(_operations, value),
-    'code' || 'failureCode' when value is String => failureCategory(value),
-    'container' when value is String => _recognized(_containers, value),
-    'videoCodec' when value is String => _recognized(_videoCodecs, value),
-    'audioCodec' when value is String => _recognized(_audioCodecs, value),
-    'dynamicRange' when value is String => _recognized(_dynamicRanges, value),
-    'videoOutput' when value is String => _recognized(_videoOutputs, value),
-    'hardwareDecoder' when value is String => _recognized(
-      _hardwareDecoders,
-      value,
-    ),
-    _ => null,
-  };
-
-  static const _allowedEvents = <(String, String)>{
-    ('application', 'Credential cleanup failed'),
-    ('application', 'State save failed'),
-    ('application', 'Operation failed'),
-    ('plex-auth', 'PIN cancellation failed'),
-    ('plex-auth', 'Credential write failed'),
-    ('plex-auth', 'PIN poll failed'),
-    ('plex-library', 'Playlist discovery unavailable'),
-    ('plex-library', 'Some playlists could not be loaded'),
-    ('plex-library', 'Some collections could not be loaded'),
-    ('plex-library', 'Collection discovery unavailable'),
-    ('plex-library', 'Library scan timing'),
-    ('plex', 'Cast portrait unavailable'),
-    ('guide', 'Guide current program wait timed out'),
-    ('guide', 'Guide schedule load timed out'),
-    ('playback', 'Native playback failed'),
-    ('playback', 'Playback request failed'),
-    ('playback', 'Plex playback selected'),
-  };
   static const _operations = {
     'play',
     'pause',
@@ -491,4 +474,42 @@ class Diagnostics extends ChangeNotifier {
   };
   static const _videoOutputs = {'gpu-next', 'gpu'};
   static const _hardwareDecoders = {'d3d11va', 'nvdec', 'videotoolbox'};
+}
+
+sealed class _ContextPolicy {
+  const _ContextPolicy();
+
+  Object? sanitizeForStorage(Object? value);
+  String? admitForExport(Object value);
+}
+
+final class _CategoricalContextPolicy extends _ContextPolicy {
+  const _CategoricalContextPolicy(this.categories);
+
+  final Set<String> categories;
+
+  // The UI reads stored values. Safe unknown tokens and casing must survive.
+  @override
+  String? sanitizeForStorage(Object? value) => value is String
+      ? (Diagnostics._safeToken.hasMatch(value) ? value : 'unexpected')
+      : null;
+
+  // Snapshots can be forged, so never trust prior storage sanitation here.
+  @override
+  String? admitForExport(Object value) =>
+      value is String ? Diagnostics._recognized(categories, value) : null;
+}
+
+final class _IntegerContextPolicy extends _ContextPolicy {
+  const _IntegerContextPolicy(this.minimum, this.maximum);
+
+  final int minimum;
+  final int maximum;
+
+  @override
+  int? sanitizeForStorage(Object? value) =>
+      value is int && value >= minimum && value <= maximum ? value : null;
+
+  @override
+  String? admitForExport(Object value) => sanitizeForStorage(value)?.toString();
 }

@@ -1,5 +1,6 @@
 import '../channels/channel.dart';
 import '../plex/plex_models.dart';
+import 'manual_rundown.dart';
 
 enum StudioSourceChoice { library, playlist, filter, handPicked }
 
@@ -22,6 +23,8 @@ class ChannelStudioDraft {
        builderKey = generated ? original?.builderKey : null,
        scheduleIdentityCommitted = original != null;
 
+  final rundown = ManualRundown();
+
   final bool duplicate;
   final PlaybackMode? originalMode;
   String id;
@@ -42,6 +45,10 @@ class ChannelStudioDraft {
   final filters = <LibraryFilter, List<String>>{};
 
   void configureSource({String? defaultPlaylistId, String? defaultLibraryId}) {
+    rundown.replaceFrom(switch (source) {
+      ManualSource(:final items) => items,
+      _ => const <ChannelItem>[],
+    });
     sourceReadOnly = generated;
     sourceChoice = switch (source) {
       LibrarySource() => StudioSourceChoice.library,
@@ -111,7 +118,7 @@ class ChannelStudioDraft {
 
   ContentSource editedSource({
     required List<PlexLibrary> libraries,
-    required List<ChannelItem> manualItems,
+    required Map<String, PlexMediaItem> available,
   }) {
     if (sourceReadOnly) return source;
     switch (sourceChoice) {
@@ -138,7 +145,7 @@ class ChannelStudioDraft {
         }
         return PlaylistSource(playlistId!);
       case StudioSourceChoice.handPicked:
-        return ManualSource(manualItems);
+        return ManualSource(rundown.resolvedItems(available));
       case null:
         return source;
     }
@@ -148,11 +155,10 @@ class ChannelStudioDraft {
     required String name,
     required String number,
     required List<PlexLibrary> libraries,
-    required List<ChannelItem> manualItems,
   }) => {
     'name': name.trim(),
     'number': int.tryParse(number) ?? number.trim(),
-    'source': _sourceIdentity(libraries, manualItems),
+    'source': _sourceIdentity(libraries, rundown.snapshotItems),
     'playbackMode': playbackMode.name,
     'anchor': anchor.toIso8601String(),
     'shuffleSeed': shuffleSeed,
@@ -303,6 +309,9 @@ class ChannelStudioDraft {
   }
 
   void loadSaved(Channel channel) {
+    if (channel.source case ManualSource(:final items)) {
+      rundown.acceptSaved(items);
+    }
     source = channel.source;
     playbackMode = channel.playbackMode;
     anchor = channel.anchor;

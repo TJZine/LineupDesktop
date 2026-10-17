@@ -1,4 +1,10 @@
+// MethodCall.arguments is intentionally dynamic in these protocol fixtures.
+// ignore_for_file: avoid_dynamic_calls
+// The cancellation fixtures own stream closure through their teardown path.
+// ignore_for_file: close_sinks
+
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -7,13 +13,14 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
-import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
-import 'package:lineup_desktop/playback/windows_native_player.dart';
+import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+
+import '../support/test_doubles.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -64,6 +71,256 @@ void main() {
     },
   );
 
+  for (final fullscreen in [false, true]) {
+    for (final paused in [false, true]) {
+      testWidgets(
+        'multipart seek preserves intent: fullscreen=$fullscreen paused=$paused',
+        (tester) async {
+          final p = _DisplayPlayer();
+          final f = _ContinuationFixture(
+            player: p,
+            parts: _parts(
+              first: const Duration(seconds: 60),
+              second: const Duration(seconds: 90),
+            ),
+          );
+          addTearDown(f.close);
+          if (fullscreen) await f.coordinator.toggleFullscreen();
+          expect(await f.coordinator.tune('channel-b'), isTrue);
+          if (paused) await f.coordinator.pause();
+
+          for (final target in [70, 20]) {
+            final plays = p.plays;
+            await f.coordinator.seekTo(Duration(seconds: target));
+            expect(
+              p.loads.last.path,
+              target == 70 ? '/part-2.mkv' : '/part-1.mkv',
+            );
+            expect(p.seeks.last, Duration(seconds: target == 70 ? 10 : 20));
+            expect(p.pausedStarts.last, paused || fullscreen);
+            if (fullscreen) {
+              expect(f.coordinator.displayHoldActive, isTrue);
+              p.decode();
+              p.report(DisplayMatchingOutcome.matched, wrote: true);
+              f.now = f.now.add(const Duration(milliseconds: 1500));
+              await tester.pump(const Duration(milliseconds: 1500));
+              expect(f.coordinator.displayHoldActive, isFalse);
+              expect(p.plays, plays + (paused ? 0 : 1));
+            }
+            expect(
+              f.coordinator.status.state,
+              paused ? PlayerState.paused : PlayerState.playing,
+            );
+          }
+          if (fullscreen && paused) {
+            final plays = p.plays;
+            await f.coordinator.toggleFullscreen();
+            await f.coordinator.toggleFullscreen();
+            p.report(DisplayMatchingOutcome.pending);
+            p.report(DisplayMatchingOutcome.matched);
+            await tester.pump();
+            expect(p.plays, plays);
+            expect(f.coordinator.status.state, PlayerState.paused);
+          }
+          // A new tune joins live, even when the previous program was paused.
+          expect(await f.coordinator.tune('channel-0'), isTrue);
+          expect(p.pausedStarts.last, fullscreen);
+          if (fullscreen) {
+            p.decode();
+            p.report(DisplayMatchingOutcome.matched);
+            await tester.pump();
+          }
+          expect(f.coordinator.status.state, PlayerState.playing);
+          f.coordinator.dispose();
+        },
+      );
+    }
+  }
+
+  for (final pauseLast in [false, true]) {
+    testWidgets(
+      'multipart display hold honors controls during replacement: pause=$pauseLast',
+      (tester) async {
+        final p = _BlockingDisplayPlayer();
+        final f = _ContinuationFixture(
+          player: p,
+          parts: _parts(
+            first: const Duration(seconds: 60),
+            second: const Duration(seconds: 90),
+          ),
+        );
+        addTearDown(f.close);
+        await f.coordinator.toggleFullscreen();
+        await f.coordinator.tune('channel-b');
+        p.decode();
+        p.report(DisplayMatchingOutcome.matched);
+        await tester.pump();
+        if (!pauseLast) await f.coordinator.pause();
+        final replacement = f.coordinator.seekTo(const Duration(seconds: 70));
+        await tester.pump();
+        expect(p.secondLoadStarted.isCompleted, isTrue);
+        expect(f.coordinator.displayHoldActive, isTrue);
+        p.decode();
+        // Repeated toggles use intent while observed state still reflects the
+        // display hold. The final explicit control wins before readiness.
+        final first = f.coordinator.togglePlayback();
+        final second = f.coordinator.togglePlayback();
+        final last = pauseLast ? f.coordinator.pause() : f.coordinator.play();
+        p.releaseSecondLoad.complete();
+        await tester.pump();
+        await Future.wait([replacement, first, second, last]);
+        final plays = p.plays;
+        expect(
+          f.coordinator.status.state,
+          pauseLast ? PlayerState.paused : PlayerState.playing,
+        );
+        p.report(DisplayMatchingOutcome.matched, wrote: true);
+        f.now = f.now.add(const Duration(seconds: 6));
+        await tester.pump(const Duration(seconds: 6));
+        expect(f.coordinator.displayHoldActive, isFalse);
+        expect(p.plays, plays);
+        expect(
+          f.coordinator.status.state,
+          pauseLast ? PlayerState.paused : PlayerState.playing,
+        );
+        // A subsequent replacement must also inherit the latest control.
+        await f.coordinator.seekTo(const Duration(seconds: 20));
+        p.decode();
+        p.report(DisplayMatchingOutcome.matched);
+        await tester.pump();
+        expect(
+          f.coordinator.status.state,
+          pauseLast ? PlayerState.paused : PlayerState.playing,
+        );
+        f.coordinator.dispose();
+      },
+    );
+  }
+
+  for (final replacement in ['part', 'tune']) {
+    test(
+      'multipart pending pause cannot command a newer $replacement',
+      () async {
+        final p = _BlockingDisplayPlayer();
+        final f = _ContinuationFixture(
+          player: p,
+          parts: _parts(
+            first: const Duration(seconds: 60),
+            second: const Duration(seconds: 90),
+          ),
+        );
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-b');
+        final seek = f.coordinator.seekTo(const Duration(seconds: 70));
+        await p.secondLoadStarted.future;
+        final pause = f.coordinator.pause();
+        if (replacement == 'part') {
+          await f.coordinator.seekTo(const Duration(seconds: 20));
+          expect(p.pausedStarts.last, isTrue);
+        } else {
+          expect(await f.coordinator.tune('channel-0'), isTrue);
+          expect(p.pausedStarts.last, isFalse);
+        }
+        p.releaseSecondLoad.complete();
+        await Future.wait([seek, pause]);
+        expect(p.pauses, 0);
+        expect(
+          f.coordinator.status.state,
+          replacement == 'part' ? PlayerState.paused : PlayerState.playing,
+        );
+      },
+    );
+  }
+
+  for (final pauseLast in [false, true]) {
+    test(
+      'multipart replacement applies latest control after native load dispatch: pause=$pauseLast',
+      () async {
+        const channel = MethodChannel('lineup/native_player');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        final calls = <MethodCall>[];
+        int? loadId;
+        var nativePaused = false;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          if (call.method == 'load') {
+            loadId = call.arguments['loadId'] as int;
+            nativePaused = call.arguments['startPaused'] as bool;
+          } else if (call.method == 'play' || call.method == 'pause') {
+            nativePaused = call.method == 'pause';
+            await _nativeEvent({
+              'type': 'property',
+              'loadId': loadId,
+              'name': 'pause',
+              'value': nativePaused,
+            });
+          }
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final lineup = _TestLineup(
+          playbackParts: _parts(
+            first: const Duration(hours: 2),
+            second: const Duration(hours: 1),
+          ),
+        );
+        final now = lineup.channels.last.anchor;
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = MethodChannelNativePlayer();
+        await player.initialize();
+        final c = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+          clock: () => now,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(player.dispose);
+        addTearDown(c.dispose);
+        final tune = c.tune('channel-b');
+        await pumpEventQueue();
+        await _nativeEvent({
+          'type': 'state',
+          'loadId': loadId,
+          'state': 'playing',
+        });
+        expect(await tune, isTrue);
+        if (!pauseLast) await c.pause();
+        calls.clear();
+        final seek = c.seekTo(const Duration(hours: 2, minutes: 5));
+        // Issue controls before the adapter has dispatched the replacement and
+        // withhold readiness. Native load applies its captured startPaused flag.
+        final first = pauseLast ? c.play() : c.pause();
+        final last = pauseLast ? c.pause() : c.play();
+        await pumpEventQueue();
+        expect(calls.where((call) => call.method == 'load'), hasLength(1));
+        await _nativeEvent({
+          'type': 'property',
+          'loadId': loadId,
+          'name': 'pause',
+          'value': nativePaused,
+        });
+        await _nativeEvent({
+          'type': 'state',
+          'loadId': loadId,
+          'state': 'playing',
+        });
+        await Future.wait([seek, first, last]);
+        expect(nativePaused, pauseLast);
+        expect(
+          c.status.state,
+          pauseLast ? PlayerState.paused : PlayerState.playing,
+        );
+      },
+    );
+  }
+
   testWidgets(
     'display hold local load projects busy without changing overlay or status',
     (tester) async {
@@ -100,6 +357,58 @@ void main() {
       );
     },
   );
+
+  testWidgets('display hold session exit publishes exactly once', (
+    tester,
+  ) async {
+    final f = _ContinuationFixture(player: _DisplayPlayer());
+    final p = f.player as _DisplayPlayer;
+    addTearDown(f.close);
+    await f.coordinator.toggleFullscreen();
+    await f.coordinator.loadInitialMedia(
+      Uri.parse('https://synthetic.test/local'),
+    );
+    expect(f.coordinator.displayHoldActive, isTrue);
+    var notifications = 0;
+    f.coordinator.addListener(() => notifications++);
+
+    await f.coordinator.toggleFullscreen();
+
+    expect(notifications, 1);
+    expect(f.coordinator.displayHoldActive, isFalse);
+    expect(p.plays, 1);
+    expect(f.coordinator.busyLabel, isNull);
+    f.coordinator.dispose();
+  });
+
+  test('listener-origin publication gets one further reconciliation round', () {
+    final lineup = _TestLineup();
+    final guide = GuideController(lineup: lineup);
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    final observations = <PlayerOverlay>[];
+    var depth = 0;
+    var maxDepth = 0;
+    coordinator.addListener(() {
+      depth++;
+      if (depth > maxDepth) maxDepth = depth;
+      observations.add(coordinator.overlay);
+      if (observations.length == 1) coordinator.showMiniGuide();
+      depth--;
+    });
+
+    coordinator.showOsd();
+
+    expect(observations, [PlayerOverlay.osd, PlayerOverlay.miniGuide]);
+    expect(maxDepth, 1);
+    expect(coordinator.overlay, PlayerOverlay.miniGuide);
+  });
 
   for (final userPaused in [false, true]) {
     testWidgets('admission fallback preserves playback intent: $userPaused', (
@@ -1689,7 +1998,7 @@ void main() {
           lineup: lineup,
           loadSchedule: (channel) async => _schedule(channel),
         );
-        final player = WindowsNativePlayer(
+        final player = MethodChannelNativePlayer(
           loadTimeout: failure == 'timeout' ? Duration.zero : null,
         );
         await player.initialize();
@@ -1792,7 +2101,7 @@ void main() {
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
       );
-      final player = WindowsNativePlayer();
+      final player = MethodChannelNativePlayer();
       await player.initialize();
       final coordinator = PlayerCoordinator(
         player: player,
@@ -1947,7 +2256,9 @@ void main() {
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.overlay, PlayerOverlay.osd);
       expect(tuned, isTrue);
+      expect(coordinator.watchingChannelId, 'channel-b');
       await coordinator.stop();
+      expect(coordinator.watchingChannelId, isNull);
     },
   );
 
@@ -2012,6 +2323,231 @@ void main() {
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.overlay, PlayerOverlay.error);
   });
+
+  for (final failure in <Object>[
+    const FileSystemException('Synthetic save IO failure.'),
+    const LineupScopeSuperseded(),
+    const PlayerUnavailable('Synthetic native failure.'),
+    const PlexException(
+      'authorization-unavailable',
+      'Authorization unavailable.',
+    ),
+    TimeoutException('Synthetic timeout.'),
+    PlatformException(code: 'synthetic'),
+  ]) {
+    test(
+      'expected tune failure does not report: ${failure.runtimeType}',
+      () async {
+        final reports = <FlutterErrorDetails>[];
+        final previousHandler = FlutterError.onError;
+        FlutterError.onError = reports.add;
+        addTearDown(() => FlutterError.onError = previousHandler);
+        final lineup = _FailingPersistenceLineup(failure: failure);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        )..requestViewport(0, 2);
+        await Future<void>.delayed(Duration.zero);
+        final player = _Player();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+
+        expect(await coordinator.tune('channel-b'), isFalse);
+
+        expect(reports, isEmpty);
+        expect(coordinator.tuning, isFalse);
+        expect(
+          coordinator.error,
+          failure is PlexException
+              ? failure.message
+              : 'Playback could not start. Retry or choose another channel.',
+        );
+        expect(lineup.currentChannelId, 'channel-0');
+        expect(player.stops, 1);
+      },
+    );
+  }
+
+  for (final operation in ['initial media', 'tune', 'recovery', 'seek']) {
+    for (final privatePayload in [false, true]) {
+      test(
+        'unexpected $operation reports fixed data (private=$privatePayload)',
+        () async {
+          const sentinel = 'private-operation-token';
+          final failure = privatePayload
+              ? const FormatException(
+                  'https://private.test/media?X-Plex-Token=$sentinel',
+                )
+              : StateError('Synthetic programming failure.');
+          final reports = <FlutterErrorDetails>[];
+          final previousHandler = FlutterError.onError;
+          FlutterError.onError = reports.add;
+          addTearDown(() => FlutterError.onError = previousHandler);
+          final lineup = operation == 'tune'
+              ? _FailingPersistenceLineup(failure: failure)
+              : _TestLineup(
+                  recoverAuthorization: operation == 'recovery',
+                  failAuthorizationRecovery: operation == 'recovery',
+                  authorizationRecoveryFailure: failure,
+                );
+          lineup.diagnostics.enabled = true;
+          final guide = GuideController(
+            lineup: lineup,
+            loadSchedule: (channel) async => _schedule(channel),
+          )..requestViewport(0, 2);
+          await Future<void>.delayed(Duration.zero);
+          final _Player player = switch (operation) {
+            'initial media' => _LoadFailurePlayer(failure: failure),
+            'seek' => _FailingSeekPlayer(failure),
+            _ => _EventPlayer(),
+          };
+          if (player is _EventPlayer) addTearDown(player.close);
+          final coordinator = PlayerCoordinator(
+            player: player,
+            lineup: lineup,
+            guide: guide,
+          );
+          addTearDown(lineup.dispose);
+          addTearDown(guide.dispose);
+          addTearDown(coordinator.dispose);
+
+          switch (operation) {
+            case 'initial media':
+              await coordinator.loadInitialMedia(
+                Uri.parse('https://synthetic.test/local'),
+              );
+            case 'tune':
+              expect(await coordinator.tune('channel-b'), isFalse);
+            case 'recovery':
+              expect(await coordinator.tune('channel-b'), isTrue);
+              final events = player as _EventPlayer;
+              events.emitError(
+                recoverable: true,
+                generation: events.loadGenerations.single,
+                failureCode: 'http_error',
+                httpStatus: 401,
+              );
+              await pumpEventQueue(times: 5);
+            case 'seek':
+              await coordinator.seekTo(const Duration(seconds: 5));
+          }
+
+          expect(reports, hasLength(1));
+          final report = reports.single;
+          expect(report.exception, isA<StateError>());
+          expect(
+            (report.exception as StateError).message,
+            'Unexpected playback operation failure.',
+          );
+          expect(report.library, 'Lineup Desktop');
+          expect(report.stack, isNull);
+          expect(report.context.toString(), switch (operation) {
+            'initial media' => 'while loading initial media',
+            'tune' => 'while tuning a channel',
+            'recovery' => 'while recovering playback authorization',
+            _ => 'while seeking playback',
+          });
+          expect(lineup.diagnostics.entries.last.context['code'], 'unexpected');
+          final evidence =
+              '${report.toString()} ${_supportReport(lineup, coordinator)} '
+              '${coordinator.error} ${coordinator.notice}';
+          expect(evidence, isNot(contains(sentinel)));
+          expect(evidence, isNot(contains('private.test')));
+          expect(evidence, isNot(contains('Synthetic programming failure.')));
+        },
+      );
+    }
+  }
+
+  for (final operation in [
+    'cross seek load',
+    'cross seek target',
+    'part advance',
+    'active recovery',
+  ]) {
+    for (final expected in [false, true]) {
+      test(
+        'active multipart failure reports once: $operation expected=$expected',
+        () async {
+          const sentinel = 'multipart-private-token';
+          final Object failure = expected
+              ? const PlayerUnavailable('Synthetic native load failure.')
+              : StateError('https://private.test/media?X-Plex-Token=$sentinel');
+          final reports = <FlutterErrorDetails>[];
+          final previousHandler = FlutterError.onError;
+          FlutterError.onError = reports.add;
+          addTearDown(() => FlutterError.onError = previousHandler);
+          final player = _SecondLoadFailurePlayer(
+            failure: failure,
+            failSeek: operation == 'cross seek target',
+          );
+          final f = _ContinuationFixture(
+            parts: _parts(
+              first: const Duration(seconds: 60),
+              second: const Duration(seconds: 60),
+            ),
+            player: player,
+            recoverAuthorization: operation == 'active recovery',
+          );
+          addTearDown(f.close);
+          f.lineup.diagnostics.enabled = true;
+          expect(await f.coordinator.tune('channel-b'), isTrue);
+
+          if (operation.startsWith('cross seek')) {
+            await f.coordinator.seekTo(const Duration(seconds: 70));
+          } else if (operation == 'part advance') {
+            f.endNaturally();
+          } else {
+            player.emitError(
+              recoverable: true,
+              generation: player.loadGenerations.single,
+              failureCode: 'http_error',
+              httpStatus: 401,
+            );
+          }
+          await pumpEventQueue(times: 5);
+
+          expect(reports, hasLength(expected ? 0 : 1));
+          if (!expected) {
+            final report = reports.single;
+            expect(
+              (report.exception as StateError).message,
+              'Unexpected playback operation failure.',
+            );
+            expect(report.stack, isNull);
+            expect(
+              report.context.toString(),
+              operation == 'active recovery'
+                  ? 'while recovering playback authorization'
+                  : 'while completing a playback part load',
+            );
+          }
+          expect(f.coordinator.tuning, isFalse);
+          expect(f.coordinator.overlay, PlayerOverlay.error);
+          expect(
+            f.coordinator.error,
+            'Playback could not start. Retry or choose another channel.',
+          );
+          expect(player.stops, 1);
+          expect(
+            f.lineup.diagnostics.entries.last.context['code'],
+            expected ? 'player_unavailable' : 'unexpected',
+          );
+          final evidence =
+              '${reports.toString()} ${_supportReport(f.lineup, f.coordinator)} '
+              '${f.coordinator.error} ${f.coordinator.notice}';
+          expect(evidence, isNot(contains(sentinel)));
+          expect(evidence, isNot(contains('private.test')));
+        },
+      );
+    }
+  }
 
   test('scope change stops playback and clears its intent', () async {
     final lineup = _TestLineup();
@@ -3790,6 +4326,43 @@ void main() {
     },
   );
 
+  test('channel deleted during load retains orphaned playback', () async {
+    final lineup = _TestLineup(useRealCurrentChannelMutation: true);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _ControlledPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final tune = coordinator.tune('channel-b');
+    await player.firstLoadStarted.future;
+    lineup.replaceChannels([
+      for (final channel in lineup.channels)
+        if (channel.id != 'channel-b') channel,
+    ]);
+    player.releaseFirstLoad.complete();
+
+    expect(await tune, isFalse);
+    expect(coordinator.tuning, isFalse);
+    expect(coordinator.error, isNull);
+    expect(coordinator.currentChannel?.id, 'channel-0');
+    expect(coordinator.currentProgram?.channelId, 'channel-b');
+    expect(coordinator.watchingChannelId, isNull);
+    expect(coordinator.hasPlaybackIntent, isTrue);
+    expect(player.stops, 0);
+    await coordinator.stop();
+    expect(player.stops, 1);
+  });
+
   test('stop cancels a pending tune and clears its request', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
@@ -4735,6 +5308,7 @@ void main() {
         addTearDown(coordinator.dispose);
 
         await coordinator.loadInitialMedia(Uri.parse('lineup-test://initial'));
+        expect(coordinator.watchingChannelId, isNull);
         final generation = player.loadGenerations.single;
         player.emitStatus(terminal, generation: generation);
         await Future<void>.delayed(Duration.zero);
@@ -4866,6 +5440,92 @@ void main() {
       expect(tuned, isFalse);
     },
   );
+
+  for (final outcome in [
+    'success',
+    'failure',
+    'rollback failure',
+    'newer tune',
+    'newer scope',
+  ]) {
+    test('authorization recovery during persistence: $outcome', () async {
+      final recoveryFails =
+          outcome == 'failure' || outcome == 'rollback failure';
+      final lineup = _BlockingLineup(
+        recoverAuthorization: true,
+        failAuthorizationRecovery: recoveryFails,
+        failRollback: outcome == 'rollback failure',
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _EventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      final tune = coordinator.tune('channel-b');
+      await lineup.persistenceStarted.future;
+      player.emitError(
+        recoverable: true,
+        generation: player.loadGenerations.single,
+        failureCode: 'http_error',
+        httpStatus: 401,
+      );
+      await pumpEventQueue(times: 10);
+      expect(lineup.recoveryCalls, 1);
+      final tuningBeforeSaveRelease = coordinator.tuning;
+      if (!recoveryFails) {
+        expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
+      }
+      Future<bool>? winner;
+      if (outcome == 'newer tune') winner = coordinator.tune('channel-0');
+      if (outcome == 'newer scope') lineup.changeContentScope();
+      lineup.releasePersistence.complete();
+      final tuned = await tune;
+      if (winner != null) expect(await winner, isTrue);
+      await pumpEventQueue(times: 5);
+
+      expect(coordinator.tuning, isFalse);
+      if (outcome == 'success') {
+        expect(tuned, isTrue);
+        expect(lineup.currentChannelId, 'channel-b');
+        expect(coordinator.error, isNull);
+        expect(player.stops, 0);
+        // The recovered load remains the active playback lifetime.
+        await coordinator.seekTo(const Duration(minutes: 5));
+        expect(player.loadPlexTokens.last, 'test-token-2');
+      } else if (recoveryFails) {
+        expect(tuningBeforeSaveRelease, isFalse);
+        expect(tuned, isFalse);
+        expect(
+          lineup.currentChannelId,
+          outcome == 'rollback failure' ? 'channel-b' : 'channel-0',
+        );
+        expect(coordinator.error, isNotNull);
+        expect(coordinator.overlay, PlayerOverlay.error);
+        expect(player.stops, 1);
+      } else {
+        expect(tuned, isFalse);
+        expect(coordinator.error, isNull);
+        if (outcome == 'newer tune') {
+          expect(lineup.currentChannelId, 'channel-0');
+          expect(player.loadPlexTokens.last, 'test-token-1');
+        } else {
+          // A retired tune must not roll back the new content scope.
+          expect(lineup.currentChannelId, 'channel-b');
+        }
+      }
+    });
+  }
 
   test('known schedule elapsed starts directly in the matching part', () async {
     final lineup = _TestLineup(
@@ -5046,9 +5706,9 @@ void main() {
 
       final seek = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
       await player.secondLoadStarted.future;
-      await coordinator.pause();
+      final pause = coordinator.pause();
       player.releaseSecondLoad.complete();
-      await seek;
+      await Future.wait([seek, pause]);
 
       expect(player.seeks.last, const Duration(minutes: 5));
       expect(coordinator.error, isNull);
@@ -5321,6 +5981,10 @@ void main() {
 
   for (final operation in ['cross seek', 'part advance']) {
     test('stale $operation failure cannot mutate a newer load', () async {
+      final reports = <FlutterErrorDetails>[];
+      final previousHandler = FlutterError.onError;
+      FlutterError.onError = reports.add;
+      addTearDown(() => FlutterError.onError = previousHandler);
       final lineup = _TestLineup(
         playbackParts: _parts(
           first: const Duration(hours: 2),
@@ -5365,6 +6029,7 @@ void main() {
         '/part-2.mkv',
         '/part-1.mkv',
       ]);
+      expect(reports, isEmpty);
       expect(coordinator.error, isNull);
       expect(coordinator.overlay, isNot(PlayerOverlay.error));
       await coordinator.stop();
@@ -6001,6 +6666,10 @@ void main() {
   });
 
   test('part transition failure stops and settles playback', () async {
+    final reports = <FlutterErrorDetails>[];
+    final previousHandler = FlutterError.onError;
+    FlutterError.onError = reports.add;
+    addTearDown(() => FlutterError.onError = previousHandler);
     final lineup = _TestLineup(
       playbackParts: _parts(
         first: const Duration(hours: 2),
@@ -6030,6 +6699,15 @@ void main() {
     );
     await pumpEventQueue(times: 2);
 
+    expect(reports, hasLength(1));
+    expect(
+      (reports.single.exception as StateError).message,
+      'Unexpected playback operation failure.',
+    );
+    expect(
+      reports.single.context.toString(),
+      'while completing a playback part load',
+    );
     expect(player.loads, hasLength(2));
     expect(player.stops, 1);
     expect(coordinator.overlay, PlayerOverlay.error);
@@ -6341,10 +7019,11 @@ class _TestLineup extends LineupController {
     this.failAuthorizationRecovery = false,
     this.authorizationRecoveryFailure,
     this.useRealPlaybackRequest = false,
+    this.useRealCurrentChannelMutation = false,
     this.playbackParts,
   }) : super(
-         store: _MemoryStore(),
-         credentials: _Credentials(),
+         store: MemoryAppStore(clientId: 'test'),
+         credentials: MemoryCredentialStore(),
          plex: PlexClient(
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
          ),
@@ -6387,6 +7066,7 @@ class _TestLineup extends LineupController {
   final bool failAuthorizationRecovery;
   final Object? authorizationRecoveryFailure;
   final bool useRealPlaybackRequest;
+  final bool useRealCurrentChannelMutation;
   final List<LineupPlaybackPart>? playbackParts;
   int playbackRequests = 0;
   String? lastPlaybackItemId;
@@ -6473,6 +7153,7 @@ class _TestLineup extends LineupController {
 
   @override
   Future<void> setCurrentChannel(String? id) async {
+    if (useRealCurrentChannelMutation) return super.setCurrentChannel(id);
     fixtureActor.selectChannel(id);
     notifyListeners();
   }
@@ -6491,20 +7172,38 @@ class _LogoutLineup extends _TestLineup {
 }
 
 class _FailingPersistenceLineup extends _TestLineup {
+  _FailingPersistenceLineup({
+    this.failure = const FileSystemException('persistence failed'),
+  });
+
+  final Object failure;
+
   @override
   Future<void> setCurrentChannel(String? id) async {
-    if (id == 'channel-b') throw StateError('persistence failed');
+    if (id == 'channel-b') {
+      Error.throwWithStackTrace(failure, StackTrace.current);
+    }
     await super.setCurrentChannel(id);
   }
 }
 
 class _BlockingLineup extends _TestLineup {
+  _BlockingLineup({
+    super.recoverAuthorization,
+    super.failAuthorizationRecovery,
+    this.failRollback = false,
+  });
+
+  final bool failRollback;
   final persistenceStarted = Completer<void>();
   final releasePersistence = Completer<void>();
   bool _blocked = false;
 
   @override
   Future<void> setCurrentChannel(String? id) async {
+    if (failRollback && _blocked && id == 'channel-0') {
+      throw const FileSystemException('Synthetic rollback failure.');
+    }
     fixtureActor.selectChannel(id);
     notifyListeners();
     if (!_blocked) {
@@ -6515,81 +7214,16 @@ class _BlockingLineup extends _TestLineup {
   }
 }
 
-class _Player implements NativePlayer {
-  final loads = <Uri>[];
-  final loadPlexTokens = <String?>[];
-  final loadGenerations = <int?>[];
-  final seeks = <Duration>[];
-  final fullscreenValues = <bool>[];
-  final selectedTracks = <(PlayerTrackType, int?)>[];
-  int stops = 0;
-  int plays = 0;
-
-  @override
-  PlayerStatus status = const PlayerStatus(
-    state: PlayerState.playing,
-    message: 'Playing',
-  );
-  @override
-  Duration position = const Duration(minutes: 10);
-  @override
-  Duration duration = const Duration(hours: 1);
-  @override
-  PlayerTelemetry telemetry = const PlayerTelemetry();
-  @override
-  List<PlayerTrack> tracks = const [];
-  @override
-  Stream<PlayerEvent> get events => const Stream.empty();
-  @override
-  DisplayMatchingReport get displayReport =>
-      const DisplayMatchingReport.initial();
-  @override
-  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
-  @override
-  Future<void> initialize() async {}
-  @override
-  Future<void> load(
-    Uri media, {
-    String? plexToken,
-    int? generation,
-    bool startPaused = false,
-  }) async {
-    loads.add(media);
-    loadPlexTokens.add(plexToken);
-    loadGenerations.add(generation);
-  }
-
-  @override
-  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
-
-  @override
-  Future<void> play() async {
-    plays++;
-  }
-
-  @override
-  Future<void> pause() async {}
-  @override
-  Future<void> seek(Duration value) async => seeks.add(value);
-  @override
-  Future<void> setVideoRect(PlayerVideoRect rect) async {}
-  @override
-  Future<void> setFullscreen(bool fullscreen) async {
-    fullscreenValues.add(fullscreen);
-  }
-
-  @override
-  Future<void> selectTrack(PlayerTrackType type, int? id) async =>
-      selectedTracks.add((type, id));
-  @override
-  Future<void> setVolume(double volume) async {}
-  @override
-  Future<void> stop() async {
-    stops++;
-  }
-
-  @override
-  Future<void> dispose() async {}
+class _Player extends FakeNativePlayer {
+  _Player()
+    : super(
+        initialStatus: const PlayerStatus(
+          state: PlayerState.playing,
+          message: 'Playing',
+        ),
+        position: const Duration(minutes: 10),
+        duration: const Duration(hours: 1),
+      );
 }
 
 class _CancellingPlayer extends _Player {
@@ -6730,6 +7364,11 @@ class _PreemptibleLoadPlayer extends _EventPlayer {
 }
 
 class _LoadFailurePlayer extends _Player {
+  _LoadFailurePlayer({Object? failure})
+    : failure = failure ?? StateError('load failed after dispatch');
+
+  final Object failure;
+
   @override
   Future<void> load(
     Uri media, {
@@ -6738,7 +7377,7 @@ class _LoadFailurePlayer extends _Player {
     bool startPaused = false,
   }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
-    throw StateError('load failed after dispatch');
+    Error.throwWithStackTrace(failure, StackTrace.current);
   }
 }
 
@@ -6822,6 +7461,20 @@ class _EventPlayer extends _Player {
 }
 
 class _SecondLoadFailurePlayer extends _EventPlayer {
+  _SecondLoadFailurePlayer({Object? failure, this.failSeek = false})
+    : failure = failure ?? StateError('part transition failed');
+
+  final Object failure;
+  final bool failSeek;
+
+  @override
+  Future<void> seek(Duration position) async {
+    if (failSeek && loads.length == 2) {
+      Error.throwWithStackTrace(failure, StackTrace.current);
+    }
+    await super.seek(position);
+  }
+
   @override
   Future<void> load(
     Uri media, {
@@ -6830,7 +7483,9 @@ class _SecondLoadFailurePlayer extends _EventPlayer {
     bool startPaused = false,
   }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
-    if (loads.length == 2) throw StateError('part transition failed');
+    if (loads.length == 2 && !failSeek) {
+      Error.throwWithStackTrace(failure, StackTrace.current);
+    }
   }
 }
 
@@ -7066,6 +7721,17 @@ class _BlockingControlPlayer extends _EventPlayer {
   }
 }
 
+class _FailingSeekPlayer extends _Player {
+  _FailingSeekPlayer(this.failure);
+
+  final Object failure;
+
+  @override
+  Future<void> seek(Duration position) async {
+    Error.throwWithStackTrace(failure, StackTrace.current);
+  }
+}
+
 class _FailingControlPlayer extends _Player {
   _FailingControlPlayer({String failureCode = 'command_queue_full'})
     : _failure = PlayerUnavailable(
@@ -7134,29 +7800,6 @@ class _BlockingSecondSeekPlayer extends _EventPlayer {
     secondSeekStarted.complete();
     await releaseSecondSeek.future;
   }
-}
-
-class _MemoryStore implements AppStore {
-  @override
-  Future<String> clientIdentifier() async => 'test';
-  @override
-  Future<AppStoreLoadResult> load() async =>
-      const AppStoreLoadResult(PersistedState());
-  @override
-  Future<void> save(PersistedState state) async {}
-}
-
-class _Credentials implements CredentialStore {
-  @override
-  Future<void> clear() async {}
-  @override
-  Future<String?> readAccountToken() async => null;
-  @override
-  Future<String?> readProfileToken(String profileId) async => null;
-  @override
-  Future<void> writeAccountToken(String token) async {}
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async {}
 }
 
 String _supportReport(LineupController lineup, PlayerCoordinator coordinator) =>
@@ -7295,5 +7938,29 @@ class _DisplayPlayer extends _EventPlayer {
   Future<void> close() async {
     await _reports.close();
     await super.close();
+  }
+}
+
+/// Native has applied the load command, but has not signalled readiness yet.
+class _BlockingDisplayPlayer extends _DisplayPlayer {
+  final secondLoadStarted = Completer<void>();
+  final releaseSecondLoad = Completer<void>();
+
+  @override
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+    );
+    if (loads.length != 2) return;
+    secondLoadStarted.complete();
+    await releaseSecondLoad.future;
   }
 }

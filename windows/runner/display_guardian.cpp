@@ -1,4 +1,5 @@
 #include "display_guardian.h"
+#include "win32_handle.h"
 
 #include <shellapi.h>
 
@@ -9,22 +10,6 @@
 
 namespace lineup {
 namespace {
-class Handle {
-public:
-  explicit Handle(HANDLE value = nullptr) : value_(value) {}
-  ~Handle() { Reset(); }
-  Handle(const Handle &) = delete;
-  Handle &operator=(const Handle &) = delete;
-  HANDLE Get() const { return value_; }
-  void Reset(HANDLE value = nullptr) {
-    if (value_ && value_ != INVALID_HANDLE_VALUE)
-      CloseHandle(value_);
-    value_ = value;
-  }
-
-private:
-  HANDLE value_;
-};
 bool KnownState(uint32_t state) {
   return state == static_cast<uint32_t>(DisplayState::sdr) ||
          state == static_cast<uint32_t>(DisplayState::hdr);

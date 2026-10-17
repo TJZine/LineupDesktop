@@ -39,8 +39,10 @@ class LineupShell extends StatefulWidget {
 }
 
 class _LineupShellState extends State<LineupShell> {
-  late int _selectedIndex = widget.initialMediaPath == null ? 0 : 4;
-  int? _settingsReturnIndex;
+  late ShellDestination _destination = widget.initialMediaPath == null
+      ? ShellDestination.guide
+      : ShellDestination.player;
+  ShellDestination? _settingsReturnDestination;
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey();
@@ -60,10 +62,8 @@ class _LineupShellState extends State<LineupShell> {
     traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
   );
   bool _selectionPending = false;
-  bool _appMenuOpen = false;
   bool _keyboardInput = false;
-  Rect? _appMenuAnchor;
-  FocusNode? _appMenuInvokerFocus;
+  ({Rect anchor, FocusNode invokerFocus})? _appMenu;
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
   bool _guideOpenedFromPlayer = false;
@@ -83,14 +83,16 @@ class _LineupShellState extends State<LineupShell> {
       guide: _guide,
       clock: widget.guideClock,
     );
-    _player.setPlayerDestinationVisible(_selectedIndex == 4);
+    _player.setPlayerDestinationVisible(
+      _destination == ShellDestination.player,
+    );
     final initialMediaPath = widget.initialMediaPath;
     if (initialMediaPath != null) {
       unawaited(_player.loadInitialMedia(_mediaUri(initialMediaPath)));
     }
     _lastPlayerFacts = _shellPlayerFacts;
     _player.addListener(_playerChanged);
-    if (_selectedIndex == 0) _player.showFullGuide();
+    if (_destination == ShellDestination.guide) _player.showFullGuide();
     widget.controller.addListener(_changed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
   }
@@ -104,8 +106,8 @@ class _LineupShellState extends State<LineupShell> {
     _player.status.message,
     _player.currentChannel?.id,
     _player.currentProgram?.scheduled.item.title,
-    _selectedIndex == 3 ? _player.telemetry : null,
-    _selectedIndex == 3 ? _player.displayReport : null,
+    _destination == ShellDestination.diagnostics ? _player.telemetry : null,
+    _destination == ShellDestination.diagnostics ? _player.displayReport : null,
   );
 
   void _playerChanged() {
@@ -122,12 +124,10 @@ class _LineupShellState extends State<LineupShell> {
         _lastStage != SetupStage.ready && stage == SetupStage.ready;
     _lastStage = stage;
     if (stage == SetupStage.welcome) _onboardingFromAccount = false;
-    if (_appMenuOpen &&
+    if (_appMenu != null &&
         stage != SetupStage.ready &&
         !_onboardingMenuAvailable) {
-      _appMenuOpen = false;
-      _appMenuAnchor = null;
-      _appMenuInvokerFocus = null;
+      _appMenu = null;
     }
     setState(() {});
     if (returnedToApp) {
@@ -154,55 +154,60 @@ class _LineupShellState extends State<LineupShell> {
     super.dispose();
   }
 
-  Future<void> _select(int index) async {
+  Future<void> _select(ShellDestination destination) async {
     if (_selectionPending) return;
     if (widget.controller.stage != SetupStage.ready &&
         !await _leaveOnboardingForRoute()) {
       return;
     }
-    if (index == 4 && !_hasPlaybackSurface) {
-      if (_appMenuOpen) _closeAppMenu();
+    if (destination == ShellDestination.player && !_hasPlaybackSurface) {
+      if (_appMenu != null) _closeAppMenu();
       return;
     }
-    if (index == _selectedIndex &&
-        !(index == 1 && (_channelsKey.currentState?.studioOpen ?? false))) {
-      if (_appMenuOpen) _closeAppMenu();
+    if (destination == _destination &&
+        !(destination == ShellDestination.channels &&
+            (_channelsKey.currentState?.studioOpen ?? false))) {
+      if (_appMenu != null) _closeAppMenu();
       return;
     }
     _selectionPending = true;
     try {
-      if (_selectedIndex == 1 &&
+      if (_destination == ShellDestination.channels &&
           !(await (_channelsKey.currentState?.requestLeave() ??
               Future.value(true)))) {
         return;
       }
       if (!mounted) return;
       if (widget.controller.stage == SetupStage.ready) {
-        if (index == 2 && _selectedIndex != 2 && _selectedIndex != 3) {
-          _settingsReturnIndex = _selectedIndex;
-        } else if (index != 2 && index != 3) {
-          _settingsReturnIndex = null;
+        if (destination == ShellDestination.settings &&
+            _destination != ShellDestination.settings &&
+            _destination != ShellDestination.diagnostics) {
+          _settingsReturnDestination = _destination;
+        } else if (destination != ShellDestination.settings &&
+            destination != ShellDestination.diagnostics) {
+          _settingsReturnDestination = null;
         }
-        if (index == 3 && _settingsReturnIndex == null) {
-          _settingsReturnIndex = _selectedIndex == 4
-              ? 4
-              : _selectedIndex == 1
-              ? 1
-              : 0;
+        if (destination == ShellDestination.diagnostics &&
+            _settingsReturnDestination == null) {
+          _settingsReturnDestination = _destination == ShellDestination.player
+              ? ShellDestination.player
+              : _destination == ShellDestination.channels
+              ? ShellDestination.channels
+              : ShellDestination.guide;
         }
       }
-      if (index == 0) {
-        _guideOpenedFromPlayer = _selectedIndex == 4;
+      if (destination == ShellDestination.guide) {
+        _guideOpenedFromPlayer = _destination == ShellDestination.player;
         _player.showFullGuide();
       } else if (_player.overlay == PlayerOverlay.fullGuide) {
         _player.closeOverlay();
       }
       setState(() {
-        _selectedIndex = index;
-        _player.setPlayerDestinationVisible(index == 4);
-        _appMenuOpen = false;
-        _appMenuAnchor = null;
-        _appMenuInvokerFocus = null;
+        _destination = destination;
+        _player.setPlayerDestinationVisible(
+          destination == ShellDestination.player,
+        );
+        _appMenu = null;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
     } finally {
@@ -231,11 +236,11 @@ class _LineupShellState extends State<LineupShell> {
 
   Future<void> _openNowPlaying() async {
     if (_selectionPending || !_canShowNowPlaying) return;
-    await _select(4);
+    await _select(ShellDestination.player);
     if (!mounted ||
         widget.controller.stage != SetupStage.ready ||
-        _selectedIndex != 4 ||
-        _appMenuOpen ||
+        _destination != ShellDestination.player ||
+        _appMenu != null ||
         !_canShowNowPlaying) {
       return;
     }
@@ -243,8 +248,8 @@ class _LineupShellState extends State<LineupShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted &&
           widget.controller.stage == SetupStage.ready &&
-          _selectedIndex == 4 &&
-          !_appMenuOpen &&
+          _destination == ShellDestination.player &&
+          _appMenu == null &&
           _player.overlay == PlayerOverlay.nowPlaying) {
         _playerFocus.requestFocus();
       }
@@ -253,13 +258,12 @@ class _LineupShellState extends State<LineupShell> {
 
   void _restoreRouteFocus() {
     if (!mounted) return;
-    final target = switch (_selectedIndex) {
-      0 => _guideFocus,
-      1 => _channelsFocus,
-      2 => _settingsFocus,
-      3 => _diagnosticsFocus,
-      4 => _playerFocus,
-      _ => _guideFocus,
+    final target = switch (_destination) {
+      ShellDestination.guide => _guideFocus,
+      ShellDestination.channels => _channelsFocus,
+      ShellDestination.settings => _settingsFocus,
+      ShellDestination.diagnostics => _diagnosticsFocus,
+      ShellDestination.player => _playerFocus,
     };
     target.requestFocus();
   }
@@ -268,12 +272,11 @@ class _LineupShellState extends State<LineupShell> {
     final renderObject = invokerContext.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) return;
     setState(() {
-      _appMenuAnchor = MatrixUtils.transformRect(
+      final anchor = MatrixUtils.transformRect(
         renderObject.getTransformTo(context.findRenderObject()),
         Offset.zero & renderObject.size,
       );
-      _appMenuInvokerFocus = invokerFocus;
-      _appMenuOpen = true;
+      _appMenu = (anchor: anchor, invokerFocus: invokerFocus);
     });
   }
 
@@ -288,22 +291,23 @@ class _LineupShellState extends State<LineupShell> {
   void _closeGuide(bool hasPlaybackSurface) {
     final returnToPlayer = hasPlaybackSurface || _guideOpenedFromPlayer;
     _guideOpenedFromPlayer = false;
-    returnToPlayer ? unawaited(_select(4)) : _openAppMenuFromCurrentFocus();
+    returnToPlayer
+        ? unawaited(_select(ShellDestination.player))
+        : _openAppMenuFromCurrentFocus();
   }
 
   Future<void> _tuneFromGuide(String channelId) async {
     final tuning = _player.tune(channelId);
-    await _select(4);
+    await _select(ShellDestination.player);
     await tuning;
   }
 
   void _closeAppMenu({bool restoreInvoker = true}) {
-    final invoker = _appMenuInvokerFocus;
-    final restoreControl = _selectedIndex != 4 || _keyboardInput;
+    final invoker = _appMenu?.invokerFocus;
+    final restoreControl =
+        _destination != ShellDestination.player || _keyboardInput;
     setState(() {
-      _appMenuOpen = false;
-      _appMenuAnchor = null;
-      _appMenuInvokerFocus = null;
+      _appMenu = null;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -317,7 +321,7 @@ class _LineupShellState extends State<LineupShell> {
 
   Future<void> _openAccount() async {
     _settingsCategory = SettingsCategory.account;
-    await _select(2);
+    await _select(ShellDestination.settings);
   }
 
   void _openProfilePickerFromAccount() {
@@ -356,24 +360,24 @@ class _LineupShellState extends State<LineupShell> {
       return KeyEventResult.ignored;
     }
     final keyboard = HardwareKeyboard.instance;
-    if (_selectedIndex == 3 &&
-        !_appMenuOpen &&
+    if (_destination == ShellDestination.diagnostics &&
+        _appMenu == null &&
         (event.logicalKey == LogicalKeyboardKey.escape ||
             event.logicalKey == LogicalKeyboardKey.backspace ||
             event.logicalKey == LogicalKeyboardKey.goBack)) {
       _settingsCategory = SettingsCategory.support;
-      unawaited(_select(2));
+      unawaited(_select(ShellDestination.settings));
       return KeyEventResult.handled;
     }
-    if (_selectedIndex == 2 &&
-        _settingsReturnIndex != null &&
-        !_appMenuOpen &&
+    if (_destination == ShellDestination.settings &&
+        _settingsReturnDestination != null &&
+        _appMenu == null &&
         (event.logicalKey == LogicalKeyboardKey.escape ||
             event.logicalKey == LogicalKeyboardKey.backspace ||
             event.logicalKey == LogicalKeyboardKey.goBack)) {
-      final returnIndex = _settingsReturnIndex!;
-      _settingsReturnIndex = null;
-      unawaited(_select(returnIndex));
+      final returnDestination = _settingsReturnDestination!;
+      _settingsReturnDestination = null;
+      unawaited(_select(returnDestination));
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.f3 &&
@@ -381,12 +385,12 @@ class _LineupShellState extends State<LineupShell> {
         !keyboard.isMetaPressed &&
         !keyboard.isAltPressed &&
         !keyboard.isShiftPressed) {
-      unawaited(_select(2));
+      unawaited(_select(ShellDestination.settings));
       return KeyEventResult.handled;
     }
-    final index = navigationShortcutIndex(event.logicalKey);
-    if (index == null) return KeyEventResult.ignored;
-    unawaited(_select(index));
+    final destination = navigationShortcutDestination(event.logicalKey);
+    if (destination == null) return KeyEventResult.ignored;
+    unawaited(_select(destination));
     return KeyEventResult.handled;
   }
 
@@ -405,13 +409,13 @@ class _LineupShellState extends State<LineupShell> {
   Future<void> _completeSetup() async {
     widget.controller.completeChannelSetup();
     _onboardingFromAccount = false;
-    await _select(1);
+    await _select(ShellDestination.channels);
   }
 
   Future<void> _completeSetupAndAdd() async {
     widget.controller.completeChannelSetup();
     _onboardingFromAccount = false;
-    await _select(1);
+    await _select(ShellDestination.channels);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _channelsKey.currentState?.openNew();
     });
@@ -445,7 +449,7 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Future<void> _logout() async {
-    if (_selectedIndex == 1 &&
+    if (_destination == ShellDestination.channels &&
         !(await (_channelsKey.currentState?.requestLeave() ??
             Future.value(true)))) {
       return;
@@ -468,7 +472,7 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Widget _immersiveAppMenu(bool hasPlaybackSurface) {
-    final anchor = _appMenuAnchor;
+    final anchor = _appMenu?.anchor;
     if (anchor == null) return const SizedBox.shrink();
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
@@ -518,13 +522,13 @@ class _LineupShellState extends State<LineupShell> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _menuDestination(
-                        index: 0,
+                        destination: ShellDestination.guide,
                         label: 'Guide',
                         autofocus: true,
                         detailStyle: detailStyle,
                       ),
                       _menuDestination(
-                        index: 4,
+                        destination: ShellDestination.player,
                         label: 'Player',
                         enabled: hasPlaybackSurface,
                         helper: hasPlaybackSurface
@@ -549,12 +553,12 @@ class _LineupShellState extends State<LineupShell> {
                           ),
                         ),
                       _menuDestination(
-                        index: 1,
+                        destination: ShellDestination.channels,
                         label: 'Channels',
                         detailStyle: detailStyle,
                       ),
                       _menuDestination(
-                        index: 2,
+                        destination: ShellDestination.settings,
                         label: 'Settings',
                         detailStyle: detailStyle,
                       ),
@@ -564,7 +568,7 @@ class _LineupShellState extends State<LineupShell> {
                         child: LineupNavigationRow(
                           key: const Key('app-menu-account'),
                           selected:
-                              _selectedIndex == 2 &&
+                              _destination == ShellDestination.settings &&
                               _settingsCategory == SettingsCategory.account,
                           onPressed: () => unawaited(_openAccount()),
                           child: Row(
@@ -608,14 +612,14 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Widget _menuDestination({
-    required int index,
+    required ShellDestination destination,
     required String label,
     bool enabled = true,
     bool autofocus = false,
     String? helper,
     required TextStyle? detailStyle,
   }) {
-    final selected = _selectedIndex == index;
+    final selected = _destination == destination;
     final semanticLabel = [
       label,
       ?helper,
@@ -627,11 +631,11 @@ class _LineupShellState extends State<LineupShell> {
       button: true,
       enabled: enabled,
       label: semanticLabel,
-      onTap: enabled ? () => unawaited(_select(index)) : null,
+      onTap: enabled ? () => unawaited(_select(destination)) : null,
       child: LineupNavigationRow(
         selected: selected,
         autofocus: autofocus,
-        onPressed: enabled ? () => unawaited(_select(index)) : null,
+        onPressed: enabled ? () => unawaited(_select(destination)) : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -679,10 +683,13 @@ class _LineupShellState extends State<LineupShell> {
             fit: StackFit.expand,
             children: [
               ExcludeSemantics(
-                excluding: _appMenuOpen,
-                child: ExcludeFocus(excluding: _appMenuOpen, child: onboarding),
+                excluding: _appMenu != null,
+                child: ExcludeFocus(
+                  excluding: _appMenu != null,
+                  child: onboarding,
+                ),
               ),
-              if (_appMenuOpen) _immersiveAppMenu(_hasPlaybackSurface),
+              if (_appMenu != null) _immersiveAppMenu(_hasPlaybackSurface),
             ],
           ),
         ),
@@ -692,7 +699,7 @@ class _LineupShellState extends State<LineupShell> {
       key: _playerKey,
       controller: _player,
       focusNode: _playerFocus,
-      openGuide: () => unawaited(_select(0)),
+      openGuide: () => unawaited(_select(ShellDestination.guide)),
       openMenu: _openAppMenu,
     );
     final hasPlaybackSurface = _hasPlaybackSurface;
@@ -702,17 +709,7 @@ class _LineupShellState extends State<LineupShell> {
     final guideHasPicture = hasPlaybackSurface && !guidePlaybackUnavailable;
     final guideView = GuideView(
       controller: _guide,
-      watchingChannelId:
-          !guidePlaybackUnavailable &&
-              !_player.tuning &&
-              const {
-                PlayerState.playing,
-                PlayerState.paused,
-                PlayerState.buffering,
-                PlayerState.seeking,
-              }.contains(_player.status.state)
-          ? _player.currentChannel?.id
-          : null,
+      watchingChannelId: _player.watchingChannelId,
       focusNode: _guideFocus,
       onClose: () => _closeGuide(hasPlaybackSurface),
       onOpenMenu: _openAppMenu,
@@ -726,7 +723,9 @@ class _LineupShellState extends State<LineupShell> {
                   (guidePlaybackUnavailable ? _player.status.message : null),
               onRetry: _player.canRetry ? _player.retry : null,
             ),
-      onOpenPlayer: guideHasPicture ? () => unawaited(_select(4)) : null,
+      onOpenPlayer: guideHasPicture
+          ? () => unawaited(_select(ShellDestination.player))
+          : null,
       onTune: _tuneFromGuide,
       onSetUpChannels: () => unawaited(controller.enterChannelSetup()),
       showIdleArtwork:
@@ -740,17 +739,17 @@ class _LineupShellState extends State<LineupShell> {
       menuFocusNode: _settingsMenuFocus,
       onOpenMenu: _openAppMenu,
       backLabel:
-          '‹ Back to ${switch (_settingsReturnIndex) {
-            4 => "Player",
-            1 => "Channels",
+          '‹ Back to ${switch (_settingsReturnDestination) {
+            ShellDestination.player => "Player",
+            ShellDestination.channels => "Channels",
             _ => "Guide",
           }}',
-      onBack: _settingsReturnIndex == null
+      onBack: _settingsReturnDestination == null
           ? null
           : () {
-              final returnIndex = _settingsReturnIndex!;
-              _settingsReturnIndex = null;
-              unawaited(_select(returnIndex));
+              final returnDestination = _settingsReturnDestination!;
+              _settingsReturnDestination = null;
+              unawaited(_select(returnDestination));
             },
       category: _settingsCategory,
       onCategoryChanged: (category) => setState(() {
@@ -759,11 +758,11 @@ class _LineupShellState extends State<LineupShell> {
       onSwitchProfile: _openProfilePickerFromAccount,
       onSwitchServer: _openServerPickerFromAccount,
       onSignOut: _requestLogout,
-      onOpenDiagnostics: () => unawaited(_select(3)),
+      onOpenDiagnostics: () => unawaited(_select(ShellDestination.diagnostics)),
     );
-    final views = <Widget>[
-      guideView,
-      ChannelsView(
+    final routeView = switch (_destination) {
+      ShellDestination.guide => guideView,
+      ShellDestination.channels => ChannelsView(
         key: _channelsKey,
         controller: controller,
         player: _player,
@@ -771,35 +770,32 @@ class _LineupShellState extends State<LineupShell> {
         focusNode: _channelsFocus,
         menuFocusNode: _channelsMenuFocus,
         onOpenMenu: _openAppMenu,
-        onOpenPlayer: () => unawaited(_select(4)),
+        onOpenPlayer: () => unawaited(_select(ShellDestination.player)),
       ),
-      settingsView,
-      DiagnosticsView(
+      ShellDestination.settings => Stack(
+        fit: StackFit.expand,
+        children: [
+          if (hasPlaybackSurface) PlayerSurface(controller: _player),
+          settingsView,
+        ],
+      ),
+      ShellDestination.diagnostics => DiagnosticsView(
         controller: controller,
         playback: _player.diagnosticPlaybackSnapshot,
         onRecordingSettings: () {
           _settingsCategory = SettingsCategory.support;
-          unawaited(_select(2));
+          unawaited(_select(ShellDestination.settings));
         },
         focusNode: _diagnosticsFocus,
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
         onBack: () {
           _settingsCategory = SettingsCategory.support;
-          unawaited(_select(2));
+          unawaited(_select(ShellDestination.settings));
         },
       ),
-      playerView,
-    ];
-    final routeView = _selectedIndex == 2
-        ? Stack(
-            fit: StackFit.expand,
-            children: [
-              if (hasPlaybackSurface) PlayerSurface(controller: _player),
-              settingsView,
-            ],
-          )
-        : views[_selectedIndex];
+      ShellDestination.player => playerView,
+    };
     return _withGlobalKeys(
       Scaffold(
         backgroundColor: Colors.transparent,
@@ -808,15 +804,16 @@ class _LineupShellState extends State<LineupShell> {
           children: [
             ExcludeSemantics(
               key: const Key('immersive-route-semantics'),
-              excluding: _appMenuOpen,
+              excluding: _appMenu != null,
               child: ExcludeFocus(
-                excluding: _appMenuOpen,
+                excluding: _appMenu != null,
                 child: SafeArea(
                   child: ColoredBox(
                     color:
-                        _selectedIndex == 2 ||
-                            _selectedIndex == 4 ||
-                            (_selectedIndex == 0 && hasPlaybackSurface)
+                        _destination == ShellDestination.settings ||
+                            _destination == ShellDestination.player ||
+                            (_destination == ShellDestination.guide &&
+                                hasPlaybackSurface)
                         ? Colors.transparent
                         : Theme.of(context).scaffoldBackgroundColor,
                     child: routeView,
@@ -824,7 +821,7 @@ class _LineupShellState extends State<LineupShell> {
                 ),
               ),
             ),
-            if (_appMenuOpen) _immersiveAppMenu(hasPlaybackSurface),
+            if (_appMenu != null) _immersiveAppMenu(hasPlaybackSurface),
           ],
         ),
       ),
@@ -936,12 +933,8 @@ class _SettingsViewState extends State<SettingsView> {
   late LineupSettings _displaySettings;
   late LineupSettings _lastControllerSettings;
   bool _categoryFocusPlaced = false;
-  final Map<String, Timer> _savingTimers = {};
-  final Set<String> _pendingSettingKeys = {};
-  final Set<String> _showSaving = {};
-  final Map<String, String> _errors = {};
-  final Map<String, LineupSettings Function(LineupSettings)> _pendingChanges =
-      {};
+  final Map<_SettingKey, _PendingSave> _pendingSaves = {};
+  final Map<_SettingKey, String> _errors = {};
 
   SettingsCategory get _category =>
       widget.onCategoryChanged == null ? _localCategory : widget.category;
@@ -973,8 +966,8 @@ class _SettingsViewState extends State<SettingsView> {
     if (identical(settings, _lastControllerSettings)) return;
     _lastControllerSettings = settings;
     var refreshed = settings;
-    for (final keyName in _pendingSettingKeys) {
-      refreshed = _pendingChanges[keyName]!(refreshed);
+    for (final pending in _pendingSaves.values) {
+      refreshed = pending.change(refreshed);
     }
     if (!mounted) return;
     setState(() => _displaySettings = refreshed);
@@ -983,8 +976,8 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void dispose() {
     widget.controller.removeListener(_controllerChanged);
-    for (final timer in _savingTimers.values) {
-      timer.cancel();
+    for (final pending in _pendingSaves.values) {
+      pending.timer?.cancel();
     }
     super.dispose();
   }
@@ -1171,207 +1164,181 @@ class _SettingsViewState extends State<SettingsView> {
           description: _categoryDescription(_category),
           children: switch (_category) {
             SettingsCategory.appearance => [
-              _Dropdown<LineupThemeName>(
-                'Theme',
-                'Color and surface treatment throughout Lineup.',
-                value.theme,
-                LineupThemeName.values,
-                (item) => item.label,
-                _pendingSettingKeys.contains('theme')
-                    ? null
-                    : (item) => _update(
-                        'theme',
-                        (current) => current.copyWith(theme: item),
-                      ),
-                first: true,
-              ),
-              _settingFeedback('theme'),
-              _Dropdown<GuideInfoBackgroundMode>(
-                'Guide information background',
-                'Choose artwork colors, the theme, or an artwork backdrop.',
-                value.guideInfoBackgroundMode,
-                GuideInfoBackgroundMode.values,
-                (item) => switch (item) {
-                  GuideInfoBackgroundMode.bleed => 'Artwork colors',
-                  GuideInfoBackgroundMode.themeDefault => 'Theme background',
-                  GuideInfoBackgroundMode.artwork => 'Artwork backdrop',
-                },
-                _pendingSettingKeys.contains('guideInfoBackgroundMode')
-                    ? null
-                    : (item) => _update(
-                        'guideInfoBackgroundMode',
-                        (current) =>
-                            current.copyWith(guideInfoBackgroundMode: item),
-                      ),
-              ),
-              _settingFeedback('guideInfoBackgroundMode'),
-              _SettingsSwitchTile(
-                title: const Text('Use title artwork'),
-                subtitle: const Text(
-                  'Use available Plex title artwork with a readable text fallback.',
+              ..._settingControl<LineupThemeName>(
+                _SettingKey.theme,
+                (current, item) => current.copyWith(theme: item),
+                (onChanged) => _Dropdown<LineupThemeName>(
+                  'Theme',
+                  'Color and surface treatment throughout Lineup.',
+                  value.theme,
+                  LineupThemeName.values,
+                  (item) => item.label,
+                  onChanged,
+                  first: true,
                 ),
-                value: value.preferClearLogos,
-                onChanged: _pendingSettingKeys.contains('preferClearLogos')
-                    ? null
-                    : (item) => _update(
-                        'preferClearLogos',
-                        (current) => current.copyWith(preferClearLogos: item),
-                      ),
               ),
-              _settingFeedback('preferClearLogos'),
-              _Dropdown<OverlayTransparency>(
-                'Player overlays',
-                'How much of the picture shows through Player controls and panels. More transparent can be harder to read on bright scenes.',
-                value.overlayTransparency,
-                OverlayTransparency.values,
-                (item) => item.label,
-                _pendingSettingKeys.contains('overlayTransparency')
-                    ? null
-                    : (item) => _update(
-                        'overlayTransparency',
-                        (current) =>
-                            current.copyWith(overlayTransparency: item),
-                      ),
-                choiceDescription: (item) => switch (item) {
-                  OverlayTransparency.moreTransparent => 'Lightest',
-                  OverlayTransparency.standard => 'Default',
-                  OverlayTransparency.reduced => 'Most solid, easiest to read',
-                },
+              ..._settingControl<GuideInfoBackgroundMode>(
+                _SettingKey.guideInfoBackgroundMode,
+                (current, item) =>
+                    current.copyWith(guideInfoBackgroundMode: item),
+                (onChanged) => _Dropdown<GuideInfoBackgroundMode>(
+                  'Guide information background',
+                  'Choose artwork colors, the theme, or an artwork backdrop.',
+                  value.guideInfoBackgroundMode,
+                  GuideInfoBackgroundMode.values,
+                  (item) => switch (item) {
+                    GuideInfoBackgroundMode.bleed => 'Artwork colors',
+                    GuideInfoBackgroundMode.themeDefault => 'Theme background',
+                    GuideInfoBackgroundMode.artwork => 'Artwork backdrop',
+                  },
+                  onChanged,
+                ),
               ),
-              _settingFeedback('overlayTransparency'),
+              ..._settingControl<bool>(
+                _SettingKey.preferClearLogos,
+                (current, item) => current.copyWith(preferClearLogos: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('Use title artwork'),
+                  subtitle: const Text(
+                    'Use available Plex title artwork with a readable text fallback.',
+                  ),
+                  value: value.preferClearLogos,
+                  onChanged: onChanged,
+                ),
+              ),
+              ..._settingControl<OverlayTransparency>(
+                _SettingKey.overlayTransparency,
+                (current, item) => current.copyWith(overlayTransparency: item),
+                (onChanged) => _Dropdown<OverlayTransparency>(
+                  'Player overlays',
+                  'How much of the picture shows through Player controls and panels. More transparent can be harder to read on bright scenes.',
+                  value.overlayTransparency,
+                  OverlayTransparency.values,
+                  (item) => item.label,
+                  onChanged,
+                  choiceDescription: (item) => switch (item) {
+                    OverlayTransparency.moreTransparent => 'Lightest',
+                    OverlayTransparency.standard => 'Default',
+                    OverlayTransparency.reduced =>
+                      'Most solid, easiest to read',
+                  },
+                ),
+              ),
             ],
             SettingsCategory.guide => [
-              _Dropdown<int>(
-                'Visible hours',
-                'Choose how much of the schedule appears at once.',
-                value.guideHours,
-                LineupSettings.guideHoursOptions,
-                (item) => switch (item) {
-                  2 => 'Detailed (2 hours)',
-                  3 => 'Wide (3 hours)',
-                  _ => 'Extended ($item hours)',
-                },
-                choiceDescription: (item) => switch (item) {
-                  2 => 'Less schedule at once',
-                  3 => 'Balanced schedule at once',
-                  _ => 'More schedule at once',
-                },
-                _pendingSettingKeys.contains('guideHours')
-                    ? null
-                    : (item) => _update(
-                        'guideHours',
-                        (current) => current.copyWith(guideHours: item),
-                      ),
-                first: true,
-              ),
-              _settingFeedback('guideHours'),
-              _SettingsSwitchTile(
-                title: const Text('Show channel sources'),
-                subtitle: const Text(
-                  "Show where each channel's programs come from under its name in the Guide.",
+              ..._settingControl<int>(
+                _SettingKey.guideHours,
+                (current, item) => current.copyWith(guideHours: item),
+                (onChanged) => _Dropdown<int>(
+                  'Visible hours',
+                  'Choose how much of the schedule appears at once.',
+                  value.guideHours,
+                  LineupSettings.guideHoursOptions,
+                  (item) => switch (item) {
+                    2 => 'Detailed (2 hours)',
+                    3 => 'Wide (3 hours)',
+                    _ => 'Extended ($item hours)',
+                  },
+                  choiceDescription: (item) => switch (item) {
+                    2 => 'Less schedule at once',
+                    3 => 'Balanced schedule at once',
+                    _ => 'More schedule at once',
+                  },
+                  onChanged,
+                  first: true,
                 ),
-                value: value.guideShowChannelSources,
-                onChanged:
-                    _pendingSettingKeys.contains('guideShowChannelSources')
-                    ? null
-                    : (item) => _update(
-                        'guideShowChannelSources',
-                        (current) =>
-                            current.copyWith(guideShowChannelSources: item),
-                      ),
               ),
-              _settingFeedback('guideShowChannelSources'),
-              _SettingsSwitchTile(
-                title: const Text('Show now playing in Guide'),
-                subtitle: const Text(
-                  'Identify the playing channel and program while browsing other listings.',
+              ..._settingControl<bool>(
+                _SettingKey.guideShowChannelSources,
+                (current, item) =>
+                    current.copyWith(guideShowChannelSources: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('Show channel sources'),
+                  subtitle: const Text(
+                    "Show where each channel's programs come from under its name in the Guide.",
+                  ),
+                  value: value.guideShowChannelSources,
+                  onChanged: onChanged,
                 ),
-                value: value.nowWatchingBanner,
-                onChanged: _pendingSettingKeys.contains('nowWatchingBanner')
-                    ? null
-                    : (item) => _update(
-                        'nowWatchingBanner',
-                        (current) => current.copyWith(nowWatchingBanner: item),
-                      ),
               ),
-              _settingFeedback('nowWatchingBanner'),
+              ..._settingControl<bool>(
+                _SettingKey.nowWatchingBanner,
+                (current, item) => current.copyWith(nowWatchingBanner: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('Show now playing in Guide'),
+                  subtitle: const Text(
+                    'Identify the playing channel and program while browsing other listings.',
+                  ),
+                  value: value.nowWatchingBanner,
+                  onChanged: onChanged,
+                ),
+              ),
             ],
             SettingsCategory.playback => [
-              _Dropdown<int>(
-                'Player controls auto-hide',
-                'Set how long controls remain visible while playing.',
-                value.osdAutoHideSeconds,
-                LineupSettings.osdAutoHideSecondsOptions,
-                (item) => '$item seconds',
-                _pendingSettingKeys.contains('osdAutoHideSeconds')
-                    ? null
-                    : (item) => _update(
-                        'osdAutoHideSeconds',
-                        (current) => current.copyWith(osdAutoHideSeconds: item),
-                      ),
-                first: true,
-              ),
-              _settingFeedback('osdAutoHideSeconds'),
-              _SettingsSwitchTile(
-                title: const Text('DVR playback controls'),
-                subtitle: const Text(
-                  'Show transport controls and enable pause, seek, stop, and media-key shortcuts in Player.',
+              ..._settingControl<int>(
+                _SettingKey.osdAutoHideSeconds,
+                (current, item) => current.copyWith(osdAutoHideSeconds: item),
+                (onChanged) => _Dropdown<int>(
+                  'Player controls auto-hide',
+                  'Set how long controls remain visible while playing.',
+                  value.osdAutoHideSeconds,
+                  LineupSettings.osdAutoHideSecondsOptions,
+                  (item) => '$item seconds',
+                  onChanged,
+                  first: true,
                 ),
-                value: value.dvrControlsEnabled,
-                onChanged: _pendingSettingKeys.contains('dvrControlsEnabled')
-                    ? null
-                    : (item) => _update(
-                        'dvrControlsEnabled',
-                        (current) => current.copyWith(dvrControlsEnabled: item),
-                      ),
               ),
-              _settingFeedback('dvrControlsEnabled'),
-              _SettingsSwitchTile(
-                title: const Text('Match display HDR in fullscreen'),
-                subtitle: const Text(
-                  'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+              ..._settingControl<bool>(
+                _SettingKey.dvrControlsEnabled,
+                (current, item) => current.copyWith(dvrControlsEnabled: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('DVR playback controls'),
+                  subtitle: const Text(
+                    'Show transport controls and enable pause, seek, stop, and media-key shortcuts in Player.',
+                  ),
+                  value: value.dvrControlsEnabled,
+                  onChanged: onChanged,
                 ),
-                value: value.matchDisplayHdr,
-                onChanged: _pendingSettingKeys.contains('matchDisplayHdr')
-                    ? null
-                    : (item) => _update(
-                        'matchDisplayHdr',
-                        (current) => current.copyWith(matchDisplayHdr: item),
-                      ),
               ),
-              _settingFeedback('matchDisplayHdr'),
+              ..._settingControl<bool>(
+                _SettingKey.matchDisplayHdr,
+                (current, item) => current.copyWith(matchDisplayHdr: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('Match display HDR in fullscreen'),
+                  subtitle: const Text(
+                    'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+                  ),
+                  value: value.matchDisplayHdr,
+                  onChanged: onChanged,
+                ),
+              ),
             ],
             SettingsCategory.accessibility => [
-              _SettingsSwitchTile(
-                title: const Text('Reduce motion'),
-                subtitle: const Text(
-                  'Disable nonessential application transitions.',
+              ..._settingControl<bool>(
+                _SettingKey.reduceMotion,
+                (current, item) => current.copyWith(reduceMotion: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('Reduce motion'),
+                  subtitle: const Text(
+                    'Disable nonessential application transitions.',
+                  ),
+                  value: value.reduceMotion,
+                  onChanged: onChanged,
+                  first: true,
                 ),
-                value: value.reduceMotion,
-                onChanged: _pendingSettingKeys.contains('reduceMotion')
-                    ? null
-                    : (item) => _update(
-                        'reduceMotion',
-                        (current) => current.copyWith(reduceMotion: item),
-                      ),
-                first: true,
               ),
-              _settingFeedback('reduceMotion'),
-              _SettingsSwitchTile(
-                title: const Text('Large focus indicators'),
-                subtitle: const Text(
-                  'Use thicker outlines when navigating with a keyboard or remote.',
+              ..._settingControl<bool>(
+                _SettingKey.largeFocusIndicators,
+                (current, item) => current.copyWith(largeFocusIndicators: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('Large focus indicators'),
+                  subtitle: const Text(
+                    'Use thicker outlines when navigating with a keyboard or remote.',
+                  ),
+                  value: value.largeFocusIndicators,
+                  onChanged: onChanged,
                 ),
-                value: value.largeFocusIndicators,
-                onChanged: _pendingSettingKeys.contains('largeFocusIndicators')
-                    ? null
-                    : (item) => _update(
-                        'largeFocusIndicators',
-                        (current) =>
-                            current.copyWith(largeFocusIndicators: item),
-                      ),
               ),
-              _settingFeedback('largeFocusIndicators'),
             ],
             SettingsCategory.account => [
               _SettingsRow(
@@ -1415,22 +1382,19 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
                 first: true,
               ),
-              _SettingsSwitchTile(
-                title: const Text('Show profile picker on startup'),
-                subtitle: const Text(
-                  'Ask who is watching when this Plex Home has multiple profiles.',
+              ..._settingControl<bool>(
+                _SettingKey.profilePickerOnStartup,
+                (current, item) =>
+                    current.copyWith(profilePickerOnStartup: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('Show profile picker on startup'),
+                  subtitle: const Text(
+                    'Ask who is watching when this Plex Home has multiple profiles.',
+                  ),
+                  value: value.profilePickerOnStartup,
+                  onChanged: onChanged,
                 ),
-                value: value.profilePickerOnStartup,
-                onChanged:
-                    _pendingSettingKeys.contains('profilePickerOnStartup')
-                    ? null
-                    : (item) => _update(
-                        'profilePickerOnStartup',
-                        (current) =>
-                            current.copyWith(profilePickerOnStartup: item),
-                      ),
               ),
-              _settingFeedback('profilePickerOnStartup'),
               _SettingsRow(
                 label: const Text('Plex Media Server'),
                 helper: widget.controller.server == null
@@ -1463,21 +1427,19 @@ class _SettingsViewState extends State<SettingsView> {
               ),
             ],
             SettingsCategory.support => [
-              _SettingsSwitchTile(
-                title: const Text('Record redacted diagnostics'),
-                subtitle: const Text(
-                  'Tokens, URLs, paths, headers and credentials are excluded. Turning this off clears recorded events.',
+              ..._settingControl<bool>(
+                _SettingKey.diagnosticsEnabled,
+                (current, item) => current.copyWith(diagnosticsEnabled: item),
+                (onChanged) => _SettingsSwitchTile(
+                  title: const Text('Record redacted diagnostics'),
+                  subtitle: const Text(
+                    'Tokens, URLs, paths, headers and credentials are excluded. Turning this off clears recorded events.',
+                  ),
+                  value: value.diagnosticsEnabled,
+                  onChanged: onChanged,
+                  first: true,
                 ),
-                value: value.diagnosticsEnabled,
-                onChanged: _pendingSettingKeys.contains('diagnosticsEnabled')
-                    ? null
-                    : (item) => _update(
-                        'diagnosticsEnabled',
-                        (current) => current.copyWith(diagnosticsEnabled: item),
-                      ),
-                first: true,
               ),
-              _settingFeedback('diagnosticsEnabled'),
               _SettingsRow(
                 label: const Text('Diagnostics'),
                 helper: const Text(
@@ -1495,19 +1457,33 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _settingFeedback(String keyName) {
-    final error = _errors[keyName];
+  List<Widget> _settingControl<T>(
+    _SettingKey key,
+    LineupSettings Function(LineupSettings, T) change,
+    Widget Function(ValueChanged<T>?) build,
+  ) => [
+    build(
+      _pendingSaves.containsKey(key)
+          ? null
+          : (value) =>
+                unawaited(_update(key, (current) => change(current, value))),
+    ),
+    _settingFeedback(key),
+  ];
+
+  Widget _settingFeedback(_SettingKey key) {
+    final error = _errors[key];
     if (error != null) {
       return Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text(
           error,
-          key: ValueKey('setting-error-$keyName'),
+          key: ValueKey('setting-error-${key.name}'),
           style: TextStyle(color: Theme.of(context).colorScheme.error),
         ),
       );
     }
-    if (_showSaving.contains(keyName)) {
+    if (_pendingSaves[key]?.showSaving ?? false) {
       return Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text('Saving…'),
@@ -1517,19 +1493,19 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _update(
-    String keyName,
+    _SettingKey key,
     LineupSettings Function(LineupSettings) change,
   ) async {
-    if (_pendingSettingKeys.contains(keyName)) return;
+    if (_pendingSaves.containsKey(key)) return;
+    final pending = _PendingSave(change);
     setState(() {
-      _pendingSettingKeys.add(keyName);
-      _errors.remove(keyName);
-      _pendingChanges[keyName] = change;
+      _pendingSaves[key] = pending;
+      _errors.remove(key);
       _displaySettings = change(_displaySettings);
     });
-    _savingTimers[keyName] = Timer(const Duration(milliseconds: 300), () {
-      if (mounted && _pendingSettingKeys.contains(keyName)) {
-        setState(() => _showSaving.add(keyName));
+    pending.timer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && identical(_pendingSaves[key], pending)) {
+        setState(() => pending.showSaving = true);
       }
     });
     String? error;
@@ -1538,18 +1514,16 @@ class _SettingsViewState extends State<SettingsView> {
     } catch (_) {
       error = 'Could not save. The previous value was restored.';
     } finally {
-      _savingTimers.remove(keyName)?.cancel();
+      pending.timer?.cancel();
       if (mounted) {
         setState(() {
-          _pendingSettingKeys.remove(keyName);
-          _showSaving.remove(keyName);
-          _pendingChanges.remove(keyName);
+          _pendingSaves.remove(key);
           var refreshed = widget.controller.settings;
-          for (final pending in _pendingChanges.values) {
-            refreshed = pending(refreshed);
+          for (final pending in _pendingSaves.values) {
+            refreshed = pending.change(refreshed);
           }
           _displaySettings = refreshed;
-          if (error != null) _errors[keyName] = error;
+          if (error != null) _errors[key] = error;
         });
       }
     }
@@ -1824,4 +1798,29 @@ class _Dropdown<T> extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _SettingKey {
+  theme,
+  guideInfoBackgroundMode,
+  preferClearLogos,
+  overlayTransparency,
+  guideHours,
+  guideShowChannelSources,
+  nowWatchingBanner,
+  osdAutoHideSeconds,
+  dvrControlsEnabled,
+  matchDisplayHdr,
+  reduceMotion,
+  largeFocusIndicators,
+  profilePickerOnStartup,
+  diagnosticsEnabled,
+}
+
+class _PendingSave {
+  _PendingSave(this.change);
+
+  final LineupSettings Function(LineupSettings) change;
+  Timer? timer;
+  bool showSaving = false;
 }

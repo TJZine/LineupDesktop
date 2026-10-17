@@ -21,6 +21,130 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'NF-12 conflict replacement clears browse undo and pending choices',
+    (tester) async {
+      final original = _channel(
+        id: 'undo-conflict',
+        number: 27,
+        name: 'Undo conflict',
+        source: ManualSource([channelItemFor(_media('one'))]),
+      );
+      final external = _channel(
+        id: original.id,
+        number: original.number,
+        name: 'External edit',
+        source: original.source,
+      );
+      final controller = _ExpectedBaseController(
+        scenario: LineupScenario(
+          channels: [original],
+          availableMedia: [_media('one'), _media('two'), _media('three')],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await _settleAirCheck(tester);
+      await tester.ensureVisible(find.textContaining('Browse library'));
+      await tester.tap(find.textContaining('Browse library'));
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('studio-result-two')));
+      await tester.tap(find.byKey(const Key('studio-result-two')));
+      await _settleAirCheck(tester);
+      expect(find.text('Undo last addition'), findsOneWidget);
+      controller.fixtureActor.replaceChannels([external]);
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('studio-search')), 'three');
+      await tester.ensureVisible(find.text('Select'));
+      await tester.tap(find.text('Select'));
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('studio-result-three')));
+      await tester.tap(find.byKey(const Key('studio-result-three')));
+      await tester.pump();
+      expect(find.text('Add selected (1)'), findsOneWidget);
+      await tester.ensureVisible(find.text('Use saved version…'));
+      await tester.tap(find.text('Use saved version…'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use saved version'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.textContaining('Browse library'));
+      await tester.tap(find.textContaining('Browse library'));
+      await tester.pump();
+      expect(find.text('Undo last addition'), findsNothing);
+      expect(find.text('Select'), findsOneWidget);
+      expect(find.text('Add selected (1)'), findsNothing);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('studio-search')))
+            .controller!
+            .text,
+        isEmpty,
+      );
+    },
+  );
+
+  for (final removeAll in [false, true]) {
+    testWidgets(
+      'NF-12 removal prunes ${removeAll ? 'last' : 'partial'} undo occurrences',
+      (tester) async {
+        final controller = _RecordingSaveController(
+          scenario: LineupScenario(
+            availableMedia: [_media('one'), _media('two')],
+          ),
+        );
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(
+          _studio(controller, ChannelStudioMode.createCustom),
+        );
+        await _settleAirCheck(tester);
+        await tester.ensureVisible(find.text('Select'));
+        await tester.tap(find.text('Select'));
+        await tester.pump();
+        for (final id in ['one', 'two']) {
+          await tester.ensureVisible(find.byKey(Key('studio-result-$id')));
+          await tester.tap(find.byKey(Key('studio-result-$id')));
+        }
+        await tester.pump();
+        await tester.ensureVisible(find.text('Add selected (2)'));
+        await tester.tap(find.text('Add selected (2)'));
+        await tester.pump();
+        expect(find.text('Undo last addition'), findsOneWidget);
+        await tester.ensureVisible(find.textContaining('Channel programs · 2'));
+        await tester.tap(find.textContaining('Channel programs · 2'));
+        await tester.pump();
+        for (var index = 0; index < (removeAll ? 2 : 1); index++) {
+          final button = find
+              .ancestor(
+                of: find.byTooltip('Remove from channel').first,
+                matching: find.byType(IconButton),
+              )
+              .first;
+          tester.widget<IconButton>(button).onPressed!();
+          await tester.pump();
+        }
+        if (!removeAll) {
+          await tester.ensureVisible(find.textContaining('Browse library'));
+          await tester.tap(find.textContaining('Browse library'));
+          await tester.pump();
+          expect(find.text('Undo last addition'), findsOneWidget);
+          await tester.ensureVisible(find.text('Undo last addition'));
+          await tester.tap(find.text('Undo last addition'));
+          await tester.pump();
+          expect(find.textContaining('Channel programs · 0'), findsOneWidget);
+        } else {
+          expect(find.text('Undo last addition'), findsNothing);
+        }
+      },
+    );
+  }
+
   test(
     'source summaries retain titles, filters, manual counts, and mix shape',
     () {
@@ -395,7 +519,7 @@ void main() {
   testWidgets(
     'identity validation names conflicts and focuses the first error',
     (tester) async {
-      final controller = FixtureController(
+      final controller = _RecordingSaveController(
         scenario: LineupScenario(
           channels: [_channel(id: 'taken', number: 7, name: 'The Seven')],
           libraries: const [
@@ -3931,7 +4055,7 @@ void main() {
     final publishedItems = (observed.source as ManualSource).items;
     mutableInput.clear();
     expect(publishedItems, hasLength(1));
-    expect(() => publishedItems.clear(), throwsUnsupportedError);
+    expect(publishedItems.clear, throwsUnsupportedError);
     final fixture = UiFixture(controller: controller);
     addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
@@ -4598,6 +4722,9 @@ void main() {
       _expectFitsHorizontally(tester, finder, const Size(800, 600));
       expect(tester.takeException(), isNull);
     }
+    await tester.ensureVisible(find.byKey(const Key('studio-result-one')));
+    await tester.tap(find.byKey(const Key('studio-result-one')));
+    await _settleAirCheck(tester);
     tester
         .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save channel'))
         .onPressed!();
@@ -4931,7 +5058,7 @@ void main() {
   });
 
   testWidgets(
-    'pending filters and bulk selection keep Studio panels fixed and disable saved Tune',
+    'pending choices keep Studio panels fixed and survive layout changes',
     (tester) async {
       tester.view
         ..devicePixelRatio = 1
@@ -5025,10 +5152,89 @@ void main() {
         ),
         findsNWidgets(2),
       );
+      await tester.ensureVisible(
+        find.widgetWithText(CheckboxListTile, 'Drama'),
+      );
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+      for (final width in [700.0, 1920.0]) {
+        tester.view.physicalSize = Size(width, 1080);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ChannelAirCheck>(find.byType(ChannelAirCheck)).compact,
+          width == 700,
+        );
+        expect(
+          find.byKey(const Key('studio-filter-picker-genre')),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<CheckboxListTile>(
+                find.widgetWithText(CheckboxListTile, 'Drama'),
+              )
+              .value,
+          isTrue,
+        );
+        expect(
+          tester
+              .widget<CheckboxListTile>(
+                find.widgetWithText(CheckboxListTile, 'Comedy'),
+              )
+              .value,
+          isFalse,
+        );
+        expect(
+          tester
+              .widget<FilledButton>(find.byKey(const Key('studio-tune')))
+              .onPressed,
+          isNull,
+        );
+      }
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'Add filter');
+      await tester.ensureVisible(find.text('Select'));
+      await tester.tap(find.text('Select'));
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('studio-result-two')));
+      await tester.tap(find.byKey(const Key('studio-result-two')));
+      await tester.pump();
+      for (final width in [700.0, 1920.0]) {
+        tester.view.physicalSize = Size(width, 1080);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ChannelAirCheck>(find.byType(ChannelAirCheck)).compact,
+          width == 700,
+        );
+        expect(find.text('Add selected (1)'), findsOneWidget);
+        expect(
+          tester
+              .widget<Checkbox>(
+                find.descendant(
+                  of: find.byKey(const Key('studio-result-two')),
+                  matching: find.byType(Checkbox),
+                ),
+              )
+              .value,
+          isTrue,
+        );
+        expect(
+          tester
+              .widget<FilledButton>(find.byKey(const Key('studio-tune')))
+              .onPressed,
+          isNull,
+        );
+      }
+      await tester.ensureVisible(find.text('Cancel'));
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('studio-tune')))
+            .onPressed,
+        isNotNull,
+      );
     },
   );
 
@@ -5365,9 +5571,15 @@ class _RecordingSaveController extends FixtureController {
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async {
     loaded = channel;
-    if (scheduleFailure case final failure?) throw failure;
+    if (scheduleFailure case final failure?) {
+      // The fixture injects arbitrary failures to exercise propagation.
+      // ignore: only_throw_errors
+      throw failure;
+    }
     if (nextScheduleFailure case final failure?) {
       nextScheduleFailure = null;
+      // The fixture injects arbitrary failures to exercise propagation.
+      // ignore: only_throw_errors
       throw failure;
     }
     return _testSchedule(channel, this);

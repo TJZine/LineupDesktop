@@ -158,8 +158,8 @@ void main() {
         options: options,
         anchor: anchor,
       );
-      if (jsonEncode(expected.channels.map((c) => planFacts(c)).toList()) !=
-              jsonEncode(actual.channels.map((c) => planFacts(c)).toList()) ||
+      if (jsonEncode(expected.channels.map(planFacts).toList()) !=
+              jsonEncode(actual.channels.map(planFacts).toList()) ||
           jsonEncode(
                 expected.eligibleOriginalsByStrategy.map(
                   (k, v) => MapEntry(k.name, v),

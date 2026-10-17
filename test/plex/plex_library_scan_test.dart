@@ -103,13 +103,13 @@ void main() {
 
   for (final payload in <String, Object?>{
     'missing envelope': {},
-    'invalid envelope': {'MediaContainer': []},
-    'missing inventory': {'MediaContainer': {}},
+    'invalid envelope': {'MediaContainer': <Object?>[]},
+    'missing inventory': {'MediaContainer': <String, Object?>{}},
     'nonempty count without inventory': {
       'MediaContainer': {'size': 1},
     },
     'invalid inventory': {
-      'MediaContainer': {'Directory': {}},
+      'MediaContainer': {'Directory': <String, Object?>{}},
     },
     'invalid row': {
       'MediaContainer': {
@@ -118,11 +118,11 @@ void main() {
     },
     'missing row type': {
       'MediaContainer': {
-        'Directory': [{}],
+        'Directory': <Object?>[<String, Object?>{}],
       },
     },
     'contradictory size': {
-      'MediaContainer': {'size': 1, 'Directory': []},
+      'MediaContainer': {'size': 1, 'Directory': <Object?>[]},
     },
   }.entries) {
     test('library endpoint rejects ${payload.key}', () async {
@@ -397,7 +397,7 @@ void main() {
     );
   }
 
-  for (final badPage in [
+  for (final badPage in <Map<String, Object?>>[
     {'Metadata': [], 'size': 0, 'totalSize': 1},
     {'Metadata': [], 'size': -1},
     {'Metadata': [], 'size': 'NaN'},
@@ -806,7 +806,7 @@ void main() {
       onPhase: phases.add,
     );
     expect(phases, PlexLibraryScanPhase.values);
-    expect(scanned.items.map((i) => i.collections).toList(), [
+    expect(scanned.items.map((i) => i.collections).toList(), <List<String>>[
       ['Shared'],
       ['Shared'],
       ['Season', 'Shared'],
@@ -826,6 +826,74 @@ void main() {
   });
 
   test(
+    'malformed structural item fails the scan with a typed parse error',
+    () async {
+      final client = _client((request) async {
+        expect(request.url.path, '/library/sections/library/all');
+        return _page([
+          {
+            'ratingKey': 'invalid',
+            'title': 'Invalid item',
+            'type': 'movie',
+            'Media': {'Part': <Object?>[]},
+          },
+        ], total: 1);
+      });
+
+      await expectLater(
+        client.scanLibrary(
+          _server,
+          'token',
+          'library',
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        ),
+        _error('parse-error'),
+      );
+    },
+  );
+
+  test(
+    'malformed selected Stream fails the scan with a typed parse error',
+    () async {
+      final client = _client((request) async {
+        expect(request.url.path, '/library/sections/library/all');
+        return _page([
+          {
+            'ratingKey': 'invalid-selected-stream',
+            'title': 'Invalid selected stream',
+            'type': 'movie',
+            'Media': [
+              {
+                'DOVIPresent': true,
+                'Part': [
+                  {
+                    'key': '/library/parts/invalid-selected-stream.mkv',
+                    'Stream': {'codec': 'dovi'},
+                  },
+                ],
+              },
+            ],
+          },
+        ], total: 1);
+      });
+
+      await expectLater(
+        client.scanLibrary(
+          _server,
+          'token',
+          'library',
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        ),
+        _error('parse-error'),
+      );
+    },
+  );
+
+  test(
     'show genre failure fails scan while listing failure keeps item inventory',
     () async {
       for (final type in [PlexLibraryType.movie, PlexLibraryType.show]) {
@@ -834,7 +902,7 @@ void main() {
               request.url.queryParameters['type'] == '2') {
             return http.Response('', 500);
           }
-          return _page([
+          return _page(<Object?>[
             {'ratingKey': '1', 'title': 'Item', 'type': 'movie'},
           ], total: 1);
         });

@@ -47,8 +47,6 @@ std::string BoundedUtf8(const char* input, size_t limit, bool* valid_utf8) {
   return value;
 }
 
-namespace {
-
 const mpv_node* FindTrackNode(const mpv_node_list& map, const char* key) {
   for (int index = 0; index < map.num; ++index) {
     if (map.keys[index] && std::strcmp(map.keys[index], key) == 0) {
@@ -57,6 +55,8 @@ const mpv_node* FindTrackNode(const mpv_node_list& map, const char* key) {
   }
   return nullptr;
 }
+
+namespace {
 
 const char* TrackType(const mpv_node* node) {
   if (node && node->format == MPV_FORMAT_STRING && node->u.string) {

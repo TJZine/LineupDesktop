@@ -788,7 +788,7 @@ Focused portable checks:
 
 ```sh
 dart format <changed Dart paths>
-TZ=America/New_York flutter test test/playback/windows_native_player_test.dart
+TZ=America/New_York flutter test test/playback/method_channel_native_player_test.dart
 TZ=America/New_York flutter test test/playback/player_track_label_test.dart
 TZ=America/New_York flutter test test/playback/player_view_test.dart
 TZ=America/New_York flutter test test/playback/player_coordinator_test.dart

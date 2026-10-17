@@ -381,7 +381,7 @@ String _categoryContent(SettingsCategory category) => switch (category) {
   SettingsCategory.support => 'Diagnostics',
 };
 
-class _DelayedSettingsStore extends FixtureStore {
+class _DelayedSettingsStore extends MemoryAppStore {
   Completer<void> pending = Completer<void>();
   @override
   Future<void> save(value) async {

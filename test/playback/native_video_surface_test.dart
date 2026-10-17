@@ -4,6 +4,8 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
+import '../support/test_doubles.dart';
+
 void main() {
   testWidgets(
     'projects global logical bounds, DPR, deduplication, and teardown',
@@ -12,7 +14,7 @@ void main() {
       tester.view.devicePixelRatio = 2;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final player = _RecordingPlayer();
+      final player = FakeNativePlayer();
 
       Widget surface() => MaterialApp(
         home: Stack(
@@ -31,7 +33,7 @@ void main() {
       await tester.pumpWidget(surface());
       await tester.pump();
 
-      expect(player.rects, [
+      expect(player.videoRects, [
         const PlayerVideoRect(
           left: 40,
           top: 50,
@@ -43,12 +45,12 @@ void main() {
 
       await tester.pumpWidget(surface());
       await tester.pump();
-      expect(player.rects, hasLength(1));
+      expect(player.videoRects, hasLength(1));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
       expect(
-        player.rects.last,
+        player.videoRects.last,
         const PlayerVideoRect(left: 0, top: 0, width: 0, height: 0, scale: 1),
       );
     },
@@ -62,7 +64,7 @@ void main() {
         tester.view.physicalSize = window * dpr;
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.view.resetPhysicalSize);
-        final player = _RecordingPlayer();
+        final player = FakeNativePlayer();
         Widget surface() => MaterialApp(
           builder: LineupCanvas.builder,
           home: Stack(
@@ -87,7 +89,7 @@ void main() {
         await tester.pumpWidget(surface());
         await tester.pump();
         final scale = LineupCanvas.scaleFor(window);
-        expect(player.rects, [
+        expect(player.videoRects, [
           PlayerVideoRect(
             left: 52 * scale,
             top: 58 * scale,
@@ -98,83 +100,14 @@ void main() {
         ]);
         await tester.pumpWidget(surface());
         await tester.pump();
-        expect(player.rects, hasLength(1));
+        expect(player.videoRects, hasLength(1));
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
         expect(
-          player.rects.last,
+          player.videoRects.last,
           const PlayerVideoRect(left: 0, top: 0, width: 0, height: 0, scale: 1),
         );
       });
     }
   }
-}
-
-class _RecordingPlayer implements NativePlayer {
-  final rects = <PlayerVideoRect>[];
-
-  @override
-  PlayerStatus get status =>
-      const PlayerStatus(state: PlayerState.idle, message: 'Idle');
-
-  @override
-  Duration get position => Duration.zero;
-
-  @override
-  Duration get duration => Duration.zero;
-
-  @override
-  PlayerTelemetry get telemetry => const PlayerTelemetry();
-
-  @override
-  List<PlayerTrack> get tracks => const [];
-
-  @override
-  Stream<PlayerEvent> get events => const Stream.empty();
-  @override
-  DisplayMatchingReport get displayReport =>
-      const DisplayMatchingReport.initial();
-  @override
-  Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
-
-  @override
-  Future<void> initialize() async {}
-
-  @override
-  Future<void> load(
-    Uri media, {
-    String? plexToken,
-    int? generation,
-    bool startPaused = false,
-  }) async {}
-
-  @override
-  Future<void> setDisplayMatching(DisplayMatchingRequest request) async {}
-
-  @override
-  Future<void> play() async {}
-
-  @override
-  Future<void> pause() async {}
-
-  @override
-  Future<void> seek(Duration position) async {}
-
-  @override
-  Future<void> setVideoRect(PlayerVideoRect rect) async => rects.add(rect);
-
-  @override
-  Future<void> setFullscreen(bool fullscreen) async {}
-
-  @override
-  Future<void> selectTrack(PlayerTrackType type, int? id) async {}
-
-  @override
-  Future<void> setVolume(double volume) async {}
-
-  @override
-  Future<void> stop() async {}
-
-  @override
-  Future<void> dispose() async {}
 }

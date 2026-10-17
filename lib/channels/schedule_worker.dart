@@ -17,6 +17,50 @@ typedef ScheduleWorkerSpawn = Future<Isolate> Function(
   List<PlexPlaylist> playlists,
 );
 
+sealed class _ScheduleWorkerMessage {
+  const _ScheduleWorkerMessage();
+}
+
+final class _ScheduleWorkerBootstrap extends _ScheduleWorkerMessage {
+  const _ScheduleWorkerBootstrap(this.output, this.media, this.playlists);
+
+  final SendPort output;
+  final List<PlexMediaItem> media;
+  final List<PlexPlaylist> playlists;
+}
+
+final class _ScheduleWorkerRequest extends _ScheduleWorkerMessage {
+  const _ScheduleWorkerRequest(this.id, this.channel);
+
+  final int id;
+  final Channel channel;
+}
+
+final class _ScheduleWorkerResult extends _ScheduleWorkerMessage {
+  const _ScheduleWorkerResult.success(this.id, this.schedule)
+    : failureReason = null,
+      remoteErrorMessage = null,
+      remoteErrorStack = null;
+
+  const _ScheduleWorkerResult.failure(this.id, this.failureReason)
+    : schedule = null,
+      remoteErrorMessage = null,
+      remoteErrorStack = null;
+
+  const _ScheduleWorkerResult.unexpected(
+    this.id,
+    this.remoteErrorMessage,
+    this.remoteErrorStack,
+  ) : schedule = null,
+      failureReason = null;
+
+  final int id;
+  final ScheduleIndex? schedule;
+  final ScheduleFailureReason? failureReason;
+  final String? remoteErrorMessage;
+  final String? remoteErrorStack;
+}
+
 class ScheduleWorker {
   ScheduleWorker(this.media, this.playlists, {ScheduleWorkerSpawn? spawn})
     : _spawn = spawn ?? _spawnWorker;
@@ -44,7 +88,7 @@ class ScheduleWorker {
     final completer = Completer<ScheduleIndex>();
     _pending[id] = completer;
     try {
-      port.send([id, channel]);
+      port.send(_ScheduleWorkerRequest(id, channel));
     } catch (_) {
       _pending.remove(id);
       rethrow;
@@ -84,16 +128,16 @@ class ScheduleWorker {
       retire();
     }
 
-    responses.listen((message) {
+    responses.listen((Object? message) {
       if (!identical(_responses, responses)) return;
       if (message == null) {
         fail(StateError('Schedule worker exited unexpectedly'));
         return;
       }
-      if (message is List<Object?> && message.length == 2) {
+      if (_isVmErrorMessage(message)) {
         final error = RemoteError(
-          message[0].toString(),
-          message[1]?.toString() ?? '',
+          (message as List<Object?>)[0] as String,
+          message[1] as String,
         );
         fail(error, error.stackTrace);
         return;
@@ -108,26 +152,44 @@ class ScheduleWorker {
         }
         return;
       }
-      if (message is! List<Object?> ||
-          message.length != 3 ||
-          message[0] is! int) {
-        fail(StateError('Schedule worker sent an invalid response'));
+      if (message is _ScheduleWorkerResult) {
+        final completer = _pending.remove(message.id);
+        if (completer == null) return;
+        if (message.remoteErrorMessage != null &&
+            message.remoteErrorStack != null) {
+          final error = RemoteError(
+            message.remoteErrorMessage!,
+            message.remoteErrorStack!,
+          );
+          completer.completeError(error, error.stackTrace);
+        } else if (message.schedule != null) {
+          completer.complete(message.schedule);
+        } else if (message.failureReason != null) {
+          completer.completeError(
+            ScheduleBuildException(message.failureReason!),
+          );
+        } else {
+          completer.completeError(
+            StateError('Schedule worker could not build the schedule'),
+          );
+        }
         return;
       }
-      final values = message;
-      final completer = _pending.remove(values[0] as int);
-      if (completer == null) return;
-      final schedule = values[1] as ScheduleIndex?;
-      if (schedule == null) {
-        final reason = values[2] as ScheduleFailureReason?;
+      final requestId = _correlatedRequestId(message);
+      if (requestId != null) {
+        final completer = _pending.remove(requestId);
+        if (completer == null) {
+          fail(
+            const FormatException('Schedule worker sent an invalid response'),
+          );
+          return;
+        }
         completer.completeError(
-          reason == null
-              ? StateError('Schedule worker could not build the schedule')
-              : ScheduleBuildException(reason),
+          const FormatException('Schedule worker sent an invalid response'),
         );
-      } else {
-        completer.complete(schedule);
+        return;
       }
+      fail(const FormatException('Schedule worker sent an invalid response'));
     });
 
     Future<Isolate> spawning;
@@ -162,40 +224,50 @@ class ScheduleWorker {
     SendPort responses,
     List<PlexMediaItem> media,
     List<PlexPlaylist> playlists,
-  ) => Isolate.spawn(
+  ) => Isolate.spawn<_ScheduleWorkerBootstrap>(
     _run,
-    [responses, media, playlists],
+    _ScheduleWorkerBootstrap(responses, media, playlists),
     onExit: responses,
     onError: responses,
     errorsAreFatal: true,
     debugName: 'Lineup schedule worker',
   );
 
-  static void _run(List<Object?> bootstrap) {
-    final output = bootstrap[0] as SendPort;
-    final media = bootstrap[1] as List<PlexMediaItem>;
-    final playlists = bootstrap[2] as List<PlexPlaylist>;
+  static void _run(_ScheduleWorkerBootstrap bootstrap) {
+    final output = bootstrap.output;
+    final media = bootstrap.media;
+    final playlists = bootstrap.playlists;
     final requests = ReceivePort();
     output.send(requests.sendPort);
     requests.listen((message) {
-      final values = message as List<Object?>;
-      final id = values[0] as int;
-      final channel = values[1] as Channel;
+      if (message is! _ScheduleWorkerRequest) return;
       try {
-        output.send([
-          id,
-          buildChannelSchedule(
-            channel,
-            resolveContent(channel.source, media, playlists),
+        output.send(
+          _ScheduleWorkerResult.success(
+            message.id,
+            buildChannelSchedule(
+              message.channel,
+              resolveContent(message.channel.source, media, playlists),
+            ),
           ),
-          null,
-        ]);
+        );
       } on ScheduleBuildException catch (error) {
-        output.send([id, null, error.reason]);
+        output.send(_ScheduleWorkerResult.failure(message.id, error.reason));
       } on FormatException {
-        output.send([id, null, ScheduleFailureReason.unsupportedSource]);
-      } catch (_) {
-        output.send([id, null, null]);
+        output.send(
+          _ScheduleWorkerResult.failure(
+            message.id,
+            ScheduleFailureReason.unsupportedSource,
+          ),
+        );
+      } catch (error, stackTrace) {
+        output.send(
+          _ScheduleWorkerResult.unexpected(
+            message.id,
+            error.toString(),
+            stackTrace.toString(),
+          ),
+        );
       }
     });
   }
@@ -224,3 +296,14 @@ class ScheduleWorker {
     _pending.clear();
   }
 }
+
+bool _isVmErrorMessage(Object message) =>
+    message is List &&
+    message.length == 2 &&
+    message[0] is String &&
+    message[1] is String;
+
+int? _correlatedRequestId(Object message) =>
+    message is List && message.isNotEmpty && message[0] is int
+    ? message[0] as int
+    : null;

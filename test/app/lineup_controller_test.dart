@@ -1,4 +1,5 @@
 import '../support/committed_state_matchers.dart';
+import '../support/test_doubles.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -41,6 +42,226 @@ Future<void> _waitForTestState(
 }
 
 void main() {
+  test(
+    'partial lineup publications retain unchanged owned collections',
+    () async {
+      final first = _channel('first');
+      final second = Channel.fromJson({
+        ..._channel('second').toJson(),
+        'number': 2,
+      });
+      final store = _MemoryStore();
+      const movies = PlexLibrary(
+        id: 'movies',
+        title: 'Movies',
+        type: PlexLibraryType.movie,
+      );
+      const tv = PlexLibrary(id: 'tv', title: 'TV', type: PlexLibraryType.show);
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+        scenario: LineupScenario(
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          server: _server('server'),
+          libraries: const [movies, tv],
+          selectedLibraryIds: const {'movies'},
+          channels: [first, second],
+          currentChannelId: first.id,
+        ),
+      );
+      addTearDown(controller.dispose);
+      final channels = controller.channels;
+      final libraryIds = controller.selectedLibraryIds;
+      final revision = controller.channelRevision(first.id);
+
+      await controller.setCurrentChannel(second.id);
+      expect(controller.channels, same(channels));
+      expect(controller.selectedLibraryIds, same(libraryIds));
+      expect(controller.currentChannelId, second.id);
+      expect(
+        store.state.currentChannelByProfileServer['owner']!['server'],
+        second.id,
+      );
+
+      final selected = {'movies', 'tv'};
+      controller.fixtureActor.publishInventory(selectedLibraryIds: selected);
+      selected.clear();
+      expect(controller.selectedLibraryIds, {'movies', 'tv'});
+      expect(controller.channels, same(channels));
+      controller.fixtureActor.discoverLibraries(const [movies]);
+      expect(controller.selectedLibraryIds, {'movies'});
+      expect(controller.channels, same(channels));
+      expect(controller.currentChannelId, second.id);
+      expect(controller.channelRevision(first.id), revision);
+
+      final filteredIds = controller.selectedLibraryIds;
+      await controller.setCurrentChannel(null);
+      expect(controller.channels, same(channels));
+      expect(controller.selectedLibraryIds, same(filteredIds));
+      expect(controller.currentChannelId, isNull);
+      expect(() => controller.channels.clear(), throwsUnsupportedError);
+      expect(
+        () => controller.selectedLibraryIds.clear(),
+        throwsUnsupportedError,
+      );
+    },
+  );
+
+  test(
+    'clearing saved server persists runtime settings and retains scoped lineup',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      await controller.initialize();
+      controller.fixtureActor.publishSettings(
+        controller.settings.copyWith(guideHours: 4),
+      );
+      final channels = controller.channels;
+      await controller.clearSavedServer();
+      expect(fixture.store.state.settings.guideHours, 4);
+      expect(fixture.store.state.selectedServerByProfile, isEmpty);
+      expect(
+        fixture
+            .store
+            .state
+            .selectedLibraryIdsByProfileServer['owner']!['server'],
+        ['movies', 'tv'],
+      );
+      expect(
+        fixture.store.state.channelsByProfileServer['owner']!['server'],
+        channelValues(channels),
+      );
+      expect(controller.server, isNull);
+      expect(controller.channels, isEmpty);
+    },
+  );
+
+  test(
+    'clearing saved server does not publish after disposal during its save',
+    () async {
+      final store = _ControlledSaveStore();
+      final fixture = _reentryFixture(storeOverride: store);
+      final controller = fixture.controller;
+      await controller.initialize();
+      final server = controller.server;
+      final channels = controller.channels;
+      store.blockNext();
+      final clearing = controller.clearSavedServer();
+      await store.blockedSaveStarted.future;
+      controller.dispose();
+      store.releaseBlockedSave();
+      await clearing;
+      expect(store.state.selectedServerByProfile, isEmpty);
+      expect(controller.server, same(server));
+      expect(controller.channels, same(channels));
+    },
+  );
+
+  test(
+    'NF-07 refresh during saved selection save cannot strand restore intent',
+    () async {
+      final store = _ControlledSaveStore();
+      final fixture = _reentryFixture(storeOverride: store);
+      final controller = fixture.controller;
+      await controller.initialize();
+      store.blockNext();
+      final selecting = controller.selectServer(
+        fixture.plex.serversResult.first,
+      );
+      await store.blockedSaveStarted.future;
+      await controller.refreshServers();
+      store.releaseBlockedSave();
+      await selecting;
+      expect(controller.server!.id, 'server');
+      expect(controller.selectedLibraryIds, {'movies', 'tv'});
+      expect(store.state.selectedServerByProfile['owner'], 'server');
+      expect(controller.restoringSavedLineup, isFalse);
+    },
+  );
+
+  test(
+    'NF-07 old scan completion preserves newer saved restore intent',
+    () async {
+      final fixture = _reentryFixture();
+      final controller = fixture.controller;
+      await controller.initialize();
+      final oldStarted = Completer<void>();
+      final oldRelease = Completer<void>();
+      final newStarted = Completer<void>();
+      final newRelease = Completer<void>();
+      var old = true;
+      fixture.plex.scanLibraryHandler = (_, _, id, _, _, _, _) async {
+        if (old) {
+          if (!oldStarted.isCompleted) oldStarted.complete();
+          await oldRelease.future;
+        } else {
+          if (!newStarted.isCompleted) newStarted.complete();
+          await newRelease.future;
+        }
+        return PlexLibraryScan(items: [_scanMovie(id)]);
+      };
+      final abandoned = controller.scanLibraries({'movies', 'tv'});
+      await oldStarted.future;
+      old = false;
+      final restoring = controller.selectServer(
+        fixture.plex.serversResult.first,
+      );
+      await newStarted.future;
+      expect(controller.restoringSavedLineup, isTrue);
+      oldRelease.complete();
+      expect(await abandoned, isFalse);
+      expect(controller.restoringSavedLineup, isTrue);
+      newRelease.complete();
+      await restoring;
+      expect(controller.restoringSavedLineup, isFalse);
+      expect(controller.stage, SetupStage.ready);
+    },
+  );
+
+  test(
+    'NF-08 queued scan commit reports false after selection retires readiness',
+    () async {
+      final store = _ControlledSaveStore();
+      final fixture = _reentryFixture(storeOverride: store);
+      final controller = fixture.controller;
+      await controller.initialize();
+      store.blockNext();
+      final selecting = controller.selectServer(
+        fixture.plex.serversResult.last,
+      );
+      await store.blockedSaveStarted.future;
+      final committing = controller.commitLibraryScan({'movies'});
+      store.releaseBlockedSave();
+      await selecting;
+      expect(await committing, isFalse);
+      expect(controller.error, isNull);
+      expect(controller.server!.id, 'other');
+      expect(controller.selectedLibraryIds, isEmpty);
+    },
+  );
+
+  test('NF-09 scan schedule migration records channel revisions', () async {
+    final fixture = _reentryFixture();
+    final controller = fixture.controller;
+    await controller.initialize();
+    final raw = _channel('legacy').toJson()..remove('scheduleVersion');
+    controller.fixtureActor.replaceChannels([Channel.fromJson(raw)]);
+    final before = controller.channelRevision('legacy');
+    expect(await controller.commitLibraryScan({'movies'}), isTrue);
+    expect(controller.channels.single.scheduleVersion, currentScheduleVersion);
+    expect(controller.channelRevision('legacy'), greaterThan(before));
+    expect(
+      fixture
+          .store
+          .state
+          .channelsByProfileServer['owner']!['server']!
+          .single
+          .scheduleVersion,
+      currentScheduleVersion,
+    );
+  });
+
   test(
     'queued reviewed plans detach every programming alias at entry',
     () async {
@@ -396,7 +617,7 @@ void main() {
     final durable =
         store.state.channelsByProfileServer['owner']!['server']!.single;
     expect((durable.source as ManualSource).items.single.genres, ['Comedy']);
-    expect(() => committed.genres.clear(), throwsUnsupportedError);
+    expect(committed.genres.clear, throwsUnsupportedError);
   });
 
   test(
@@ -574,17 +795,14 @@ void main() {
     expect(committedMedia.single.parts.single.path, '/movie');
     expect(committedMedia.single.actors, ['Drama']);
     expect(committedPlaylists.single.items.single.genres, ['Drama']);
+    expect(library.filters[LibraryFilter.genre]!.clear, throwsUnsupportedError);
+    expect(manual.items.single.genres.clear, throwsUnsupportedError);
+    expect(source.sources.clear, throwsUnsupportedError);
     expect(
-      () => library.filters[LibraryFilter.genre]!.clear(),
+      committed.single.scheduleTransition!.legacyCycleItems.clear,
       throwsUnsupportedError,
     );
-    expect(() => manual.items.single.genres.clear(), throwsUnsupportedError);
-    expect(() => source.sources.clear(), throwsUnsupportedError);
-    expect(
-      () => committed.single.scheduleTransition!.legacyCycleItems.clear(),
-      throwsUnsupportedError,
-    );
-    expect(() => committedMedia.single.parts.clear(), throwsUnsupportedError);
+    expect(committedMedia.single.parts.clear, throwsUnsupportedError);
     expect(
       () => committedMedia.single.collections.clear(),
       throwsUnsupportedError,
@@ -7319,7 +7537,10 @@ void main() {
     );
     await store.blockedSaveStarted.future;
     final stale = controller.saveChannel(_channel('stale'), expectedBase: null);
-    final staleExpectation = expectLater(stale, throwsStateError);
+    final staleExpectation = expectLater(
+      stale,
+      throwsA(isA<LineupScopeSuperseded>()),
+    );
     final logout = controller.logout();
     store.releaseBlockedSave();
 
@@ -8172,7 +8393,10 @@ void main() {
         );
         final mutationResult = saveFails
             ? queuedMutation
-            : expectLater(queuedMutation, throwsStateError);
+            : expectLater(
+                queuedMutation,
+                throwsA(isA<LineupScopeSuperseded>()),
+              );
         final savesBeforeRelease = store.saveCalls;
         store.releaseBlockedSave();
         await selecting;
@@ -8301,7 +8525,10 @@ void main() {
           expectedLineup: [existing],
           orderedChannelIds: [existing.id],
         );
-        final denied = expectLater(queued, throwsStateError);
+        final denied = expectLater(
+          queued,
+          throwsA(isA<LineupScopeSuperseded>()),
+        );
         final logout = controller.logout();
         await Future<void>.delayed(Duration.zero);
         await expectLater(
@@ -8618,27 +8845,27 @@ Channel _generatedChannel(String id, int number, {String? builderKey}) =>
     );
 
 ({LineupController controller, _FakePlex plex, _MemoryStore store})
-_reentryFixture({bool saved = true}) {
+_reentryFixture({bool saved = true, _MemoryStore? storeOverride}) {
   final selected = _server('server');
-  final store = _MemoryStore(
-    PersistedState(
-      selectedServerByProfile: const {'owner': 'server'},
-      selectedLibraryIdsByProfileServer: saved
-          ? const {
-              'owner': {
-                'server': ['movies', 'tv'],
-              },
-            }
-          : const {},
-      channelsByProfileServer: saved
-          ? {
-              'owner': {
-                'server': [_channel('saved')],
-              },
-            }
-          : const {},
-    ),
+  final initialState = PersistedState(
+    selectedServerByProfile: const {'owner': 'server'},
+    selectedLibraryIdsByProfileServer: saved
+        ? const {
+            'owner': {
+              'server': ['movies', 'tv'],
+            },
+          }
+        : const {},
+    channelsByProfileServer: saved
+        ? {
+            'owner': {
+              'server': [_channel('saved')],
+            },
+          }
+        : const {},
   );
+  final store = storeOverride ?? _MemoryStore();
+  store.state = initialState;
   final plex = _FakePlex()
     ..serversResult = [selected, _server('other')]
     ..connectionResult = selected.connections.single
@@ -8696,32 +8923,9 @@ class _MemoryStore implements AppStore {
   }
 }
 
-class _MemoryCredentials implements CredentialStore {
-  _MemoryCredentials({this.accountToken, Map<String, String>? profileTokens})
-    : profileTokens = profileTokens ?? {};
-
-  String? accountToken;
-  final Map<String, String> profileTokens;
-
-  @override
-  Future<void> clear() async {
-    accountToken = null;
-    profileTokens.clear();
-  }
-
-  @override
-  Future<String?> readAccountToken() async => accountToken;
-
-  @override
-  Future<String?> readProfileToken(String profileId) async =>
-      profileTokens[profileId];
-
-  @override
-  Future<void> writeAccountToken(String token) async => accountToken = token;
-
-  @override
-  Future<void> writeProfileToken(String profileId, String token) async =>
-      profileTokens[profileId] = token;
+class _MemoryCredentials extends MemoryCredentialStore {
+  _MemoryCredentials({super.accountToken, Map<String, String>? profileTokens})
+    : super(profileTokens: profileTokens ?? {});
 }
 
 class _AmbiguousWriteCredentials extends _MemoryCredentials {
@@ -8918,9 +9122,7 @@ class _FakePlex extends PlexClient {
   _FakePlex()
     : super(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: MockClient(
-          (_) async => throw StateError('unexpected HTTP'),
-        ),
+        httpClient: testPlexHttpClient(),
       );
 
   PlexAccount accountResult = const PlexAccount(
@@ -9056,6 +9258,8 @@ class _FakePlex extends PlexClient {
     cancelPinCalls++;
     final failure = cancelPinFailure;
     cancelPinFailure = null;
+    // The fixture injects arbitrary failures to exercise propagation.
+    // ignore: only_throw_errors
     if (failure != null) throw failure;
   }
 

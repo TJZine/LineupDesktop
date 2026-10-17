@@ -89,13 +89,42 @@ void UnverifiedOriginalRemainsUnresolved() {
   Check(!session.ParentLost(api) && api.writes == 0 && api.queries == 1,
         "observing original cannot settle a potentially late attempted write");
 }
+void RecoveryAttemptHistoryEdges() {
+  auto pending = owned;
+  pending.verified = pending.original;
+  GuardianSession late;
+  Check(late.Accept(MakeGuardianRecord(GuardianKind::arm, 1, pending)).has_value(),
+        "arm previously verified original with pending opposite attempt");
+  FakeApi original;
+  original.observed = pending.original;
+  Check(!late.ParentLost(original) && original.writes == 0 && original.queries == 1,
+        "verified original cannot settle an unverified opposite attempt");
+
+  pending = owned;
+  pending.attempted = pending.original;
+  GuardianSession restoring;
+  Check(restoring.Accept(MakeGuardianRecord(GuardianKind::arm, 1, pending)).has_value(),
+        "arm unverified restoration with verified HDR");
+  FakeApi hdr;
+  Check(restoring.ParentLost(hdr) && hdr.writes == 1 && hdr.queries == 2 &&
+            hdr.requested == pending.original,
+        "attempted original does not hide verified HDR requiring restoration");
+  GuardianSession already;
+  Check(already.Accept(MakeGuardianRecord(GuardianKind::arm, 1, pending)).has_value(),
+        "arm restoration already at original");
+  FakeApi safe;
+  safe.observed = pending.original;
+  Check(already.ParentLost(safe) && safe.writes == 0 && safe.queries == 1,
+        "restoration attempt at original is safe rather than unresolved");
+}
 void NoActionCases() {
   for (DisplayState state : {DisplayState::sdr, DisplayState::unknown}) {
     GuardianSession session;
     Check(session.Accept(Arm()).has_value(), "arm");
     FakeApi api;
     api.observed = state;
-    session.ParentLost(api);
+    Check(session.ParentLost(api) == (state == DisplayState::sdr),
+          "R1 unknown is unresolved; R3 original is safe");
     Check(api.queries == 1 && api.writes == 0,
           "original or unknown is never changed");
   }
@@ -106,7 +135,7 @@ void NoActionCases() {
             .has_value(),
         "arm no writes");
   FakeApi api;
-  other.ParentLost(api);
+  Check(other.ParentLost(api), "external state is safe without restoration");
   Check(api.queries == 1 && api.writes == 0,
         "unowned observed state is not changed");
 
@@ -117,10 +146,10 @@ void NoActionCases() {
   Check(ack && ValidGuardianAck(*ack, 2) && disarmed.Finished(),
         "disarm acknowledged");
   FakeApi after;
-  disarmed.ParentLost(after);
+  Check(!disarmed.ParentLost(after), "disarmed loss performs no recovery");
   Check(after.queries == 0 && after.writes == 0, "disarm prohibits recovery");
   GuardianSession unarmed;
-  unarmed.ParentLost(after);
+  Check(!unarmed.ParentLost(after), "unarmed loss performs no recovery");
   Check(after.queries == 0, "loss before arm has no target");
 }
 void ValidationCases() {
@@ -334,6 +363,7 @@ int main(int argc, char **argv) {
       return *child;
     RestoreCases();
     NoActionCases();
+    RecoveryAttemptHistoryEdges();
     UnverifiedOriginalRemainsUnresolved();
     ValidationCases();
     AcknowledgmentCases();

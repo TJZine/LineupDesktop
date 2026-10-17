@@ -1,3 +1,7 @@
+// Stream controllers are intentionally completed by the transport cancellation
+// paths exercised in these protocol tests.
+// ignore_for_file: close_sinks
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -6,6 +10,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:lineup_desktop/app_version.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -102,11 +107,14 @@ void main() {
 
   for (final failure in <Object>[
     const SocketException('opaque socket detail'),
+    const HandshakeException('opaque handshake detail'),
     http.ClientException('opaque client detail'),
   ]) {
     test('${failure.runtimeType} maps to a finite transport code', () async {
       final client = PlexClient(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        // The transport fixture supplies representative IO exceptions.
+        // ignore: only_throw_errors
         httpClient: MockClient((_) async => throw failure),
       );
       await expectLater(
@@ -152,7 +160,23 @@ void main() {
       request.headers['X-Plex-Client-Identifier'],
       'lineup-desktop-test-abcdefghijklmnopqrst',
     );
+    expect(request.headers['X-Plex-Version'], lineupVersion);
     expect(request.headers, isNot(contains('X-Plex-Token')));
+  });
+
+  test('invalid PIN expiration is a typed parse error', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({'id': 5, 'code': 'ABCD', 'expiresAt': 'invalid'}),
+          201,
+        ),
+      ),
+    );
+    addTearDown(client.close);
+
+    await expectLater(client.createPin(), _plexError('parse-error'));
   });
 
   test(
@@ -3077,7 +3101,7 @@ void main() {
         );
         return http.Response(
           jsonEncode({
-            'MediaContainer': {'totalSize': 0, 'Metadata': []},
+            'MediaContainer': {'totalSize': 0, 'Metadata': <Object?>[]},
           }),
           200,
         );
@@ -3292,8 +3316,8 @@ void main() {
       'duration': 1000,
     };
     final badBodies = <String, Object?>{
-      'missing container': {'Other': []},
-      'non-map container': {'MediaContainer': []},
+      'missing container': {'Other': <Object?>[]},
+      'non-map container': {'MediaContainer': <Object?>[]},
       'non-list metadata': {
         'MediaContainer': {'Metadata': 'soon'},
       },
@@ -4054,7 +4078,7 @@ void main() {
           paths.add(request.url.path);
           return switch (request.url.path) {
             '/api/v2/home/users' => http.Response(
-              jsonEncode({'users': []}),
+              jsonEncode({'users': <Object?>[]}),
               200,
             ),
             '/api/home/users' => http.Response(
@@ -4084,6 +4108,24 @@ void main() {
       ]);
     },
   );
+
+  test('Plex Home skips empty XML tokens', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          '<root><user authenticationToken=""/><user authenticationToken="profile-token"/></root>',
+          200,
+        ),
+      ),
+    );
+    addTearDown(client.close);
+
+    expect(
+      await client.switchHomeUser('account-token', '7', null),
+      'profile-token',
+    );
+  });
 
   test('Plex Home JSON preserves explicit role facts', () async {
     final client = PlexClient(
@@ -4197,7 +4239,7 @@ void main() {
     });
   }
 
-  for (final (format, payload) in [
+  for (final (format, payload) in <(String, String)>[
     ('JSON', '{"users":'),
     ('XML', '<MediaContainer>'),
   ]) {
@@ -4223,8 +4265,8 @@ void main() {
     );
   }
 
-  for (final (format, payload) in [
-    ('JSON', jsonEncode({'users': []})),
+  for (final (format, payload) in <(String, String)>[
+    ('JSON', jsonEncode({'users': <Object?>[]})),
     ('XML', '<MediaContainer/>'),
   ]) {
     test('valid empty Plex Home inventory remains empty ($format)', () async {

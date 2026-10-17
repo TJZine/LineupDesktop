@@ -280,7 +280,7 @@ Report Pass, Fail, or Blocked per row, with the commit SHA and build identity.
 ## Out of scope
 
 - Gapless preloading of the next program.
-- Fullscreen HDR matching (see the [HDR discovery plan](fullscreen-hdr-discovery-plan.md)).
+- Fullscreen HDR matching (see the [HDR implementation plan](fullscreen-hdr-implementation-plan.md)).
 - New Player UI.
 - Changes to Guide wall-clock behavior.
 - Automatic retry after failures.

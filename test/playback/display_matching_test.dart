@@ -114,7 +114,7 @@ void main() {
         case 'deadline':
           await f.elapse(tester, const Duration(seconds: 4));
         case 'end':
-          f.policy.updateSession(false, paused: true);
+          f.policy.updateSession(false, userPaused: true);
       }
       expect(f.player.plays, 1);
       expect(f.policy.holdActive, isFalse);
@@ -223,7 +223,7 @@ void main() {
         final f = _Fixture();
         expect(f.policy.beginLoad(1, null), isFalse);
         f.decode();
-        f.policy.updateSession(true, paused: paused);
+        f.policy.updateSession(true, userPaused: paused);
         f.report(
           observed: matching
               ? DisplayMatchingState.hdr
@@ -250,11 +250,11 @@ void main() {
       tester,
     ) async {
       final f = _Fixture();
-      f.policy.updateSession(true, paused: false);
+      f.policy.updateSession(true, userPaused: false);
       f.report(session: state);
       expect(f.policy.beginLoad(1, null), isFalse);
-      f.policy.updateSession(false, paused: false);
-      f.policy.updateSession(true, paused: false);
+      f.policy.updateSession(false, userPaused: false);
+      f.policy.updateSession(true, userPaused: false);
       expect(f.policy.beginLoad(2, null), isTrue);
       f.close();
     });
@@ -302,7 +302,7 @@ void main() {
     f.policy.beginLoad(1, null);
     f.decode();
     f.player.pendingPause = Completer<void>();
-    f.policy.updateSession(true, paused: false);
+    f.policy.updateSession(true, userPaused: false);
     f.report();
     final old = f.player.pendingPause!;
     f.player.pendingPause = null;
@@ -358,22 +358,23 @@ void main() {
     f.close();
   });
 
-  testWidgets(
-    'rapid session restart does not mistake a hold pause for user pause',
-    (tester) async {
-      final f = _Fixture();
-      f.start();
-      f.decode();
-      f.policy.updateSession(false, paused: true);
-      expect(f.player.plays, 1);
-      f.policy.updateSession(true, paused: true);
-      f.report(observed: DisplayMatchingState.sdr);
-      f.report(outcome: DisplayMatchingOutcome.matched);
-      expect(f.player.pauses, 1);
-      expect(f.player.plays, 2);
-      f.close();
-    },
-  );
+  testWidgets('rapid session restart retains explicit play intent', (
+    tester,
+  ) async {
+    final f = _Fixture();
+    f.start();
+    f.decode();
+    // The coordinator now supplies user intent independently of native
+    // pause observations caused by the hold.
+    f.policy.updateSession(false, userPaused: false);
+    expect(f.player.plays, 1);
+    f.policy.updateSession(true, userPaused: false);
+    f.report(observed: DisplayMatchingState.sdr);
+    f.report(outcome: DisplayMatchingOutcome.matched);
+    expect(f.player.pauses, 1);
+    expect(f.player.plays, 2);
+    f.close();
+  });
 
   testWidgets('first transfer only; no extra revisions for polls', (
     tester,
@@ -459,7 +460,7 @@ class _Fixture {
   late final DisplayMatching policy;
   DateTime now = DateTime.utc(2026);
   void start({Duration? target}) {
-    policy.updateSession(true, paused: false);
+    policy.updateSession(true, userPaused: false);
     expect(policy.beginLoad(1, target), isTrue);
   }
 

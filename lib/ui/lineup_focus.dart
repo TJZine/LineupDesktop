@@ -4,6 +4,12 @@ import 'package:flutter/services.dart';
 import 'app_theme.dart';
 
 /// Paint modality is separate from focus ownership. Pointer input never unfocuses.
+///
+/// This scope shows rings for navigation keys only. Player and shell separately
+/// observe every key-down/repeat for focus restoration and overlay timeout policy.
+/// Their resets are intentional (b86693d9): Player hover returns to pointer mode
+/// and calls handlePointerActivity independently; shell pointer-down returns to
+/// pointer mode. Do not substitute ring visibility for actual input modality.
 class LineupFocusScope extends StatefulWidget {
   const LineupFocusScope({required this.child, super.key});
   final Widget child;

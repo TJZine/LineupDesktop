@@ -27,6 +27,7 @@ void main() {
   Future<ProcessResult> run({bool check = true, String? directory}) {
     return Process.run(dart, [
       formatter,
+      '--skip-toolchain-check',
       if (check) '--check',
     ], workingDirectory: directory ?? repository.path);
   }
