@@ -275,11 +275,12 @@ jobs:
           & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
           $env:LINEUP_MPV_ROOT = $mpvRoot
           flutter build windows
-          cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test native_playback_state_test player_core_contract_test encodable_value_conversion_test display_dynamic_range_test display_guardian_test
+          cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test native_playback_state_test player_core_contract_test encodable_value_conversion_test display_dynamic_range_test display_guardian_test native_player_contract_test
           foreach ($nativeTest in @('track_list_encoder', 'native_playback_state', 'player_core_contract', 'encodable_value_conversion', 'display_dynamic_range')) {
             ctest --test-dir .\build\windows\x64 -C Release -R "^${nativeTest}$" --output-on-failure --no-tests=error --parallel 1 --timeout 30
           }
           ctest --test-dir .\build\windows\x64 -C Release -R '^display_guardian$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
+          ctest --test-dir .\build\windows\x64 -C Release -R '^native_player_contract$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
 
   release-inputs:
     name: Detect Windows release inputs
