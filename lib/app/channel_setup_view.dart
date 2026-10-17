@@ -388,7 +388,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       final ready = widget.controller.libraryScanCommittableIds.intersection(
         _selectedLibraries,
       );
-      if (advanceWhenReady && ready.length == _selectedLibraries.length) {
+      if (advanceWhenReady &&
+          ready.length == _selectedLibraries.length &&
+          widget.controller.libraryScanStatus == LibraryScanStatus.complete &&
+          widget.controller.error == null) {
         await _commitLibraries(ready);
       } else {
         setState(() {});

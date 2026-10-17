@@ -42,14 +42,18 @@ class _LibraryScanRow {
     this.items,
     this.failedTitles = const {},
     this.discoveryFailure,
+    this.retainedAfterFailure = false,
   });
 
   final LibraryScanFact fact;
   final List<PlexMediaItem>? items;
   final Set<String> failedTitles;
   final PlexCollectionFailure? discoveryFailure;
+  // A usable old item result is not a successful read by the latest attempt.
+  final bool retainedAfterFailure;
 
   bool get needsRetry =>
+      retainedAfterFailure ||
       const {
         LibraryScanStatus.transientFailure,
         LibraryScanStatus.cancelled,
@@ -63,7 +67,29 @@ class _LibraryScanRow {
     items: items,
     failedTitles: failedTitles,
     discoveryFailure: discoveryFailure,
+    retainedAfterFailure: retainedAfterFailure,
   );
+
+  _LibraryScanRow retainAfterFailedRead() => _LibraryScanRow(
+    fact: fact,
+    items: items,
+    failedTitles: failedTitles,
+    discoveryFailure: discoveryFailure,
+    retainedAfterFailure: true,
+  );
+}
+
+/// Retry work can be newer than the readiness restored for explicit Continue.
+class _ScanRetryInventory {
+  const _ScanRetryInventory({
+    required this.contentScope,
+    required this.scope,
+    required this.rows,
+  });
+
+  final int contentScope;
+  final ({String? profileId, String serverId}) scope;
+  final Map<String, _LibraryScanRow> rows;
 }
 
 class _ScanReadiness {
@@ -115,6 +141,7 @@ class _LibraryScanState {
   int? _rowContentScope;
   _ScanReadiness? _ready;
   _ScanAttempt? _attempt;
+  _ScanRetryInventory? _retainedRetry;
   Map<String, _LibraryScanRow> _retryBaseline = const {};
   Completer<void>? _cancelled;
   Object? failure;
@@ -139,7 +166,7 @@ class _LibraryScanState {
           entry.key: ?entry.value.discoveryFailure,
       });
   Set<String> get retryIds => Set.unmodifiable(
-    rows.entries
+    (_retainedRetry?.rows ?? rows).entries
         .where((entry) => entry.value.needsRetry)
         .map((entry) => entry.key),
   );
@@ -259,24 +286,26 @@ class _LibraryScanState {
     required bool retryFailedOnly,
     required Set<String>? retryLibraryIds,
   }) {
+    final retryRows = _retainedRetry?.rows ?? rows;
     final retain =
         (retryFailedOnly || retryLibraryIds != null) &&
-        _rowContentScope == contentScope &&
-        scope == selectedScope &&
-        setEquals(ids, selectedIds);
-    _retryBaseline = retain ? rows : const {};
+        (_retainedRetry?.contentScope ?? _rowContentScope) == contentScope &&
+        (_retainedRetry?.scope ?? scope) == selectedScope &&
+        setEquals(retryRows.keys.toSet(), selectedIds);
+    _retryBaseline = retain ? retryRows : const {};
+    _retainedRetry = null;
     final retainedIds = <String>{
       for (final id in selectedIds)
         if (retain &&
             (retryLibraryIds != null
                 ? !retryLibraryIds.contains(id)
-                : rows[id]!.items != null && !rows[id]!.needsRetry))
+                : retryRows[id]!.items != null && !retryRows[id]!.needsRetry))
           id,
     };
     rows = Map.unmodifiable({
       for (final id in selectedIds)
         id: retainedIds.contains(id)
-            ? rows[id]!
+            ? retryRows[id]!
             : (_retryBaseline[id] ??
                       const _LibraryScanRow(
                         fact: LibraryScanFact(status: LibraryScanStatus.idle),
@@ -287,7 +316,7 @@ class _LibraryScanState {
     });
     scope = selectedScope;
     _rowContentScope = contentScope;
-    discoveryObsolete = false;
+    _updateDiscoveryFreshness();
     catalogUnavailable = true;
     failedPlaylistIds = const {};
     status = LibraryScanStatus.scanning;
@@ -363,13 +392,17 @@ class _LibraryScanState {
         discoveryFailure: scan.collections.failure,
       ),
     });
+    _updateDiscoveryFreshness();
   }
+
+  void _updateDiscoveryFreshness() =>
+      discoveryObsolete = rows.values.any((row) => row.retainedAfterFailure);
 
   void failLibrary(String id) {
     final retained = _retryBaseline[id];
     if (retained?.items != null) {
       discoveryObsolete = true;
-      rows = Map.unmodifiable({...rows, id: retained!});
+      rows = Map.unmodifiable({...rows, id: retained!.retainAfterFailedRead()});
       return;
     }
     final current = rows[id]!.fact;
@@ -410,11 +443,13 @@ class _LibraryScanState {
     ),
     status:
         rows.values.any(
-          (row) => const {
-            LibraryScanStatus.transientFailure,
-            LibraryScanStatus.cancelled,
-            LibraryScanStatus.idle,
-          }.contains(row.fact.status),
+          (row) =>
+              row.retainedAfterFailure ||
+              const {
+                LibraryScanStatus.transientFailure,
+                LibraryScanStatus.cancelled,
+                LibraryScanStatus.idle,
+              }.contains(row.fact.status),
         )
         ? LibraryScanStatus.transientFailure
         : media.isNotEmpty
@@ -444,6 +479,19 @@ class _LibraryScanState {
         )) {
       return;
     }
+    final currentScope = scope;
+    if (_rowContentScope == contentScope &&
+        currentScope != null &&
+        !identical(rows, previous.rows)) {
+      _retainedRetry = _ScanRetryInventory(
+        contentScope: contentScope,
+        scope: currentScope,
+        rows: Map.unmodifiable({
+          for (final entry in rows.entries)
+            entry.key: _retryRow(entry.key, entry.value, previous),
+        }),
+      );
+    }
     _ready = previous;
     rows = previous.rows;
     scope = previous.scope;
@@ -452,6 +500,24 @@ class _LibraryScanState {
     failedPlaylistIds = previous.result.failedPlaylistIds;
     status = previous.result.status;
     discoveryObsolete = true;
+  }
+
+  _LibraryScanRow _retryRow(
+    String id,
+    _LibraryScanRow row,
+    _ScanReadiness previous,
+  ) {
+    final fallback = _retryBaseline[id] ?? previous.rows[id];
+    if (fallback?.items != null &&
+        const {
+          LibraryScanStatus.idle,
+          LibraryScanStatus.scanning,
+          LibraryScanStatus.transientFailure,
+          LibraryScanStatus.cancelled,
+        }.contains(row.fact.status)) {
+      return fallback!.retainAfterFailedRead();
+    }
+    return row;
   }
 
   void finishRefresh(int contentScope, {required bool failed}) {
@@ -508,6 +574,7 @@ class _LibraryScanState {
     _rowContentScope = null;
     _ready = null;
     _attempt = null;
+    _retainedRetry = null;
     _retryBaseline = const {};
     failure = null;
     discoveryObsolete = false;
