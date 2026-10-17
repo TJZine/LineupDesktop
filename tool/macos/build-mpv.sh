@@ -447,7 +447,12 @@ build_mpv() {
 # --- Distribution ------------------------------------------------------------
 
 # Shipped libraries: everything the dynamic-link closure of libmpv needs.
-# glslang and the Vulkan headers are build-time only (static / headers).
+# License texts cover each shipped library plus the code compiled into one:
+# glslang and fast_float (libplacebo), SPIRV-Cross and cereal (MoltenVK), and
+# the Vulkan headers (libplacebo, mpv, MoltenVK).
+license_components=(mpv ffmpeg libplacebo glslang fast_float moltenvk
+  spirv-cross cereal vulkan-headers openssl curl lcms2 dav1d freetype fribidi
+  harfbuzz libass)
 license_files() {
   case "$1" in
     mpv) echo "LICENSE.LGPL Copyright" ;;
@@ -455,8 +460,10 @@ license_files() {
     libplacebo) echo "LICENSE" ;;
     moltenvk) echo "LICENSE" ;;
     glslang) echo "LICENSE.txt" ;;
-    vulkan-headers) echo "LICENSE.md" ;;
-    spirv-cross) echo "LICENSE" ;;
+    fast_float) echo "LICENSE-MIT LICENSE-APACHE LICENSE-BOOST" ;;
+    vulkan-headers) echo "LICENSE.md LICENSES/Apache-2.0.txt LICENSES/MIT.txt" ;;
+    spirv-cross) echo "LICENSE LICENSES/Apache-2.0.txt LICENSES/MIT.txt" ;;
+    cereal) echo "LICENSE" ;;
     openssl) echo "LICENSE.txt" ;;
     curl) echo "COPYING" ;;
     lcms2) echo "LICENSE" ;;
@@ -475,6 +482,8 @@ license_source_dir() {
     moltenvk) echo "$src" ;;
     vulkan-headers) echo "$src/External/Vulkan-Headers" ;;
     spirv-cross) echo "$src/External/SPIRV-Cross" ;;
+    cereal) echo "$src/External/cereal" ;;
+    fast_float) echo "$src_root/$(archive_dir LIBPLACEBO)/3rdparty/fast_float" ;;
     *) echo "$src_root/$(archive_dir "$(tr '[:lower:]-' '[:upper:]_' <<<"$1")")" ;;
   esac
 }
@@ -538,9 +547,8 @@ build_dist() {
   cp -R "$prefix/include/mpv" "$dist/include/mpv"
   cp "$patch_dir"/*.patch "$dist/patches/"
 
-  local component files dir f
-  for component in mpv ffmpeg libplacebo moltenvk glslang vulkan-headers \
-      spirv-cross openssl curl lcms2 dav1d freetype fribidi harfbuzz libass; do
+  local component dir f
+  for component in "${license_components[@]}"; do
     dir=$(license_source_dir "$component")
     mkdir -p "$dist/licenses/$component"
     for f in $(license_files "$component"); do
@@ -559,6 +567,18 @@ write_build_info() {
   local patch
   for patch in "$patch_dir"/*.patch; do
     echo "  $(basename "$patch") $(sha256_of "$patch")"
+  done
+  echo "Sources:"
+  local name version_ref url_ref sha_ref git_ref commit_ref license_ref
+  for name in MPV FFMPEG LIBPLACEBO GLSLANG MOLTENVK OPENSSL CURL LCMS2 DAV1D \
+      FREETYPE FRIBIDI HARFBUZZ LIBASS; do
+    version_ref="${name}_VERSION" url_ref="${name}_URL" sha_ref="${name}_SHA256"
+    git_ref="${name}_GIT" commit_ref="${name}_COMMIT" license_ref="${name}_LICENSE"
+    if [[ -n "${!url_ref:-}" ]]; then
+      echo "  $name ${!version_ref} (${!license_ref}) ${!url_ref} sha256:${!sha_ref}"
+    else
+      echo "  $name ${!version_ref} (${!license_ref}) ${!git_ref} commit:${!commit_ref}"
+    fi
   done
   echo "Deployment target: macOS $MACOSX_DEPLOYMENT_TARGET"
   echo "SDK: $(xcrun --sdk macosx --show-sdk-version) ($(xcodebuild -version | tr '\n' ' '))"
