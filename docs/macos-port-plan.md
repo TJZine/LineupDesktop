@@ -33,8 +33,8 @@ In scope:
 - video presentation under Flutter with the approved Guide alpha;
 - **HDR output in the first release, including Dolby Vision profiles 5 and
   8.** This is a core product requirement (§4.3, §4.5);
-- a pinned, LGPL, dynamically linked libmpv runtime, built by us with two
-  small mpv patches, acceptable for App Store distribution;
+- a pinned, LGPL, dynamically linked libmpv runtime, built by us with one
+  small mpv patch, acceptable for App Store distribution;
 - a shared C++ mpv core used by both Windows and macOS;
 - macOS fullscreen, window lifecycle, keyboard, menu, and copy;
 - App Store packaging, sandbox, signing, CI, and runtime provenance;
@@ -84,7 +84,7 @@ Windows native code, split by what macOS needs:
 | Repository strategy | One repository and one Flutter app (CQ plan §9.1). Work branches from `main` and lands by squash merge. |
 | Media engine | libmpv. AVFoundation alone lacks MKV, ASS subtitles, and several Plex direct-play codecs, and it would have to synthesize mpv's state vocabulary. |
 | HDR | Required in the first macOS release, including Dolby Vision profiles 5 and 8. Not negotiable. |
-| Presentation and HDR route | Route C: `gpu-next` on MoltenVK, embedded in our view through two LGPL mpv patches (§4.3). Route A is ruled out because its renderer cannot render Dolby Vision profile 5. Route B (Flutter texture) is ruled out because it cannot output HDR. |
+| Presentation and HDR route | Route C: `gpu-next` on MoltenVK, embedded in our view through one LGPL mpv patch (§4.3). Spike S1 verified HDR10, HLG, and Dolby Vision profiles 5 and 8.1. Route A is ruled out because its renderer cannot render Dolby Vision profile 5. Route B (Flutter texture) is ruled out because it cannot output HDR. |
 | Distribution | Mac App Store, free to download with a paid full-feature tier. The free tier limits the number of channels. |
 
 ### Product decisions still needed (recommendation first)
@@ -265,14 +265,14 @@ platform allows it, but HDR10 output is accepted where it does not.
 
 **Routes considered:**
 
-| | A. Render API, app-owned EDR layer | C. `gpu-next` embedded in our view (chosen) | C2. AVFoundation output (Apple renders Dolby Vision) |
+| | A. Render API, app-owned EDR layer | C. `gpu-next` embedded in our view (chosen; verified in S1) | C2. AVFoundation output (Apple renders Dolby Vision) |
 | --- | --- | --- | --- |
 | Mechanism | mpv renders through OpenGL into a 16-bit float target. We present it in our own layer with EDR enabled. This is the pattern of mpv's own cocoa-cb backend. | We patch mpv's `macvk` context so it accepts an app-provided `CAMetalLayer` through `--wid`, and so `target-colorspace-hint` sets the MoltenVK swapchain HDR color space. | mpv decodes; frames go to an `AVSampleBufferDisplayLayer` with their Dolby Vision metadata, and macOS renders them. Plezy ships this in a GPL fork. |
 | Dolby Vision profile 5 | **No:** the renderer discards the Dolby Vision mapping | Yes, through libplacebo, the same as Windows | Yes, Apple-native |
 | HDR10 / HLG | Yes (cocoa-cb pattern) | Yes, if MoltenVK's HDR color spaces behave (verified in S1) | Yes |
 | Renderer | Classic `gpu` | `gpu-next`, the same as Windows: one tone-mapping and color pipeline on both platforms | Apple's renderer; mpv's renderer and shaders are unused |
 | Subtitles | mpv renders them | mpv renders them | Need a separate path, because mpv's overlay would not be in the AVFoundation frames |
-| Upstream | Unmodified | Two focused patches, which we try to upstream | A new video output plus FFmpeg metadata-forwarding patches |
+| Upstream | Unmodified | One focused embedding patch (S1), which we try to upstream | A new video output plus FFmpeg metadata-forwarding patches |
 | Effort and risk | Lowest, but fails the requirement | Medium | Highest |
 
 **Decision:** route C. Route A is ruled out by the Dolby Vision profile 5
@@ -287,25 +287,61 @@ Route C also brings two benefits:
 - No dependency on Apple's deprecated OpenGL.
 
 Upstream mpv already uses `gpu-next` on MoltenVK as its default on macOS, but
-only inside mpv's own window. The patches add embedding and HDR signaling
-rather than a new renderer.
+only inside mpv's own window. The patch adds embedding rather than a new
+renderer.
 
-**The two mpv patches (LGPL, published, upstreamed if accepted):**
+**The mpv patch (LGPL, published, upstreamed if accepted):**
 
-1. **Embedding:** when `--wid` is set on macOS, the `macvk` context renders
-   into the provided `CAMetalLayer` (or the layer of a provided `NSView`) and
-   creates no window, title bar, or menu handling of its own. Resizing comes
-   from the host. This mirrors what `--wid` does on Win32 and X11.
-2. **HDR signaling:** enable `target-colorspace-hint` for `macvk`:
-   - choose the Vulkan swapchain color space (HDR10/PQ, or extended sRGB for
-     SDR) through MoltenVK's `VK_EXT_swapchain_colorspace`;
-   - set EDR on the layer when the color space is HDR;
-   - report the display's EDR headroom as the target peak, so `gpu-next`
-     tone-maps to what the screen can actually show.
+- **Embedding:** when `--wid` is set on macOS, the `macvk` context renders into
+  the provided `CAMetalLayer` and creates no window, view, title bar, or app
+  integration of its own. The host sets the layer's `drawableSize`, and mpv
+  observes it once per frame to resize. This mirrors what `--wid` does on Win32
+  and X11.
+  - Spike version: `tool/macos/mpv-patches/0001-…patch` on the
+    `spike/macos-route-c` branch, about 80 lines in
+    `video/out/vulkan/context_mac.m`.
+
+A second patch for HDR signaling was planned but proved unnecessary (see
+"Spike S1 results" below).
+
+**Spike S1 results (2026-10-17, M1 Pro, built-in Liquid Retina XDR):**
+
+Setup:
+
+- mpv `3186d369f` (the commit Windows pins) plus the embedding patch, built
+  with `-Dgpl=false`.
+- MoltenVK 1.4.2 and libplacebo 7.360 from Homebrew. These are spike
+  dependencies; the shipped runtime comes from S2.
+- The real Lineup Guide and Player, run through `test_driver/ui_harness.dart`,
+  with the video rect forwarded to the runner.
+
+| Matrix row | Result |
+| --- | --- |
+| Embedding under a transparent `FlutterView` | Pass. Video shows exactly through the Guide picture-in-picture aperture and fills the Player route. The rect follows window and fullscreen changes. |
+| HDR10 | Pass. With `target-colorspace-hint=yes`, libplacebo picks `A2R10G10B10 + HDR10_ST2084` on MoltenVK. MoltenVK then sets the layer's color space to `ITUR_2100_PQ`, turns on `wantsExtendedDynamicRangeContent`, and passes the HDR metadata as `CAEDRMetadata`. Display headroom is 16×. **The user confirmed visibly brighter highlights than UI white.** |
+| HLG | Pass. Converted to PQ output with EDR. |
+| Dolby Vision profile 8.1 (4K UHD BD source) | Pass. With VideoToolbox decode, mpv reports `colormatrix=dolbyvision`, so the Dolby Vision metadata survives hardware decoding and reshaping applies. Output is PQ with EDR. |
+| Dolby Vision profile 5 (Dolby test patterns, `dvhe.05`, compatibility ID 0) | Pass. Reshaping is applied with VideoToolbox decode. The BT.2020 color bars render with correct hues and neutral gray (no IPT tint), in the full Player and in fullscreen. |
+| HDR ↔ SDR switching (4 changes in one session) | Pass. EDR turns off for SDR (BT.709 layer color space, 203-nit white) and back on for HDR every time. |
+| 4K60 10-bit HEVC HDR10, full-screen render size | Pass. Drops happen only around startup and the fullscreen transition, none in steady state. About 15–17% CPU. |
+| Fullscreen (green button and View menu) | Pass at the presentation level. Dart synchronization (§4.6) is not part of the spike. |
+| Exact Guide alpha pixel comparison, live-resize misalignment, mixed-scale dual displays, OSD over HDR | Not yet measured. Only one display was available. These carry into M2 and A1. |
+
+**Consequences for this plan:**
+
+- Only the embedding patch is needed. HDR output, EDR, and HDR metadata work
+  through the existing `target-colorspace-hint` path because MoltenVK
+  implements `VK_EXT_swapchain_colorspace` and `VK_EXT_hdr_metadata`.
+- The production adapter sets `target-colorspace-hint=yes`.
+- The spike did not need a target peak from the display's EDR headroom. macOS
+  tone-maps PQ above the current headroom itself. Whether a `preferred_csp`
+  for `macvk` (reporting headroom to `gpu-next`) improves on that is an
+  optional quality refinement for M2, not a requirement.
+- Route C2 is no longer needed as a contingency for HDR.
 
 **Spike S1 (decides the remaining unknowns in C):**
 
-1. Build mpv with the two patches, as a prototype that need not yet be clean.
+1. Build mpv with the patches, as a prototype that need not yet be clean. (Done: only the embedding patch was needed.)
 2. Embed it below a transparent `FlutterView`.
 3. Run the matrix below.
 
@@ -399,7 +435,7 @@ Pass criteria for the runtime:
 - an LGPL-only configuration that is verifiable from its build recipe;
 - dynamic linkage;
 - arm64 and, if P3 requires it, x86_64 slices;
-- `macvk` with MoltenVK and our two patches; `gpu-next` with libplacebo's
+- `macvk` with MoltenVK and our embedding patch; `gpu-next` with libplacebo's
   Dolby Vision support;
 - VideoToolbox hardware decode, including 10-bit HEVC;
 - `tls-verify=yes` works against `plex.direct` HTTPS using system trust (the
@@ -574,8 +610,8 @@ ordering constraints, and independent packages can run in parallel.
 | --- | --- | --- | --- |
 | D0 | Product decisions P1, P3, P5–P7, M1–M3 | — | Answers recorded in this plan |
 | L0 | Legal review: LGPL on the App Store, Plex terms and trademark, source visibility | M3 | Written go/no-go before the first paid submission |
-| S1 | Route C prototype: patched mpv embedded under Flutter, full HDR and Dolby Vision matrix (§4.3) | — (uses a local build) | Spike report; E1 decided |
-| S2 | Reproducible self-built runtime with the patch series (§4.4) | S1 patches drafted | Build script, runtime identity, `macos-runtime.md` |
+| S1 | Route C prototype: patched mpv embedded under Flutter, full HDR and Dolby Vision matrix (§4.3) | — (uses a local build) | **Done 2026-10-17**: results in §4.3; E1 decided for C |
+| S2 | Reproducible self-built runtime with the patch series (§4.4) | S1 patch drafted (done) | Build script, runtime identity, `macos-runtime.md` |
 | K1 | Extract the shared mpv core; Windows uses it with no behavior change | — (starts immediately) | `native/player_core/`, Windows tests green, a Windows acceptance item added to the batched pass |
 | K2 | Run the core contract tests on macOS (CMake + CTest, or an XCTest target) | K1 | Native tests in macOS CI |
 | M1 | macOS adapter: channel, codec, core wiring, display report `unavailable` | K1, S2 | Playback with audio, track and stop correlation |
@@ -592,7 +628,7 @@ ordering constraints, and independent packages can run in parallel.
 Suggested critical path:
 
 1. Run S1, K1, and D0 in parallel. S1 needs neither the shared core nor
-   the final runtime. S2 follows once S1's patches settle.
+   the final runtime. S2 follows now that the S1 patch has settled.
 2. M1, then M2.
 3. M3 and U1, alongside B1 and B2.
 4. R1 and C1.
@@ -628,7 +664,7 @@ still the user's.
 | MoltenVK HDR color spaces or EDR misbehave | HDR fails on route C | S1 tests this first. The contingency is C2 (AVFoundation output). |
 | Dolby Vision metadata is lost with VideoToolbox hardware decode | Profile 5 is wrong, or needs costly software decode | S1 matrix row. FFmpeg parses the metadata in its HEVC decoder ahead of the hardware decode; verify, and measure the software fallback. |
 | A transparent `FlutterView` does not composite exactly over a native layer (Impeller, color space) | Presentation is blocked | S1 tests this early. Fall back to engine-side investigation. |
-| mpv patch maintenance | Upgrade friction | Keep the two patches small and well-tested; offer them upstream, since `--wid` on macOS is a long-standing gap. |
+| mpv patch maintenance | Upgrade friction | Keep the one patch small and well-tested; offer it upstream, since `--wid` on macOS is a long-standing gap. |
 | App Review rejects for LGPL, Plex trademark, or a missing demo account | Launch delay | L0 before submission; prepare the demo server and account; follow brand guidance. |
 | Public repository undermines the paid tier | Lost revenue | M3 decision before Pro ships. |
 | No suitable LGPL macOS build exists | Licensing or provenance gap | Self-build in CI (S2 option 3). |
@@ -642,7 +678,7 @@ still the user's.
 | Port Dart changes (U1) | Small: about 200–400 changed lines plus focused tests | Mostly behind existing seams |
 | Shared core extraction (K1) | Medium: about 1,000 lines moved and reshaped | The Windows adapter shrinks. The risk is regression, not volume. |
 | macOS adapter and presentation (M1–M3) | Medium: about 900–1,300 new lines of Objective-C++ | mpv owns rendering and HDR; the adapter owns the layer, lifecycle, and fullscreen |
-| mpv patches and self-built runtime (S1, S2) | Medium–large: two mpv patches, a full dependency build, and patch upkeep across mpv updates | The largest new engineering cost, and the price of Dolby Vision profile 5 |
+| mpv patch and self-built runtime (S1, S2) | Medium: one small mpv patch, a full dependency build, and patch upkeep across mpv updates | The largest new engineering cost, and the price of Dolby Vision profile 5 |
 | Runtime, signing, CI, App Store packaging (S2, R1, C1) | Medium | Scripts and provenance more than app code |
 | Monetization (B1, B2) | Medium: entitlement policy, StoreKit bridge, locked states, upsell UI | Needs design approval first |
 | S1 prototype | Medium | Settles the HDR and transparency unknowns before the main build |
