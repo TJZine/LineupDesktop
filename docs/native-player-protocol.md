@@ -11,8 +11,9 @@ The specification was cross-checked against:
 - `lib/playback/native_player.dart`
 - `lib/playback/method_channel_native_player.dart`
 - `lib/playback/unsupported_native_player.dart`
-- `windows/runner/native_player.cpp` and `.h`
-- `windows/runner/track_list_encoder.cpp`
+- `native/player_core/player_core.cpp` and `.h` (shared libmpv core)
+- `native/player_core/track_list_encoder.cpp`
+- `windows/runner/native_player.cpp` and `.h` (Windows adapter)
 - `windows/runner/display_dynamic_range.*`
 
 ## Channel and call shape
@@ -226,7 +227,7 @@ its report and media state on initialize/dispose.
 ## Queue capacity and eviction
 
 The native event queue holds 256 events. When it is full, the policy in
-`native_player.cpp:1254-1267` is:
+`PlayerCore::QueueEvent` in `native/player_core/player_core.cpp` is:
 
 1. Find and evict the oldest queued `property` event, regardless of the type
    of the incoming event.
