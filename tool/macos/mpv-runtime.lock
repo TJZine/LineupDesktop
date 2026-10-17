@@ -119,7 +119,15 @@ FFMPEG_FLAGS=(--disable-gpl --disable-version3 --disable-nonfree
   --enable-videotoolbox --enable-libdav1d --enable-zlib --enable-bzlib
   --enable-pthreads --enable-network --enable-openssl --disable-protocols
   --enable-protocol=file,crypto,data,http,https,httpproxy,tcp,tls
-  --disable-demuxer=rtsp,sdp,rtp,sap --disable-muxer=rtsp,sap,whip,rtp,rtp_mpegts)
+  --disable-demuxer=rtsp,sdp,rtp,sap --disable-muxer=rtsp,sap,whip,rtp,rtp_mpegts
+  --disable-filter=perlin,codecview --disable-arm-crc --disable-pmull
+  --disable-eor3)
+# No GPL code: perlin.c (perlin video source) and qp_table.c (used by the
+# codecview debug filter) carry GPL headers, so those two filters are off;
+# the aarch64 AC-3 DSP and CRC assembly carry GPL headers too and are removed
+# by tool/macos/ffmpeg-patches/ (with the CRC extensions disabled above) in
+# favor of FFmpeg's portable C code. collect-notices.py fails the build if any
+# compiled file has a GPL-only header.
 # The RTP/RTSP/SAP/WHIP formats are disabled because they would pull in the
 # rtp, udp and dtls protocols (and SDP could open RTP directly).
 
