@@ -36,9 +36,9 @@ jobs:
           TZ: America/New_York
 
   build-macos:
-    name: Verify macOS alpha surface and build macOS
+    name: Verify macOS portable/native build
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -48,12 +48,82 @@ jobs:
           flutter-version: 3.47.7
           channel: stable
           cache: true
-      - run: dart tool/check_toolchain.dart
-      - name: Run required Guide alpha checks
+      - name: Verify pinned Flutter toolchain
+        shell: bash
+        run: dart tool/check_toolchain.dart
+      - name: Run full portable macOS suite including required Guide alpha
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          dart tool/format.dart --check
+          flutter analyze
+          TZ=America/New_York flutter test
+      - name: Prepare macOS runtime build prerequisites
+        shell: bash
         env:
-          TZ: America/New_York
-        run: flutter test test/app/guide_opacity_test.dart
-      - run: flutter build macos
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          set -euo pipefail
+
+          host_arch="$(uname -m)"
+          if [[ "$host_arch" != arm64 ]]; then
+            echo "This job requires an arm64 macOS runner; found $host_arch." >&2
+            exit 1
+          fi
+
+          command -v brew >/dev/null || {
+            echo "Required build tool is unavailable: brew" >&2
+            exit 1
+          }
+
+          missing_formulas=()
+          command -v meson >/dev/null || missing_formulas+=(meson)
+          command -v ninja >/dev/null || missing_formulas+=(ninja)
+          command -v pkg-config >/dev/null || missing_formulas+=(pkgconf)
+          command -v cmake >/dev/null || missing_formulas+=(cmake)
+          if ((${#missing_formulas[@]})); then
+            echo "Installing missing Homebrew formulas: ${missing_formulas[*]}"
+            brew install "${missing_formulas[@]}"
+          fi
+
+          for tool in meson ninja pkg-config cmake python3 git curl shasum xcrun xcodebuild; do
+            command -v "$tool" >/dev/null || {
+              echo "Required build tool is unavailable: $tool" >&2
+              exit 1
+            }
+          done
+          echo "Host architecture: $host_arch"
+          echo "Selected Xcode: $(xcode-select -p)"
+          xcodebuild -version
+          echo "macOS SDK: $(xcrun --sdk macosx --show-sdk-version)"
+      - name: Build and verify pinned arm64 macOS libmpv runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool/macos/build-mpv.sh --arch arm64
+          runtime="$GITHUB_WORKSPACE/build/macos-runtime/dist/arm64"
+          test -f "$runtime/include/mpv/client.h"
+          test -f "$runtime/lib/libmpv.2.dylib"
+          echo "LINEUP_MPV_RUNTIME=$runtime" >> "$GITHUB_ENV"
+          echo "Prepared LINEUP_MPV_RUNTIME=$runtime"
+      - name: Run macOS runtime embed integration check
+        shell: bash
+        run: tool/macos/mpv-runtime-embed-test.sh
+      - name: Build macOS application with the prepared runtime
+        shell: bash
+        run: flutter build macos
+      - name: Run NativePlayerTests in Debug without code signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project macos/Runner.xcodeproj \
+            -scheme NativePlayerTests \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath "$RUNNER_TEMP/lineup-native-tests" \
+            CODE_SIGNING_ALLOWED=NO
 
   macos-player-core:
     name: Verify macOS shared player core contracts
