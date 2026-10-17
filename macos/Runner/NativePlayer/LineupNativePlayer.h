@@ -15,7 +15,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// `videoHost` must be a flipped view that fills the window's content area
 /// below the FlutterView. The adapter observes `window` for fullscreen,
-/// minimize, occlusion, backing-scale, and close transitions.
+/// minimize, occlusion, and close transitions; the video view itself follows
+/// backing-scale changes (viewDidChangeBackingProperties).
 - (instancetype)initWithMessenger:(id<FlutterBinaryMessenger>)messenger
                         videoHost:(NSView*)videoHost
                            window:(NSWindow*)window NS_DESIGNATED_INITIALIZER;

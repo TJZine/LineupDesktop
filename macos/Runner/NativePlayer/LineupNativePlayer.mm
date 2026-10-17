@@ -60,6 +60,17 @@ FlutterError* WindowError(NSString* message) {
                              details:nil];
 }
 
+// MoltenVK writes informational messages to stderr unless configured
+// otherwise; keep errors only. It reads the setting when libmpv creates its
+// Vulkan instance. This runs before main(), while the process is still
+// single-threaded, because setenv is unsafe once the Flutter engine's threads
+// may read the environment. It covers launches through LaunchServices and
+// direct launches of the executable alike, and an existing value (a
+// developer's) wins.
+__attribute__((constructor)) void QuietMoltenVKLogging() {
+  setenv("MVK_CONFIG_LOG_LEVEL", "1", 0);
+}
+
 struct FullscreenRequest {
   uint64_t id;
   bool fullscreen;
@@ -358,9 +369,6 @@ class MacCoreHost final : public lineup::player::CoreHost {
     return CallError{"initialize_failed",
                      "The video presentation view is unavailable."};
   }
-  // MoltenVK writes informational messages to stderr unless told otherwise;
-  // keep errors only. An explicit developer setting wins.
-  setenv("MVK_CONFIG_LOG_LEVEL", "1", 0);
 
   _videoView = [[LineupVideoView alloc] initWithFrame:NSZeroRect];
   _videoView.hidden = YES;
@@ -378,7 +386,8 @@ class MacCoreHost final : public lineup::player::CoreHost {
       // Lets libplacebo pick the HDR10/PQ swapchain for HDR content; MoltenVK
       // then sets the layer's color space, EDR, and HDR metadata.
       {"target-colorspace-hint", "yes"},
-  };  return std::nullopt;
+  };
+  return std::nullopt;
 }
 
 // The core calls this only after libmpv has been terminated (or was never
