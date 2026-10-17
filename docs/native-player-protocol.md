@@ -74,11 +74,46 @@ may synthesize higher-level policy codes; those are not native wire values.
 ## Native to Dart events
 
 Events are maps with a required `type` key. The Dart transport drops malformed
-events and events whose load identity is not current. A native lifecycle
+events and load-scoped events whose load identity is not current. `display`
+and `fullscreen` are player-scoped and parsed before load correlation. A native lifecycle
 generation is attached to queued events internally; during draining, events
 from an older native generation are dropped before invocation. The generation
 is not serialized as an event key. Dart projects its own active load generation
 onto `PlayerEvent` for coordinator currentness checks.
+
+### `fullscreen`
+
+`{type: "fullscreen", fullscreen: bool}` reports the actual completed window
+state. It has no `loadId` and is independent of playback, tracks, and stop.
+Both Windows and macOS emit an initial snapshot after successful native
+initialization (including an already-fullscreen window) and after completed
+native fullscreen changes, whatever initiated them. Native adapters use the
+core's bounded platform-event queue and drain the observation on the platform
+thread before replying, so the next serialized Dart toggle calculates its
+target from the observed window state. Native lifecycle generations change
+on initialization and disposal, not media loads. A failed transition emits no
+invented target state.
+
+Dart accepts only a bool payload during the channel owner's initializing or
+initialized lifetime. Disposal/failure retires the event handler epoch and
+resets its snapshot; late callbacks from a retired lifetime are ignored. The
+`NativePlayer.fullscreenChanges` stream is hot/broadcast with no replay;
+`fullscreen` retains the latest observation for a later subscriber (false
+before initialization). The coordinator reconciles this state and display
+matching without issuing another native request. Received observations,
+including one equal to the previous value, supersede an in-flight command's
+intent and any late success/error. Dart toggles remain serialized; cleanup
+retires their existing control epoch and exits fullscreen. A completed command
+can commit its target only if no newer observation or cleanup superseded it.
+Player-scoped observations remain meaningful across media/scope replacement;
+they cannot revive retired playback intent or a disposed coordinator.
+
+On macOS a completed AppKit transition settles waiting requests successfully
+with that published state even if the user changed their original target. It
+does not queue an automatic reverse transition toward stale intent. Missing
+windows, invalid arguments, failure to start, and transition deadlines keep
+their bounded error behavior. An already-matching request still succeeds
+immediately, including during a pending/active transition.
 
 ### `state`
 
@@ -251,7 +286,9 @@ Any platform implementation must preserve these obligations:
 3. Keep the rectangle across load and stop. Hide video for a zero rectangle or
    while minimized.
 4. Keep video passive: it has no hit-testing, focus, or accessibility surface.
-5. Complete `setFullscreen` only after the platform transition has completed.
+5. Complete a nonmatching `setFullscreen` request after the platform transition
+   has completed; an already-matching request succeeds immediately. Publish the
+   actual `fullscreen` observation, which may supersede the requested target.
 6. Enforce the token-safety contract documented on `NativePlayer.load`:
    HTTPS, scoped headers, no unsafe redirects, no logging, and no implicit
    unvalidated nested references.
@@ -300,7 +337,9 @@ the shared core, with these platform-specific values:
   complete after AppKit reports the transition. It fails with `window_error`
   when AppKit does not start the transition within one second or complete
   the request within five. A request for the window's current state succeeds
-  immediately, even when a transition is running or pending.
+  immediately, even when a transition is running or pending. Completed AppKit
+  notifications publish the actual player-scoped state and settle waiting
+  requests without reversing a user change.
 - Closing the window or quitting starts asynchronous native disposal after
   the existing close/Flutter quit approval. The window and video owners stay
   alive while the main run loop handles wakeups. libmpv terminates on its

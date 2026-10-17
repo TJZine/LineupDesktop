@@ -372,10 +372,14 @@ class MacCoreHost final : public lineup::player::CoreHost {
   if ([method isEqualToString:@"initialize"]) {
     _displayRevisions.Reset();
     _core->DiscardQueuedEvents("display");
-    SendResult(result, _core->Initialize());
+    _core->DiscardQueuedEvents("fullscreen");
+    const auto outcome = _core->Initialize();
+    if (!outcome.error) [self publishFullscreen];
+    SendResult(result, outcome);
     return;
   }
   if ([method isEqualToString:@"dispose"]) {
+    [self failFullscreenRequests:@"The native player was disposed."];
     _core->Dispose([result](const CallResult& outcome) {
       SendResult(result, outcome);
     });
@@ -553,10 +557,9 @@ class MacCoreHost final : public lineup::player::CoreHost {
   [self advanceFullscreen];
 }
 
-// When no transition is running or pending, settles requests that the
-// window's state satisfies, then starts one transition toward any request
-// that remains. Requests for the in-flight transition's target settle when it
-// completes; requests for the opposite state wait for it and toggle again.
+// Starts a transition only while idle. Once AppKit completes a transition,
+// its actual state wins over every waiting request; do not toggle back toward
+// an intent that a user-initiated change may have superseded.
 - (void)advanceFullscreen {
   if (_fullscreenTransitioning || _pendingFullscreenToggle != 0) {
     return;
@@ -594,10 +597,24 @@ class MacCoreHost final : public lineup::player::CoreHost {
   _fullscreenTransitioning = YES;
 }
 
+- (void)publishFullscreen {
+  if (_shutdownState != ShutdownState::idle || !_core->initialized()) return;
+  _core->QueuePlatformEvent({
+      {"type", Value("fullscreen")},
+      {"fullscreen", Value(static_cast<bool>([self windowIsFullscreen]))},
+  });
+  // Deliver before replies so Dart's next serialized toggle sees this state.
+  // Keep the normal bounded queue/codec path, not a second sink.
+  [self processWakeup];
+}
+
 - (void)fullscreenTransitionCompleted {
   _pendingFullscreenToggle = 0;
   _fullscreenTransitioning = NO;
-  [self advanceFullscreen];
+  [self publishFullscreen];
+  auto requests = std::move(_fullscreenRequests);
+  _fullscreenRequests.clear();
+  for (auto& request : requests) request.result(nil);
 }
 
 // AppKit did not start the toggle: fail every waiting request now rather

@@ -104,6 +104,16 @@ class FakeNativePlayer implements NativePlayer {
   final loadGenerations = <int?>[];
   final loadStartPaused = <bool>[];
   final seeks = <Duration>[];
+  @override
+  bool fullscreen = false;
+  final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
+  @override
+  Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;
+  void emitFullscreen(bool observed) {
+    fullscreen = observed;
+    if (!_fullscreenChanges.isClosed) _fullscreenChanges.add(observed);
+  }
+
   final fullscreenValues = <bool>[];
   final selectedTracks = <(PlayerTrackType, int?)>[];
   final volumeValues = <double>[];
@@ -166,8 +176,10 @@ class FakeNativePlayer implements NativePlayer {
   Future<void> setVideoRect(PlayerVideoRect rect) async => videoRects.add(rect);
 
   @override
-  Future<void> setFullscreen(bool fullscreen) async =>
-      fullscreenValues.add(fullscreen);
+  Future<void> setFullscreen(bool fullscreen) async {
+    fullscreenValues.add(fullscreen);
+    emitFullscreen(fullscreen);
+  }
 
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async =>
@@ -184,6 +196,7 @@ class FakeNativePlayer implements NativePlayer {
     disposed = true;
     await _events.close();
     await _displayReports.close();
+    await _fullscreenChanges.close();
   }
 
   void emit(

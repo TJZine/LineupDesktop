@@ -8,6 +8,9 @@ abstract interface class NativePlayer {
   List<PlayerTrack> get tracks;
   DisplayMatchingReport get displayReport;
 
+  /// Latest observed window state; false before native initialization.
+  bool get fullscreen;
+
   /// A hot broadcast stream of player state snapshots.
   ///
   /// Implementations must allow multiple simultaneous listeners. Events
@@ -19,6 +22,11 @@ abstract interface class NativePlayer {
   /// Reports are not associated with a media load. Implementations must keep
   /// them independent from [events] and allow multiple listeners.
   Stream<DisplayMatchingReport> get displayReports;
+
+  /// Hot broadcast observations of native fullscreen, independent of media.
+  /// Native initialization publishes a snapshot, including an already-fullscreen
+  /// window. Command completion must not overwrite a newer observation.
+  Stream<bool> get fullscreenChanges;
 
   Future<void> initialize();
 
@@ -46,6 +54,9 @@ abstract interface class NativePlayer {
   Future<void> pause();
   Future<void> seek(Duration position);
   Future<void> setVideoRect(PlayerVideoRect rect);
+
+  /// Requests a transition. A user change may supersede its target; follow
+  /// [fullscreenChanges] for the actual state rather than reasserting intent.
   Future<void> setFullscreen(bool fullscreen);
 
   /// Requests a track change and completes after native command execution.

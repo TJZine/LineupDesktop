@@ -832,6 +832,35 @@ void main() {
     },
   );
 
+  testWidgets(
+    'native fullscreen changes update OSD icon without another command',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing);
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Full screen'), findsOneWidget);
+      fixture.native.emitFullscreen(true);
+      await tester.pump();
+      expect(find.byTooltip('Exit full screen'), findsOneWidget);
+      expect(find.byIcon(Icons.fullscreen_exit), findsOneWidget);
+      fixture.native.emitFullscreen(false);
+      await tester.pump();
+      expect(find.byTooltip('Full screen'), findsOneWidget);
+      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
+      expect(fixture.native.fullscreenValues, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
   testWidgets('OSD menu and fullscreen actions close the picker first', (
     tester,
   ) async {
@@ -6549,6 +6578,16 @@ class _Native implements NativePlayer {
   Stream<DisplayMatchingReport> get displayReports => _displayReports.stream;
   void emitDisplay(DisplayMatchingReport report) => _displayReports.add(report);
   @override
+  bool fullscreen = false;
+  final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
+  @override
+  Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;
+  void emitFullscreen(bool observed) {
+    fullscreen = observed;
+    if (!_fullscreenChanges.isClosed) _fullscreenChanges.add(observed);
+  }
+
+  @override
   Future<void> initialize() async {}
   @override
   Future<void> load(
@@ -6619,6 +6658,7 @@ class _Native implements NativePlayer {
   @override
   Future<void> setFullscreen(bool fullscreen) async {
     fullscreenValues.add(fullscreen);
+    emitFullscreen(fullscreen);
   }
 
   @override
@@ -6651,6 +6691,7 @@ class _Native implements NativePlayer {
   Future<void> dispose() async {
     await _events.close();
     await _displayReports.close();
+    await _fullscreenChanges.close();
   }
 }
 

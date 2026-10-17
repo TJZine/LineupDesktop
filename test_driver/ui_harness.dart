@@ -93,6 +93,11 @@ class HarnessController extends LineupController {
 }
 
 class HarnessPlayer implements NativePlayer {
+  @override
+  bool fullscreen = false;
+  final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
+  @override
+  Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;
   final _events = StreamController<PlayerEvent>.broadcast();
   bool _disposed = false;
   int _loadEpoch = 0;
@@ -197,7 +202,11 @@ class HarnessPlayer implements NativePlayer {
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async {}
   @override
-  Future<void> setFullscreen(bool fullscreen) async {}
+  Future<void> setFullscreen(bool fullscreen) async {
+    this.fullscreen = fullscreen;
+    if (!_fullscreenChanges.isClosed) _fullscreenChanges.add(fullscreen);
+  }
+
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async {}
   @override
@@ -209,6 +218,7 @@ class HarnessPlayer implements NativePlayer {
     if (_disposed) return;
     _disposed = true;
     await _events.close();
+    await _fullscreenChanges.close();
   }
 }
 

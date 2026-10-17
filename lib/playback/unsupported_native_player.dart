@@ -40,6 +40,12 @@ class UnsupportedNativePlayer implements NativePlayer {
   Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
 
   @override
+  bool get fullscreen => false;
+
+  @override
+  Stream<bool> get fullscreenChanges => const Stream.empty();
+
+  @override
   Future<void> initialize() async {}
 
   Never _unavailable() => throw PlayerUnavailable(platformFailureMessage);

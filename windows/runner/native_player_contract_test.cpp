@@ -385,6 +385,30 @@ void Lifecycle(WindowHarness& window, WindowsNativePlayer& player,
   Reply init;
   messenger.Call("initialize", init);
   Check(init.successes == 1, "real production mpv initialization");
+  const auto observed_fullscreen = [&](bool value) {
+    return std::any_of(messenger.events.begin(), messenger.events.end(), [&](const Map& event) {
+      return Has(event, "type", Value("fullscreen")) &&
+             Has(event, "fullscreen", Value(value)) && event.size() == 2;
+    });
+  };
+  native_test::PumpUntil([&]() { return observed_fullscreen(false); },
+                        "initial fullscreen snapshot is player-scoped and typed");
+  for (const bool fullscreen : {true, false}) {
+    messenger.events.clear();
+    Reply changed;
+    messenger.Call("setFullscreen", changed, {{Value("fullscreen"), Value(fullscreen)}});
+    Check(changed.successes == 1 && changed.errors == 0,
+          "actual adapter fullscreen transition succeeds");
+    native_test::PumpUntil([&]() { return observed_fullscreen(fullscreen); },
+                          "completed fullscreen uses production platform-event codec");
+  }
+  messenger.events.clear();
+  Reply invalid_fullscreen;
+  messenger.Call("setFullscreen", invalid_fullscreen, {{Value("fullscreen"), Value(1)}});
+  Check(invalid_fullscreen.errors == 1, "fullscreen bool validation retained");
+  NativePlayerTestAccess::Drain(player);
+  Check(!observed_fullscreen(true) && !observed_fullscreen(false),
+        "invalid fullscreen command cannot invent an observation");
   Reply stop;
   messenger.Call("stop", stop, {{Value("stopId"), Value(int64_t{901})}});
   Check(stop.successes == 1, "worker stop acceptance");

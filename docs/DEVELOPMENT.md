@@ -421,7 +421,10 @@ flutter build macos
 ### Native unit tests
 
 `macos/RunnerTests` holds unhosted XCTests for Foundation/`Value`
-conversion, video geometry, fullscreen requests, and runner/native shutdown.
+conversion, video geometry, fullscreen requests/observations, and runner/native
+shutdown. Fullscreen tests drive the real adapter/core event codec from
+controlled window notifications, including initial/reinitialized snapshots,
+user changes superseding requests, deadlines and disposal gating.
 The shutdown tests use the real adapter and core with controlled libmpv worker
 operations and window/application boundaries; they do not launch Flutter or
 establish physical playback. Use the generated Flutter configuration from an

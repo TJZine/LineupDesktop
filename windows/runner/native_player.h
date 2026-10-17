@@ -58,6 +58,7 @@ class WindowsNativePlayer final : private lineup::player::CoreHost {
                           std::string& error);
   bool SetVideoRect(const lineup::player::ValueMap& arguments);
   bool SetFullscreen(bool fullscreen, std::string& error);
+  void QueueFullscreenState();
   void QueueDisplayReport(const lineup::DisplayReport& report);
 
   HWND top_level_window_;

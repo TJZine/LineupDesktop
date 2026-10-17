@@ -59,6 +59,8 @@ lineup::player::MpvOperations ControlledOperations() {
 - (void)processWakeup;
 - (void)shutdownTimedOut;
 - (void)completeShutdownIfReady;
+- (void)fullscreenToggleStartTimedOut:(uint64_t)toggle;
+- (void)fullscreenRequestTimedOut:(uint64_t)requestId;
 - (void)terminateAfterShutdownTimeout;
 @end
 
@@ -86,9 +88,19 @@ lineup::player::MpvOperations ControlledOperations() {
 @end
 
 @interface ShutdownTestMessenger : NSObject <FlutterBinaryMessenger>
+@property(nonatomic, strong) NSMutableArray<NSDictionary*>* fullscreenEvents;
 @end
 @implementation ShutdownTestMessenger
-- (void)sendOnChannel:(NSString*)channel message:(NSData*)message {}
+- (void)sendOnChannel:(NSString*)channel message:(NSData*)message {
+  if (!message) return;
+  FlutterMethodCall* call = [FlutterStandardMethodCodec.sharedInstance decodeMethodCall:message];
+  NSDictionary* event = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : nil;
+  if (event && [call.method isEqualToString:@"event"] &&
+      [event[@"type"] isEqual:@"fullscreen"]) {
+    if (!self.fullscreenEvents) self.fullscreenEvents = [NSMutableArray array];
+    [self.fullscreenEvents addObject:event];
+  }
+}
 - (void)sendOnChannel:(NSString*)channel
              message:(NSData*)message
          binaryReply:(FlutterBinaryReply)callback {}
@@ -99,8 +111,12 @@ lineup::player::MpvOperations ControlledOperations() {
 @end
 
 @interface ShutdownTestWindow : NSObject
+@property(nonatomic) NSWindowStyleMask styleMask;
+@property(nonatomic) NSUInteger toggleCount;
+- (void)toggleFullScreen:(id)sender;
 @end
 @implementation ShutdownTestWindow
+- (void)toggleFullScreen:(id)sender { self.toggleCount += 1; }
 - (BOOL)isMiniaturized { return NO; }
 - (NSWindowOcclusionState)occlusionState { return NSWindowOcclusionStateVisible; }
 @end
@@ -108,7 +124,8 @@ lineup::player::MpvOperations ControlledOperations() {
 @interface NativeShutdownTests : XCTestCase
 @property(nonatomic, strong) ShutdownTestPlayer* player;
 @property(nonatomic, strong) NSView* videoHost;
-@property(nonatomic, strong) NSObject* window;
+@property(nonatomic, strong) ShutdownTestWindow* window;
+@property(nonatomic, strong) ShutdownTestMessenger* messenger;
 @end
 
 @implementation NativeShutdownTests
@@ -118,8 +135,9 @@ lineup::player::MpvOperations ControlledOperations() {
   worker = std::make_shared<ControlledWorker>();
   self.videoHost = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 180)];
   self.window = [ShutdownTestWindow new];
+  self.messenger = [ShutdownTestMessenger new];
   self.player = [[ShutdownTestPlayer alloc]
-      initWithMessenger:[ShutdownTestMessenger new]
+      initWithMessenger:self.messenger
               videoHost:self.videoHost
                  window:(NSWindow*)self.window];
 }
@@ -155,6 +173,100 @@ lineup::player::MpvOperations ControlledOperations() {
                                                                 arguments:nil]
                         result:^(id result) { XCTAssertTrue([result isKindOfClass:NSDictionary.class]); }];
   XCTAssertEqual(self.videoHost.subviews.count, 1u);
+}
+
+- (void)testFullscreenSnapshotAndNativeNotificationsUseProductionEventPath {
+  self.window.styleMask = NSWindowStyleMaskFullScreen;
+  [self initializePlayer];
+  // No explicit pump: publish the snapshot before the initialize reply, so
+  // Dart's next serialized toggle starts from the observed window state.
+  XCTAssertEqual(self.messenger.fullscreenEvents.count, 1u);
+  [self.player processWakeup];
+  XCTAssertEqualObjects(self.messenger.fullscreenEvents,
+                        (@[ @{@"type": @"fullscreen", @"fullscreen": @YES} ]));
+  [NSNotificationCenter.defaultCenter postNotificationName:NSWindowWillExitFullScreenNotification
+                                                    object:self.window];
+  self.window.styleMask = 0;
+  [NSNotificationCenter.defaultCenter postNotificationName:NSWindowDidExitFullScreenNotification
+                                                    object:self.window];
+  XCTAssertEqual(self.messenger.fullscreenEvents.count, 2u);
+  [self.player processWakeup];
+  XCTAssertEqual(self.messenger.fullscreenEvents.count, 2u);
+  NSDictionary* event = self.messenger.fullscreenEvents.lastObject;
+  XCTAssertEqual(event.count, 2u);
+  XCTAssertEqualObjects(event[@"fullscreen"], @NO);
+  NSNumber* observed = event[@"fullscreen"];
+  XCTAssertNotNil(observed);
+  if (observed) {
+    XCTAssertEqual(CFGetTypeID((__bridge CFTypeRef)observed), CFBooleanGetTypeID());
+  }
+
+  __block BOOL disposed = NO;
+  [self.player handleMethodCall:[FlutterMethodCall methodCallWithMethodName:@"dispose" arguments:nil]
+                        result:^(id result) { XCTAssertNil(result); disposed = YES; }];
+  worker->Release();
+  [self waitUntil:^BOOL { return disposed; }];
+  self.window.styleMask = NSWindowStyleMaskFullScreen;
+  [NSNotificationCenter.defaultCenter postNotificationName:NSWindowDidEnterFullScreenNotification
+                                                    object:self.window];
+  [self.player processWakeup];
+  XCTAssertEqual(self.messenger.fullscreenEvents.count, 2u);
+  [self initializePlayer];
+  [self.player processWakeup];
+  XCTAssertEqual(self.messenger.fullscreenEvents.count, 3u);
+  XCTAssertEqualObjects(self.messenger.fullscreenEvents.lastObject[@"fullscreen"], @YES);
+}
+
+- (void)testCompletedNativeStateSettlesOppositeRequestWithoutReversing {
+  [self initializePlayer];
+  [self.player processWakeup];
+  __block NSUInteger replies = 0;
+  [self.player handleMethodCall:[FlutterMethodCall methodCallWithMethodName:@"setFullscreen"
+                                                                arguments:@{@"fullscreen": @YES}]
+                        result:^(id result) { XCTAssertNil(result); replies += 1; }];
+  XCTAssertEqual(self.window.toggleCount, 1u);
+  [NSNotificationCenter.defaultCenter postNotificationName:NSWindowWillEnterFullScreenNotification
+                                                    object:self.window];
+  // Controlled AppKit boundary: a user change finishes in the opposite state.
+  self.window.styleMask = 0;
+  [NSNotificationCenter.defaultCenter postNotificationName:NSWindowWillExitFullScreenNotification
+                                                    object:self.window];
+  [NSNotificationCenter.defaultCenter postNotificationName:NSWindowDidExitFullScreenNotification
+                                                    object:self.window];
+  [self.player processWakeup];
+  XCTAssertEqual(replies, 1u);
+  XCTAssertEqual(self.window.toggleCount, 1u);
+  XCTAssertEqualObjects(self.messenger.fullscreenEvents.lastObject[@"fullscreen"], @NO);
+  [self.player processWakeup];
+  XCTAssertEqual(replies, 1u);
+}
+
+- (void)testFullscreenDeadlinesStillFailWithoutInventingState {
+  [self initializePlayer];
+  for (NSNumber* started in @[ @NO, @YES ]) {
+    __block NSUInteger replies = 0;
+    [self.player handleMethodCall:[FlutterMethodCall methodCallWithMethodName:@"setFullscreen"
+                                                                  arguments:@{@"fullscreen": @YES}]
+                          result:^(id result) {
+      XCTAssertTrue([result isKindOfClass:FlutterError.class]);
+      XCTAssertEqualObjects(((FlutterError*)result).code, @"window_error");
+      replies += 1;
+    }];
+    if (started.boolValue) {
+      [NSNotificationCenter.defaultCenter postNotificationName:NSWindowWillEnterFullScreenNotification
+                                                      object:self.window];
+      uint64_t request = [[self.player valueForKey:@"nextFullscreenRequest"] unsignedLongLongValue];
+      [self.player fullscreenRequestTimedOut:request];
+      [self.player fullscreenRequestTimedOut:request];
+    } else {
+      uint64_t toggle = [[self.player valueForKey:@"pendingFullscreenToggle"] unsignedLongLongValue];
+      [self.player fullscreenToggleStartTimedOut:toggle];
+      [self.player fullscreenToggleStartTimedOut:toggle];
+    }
+    XCTAssertEqual(replies, 1u);
+    XCTAssertEqual(self.messenger.fullscreenEvents.count, 1u);
+    XCTAssertEqualObjects(self.messenger.fullscreenEvents.lastObject[@"fullscreen"], @NO);
+  }
 }
 
 - (void)testQuitWaitsForFlutterApprovalAndKeepsMainLoopAndOwnersAlive {

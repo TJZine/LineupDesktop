@@ -93,7 +93,10 @@ void WindowsNativePlayer::HandleMethodCall(
   if (method == "initialize") {
     display_->ResetRevision();
     core_.DiscardQueuedEvents("display");
-    SendResult(*result, core_.Initialize());
+    core_.DiscardQueuedEvents("fullscreen");
+    const auto outcome = core_.Initialize();
+    if (!outcome.error) QueueFullscreenState();
+    SendResult(*result, outcome);
     return;
   }
   if (method == "dispose") {
@@ -322,7 +325,19 @@ bool WindowsNativePlayer::SetFullscreen(bool fullscreen, std::string& error) {
     }
     fullscreen_ = false;
   }
+  QueueFullscreenState();
   return true;
+}
+
+void WindowsNativePlayer::QueueFullscreenState() {
+  if (!core_.initialized()) return;
+  core_.QueuePlatformEvent({
+      {"type", lineup::player::Value("fullscreen")},
+      {"fullscreen", lineup::player::Value(fullscreen_)},
+  });
+  // Publish before the reply so Dart's next serialized toggle sees this state.
+  // Keep the observation on the normal bounded queue/codec path.
+  core_.ProcessWakeup([this](const ValueMap& event) { SendEvent(event); });
 }
 
 bool WindowsNativePlayer::HandleWindowMessage(UINT message, WPARAM wparam) {

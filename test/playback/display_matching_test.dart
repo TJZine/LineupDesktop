@@ -493,6 +493,10 @@ class _Fixture {
 }
 
 class _Player implements NativePlayer {
+  @override
+  bool get fullscreen => false;
+  @override
+  Stream<bool> get fullscreenChanges => const Stream.empty();
   int plays = 0;
   int pauses = 0;
   Completer<void>? pendingRequest;

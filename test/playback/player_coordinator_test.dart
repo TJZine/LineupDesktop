@@ -26,7 +26,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-    'disposal observes both delayed subscription cleanup failures',
+    'disposal observes all three delayed native subscription cleanup failures',
     () async {
       final failures = <FlutterErrorDetails>[];
       final previousErrorHandler = FlutterError.onError;
@@ -47,17 +47,19 @@ void main() {
       coordinator.dispose();
       expect(player.eventStream.hasListener, isFalse);
       expect(player.displayStream.hasListener, isFalse);
+      expect(player.fullscreenStream.hasListener, isFalse);
       expect(failures, isEmpty);
       for (final cancellation in [
         player.eventCancellation,
         player.displayCancellation,
+        player.fullscreenCancellation,
       ]) {
         cancellation.completeError(
           StateError('https://private.test/media?X-Plex-Token=secret-sentinel'),
         );
         await Future<void>.delayed(Duration.zero);
       }
-      expect(failures, hasLength(2));
+      expect(failures, hasLength(3));
       for (final failure in failures) {
         expect(failure.exception, isA<StateError>());
         expect(
@@ -68,6 +70,7 @@ void main() {
       }
       await player.eventStream.close();
       await player.displayStream.close();
+      await player.fullscreenStream.close();
     },
   );
 
@@ -358,7 +361,7 @@ void main() {
     },
   );
 
-  testWidgets('display hold session exit publishes exactly once', (
+  testWidgets('observed fullscreen session exit publishes exactly once', (
     tester,
   ) async {
     final f = _ContinuationFixture(player: _DisplayPlayer());
@@ -372,12 +375,14 @@ void main() {
     var notifications = 0;
     f.coordinator.addListener(() => notifications++);
 
-    await f.coordinator.toggleFullscreen();
+    // Isolate this publication from the later native playing observation.
+    p.emitFullscreen(false);
 
     expect(notifications, 1);
     expect(f.coordinator.displayHoldActive, isFalse);
     expect(p.plays, 1);
     expect(f.coordinator.busyLabel, isNull);
+    await tester.pump();
     f.coordinator.dispose();
   });
 
@@ -501,6 +506,7 @@ void main() {
 
   for (final trigger in [
     'fullscreen',
+    'native fullscreen',
     'Guide close',
     'Player destination',
     'setting',
@@ -520,7 +526,9 @@ void main() {
           f.lineup.settings.copyWith(matchDisplayHdr: false),
         );
       }
-      if (trigger != 'fullscreen') await f.coordinator.toggleFullscreen();
+      if (trigger != 'fullscreen' && trigger != 'native fullscreen') {
+        await f.coordinator.toggleFullscreen();
+      }
       await f.coordinator.loadInitialMedia(
         Uri.parse('https://synthetic.test/local'),
       );
@@ -528,6 +536,7 @@ void main() {
       p.decode();
       await tester.pump();
       if (trigger == 'fullscreen') await f.coordinator.toggleFullscreen();
+      if (trigger == 'native fullscreen') p.emitFullscreen(true);
       if (trigger == 'Guide close') f.coordinator.closeOverlay();
       if (trigger == 'Player destination') {
         f.coordinator.setPlayerDestinationVisible(true);
@@ -2576,6 +2585,89 @@ void main() {
     expect(coordinator.hasPlaybackIntent, isFalse);
     expect(coordinator.overlay, PlayerOverlay.none);
     expect(coordinator.sleepDuration, isNull);
+  });
+
+  test(
+    'native fullscreen snapshot and OS changes update state without a command',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(lineup: lineup);
+      final player = _Player()..fullscreen = true;
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      expect(coordinator.fullscreen, isTrue);
+      player.emitFullscreen(false);
+      expect(coordinator.fullscreen, isFalse);
+      player.emitFullscreen(true);
+      expect(coordinator.fullscreen, isTrue);
+      expect(player.fullscreenValues, isEmpty);
+    },
+  );
+
+  for (final failure in [false, true]) {
+    test(
+      'native observation supersedes pending fullscreen ${failure ? 'failure' : 'success'}',
+      () async {
+        final lineup = _TestLineup();
+        final guide = GuideController(lineup: lineup);
+        final player = _PendingFullscreenPlayer();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+        final toggle = coordinator.toggleFullscreen();
+        await player.started.future;
+        // Same as the starting value, but newer than the request's opposite intent.
+        player.emitFullscreen(false);
+        if (failure) {
+          player.reply.completeError(
+            const PlayerUnavailable('Native transition failed.'),
+          );
+        } else {
+          player.reply.complete();
+        }
+        await toggle;
+        expect(coordinator.fullscreen, isFalse);
+        expect(coordinator.error, isNull);
+        expect(coordinator.notice, isNull);
+        expect(player.fullscreenValues, [true]);
+      },
+    );
+  }
+
+  test('queued toggle uses the intervening native state', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(lineup: lineup);
+    final player = _PendingFullscreenPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    final first = coordinator.toggleFullscreen();
+    await player.started.future;
+    final second = coordinator.toggleFullscreen();
+    player.emitFullscreen(false);
+    player.reply.complete();
+    await Future.wait([first, second]);
+    expect(player.fullscreenValues, [true, true]);
+    expect(coordinator.fullscreen, isTrue);
+    coordinator.dispose();
+    player.emitFullscreen(true);
+    expect(coordinator.fullscreen, isFalse);
   });
 
   test('scope cleanup does not notify after disposal', () async {
@@ -7229,6 +7321,12 @@ class _Player extends FakeNativePlayer {
 class _CancellingPlayer extends _Player {
   final eventCancellation = Completer<void>();
   final displayCancellation = Completer<void>();
+  final fullscreenCancellation = Completer<void>();
+  late final fullscreenStream = StreamController<bool>(
+    onCancel: () => fullscreenCancellation.future,
+  );
+  @override
+  Stream<bool> get fullscreenChanges => fullscreenStream.stream;
   late final eventStream = StreamController<PlayerEvent>(
     onCancel: () => eventCancellation.future,
   );
@@ -7268,6 +7366,20 @@ mixin _BlocksFirstLoad on _Player {
 }
 
 class _ControlledPlayer extends _Player with _BlocksFirstLoad {}
+
+class _PendingFullscreenPlayer extends _Player {
+  final started = Completer<void>();
+  final reply = Completer<void>();
+  bool _first = true;
+  @override
+  Future<void> setFullscreen(bool value) async {
+    if (!_first) return super.setFullscreen(value);
+    _first = false;
+    fullscreenValues.add(value);
+    started.complete();
+    await reply.future;
+  }
+}
 
 class _BlockingFullscreenPlayer extends _Player {
   _BlockingFullscreenPlayer({required this.blockOn});

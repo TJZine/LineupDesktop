@@ -53,6 +53,10 @@ class PlayerCoordinator extends ChangeNotifier {
     _displaySubscription = player.displayReports.listen(
       _displayMatching.receive,
     );
+    _fullscreen = player.fullscreen;
+    _fullscreenSubscription = player.fullscreenChanges.listen(
+      _observeFullscreen,
+    );
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
@@ -61,6 +65,8 @@ class PlayerCoordinator extends ChangeNotifier {
 
   late final DisplayMatching _displayMatching;
   StreamSubscription<DisplayMatchingReport>? _displaySubscription;
+  StreamSubscription<bool>? _fullscreenSubscription;
+  int _fullscreenObservationRevision = 0;
   bool _playerDestinationVisible = true;
   bool get displayHoldActive => _displayMatching.holdActive;
   DisplayMatchingReport get displayReport => _displayMatching.report;
@@ -1488,6 +1494,15 @@ class PlayerCoordinator extends ChangeNotifier {
     _trackConfirmation = _TrackConfirmation(error: error);
   }
 
+  void _observeFullscreen(bool observed) {
+    if (_disposed) return;
+    // Even an unchanged observation can supersede a pending opposite request.
+    ++_fullscreenObservationRevision;
+    if (_fullscreen == observed) return;
+    _fullscreen = observed;
+    notifyListeners();
+  }
+
   Future<void> toggleFullscreen() {
     final controlGeneration = ++_controlGeneration;
     final tuneGeneration = _tuneGeneration;
@@ -1495,16 +1510,22 @@ class PlayerCoordinator extends ChangeNotifier {
     final operation = _fullscreenOperations.then((_) async {
       if (_disposed || epoch != _fullscreenEpoch) return;
       final next = !_fullscreen;
+      final observation = _fullscreenObservationRevision;
       try {
         await player.setFullscreen(next);
       } catch (error) {
         if (epoch == _fullscreenEpoch &&
+            observation == _fullscreenObservationRevision &&
             _ownsPlaybackControl(controlGeneration, tuneGeneration)) {
           _publishControlFailure('fullscreen', error);
         }
         return;
       }
-      if (_disposed || epoch != _fullscreenEpoch) return;
+      if (_disposed ||
+          epoch != _fullscreenEpoch ||
+          observation != _fullscreenObservationRevision) {
+        return;
+      }
       _fullscreen = next;
       notifyListeners();
     });
@@ -2131,6 +2152,8 @@ class PlayerCoordinator extends ChangeNotifier {
     _displayMatching.dispose();
     unawaited(_cancelPlayerSubscription(_displaySubscription));
     _displaySubscription = null;
+    unawaited(_cancelPlayerSubscription(_fullscreenSubscription));
+    _fullscreenSubscription = null;
     ++_tuneGeneration;
     ++_controlGeneration;
     ++_sleepEpoch;

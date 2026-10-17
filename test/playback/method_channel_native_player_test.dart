@@ -17,6 +17,117 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
+  group('observed fullscreen', () {
+    late MethodChannelNativePlayer player;
+    setUp(() {
+      messenger.setMockMethodCallHandler(channel, (_) async => null);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+    });
+
+    test(
+      'strict player-scoped bool, broadcast snapshots without a load',
+      () async {
+        await player.initialize();
+        final first = <bool>[];
+        final second = <bool>[];
+        final a = player.fullscreenChanges.listen(first.add);
+        final b = player.fullscreenChanges.listen(second.add);
+        addTearDown(a.cancel);
+        addTearDown(b.cancel);
+        for (final invalid in [null, 0, 1, 'true', <Object>[]]) {
+          await _sendNativeEvent(messenger, {
+            'type': 'fullscreen',
+            'fullscreen': invalid,
+          });
+        }
+        await _sendNativeEvent(messenger, {'type': 'fullscreen'});
+        expect(first, isEmpty);
+        expect(player.fullscreen, isFalse);
+        await _sendNativeEvent(messenger, {
+          'type': 'fullscreen',
+          'fullscreen': true,
+          'loadId': -99,
+        });
+        expect(first, [true]);
+        expect(second, [true]);
+        expect(player.fullscreen, isTrue);
+        final late = <bool>[];
+        final c = player.fullscreenChanges.listen(late.add);
+        addTearDown(c.cancel);
+        expect(late, isEmpty);
+        await _sendNativeEvent(messenger, {
+          'type': 'fullscreen',
+          'fullscreen': false,
+        });
+        expect(first, [true, false]);
+        expect(second, [true, false]);
+        expect(late, [false]);
+      },
+    );
+
+    test('initializing accepts native snapshot; disposed lifetime rejects late events', () async {
+      final initialized = Completer<void>();
+      final disposed = Completer<void>();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'initialize') await initialized.future;
+        if (call.method == 'dispose') await disposed.future;
+        return null;
+      });
+      final observations = <bool>[];
+      final subscription = player.fullscreenChanges.listen(observations.add);
+      addTearDown(subscription.cancel);
+      final initialize = player.initialize();
+      await pumpEventQueue(times: 2);
+      await _sendNativeEvent(messenger, {
+        'type': 'fullscreen',
+        'fullscreen': true,
+      });
+      expect(player.fullscreen, isTrue);
+      initialized.complete();
+      await initialize;
+      final dispose = player.dispose();
+      await pumpEventQueue(times: 2);
+      await _sendNativeEvent(messenger, {
+        'type': 'fullscreen',
+        'fullscreen': true,
+      });
+      expect(player.fullscreen, isFalse);
+      expect(observations, [true]);
+      disposed.complete();
+      await dispose;
+      await player.initialize();
+      expect(player.fullscreen, isFalse);
+      await _sendNativeEvent(messenger, {
+        'type': 'fullscreen',
+        'fullscreen': true,
+      });
+      expect(observations, [true, true]);
+    });
+
+    test(
+      'late command success cannot change a fresher observed state',
+      () async {
+        final reply = Completer<void>();
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'setFullscreen') await reply.future;
+          return null;
+        });
+        await player.initialize();
+        final request = player.setFullscreen(true);
+        await pumpEventQueue(times: 2);
+        await _sendNativeEvent(messenger, {
+          'type': 'fullscreen',
+          'fullscreen': false,
+        });
+        reply.complete();
+        await request;
+        expect(player.fullscreen, isFalse);
+      },
+    );
+  });
+
   group('typed track snapshots', () {
     late MethodChannelNativePlayer player;
     late int loadId;
