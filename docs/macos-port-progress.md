@@ -448,3 +448,37 @@ authorization is being requested for that concrete action. No main-branch merge,
 release publication, account/signing setup or App Store submission is included.
 Mac unlock and Licenses UI direction questions remain pending. Physical-key
 acceptance is still needed because of the established CUA modifier limitation.
+
+## Authorized hosted CI and combined visible check
+
+The human explicitly authorized publishing the reviewed `platform/macos` branch
+and running CI. The controller pushed `feb453cb` to `origin/platform/macos`.
+The workflow's push trigger covers only `main`/`flutter-mvp`, so the controller
+used its existing `workflow_dispatch` on this branch. Actual run:
+[39079367554](https://github.com/TJZine/LineupDesktop/actions/runs/39079367554),
+head `feb453cbec0f89b86d6977a0d101b57f6908abab`. Initial observed passes:
+macOS shared-core contracts, Windows release policy and release-input detection.
+Mac portable/native, Windows player/contracts, Dart and engine/package remain
+in progress. Child `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (worker_luna) owns
+read-only single-run verification and meaningful failure/completion callbacks;
+it may not dispatch/push/fix/cancel or interfere with physical checks.
+
+After the user unlocked the Mac, the combined real-protocol Debug harness
+passed these cross-source fullscreen observations with real synthetic playback:
+green-button entry → Player-button exit; Player-button entry → View-menu exit;
+Player-button entry after that native exit; and View-menu entry → Player-button
+exit. Native menu labels/window chrome confirmed state. Reversing the native
+entry through Player and entering after native exit distinguishes synchronized
+Dart state from a stale boolean. The synthetic HDR ramp also rendered after
+switching from the SDR fixture and appeared in the Guide aperture. This is
+observed presentation/control behavior, not human HDR color or exact alpha
+acceptance. Debug dylib SHA-256:
+`9b68e82ea613a14cef992edbff97984ec9b23de2cace52de2eb83d9257150305`.
+The build is attributed to the original executable M3b aggregate with the
+subsequent comment-only rationale correction recorded above.
+
+The controller left the app windowed in Guide playing the HDR fixture, then
+handed exclusive UI access to the human for actual Command key, text selection,
+Control-Command-F, live-resize/alignment and switching/transparency checks.
+Those answers remain pending. No automation or child may interfere with that
+human check. Licenses-screen direction remains pending; purchase work deferred.
