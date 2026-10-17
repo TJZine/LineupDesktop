@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart'
@@ -3506,6 +3508,64 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  testWidgets('Guide find chord uses Command on macOS and Ctrl elsewhere', (
+    tester,
+  ) async {
+    final lineup = _Lineup(3);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final search = find.byKey(const Key('guide-channel-search'));
+    Future<bool> searchFocusedAfterChord(LogicalKeyboardKey modifier) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final program = guide.currentProgram(lineup.channels.first.id)!;
+      await tester.tap(find.byKey(ValueKey(program.id)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pump();
+      return tester.widget<TextField>(search).focusNode!.hasFocus;
+    }
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      expect(
+        await searchFocusedAfterChord(LogicalKeyboardKey.controlLeft),
+        isFalse,
+      );
+      expect(
+        await searchFocusedAfterChord(LogicalKeyboardKey.metaLeft),
+        isTrue,
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      expect(
+        await searchFocusedAfterChord(LogicalKeyboardKey.metaLeft),
+        isFalse,
+      );
+      expect(
+        await searchFocusedAfterChord(LogicalKeyboardKey.controlLeft),
+        isTrue,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,

@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
 import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
@@ -572,8 +573,7 @@ class _GuideViewState extends State<GuideView>
         keyboard.isControlPressed ||
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
-    if (key == LogicalKeyboardKey.keyF &&
-        (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+    if (key == LogicalKeyboardKey.keyF && commandModifier(keyboard)) {
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
