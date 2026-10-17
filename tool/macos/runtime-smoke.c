@@ -6,7 +6,7 @@
 //
 // Usage:
 //   runtime-smoke [--layer] [-o name=value]... [-p property]...
-//                 --expect load|reject TARGET
+//                 [-e property=value]... --expect load|reject TARGET
 //   runtime-smoke --licenses
 //
 //   --layer          Render with the production route C output (vo=gpu-next,
@@ -14,14 +14,19 @@
 //                    host CAMetalLayer passed through --wid, instead of
 //                    vo=null. Hardware decode interop needs a real VO.
 //   -o name=value    mpv option set before initialization (repeatable).
-//   -p property      property printed after the first video frame
-//                    (repeatable); with -p the run waits for playback.
-//   --expect load    TARGET must load (and, with -p, start playback).
-//   --expect reject  TARGET must fail to load with a TLS certificate error.
+//   -p property      property printed once playback starts (repeatable).
+//   -e property=value
+//                    assertion: once playback starts, the property's string
+//                    value must equal value (repeatable). Values are polled
+//                    for up to 3 seconds, for properties such as sub-text
+//                    that appear shortly after the first frame.
+//   --expect load    TARGET must load without a fatal error and, with -p or
+//                    -e, start playback with every assertion holding.
+//   --expect reject  TARGET must fail to load with a TLS certificate
+//                    verification error (not any other TLS failure).
 //
 // Exit status 0 means the expectation held. Build: see docs/macos-runtime.md.
 
-#include <dlfcn.h>
 #include <mach-o/dyld.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -37,6 +42,7 @@
 #include <mpv/client.h>
 
 #define MAX_ITEMS 32
+#define ASSERT_TIMEOUT_POLLS 30  // 30 x 0.1 s
 
 // runtime-smoke-layer.m
 int64_t runtime_smoke_create_layer(int width, int height);
@@ -61,15 +67,42 @@ static void print_loaded_runtime(void) {
   }
 }
 
-static bool mentions_certificate_error(const char *text) {
-  return strstr(text, "certificate") || strstr(text, "SSL") ||
-         strstr(text, "tls-verify");
+// Certificate verification failures only: curl's peer-verification error and
+// mpv's explanation of it, and OpenSSL's verify failure as FFmpeg reports it.
+// Other TLS failures (protocol version, handshake) do not count.
+static bool is_certificate_rejection(const char *text) {
+  return strstr(text, "SSL peer certificate or SSH remote key was not OK") ||
+         strstr(text, "TLS certificate verification failed") ||
+         strstr(text, "certificate verify failed");
+}
+
+struct assertion {
+  char property[256];
+  const char *expected;
+};
+
+// Prints each assertion's current value; returns true when all hold.
+static bool check_assertions(mpv_handle *mpv, struct assertion *assertions,
+                             int count, bool print) {
+  bool all = true;
+  for (int i = 0; i < count; i++) {
+    char *value = mpv_get_property_string(mpv, assertions[i].property);
+    bool ok = value && !strcmp(value, assertions[i].expected);
+    if (print)
+      printf("assert %s == %s: %s (actual: %s)\n", assertions[i].property,
+             assertions[i].expected, ok ? "ok" : "FAILED",
+             value ? value : "(unavailable)");
+    all = all && ok;
+    mpv_free(value);
+  }
+  return all;
 }
 
 int main(int argc, char **argv) {
   const char *options[MAX_ITEMS];
   const char *properties[MAX_ITEMS];
-  int option_count = 0, property_count = 0;
+  struct assertion assertions[MAX_ITEMS];
+  int option_count = 0, property_count = 0, assertion_count = 0;
   const char *expect = NULL, *target = NULL;
   bool use_layer = false;
 
@@ -84,6 +117,17 @@ int main(int argc, char **argv) {
       options[option_count++] = argv[++i];
     } else if (!strcmp(argv[i], "-p") && i + 1 < argc && property_count < MAX_ITEMS) {
       properties[property_count++] = argv[++i];
+    } else if (!strcmp(argv[i], "-e") && i + 1 < argc && assertion_count < MAX_ITEMS) {
+      const char *spec = argv[++i];
+      const char *equals = strchr(spec, '=');
+      if (!equals || (size_t)(equals - spec) >= sizeof(assertions[0].property)) {
+        fprintf(stderr, "assertion must be property=value: %s\n", spec);
+        return 2;
+      }
+      struct assertion *assertion = &assertions[assertion_count++];
+      snprintf(assertion->property, sizeof(assertion->property), "%.*s",
+               (int)(equals - spec), spec);
+      assertion->expected = equals + 1;
     } else if (!strcmp(argv[i], "--expect") && i + 1 < argc) {
       expect = argv[++i];
     } else if (!target && argv[i][0] != '-') {
@@ -96,7 +140,8 @@ int main(int argc, char **argv) {
   bool expect_load = expect && !strcmp(expect, "load");
   bool expect_reject = expect && !strcmp(expect, "reject");
   if (!target || (!expect_load && !expect_reject)) {
-    fprintf(stderr, "usage: runtime-smoke [-o name=value]... [-p property]... "
+    fprintf(stderr, "usage: runtime-smoke [--layer] [-o name=value]... "
+                    "[-p property]... [-e property=value]... "
                     "--expect load|reject TARGET\n");
     return 2;
   }
@@ -155,8 +200,9 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  bool loaded = false, played = false, ended = false, tls_error = false,
-       fatal = false;
+  bool wait_for_playback = property_count > 0 || assertion_count > 0;
+  bool loaded = false, played = false, ended = false, certificate_rejected = false,
+       fatal = false, assertions_hold = true;
   int end_error = 0;
   while (!ended) {
     mpv_event *event = mpv_wait_event(mpv, 60);
@@ -167,22 +213,28 @@ int main(int argc, char **argv) {
     if (event->event_id == MPV_EVENT_LOG_MESSAGE) {
       mpv_event_log_message *message = event->data;
       printf("log[%s] %s: %s", message->level, message->prefix, message->text);
-      if (mentions_certificate_error(message->text))
-        tls_error = true;
+      if (is_certificate_rejection(message->text))
+        certificate_rejected = true;
       if (!strcmp(message->level, "fatal"))
         fatal = true;
     } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
       loaded = true;
       printf("event: file-loaded\n");
-      if (property_count == 0)
+      if (!wait_for_playback)
         break;
     } else if (event->event_id == MPV_EVENT_PLAYBACK_RESTART && !played) {
       played = true;
+      for (int polls = 0; polls < ASSERT_TIMEOUT_POLLS; polls++) {
+        if (check_assertions(mpv, assertions, assertion_count, false))
+          break;
+        mpv_wait_event(mpv, 0.1);
+      }
       for (int i = 0; i < property_count; i++) {
         char *value = mpv_get_property_string(mpv, properties[i]);
         printf("%s: %s\n", properties[i], value ? value : "(unavailable)");
         mpv_free(value);
       }
+      assertions_hold = check_assertions(mpv, assertions, assertion_count, true);
       break;
     } else if (event->event_id == MPV_EVENT_END_FILE) {
       mpv_event_end_file *end = event->data;
@@ -197,9 +249,9 @@ int main(int argc, char **argv) {
 
   bool pass;
   if (expect_load)
-    pass = loaded && !fatal && (property_count == 0 || played);
+    pass = loaded && !fatal && (!wait_for_playback || played) && assertions_hold;
   else
-    pass = !loaded && end_error < 0 && tls_error;
+    pass = !loaded && end_error < 0 && certificate_rejected;
   printf("result: %s (expected %s)\n", pass ? "PASS" : "FAIL", expect);
   return pass ? 0 : 1;
 }

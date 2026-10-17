@@ -19,11 +19,13 @@ OPENSSL_URL=https://github.com/openssl/openssl/releases/download/openssl-3.5.9/o
 OPENSSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
 OPENSSL_LICENSE=Apache-2.0
 # Library-only build. Providers are built in (no-module) and no engine or DSO
-# loading exists, so OpenSSL never loads code at runtime. OPENSSLDIR points to
-# a directory that does not exist, so no system or third-party openssl.cnf or
-# CA directory is consulted; curl verifies peers through Apple SecTrust.
+# loading exists, so OpenSSL never loads code at runtime. OPENSSLDIR (and the
+# ENGINESDIR/MODULESDIR derived from the neutral install prefix) point into
+# /var/empty, which is empty and root-owned, so no system or third-party
+# openssl.cnf or CA directory is consulted; curl verifies peers through Apple
+# SecTrust.
 OPENSSL_FLAGS=(no-module no-engine no-dso no-legacy no-tests no-docs
-  no-ssl3 no-comp --openssldir=/var/empty/lineup-openssl)
+  no-ssl3 no-comp --openssldir=/var/empty/lineup-runtime/ssl)
 
 CURL_VERSION=8.23.0
 CURL_URL=https://curl.se/download/curl-8.23.0.tar.bz2
@@ -143,8 +145,12 @@ MOLTENVK_LICENSE=Apache-2.0
 # MoltenVK's fetchDependencies clones its build dependencies at the commits in
 # its ExternalRevisions/ directory. The build script refuses to continue
 # unless they equal the commits below. Vulkan-Headers also supplies the headers
-# and vk.xml used by libplacebo and mpv. SPIRV-Cross (Apache-2.0) is statically
-# linked into libMoltenVK; the others are build inputs or header-only.
+# and vk.xml used by libplacebo and mpv. Statically compiled into
+# libMoltenVK: SPIRV-Cross (Apache-2.0 or MIT), SPIRV-Tools (Apache-2.0, its
+# disassembler and utilities), the SPIRV-Headers grammar tables (MIT-style
+# Khronos license), and cereal (BSD-3-Clause). Vulkan-Tools and Volk are
+# fetched by MoltenVK but not linked. All shipped notices are listed in
+# license_files in build-mpv.sh.
 MOLTENVK_EXTERNAL_REVISIONS=(
   Vulkan-Headers=e3b1eec08173d6b825cd3ac88c885a63b621504a
   SPIRV-Cross=6c09849fe88c48eaed08413aa022aaa136a3a057
