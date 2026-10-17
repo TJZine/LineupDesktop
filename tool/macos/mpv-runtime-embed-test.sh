@@ -4,6 +4,7 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 embed_script="$repo_root/macos/Runner/Scripts/mpv_runtime.sh"
+accepted_runtime="${LINEUP_MPV_RUNTIME:-}"
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/lineup-mpv-embed-test.XXXXXX")
 app="$test_root/Lineup Desktop.app"
 frameworks="$app/Contents/Frameworks"
@@ -15,6 +16,8 @@ fake_bin="$test_root/bin"
 codesign_log="$test_root/codesign.log"
 manifest_name='.lineup-mpv-runtime-manifest'
 pending_manifest_name='.lineup-mpv-runtime-pending'
+owned_resources="$resources/LineupNativeRuntime"
+resource_backup="$resources/.lineup-native-runtime-previous"
 manifest="$resources/.lineup-mpv-runtime-manifest"
 pending_manifest="$resources/.lineup-mpv-runtime-pending"
 legacy_manifest="$frameworks/.lineup-mpv-runtime-manifest"
@@ -63,6 +66,90 @@ make_library() {
   printf '%s\n' "$2" > "$1"
 }
 
+make_resource_fixture() {
+  fixture_runtime=$1
+  fixture_label=$2
+  for fixture_file in \
+    BUILD-INFO.txt \
+    licenses/NOTICES-SUMMARY.txt \
+    licenses/cereal/LICENSE \
+    licenses/curl/COPYING \
+    licenses/curl/NOTICES.txt \
+    licenses/curl/inet_ntop-ISC.txt \
+    licenses/curl/inet_pton-ISC.txt \
+    licenses/dav1d/COPYING \
+    licenses/dav1d/NOTICES.txt \
+    licenses/fast_float/LICENSE-APACHE \
+    licenses/fast_float/LICENSE-BOOST \
+    licenses/fast_float/LICENSE-MIT \
+    licenses/ffmpeg/COPYING.LGPLv2.1 \
+    licenses/ffmpeg/IJG-NOTICE.txt \
+    licenses/ffmpeg/LICENSE.md \
+    licenses/ffmpeg/NOTICES.txt \
+    licenses/freetype/BDF-README \
+    licenses/freetype/FTL.TXT \
+    licenses/freetype/LICENSE.TXT \
+    licenses/freetype/NOTICES.txt \
+    licenses/freetype/PCF-README \
+    licenses/freetype/fthash-NOTICE.txt \
+    licenses/fribidi/COPYING \
+    licenses/fribidi/NOTICES.txt \
+    licenses/glslang/LICENSE.txt \
+    licenses/glslang/NOTICES.txt \
+    licenses/harfbuzz/COPYING \
+    licenses/harfbuzz/NOTICES.txt \
+    licenses/harfbuzz/ms-use-COPYING \
+    licenses/lcms2/LICENSE \
+    licenses/lcms2/NOTICES.txt \
+    licenses/libass/COPYING \
+    licenses/libass/NOTICES.txt \
+    licenses/libplacebo/LICENSE \
+    licenses/libplacebo/NOTICES.txt \
+    licenses/moltenvk/LICENSE \
+    licenses/moltenvk/NOTICES.txt \
+    licenses/mpv/Copyright \
+    licenses/mpv/LICENSE.LGPL \
+    licenses/mpv/NOTICES.txt \
+    licenses/openssl/LICENSE.txt \
+    licenses/openssl/NOTICES.txt \
+    licenses/spirv-cross/Apache-2.0.txt \
+    licenses/spirv-cross/LICENSE \
+    licenses/spirv-cross/MIT.txt \
+    licenses/spirv-headers/LICENSE \
+    licenses/spirv-tools/LICENSE \
+    licenses/vulkan-headers/Apache-2.0.txt \
+    licenses/vulkan-headers/LICENSE.md \
+    licenses/vulkan-headers/MIT.txt \
+    patches/ffmpeg/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch \
+    patches/ffmpeg/0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch \
+    patches/mpv/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch; do
+    mkdir -p "$fixture_runtime/$(dirname "$fixture_file")"
+    printf '%s\n%s\n' "$fixture_label" "$fixture_file" > "$fixture_runtime/$fixture_file"
+  done
+  mkdir -p "$fixture_runtime/licenses/empty directory"
+}
+
+assert_resource_tree() {
+  source_resources=$1
+  embedded_resources=$2
+  diff -qr "$source_resources/licenses" "$embedded_resources/licenses" >/dev/null ||
+    fail 'Embedded license file set, directory hierarchy, or bytes differ.'
+  diff -qr "$source_resources/patches" "$embedded_resources/patches" >/dev/null ||
+    fail 'Embedded patch file set, directory hierarchy, or bytes differ.'
+  cmp -s "$source_resources/BUILD-INFO.txt" "$embedded_resources/BUILD-INFO.txt" ||
+    fail 'Embedded raw runtime provenance differs.'
+  top_entries=$(find "$embedded_resources" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d '[:space:]')
+  [ "$top_entries" = 3 ] || fail 'The owned resource tree contains unexpected files/dylibs.'
+  bad_modes=$(find "$embedded_resources" \( -type d ! -perm 0755 \) -o \( -type f ! -perm 0644 \))
+  [ -z "$bad_modes" ] || fail 'Bundled resource permissions are not readable across users.'
+}
+
+assert_no_resource_stage() {
+  for abandoned in "$resources"/.lineup-native-runtime-stage.*; do
+    [ ! -e "$abandoned" ] || fail 'A failed embed left a resource stage in the app.'
+  done
+}
+
 make_runtime_one() {
   runtime_path=$1
   mkdir -p "$runtime_path/include/mpv" "$runtime_path/lib"
@@ -71,6 +158,8 @@ make_runtime_one() {
   make_library "$runtime_path/lib/libavutil.61.dylib" 'runtime-one avutil'
   make_library "$runtime_path/lib/libMoltenVK.dylib" 'runtime-one MoltenVK'
   make_library "$runtime_path/lib/libremoved.1.dylib" 'runtime-one removed later'
+  make_resource_fixture "$runtime_path" 'runtime-one resources'
+  make_library "$runtime_path/licenses/removed-notice.txt" 'old optional notice'
 }
 
 make_runtime_two() {
@@ -81,6 +170,9 @@ make_runtime_two() {
   make_library "$runtime_path/lib/libavutil.62.dylib" 'runtime-two avutil replacement'
   make_library "$runtime_path/lib/libMoltenVK.dylib" 'runtime-two MoltenVK'
   make_library "$runtime_path/lib/libadded.1.dylib" 'runtime-two added component'
+  make_resource_fixture "$runtime_path" 'runtime-two resources'
+  mkdir -p "$runtime_path/licenses/extra notices"
+  make_library "$runtime_path/licenses/extra notices/added.txt" 'new optional notice'
 }
 
 make_runtime_three() {
@@ -90,6 +182,7 @@ make_runtime_three() {
   make_library "$runtime_path/lib/libmpv.2.dylib" 'runtime-three mpv'
   make_library "$runtime_path/lib/libavutil.63.dylib" 'runtime-three avutil replacement'
   make_library "$runtime_path/lib/libMoltenVK.dylib" 'runtime-three MoltenVK'
+  make_resource_fixture "$runtime_path" 'runtime-three resources'
 }
 
 run_embed() {
@@ -103,7 +196,8 @@ run_embed() {
     "$embed_script" embed
 }
 
-mkdir -p "$frameworks" "$fake_bin"
+mkdir -p "$frameworks" "$resources" "$fake_bin"
+make_library "$resources/unrelated-resource.txt" 'unrelated resource'
 cat > "$fake_bin/codesign" <<'FAKE_CODESIGN'
 #!/bin/sh
 set -eu
@@ -121,6 +215,12 @@ if [ "${1:-}" = '-f' ]; then
 else
   source_path=${1:-}
 fi
+case "$(basename "$source_path")" in
+  .lineup-native-runtime-stage.*)
+    if [ "${FAKE_RESOURCE_PUBLISH_FAIL:-NO}" = YES ]; then exit 49; fi ;;
+  .lineup-native-runtime-previous)
+    if [ "${FAKE_RESOURCE_ROLLBACK_FAIL:-NO}" = YES ]; then exit 50; fi ;;
+esac
 if [ -n "${FAKE_MV_FAIL_NAME:-}" ] &&
   [ "$(basename "$source_path")" = "$FAKE_MV_FAIL_NAME" ]; then
   exit 47
@@ -128,6 +228,20 @@ fi
 exec /bin/mv "$@"
 FAKE_MV
 chmod +x "$fake_bin/mv"
+cat > "$fake_bin/cp" <<'FAKE_CP'
+#!/bin/sh
+set -eu
+for argument do destination_path=$argument; done
+/bin/cp "$@"
+case "$destination_path" in
+  */.lineup-native-runtime-stage.*/licenses)
+    if [ "${FAKE_RESOURCE_COPY_FAIL:-NO}" = YES ]; then exit 48; fi
+    if [ "${FAKE_RESOURCE_COPY_TRUNCATE:-NO}" = YES ]; then
+      : > "$destination_path/mpv/NOTICES.txt"
+    fi ;;
+esac
+FAKE_CP
+chmod +x "$fake_bin/cp"
 
 if LINEUP_MPV_RUNTIME="$test_root/missing-runtime" "$embed_script" check 2>/dev/null; then
   fail 'A missing runtime unexpectedly passed the early check.'
@@ -159,6 +273,8 @@ assert_content "$frameworks/libmpv.2.dylib" 'runtime-one mpv'
 assert_content "$frameworks/libavutil.61.dylib" 'runtime-one avutil'
 assert_content "$frameworks/libMoltenVK.dylib" 'runtime-one MoltenVK'
 assert_content "$frameworks/libremoved.1.dylib" 'runtime-one removed later'
+assert_resource_tree "$runtime_one" "$owned_resources"
+assert_content "$resources/unrelated-resource.txt" 'unrelated resource'
 assert_missing "$frameworks/libmpv.1.dylib"
 assert_missing "$frameworks/libavutil.61.1.102.dylib"
 assert_missing "$frameworks/libMoltenVK.0.dylib"
@@ -359,6 +475,136 @@ fi
 assert_content "$outside_sentinel" 'outside sentinel'
 rm -f "$legacy_pending_manifest"
 
+# Resource A->B replacement must remove stale files, copy optional/nested
+# files and empty directories, and preserve unrelated resource/framework siblings.
+CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"
+assert_resource_tree "$runtime_one" "$owned_resources"
+CODE_SIGNING_ALLOWED=NO run_embed "$runtime_two"
+assert_resource_tree "$runtime_two" "$owned_resources"
+assert_missing "$owned_resources/licenses/removed-notice.txt"
+assert_content "$owned_resources/licenses/extra notices/added.txt" 'new optional notice'
+assert_content "$resources/unrelated-resource.txt" 'unrelated resource'
+assert_content "$frameworks/libunrelated.7.dylib" 'unrelated numeric dylib'
+
+# Missing/empty essential inputs fail before changing the completed resources.
+for missing in BUILD-INFO.txt licenses/NOTICES-SUMMARY.txt licenses/mpv/LICENSE.LGPL \
+  licenses/mpv/NOTICES.txt patches/mpv/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch; do
+  mv "$runtime_one/$missing" "$test_root/missing-input"
+  if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"; then
+    fail "A missing resource input was accepted: $missing"
+  fi
+  mv "$test_root/missing-input" "$runtime_one/$missing"
+  assert_resource_tree "$runtime_two" "$owned_resources"
+done
+cp "$runtime_one/licenses/mpv/NOTICES.txt" "$test_root/notices-input"
+: > "$runtime_one/licenses/mpv/NOTICES.txt"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"; then
+  fail 'An empty required notice was accepted.'
+fi
+cp "$test_root/notices-input" "$runtime_one/licenses/mpv/NOTICES.txt"
+assert_resource_tree "$runtime_two" "$owned_resources"
+
+# Reject source links/special files, including optional files and whole trees.
+ln -s "$outside_sentinel" "$runtime_one/licenses/escape-link"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"; then fail 'A source symlink was accepted.'; fi
+rm "$runtime_one/licenses/escape-link"
+mkfifo "$runtime_one/patches/special-file"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"; then fail 'A source FIFO was accepted.'; fi
+rm "$runtime_one/patches/special-file"
+mv "$runtime_one/licenses" "$runtime_one/licenses-real"
+ln -s "$runtime_one/licenses-real" "$runtime_one/licenses"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"; then fail 'A linked source tree was accepted.'; fi
+rm "$runtime_one/licenses"
+mv "$runtime_one/licenses-real" "$runtime_one/licenses"
+assert_content "$outside_sentinel" 'outside sentinel'
+assert_resource_tree "$runtime_two" "$owned_resources"
+
+# Copy failure and a false-success truncation both retain the old full tree.
+for copy_failure in exit truncated; do
+  if [ "$copy_failure" = exit ]; then
+    if CODE_SIGNING_ALLOWED=NO FAKE_RESOURCE_COPY_FAIL=YES run_embed "$runtime_one"; then
+      fail 'A controlled resource copy failure returned success.'
+    fi
+  else
+    if CODE_SIGNING_ALLOWED=NO FAKE_RESOURCE_COPY_TRUNCATE=YES run_embed "$runtime_one"; then
+      fail 'A silently truncated resource copy returned success.'
+    fi
+  fi
+  unset FAKE_RESOURCE_COPY_FAIL FAKE_RESOURCE_COPY_TRUNCATE
+  assert_resource_tree "$runtime_two" "$owned_resources"
+  assert_no_resource_stage
+done
+
+# The old directory is rolled back if publication fails; retry installs A.
+if CODE_SIGNING_ALLOWED=NO FAKE_RESOURCE_PUBLISH_FAIL=YES run_embed "$runtime_one"; then
+  fail 'A controlled resource publication failure returned success.'
+fi
+unset FAKE_RESOURCE_PUBLISH_FAIL
+assert_resource_tree "$runtime_two" "$owned_resources"
+assert_missing "$resource_backup"
+assert_no_resource_stage
+CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"
+assert_resource_tree "$runtime_one" "$owned_resources"
+
+# If rollback itself is unavailable, keep the previous complete tree in the
+# reserved backup; the next successful embed must recover and replace it.
+if CODE_SIGNING_ALLOWED=NO FAKE_RESOURCE_PUBLISH_FAIL=YES FAKE_RESOURCE_ROLLBACK_FAIL=YES \
+  run_embed "$runtime_two"; then fail 'A resource rollback failure returned success.'; fi
+unset FAKE_RESOURCE_PUBLISH_FAIL FAKE_RESOURCE_ROLLBACK_FAIL
+assert_missing "$owned_resources"
+assert_resource_tree "$runtime_one" "$resource_backup"
+assert_no_resource_stage
+CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"
+assert_resource_tree "$runtime_one" "$owned_resources"
+assert_missing "$resource_backup"
+
+# Recover both possible interrupted-publication states without stale notices.
+mv "$owned_resources" "$resource_backup"
+CODE_SIGNING_ALLOWED=NO run_embed "$runtime_two"
+assert_resource_tree "$runtime_two" "$owned_resources"
+assert_missing "$resource_backup"
+cp -R "$owned_resources" "$resource_backup"
+CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"
+assert_resource_tree "$runtime_one" "$owned_resources"
+assert_missing "$resource_backup"
+mkdir "$resources/.lineup-native-runtime-stage.interrupted"
+make_library "$resources/.lineup-native-runtime-stage.interrupted/partial-notice" 'abandoned stage'
+CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"
+assert_resource_tree "$runtime_one" "$owned_resources"
+assert_no_resource_stage
+
+# Refuse destination root/ancestor links or traversal before outside writes.
+mv "$owned_resources" "$test_root/owned-resources-save"
+ln -s "$outside_directory" "$owned_resources"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_two"; then fail 'A linked owned destination was accepted.'; fi
+[ -L "$owned_resources" ] || fail 'Rejected owned-destination link was changed.'
+rm "$owned_resources"
+mv "$test_root/owned-resources-save" "$owned_resources"
+ln -s "$outside_directory" "$resource_backup"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_two"; then fail 'A linked backup destination was accepted.'; fi
+rm "$resource_backup"
+mv "$resources" "$test_root/resources-save"
+ln -s "$outside_directory" "$resources"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_two"; then fail 'A linked Resources directory was accepted.'; fi
+rm "$resources"
+mv "$test_root/resources-save" "$resources"
+ln -s "$outside_directory" "$test_root/Outside.app"
+if LINEUP_MPV_RUNTIME="$runtime_two" TARGET_BUILD_DIR="$test_root" \
+  FRAMEWORKS_FOLDER_PATH='Outside.app/Contents/Frameworks' CODE_SIGNING_ALLOWED=NO \
+  "$embed_script" embed; then fail 'A linked app ancestor was accepted.'; fi
+if LINEUP_MPV_RUNTIME="$runtime_two" TARGET_BUILD_DIR="$test_root" \
+  FRAMEWORKS_FOLDER_PATH='../Outside.app/Contents/Frameworks' CODE_SIGNING_ALLOWED=NO \
+  "$embed_script" embed; then fail 'A traversing bundle path was accepted.'; fi
+if LINEUP_MPV_RUNTIME="$runtime_two" TARGET_BUILD_DIR="$test_root" \
+  FRAMEWORKS_FOLDER_PATH='Lineup Desktop.app/Contents/Frameworks' \
+  UNLOCALIZED_RESOURCES_FOLDER_PATH="$outside_directory" CODE_SIGNING_ALLOWED=NO \
+  "$embed_script" embed; then fail 'An outside resource destination was accepted.'; fi
+assert_content "$outside_directory/sentinel" 'outside directory sentinel'
+assert_missing "$outside_directory/LineupNativeRuntime"
+assert_missing "$outside_directory/Contents"
+assert_resource_tree "$runtime_one" "$owned_resources"
+assert_content "$resources/unrelated-resource.txt" 'unrelated resource'
+
 # Use a real Mach-O app and dylib to prove that Resources bookkeeping does not
 # invalidate an ad-hoc app signature, and that the old Frameworks location is
 # the failure this test would catch.
@@ -372,6 +618,7 @@ mach_runtime="$test_root/mach-runtime"
 mkdir -p "$mach_app/Contents/MacOS" "$mach_frameworks" "$mach_resources" \
   "$mach_runtime/include/mpv" "$mach_runtime/lib"
 printf '%s\n' '/* fixture mpv header */' > "$mach_runtime/include/mpv/client.h"
+make_resource_fixture "$mach_runtime" 'Mach-O runtime resources'
 printf '%s\n' 'int lineup_fixture_value(void) { return 7; }' > "$test_root/mach-lib.c"
 cc -dynamiclib -Wl,-install_name,@rpath/libmpv.2.dylib \
   -o "$mach_runtime/lib/libmpv.2.dylib" "$test_root/mach-lib.c"
@@ -403,6 +650,7 @@ LINEUP_MPV_RUNTIME="$mach_runtime" \
   CODE_SIGNING_ALLOWED=YES EXPANDED_CODE_SIGN_IDENTITY='' \
   ENABLE_HARDENED_RUNTIME=NO PATH='/usr/bin:/bin:/usr/sbin:/sbin' \
   "$embed_script" embed
+assert_resource_tree "$mach_runtime" "$mach_resources/LineupNativeRuntime"
 assert_file "$mach_resources/$manifest_name"
 assert_missing "$mach_resources/$pending_manifest_name"
 assert_missing "$mach_frameworks/$manifest_name"
@@ -413,5 +661,25 @@ assert_missing "$mach_frameworks/$pending_manifest_name"
   > "$mach_root/app-codesign.log" 2>&1
 /usr/bin/codesign --verify --deep --strict "$mach_app" \
   > "$mach_root/app-verify.log" 2>&1
+
+# When supplied, also embed/sign the immutable accepted prepared runtime into
+# this isolated Mach-O app. No app/Xcode/Flutter build output is touched.
+if [ -n "$accepted_runtime" ]; then
+  (cd "$accepted_runtime" && find lib licenses patches -type f -exec shasum -a 256 '{}' \; &&
+    shasum -a 256 BUILD-INFO.txt) > "$test_root/accepted-before.sha256"
+  LINEUP_MPV_RUNTIME="$accepted_runtime" TARGET_BUILD_DIR="$mach_root" \
+    FRAMEWORKS_FOLDER_PATH='Fixture.app/Contents/Frameworks' \
+    UNLOCALIZED_RESOURCES_FOLDER_PATH='Fixture.app/Contents/Resources' \
+    CODE_SIGNING_ALLOWED=YES EXPANDED_CODE_SIGN_IDENTITY='' ENABLE_HARDENED_RUNTIME=NO \
+    PATH='/usr/bin:/bin:/usr/sbin:/sbin' "$embed_script" embed
+  assert_resource_tree "$accepted_runtime" "$mach_resources/LineupNativeRuntime"
+  (cd "$accepted_runtime" && shasum -a 256 -c "$test_root/accepted-before.sha256") \
+    > "$test_root/accepted-after.log"
+  /usr/bin/codesign --force --sign - --timestamp=none "$mach_app" \
+    > "$mach_root/accepted-codesign.log" 2>&1
+  /usr/bin/codesign --verify --deep --strict "$mach_app" \
+    > "$mach_root/accepted-verify.log" 2>&1
+  echo 'accepted runtime resources match byte-for-byte; source hashes unchanged; ad-hoc app signature verified'
+fi
 
 echo 'mpv runtime embedding integration test passed'

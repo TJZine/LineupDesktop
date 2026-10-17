@@ -373,7 +373,12 @@ macOS is not yet a release platform; the port plan is
 
 The Runner links the prepared LGPL libmpv runtime (the S2 build with the
 `CAMetalLayer` `--wid` embedding patch) and embeds its `lib/*.dylib` files into
-`Contents/Frameworks`, signed with the app's identity. The runtime location
+`Contents/Frameworks`, signed with the app's identity. Its complete `licenses/`
+and `patches/` trees plus raw `BUILD-INFO.txt` are embedded byte-for-byte under
+`Contents/Resources/LineupNativeRuntime`. This dedicated subtree is replaced as
+one owned unit; unrelated app resources are preserved. Required resource inputs
+must exist and be nonempty, with no source/destination symlinks or special files.
+An incomplete runtime fails the build before publication. The runtime location
 is the single build setting `LINEUP_MPV_RUNTIME`, defined in
 `macos/Runner/Configs/NativePlayer.xcconfig`. It defaults to
 `build/macos-runtime/dist/arm64` in the repository. The build fails early, with
@@ -389,6 +394,23 @@ or write `LINEUP_MPV_RUNTIME = /path/to/macos-runtime/arm64` in the untracked
 `macos/Runner/Configs/NativePlayer.local.xcconfig`, which takes precedence over
 the environment. Runtime provisioning, pinning, and App Store signing are
 package R1 of the port plan.
+
+The embed integration test exercises ownership/migration, signing failures,
+complete resource file sets/bytes, removal of obsolete notices, copy/publication
+failure and retry, path boundaries, and a minimal real Mach-O ad-hoc signed app:
+
+```sh
+LINEUP_MPV_RUNTIME="$PWD/build/macos-runtime/dist/arm64" \
+  tool/macos/mpv-runtime-embed-test.sh
+```
+
+The supplied runtime is copied into an isolated temporary fixture app and
+verified byte-for-byte for resources; source hashes must remain unchanged.
+Without `LINEUP_MPV_RUNTIME`, the deterministic fixture and Mach-O checks still
+run. This does not rebuild a Flutter app or establish team signing, sandbox,
+App Store/legal approval, an in-app Licenses surface, or source archive hosting.
+Bundled `BUILD-INFO.txt` records **prepared, pre-signing** library identities;
+it is not a manifest of the signed app/package's library hashes.
 
 ```sh
 flutter config --enable-macos-desktop

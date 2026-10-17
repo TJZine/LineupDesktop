@@ -427,8 +427,30 @@ document in the same commit.
   Apple's secure `--timestamp`, while `CODE_SIGNING_ALLOWED=NO` skips signing.
   Real identity, sandbox, and package acceptance remain separate release
   checks.
-- In the Licenses screen (§4.8): every text under `dist/arm64/licenses`, both
-  the curated license files and each component's generated `NOTICES.txt`:
+- The embed phase also installs the complete selected runtime's `licenses/`
+  and `patches/` trees and `BUILD-INFO.txt` into the dedicated
+  `Contents/Resources/LineupNativeRuntime/` subtree. Hierarchy and text bytes
+  are preserved, including curated licenses, generated `NOTICES.txt` files,
+  and `NOTICES-SUMMARY.txt`; directories are `0755`, files `0644`, and dylibs
+  remain only in Frameworks. Missing/empty
+  required prepared-runtime resource files fail the build. Source trees and
+  destinations reject symlinks/special files; bundle paths cannot traverse or
+  redirect through an app-directory symlink. This is packaging validation, not
+  a second GPL audit or a legal completeness assessment.
+  Resources are copied and compared in a private stage before publication.
+  The owned directory is replaced as a whole, removing obsolete notices and
+  preserving unrelated Resources/Frameworks. A failed replacement restores the
+  previous complete tree; if rollback is unavailable, the reserved backup is
+  retained for the next retry. Interrupted stages/backups are recovered or
+  removed before completing a later embed. This resource transaction preserves
+  the existing dylib ownership/pending-manifest recovery behavior.
+  `BUILD-INFO.txt` describes the raw prepared runtime: exact source links,
+  lock/patch identities and pre-signing library hashes. Those hashes are
+  **not** the post-signing app/package hashes; signing changes dylib bytes.
+  A later signed artifact requires its own package identity.
+- A user-accessible Licenses screen (§4.8), its design and presentation of the
+  bundled resources remain open. It must expose every text under `licenses/`,
+  including curated license files and each component's generated `NOTICES.txt`:
   - mpv; FFmpeg with the IJG notice; libplacebo; glslang; fast_float;
   - MoltenVK, SPIRV-Cross, SPIRV-Tools, SPIRV-Headers, cereal, and
     Vulkan-Headers;
@@ -442,7 +464,8 @@ document in the same commit.
 - An LGPL notice for mpv, FFmpeg, libplacebo, and FriBidi. It links the exact
   sources above, the mpv and FFmpeg patches, `tool/macos/build-mpv.sh`, and the
   lock file, and states that users may replace those libraries and how.
-- The published patches:
+- The patches are bundled as raw resources above; public source/patch release
+  obligations remain separate:
   - `tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch`
   - `tool/macos/ffmpeg-patches/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch`
   - `tool/macos/ffmpeg-patches/0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch`
@@ -491,19 +514,19 @@ This is an engineering list of review items, not legal advice.
 
 ## Remaining work and risks
 
-- **Authenticated-reference parity:** `http-header-fields` and
-  `curl-max-redirects=0` use the same mpv source as Windows, but
-  `authenticated_reference_test` has not been ported to macOS (plan §4.4).
+- **Authenticated references:** the standalone production-adapter checker is
+  integrated; its [26-case headless proof](DEVELOPMENT.md#macos-authenticated-reference-proof)
+  covers the selected real runtime with synthetic loopback TLS/HTTP and token
+  audit. This does not establish signed-sandbox, physical or real-Plex behavior.
 - **Sandbox and hardened runtime:** see the pending checks above.
 - **macOS 12–26:** all libraries target 12.0, but only macOS 27 was tested.
-- **CI:** the plan calls for building in CI; the script is CI-ready, but no
-  workflow was added.
+- **Hosted CI acceptance:** `.github/workflows/ci.yml` now provisions/builds
+  the pinned runtime and requires portable/native, embed/signing and
+  authenticated-reference checks. The separate core-contract job is also
+  integrated. Hosted execution has not been established by the local evidence
+  recorded here.
 - **x86_64 / universal:** not built (plan P3); see "Architectures" for what is
   missing.
-- **MoltenVK logging:** MoltenVK writes an `[mvk-info]` banner and
-  `[mvk-warn] … primitive restart` lines to stderr. The adapter should set
-  `MVK_CONFIG_LOG_LEVEL` (for example to errors only), or the runtime should
-  be built with a lower default.
 - **Byte identity:** libharfbuzz and libmpv still differ between build
   directories (see "Path-neutral builds").
 - **Patch upkeep:** the embedding patch applies to `3186d369f` only, and each

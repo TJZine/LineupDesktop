@@ -4,12 +4,15 @@
 #
 #   mpv_runtime.sh check   fail early with a clear message when it is missing
 #   mpv_runtime.sh embed   copy its dylibs into Contents/Frameworks and sign
-#                          them with the app's signing identity
+#                          them with the app's signing identity, and install
+#                          its license/patch/provenance resources
 set -eu
 
 runtime="${LINEUP_MPV_RUNTIME:-}"
 manifest_name='.lineup-mpv-runtime-manifest'
 pending_manifest_name='.lineup-mpv-runtime-pending'
+resource_name='LineupNativeRuntime'
+resource_backup_name='.lineup-native-runtime-previous'
 
 check() {
   if [ -z "$runtime" ] || [ ! -f "$runtime/include/mpv/client.h" ] ||
@@ -18,11 +21,172 @@ check() {
     echo "error: Build or provision the macOS runtime (lib/ and include/mpv/), or point LINEUP_MPV_RUNTIME at one through the environment or Runner/Configs/NativePlayer.local.xcconfig. See docs/DEVELOPMENT.md." >&2
     exit 1
   fi
+  check_resources
 }
 
 fail() {
   echo "error: $*" >&2
   exit 1
+}
+
+validate_resource_tree() {
+  tree=$1
+  [ -d "$tree" ] && [ ! -L "$tree" ] ||
+    fail "The native runtime resource tree must be a real directory: $tree"
+  invalid=$(find "$tree" ! -type d ! -type f -print) ||
+    fail "Could not inspect native runtime resources: $tree"
+  [ -z "$invalid" ] ||
+    fail "Native runtime resources contain symlinks or special files: $tree"
+}
+
+check_resources() {
+  validate_resource_tree "$runtime/licenses"
+  validate_resource_tree "$runtime/patches"
+  # Required files of the current prepared-runtime format. S2's builder owns
+  # license classification, generated-notice coverage, and GPL verification.
+  # Copy all additional files too; this is a presence check, not a legal audit.
+  for required in \
+    BUILD-INFO.txt \
+    licenses/NOTICES-SUMMARY.txt \
+    licenses/cereal/LICENSE \
+    licenses/curl/COPYING \
+    licenses/curl/NOTICES.txt \
+    licenses/curl/inet_ntop-ISC.txt \
+    licenses/curl/inet_pton-ISC.txt \
+    licenses/dav1d/COPYING \
+    licenses/dav1d/NOTICES.txt \
+    licenses/fast_float/LICENSE-APACHE \
+    licenses/fast_float/LICENSE-BOOST \
+    licenses/fast_float/LICENSE-MIT \
+    licenses/ffmpeg/COPYING.LGPLv2.1 \
+    licenses/ffmpeg/IJG-NOTICE.txt \
+    licenses/ffmpeg/LICENSE.md \
+    licenses/ffmpeg/NOTICES.txt \
+    licenses/freetype/BDF-README \
+    licenses/freetype/FTL.TXT \
+    licenses/freetype/LICENSE.TXT \
+    licenses/freetype/NOTICES.txt \
+    licenses/freetype/PCF-README \
+    licenses/freetype/fthash-NOTICE.txt \
+    licenses/fribidi/COPYING \
+    licenses/fribidi/NOTICES.txt \
+    licenses/glslang/LICENSE.txt \
+    licenses/glslang/NOTICES.txt \
+    licenses/harfbuzz/COPYING \
+    licenses/harfbuzz/NOTICES.txt \
+    licenses/harfbuzz/ms-use-COPYING \
+    licenses/lcms2/LICENSE \
+    licenses/lcms2/NOTICES.txt \
+    licenses/libass/COPYING \
+    licenses/libass/NOTICES.txt \
+    licenses/libplacebo/LICENSE \
+    licenses/libplacebo/NOTICES.txt \
+    licenses/moltenvk/LICENSE \
+    licenses/moltenvk/NOTICES.txt \
+    licenses/mpv/Copyright \
+    licenses/mpv/LICENSE.LGPL \
+    licenses/mpv/NOTICES.txt \
+    licenses/openssl/LICENSE.txt \
+    licenses/openssl/NOTICES.txt \
+    licenses/spirv-cross/Apache-2.0.txt \
+    licenses/spirv-cross/LICENSE \
+    licenses/spirv-cross/MIT.txt \
+    licenses/spirv-headers/LICENSE \
+    licenses/spirv-tools/LICENSE \
+    licenses/vulkan-headers/Apache-2.0.txt \
+    licenses/vulkan-headers/LICENSE.md \
+    licenses/vulkan-headers/MIT.txt \
+    patches/ffmpeg/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch \
+    patches/ffmpeg/0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch \
+    patches/mpv/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch; do
+    [ -f "$runtime/$required" ] && [ ! -L "$runtime/$required" ] &&
+      [ -s "$runtime/$required" ] ||
+      fail "Missing or empty native runtime license/provenance input: $runtime/$required"
+  done
+}
+
+# Build products may live below a symlinked system temporary directory, but
+# nothing inside TARGET_BUILD_DIR may redirect the bundle destination outside it.
+validate_bundle_path() {
+  relative=$1
+  current=$TARGET_BUILD_DIR
+  [ -d "$current" ] || fail "The target build directory is unavailable: $current"
+  while [ -n "$relative" ]; do
+    case "$relative" in
+      */*) component=${relative%%/*}; relative=${relative#*/} ;;
+      *) component=$relative; relative='' ;;
+    esac
+    case "$component" in
+      ''|.|..) fail "Invalid app bundle directory component: $component" ;;
+    esac
+    current="$current/$component"
+    [ ! -L "$current" ] || fail "An app bundle directory must not be a symlink: $current"
+    if [ -e "$current" ]; then
+      [ -d "$current" ] || fail "An app bundle directory is not a directory: $current"
+    fi
+  done
+}
+
+prepare_resource_destination() {
+  resource_destination="$resources_destination/$resource_name"
+  resource_backup="$resources_destination/$resource_backup_name"
+  for tree in "$resource_destination" "$resource_backup"; do
+    if [ -e "$tree" ] || [ -L "$tree" ]; then
+      validate_resource_tree "$tree"
+    fi
+  done
+  # Recover an interrupted rename before staging the next complete tree. If a
+  # new tree was already installed, only its obsolete backup remains to clean.
+  if [ -d "$resource_backup" ]; then
+    if [ -d "$resource_destination" ]; then
+      rm -rf "$resource_backup"
+    else
+      resource_rollback_needed=1
+      mv -f "$resource_backup" "$resource_destination"
+      resource_rollback_needed=0
+    fi
+  fi
+}
+
+stage_resources() {
+  # A killed build may leave an unpublished stage. These reserved directories
+  # are owned by this phase and must not become stale signed app resources.
+  for abandoned in "$resources_destination"/.lineup-native-runtime-stage.*; do
+    if [ -e "$abandoned" ] || [ -L "$abandoned" ]; then
+      validate_resource_tree "$abandoned"
+      find "$abandoned" -type d -exec chmod u+w '{}' +
+      rm -rf "$abandoned"
+    fi
+  done
+  resource_stage=$(mktemp -d "$resources_destination/.lineup-native-runtime-stage.XXXXXX")
+  cp -RP "$runtime/licenses" "$resource_stage/licenses"
+  cp -RP "$runtime/patches" "$resource_stage/patches"
+  cp -P "$runtime/BUILD-INFO.txt" "$resource_stage/BUILD-INFO.txt"
+  validate_resource_tree "$resource_stage"
+  # A tool reporting success must still have copied the entire selected input.
+  diff -qr "$runtime/licenses" "$resource_stage/licenses" >/dev/null ||
+    fail "The staged native runtime licenses differ from their source."
+  diff -qr "$runtime/patches" "$resource_stage/patches" >/dev/null ||
+    fail "The staged native runtime patches differ from their source."
+  cmp -s "$runtime/BUILD-INFO.txt" "$resource_stage/BUILD-INFO.txt" ||
+    fail "The staged native runtime provenance differs from its source."
+  # mktemp's private root and source permission bits must not make bundled
+  # public license texts unreadable to another user installing/running the app.
+  find "$resource_stage" -type d -exec chmod 755 '{}' +
+  find "$resource_stage" -type f -exec chmod 644 '{}' +
+}
+
+publish_resources() {
+  if [ -d "$resource_destination" ]; then
+    mv -f "$resource_destination" "$resource_backup"
+    resource_rollback_needed=1
+  fi
+  mv -f "$resource_stage" "$resource_destination"
+  resource_stage=''
+  resource_rollback_needed=0
+  if [ -d "$resource_backup" ]; then
+    rm -rf "$resource_backup"
+  fi
 }
 
 validate_runtime_name() {
@@ -150,6 +314,10 @@ write_manifest() {
 
 stage=''
 write_tmp=''
+resource_stage=''
+resource_backup=''
+resource_destination=''
+resource_rollback_needed=0
 cleanup_embed_artifacts() {
   cleanup_status=$1
   if [ -n "${stage:-}" ] && [ -d "$stage" ]; then
@@ -161,6 +329,18 @@ cleanup_embed_artifacts() {
   fi
   if [ -n "${write_tmp:-}" ]; then
     rm -f "$write_tmp" || :
+  fi
+  # A failed publication keeps the old complete tree. If rollback itself is
+  # interrupted/fails, retain the backup for prepare_resource_destination.
+  if [ "${resource_rollback_needed:-0}" -eq 1 ] &&
+    [ -n "${resource_backup:-}" ] && [ -d "$resource_backup" ] && [ ! -L "$resource_backup" ] &&
+    [ ! -e "$resource_destination" ] && [ ! -L "$resource_destination" ]; then
+    mv -f "$resource_backup" "$resource_destination" ||
+      echo "error: Native runtime resource rollback failed; retry embedding to recover the retained backup." >&2
+  fi
+  if [ -n "${resource_stage:-}" ] && [ -d "$resource_stage" ]; then
+    find "$resource_stage" -type d -exec chmod u+w '{}' + || :
+    rm -rf "$resource_stage" || :
   fi
   return "$cleanup_status"
 }
@@ -182,6 +362,11 @@ prepare_destination_names() {
 
 embed() {
   check
+  case "$FRAMEWORKS_FOLDER_PATH" in
+    *.app/Contents/Frameworks) ;;
+    *) fail "The Frameworks destination must be inside an app's Contents directory." ;;
+  esac
+  validate_bundle_path "$FRAMEWORKS_FOLDER_PATH"
   destination="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
   [ ! -L "$destination" ] || fail "The app Frameworks destination must not be a symlink: $destination"
   mkdir -p "$destination"
@@ -219,7 +404,10 @@ embed() {
   esac
   [ ! -L "$resources_destination" ] ||
     fail "The app Resources destination must not be a symlink: $resources_destination"
+  validate_bundle_path "$(dirname "$FRAMEWORKS_FOLDER_PATH")/Resources"
   mkdir -p "$resources_destination"
+  prepare_resource_destination
+  stage_resources
 
   manifest="$resources_destination/$manifest_name"
   pending_manifest="$resources_destination/$pending_manifest_name"
@@ -304,6 +492,7 @@ embed() {
   write_manifest "$manifest" "$current_entries"
   rm -f "$pending_manifest"
   rm -f "$legacy_manifest" "$legacy_pending_manifest"
+  publish_resources
 }
 
 case "${1:-}" in
