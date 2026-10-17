@@ -312,6 +312,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
 
 - (void)processWakeup {
   _core->ProcessWakeup([self](const ValueMap& event) {
+    [self logVideoParameters:event];
     [_channel invokeMethod:@"event" arguments:lineup::ToFoundationMap(event)];
   });
 }
@@ -409,8 +410,12 @@ class MacCoreHost final : public lineup::player::CoreHost {
   // is controlled only by `hidden`.
   _videoView.frame = lineup::RetainedVideoFrame(_videoRect, _videoView.frame);
   // A hidden layer also stops the patched mpv context from rendering.
+  const bool shown = visible && _videoView.hidden;
   _videoView.hidden = !visible;
   [CATransaction commit];
+  if (shown) {
+    [self logPresentationFacts:@"shown"];
+  }
 }
 
 #pragma mark - Fullscreen
@@ -594,13 +599,36 @@ class MacCoreHost final : public lineup::player::CoreHost {
       [NSTimer scheduledTimerWithTimeInterval:1.0
                                       repeats:YES
                                         block:^(NSTimer*) {
-                                          [weakSelf logPresentationFacts];
+                                          [weakSelf logPresentationFacts:nil];
                                         }];
 }
 
-- (void)logPresentationFacts {
+// Logs the content's transfer, primaries, and matrix from each video-params
+// event, with the layer facts at that moment.
+- (void)logVideoParameters:(const ValueMap&)event {
+  using lineup::player::FindString;
+  const std::string* type = FindString(&event, "type");
+  const std::string* name = FindString(&event, "name");
+  if (!_presentationLogTimer || !type || *type != "property" || !name ||
+      *name != "video-params") {
+    return;
+  }
+  const ValueMap* params = lineup::player::AsMap(lineup::player::Find(event, "value"));
+  const std::string* gamma = FindString(params, "gamma");
+  const std::string* primaries = FindString(params, "primaries");
+  const std::string* matrix = FindString(params, "colormatrix");
+  [self logPresentationFacts:
+            [NSString stringWithFormat:
+                          @"video-params gamma=%s primaries=%s colormatrix=%s",
+                          gamma ? gamma->c_str() : "none",
+                          primaries ? primaries->c_str() : "none",
+                          matrix ? matrix->c_str() : "none"]];
+}
+
+// With a reason, always logs; from the poll (nil reason), logs only changes.
+- (void)logPresentationFacts:(NSString*)reason {
   CAMetalLayer* layer = _videoView.metalLayer;
-  if (!layer) {
+  if (!layer || !_presentationLogTimer) {
     return;
   }
   NSWindow* window = _window;
@@ -623,9 +651,10 @@ class MacCoreHost final : public lineup::player::CoreHost {
           NSStringFromRect(window.frame), window.isVisible,
           (window.occlusionState & NSWindowOcclusionStateVisible) != 0,
           [self windowIsFullscreen]];
-  if (![facts isEqualToString:_lastPresentationFacts]) {
+  if (reason || ![facts isEqualToString:_lastPresentationFacts]) {
     _lastPresentationFacts = facts;
-    NSLog(@"[lineup-presentation] %@", facts);
+    NSLog(@"[lineup-presentation] %@%@%@", reason ?: @"", reason ? @": " : @"",
+          facts);
   }
 }
 
