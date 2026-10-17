@@ -98,6 +98,41 @@ static bool check_assertions(mpv_handle *mpv, struct assertion *assertions,
   return all;
 }
 
+struct run_state {
+  bool loaded, played, ended, certificate_rejected, fatal;
+  int end_error;
+};
+
+// Applies one mpv event to the run state; used by the main loop and while
+// polling assertions.
+static void handle_event(mpv_event *event, struct run_state *state) {
+  switch (event->event_id) {
+  case MPV_EVENT_LOG_MESSAGE: {
+    mpv_event_log_message *message = event->data;
+    printf("log[%s] %s: %s", message->level, message->prefix, message->text);
+    if (is_certificate_rejection(message->text))
+      state->certificate_rejected = true;
+    if (!strcmp(message->level, "fatal"))
+      state->fatal = true;
+    break;
+  }
+  case MPV_EVENT_FILE_LOADED:
+    state->loaded = true;
+    printf("event: file-loaded\n");
+    break;
+  case MPV_EVENT_END_FILE: {
+    mpv_event_end_file *end = event->data;
+    state->end_error = end->reason == MPV_END_FILE_REASON_ERROR ? end->error : 0;
+    printf("event: end-file reason=%d error=%s\n", end->reason,
+           state->end_error ? mpv_error_string(state->end_error) : "none");
+    state->ended = true;
+    break;
+  }
+  default:
+    break;
+  }
+}
+
 int main(int argc, char **argv) {
   const char *options[MAX_ITEMS];
   const char *properties[MAX_ITEMS];
@@ -201,33 +236,27 @@ int main(int argc, char **argv) {
   }
 
   bool wait_for_playback = property_count > 0 || assertion_count > 0;
-  bool loaded = false, played = false, ended = false, certificate_rejected = false,
-       fatal = false, assertions_hold = true;
-  int end_error = 0;
-  while (!ended) {
+  struct run_state state = {0};
+  bool assertions_hold = true;
+  while (!state.ended) {
     mpv_event *event = mpv_wait_event(mpv, 60);
     if (event->event_id == MPV_EVENT_NONE) {
       printf("result: timeout\n");
       break;
     }
-    if (event->event_id == MPV_EVENT_LOG_MESSAGE) {
-      mpv_event_log_message *message = event->data;
-      printf("log[%s] %s: %s", message->level, message->prefix, message->text);
-      if (is_certificate_rejection(message->text))
-        certificate_rejected = true;
-      if (!strcmp(message->level, "fatal"))
-        fatal = true;
-    } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
-      loaded = true;
-      printf("event: file-loaded\n");
-      if (!wait_for_playback)
-        break;
-    } else if (event->event_id == MPV_EVENT_PLAYBACK_RESTART && !played) {
-      played = true;
+    handle_event(event, &state);
+    if (event->event_id == MPV_EVENT_FILE_LOADED && !wait_for_playback)
+      break;
+    if (event->event_id == MPV_EVENT_PLAYBACK_RESTART && !state.played) {
+      state.played = true;
+      // Poll for late-arriving values; events that arrive meanwhile (a fatal
+      // error, the end of the file) are handled like any other and end it.
       for (int polls = 0; polls < ASSERT_TIMEOUT_POLLS; polls++) {
         if (check_assertions(mpv, assertions, assertion_count, false))
           break;
-        mpv_wait_event(mpv, 0.1);
+        handle_event(mpv_wait_event(mpv, 0.1), &state);
+        if (state.ended || state.fatal)
+          break;
       }
       for (int i = 0; i < property_count; i++) {
         char *value = mpv_get_property_string(mpv, properties[i]);
@@ -236,12 +265,6 @@ int main(int argc, char **argv) {
       }
       assertions_hold = check_assertions(mpv, assertions, assertion_count, true);
       break;
-    } else if (event->event_id == MPV_EVENT_END_FILE) {
-      mpv_event_end_file *end = event->data;
-      end_error = end->reason == MPV_END_FILE_REASON_ERROR ? end->error : 0;
-      printf("event: end-file reason=%d error=%s\n", end->reason,
-             end_error ? mpv_error_string(end_error) : "none");
-      ended = true;
     }
   }
   print_loaded_runtime();
@@ -249,9 +272,10 @@ int main(int argc, char **argv) {
 
   bool pass;
   if (expect_load)
-    pass = loaded && !fatal && (!wait_for_playback || played) && assertions_hold;
+    pass = state.loaded && !state.fatal && state.end_error == 0 &&
+           (!wait_for_playback || state.played) && assertions_hold;
   else
-    pass = !loaded && end_error < 0 && certificate_rejected;
+    pass = !state.loaded && state.end_error < 0 && state.certificate_rejected;
   printf("result: %s (expected %s)\n", pass ? "PASS" : "FAIL", expect);
   return pass ? 0 : 1;
 }
