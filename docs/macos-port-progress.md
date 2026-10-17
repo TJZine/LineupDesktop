@@ -157,7 +157,10 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | C1b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow only | Complete: approved; exact Bash failure propagation/path probes and actual system-OpenSSL fixture certificate generation passed |
 | R1c native runtime resource packaging | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Existing embed script/fixture and runtime/Development docs; package existing licenses, notices, patches and BUILD-INFO under owned Resources subtree; no UI/API | Complete, independently approved and integrated as `48e93064`; actual Release bundle/resource/signature checks pass |
 | R1c adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen four-file packaging source; isolated fixtures/read-only app evidence | Complete: approved exact four files; independent real-runtime fixture and additional recovery/path probes passed |
-| M3b fullscreen observation/reconciliation | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Native adapter player-scoped events, Dart playback interface/transport/coordinator, affected fakes/tests and protocol docs; no app/menu files | Running after P6 approval; independent review and Windows CI required |
+| M3b fullscreen observation/reconciliation | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Native adapter player-scoped events, Dart playback interface/transport/coordinator, affected fakes/tests and protocol docs; no app/menu files | Complete and frozen: 18-file aggregate `cb2c8edfefbe9a28eb119f9e4fa7cdacf0f3cab6b660cd2fd0370ab443d35201`; independent review and combined checks running |
+| M3b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen 18-file native/transport/coordinator/protocol diff; excludes parent record and disjoint workflow | Running; lifecycle, event ordering, reentrancy, pending-request races, Windows equivalence and maintainability |
+| C1c Windows adapter-contract CI | `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Existing build-windows workflow only: explicitly build/run native_player_contract_test with no skip | Complete, independently approved and integrated as `ee379d3d`; Windows execution remains open |
+| C1c adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen two-line Windows job change only; M3b excluded except prerequisite context | Complete: approved exact workflow; target dependencies, failure/no-skip semantics and unrelated structural equality verified |
 | U1 native command delivery | `01a14bfd-7a31-7e50-9de6-e6318b5c1aac` (`local`) | `worker`: `gpt-6.1-sol`, medium | App/Guide keyboard routing, Mac app/window/menu files and focused test/app coverage only; excludes M3b playback/native-player files | Complete, independently approved and integrated as `38426fb4`; 106 affected tests pass and old code fails the new assertion |
 | U1 shortcut adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen Guide source/test only; M3b and parent record excluded | Complete: approved exact two-file patch; source, platform behavior, focus propagation and negative-control attribution verified |
 
@@ -385,3 +388,40 @@ Command-F and non-Mac behavior, and verified the attributed 106-test evidence.
 No extra tests were run against moving M3b interface/fake inputs. The controller
 integrated the exact files as `38426fb4`. Combined M3b/U1 build and native/physical
 keyboard acceptance remain outstanding until the fullscreen source is frozen.
+
+M3b implementation returned an exact 18-file frozen source aggregate
+`cb2c8edfefbe9a28eb119f9e4fa7cdacf0f3cab6b660cd2fd0370ab443d35201`.
+Its affected Dart suites pass 468 tests plus three unsupported-backend cases.
+Actual isolated macOS native tests pass 19 cases with one pre-existing intentional
+destructive-probe skip. Removing coordinator stale-completion protection or
+native fullscreen emission fails the added distinguishing tests; final source
+was restored before its passing checks. Independent review is in progress.
+
+The controller's combined default Release build with integrated U1 and frozen
+M3b passed, as did full analysis. Strict/deep ad-hoc app signature and packaged
+runtime resource comparisons pass; frozen M3b source hashes are unchanged.
+The full Dart suite passed all 1,737 tests and the Debug real-protocol harness
+build passed. Full analysis reports no issues. These are provisional candidate
+results until review accepts the exact source; all 18 file hashes remained
+unchanged after the runs. Logs: `/tmp/lineup-m3b-u1-combined-full-tests.log`,
+`/tmp/lineup-m3b-u1-combined-analyze.log`, and
+`/tmp/lineup-m3b-u1-combined-harness-build.log`.
+
+C1c will explicitly select the existing Windows adapter contract target because
+M3b changes its actual HWND/codec fullscreen assertions. Merely modifying an
+EXCLUDE_FROM_ALL target does not execute it in normal CI. Current local evidence
+cannot establish Windows runtime prerequisites or a hosted pass; failures must
+remain visible and no unverified installer/skip may be substituted.
+
+The controller attempted to expose the combined M3b/U1 harness for a native
+fullscreen → Player-button reversal check. CUA reported that the Mac was locked
+and automatic unlock was unavailable. No visible result is claimed. The human
+has been asked to unlock it or defer visible checks; reviews continue. Physical
+Command-modifier checks remain distinct because of the proven CUA limitation.
+
+C1c exact reviewed workflow is integrated as `ee379d3d`. The independent reviewer
+verified the target's actual adapter/codec/runtime entry, exact CTest name,
+configuration/dependency flow, preserved PowerShell failure handling and no-test
+error, and unchanged unrelated workflow. This is source-wiring acceptance only;
+no Windows/hosted pass is claimed. The CMake per-test 45-second timeout still
+applies despite the CLI's 60-second default.
