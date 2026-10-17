@@ -45,12 +45,14 @@ distribution remain gated by the relevant decisions and approvals.
   independent approval of its exact manifest and evidence.
 - R1a runtime embedding recovery and signing timestamps are integrated by
   `f3217d87` after correction and independent approval of the exact three files.
-  A subsequent actual bundle-signing failure requires the focused follow-up below.
+  A subsequent actual bundle-signing failure was corrected in `104eb220` after
+  independent approval and real Debug/Release build/signature checks.
 - C1a full portable/native macOS CI and runtime provisioning are integrated by
   `80bb7d34` after independent approval. Hosted execution is outstanding.
 - R1b real-runtime authenticated-reference proof is integrated by `9f766d33`
   after all 26 cases passed and the exact corrected manifest was independently
-  approved. C1b owns its CI entry point.
+  approved. C1b adds its required CI entry point in `0d7e195e`, also independently
+  approved. Hosted execution remains outstanding.
 
 ## Evidence and acceptance
 
@@ -141,14 +143,16 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | M12-R5 targeted re-review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen six-file candidate working diff at `0857c906`, including new scheme/config | Complete: approved; reviewed aggregate SHA-256 `49054e38cfb471d1e60315dc4aa40411bfddad87f4c1c302be979c894ade6ec0` |
 | M3a asynchronous termination | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Primary checkout at `a93aefe35391a90897fbbdb5b86564e6ef1b9e9c`; macOS lifecycle source/tests and focused existing docs; no core/Windows/Git changes | Complete, reviewed and accepted; frozen 12-file aggregate `4f3a88a7128fdcce3579a07f3e488b53aeae890ea7a6662e7aba3ceaabac9561` |
 | M3a adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen M3a manifest; excludes controller record and disjoint R1a script work | Complete: approved; controller integrates exact reviewed files |
-| R1a embed cleanup and timestamps | `01a14bc1-7787-75f2-841a-48b715f3b209` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Only runtime embed script, isolated production-script integration tests, and runtime documentation; no shared app builds or signing services | Integrated as `f3217d87`; real app signing exposed a metadata-location issue; focused follow-up running |
+| R1a embed cleanup and timestamps | `01a14bc1-7787-75f2-841a-48b715f3b209` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Only runtime embed script, isolated production-script integration tests, and runtime documentation; no shared app builds or signing services | Complete: `f3217d87` plus independently approved Resources correction `104eb220`; Debug/Release ad-hoc app signing passes |
 | R1a adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen initial R1a script/test/runtime-doc diff; excludes parent record and R1b tooling | Complete: requests one confirmed P2 recovery correction; targeted re-review required |
-| R1a final boundary re-review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen script `fb6aa2341188f935aabb9ac379914843c2deb8f6508c16e360e9c80d7acc8b50`, updated actual-script regression fixture and runtime doc; excludes other slices | Complete: approved exact three-file correction; additional publication/cleanup failure probes recover safely |
+| R1a final boundary re-review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen script `fb6aa2341188f935aabb9ac379914843c2deb8f6508c16e360e9c80d7acc8b50`, updated actual-script regression fixture and runtime doc; excludes other slices | Complete: approved original recovery correction and exact Resources follow-up; all four ownership records and publication/cleanup failure retries verified |
 | R1b authenticated-reference parity | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | New macOS native test tooling and Development command; actual accepted runtime, isolated HTTPS fixtures; no core/Windows/app changes | Complete, independently approved and integrated as `9f766d33`; 26 actual-runtime cases pass |
 | R1b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen four-file authenticated-reference unit; moving R1a/C1a and parent record excluded | Complete: both corrections independently approved; exact source, artifacts, runtime and focused classifier checks verified |
 | C1a macOS development CI | `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Only existing `build-macos` workflow job: full portable suite, source runtime provisioning, app build and existing native tests | Complete, independently approved and integrated as `80bb7d34`; hosted evidence outstanding |
 | C1a adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow only; moving R1b and parent record excluded | Complete: approved with YAML/Bash, structural and controlled failure-path checks; no hosted execution |
-| C1b authenticated-reference CI | `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Existing build-macos workflow only: fixture prerequisites and no-skip real-runtime runner before app build | Running; independent review required before integration |
+| C1b authenticated-reference CI | `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Existing build-macos workflow only: fixture prerequisites and no-skip real-runtime runner before app build | Complete, independently approved and integrated as `0d7e195e`; exact workflow SHA-256 `c1120a3d0c8c55c8694e0410d9d942263e49527447b8e905391b5acf1b77a682` |
+| C1b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow only | Complete: approved; exact Bash failure propagation/path probes and actual system-OpenSSL fixture certificate generation passed |
+| R1c native runtime resource packaging | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Existing embed script/fixture and runtime/Development docs; package existing licenses, notices, patches and BUILD-INFO under owned Resources subtree; no UI/API | Running; independent review and actual combined build required |
 
 M3a is the lifecycle portion of M3, independent of the unresolved P6
 fullscreen product decision. It must preserve the pinned Flutter superclass's
@@ -228,16 +232,47 @@ was treated as unsigned code. The earlier fake-signer fixture did not establish
 whole-bundle signing. A focused follow-up must put metadata in Resources,
 safely migrate completed/pending ownership from incremental Frameworks output,
 and exercise real ad-hoc bundle signing without excluding resource validation.
-No signed-app success is claimed for `f3217d87`. The controller owns the next
-actual Flutter build after the corrected source is frozen and reviewed.
+No signed-app success is claimed for `f3217d87` alone. The corrected frozen
+Resources implementation (script SHA-256
+`f341407caeac221e2cb7784e66ba6366d80c4cb81119a0c0beb77f944e3f85df`)
+then passed the actual incremental Debug build without cleaning the prior failed
+output. The default Release build also passed. Both complete app bundles and
+all 18 embedded runtime libraries pass deep/strict ad-hoc signature checks,
+the Resources manifest exactly covers the runtime, and pending/legacy metadata
+is absent. Local logs: `/tmp/lineup-r1a-resources-app-build.log`,
+`/tmp/lineup-r1a-resources-app-signature.log`,
+`/tmp/lineup-macos-integrated-release-build.log`, and
+`/tmp/lineup-macos-integrated-release-signature.log`. This establishes local
+development signing/build integration, not team-identity signing or App Store
+acceptance. The independent reviewer additionally exercised all four active/legacy
+ownership records, failure/retry at each publication/removal boundary, invalid
+record tails and symlinks, and relative/absolute/fallback Resources paths. It
+approved the exact three-file follow-up; the controller integrated `104eb220`.
 
 The controller ran the complete portable macOS suite with pinned Flutter 3.47.7
 and `TZ=America/New_York`: all 1,728 tests passed. Local log:
 `/tmp/lineup-c1a-macos-portable-full.log`. This includes the exact Guide alpha
 checks and Dart contracts; it does not establish physical composition or HDR.
+The pinned-SDK formatter check passed all 147 Dart files with no changes, and
+`flutter analyze` reported no issues (logs `/tmp/lineup-macos-final-format.log`
+and `/tmp/lineup-macos-final-analyze.log`).
 
-Active independent engineering is the R1a Resources/signing follow-up and C1b
-authenticated-reference CI. M3b fullscreen events/Dart synchronization, remaining
+The controller rebuilt the existing credential-free real-protocol harness on
+these inputs. It rendered the synthetic HDR ramp in Player and the rounded
+Guide video aperture, entered fullscreen using the native green button and
+exited through View. Command-Q retired the playback process. The initial
+window capture was a Stage Manager thumbnail; after fullscreen the full
+window was observable. Two pointer drags did not establish a window geometry
+change, so they are not live-resize evidence. Exact Guide pixel alpha, human
+HDR color/brightness, continuous resize quality, all-source fullscreen and
+final signed-package acceptance remain open. No extra source instrumentation
+or product UI changes were made for this observation.
+
+Active independent engineering is R1c packaging of the existing license,
+notice, patch and raw prepared-runtime identity files into a dedicated app
+Resources subtree. This is required regardless of Licenses-screen design;
+it does not approve a screen or establish legal compliance. Distinguish the
+prepared runtime's BUILD-INFO hashes from later signed binary/package hashes. M3b fullscreen events/Dart synchronization, remaining
 U1 command/menu behavior, R1 signed distribution and notices UI, and B1/B2
 remain gated by the relevant open product/design/account decisions. Resolve
 dependencies against current source rather than treating the package list as
