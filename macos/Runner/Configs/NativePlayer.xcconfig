@@ -10,6 +10,10 @@
 LINEUP_MPV_RUNTIME = $(LINEUP_MPV_RUNTIME:default=$(SRCROOT)/../build/macos-runtime/dist/arm64)
 #include? "NativePlayer.local.xcconfig"
 
+// The runtime provides an arm64 slice only; an x86_64 slice depends on the
+// open Intel-support decision (plan P3) and the runtime build (R1).
+ARCHS = arm64
+
 CLANG_CXX_LANGUAGE_STANDARD = c++17
 HEADER_SEARCH_PATHS = $(inherited) "$(SRCROOT)/../native"
 // Third-party headers: their documentation warnings are not ours to fix.
