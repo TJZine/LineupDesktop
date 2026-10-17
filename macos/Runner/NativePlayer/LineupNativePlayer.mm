@@ -25,8 +25,12 @@ using lineup::player::Value;
 using lineup::player::ValueMap;
 
 NSString* const kChannelName = @"lineup/native_player";
-// A native fullscreen animation takes well under a second; a transition that
-// has not completed by then is reported as a window error.
+// AppKit posts will-enter/will-exit synchronously when a transition starts,
+// and the animation takes well under a second. A toggle that has not started
+// within kFullscreenStartMilliseconds (for example while the window is
+// minimized or the session is locked) or a request not settled within
+// kFullscreenTimeoutSeconds is reported as a window error.
+constexpr int64_t kFullscreenStartMilliseconds = 1000;
 constexpr int64_t kFullscreenTimeoutSeconds = 5;
 
 void SendResult(FlutterResult result, const CallResult& outcome) {
@@ -200,6 +204,12 @@ class MacCoreHost final : public lineup::player::CoreHost {
   lineup::player::DisplayRevisionOrder _displayRevisions;
   std::vector<FullscreenRequest> _fullscreenRequests;
   uint64_t _nextFullscreenRequest;
+  // A toggle this adapter issued that AppKit has not yet started, identified
+  // so that a late start check cannot act on a newer toggle.
+  uint64_t _pendingFullscreenToggle;
+  uint64_t _nextFullscreenToggle;
+  // Between AppKit's will- and did-enter/exit notifications, whoever
+  // started the transition.
   BOOL _fullscreenTransitioning;
   NSMutableArray<id>* _observers;
   NSTimer* _presentationLogTimer;
@@ -415,7 +425,8 @@ class MacCoreHost final : public lineup::player::CoreHost {
     result(WindowError(@"The player window is unavailable."));
     return;
   }
-  if (!_fullscreenTransitioning && _fullscreenRequests.empty() &&
+  // Nothing is moving the window, so its current state is final.
+  if (!_fullscreenTransitioning && _pendingFullscreenToggle == 0 &&
       static_cast<bool>([self windowIsFullscreen]) == fullscreen) {
     result(nil);
     return;
@@ -431,10 +442,12 @@ class MacCoreHost final : public lineup::player::CoreHost {
   [self advanceFullscreen];
 }
 
-// Settles requests that the window's current state satisfies, then starts
-// one transition toward any request that remains.
+// When no transition is running or pending, settles requests that the
+// window's state satisfies, then starts one transition toward any request
+// that remains. Requests for the in-flight transition's target settle when it
+// completes; requests for the opposite state wait for it and toggle again.
 - (void)advanceFullscreen {
-  if (_fullscreenTransitioning) {
+  if (_fullscreenTransitioning || _pendingFullscreenToggle != 0) {
     return;
   }
   const bool current = [self windowIsFullscreen];
@@ -449,7 +462,15 @@ class MacCoreHost final : public lineup::player::CoreHost {
   }
   _fullscreenRequests = std::move(remaining);
   if (!_fullscreenRequests.empty()) {
-    _fullscreenTransitioning = YES;
+    const uint64_t toggle = ++_nextFullscreenToggle;
+    _pendingFullscreenToggle = toggle;
+    __weak LineupNativePlayer* weakSelf = self;
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW,
+                      kFullscreenStartMilliseconds * NSEC_PER_MSEC),
+        dispatch_get_main_queue(), ^{
+          [weakSelf fullscreenToggleStartTimedOut:toggle];
+        });
     [_window toggleFullScreen:nil];
   }
   for (FlutterResult result : settled) {
@@ -457,9 +478,25 @@ class MacCoreHost final : public lineup::player::CoreHost {
   }
 }
 
+- (void)fullscreenTransitionStarted {
+  _pendingFullscreenToggle = 0;
+  _fullscreenTransitioning = YES;
+}
+
 - (void)fullscreenTransitionCompleted {
+  _pendingFullscreenToggle = 0;
   _fullscreenTransitioning = NO;
   [self advanceFullscreen];
+}
+
+// AppKit did not start the toggle: fail every waiting request now rather
+// than at the overall timeout, and leave no pending toggle behind.
+- (void)fullscreenToggleStartTimedOut:(uint64_t)toggle {
+  if (_pendingFullscreenToggle != toggle) {
+    return;
+  }
+  _pendingFullscreenToggle = 0;
+  [self failFullscreenRequests:@"The fullscreen transition did not start."];
 }
 
 - (void)fullscreenRequestTimedOut:(uint64_t)requestId {
@@ -469,8 +506,9 @@ class MacCoreHost final : public lineup::player::CoreHost {
       FlutterResult result = it->result;
       _fullscreenRequests.erase(it);
       if (_fullscreenRequests.empty()) {
-        // AppKit never reported the transition (for example, the window is
-        // minimized); allow a later request to try again.
+        // A failed transition is reported only to a window delegate, never
+        // as a did-enter/exit notification; a real transition is far shorter
+        // than this timeout, so allow a later request to try again.
         _fullscreenTransitioning = NO;
       }
       result(WindowError(@"The fullscreen transition did not complete."));
@@ -510,7 +548,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
          NSWindowWillExitFullScreenNotification
        ]) {
     observe(name, window, ^(LineupNativePlayer* player) {
-      player->_fullscreenTransitioning = YES;
+      [player fullscreenTransitionStarted];
     });
   }
   for (NSNotificationName name in @[
