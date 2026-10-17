@@ -280,7 +280,17 @@ jobs:
             ctest --test-dir .\build\windows\x64 -C Release -R "^${nativeTest}$" --output-on-failure --no-tests=error --parallel 1 --timeout 30
           }
           ctest --test-dir .\build\windows\x64 -C Release -R '^display_guardian$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
-          ctest --test-dir .\build\windows\x64 -C Release -R '^native_player_contract$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
+          try {
+            ctest --test-dir .\build\windows\x64 -C Release -R '^native_player_contract$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
+          } catch {
+            $testFailure = $_
+            try {
+              & .\tool\windows\diagnose-native-startup.ps1 -Executable (Join-Path $env:GITHUB_WORKSPACE 'build/windows/x64/runner/Release/native_player_contract_test.exe')
+            } catch {
+              Write-Warning "Native startup diagnostics failed: $($_.Exception.Message)"
+            }
+            throw $testFailure
+          }
 
   release-inputs:
     name: Detect Windows release inputs

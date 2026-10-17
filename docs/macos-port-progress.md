@@ -533,3 +533,26 @@ integration and an authorized branch push/rerun. Runtime pins, production
 adapters and package policy remain outside this unit. CI observer
 `01a14bdd-a2a0-7ba0-bcb5-c06320493487` follows the remaining jobs read-only and
 reports a new failure or completion.
+
+The held existing-app baseline physically reproduced the defect: the human
+reported phase C (SDR → HDR in Player) as dim, then phase D (same clip opened in
+Guide) as restored brightness. Phase E returns to Player without changing media
+and remains pending. Original process PID 51721, executable SHA-256
+`c4d72ca2837686cfe372b639947238176af3195c7efb92191bc3fe4f6d025efa`,
+Debug dylib identity as above. Existing stdout/stderr were `/dev/null` and no
+presentation records were available in unified logs, so this baseline cannot
+settle layer/swapchain/headroom hypotheses. The worker preserves the phase log
+under `/tmp/lineup-visible-hdr-investigation/` before isolated instrumentation.
+
+The independent CI reviewer approved the exact three-file startup diagnostic
+patch, SHA-256
+`37f5d1b86081e200b7da6bba5314117bed30501b672768e317e1ca6083fb15bc`.
+It wraps the unchanged real contract invocation, runs the focused helper on
+failure, and rethrows the original CTest failure even if diagnostics fail.
+AST/YAML and real PowerShell control-flow probes passed; actual Windows loader
+execution remains a hosted gate. The helper's process can identify failed DLL
+loads, but a failure may also reflect a dependency of that named DLL, and a
+successful load does not itself prove the original test can start. No runtime
+acquisition or presumed Vulkan remedy was added. The current workflow cancels
+older runs on the same branch, so the controller will preserve the still-running
+macOS/package jobs before dispatching this diagnostic revision.

@@ -131,10 +131,17 @@ cmake --build .\build\windows\x64 --config Release --target player_core_contract
 ctest --test-dir .\build\windows\x64 -C Release -R '^(player_core_contract|encodable_value_conversion)$' --output-on-failure --timeout 45
 ```
 
-The player-contract and
-runner-lifecycle targets remain explicit local checks. Build/install the
-candidate with the pinned patched engine and prepared libmpv first for those
-checks, then build the targets and run their CTests:
+CI also builds and runs `native_player_contract_test` against the stock
+Flutter DLL and prepared libmpv. If its CTest fails, CI runs
+`tool/windows/diagnose-native-startup.ps1` against the exact test executable
+before reporting the original failure. The diagnostic prints the built DLL
+hashes, PE imports, and named Windows loader results; it installs no runtime
+and does not turn a failed test into a pass.
+
+For local player-contract checks, build Windows with prepared libmpv first.
+The runner-lifecycle target remains an explicit local check and additionally
+requires the installed candidate with the pinned patched engine. Then build
+the targets and run their CTests:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target native_playback_state_test native_player_contract_test runner_lifecycle_test
