@@ -98,16 +98,28 @@ FFMPEG_URL=https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
 FFMPEG_SHA256=8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
 FFMPEG_LICENSE=LGPL-2.1-or-later
 # LGPL 2.1+ only (no gpl, version3 or nonfree). --disable-autodetect stops
-# configure from picking up anything not listed here. --disable-network: all
-# HTTP(S), including nested opens, goes through mpv's libcurl stream, so the
-# runtime has one TLS stack (curl + OpenSSL + Apple SecTrust). iconv stays
-# off: mpv converts subtitle charsets itself, and FFmpeg 9.0.2 does not add
-# -liconv to libavcodec when iconv is outside libc.
+# configure from picking up anything not listed here.
+#
+# Networking: mpv opens HTTP(S), including HLS/DASH segments (nested opens),
+# through its libcurl stream, which verifies with Apple SecTrust. FFmpeg still
+# needs its http/https protocols registered, because its HLS demuxer validates
+# each segment URL's protocol by name before handing the open to mpv. Only
+# the protocols below are built. FFmpeg's https uses the same OpenSSL with
+# certificate verification on (FFmpeg's default) and no trust anchors, so any
+# HTTPS connection FFmpeg would make itself (header-free fallback opens,
+# curl-enabled=no) fails closed instead of connecting unverified.
+#
+# iconv stays off: mpv converts subtitle charsets itself, and FFmpeg 9.0.2
+# does not add -liconv to libavcodec when iconv is outside libc.
 FFMPEG_FLAGS=(--disable-gpl --disable-version3 --disable-nonfree
   --disable-autodetect --disable-programs --disable-doc --disable-avdevice
-  --disable-network --disable-debug --enable-pic
+  --disable-debug --enable-pic
   --enable-videotoolbox --enable-libdav1d --enable-zlib --enable-bzlib
-  --enable-pthreads)
+  --enable-pthreads --enable-network --enable-openssl --disable-protocols
+  --enable-protocol=file,crypto,data,http,https,httpproxy,tcp,tls
+  --disable-demuxer=rtsp,sdp,rtp,sap --disable-muxer=rtsp,sap,whip,rtp,rtp_mpegts)
+# The RTP/RTSP/SAP/WHIP formats are disabled because they would pull in the
+# rtp, udp and dtls protocols (and SDP could open RTP directly).
 
 # glslang compiles libplacebo's GLSL to SPIR-V. It is a build-time static
 # library linked into libplacebo, not a separately shipped dylib. Its license

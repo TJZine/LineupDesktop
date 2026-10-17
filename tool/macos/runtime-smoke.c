@@ -5,9 +5,14 @@
 // target headlessly and checks the outcome.
 //
 // Usage:
-//   runtime-smoke [-o name=value]... [-p property]... --expect load|reject TARGET
+//   runtime-smoke [--layer] [-o name=value]... [-p property]...
+//                 --expect load|reject TARGET
 //   runtime-smoke --licenses
 //
+//   --layer          Render with the production route C output (vo=gpu-next,
+//                    gpu-api=vulkan, gpu-context=macvk) into an off-screen
+//                    host CAMetalLayer passed through --wid, instead of
+//                    vo=null. Hardware decode interop needs a real VO.
 //   -o name=value    mpv option set before initialization (repeatable).
 //   -p property      property printed after the first video frame
 //                    (repeatable); with -p the run waits for playback.
@@ -32,6 +37,9 @@
 #include <mpv/client.h>
 
 #define MAX_ITEMS 32
+
+// runtime-smoke-layer.m
+int64_t runtime_smoke_create_layer(int width, int height);
 
 static void print_ffmpeg_licenses(void) {
   printf("avutil_license: %s\n", avutil_license());
@@ -63,9 +71,12 @@ int main(int argc, char **argv) {
   const char *properties[MAX_ITEMS];
   int option_count = 0, property_count = 0;
   const char *expect = NULL, *target = NULL;
+  bool use_layer = false;
 
   for (int i = 1; i < argc; i++) {
-    if (!strcmp(argv[i], "--licenses")) {
+    if (!strcmp(argv[i], "--layer")) {
+      use_layer = true;
+    } else if (!strcmp(argv[i], "--licenses")) {
       print_ffmpeg_licenses();
       print_loaded_runtime();
       return 0;
@@ -98,8 +109,17 @@ int main(int argc, char **argv) {
   // Headless defaults; -o may override them.
   mpv_set_option_string(mpv, "config", "no");
   mpv_set_option_string(mpv, "terminal", "no");
-  mpv_set_option_string(mpv, "vo", "null");
   mpv_set_option_string(mpv, "ao", "null");
+  if (use_layer) {
+    int64_t wid = runtime_smoke_create_layer(1280, 720);
+    mpv_set_option_string(mpv, "vo", "gpu-next");
+    mpv_set_option_string(mpv, "gpu-api", "vulkan");
+    mpv_set_option_string(mpv, "gpu-context", "macvk");
+    mpv_set_option_string(mpv, "target-colorspace-hint", "yes");
+    mpv_set_option(mpv, "wid", MPV_FORMAT_INT64, &wid);
+  } else {
+    mpv_set_option_string(mpv, "vo", "null");
+  }
   for (int i = 0; i < option_count; i++) {
     char buffer[1024];
     snprintf(buffer, sizeof(buffer), "%s", options[i]);
@@ -135,7 +155,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  bool loaded = false, played = false, ended = false, tls_error = false;
+  bool loaded = false, played = false, ended = false, tls_error = false,
+       fatal = false;
   int end_error = 0;
   while (!ended) {
     mpv_event *event = mpv_wait_event(mpv, 60);
@@ -148,6 +169,8 @@ int main(int argc, char **argv) {
       printf("log[%s] %s: %s", message->level, message->prefix, message->text);
       if (mentions_certificate_error(message->text))
         tls_error = true;
+      if (!strcmp(message->level, "fatal"))
+        fatal = true;
     } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
       loaded = true;
       printf("event: file-loaded\n");
@@ -174,7 +197,7 @@ int main(int argc, char **argv) {
 
   bool pass;
   if (expect_load)
-    pass = loaded && (property_count == 0 || played);
+    pass = loaded && !fatal && (property_count == 0 || played);
   else
     pass = !loaded && end_error < 0 && tls_error;
   printf("result: %s (expected %s)\n", pass ? "PASS" : "FAIL", expect);

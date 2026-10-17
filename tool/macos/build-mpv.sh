@@ -613,7 +613,9 @@ stage_verify() {
   local smoke="$work/runtime-smoke"
   # The runtime ships only versioned dylib names, so link them by path.
   "$CC" $target_flags -O2 -Wall -Werror -I"$prefix/include" \
-    "$script_dir/runtime-smoke.c" -o "$smoke" "$dist/lib"/libmpv.*.dylib \
+    "$script_dir/runtime-smoke.c" "$script_dir/runtime-smoke-layer.m" \
+    -framework AppKit -framework Metal -framework QuartzCore \
+    -o "$smoke" "$dist/lib"/libmpv.*.dylib \
     "$dist/lib"/libav{codec,format,util,filter}.*.dylib \
     "$dist/lib"/libsw{scale,resample}.*.dylib -Wl,-rpath,"$dist/lib"
   local licenses
