@@ -1,0 +1,148 @@
+<div class="viz-controls"><label class="form-label">Preview mode<select class="form-select" id="cd-design"><option value="normal">Browse channels</option><option value="selection">Select channels</option><option value="reorder">Reorder channels</option></select></label><label class="form-label">Desktop size<select class="form-select" id="cd-size"><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select></label></div>
+<div id="channel-directions"><div class="cd-frame"><section class="cd-screen">
+<header><button class="cd-menu" aria-label="Open Lineup menu">☰ <span>LINEUP</span></button><span class="cd-context">Channels</span></header>
+<div class="cd-heading"><div><h2>Channels <span>390</span></h2><p>Your lineup, in channel order.</p></div><div class="cd-actions"><button id="cd-generate">Generate lineup</button><button class="cd-primary" id="cd-add">Add a custom channel</button></div></div>
+<div class="cd-body"><section class="cd-directory"><div class="cd-toolbar"><input id="cd-search" type="search" aria-label="Search channels by name or number" placeholder="Search channels by name or number"><div class="cd-filters" aria-label="Channel type"><button aria-pressed="true" data-filter="All">All</button><button aria-pressed="false" data-filter="Custom">Custom</button><button aria-pressed="false" data-filter="Generated">Generated</button></div></div><div class="cd-columns"><span>No.</span><span>Channel</span><span>Source</span><span>Playback</span><span>Type</span><span></span></div><div class="cd-rows"></div></section>
+<aside class="cd-studio" hidden><div class="cd-studio-top"><button id="cd-back">Back to Channels</button><span>CHANNEL STUDIO</span></div><div class="cd-editor"><div class="cd-identity"><span id="cd-type">Custom channel</span><h3 id="cd-title">Evening cinema</h3></div><p id="cd-readonly" hidden>Generated programming is read-only. Duplicate as custom to make your own version.</p><div class="cd-fields"><label>Station name<input id="cd-name" value="Evening cinema"></label><label>Channel number<input id="cd-number" type="number" min="1" max="1000" value="1"></label></div><section class="cd-program"><h4>Programming</h4><label>Video playlist<select id="cd-playlist"><option>Evening cinema</option><option>Weekend discoveries</option><option>Documentary collection</option></select></label><p>42 programs · Includes watched items</p></section><section class="cd-program"><h4>Playback order</h4><select id="cd-playback" aria-label="Playback order"><option>Shuffle</option><option>In order</option><option>Mini-marathons</option></select><p id="cd-description">A shuffled rotation of your selected programs.</p></section></div><div class="cd-studio-footer"><span id="cd-feedback" role="status"></span><button class="cd-primary" id="cd-save" disabled>Save changes</button></div></aside></div>
+<p id="cd-notice" role="status" hidden></p>
+</section></div></div>
+<style>
+#channel-directions{--film:#090806;--booth:#12100d;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;color-scheme:dark;margin-top:12px}
+#channel-directions *{box-sizing:border-box}
+#channel-directions .cd-frame{overflow:hidden;background:var(--film);border-radius:8px}
+#channel-directions .cd-screen{width:1280px;height:720px;transform-origin:top left;background:var(--film);color:var(--paper);font:16px/1.4 Arial,sans-serif;padding:20px 32px;display:flex;flex-direction:column}
+#channel-directions header{display:flex;align-items:center;gap:24px;padding-bottom:20px;border-bottom:1px solid var(--quiet)}
+#channel-directions button{font:inherit;font-size:14px;cursor:pointer;color:var(--paper);background:transparent;border:1px solid var(--strong);border-radius:6px;padding:10px 14px;min-height:40px}
+#channel-directions button:hover{background:var(--booth)}
+#channel-directions button:disabled{opacity:.45;cursor:default}
+#channel-directions .cd-menu{border:0;padding:4px 0;color:var(--support)}
+#channel-directions .cd-menu span{margin-left:12px;color:var(--amber);letter-spacing:1.5px;font-size:14px}
+#channel-directions .cd-context{color:var(--support);font-size:13px;border-left:1px solid var(--strong);padding-left:24px}
+#channel-directions .cd-heading{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:24px 0}
+#channel-directions h2{font-size:30px;font-weight:600;line-height:1.2;margin:0 0 6px}
+#channel-directions h2 span{font-size:16px;color:var(--support);font-weight:400;margin-left:12px}
+#channel-directions p{margin:0;color:var(--support);font-size:14px}
+#channel-directions .cd-actions{display:flex;gap:12px}
+#channel-directions .cd-primary{background:var(--amber);color:#060504;border-color:var(--amber);font-weight:600}
+#channel-directions .cd-primary:hover{background:#dfb472}
+#channel-directions .cd-body{display:flex;flex:1;min-height:0;gap:28px}
+#channel-directions .cd-directory{display:flex;flex-direction:column;min-width:0;flex:1}
+#channel-directions .cd-toolbar{display:flex;gap:16px;margin-bottom:20px}
+#channel-directions input,#channel-directions select{font:inherit;font-size:14px;color:var(--paper);background:#060504;border:1px solid var(--strong);border-radius:6px;min-height:40px;padding:8px 12px;width:100%}
+#channel-directions #cd-search{flex:1;min-width:0}
+#channel-directions .cd-filters{display:flex;gap:4px}
+#channel-directions .cd-filters button{border-color:transparent;color:var(--support)}
+#channel-directions .cd-filters button[aria-pressed="true"]{background:#2b2419;color:var(--paper)}
+#channel-directions .cd-columns,#channel-directions .cd-row{display:grid;grid-template-columns:52px minmax(0,1fr) 170px 140px 100px 44px;gap:16px;align-items:center}
+#channel-directions .cd-columns{padding:8px 12px;font-size:12px;color:var(--support);border-bottom:1px solid var(--strong)}
+#channel-directions .cd-rows{overflow-y:auto;flex:1;scrollbar-color:var(--strong) var(--film);scrollbar-width:thin}
+#channel-directions .cd-row{position:relative;border-bottom:1px solid var(--quiet);padding:16px 12px;min-height:68px}
+#channel-directions .cd-row:hover{background:var(--booth)}
+#channel-directions .cd-open{position:static;border:0;padding:0;min-height:0;text-align:left;font-size:16px}
+#channel-directions .cd-open::after{content:'';position:absolute;inset:0}
+#channel-directions .cd-row button.cd-open:hover{background:transparent}
+#channel-directions .cd-name{overflow-wrap:anywhere;display:block;font-weight:500}
+#channel-directions .cd-meta{font-size:13px;color:var(--support)}
+#channel-directions .cd-number{font-variant-numeric:tabular-nums;color:var(--support)}
+#channel-directions .cd-more{position:relative;z-index:1;border:0;padding:4px;font-size:20px}
+#channel-directions .cd-row[data-selected="true"]{background:#2b2419}
+#channel-directions .cd-studio{display:flex;flex-direction:column;min-width:0;flex:1;border-left:1px solid var(--quiet);padding-left:28px}
+#channel-directions .cd-studio-top{display:flex;justify-content:space-between;align-items:center;min-height:40px;margin-bottom:20px;color:var(--support);font-size:12px;letter-spacing:1px}
+#channel-directions .cd-studio-top button{border:0;padding-left:0;letter-spacing:0}
+#channel-directions .cd-editor{overflow:auto;flex:1}
+#channel-directions .cd-identity{margin-bottom:24px}
+#channel-directions .cd-identity span{font-size:12px;color:var(--support)}
+#channel-directions h3{font-size:24px;margin:6px 0 0;font-weight:600;overflow-wrap:anywhere}
+#channel-directions h4{font-size:16px;margin:0 0 14px;font-weight:500}
+#channel-directions .cd-fields{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:16px}
+#channel-directions label{display:block;color:var(--support);font-size:13px}
+#channel-directions label input,#channel-directions label select{display:block;margin-top:6px}
+#channel-directions .cd-program{border-top:1px solid var(--quiet);padding-top:20px;margin-top:24px}
+#channel-directions .cd-program p{font-size:12px;margin-top:10px}
+#channel-directions .cd-studio-footer{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--quiet);padding-top:16px;margin-top:16px;gap:16px}
+#channel-directions #cd-feedback{font-size:12px;color:var(--support)}
+#channel-directions #cd-readonly{margin-bottom:20px}
+#channel-directions[data-design="split"] .cd-directory{flex:0 0 48%}
+#channel-directions[data-design="split"] .cd-toolbar{flex-wrap:wrap;gap:8px}
+#channel-directions[data-design="split"] #cd-search{flex-basis:100%}
+#channel-directions[data-design="split"] .cd-columns{display:none}
+#channel-directions[data-design="split"] .cd-row{grid-template-columns:36px minmax(0,1fr) 36px;gap:8px;padding:14px 10px}
+#channel-directions[data-design="split"] .cd-row>.cd-source,#channel-directions[data-design="split"] .cd-row>.cd-mode,#channel-directions[data-design="split"] .cd-row>.cd-kind{display:none}
+#channel-directions .cd-small-info{display:none}
+#channel-directions[data-design="split"] .cd-small-info{display:block;font-size:12px;color:var(--support);margin-top:5px;font-weight:400}
+#channel-directions[data-design="split"] #cd-back{display:none}
+#channel-directions[data-design="directory"][data-open="true"] .cd-directory{display:none}
+#channel-directions[data-design="directory"] .cd-studio{border:0;padding:0;max-width:none}
+#channel-directions[data-design="directory"] .cd-editor{display:grid;grid-template-columns:1fr 1fr;gap:24px 40px;align-content:start}
+#channel-directions[data-design="directory"] .cd-identity,#channel-directions[data-design="directory"] #cd-readonly{grid-column:1/-1;margin-bottom:0}
+#channel-directions[data-design="directory"] .cd-fields{grid-column:1}
+#channel-directions[data-design="directory"] .cd-program{margin-top:0}
+#channel-directions [hidden]{display:none!important}
+#channel-directions[data-large="true"] .cd-screen{padding:30px 48px;font-size:21px}
+#channel-directions[data-large="true"] .cd-heading{padding:32px 0}
+#channel-directions[data-large="true"] h2{font-size:40px}
+#channel-directions[data-large="true"] h3{font-size:32px}
+#channel-directions[data-large="true"] button,#channel-directions[data-large="true"] input,#channel-directions[data-large="true"] select,#channel-directions[data-large="true"] p{font-size:18px;min-height:48px}
+#channel-directions[data-large="true"] .cd-columns,#channel-directions[data-large="true"] .cd-row{grid-template-columns:76px minmax(0,1fr) 240px 200px 145px 52px;gap:24px}
+#channel-directions[data-large="true"] .cd-row{min-height:94px;padding:22px 16px}
+#channel-directions[data-large="true"] .cd-meta,#channel-directions[data-large="true"] label,#channel-directions[data-large="true"] .cd-columns{font-size:18px}
+#channel-directions[data-large="true"] .cd-open{font-size:22px}
+#channel-directions[data-large="true"][data-design="split"] .cd-row{grid-template-columns:52px minmax(0,1fr) 44px;gap:12px}
+#channel-directions[data-large="true"] .cd-small-info{font-size:16px}
+#channel-directions #cd-notice{padding-top:12px}
+</style>
+<style>
+#channel-directions .cd-screen{position:relative}
+#channel-directions .cm-tools{display:flex;gap:8px;margin-left:auto;white-space:nowrap}
+#channel-directions .cm-tools button{border-color:transparent;color:var(--support)}
+#channel-directions .cd-toolbar{gap:12px;flex-wrap:wrap;margin-bottom:12px}
+#channel-directions #cd-search{min-width:260px}
+#channel-directions .cm-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0 16px}
+#channel-directions .cm-strip button{border-color:transparent}
+#channel-directions .cm-strip .cm-end{margin-left:auto;display:flex;gap:12px}
+#channel-directions .cm-strip .cd-primary{border-color:var(--amber)}
+#channel-directions .cm-strip .cm-delete{color:#ff7768;border:1px solid #494031}
+#channel-directions .cm-count{color:var(--support);font-size:13px}
+#channel-directions .cm-select{width:20px;height:20px;min-height:0;padding:0;accent-color:var(--amber);position:relative;z-index:2}
+#channel-directions[data-mode="selection"] .cd-row,#channel-directions[data-mode="selection"] .cd-columns{grid-template-columns:28px 52px minmax(0,1fr) 170px 140px 100px}
+#channel-directions[data-mode="reorder"] .cd-row,#channel-directions[data-mode="reorder"] .cd-columns{grid-template-columns:36px 95px minmax(0,1fr) 160px 135px 145px}
+#channel-directions .cm-moves{display:flex;gap:4px;position:relative;z-index:2}
+#channel-directions .cm-moves button{padding:4px 10px;border-color:transparent}
+#channel-directions .cm-old{font-size:12px;color:var(--support)}
+#channel-directions .cm-new{color:var(--amber)}
+#channel-directions .cm-popup{position:absolute;right:58px;top:50px;z-index:4;background:#1a1712;border:1px solid var(--strong);border-radius:8px;padding:8px;min-width:200px}
+#channel-directions .cm-popup button{display:block;text-align:left;width:100%;border:0;position:relative;z-index:5}
+#channel-directions[data-mode="normal"] .cm-popup button:last-child{color:#ff7768}
+#channel-directions .cd-open{overflow-wrap:anywhere}
+#channel-directions .cm-overlay{position:absolute;inset:0;z-index:10;background:#090806df;display:grid;place-items:center;padding:40px}
+#channel-directions .cm-dialog{width:620px;max-height:90%;overflow:auto;padding:28px;background:var(--booth);border:1px solid var(--strong);border-radius:8px}
+#channel-directions .cm-dialog h3{margin-bottom:16px}
+#channel-directions .cm-dialog p{margin-bottom:12px}
+#channel-directions .cm-targets{max-height:200px;overflow:auto;border-block:1px solid var(--quiet);margin:20px 0;padding:12px 0}
+#channel-directions .cm-targets div{padding:5px 0}
+#channel-directions .cm-dialog footer{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}
+#channel-directions .cm-danger{background:#ff7768;color:#090806;border-color:#ff7768}
+#channel-directions[data-large="true"] .cm-count{font-size:18px}
+#channel-directions[data-large="true"][data-mode="selection"] .cd-row,#channel-directions[data-large="true"][data-mode="selection"] .cd-columns{grid-template-columns:36px 76px minmax(0,1fr) 240px 200px 145px}
+#channel-directions[data-large="true"][data-mode="reorder"] .cd-row,#channel-directions[data-large="true"][data-mode="reorder"] .cd-columns{grid-template-columns:44px 130px minmax(0,1fr) 230px 180px 165px}
+</style>
+<script>
+(()=>{const root=document.getElementById('channel-directions'),modeControl=document.getElementById('cd-design'),size=document.getElementById('cd-size'),rows=root.querySelector('.cd-rows'),toolbar=root.querySelector('.cd-toolbar'),columns=root.querySelector('.cd-columns'),search=document.getElementById('cd-search'),filters=root.querySelector('.cd-filters'),headActions=root.querySelector('.cd-actions'),notice=document.getElementById('cd-notice');root.dataset.design='directory';root.querySelector('.cd-studio').remove();let mode='normal',filter='All',selected=new Set(),showSelected=false,order=[],dragged=null;const titles=['Evening cinema','Weekend discoveries','Documentary collection','Science fiction & extraordinary journeys','Classic comedy','Mystery after midnight','Animation favorites','Classic adventures and stories from around the world'];let data=Array.from({length:390},(_,i)=>({id:i,number:i+1,name:titles[i%8]+(i>=8?' · '+(Math.floor(i/8)+1):''),kind:i<3?'Custom':'Generated',source:i<3?'Playlist':['Genre','Collection','Studio','Decade'][i%4],play:['Shuffle','In order','Mini-marathons'][i%3]}));
+const tools=document.createElement('div');tools.className='cm-tools';toolbar.append(tools);const strip=document.createElement('div');strip.className='cm-strip';toolbar.after(strip);const hint=document.createElement('p');hint.className='cm-count';strip.after(hint);
+function button(label,fn,className=''){const b=document.createElement('button');b.textContent=label;b.className=className;b.onclick=fn;return b;}
+function message(text){notice.hidden=false;notice.textContent=text;}
+function matches(){const q=search.value.trim().toLowerCase();return data.filter(c=>(filter==='All'||c.kind===filter)&&(!q||c.name.toLowerCase().includes(q)||String(c.number).includes(q)));}
+function enter(next){mode=next;modeControl.value=next;root.dataset.mode=mode;showSelected=false;if(next==='reorder')order=[...data];if(next==='normal')selected.clear();render();}
+function move(c,to){const from=order.indexOf(c);if(to<0||to>=order.length)return;order.splice(from,1);order.splice(to,0,c);render();}
+function popup(row,c){root.querySelectorAll('.cm-popup').forEach(p=>p.remove());const menu=document.createElement('div');menu.className='cm-popup';if(mode==='reorder'){['Move before…','Move after…'].forEach((label,i)=>menu.append(button(label,()=>picker(c,i===1))));}else{if(c.kind==='Generated')menu.append(button('Duplicate as custom',()=>{menu.remove();message('Preview destination: a new custom draft based on '+c.name);}));menu.append(button('Delete',()=>confirmDelete([c])));}row.append(menu);}
+function overlay(title){const layer=document.createElement('div');layer.className='cm-overlay';const box=document.createElement('section');box.className='cm-dialog';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-label',title);const h=document.createElement('h3');h.textContent=title;box.append(h);layer.append(box);root.querySelector('.cd-screen').append(layer);return {layer,box};}
+function picker(c,after){root.querySelectorAll('.cm-popup').forEach(p=>p.remove());const {layer,box}=overlay(after?'Move after a channel':'Move before a channel');const input=document.createElement('input');input.placeholder='Find channel by name or number';input.setAttribute('aria-label',input.placeholder);const targets=document.createElement('div');targets.className='cm-targets';box.append(input,targets);function options(){targets.replaceChildren();order.filter(x=>x!==c&&(x.name.toLowerCase().includes(input.value.toLowerCase())||String(x.number).includes(input.value))).forEach(x=>targets.append(button(x.number+' · '+x.name,()=>{order.splice(order.indexOf(c),1);order.splice(order.indexOf(x)+(after?1:0),0,c);layer.remove();render();})));}input.oninput=options;box.append(button('Cancel',()=>layer.remove()));options();input.focus();}
+function confirmDelete(targets){root.querySelectorAll('.cm-popup').forEach(p=>p.remove());const n=targets.length,{layer,box}=overlay('Delete '+n+' '+(n===1?'channel?':'channels?'));const p=document.createElement('p');const custom=targets.filter(x=>x.kind==='Custom').length;p.textContent=custom+' custom · '+(n-custom)+' generated';box.append(p);const copy=document.createElement('p');copy.textContent='Your Plex media won’t be deleted.';box.append(copy);if(n>custom){const explanation=document.createElement('p');explanation.textContent='Generated channels may return when you generate a lineup again.';box.append(explanation);}const list=document.createElement('div');list.className='cm-targets';targets.forEach(c=>{const line=document.createElement('div');line.textContent=c.number+' · '+c.name;list.append(line);});box.append(list);const footer=document.createElement('footer'),cancel=button('Cancel',()=>layer.remove());footer.append(cancel,button('Delete '+n+' '+(n===1?'channel':'channels'),()=>{const ids=new Set(targets.map(x=>x.id));data=data.filter(x=>!ids.has(x.id));layer.remove();enter('normal');message(n+' '+(n===1?'channel':'channels')+' removed from this synthetic preview.');},'cm-danger'));box.append(footer);cancel.focus();}
+function render(){tools.replaceChildren();strip.replaceChildren();columns.replaceChildren();rows.replaceChildren();hint.hidden=true;toolbar.hidden=mode==='reorder';headActions.hidden=mode!=='normal';root.querySelector('h2').firstChild.textContent=mode==='reorder'?'Reorder channels ':'Channels ';root.querySelector('h2 span').textContent=data.length;root.querySelector('.cd-heading p').textContent=mode==='reorder'?'Channels appear in number order. Reordering changes channel numbers.':'Your lineup, in channel order.';
+if(mode==='normal'){tools.append(button('Select',()=>enter('selection')),button('Reorder channels',()=>enter('reorder')));strip.hidden=true;}else{strip.hidden=false;}
+const matching=matches();if(mode==='selection'){const outside=[...selected].filter(id=>!matching.some(c=>c.id===id)).length;const summary=button(showSelected?'Back to results':selected.size+' selected'+(outside?' · '+outside+' outside this view':''),()=>{showSelected=!showSelected;render();});summary.setAttribute('aria-label',showSelected?'Back to results':'Show selected channels');summary.disabled=selected.size===0&&!showSelected;strip.append(summary);if(!showSelected){const all=button('Select all matching',()=>{matching.forEach(c=>selected.add(c.id));render();});all.disabled=!matching.length||matching.every(c=>selected.has(c.id));strip.append(all);}const clear=button('Clear selection',()=>{selected.clear();showSelected=false;render();});clear.disabled=!selected.size;strip.append(clear);const end=document.createElement('div');end.className='cm-end';const del=button('Delete selected',()=>confirmDelete(data.filter(c=>selected.has(c.id))),'cm-delete');del.disabled=!selected.size;end.append(button('Cancel',()=>enter('normal')),del);strip.append(end);search.disabled=showSelected;filters.hidden=showSelected;if(showSelected){hint.hidden=false;hint.textContent='Selected channels · '+selected.size;}}
+else{search.disabled=false;filters.hidden=false;}
+if(mode==='reorder'){const changes=order.filter((c,i)=>c.number!==data[i].number).length;const summary=document.createElement('span');summary.className='cm-count';summary.textContent=changes?changes+' channel numbers will change':'Move channels to change their order';strip.append(summary);const end=document.createElement('div');end.className='cm-end';const save=button('Save order',()=>{order=order.map((c,i)=>({...c,number:data[i].number}));data=[...order];enter('normal');message('Order saved in this synthetic preview.');},'cd-primary');save.disabled=!changes;end.append(button('Cancel',()=>enter('normal')),save);strip.append(end);}
+const labels=mode==='selection'?['','No.','Channel','Source','Playback','Type']:mode==='reorder'?['','Number','Channel','Source','Playback','Move']:['No.','Channel','Source','Playback','Type',''];labels.forEach(x=>{const span=document.createElement('span');span.textContent=x;columns.append(span);});const visible=mode==='reorder'?order:showSelected?data.filter(c=>selected.has(c.id)):matching;visible.forEach(c=>{const row=document.createElement('div');row.className='cd-row';row.dataset.selected=String(mode==='selection'&&selected.has(c.id));if(mode==='selection'){const check=document.createElement('input');check.type='checkbox';check.className='cm-select';check.checked=selected.has(c.id);check.setAttribute('aria-label','Select '+c.name);check.onchange=()=>{check.checked?selected.add(c.id):selected.delete(c.id);render();};row.append(check);}if(mode==='reorder'){const handle=document.createElement('span');handle.textContent='⠿';handle.setAttribute('aria-hidden','true');row.append(handle);row.draggable=true;row.ondragstart=()=>dragged=c;row.ondragover=e=>e.preventDefault();row.ondrop=e=>{e.preventDefault();if(dragged&&dragged!==c)move(dragged,order.indexOf(c));dragged=null;};}const num=document.createElement('span');num.className='cd-number';const next=mode==='reorder'?data[order.indexOf(c)].number:c.number;num.textContent=next===c.number?c.number:c.number+' → '+next;if(next!==c.number)num.classList.add('cm-new');row.append(num);const open=button(c.name,()=>{if(mode==='selection'){selected.has(c.id)?selected.delete(c.id):selected.add(c.id);render();}else if(mode==='normal')message('Preview destination: Channel Studio · '+c.name);},'cd-open');row.append(open);[c.source,c.play].forEach(v=>{const el=document.createElement('span');el.className='cd-meta';el.textContent=v;row.append(el);});if(mode==='reorder'){const moves=document.createElement('div');moves.className='cm-moves';const up=button('↑',()=>move(c,order.indexOf(c)-1)),down=button('↓',()=>move(c,order.indexOf(c)+1));up.setAttribute('aria-label','Move '+c.name+' up');down.setAttribute('aria-label','Move '+c.name+' down');up.disabled=order.indexOf(c)===0;down.disabled=order.indexOf(c)===order.length-1;moves.append(up,down,button('⋯',()=>popup(row,c)));row.append(moves);}else{const kind=document.createElement('span');kind.className='cd-meta';kind.textContent=c.kind;row.append(kind);if(mode==='normal'){const more=button('⋯',()=>popup(row,c),'cd-more');more.setAttribute('aria-label','Actions for '+c.name);row.append(more);}}rows.append(row);});if(!visible.length){const p=document.createElement('p');p.textContent='No matching channels';rows.append(p);}resize();}
+function resize(){const w=Number(size.value),screen=root.querySelector('.cd-screen');root.dataset.large=String(w===1920);screen.style.width=w+'px';screen.style.height=w*9/16+'px';screen.style.transform='scale('+root.clientWidth/w+')';root.querySelector('.cd-frame').style.height=root.clientWidth*9/16+'px';}root.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;root.querySelectorAll('[data-filter]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render();});search.oninput=render;modeControl.onchange=()=>enter(modeControl.value);size.onchange=resize;document.getElementById('cd-add').onclick=()=>message('Preview destination: new custom channel');document.getElementById('cd-generate').onclick=()=>message('Preview destination: Generate lineup');root.querySelector('.cd-menu').onclick=()=>message('Preview navigation: Guide · Channels · Settings · Diagnostics · Player');new ResizeObserver(resize).observe(root);enter('normal');})();
+</script>

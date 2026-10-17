@@ -1,0 +1,85 @@
+<div class="viz-controls"><label class="form-label">Settings layout<select id="sl-direction" class="form-select"><option value="a" selected>A · Spacious settings pane</option><option value="b">B · Appearance with shared preview</option></select></label><label class="form-label">Save feedback example<select id="sl-feedback" class="form-select"><option value="normal">Normal</option><option value="saving">Saving a setting</option><option value="error">Setting could not be saved</option></select></label></div>
+<div id="settings-layout" data-direction="a"><div class="sl-frame"><section class="sl-screen" aria-label="Lineup Settings design comparison">
+<header><button class="sl-back" type="button"><i data-lucide="arrow-left" aria-hidden="true"></i>Back</button><span class="sl-heading">Settings</span><button class="sl-menu" type="button">LINEUP <i data-lucide="chevron-down" aria-hidden="true"></i></button></header>
+<div class="sl-workspace"><nav aria-label="Settings categories">
+<button type="button" data-page="Appearance" aria-current="page"><i data-lucide="palette" aria-hidden="true"></i>Appearance</button>
+<button type="button" data-page="Guide"><i data-lucide="calendar-range" aria-hidden="true"></i>Guide</button>
+<button type="button" data-page="Playback"><i data-lucide="play" aria-hidden="true"></i>Playback</button>
+<button type="button" data-page="Accessibility"><i data-lucide="accessibility" aria-hidden="true"></i>Accessibility</button>
+<button type="button" data-page="Account"><i data-lucide="user-round" aria-hidden="true"></i>Account</button>
+<button type="button" data-page="Support"><i data-lucide="circle-help" aria-hidden="true"></i>Support</button>
+</nav><main><h1 id="sl-title">Appearance</h1><p class="sl-intro" id="sl-intro">Choose the atmosphere of your lineup.</p><div class="sl-detail"><div id="sl-fields"></div><aside class="sl-preview" aria-label="Illustrative Guide information preview"><span class="sl-preview-label">GUIDE INFORMATION PREVIEW</span><div class="sl-preview-scene" data-background="Artwork colors"><div class="sl-preview-art" aria-hidden="true"></div><div class="sl-preview-copy"><span>12 · Evening television</span><h2 id="sl-preview-title">Harbor lights</h2><p>S1 E3 · The northern breakwater</p><small>8:30–9:00 PM · 30 min</small><p class="sl-synopsis">An unexpected arrival brings an old friendship into question.</p></div></div><p class="sl-preview-caption">Illustrative artwork and program details</p></aside></div></main></div>
+<div class="sl-demo-note" role="status" aria-live="polite"></div>
+</section></div></div>
+<style>
+#settings-layout{--sl-film:#090806;--sl-booth:#12100d;--sl-reel:#1a1712;--sl-paper:#f3e8d2;--sl-support:#c7b99f;--sl-muted:#978b76;--sl-border:#2b261e;--sl-amber:#cc9f5b;--sl-focus:#f0d39a;--sl-error:#ff7768;color:var(--sl-paper);font:16px/1.45 Arial,sans-serif;color-scheme:dark;margin-top:12px}
+#settings-layout *{box-sizing:border-box}
+#settings-layout .sl-frame{overflow:hidden;background:var(--sl-film)}
+#settings-layout .sl-screen{position:relative;width:1280px;height:720px;transform-origin:top left;background:radial-gradient(ellipse at 92% 0%,#2b24191f,transparent 55%),var(--sl-film)}
+#settings-layout header{height:76px;display:flex;align-items:center;margin:0 32px;border-bottom:1px solid var(--sl-border);gap:24px}
+#settings-layout button,#settings-layout select{font:inherit;color:var(--sl-paper)}
+#settings-layout button{cursor:pointer}
+#settings-layout button:disabled,#settings-layout select:disabled{cursor:default;opacity:.65}
+#settings-layout header button{display:flex;align-items:center;gap:8px;background:transparent;border:0;padding:8px 4px;color:var(--sl-support);font-size:14px}
+#settings-layout svg{width:18px;height:18px;flex-shrink:0}
+#settings-layout .sl-heading{font-size:24px}
+#settings-layout header .sl-menu{margin-left:auto;font-size:17px;letter-spacing:2px;color:var(--sl-paper)}
+#settings-layout .sl-workspace{display:grid;grid-template-columns:248px 1fr;height:620px;padding:28px 32px 0}
+#settings-layout nav{padding:8px 24px 0 0;border-right:1px solid var(--sl-border)}
+#settings-layout nav button{display:flex;gap:14px;align-items:center;text-align:left;width:100%;padding:14px 16px;margin-bottom:8px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--sl-support);font-size:16px}
+#settings-layout nav button[aria-current=page]{background:#2b2419;color:var(--sl-paper);border-left:2px solid var(--sl-amber)}
+#settings-layout nav button:hover{background:var(--sl-reel)}
+#settings-layout nav svg{color:var(--sl-muted)}
+#settings-layout nav button[aria-current=page] svg{color:var(--sl-amber)}
+#settings-layout main{padding:8px 8px 0 40px;min-width:0}
+#settings-layout h1{margin:0;font-size:30px;line-height:38px;font-weight:500}
+#settings-layout .sl-intro{font-size:15px;color:var(--sl-support);margin:6px 0 32px}
+#settings-layout .sl-detail{display:block}
+#settings-layout .sl-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px 32px;align-items:center;padding:26px 0;border-bottom:1px solid var(--sl-border);min-height:112px}
+#settings-layout .sl-row:first-child{padding-top:8px;min-height:94px}
+#settings-layout .sl-label{font-size:18px;line-height:24px;margin:0}
+#settings-layout .sl-help{font-size:14px;line-height:21px;color:var(--sl-support);margin:5px 0 0;max-width:530px}
+#settings-layout .sl-control{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+#settings-layout select{border:1px solid #494031;background:var(--sl-booth);padding:11px 36px 11px 14px;border-radius:5px;min-width:212px;max-width:100%;font-size:15px}
+#settings-layout .sl-switch{display:inline-flex;align-items:center;gap:10px;color:var(--sl-support);font-size:14px;cursor:pointer}
+#settings-layout .sl-switch input{appearance:none;width:44px;height:25px;position:relative;border:1px solid #494031;border-radius:20px;background:#27221b;margin:0;cursor:pointer;flex-shrink:0}
+#settings-layout .sl-switch input:before{content:'';position:absolute;width:17px;height:17px;border-radius:50%;left:3px;top:3px;background:#c7b99f}
+#settings-layout .sl-switch input:checked{background:var(--sl-amber);border-color:var(--sl-amber)}
+#settings-layout .sl-switch input:checked:before{left:22px;background:var(--sl-film)}
+#settings-layout .sl-state{grid-column:1/-1;min-height:18px;line-height:18px;font-size:13px;color:var(--sl-support);margin-top:-3px}
+#settings-layout .sl-state.error{color:var(--sl-error)}
+#settings-layout .sl-row:not(.sl-target) .sl-state{display:none}
+#settings-layout .sl-action{border:1px solid #494031;background:var(--sl-reel);padding:10px 16px;border-radius:5px;font-size:14px;white-space:nowrap}
+#settings-layout .sl-preview{display:none}
+#settings-layout[data-direction=b][data-page=Appearance] .sl-detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px}
+#settings-layout[data-direction=b][data-page=Appearance] .sl-row{grid-template-columns:1fr;padding:20px 0;gap:12px;min-height:0}
+#settings-layout[data-direction=b][data-page=Appearance] .sl-row:first-child{padding-top:8px}
+#settings-layout[data-direction=b][data-page=Appearance] .sl-control{justify-content:flex-start}
+#settings-layout[data-direction=b][data-page=Appearance] select{width:100%}
+#settings-layout[data-direction=b][data-page=Appearance] .sl-preview{display:block;padding-top:8px}
+#settings-layout .sl-preview-label{font-size:11px;letter-spacing:1.1px;color:var(--sl-muted)}
+#settings-layout .sl-preview-scene{margin-top:14px;min-height:270px;position:relative;isolation:isolate;overflow:hidden;border-radius:6px;background:radial-gradient(ellipse at 80% 20%,#475349,#182120 60%,#12100d);border:1px solid var(--sl-border);padding:24px}
+#settings-layout .sl-preview-copy{position:relative}
+#settings-layout .sl-preview-copy>span{font-size:12px;color:var(--sl-amber)}
+#settings-layout .sl-preview-copy h2{font-weight:500;font-size:26px;line-height:32px;margin:10px 0}
+#settings-layout .sl-preview-copy h2.logo{font-family:Georgia,serif;font-size:29px;font-style:italic}
+#settings-layout .sl-preview-copy p{font-size:14px;line-height:21px;margin:0 0 8px}
+#settings-layout .sl-preview-copy small{font-size:12px;color:var(--sl-support)}
+#settings-layout .sl-preview-copy p.sl-synopsis{margin-top:20px;color:var(--sl-support)}
+#settings-layout .sl-preview-scene[data-background='Theme background']{background:linear-gradient(135deg,var(--sl-booth),var(--sl-film))}
+#settings-layout .sl-preview-scene[data-background='Artwork backdrop']{background:linear-gradient(#1c3435,#385253 54%,#11191c)}
+#settings-layout .sl-preview-scene[data-background='Artwork backdrop'] .sl-preview-art{position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,#090806c9,#09080655),linear-gradient(32deg,transparent 40%,#647d73 41% 60%,transparent 61%);clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}
+#settings-layout .sl-preview-caption{font-size:12px;color:var(--sl-muted);margin-top:10px}
+#settings-layout .sl-demo-note{position:absolute;bottom:16px;left:320px;right:40px;color:var(--sl-support);font-size:13px}
+</style>
+<script>
+(()=>{const root=document.getElementById('settings-layout'),frame=root.querySelector('.sl-frame'),screen=root.querySelector('.sl-screen'),fields=root.querySelector('#sl-fields');let page='Appearance';const values={theme:'Ember & Steel',background:'Artwork colors',art:true,hours:'2 hours',context:true,hide:'4 seconds',dvr:false,motion:false,focus:false,startup:false,record:false};
+const pages={Appearance:{intro:'Choose the atmosphere of your lineup.',rows:[['theme','Theme','Color and surface treatment throughout Lineup.',['Ember & Steel','Slate & Pine','Swiss Minimal','DirecTV Classic','Glassmorphism']],['background','Guide information background','Choose the backdrop behind the program you are inspecting.',['Artwork colors','Theme background','Artwork backdrop']],['art','Use title artwork','Use available Plex title artwork, with readable text when artwork is missing.']]},Guide:{intro:'Browse the schedule your way.',rows:[['hours','Visible hours','How much of the schedule appears across the Guide.',['2 hours','3 hours','4 hours']],['context','Show now playing in Guide','Identify the playing channel and program while browsing other listings.']]},Playback:{intro:'Control how playback controls behave.',rows:[['hide','Player controls auto-hide','How long controls remain visible while playing.',['2 seconds','4 seconds','6 seconds','8 seconds','10 seconds','15 seconds']],['dvr','DVR playback controls','Show transport controls and enable pause, seek, stop and media-key shortcuts.']]},Accessibility:{intro:'Make navigation easier to see and follow.',rows:[['motion','Reduce motion','Use static alternatives for nonessential motion, including scrolling titles.'],['focus','Large focus indicators','Use stronger outlines for keyboard and remote navigation.']]},Account:{intro:'Manage who is watching and where your media comes from.',rows:[['profile','Plex Home profile','Alex Morgan',null,'Switch profile'],['server','Plex Media Server','Living room server',null,'Switch server'],['startup','Show profile picker on startup','Ask who is watching when your Plex Home has multiple profiles.']]},Support:{intro:'Collect useful information when something goes wrong.',rows:[['record','Record redacted diagnostics','Keep the latest 250 events for this session. Turning this off clears recorded events.'],['diagnostics','Diagnostics','Review playback information and copy a redacted support report.',null,'Open Diagnostics']]}};
+function preview(){root.querySelector('.sl-preview-scene').dataset.background=values.background;root.querySelector('#sl-preview-title').classList.toggle('logo',values.art);}
+function render(){root.dataset.page=page;root.querySelector('#sl-title').textContent=page;root.querySelector('#sl-intro').textContent=pages[page].intro;fields.replaceChildren();const target=page==='Appearance'?'background':pages[page].rows[0][0];pages[page].rows.forEach(([key,title,help,options,action])=>{const row=document.createElement('section');row.className='sl-row'+(key===target?' sl-target':'');const copy=document.createElement('div'),label=document.createElement('p'),sub=document.createElement('p');label.className='sl-label';label.id='sl-label-'+key;label.textContent=title;sub.className='sl-help';sub.id='sl-help-'+key;sub.textContent=help;copy.append(label,sub);row.append(copy);const box=document.createElement('div');box.className='sl-control';let control;if(options){control=document.createElement('select');options.forEach(o=>{const el=document.createElement('option');el.value=o;el.textContent=o;control.append(el);});control.value=values[key];control.onchange=()=>{values[key]=control.value;preview();};}else if(action){control=document.createElement('button');control.type='button';control.className='sl-action';control.textContent=action;control.onclick=()=>{root.querySelector('.sl-demo-note').textContent='Preview only · '+action;};}else{const wrapper=document.createElement('label');wrapper.className='sl-switch';control=document.createElement('input');control.type='checkbox';control.checked=values[key];const text=document.createElement('span');text.textContent=values[key]?'On':'Off';control.onchange=()=>{values[key]=control.checked;text.textContent=control.checked?'On':'Off';preview();};wrapper.append(control,text);box.append(wrapper);}control.dataset.setting=key;control.setAttribute('aria-labelledby',label.id);control.setAttribute('aria-describedby',sub.id);if(options||action)box.append(control);row.append(box);const status=document.createElement('div');status.className='sl-state';status.setAttribute('role','status');row.append(status);fields.append(row);});feedback();preview();}
+function feedback(){const state=document.getElementById('sl-feedback').value;fields.querySelectorAll('[data-setting]').forEach(x=>x.disabled=false);const row=fields.querySelector('.sl-target'),label=row.querySelector('.sl-state');label.classList.toggle('error',state==='error');label.textContent=state==='saving'?'Saving…':state==='error'?'Could not save this setting. Your previous value remains.':'';if(state==='saving')row.querySelector('[data-setting]').disabled=true;}
+root.querySelectorAll('[data-page]').forEach(button=>button.onclick=()=>{page=button.dataset.page;root.querySelectorAll('[data-page]').forEach(b=>{if(b===button)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});root.querySelector('.sl-demo-note').textContent='';render();});
+document.getElementById('sl-direction').onchange=e=>{root.dataset.direction=e.target.value;};document.getElementById('sl-feedback').onchange=feedback;
+root.querySelector('.sl-back').onclick=()=>{root.querySelector('.sl-demo-note').textContent='Preview only · Back returns to the screen that opened Settings.';};root.querySelector('.sl-menu').onclick=()=>{root.querySelector('.sl-demo-note').textContent='Preview only · Open Lineup menu.';};
+function fit(){const scale=frame.clientWidth/1280;screen.style.transform='scale('+scale+')';frame.style.height=720*scale+'px';}new ResizeObserver(fit).observe(frame);render();fit();})();
+</script>

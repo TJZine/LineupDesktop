@@ -1,0 +1,48 @@
+<div class="viz-controls" aria-label="Design preview controls"><label class="form-label">Preview state<select class="form-select" id="hybrid-state"><option value="waiting">Waiting for sign-in</option><option value="expired">Code expired</option><option value="browserFailed">Browser could not open</option></select></label></div>
+<style>
+#plex-hybrid{--film:#090806;--booth:#12100d;--raised:#1a1712;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;font:16px/1.45 Arial,sans-serif;color:var(--paper);color-scheme:dark}
+#plex-hybrid *{box-sizing:border-box}
+#plex-hybrid .ph-variant{max-width:736px;margin:0 auto 28px}
+#plex-hybrid .ph-caption{font-size:14px;color:var(--support);margin:0 0 8px}
+#plex-hybrid .ph-screen{background:var(--film);border:1px solid var(--quiet);border-radius:8px;padding:24px 28px;container-type:inline-size;min-height:376px}
+#plex-hybrid .ph-brand{color:var(--amber);font-size:14px;letter-spacing:1.3px;font-weight:600;margin:0 0 20px}
+#plex-hybrid h2{font-size:26px;line-height:1.2;margin:0 0 8px;font-weight:600}
+#plex-hybrid .ph-instruction{font-size:14px;color:var(--support);margin:0 0 20px;max-width:42ch}
+#plex-hybrid .ph-body{display:grid;grid-template-columns:minmax(0,1fr) 172px;gap:40px;align-items:center;min-height:220px;max-width:560px;margin:0 auto}
+#plex-hybrid .ph-code-row{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+#plex-hybrid .ph-code{font:500 32px/1.3 monospace;letter-spacing:6px}
+#plex-hybrid button{font:inherit;font-size:14px;min-height:44px;padding:10px 16px;display:inline-flex;align-items:center;justify-content:center;gap:8px;color:var(--paper);background:var(--booth);border:1px solid var(--strong);border-radius:8px;cursor:pointer;max-width:100%}
+#plex-hybrid button:hover{background:var(--raised)}
+#plex-hybrid button:disabled{opacity:.5;cursor:default}
+#plex-hybrid .ph-primary{background:var(--amber);color:#060504;border-color:var(--amber);font-weight:600;min-width:160px}
+#plex-hybrid .ph-primary:hover{background:#f0d39a}
+#plex-hybrid .ph-quiet{background:transparent;border-color:transparent;color:var(--support)}
+#plex-hybrid .ph-qr{width:172px;height:172px;background:#fff;border-radius:8px;padding:0;display:flex;align-items:center;justify-content:center;color:#111;overflow:hidden}
+#plex-hybrid .ph-qr svg{width:172px;height:172px;display:block}
+#plex-hybrid .ph-qr-label{font-size:12px;text-align:center;color:var(--support);margin-top:8px}
+#plex-hybrid .ph-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;min-height:44px}
+#plex-hybrid .ph-status{font-size:13px;color:var(--support);flex:1;min-width:0}
+#plex-hybrid .ph-status span{display:inline}
+#plex-hybrid .ph-status-detail{color:var(--support)}
+#plex-hybrid .ph-actions{display:flex;gap:8px;flex-wrap:wrap}
+#plex-hybrid .ph-balanced .ph-body{grid-template-columns:172px minmax(0,1fr);gap:32px;max-width:560px;margin:auto}
+#plex-hybrid .ph-balanced .ph-content{text-align:center}
+#plex-hybrid .ph-balanced .ph-code-row,#plex-hybrid .ph-balanced .ph-actions{justify-content:center}
+#plex-hybrid .ph-balanced .ph-instruction{margin-left:auto;margin-right:auto}
+#plex-hybrid [hidden]{display:none!important}
+#plex-hybrid .ph-expired-label{font-size:16px;color:#111;text-align:center;padding:16px}
+@container(max-width:520px){#plex-hybrid .ph-body,#plex-hybrid .ph-balanced .ph-body{grid-template-columns:minmax(0,1fr) 140px;gap:20px}#plex-hybrid .ph-qr,#plex-hybrid .ph-qr svg{width:140px;height:140px}#plex-hybrid .ph-balanced .ph-body{grid-template-columns:140px minmax(0,1fr)}#plex-hybrid h2{font-size:23px}}
+@container(max-width:390px){#plex-hybrid .ph-body,#plex-hybrid .ph-balanced .ph-body{grid-template-columns:1fr;gap:24px}#plex-hybrid .ph-qr-group{justify-self:center}#plex-hybrid .ph-balanced .ph-content{grid-row:1}#plex-hybrid .ph-footer{flex-wrap:wrap}#plex-hybrid .ph-status{flex-basis:100%}}
+#plex-hybrid .ph-screen.is-expired .ph-qr{background:var(--booth);border:1px solid var(--quiet)}
+#plex-hybrid .ph-screen.is-expired .ph-expired-label{color:var(--support)}
+#plex-hybrid .ph-narrow{max-width:520px}
+#plex-hybrid .ph-content{text-align:left}
+</style>
+<div id="plex-hybrid">
+<section class="ph-variant" aria-label="Hybrid at normal desktop width"><div class="ph-caption">Normal window · 736 px</div><div class="ph-screen"><div class="ph-brand">LINEUP</div><div class="ph-body"><div class="ph-content"><h2>Sign in to Plex</h2><p class="ph-instruction">Open plex.tv/link and enter this code.</p><div class="ph-code-row"><span class="ph-code" aria-label="Example code D E M O">DEMO</span><button data-copy>Copy code</button></div><div class="ph-actions"><button class="ph-primary" data-open>Open browser</button><button class="ph-primary" data-renew hidden>Get a new code</button></div></div><div class="ph-qr-group"><div class="ph-qr" role="img" aria-label="QR code for plex.tv/link"><span>plex.tv/link</span></div><div class="ph-qr-label">Or scan with your phone</div></div></div><div class="ph-footer"><div class="ph-status" role="status"><span class="ph-status-title">Waiting for sign-in</span><span class="ph-status-detail"> · Expires in 4:32</span></div><button class="ph-quiet" data-cancel>Cancel</button></div></div></section>
+<section class="ph-variant ph-narrow" aria-label="Hybrid at narrow desktop width"><div class="ph-caption">Narrow window · 520 px</div><div class="ph-screen"><div class="ph-brand">LINEUP</div><div class="ph-body"><div class="ph-content"><h2>Sign in to Plex</h2><p class="ph-instruction">Open plex.tv/link and enter this code.</p><div class="ph-code-row"><span class="ph-code" aria-label="Example code D E M O">DEMO</span><button data-copy>Copy code</button></div><div class="ph-actions"><button class="ph-primary" data-open>Open browser</button><button class="ph-primary" data-renew hidden>Get a new code</button></div></div><div class="ph-qr-group"><div class="ph-qr" role="img" aria-label="QR code for plex.tv/link"><span>plex.tv/link</span></div><div class="ph-qr-label">Or scan with your phone</div></div></div><div class="ph-footer"><div class="ph-status" role="status"><span class="ph-status-title">Waiting for sign-in</span><span class="ph-status-detail"> · Expires in 4:32</span></div><button class="ph-quiet" data-cancel>Cancel</button></div></div></section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+(()=>{const root=document.getElementById('plex-hybrid');const preview=document.getElementById('hybrid-state');let qrMarkup='plex.tv/link';if(globalThis.qrcode){const qr=qrcode(0,'M');qr.addData('https://plex.tv/link');qr.make();qrMarkup=qr.createSvgTag(4,16);}function render(){const expired=preview.value==='expired';root.querySelectorAll('.ph-screen').forEach(screen=>{screen.classList.toggle('is-expired',expired);screen.querySelector('.ph-instruction').textContent=expired?'Request a fresh code to finish signing in.':'Open plex.tv/link and enter this code.';screen.querySelector('.ph-qr').innerHTML=expired?'<span class="ph-expired-label">Code expired</span>':qrMarkup;screen.querySelector('.ph-qr').setAttribute('aria-label',expired?'Code expired':'QR code for plex.tv/link');screen.querySelector('[data-open]').hidden=expired;screen.querySelector('[data-renew]').hidden=!expired;screen.querySelector('[data-copy]').disabled=expired;screen.querySelector('[data-copy]').textContent='Copy code';screen.querySelector('.ph-qr-label').textContent=expired?'Request a new code':'Or scan with your phone';screen.querySelector('.ph-status-title').textContent=expired?'This code has expired':preview.value==='browserFailed'?'Browser could not open. Visit plex.tv/link or scan the QR.':'Waiting for sign-in';screen.querySelector('.ph-status-detail').textContent=expired?'':preview.value==='browserFailed'?'':' · Expires in 4:32';});}preview.onchange=render;root.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>b.textContent='Copied');root.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{b.closest('.ph-screen').querySelector('.ph-status-title').textContent='Waiting for sign-in in your browser';});root.querySelectorAll('[data-renew]').forEach(b=>b.onclick=()=>{preview.value='waiting';render();});root.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=()=>{b.closest('.ph-screen').querySelector('.ph-status-title').textContent='Sign-in cancelled';b.closest('.ph-screen').querySelector('.ph-status-detail').textContent='';});render();})();
+</script>

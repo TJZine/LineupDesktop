@@ -1,0 +1,1058 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
+
+void main() {
+  test('typed browse facets and saved source resolution agree on people and conjunctions', () {
+    final matching = PlexMediaItem(
+      id: 'matching',
+      title: 'Matching',
+      type: 'movie',
+      duration: const Duration(minutes: 90),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/matching')],
+      genres: const ['Drama'],
+      actors: const [' Ada Actor '],
+      directors: const ['Dee Director'],
+      year: 1987,
+    );
+    final wrongGenre = PlexMediaItem(
+      id: 'wrong-genre',
+      title: 'Other',
+      type: 'movie',
+      duration: const Duration(minutes: 90),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/other')],
+      genres: const ['Comedy'],
+      actors: const ['Ada Actor'],
+      directors: const ['Dee Director'],
+      year: 1987,
+    );
+    const filters = {
+      LibraryFilter.genre: ['Drama', 'Mystery'],
+      LibraryFilter.actor: ['ADA ACTOR', 'Someone else'],
+      LibraryFilter.director: [' dee director '],
+      LibraryFilter.decade: ['1980s'],
+      LibraryFilter.collection: <String>[],
+    };
+    final inventory = [matching, wrongGenre];
+    final browsed = inventory.where(
+      (item) => matchesLibraryFacets(item, filters),
+    );
+    final resolved = resolveContent(
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: filters,
+      ),
+      inventory,
+    );
+    expect(browsed.map((item) => item.id), ['matching']);
+    expect(resolved.map((item) => item.id), browsed.map((item) => item.id));
+  });
+
+  test(
+    'persisted collection filters resolve annotated TV and smart inventory',
+    () {
+      final inventory = [
+        PlexMediaItem(
+          id: 'episode',
+          title: 'Episode',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'tv',
+          parts: [PlexMediaPart(path: '/parts/episode')],
+          collections: const ['TV Collection'],
+        ),
+        PlexMediaItem(
+          id: 'smart-movie',
+          title: 'Movie',
+          type: 'movie',
+          duration: const Duration(minutes: 90),
+          libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie')],
+          collections: const ['Smart Collection'],
+        ),
+        PlexMediaItem(
+          id: 'other-library',
+          title: 'Other',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'other',
+          parts: [PlexMediaPart(path: '/parts/other')],
+          collections: const ['TV Collection'],
+        ),
+      ];
+      for (final scenario in [
+        ('tv', 'show', 'TV Collection', 'episode'),
+        ('movies', 'movie', 'Smart Collection', 'smart-movie'),
+      ]) {
+        final source = ContentSource.fromJson({
+          'type': 'library',
+          'libraryId': scenario.$1,
+          'libraryType': scenario.$2,
+          'includeWatched': true,
+          'filters': {
+            'collection': [scenario.$3],
+          },
+        });
+        expect(resolveContent(source, inventory).map((item) => item.id), [
+          scenario.$4,
+        ]);
+      }
+    },
+  );
+
+  test(
+    'multipart media identity is shared without losing source occurrences',
+    () {
+      final multipart = PlexMediaItem(
+        id: 'multipart',
+        title: 'Multipart',
+        type: 'movie',
+        duration: const Duration(minutes: 40),
+        libraryId: 'movies',
+        parts: [
+          PlexMediaPart(path: '/parts/first'),
+          PlexMediaPart(path: '/parts/second'),
+        ],
+      );
+      final other = PlexMediaItem(
+        id: 'other',
+        title: 'Other',
+        type: 'movie',
+        duration: const Duration(minutes: 17),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/parts/other')],
+      );
+      const library = LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      );
+      const playlist = PlaylistSource('playlist');
+      final media = [multipart, other, multipart];
+      final playlists = [
+        PlexPlaylist(
+          id: 'playlist',
+          title: 'Playlist',
+          items: [multipart, other, multipart],
+        ),
+      ];
+      final libraryItems = resolveContent(library, media, playlists);
+      expect(libraryItems.map((item) => item.id), ['multipart', 'other']);
+      expect(libraryItems.first.duration, const Duration(minutes: 40));
+      expect(
+        resolveContent(playlist, media, playlists).map((item) => item.id),
+        ['multipart', 'other', 'multipart'],
+      );
+      for (final interleave in [false, true]) {
+        final mixed = resolveContent(
+          MixedSource(sources: [library, playlist], interleave: interleave),
+          media,
+          playlists,
+        );
+        expect(mixed.where((item) => item.id == 'multipart'), hasLength(3));
+        expect(mixed.where((item) => item.id == 'other'), hasLength(2));
+        expect(
+          mixed.fold(
+            Duration.zero,
+            (duration, item) => duration + item.duration,
+          ),
+          const Duration(minutes: 154),
+        );
+      }
+    },
+  );
+
+  test('decades use one canonical four-digit representation', () {
+    expect(channelDecadeForYear(1981), '1980s');
+    expect(channelDecadeForYear(1000), '1000s');
+    expect(channelDecadeForYear(9999), '9990s');
+    for (final year in [null, -11, 999, 10000]) {
+      expect(channelDecadeForYear(year), isNull, reason: '$year');
+    }
+  });
+
+  final media = [
+    PlexMediaItem(
+      id: 'a',
+      title: 'A',
+      type: 'movie',
+      duration: Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/a')],
+      genres: ['Comedy'],
+    ),
+    PlexMediaItem(
+      id: 'b',
+      title: 'B',
+      type: 'movie',
+      duration: Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/b')],
+      genres: ['Drama'],
+      viewed: true,
+    ),
+    PlexMediaItem(
+      id: 'c',
+      title: 'C',
+      type: 'episode',
+      duration: Duration(minutes: 1),
+      libraryId: 'shows',
+      parts: [PlexMediaPart(path: '/parts/c')],
+    ),
+  ];
+
+  test(
+    'library resolution respects provenance, filters, and watched policy',
+    () {
+      final items = resolveContent(
+        const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          includeWatched: false,
+          filters: {
+            LibraryFilter.genre: ['Comedy'],
+          },
+        ),
+        media,
+      );
+      expect(items.map((item) => item.id), ['a']);
+    },
+  );
+
+  test('multi-value filters are OR within and AND between with id dedup', () {
+    final comedy = PlexMediaItem(
+      id: 'a',
+      title: 'Comedy A',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/comedy-a')],
+      genres: const ['Comedy'],
+      collections: const ['Favorites'],
+    );
+    final drama = PlexMediaItem(
+      id: 'a',
+      title: 'Drama A',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/drama-a')],
+      genres: const ['Drama'],
+      collections: const ['Favorites'],
+    );
+    final resolved = resolveContent(
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.genre: ['Drama', 'Comedy'],
+          LibraryFilter.collection: ['Favorites'],
+        },
+      ),
+      [comedy, drama, media[1]],
+    );
+
+    expect(resolved.map((item) => item.id), ['a']);
+  });
+
+  test('legacy filters normalize to canonical semantic identity', () {
+    final legacy = ContentSource.fromJson({
+      'type': 'library',
+      'libraryId': 'movies',
+      'libraryType': 'movie',
+      'includeWatched': true,
+      'filters': {'genre': 'Comedy', 'sort': 'added:desc'},
+    }) as LibrarySource;
+    const reordered = LibrarySource(
+      libraryId: 'movies',
+      libraryType: PlexLibraryType.movie,
+      filters: {
+        LibraryFilter.genre: ['Comedy', 'Comedy'],
+      },
+      order: LibraryOrder.addedDescending,
+    );
+
+    expect(legacy.filters, {
+      LibraryFilter.genre: ['Comedy'],
+    });
+    expect(legacy.order, LibraryOrder.addedDescending);
+    expect(canonicalSourceEquals(legacy, reordered), isTrue);
+    expect(
+      legacy.toJson(),
+      containsPair('filters', {
+        'genre': ['Comedy'],
+      }),
+    );
+  });
+
+  test('supported filters and newest-first sorting remain strict', () {
+    final dated = [
+      PlexMediaItem(
+        id: 'older',
+        title: 'Older',
+        type: 'movie',
+        duration: const Duration(minutes: 1),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/older')],
+        genres: const ['Comedy'],
+        collections: const ['Favorites'],
+        studio: 'Studio',
+        actors: const ['Actor'],
+        directors: const ['Director'],
+        year: 1994,
+        addedAt: DateTime.utc(2020),
+      ),
+      PlexMediaItem(
+        id: 'newer',
+        title: 'Newer',
+        type: 'movie',
+        duration: const Duration(minutes: 1),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/newer')],
+        genres: const ['Comedy'],
+        collections: const ['Favorites'],
+        studio: 'Studio',
+        actors: const ['Actor'],
+        directors: const ['Director'],
+        year: 1998,
+        addedAt: DateTime.utc(2021),
+      ),
+      PlexMediaItem(
+        id: 'unmatched',
+        title: 'Unmatched',
+        type: 'movie',
+        duration: const Duration(minutes: 1),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/unmatched')],
+        genres: const ['Drama'],
+        collections: const ['Archive'],
+        studio: 'Other Studio',
+        actors: const ['Other Actor'],
+        directors: const ['Other Director'],
+        year: 2004,
+        addedAt: DateTime.utc(2019),
+      ),
+    ];
+    for (final filter in const <LibraryFilter, List<String>>{
+      LibraryFilter.genre: ['Comedy'],
+      LibraryFilter.collection: ['Favorites'],
+      LibraryFilter.studio: ['Studio'],
+      LibraryFilter.actor: ['Actor'],
+      LibraryFilter.director: ['Director'],
+      LibraryFilter.decade: ['1990s'],
+    }.entries) {
+      expect(
+        resolveContent(
+          LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            filters: {filter.key: filter.value},
+          ),
+          dated,
+        ).map((item) => item.id),
+        ['older', 'newer'],
+        reason: '${filter.key}',
+      );
+    }
+    expect(
+      resolveContent(
+        const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          order: LibraryOrder.addedDescending,
+        ),
+        dated,
+      ).map((item) => item.id),
+      ['newer', 'older', 'unmatched'],
+    );
+    for (final filters in const <Map<LibraryFilter, List<String>>>[
+      {
+        LibraryFilter.decade: ['1995s'],
+      },
+      {
+        LibraryFilter.decade: ['90s'],
+      },
+      {
+        LibraryFilter.decade: ['990s'],
+      },
+      {
+        LibraryFilter.decade: ['-10s'],
+      },
+      {
+        LibraryFilter.decade: ['10000s'],
+      },
+    ]) {
+      expect(
+        () => resolveContent(
+          LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            filters: filters,
+          ),
+          dated,
+        ),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test('people filters normalize names consistently with proposals', () {
+    final people = [
+      for (final entry in const [
+        ('one', ' Avery Vale '),
+        ('two', 'avery vale'),
+      ])
+        PlexMediaItem(
+          id: entry.$1,
+          title: entry.$1,
+          type: 'movie',
+          duration: const Duration(minutes: 1),
+          libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/${entry.$1}')],
+          actors: [entry.$2, entry.$2.toUpperCase()],
+          directors: [entry.$2, entry.$2.toUpperCase()],
+        ),
+    ];
+
+    for (final filter in const <Map<LibraryFilter, List<String>>>[
+      {
+        LibraryFilter.actor: ['avery vale'],
+      },
+      {
+        LibraryFilter.director: ['AVERY VALE'],
+      },
+    ]) {
+      expect(
+        resolveContent(
+          LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            filters: filter,
+          ),
+          people,
+        ).map((item) => item.id),
+        ['one', 'two'],
+      );
+    }
+  });
+
+  test('manual content refreshes in stored order without mutation', () {
+    const retained = ManualSource([
+      ChannelItem(id: 'b', title: 'Old B', duration: Duration(seconds: 1)),
+      ChannelItem(
+        id: 'missing',
+        title: 'Missing',
+        duration: Duration(seconds: 1),
+      ),
+      ChannelItem(id: 'a', title: 'Old A', duration: Duration(seconds: 1)),
+    ]);
+    final before = retained.toJson();
+
+    final resolved = resolveContent(retained, media);
+
+    expect(resolved.map((item) => item.id), ['b', 'a']);
+    expect(resolved.map((item) => item.title), ['B', 'A']);
+    expect(retained.toJson(), before);
+  });
+
+  test('playable media IDs keep media-first then playlist item order', () {
+    final mediaWinner = media.first;
+    final firstPlaylistWinner = PlexMediaItem(
+      id: 'playlist-only',
+      title: 'First playlist winner',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      parts: [PlexMediaPart(path: '/playlist-first')],
+    );
+    final projection = playableMediaById(media, [
+      PlexPlaylist(
+        id: 'first',
+        title: 'First',
+        items: [
+          PlexMediaItem(
+            id: mediaWinner.id,
+            title: 'Playlist duplicate',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            parts: [PlexMediaPart(path: '/duplicate')],
+          ),
+          firstPlaylistWinner,
+        ],
+      ),
+      PlexPlaylist(
+        id: 'second',
+        title: 'Second',
+        items: [
+          PlexMediaItem(
+            id: firstPlaylistWinner.id,
+            title: 'Later playlist duplicate',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            parts: [PlexMediaPart(path: '/playlist-later')],
+          ),
+          const PlexMediaItem(
+            id: 'unplayable',
+            title: 'Unplayable',
+            type: 'movie',
+            duration: Duration(minutes: 1),
+          ),
+        ],
+      ),
+    ]);
+
+    expect(projection.keys, ['a', 'b', 'c', 'playlist-only']);
+    expect(projection['a'], same(mediaWinner));
+    expect(projection['playlist-only'], same(firstPlaylistWinner));
+    expect(() => projection['new'] = mediaWinner, throwsUnsupportedError);
+  });
+
+  test('mixed interleave is stable for uneven sources', () {
+    final source = MixedSource(
+      interleave: true,
+      sources: [
+        ManualSource([channelItemFor(media[0]), channelItemFor(media[1])]),
+        ManualSource([channelItemFor(media[2])]),
+      ],
+    );
+    expect(resolveContent(source, media).map((item) => item.id), [
+      'a',
+      'c',
+      'b',
+    ]);
+  });
+
+  test('mixed manual library and playlist ordering is deterministic', () {
+    final playlistItem = PlexMediaItem(
+      id: 'playlist-item',
+      title: 'Playlist',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      parts: [PlexMediaPart(path: '/playlist')],
+    );
+    final sources = [
+      const ManualSource([
+        ChannelItem(id: 'b', title: 'Stored B', duration: Duration(seconds: 1)),
+        ChannelItem(id: 'a', title: 'Stored A', duration: Duration(seconds: 1)),
+      ]),
+      const LibrarySource(
+        libraryId: 'shows',
+        libraryType: PlexLibraryType.show,
+      ),
+      const PlaylistSource('playlist'),
+    ];
+    final playlists = [
+      PlexPlaylist(id: 'playlist', title: 'Playlist', items: [playlistItem]),
+    ];
+
+    expect(
+      resolveContent(
+        MixedSource(sources: sources),
+        media,
+        playlists,
+      ).map((item) => item.id),
+      ['b', 'a', 'c', 'playlist-item'],
+    );
+    expect(
+      resolveContent(
+        MixedSource(sources: sources, interleave: true),
+        media,
+        playlists,
+      ).map((item) => item.id),
+      ['b', 'c', 'playlist-item', 'a'],
+    );
+  });
+
+  test('mixed omits unavailable manual items and fails closed recursively', () {
+    const unavailable = ManualSource([
+      ChannelItem(
+        id: 'missing',
+        title: 'Missing',
+        duration: Duration(minutes: 1),
+      ),
+      ChannelItem(
+        id: 'unplayable',
+        title: 'Unplayable',
+        duration: Duration(minutes: 1),
+      ),
+    ]);
+    final unplayable = PlexMediaItem(
+      id: 'unplayable',
+      title: 'Unplayable now',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+    );
+
+    expect(
+      resolveContent(const MixedSource(sources: [unavailable]), [unplayable]),
+      isEmpty,
+    );
+    expect(
+      () => resolveContent(
+        const MixedSource(
+          sources: [
+            MixedSource(
+              sources: [
+                LibrarySource(
+                  libraryId: 'movies',
+                  libraryType: PlexLibraryType.movie,
+                  filters: {
+                    LibraryFilter.decade: ['invalid'],
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        media,
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('playlist sources resolve current Plex playlist contents', () {
+    const source = PlaylistSource('playlist');
+    final resolved = resolveContent(source, const [], [
+      PlexPlaylist(id: 'playlist', title: 'Favorites', items: media),
+    ]);
+    expect(resolved.map((item) => item.id), media.map((item) => item.id));
+  });
+
+  test(
+    'library and playlist sources reject positive-duration items without parts',
+    () {
+      const unsupported = PlexMediaItem(
+        id: 'unsupported',
+        title: 'Unsupported',
+        type: 'movie',
+        duration: Duration(minutes: 1),
+        libraryId: 'movies',
+      );
+      const library = LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      );
+      const playlist = PlaylistSource('playlist');
+
+      expect(resolveContent(library, const [unsupported]), isEmpty);
+      expect(
+        resolveContent(playlist, const [], const [
+          PlexPlaylist(id: 'playlist', title: 'Playlist', items: [unsupported]),
+        ]),
+        isEmpty,
+      );
+    },
+  );
+
+  test('maps distinct episode artwork and prefers the show poster', () {
+    final item = channelItemFor(
+      const PlexMediaItem(
+        id: 'episode',
+        title: 'Episode',
+        type: 'episode',
+        duration: Duration(minutes: 1),
+        grandparentTitle: 'Show',
+        thumbPath: '/library/metadata/episode/thumb',
+        grandparentThumbPath: '/library/metadata/show/thumb',
+        artPath: '/library/metadata/show/art',
+        clearLogoPath: '/library/metadata/show/clearlogo',
+      ),
+    );
+
+    expect(item.poster, Uri.parse('/library/metadata/episode/thumb'));
+    expect(item.showThumb, '/library/metadata/show/thumb');
+    expect(item.backdrop, Uri.parse('/library/metadata/show/art'));
+    expect(item.clearLogo, Uri.parse('/library/metadata/show/clearlogo'));
+  });
+
+  test('maps Plex cast facts without changing the actor-name projection', () {
+    final item = channelItemFor(
+      const PlexMediaItem(
+        id: 'episode',
+        title: 'Episode',
+        type: 'episode',
+        duration: Duration(minutes: 1),
+        actors: ['Avery Vale'],
+        cast: [
+          PlexCastMember(
+            name: 'Avery Vale',
+            role: 'Detective Rowan',
+            thumbPath: '/library/metadata/avery/thumb',
+          ),
+          PlexCastMember(name: 'Mina Park'),
+          PlexCastMember(
+            name: 'External Portrait',
+            role: 'Reporter',
+            thumbPath: 'https://plex.invalid/library/metadata/2/thumb',
+          ),
+          PlexCastMember(
+            name: 'Unsafe Token',
+            role: 'Dispatcher',
+            thumbPath: '/library/metadata/3/thumb?X-Plex-Token=secret',
+          ),
+          PlexCastMember(
+            name: 'Unsafe Fragment',
+            role: 'Archivist',
+            thumbPath: '/library/metadata/4/thumb#private',
+          ),
+          PlexCastMember(
+            name: 'Unsafe Transcode',
+            thumbPath: '/photo/:/transcode?url=private',
+          ),
+          PlexCastMember(
+            name: 'Other PMS Path',
+            thumbPath: '/Users/private/cast.png',
+          ),
+        ],
+      ),
+    );
+
+    expect(item.cast.first.name, 'Avery Vale');
+    expect(item.cast.first.role, 'Detective Rowan');
+    expect(
+      item.cast.first.portrait,
+      Uri.parse('/library/metadata/avery/thumb'),
+    );
+    expect(item.cast[2].name, 'External Portrait');
+    expect(item.cast[2].role, 'Reporter');
+    expect(item.cast[3].name, 'Unsafe Token');
+    expect(item.cast[3].role, 'Dispatcher');
+    expect(item.cast[4].name, 'Unsafe Fragment');
+    expect(item.cast[4].role, 'Archivist');
+    expect(item.cast.skip(1).map((member) => member.portrait), [
+      null,
+      Uri.parse('https://plex.invalid/library/metadata/2/thumb'),
+      null,
+      null,
+      null,
+      Uri.parse('/Users/private/cast.png'),
+    ]);
+  });
+
+  test('maps external sources only for cast transcoding', () {
+    const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
+    final item = channelItemFor(
+      const PlexMediaItem(
+        id: 'episode',
+        title: 'Episode',
+        type: 'episode',
+        duration: Duration(minutes: 1),
+        thumbPath: trusted,
+        cast: [
+          PlexCastMember(name: 'Avery Vale', thumbPath: trusted),
+          PlexCastMember(
+            name: 'Lookalike',
+            thumbPath:
+                'https://metadata-static.plex.tv.evil.example/f/people/a.jpg',
+          ),
+        ],
+      ),
+    );
+
+    expect(item.poster, isNull);
+    expect(item.cast.first.portrait, Uri.parse(trusted));
+    expect(
+      item.cast.last.portrait,
+      Uri.parse('https://metadata-static.plex.tv.evil.example/f/people/a.jpg'),
+    );
+  });
+
+  test('drops noncanonical artwork from manually supplied Plex models', () {
+    const unsafe = '/library/metadata/1/thumb?X-Plex-Token=secret';
+    final item = channelItemFor(
+      const PlexMediaItem(
+        id: 'unsafe',
+        title: 'Unsafe artwork',
+        type: 'movie',
+        duration: Duration(minutes: 1),
+        thumbPath: unsafe,
+        grandparentThumbPath: unsafe,
+        artPath: unsafe,
+        clearLogoPath: unsafe,
+        cast: [PlexCastMember(name: 'Actor', thumbPath: unsafe)],
+      ),
+    );
+
+    expect(item.showThumb, isNull);
+    expect(item.poster, isNull);
+    expect(item.backdrop, isNull);
+    expect(item.clearLogo, isNull);
+    expect(item.cast.single.portrait, isNull);
+  });
+
+  test('unsafe persisted artwork is removed on revival and serialization', () {
+    for (final field in ['showThumb', 'poster', 'backdrop', 'clearLogo']) {
+      for (final unsafe in [
+        'https://plex.invalid/library/metadata/1/thumb',
+        '/library/metadata/1/thumb?X-Plex-Token=secret',
+        '/library/metadata/1/thumb#private',
+        '/Users/private/poster.png',
+      ]) {
+        final item = ChannelItem.fromJson({
+          'id': 'item',
+          'title': 'Item',
+          'durationMs': 60000,
+          field: unsafe,
+        });
+
+        expect(item.toJson(), isNot(contains(field)), reason: '$field $unsafe');
+        expect(item.toJson().toString(), isNot(contains(unsafe)));
+      }
+    }
+  });
+
+  test('channel item poster, backdrop, and logo round-trip canonically', () {
+    final item = ChannelItem(
+      id: 'new',
+      title: 'New item',
+      duration: Duration(minutes: 1),
+      showTitle: 'Show',
+      showThumb: '/library/metadata/show/thumb',
+      poster: Uri(path: '/library/metadata/item/thumb'),
+      backdrop: Uri(path: '/library/metadata/item/art'),
+      clearLogo: Uri(path: '/library/metadata/show/clearlogo'),
+      summary: 'Summary',
+      contentRating: 'TV-14',
+      genres: const ['Drama'],
+      year: 2026,
+      seasonNumber: 2,
+      episodeNumber: 3,
+      resolution: '1080',
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      audioChannels: 6,
+      dynamicRange: 'sdr',
+      cast: [
+        ChannelCastMember(
+          name: 'Avery Vale',
+          role: 'Detective Rowan',
+          portrait: Uri.parse('/library/metadata/avery/thumb'),
+        ),
+        ChannelCastMember(name: 'Mina Park'),
+      ],
+    );
+    expect(ChannelItem.fromJson(item.toJson()).toJson(), item.toJson());
+    expect(
+      item.toJson(),
+      containsPair('poster', '/library/metadata/item/thumb'),
+    );
+    expect(item.toJson(), isNot(contains('artwork')));
+  });
+
+  test('channel item JSON remains backward compatible without cast', () {
+    final item = ChannelItem.fromJson(const {
+      'id': 'legacy-current',
+      'title': 'Legacy current item',
+      'durationMs': 60000,
+    });
+
+    expect(item.cast, isEmpty);
+    expect(item.toJson(), isNot(contains('cast')));
+  });
+
+  test('legacy artwork is rejected without a poster fallback', () {
+    expect(
+      () => ChannelItem.fromJson(const {
+        'id': 'old',
+        'title': 'Old item',
+        'durationMs': 60000,
+        'artwork': '/old/poster',
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('all content source variants round-trip canonically', () {
+    final sources = <ContentSource>[
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        includeWatched: false,
+        filters: {
+          LibraryFilter.genre: ['Comedy'],
+        },
+      ),
+      const PlaylistSource('playlist'),
+      const ManualSource([
+        ChannelItem(id: 'item', title: 'Item', duration: Duration(minutes: 1)),
+      ]),
+      const MixedSource(
+        interleave: true,
+        sources: [PlaylistSource('playlist')],
+      ),
+    ];
+
+    for (final source in sources) {
+      expect(ContentSource.fromJson(source.toJson()).toJson(), source.toJson());
+    }
+  });
+
+  test(
+    'library sources reject an ungenerated decade and non-Boolean flags',
+    () {
+      const valid = {
+        'type': 'library',
+        'libraryId': 'movies',
+        'libraryType': 'movie',
+        'includeWatched': true,
+      };
+      for (final invalid in [
+        {
+          ...valid,
+          'filters': {
+            'decade': ['0990s'],
+          },
+        },
+        {...valid, 'includeWatched': 1},
+      ]) {
+        expect(() => ContentSource.fromJson(invalid), throwsFormatException);
+      }
+    },
+  );
+
+  test('content sources reject missing and unknown persisted values', () {
+    for (final invalid in [
+      {'type': 'playlist'},
+      {'type': 'future'},
+    ]) {
+      expect(() => ContentSource.fromJson(invalid), throwsFormatException);
+    }
+  });
+
+  test('channel items reject mistyped persisted values', () {
+    const canonical = {'id': 'item', 'title': 'Item', 'durationMs': 60000};
+    for (final invalid in [
+      {...canonical, 'durationMs': 60000.5},
+      {...canonical, 'summary': null},
+      {
+        ...canonical,
+        'genres': ['Drama', 7],
+      },
+    ]) {
+      expect(() => ChannelItem.fromJson(invalid), throwsFormatException);
+    }
+  });
+
+  test('channels round-trip and reject unknown fields and enum values', () {
+    final channel = Channel(
+      id: 'channel',
+      number: 7,
+      name: 'Channel',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.block,
+      anchor: DateTime.utc(2026, 8, 23),
+      shuffleSeed: 42,
+      blockSize: 3,
+      builderKey: 'builder',
+    );
+    expect(Channel.fromJson(channel.toJson()).toJson(), channel.toJson());
+
+    final canonical = channel.toJson();
+    for (final invalid in [
+      {...canonical}..remove('anchor'),
+      {...canonical, 'future': true},
+      {...canonical, 'playbackMode': 'future'},
+      {...canonical, 'blockSize': null},
+    ]) {
+      expect(() => Channel.fromJson(invalid), throwsFormatException);
+    }
+  });
+
+  test('non-block channels normalize specials in persistence and identity', () {
+    final requested = Channel(
+      id: 'channel',
+      number: 7,
+      name: 'Channel',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: DateTime.utc(2026, 8, 23),
+      shuffleSeed: 42,
+      includeSpecials: true,
+    );
+    final canonical = Channel(
+      id: 'channel',
+      number: 7,
+      name: 'Channel',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: DateTime.utc(2026, 8, 23),
+      shuffleSeed: 42,
+    );
+
+    expect(requested.includeSpecials, isFalse);
+    expect(requested.toJson(), isNot(contains('includeSpecials')));
+    expect(
+      canonicalScheduleIdentity(requested),
+      canonicalScheduleIdentity(canonical),
+    );
+  });
+
+  test(
+    'schedule transition requires an explicit offset and canonicalizes UTC',
+    () {
+      final channel = Channel(
+        id: 'transition',
+        number: 7,
+        name: 'Transition',
+        source: const PlaylistSource('playlist'),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026, 8, 23),
+        shuffleSeed: 42,
+        scheduleTransition: ScheduleTransition(
+          boundary: DateTime.parse('2026-08-23T14:00:00+02:00'),
+          legacyCycleItems: const [
+            ChannelItem(
+              id: 'item',
+              title: 'Item',
+              duration: Duration(minutes: 1),
+            ),
+          ],
+        ),
+      );
+      final canonical = channel.toJson();
+      expect(
+        (canonical['scheduleTransition'] as Map)['boundary'],
+        '2026-08-23T12:00:00.000Z',
+      );
+      expect(Channel.fromJson(canonical).toJson(), canonical);
+
+      final offsetless = Map<String, Object?>.from(canonical);
+      offsetless['scheduleTransition'] = {
+        ...Map<String, Object?>.from(canonical['scheduleTransition']! as Map),
+        'boundary': '2026-08-23T12:00:00',
+      };
+      expect(() => Channel.fromJson(offsetless), throwsFormatException);
+    },
+  );
+
+  test('bulk channel validation preserves identity semantics', () {
+    Channel channel(String id, int number) => Channel(
+      id: id,
+      number: number,
+      name: 'Channel $number',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: number,
+    );
+
+    final channels = [
+      for (var number = 1; number <= 1000; number++) channel('$number', number),
+    ];
+    expect(() => validateChannels(channels), returnsNormally);
+    expect(
+      () => validateChannels([channel('same', 7), channel('same', 7)]),
+      throwsFormatException,
+    );
+    expect(
+      () => validateChannels([channel('same', 7), channel('same', 8)]),
+      throwsFormatException,
+    );
+    expect(
+      () => validateChannels([channel('first', 7), channel('second', 7)]),
+      throwsFormatException,
+    );
+  });
+}

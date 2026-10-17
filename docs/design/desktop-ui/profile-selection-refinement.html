@@ -1,0 +1,34 @@
+<div class="viz-controls"><label class="form-label">Preview width<select class="form-select" id="profile-width"><option value="736">Normal · 736 px</option><option value="520">Narrow · 520 px</option><option value="360">Very narrow · 360 px</option></select></label></div>
+<style>
+#profile-refinement{--film:#090806;--booth:#12100d;--raised:#1a1712;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;font:16px/1.45 Arial,sans-serif;color:var(--paper);color-scheme:dark;max-width:736px;margin:auto}
+#profile-refinement *{box-sizing:border-box}
+#profile-refinement .pr-screen{background:var(--film);border:1px solid var(--quiet);border-radius:8px;padding:24px;container-type:inline-size}
+#profile-refinement .pr-brand{color:var(--amber);font-size:14px;font-weight:600;letter-spacing:1.3px}
+#profile-refinement .pr-heading{text-align:center;margin:28px 0 24px}
+#profile-refinement h2{font-size:26px;line-height:1.2;margin:0 0 8px;font-weight:600}
+#profile-refinement .pr-subtitle{font-size:14px;color:var(--support);margin:0}
+#profile-refinement .pr-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;max-width:608px;margin:auto;align-items:stretch}
+#profile-refinement button{font:inherit;color:var(--paper);cursor:pointer;border-radius:8px;max-width:100%}
+#profile-refinement .pr-profile{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px;padding:16px 12px;background:transparent;border:1px solid var(--quiet);min-width:0}
+#profile-refinement .pr-profile:hover{background:var(--booth);border-color:var(--strong)}
+#profile-refinement .pr-avatar{display:flex;align-items:center;justify-content:center;width:80px;height:80px;flex:none;background:var(--raised);border-radius:50%;font-size:30px;color:var(--support)}
+#profile-refinement .pr-name{font-size:16px;font-weight:600;overflow-wrap:anywhere;line-height:1.4}
+#profile-refinement .pr-meta{font-size:12px;color:var(--support);display:flex;flex-wrap:wrap;justify-content:center;gap:4px 8px;margin-top:auto;padding-top:4px}
+#profile-refinement .pr-footer{margin-top:28px;display:flex;justify-content:center}
+#profile-refinement .pr-footer button{background:transparent;border:1px solid var(--strong);padding:10px 16px;min-height:44px;font-size:14px;color:var(--support)}
+#profile-refinement .pr-result{font-size:14px;color:var(--support);text-align:center;margin:16px 0 0;overflow-wrap:anywhere}
+#profile-refinement .pr-result:empty{display:none}
+@container(max-width:530px){#profile-refinement .pr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container(max-width:340px){#profile-refinement .pr-grid{grid-template-columns:1fr;max-width:240px}}
+</style>
+<div id="profile-refinement"><section class="pr-screen" aria-label="Profile selection proposal"><div class="pr-brand">LINEUP</div><header class="pr-heading"><h2>Who's watching?</h2><p class="pr-subtitle">Choose a Plex Home profile to continue.</p></header><div class="pr-grid">
+<button class="pr-profile" data-name="Alex" data-pin="true"><span class="pr-avatar" aria-hidden="true">A</span><span class="pr-name">Alex</span><span class="pr-meta"><span>PIN required</span><span>Admin</span></span></button>
+<button class="pr-profile" data-name="Alexandra Montgomery-Sinclair" data-pin="true"><span class="pr-avatar" aria-hidden="true">A</span><span class="pr-name">Alexandra Montgomery-Sinclair</span><span class="pr-meta"><span>PIN required</span></span></button>
+<button class="pr-profile" data-name="Family Movie Nights"><span class="pr-avatar" aria-hidden="true">F</span><span class="pr-name">Family Movie Nights</span></button>
+<button class="pr-profile" data-name="Kids"><span class="pr-avatar" aria-hidden="true">K</span><span class="pr-name">Kids</span><span class="pr-meta"><span>Restricted</span></span></button>
+<button class="pr-profile" data-name="Christopher Alexander Wellington"><span class="pr-avatar" aria-hidden="true">C</span><span class="pr-name">Christopher Alexander Wellington</span></button>
+<button class="pr-profile" data-name="WeekendDocumentaryCollection"><span class="pr-avatar" aria-hidden="true">W</span><span class="pr-name">WeekendDocumentaryCollection</span></button>
+</div><footer class="pr-footer"><button data-signout>Sign out</button></footer><p class="pr-result" role="status"></p></section></div>
+<script>
+(()=>{const root=document.getElementById('profile-refinement');document.getElementById('profile-width').onchange=e=>root.style.maxWidth=e.target.value+'px';const result=root.querySelector('.pr-result');root.querySelectorAll('.pr-profile').forEach(button=>button.onclick=()=>{result.textContent=button.dataset.pin?'Preview: '+button.dataset.name+' would open PIN entry.':'Preview: Continue as '+button.dataset.name+'.';});root.querySelector('[data-signout]').onclick=()=>result.textContent='Preview: Sign out would return to Welcome.';})();
+</script>

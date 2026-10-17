@@ -1,0 +1,388 @@
+import '../channels/channel.dart';
+
+enum DynamicRange { sdr, hdr10, hlg, dolbyVision, unknown }
+
+class PlexAccount {
+  const PlexAccount({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.thumb,
+  });
+
+  final String id;
+  final String name;
+  final String email;
+  final Uri? thumb;
+}
+
+class PlexHomeUser {
+  const PlexHomeUser({
+    required this.id,
+    required this.name,
+    required this.protected,
+    this.thumb,
+    this.admin = false,
+    this.restricted,
+  });
+
+  final String id;
+  final String name;
+  final bool protected;
+  final Uri? thumb;
+  final bool admin;
+  final bool? restricted;
+}
+
+class PlexPin {
+  const PlexPin({
+    required this.id,
+    required this.code,
+    required this.expiresAt,
+  });
+
+  final int id;
+  final String code;
+  final DateTime expiresAt;
+}
+
+class PlexServer {
+  const PlexServer({
+    required this.id,
+    required this.name,
+    required this.connections,
+    this.owned = false,
+  }) : _frozen = false;
+
+  PlexServer._immutable(PlexServer original)
+    : _frozen = true,
+      id = original.id,
+      name = original.name,
+      connections = List.unmodifiable(original.connections),
+      owned = original.owned;
+
+  PlexServer immutableCopy() => _frozen ? this : PlexServer._immutable(this);
+
+  final bool _frozen;
+  final String id;
+  final String name;
+  final List<PlexConnection> connections;
+  final bool owned;
+}
+
+class PlexConnection {
+  const PlexConnection({
+    required this.uri,
+    required this.local,
+    required this.relay,
+    this.latency,
+  });
+
+  final Uri uri;
+  final bool local;
+  final bool relay;
+  final Duration? latency;
+}
+
+enum PlexConnectionKind { directLocal, directRemote, relay }
+
+String plexConnectionDescription(PlexConnection? connection) {
+  final latency = connection?.latency;
+  if (connection == null || latency == null) return 'Not measured yet';
+  final milliseconds = latency.inMilliseconds;
+  return [
+    plexConnectionKindLabel(plexConnectionKind(connection)),
+    if (connection.relay) 'Limited',
+    if (milliseconds >= 500) 'Very slow',
+    '$milliseconds ms',
+  ].join(' · ');
+}
+
+bool plexConnectionHasWarning(PlexConnection? connection) {
+  final latency = connection?.latency;
+  return latency != null &&
+      (connection!.relay || latency.inMilliseconds >= 500);
+}
+
+PlexConnectionKind plexConnectionKind(PlexConnection connection) =>
+    connection.relay
+    ? PlexConnectionKind.relay
+    : connection.local
+    ? PlexConnectionKind.directLocal
+    : PlexConnectionKind.directRemote;
+
+String plexConnectionKindLabel(PlexConnectionKind kind) => switch (kind) {
+  PlexConnectionKind.directLocal => 'Direct local',
+  PlexConnectionKind.directRemote => 'Direct remote',
+  PlexConnectionKind.relay => 'Relay',
+};
+
+class PlexLibrary {
+  const PlexLibrary({
+    required this.id,
+    required this.title,
+    required this.type,
+  });
+
+  final String id;
+  final String title;
+  final PlexLibraryType type;
+}
+
+class PlexPlaylist {
+  const PlexPlaylist({
+    required this.id,
+    required this.title,
+    required this.items,
+  }) : _frozen = false;
+
+  PlexPlaylist._immutable(PlexPlaylist original)
+    : _frozen = true,
+      id = original.id,
+      title = original.title,
+      items = List.unmodifiable(
+        original.items.map((item) => item.immutableCopy()),
+      );
+
+  PlexPlaylist immutableCopy() =>
+      _frozen ? this : PlexPlaylist._immutable(this);
+
+  final bool _frozen;
+  final String id;
+  final String title;
+  final List<PlexMediaItem> items;
+}
+
+class PlexPlaylistCatalog {
+  const PlexPlaylistCatalog({required this.playlists, required this.failedIds});
+  final List<PlexPlaylist> playlists;
+  final Set<String> failedIds;
+}
+
+/// Why all collection membership for a library is unavailable. Individual
+/// transient title failures remain in [PlexCollectionMembership.failedTitles].
+enum PlexCollectionFailure {
+  transient,
+  listingLimitExceeded,
+  memberLimitExceeded,
+  pagingLimitExceeded;
+
+  bool get isScaleLimit => this != transient;
+}
+
+/// Authoritative collection membership for one library. Failed titles have no
+/// published members, even when another collection has the same title.
+class PlexCollectionMembership {
+  const PlexCollectionMembership({
+    this.titlesByMember = const {},
+    this.failedTitles = const {},
+    this.failure,
+  });
+
+  final Map<String, Set<String>> titlesByMember;
+  final Set<String> failedTitles;
+  final PlexCollectionFailure? failure;
+  bool get unavailable => failure != null;
+}
+
+/// Phase durations and redacted counts for one successful library scan. Phases
+/// run sequentially, so [items] is the item-only baseline and the remaining
+/// phases are the time membership and show-genre enrichment add to it.
+typedef PlexLibraryScanTiming = ({
+  Duration items,
+  Duration collections,
+  Duration showGenres,
+  int collectionTitles,
+  int collectionMembers,
+  int shows,
+});
+
+class PlexLibraryScan {
+  const PlexLibraryScan({
+    required this.items,
+    this.collections = const PlexCollectionMembership(),
+    this.timing,
+  });
+
+  final List<PlexMediaItem> items;
+  final PlexCollectionMembership collections;
+  final PlexLibraryScanTiming? timing;
+}
+
+typedef PlexLibraryPageProgress = ({
+  int completedPages,
+  int completedItems,
+  int? totalItems,
+});
+
+class PlexMediaPart {
+  PlexMediaPart({required this.path, this.duration})
+    : assert(duration == null || duration.inMicroseconds > 0);
+
+  final String path;
+  final Duration? duration;
+}
+
+class PlexCastMember {
+  const PlexCastMember({required this.name, this.role, this.thumbPath});
+
+  final String name;
+  final String? role;
+  final String? thumbPath;
+}
+
+class PlexMediaItem {
+  const PlexMediaItem({
+    required this.id,
+    required this.title,
+    required this.type,
+    required this.duration,
+    this.libraryId,
+    this.parentTitle,
+    this.grandparentTitle,
+    this.parentRatingKey,
+    this.grandparentRatingKey,
+    this.thumbPath,
+    this.grandparentThumbPath,
+    this.artPath,
+    this.clearLogoPath,
+    this.parts = const [],
+    this.container,
+    this.videoCodec,
+    this.audioCodec,
+    this.dynamicRange = DynamicRange.unknown,
+    this.genres = const [],
+    this.collections = const [],
+    this.directors = const [],
+    this.actors = const [],
+    this.cast = const [],
+    this.studio,
+    this.year,
+    this.summary,
+    this.contentRating,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.videoResolution,
+    this.audioChannels,
+    this.addedAt,
+    this.viewed = false,
+  }) : _frozen = false;
+
+  PlexMediaItem.withTags(
+    PlexMediaItem original, {
+    List<String>? collections,
+    List<String>? genres,
+  }) : this._immutable(original, collections: collections, genres: genres);
+
+  PlexMediaItem._immutable(
+    PlexMediaItem original, {
+    List<String>? collections,
+    List<String>? genres,
+  }) : _frozen = true,
+       id = original.id,
+       title = original.title,
+       type = original.type,
+       duration = original.duration,
+       libraryId = original.libraryId,
+       parentTitle = original.parentTitle,
+       grandparentTitle = original.grandparentTitle,
+       parentRatingKey = original.parentRatingKey,
+       grandparentRatingKey = original.grandparentRatingKey,
+       thumbPath = original.thumbPath,
+       grandparentThumbPath = original.grandparentThumbPath,
+       artPath = original.artPath,
+       clearLogoPath = original.clearLogoPath,
+       parts = List.unmodifiable(original.parts),
+       container = original.container,
+       videoCodec = original.videoCodec,
+       audioCodec = original.audioCodec,
+       dynamicRange = original.dynamicRange,
+       genres = List.unmodifiable(genres ?? original.genres),
+       collections = List.unmodifiable(collections ?? original.collections),
+       directors = List.unmodifiable(original.directors),
+       actors = List.unmodifiable(original.actors),
+       cast = List.unmodifiable(original.cast),
+       studio = original.studio,
+       year = original.year,
+       summary = original.summary,
+       contentRating = original.contentRating,
+       seasonNumber = original.seasonNumber,
+       episodeNumber = original.episodeNumber,
+       videoResolution = original.videoResolution,
+       audioChannels = original.audioChannels,
+       addedAt = original.addedAt,
+       viewed = original.viewed;
+
+  PlexMediaItem immutableCopy() =>
+      _frozen ? this : PlexMediaItem._immutable(this);
+
+  final bool _frozen;
+  final String id;
+  final String title;
+  final String type;
+  final Duration duration;
+  final String? libraryId;
+  final String? parentTitle;
+  final String? grandparentTitle;
+  final String? parentRatingKey;
+  final String? grandparentRatingKey;
+  final String? thumbPath;
+  final String? grandparentThumbPath;
+  final String? artPath;
+  final String? clearLogoPath;
+  final List<PlexMediaPart> parts;
+  final String? container;
+  final String? videoCodec;
+  final String? audioCodec;
+  final DynamicRange dynamicRange;
+  final List<String> genres;
+  final List<String> collections;
+  final List<String> directors;
+  final List<String> actors;
+  final List<PlexCastMember> cast;
+  final String? studio;
+  final int? year;
+  final String? summary;
+  final String? contentRating;
+  final int? seasonNumber;
+  final int? episodeNumber;
+  final String? videoResolution;
+  final int? audioChannels;
+  final DateTime? addedAt;
+  final bool viewed;
+
+  bool get isPlayable =>
+      duration > Duration.zero && parts.any((part) => part.path.isNotEmpty);
+}
+
+typedef PlexPlaybackPartDescriptor = ({Uri uri, Duration? duration});
+
+class PlexException implements Exception {
+  const PlexException(this.code, this.message);
+
+  final String code;
+  final String message;
+
+  bool get isAuthorizationFailure =>
+      code == 'auth-invalid' ||
+      code == 'auth-required' ||
+      code == 'access-denied';
+  bool get isCancellation => code == 'cancelled';
+
+  @override
+  String toString() => message;
+}
+
+/// Item paging is followed by collection membership and (for TV) show genres.
+enum PlexLibraryScanPhase { items, collections, showGenres }
+
+/// Catalog discovery has an unknown total; contents settle in bounded batches.
+class PlexPlaylistProgress {
+  const PlexPlaylistProgress({
+    this.completedPlaylists = 0,
+    this.totalPlaylists,
+  });
+
+  final int completedPlaylists;
+  final int? totalPlaylists;
+}

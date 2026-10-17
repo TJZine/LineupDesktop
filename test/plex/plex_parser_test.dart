@@ -1,0 +1,667 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
+
+void main() {
+  test('formats connection routes and measured latency boundaries', () {
+    PlexConnection connection({
+      required bool local,
+      required bool relay,
+      required int latency,
+    }) => PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: local,
+      relay: relay,
+      latency: Duration(milliseconds: latency),
+    );
+
+    expect(
+      plexConnectionDescription(
+        connection(local: true, relay: false, latency: 99),
+      ),
+      'Direct local · 99 ms',
+    );
+    expect(
+      plexConnectionDescription(
+        connection(local: false, relay: false, latency: 100),
+      ),
+      'Direct remote · 100 ms',
+    );
+    expect(
+      plexConnectionDescription(
+        connection(local: false, relay: false, latency: 499),
+      ),
+      'Direct remote · 499 ms',
+    );
+    expect(
+      plexConnectionDescription(
+        connection(local: true, relay: true, latency: 500),
+      ),
+      'Relay · Limited · Very slow · 500 ms',
+    );
+    expect(
+      plexConnectionKind(connection(local: true, relay: true, latency: 1)),
+      PlexConnectionKind.relay,
+    );
+  });
+
+  test(
+    'parses collection tags for playlist metadata (library scans replace them)',
+    () {
+      final item = parseMediaItem({
+        'ratingKey': '1',
+        'title': 'Movie',
+        'type': 'movie',
+        'duration': 1000,
+        'Collection': [
+          {'tag': 'Friday Night'},
+        ],
+      });
+      expect(item.collections, ['Friday Night']);
+    },
+  );
+
+  test('parses media, part, and Dolby Vision facts', () {
+    final item = parseMediaItem({
+      'ratingKey': '42',
+      'key': '/library/metadata/42',
+      'title': 'Pilot',
+      'type': 'episode',
+      'duration': 3600000,
+      'grandparentTitle': 'Show',
+      'grandparentRatingKey': 'show-42',
+      'summary': 'A first episode.',
+      'contentRating': 'TV-14',
+      'parentIndex': 1,
+      'index': 2,
+      'Media': [
+        {
+          'container': 'MKV',
+          'videoCodec': 'HEVC',
+          'audioCodec': 'EAC3',
+          'videoResolution': '4k',
+          'audioChannels': 6,
+          'Part': [
+            {
+              'key': '/library/parts/1/file.mkv',
+              'Stream': [
+                {'codec': 'dovi'},
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(item.container, 'mkv');
+    expect(item.videoCodec, 'hevc');
+    expect(item.dynamicRange, DynamicRange.dolbyVision);
+    expect(item.grandparentRatingKey, 'show-42');
+    expect(item.summary, 'A first episode.');
+    expect(item.contentRating, 'TV-14');
+    expect(item.seasonNumber, 1);
+    expect(item.episodeNumber, 2);
+    expect(item.videoResolution, '4k');
+    expect(item.audioChannels, 6);
+  });
+
+  test('keeps absent and null list controls empty', () {
+    final item = parseMediaItem({
+      'ratingKey': 'control',
+      'title': 'Control',
+      'type': 'movie',
+      'Media': null,
+      'Genre': null,
+      'Collection': null,
+      'Director': null,
+      'Role': null,
+    });
+
+    expect(item.parts, isEmpty);
+    expect(item.genres, isEmpty);
+    expect(item.collections, isEmpty);
+    expect(item.directors, isEmpty);
+    expect(item.actors, isEmpty);
+  });
+
+  test('treats non-list enrichment containers as empty', () {
+    final item = parseMediaItem({
+      'ratingKey': 'enrichment',
+      'title': 'Enrichment',
+      'type': 'movie',
+      'Genre': {'tag': 'Drama'},
+      'Collection': {'tag': 'Collection'},
+      'Director': {'tag': 'Director'},
+      'Role': {'tag': 'Actor'},
+    });
+
+    expect(item.genres, isEmpty);
+    expect(item.collections, isEmpty);
+    expect(item.directors, isEmpty);
+    expect(item.actors, isEmpty);
+    expect(item.cast, isEmpty);
+  });
+
+  test('keeps absent and null selected part and stream containers empty', () {
+    final absentPart = parseMediaItem({
+      'ratingKey': 'absent-part',
+      'title': 'Absent part',
+      'type': 'movie',
+      'Media': [<String, Object?>{}],
+    });
+    final nullPart = parseMediaItem({
+      'ratingKey': 'null-part',
+      'title': 'Null part',
+      'type': 'movie',
+      'Media': [
+        {'Part': null},
+      ],
+    });
+    final absentStream = parseMediaItem({
+      'ratingKey': 'absent-stream',
+      'title': 'Absent stream',
+      'type': 'movie',
+      'Media': [
+        {
+          'Part': [
+            {'key': '/library/parts/absent-stream.mkv'},
+          ],
+        },
+      ],
+    });
+    final nullStream = parseMediaItem({
+      'ratingKey': 'null-stream',
+      'title': 'Null stream',
+      'type': 'movie',
+      'Media': [
+        {
+          'Part': [
+            {'key': '/library/parts/null-stream.mkv', 'Stream': null},
+          ],
+        },
+      ],
+    });
+
+    expect(absentPart.parts, isEmpty);
+    expect(nullPart.parts, isEmpty);
+    expect(absentStream.parts.map((part) => part.path), [
+      '/library/parts/absent-stream.mkv',
+    ]);
+    expect(nullStream.parts.map((part) => part.path), [
+      '/library/parts/null-stream.mkv',
+    ]);
+  });
+
+  for (final entry in <String, Map<String, Object?>>{
+    'Media': {
+      'ratingKey': 'invalid-media',
+      'title': 'Invalid media',
+      'type': 'movie',
+      'Media': {'Part': <Object?>[]},
+    },
+    'Part': {
+      'ratingKey': 'invalid-part',
+      'title': 'Invalid part',
+      'type': 'movie',
+      'Media': [
+        {
+          'Part': {'key': '/library/parts/invalid.mkv'},
+        },
+      ],
+    },
+    'Stream': {
+      'ratingKey': 'invalid-stream',
+      'title': 'Invalid stream',
+      'type': 'movie',
+      'Media': [
+        {
+          'Part': <Object?>[
+            {
+              'key': '/library/parts/invalid-stream.mkv',
+              'Stream': {'codec': 'dovi'},
+            },
+          ],
+        },
+      ],
+    },
+  }.entries) {
+    test('rejects non-list structural ${entry.key} container', () {
+      expect(
+        () => parseMediaItem(entry.value),
+        throwsA(
+          isA<PlexException>().having((e) => e.code, 'code', 'parse-error'),
+        ),
+      );
+    });
+  }
+
+  for (final malformedStream in <Object?>[
+    42,
+    <String, Object?>{'codec': 'dovi'},
+  ]) {
+    test('rejects selected first-part Stream with Dolby Vision shortcut', () {
+      expect(
+        () => parseMediaItem({
+          'ratingKey': 'invalid-selected-stream',
+          'title': 'Invalid selected stream',
+          'type': 'movie',
+          'Media': [
+            {
+              'DOVIPresent': true,
+              'Part': [
+                {
+                  'key': '/library/parts/invalid-selected-stream.mkv',
+                  'Stream': malformedStream,
+                },
+              ],
+            },
+          ],
+        }),
+        throwsA(
+          isA<PlexException>().having((e) => e.code, 'code', 'parse-error'),
+        ),
+      );
+    });
+  }
+
+  test('preserves first media and part selection for enrichment', () {
+    final item = parseMediaItem({
+      'ratingKey': 'first-selection',
+      'title': 'First selection',
+      'type': 'movie',
+      'Media': [
+        {
+          'videoCodec': 'h264',
+          'Part': [
+            {
+              'key': '/library/parts/first.mkv',
+              'Stream': [
+                {'codec': 'dovi'},
+              ],
+            },
+            {'key': '/library/parts/second.mkv', 'Stream': 42},
+          ],
+        },
+        {'Part': 42},
+      ],
+    });
+
+    expect(item.videoCodec, 'h264');
+    expect(item.dynamicRange, DynamicRange.dolbyVision);
+    expect(item.parts.map((part) => part.path), [
+      '/library/parts/first.mkv',
+      '/library/parts/second.mkv',
+    ]);
+  });
+
+  test('ignores a malformed connections container', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode([
+            {
+              'provides': 'server',
+              'accessToken': 'resource-token',
+              'clientIdentifier': 'server-id',
+              'name': 'Server',
+              'owned': true,
+              'connections': {'uri': 'https://synthetic.invalid'},
+            },
+          ]),
+          200,
+        ),
+      ),
+    );
+    addTearDown(client.close);
+
+    expect(await client.discoverServers('account-token'), isEmpty);
+  });
+
+  test('normalizes numeric grandparent rating keys', () {
+    final item = parseMediaItem({
+      'ratingKey': 'episode-42',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'grandparentRatingKey': 42,
+    });
+
+    expect(item.grandparentRatingKey, '42');
+  });
+
+  test('preserves every ordered part with positive nullable durations', () {
+    final item = parseMediaItem({
+      'ratingKey': 'multi',
+      'key': '/library/metadata/multi',
+      'title': 'Multi-part movie',
+      'type': 'movie',
+      'duration': 3000,
+      'Media': [
+        {
+          'container': 'mkv',
+          'videoCodec': 'h264',
+          'audioCodec': 'aac',
+          'Part': [
+            {'key': '/library/parts/one.mkv', 'duration': 1000},
+            {'key': '/library/parts/two.mkv', 'duration': 0},
+            {'key': '/library/parts/three.mkv', 'duration': -1},
+          ],
+        },
+        {
+          'container': 'mp4',
+          'Part': [
+            {'key': '/ignored-alternate.mp4'},
+          ],
+        },
+      ],
+    });
+
+    expect(item.parts.map((part) => part.path), [
+      '/library/parts/one.mkv',
+      '/library/parts/two.mkv',
+      '/library/parts/three.mkv',
+    ]);
+    expect(item.parts.map((part) => part.duration), [
+      const Duration(seconds: 1),
+      null,
+      null,
+    ]);
+  });
+
+  test('drops media parts without a usable path', () {
+    final item = parseMediaItem({
+      'ratingKey': 'malformed-parts',
+      'title': 'Malformed parts',
+      'type': 'movie',
+      'duration': 3000,
+      'Media': [
+        {
+          'Part': [
+            {'duration': 1000},
+            {'key': '   ', 'duration': 1000},
+            {'key': '/library/parts/valid.mkv', 'duration': 1000},
+          ],
+        },
+      ],
+    });
+    final unsupported = parseMediaItem({
+      'ratingKey': 'no-usable-parts',
+      'title': 'No usable parts',
+      'type': 'movie',
+      'duration': 1000,
+      'Media': [
+        {
+          'Part': [
+            <String, Object?>{},
+            {'key': ''},
+          ],
+        },
+      ],
+    });
+    final zeroDuration = parseMediaItem({
+      'ratingKey': 'zero-duration',
+      'title': 'Zero duration',
+      'type': 'movie',
+      'duration': 0,
+      'Media': [
+        {
+          'Part': [
+            {'key': '/library/parts/zero-duration.mkv'},
+          ],
+        },
+      ],
+    });
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    addTearDown(client.close);
+
+    expect(item.parts.map((part) => part.path), ['/library/parts/valid.mkv']);
+    expect(item.parts.single.duration, const Duration(seconds: 1));
+    expect(item.isPlayable, isTrue);
+    expect(unsupported.parts, isEmpty);
+    expect(unsupported.isPlayable, isFalse);
+    expect(zeroDuration.parts, hasLength(1));
+    expect(zeroDuration.duration, Duration.zero);
+    expect(zeroDuration.isPlayable, isFalse);
+    expect(
+      () => client.playbackDescriptor(
+        server: Uri.parse('https://plex.example:32400'),
+        item: unsupported,
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'unsupported',
+        ),
+      ),
+    );
+  });
+
+  test(
+    'accepts quoted numeric metadata and ignores invalid optional values',
+    () {
+      final item = parseMediaItem({
+        'ratingKey': 'quoted',
+        'key': '/library/metadata/quoted',
+        'title': 'Quoted metadata',
+        'type': 'episode',
+        'duration': '3600000',
+        'year': '2026',
+        'parentIndex': '1',
+        'index': '2',
+        'addedAt': '1720000000',
+        'viewCount': '1',
+        'Media': [
+          {'audioChannels': '6'},
+        ],
+      });
+
+      expect(item.duration, const Duration(hours: 1));
+      expect(item.year, 2026);
+      expect(item.seasonNumber, 1);
+      expect(item.episodeNumber, 2);
+      expect(item.audioChannels, 6);
+      expect(item.addedAt, isNotNull);
+      expect(item.viewed, isTrue);
+
+      final invalid = parseMediaItem({
+        'ratingKey': 'invalid',
+        'key': '/library/metadata/invalid',
+        'title': 'Invalid metadata',
+        'type': 'movie',
+        'duration': 'not-a-number',
+        'year': true,
+        'addedAt': 1e300,
+        'viewCount': double.infinity,
+      });
+      expect(invalid.duration, Duration.zero);
+      expect(invalid.year, isNull);
+      expect(invalid.addedAt, isNull);
+      expect(invalid.viewed, isFalse);
+    },
+  );
+
+  test('parses episode artwork facts including show poster and clear logo', () {
+    final item = parseMediaItem({
+      'ratingKey': 'episode-1',
+      'key': '/library/metadata/episode-1',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'thumb': '/library/metadata/episode-1/thumb',
+      'grandparentThumb': '/library/metadata/show-1/thumb',
+      'art': '/library/metadata/show-1/art',
+      'Image': [
+        {'type': 'clearArt', 'url': '/library/metadata/show-1/clearart'},
+        {'type': 'clearLogo', 'url': '/library/metadata/show-1/clearlogo'},
+      ],
+    });
+
+    expect(item.thumbPath, '/library/metadata/episode-1/thumb');
+    expect(item.grandparentThumbPath, '/library/metadata/show-1/thumb');
+    expect(item.artPath, '/library/metadata/show-1/art');
+    expect(item.clearLogoPath, '/library/metadata/show-1/clearlogo');
+  });
+
+  test('drops noncanonical primary artwork during Plex projection', () {
+    final unsafeValues = [
+      'https://plex.invalid/library/metadata/1/thumb',
+      '//plex.invalid/library/metadata/1/thumb',
+      '/library/metadata/1/thumb?X-Plex-Token=secret',
+      '/library/metadata/1/thumb#private',
+      '/library/metadata/../private/thumb',
+      '/photo/:/transcode?url=private',
+      '/Users/private/poster.png',
+    ];
+
+    for (final unsafe in unsafeValues) {
+      final item = parseMediaItem({
+        'ratingKey': 'unsafe',
+        'title': 'Unsafe artwork',
+        'type': 'movie',
+        'duration': 1000,
+        'thumb': unsafe,
+        'grandparentThumb': unsafe,
+        'art': unsafe,
+        'Image': [
+          {'type': 'clearLogo', 'url': unsafe},
+        ],
+      });
+
+      expect(item.thumbPath, isNull, reason: unsafe);
+      expect(item.grandparentThumbPath, isNull, reason: unsafe);
+      expect(item.artPath, isNull, reason: unsafe);
+      expect(item.clearLogoPath, isNull, reason: unsafe);
+    }
+  });
+
+  test('parses trimmed, deduplicated cast facts and actor names', () {
+    final item = parseMediaItem({
+      'ratingKey': 'cast-1',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'Role': [
+        {
+          'tag': '  Avery Vale  ',
+          'role': '  Detective Rowan  ',
+          'thumb': ' /library/metadata/avery/thumb ',
+        },
+        {'tag': 'avery vale', 'role': 'Duplicate'},
+        {'tag': '   ', 'role': 'Blank'},
+        {'role': 'Missing name'},
+        'malformed',
+        {'tag': 'Mina Park'},
+        {
+          'tag': 'Unsafe Absolute',
+          'role': 'Reporter',
+          'thumb': 'https://user@plex.invalid/library/metadata/2/thumb',
+        },
+        {
+          'tag': 'Unsafe Token',
+          'role': 'Dispatcher',
+          'thumb': '/library/metadata/3/thumb?X-Plex-Token=secret',
+        },
+        {
+          'tag': 'Unsafe Fragment',
+          'role': 'Archivist',
+          'thumb': '/library/metadata/4/thumb#private',
+        },
+      ],
+      'Director': [
+        {'tag': '  Jane Director  '},
+        {'tag': 'jane director'},
+      ],
+    });
+
+    expect(item.actors, [
+      'Avery Vale',
+      'Mina Park',
+      'Unsafe Absolute',
+      'Unsafe Token',
+      'Unsafe Fragment',
+    ]);
+    expect(item.cast, hasLength(5));
+    expect(item.directors, ['Jane Director']);
+    expect(item.cast.first.name, 'Avery Vale');
+    expect(item.cast.first.role, 'Detective Rowan');
+    expect(item.cast.first.thumbPath, '/library/metadata/avery/thumb');
+    expect(item.cast[1].role, isNull);
+    expect(item.cast[2].role, 'Reporter');
+    expect(item.cast[3].role, 'Dispatcher');
+    expect(item.cast[4].role, 'Archivist');
+    expect(
+      item.cast.skip(1),
+      everyElement(
+        predicate<PlexCastMember>((member) {
+          return member.thumbPath == null;
+        }),
+      ),
+    );
+  });
+
+  test(
+    'retains validated transcoder sources and drops unsafe cast portraits',
+    () {
+      const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
+      final item = parseMediaItem({
+        'ratingKey': 'cast-portraits',
+        'title': 'Episode',
+        'type': 'episode',
+        'duration': 1000,
+        'Role': [
+          {'tag': 'Trusted', 'thumb': trusted},
+          for (final unsafe in [
+            'file:///portrait.jpg',
+            '/library/../portrait.jpg',
+            'https://user@metadata-static.plex.tv/f/people/user.jpg',
+            'https://metadata-static.plex.tv/f/people/fragment.jpg#private',
+          ].indexed)
+            {'tag': 'Unsafe ${unsafe.$1}', 'thumb': unsafe.$2},
+        ],
+      });
+
+      expect(item.cast.first.thumbPath, trusted);
+      expect(
+        item.cast.skip(1).map((member) => member.thumbPath),
+        everyElement(isNull),
+      );
+    },
+  );
+
+  test('bounds rich cast without truncating actor names', () {
+    final roles = [
+      {'tag': 'Actor 0'},
+      {'tag': ' actor 0 ', 'role': 'Duplicate'},
+      for (var index = 1; index < maxRichCastMembers + 5; index++)
+        {'tag': 'Actor $index', 'role': 'Role $index'},
+    ];
+    final item = parseMediaItem({
+      'ratingKey': 'large-cast',
+      'title': 'Large cast',
+      'type': 'movie',
+      'duration': 1000,
+      'Role': roles,
+    });
+
+    expect(item.actors, [
+      for (var index = 0; index < maxRichCastMembers + 5; index++)
+        'Actor $index',
+    ]);
+    expect(item.cast, hasLength(maxRichCastMembers));
+    expect(item.cast.map((member) => member.name), [
+      for (var index = 0; index < maxRichCastMembers; index++) 'Actor $index',
+    ]);
+  });
+
+  test('rejects missing media identity', () {
+    expect(() => parseMediaItem({'title': 'No id'}), throwsA(isA<Exception>()));
+  });
+}

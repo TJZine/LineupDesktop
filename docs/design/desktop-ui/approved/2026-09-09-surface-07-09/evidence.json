@@ -1,0 +1,20 @@
+{
+  "head": "e9d4411982a052ce5283b2a17e81b0a787fbaf0e",
+  "source": "lib/app/onboarding_view.dart",
+  "source_sha256": "3b40cb913f5761ced6d8f6a8d555151cf433df4574b1ebf5ad7bf22b317e1f60",
+  "physical_size": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "fonts": "Pinned Roboto body; actual Arial wordmark; Windows Segoe UI validation outstanding",
+  "png_sha256": {
+    "surface-07-linking-browser-failure.png": "904f861fd20ace2d9000a9261f2f134d537b2256595ec95d52680bdfe6cef1d6",
+    "surface-07-linking-normal.png": "68d1d7897c661d9e3da320b22bd2c63728cb06d07a67f2a5d2283701fa81b945",
+    "surface-08-linking-expired.png": "465eff4c81c4c50b81d72467c0ea06c6522eddf4d2a453fd5d47ddf9fac70094",
+    "surface-09-linking-terminal-failure.png": "e0e18ca408545bc0ddc4dfb9df8038f4859eaaa5d28ed6e2887cbdb3f6fa9b7a"
+  },
+  "implementation_commit": "3a9d6b7e860172d9426dc1d278ed6a48f2f073af",
+  "approval": "locked. time for profile selection, profile pin, and server selection."
+}

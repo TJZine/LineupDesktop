@@ -1,0 +1,26 @@
+{
+  "status": "Approved at 1080p with explicit text-only final amendment; recapture waived by user",
+  "approval": "remove the rest and its locked. you dont need to inspect the visual or show me a visual after this small change we are only removing text",
+  "implementation_commit": "aa25168f267655bf9b76311c1fa8307e70f604f3",
+  "final_source_sha256": "61ada2a25c6d48535adcfd73e9934f403b8f4550d11d04537d964fbb9c81fd70",
+  "final_amendment": "Keep heading, lineup-removal/irreversibility explanation, roster and actions; remove type breakdown, Plex reassurance and regeneration note",
+  "prior_capture_source_sha256": "2318f34d3f4f7bc7b58cd1970fdb89a5e01b3498306e564ef33e6ce2c0c95adf",
+  "capture_boundary": "These PNGs precede the final approved text removals. They are not captures of the final commit. No final visual inspection or recapture was performed, as instructed.",
+  "viewport": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "images": {
+    "before-final-copy-mixed.png": "f3785b4559735fb275df9e46215c93b32f3b2a41f0210b549d5399a5667e4019",
+    "before-final-copy-single.png": "785c1917b6a916a83c9df87307f1075285ee13927197e718a5c02a98d5d2f93a"
+  },
+  "checks": "Six existing Channels behavior tests, targeted analysis, formatting and diff checks passed after copy removal",
+  "pending": [
+    "adaptive resolutions/DPI/enlarged text",
+    "grouped accessibility",
+    "physical Windows"
+  ],
+  "independent_review": "not specifically recommended"
+}

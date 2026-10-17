@@ -1,0 +1,29 @@
+{
+  "status": "Locked at1080p by explicit conditional user approval; root found no further refinements",
+  "base_commit": "fbc7e03f5c1bfeaecd68a17ea4c2e23734ad854c",
+  "sources": {
+    "lib/app/lineup_shell.dart": "f7e1cce7f29748fc8487227fdde97faa36500d0a8f0b6fce6494470ab0b3829f"
+  },
+  "images": {
+    "channels-1920x1080.png": "68b5f7d608df45141043bf5815ff20f2219be6bb9579ab70ba11cd9d76a50ba7",
+    "guide-1920x1080.png": "bc5c137c404e3565ae4eb491965f8f825101d981330fe2e5ab8df7bbb2e18785",
+    "diagnostics-1920x1080.png": "5c3429ed666af23c0c01f2623e37312a140ada2d7a6e931b637015306f2b03fc",
+    "player-1920x1080.png": "3876c97321c73b1421337e3689daa56fcc330c23ea358df086d8c348e6fcb7fc",
+    "settings-long-1920x1080.png": "e5ae97018c7d436f77318542f00cfeaffd9a9a54d9eaedc95193557551a029a5",
+    "settings-1920x1080.png": "fa6d595824bedb16e0e1b64ba61f5624fe57f5aa8e78c11dbaadb67f1b3ec56a"
+  },
+  "viewport": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "checks": "10 existing navigation/parity tests and focused analyzer passed in implementation task; root reviewed diff and six fresh production-shell capture/Escape focus-return cases passed. No root production changes.",
+  "limitations": [
+    "Synthetic identity and playback fixtures; no native-video proof",
+    "Grouped adaptive visual and exact-commit physical Windows checks pending"
+  ],
+  "implementation_commit": "ad7161124bef4c075681510a5fce390045412029",
+  "approval_message": "yes, if you have no further refinements locked.",
+  "independent_review": "Not specifically recommended"
+}

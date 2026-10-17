@@ -1,0 +1,587 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/diagnostics/diagnostics.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+
+void main() {
+  String reportFor(
+    Diagnostics diagnostics, {
+    String appBuild = '1',
+    String appVersion = '1.0.0',
+  }) => diagnostics.buildSupportReport(
+    diagnostics.snapshot(
+      reportTime: DateTime.utc(2026, 10, 12),
+      timeZone: 'UTC',
+      appVersion: appVersion,
+      appBuild: appBuild,
+      platform: 'windows',
+      plexServerSelected: false,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+    ),
+  );
+
+  test('release wrapper build identity has its own bounded grammar', () {
+    final diagnostics = Diagnostics();
+    const commit = 'e83778169ea6e00217140981213425c3ecae5358';
+    for (final build in ['42@$commit', '42', 'dev-local', 'Unavailable']) {
+      expect(reportFor(diagnostics, appBuild: build), contains('($build)'));
+    }
+    for (final build in [
+      '42@${commit.substring(1)}',
+      '42@${commit}a',
+      '42@${'g' * 40}',
+      '${'1' * 21}@$commit',
+      'dev@$commit',
+      '42@$commit\nprivate',
+      'private@example.com',
+      'https://private.example/?token=secret',
+      '/Users/private/title.mkv',
+      'token=secret',
+      'x' * 65,
+    ]) {
+      final report = reportFor(diagnostics, appBuild: build);
+      expect(report, contains('App: 1.0.0 (Unavailable)'), reason: build);
+      expect(report, isNot(contains(build)), reason: build);
+    }
+    expect(
+      reportFor(diagnostics, appVersion: '42@$commit'),
+      contains('App: Unavailable (1)'),
+    );
+  });
+
+  test(
+    'fixed failure categories export but unknown and sensitive values do not',
+    () {
+      final diagnostics = Diagnostics()..enabled = true;
+      const categories = [
+        'network-timeout',
+        'network-unavailable',
+        'rate-limited',
+        'auth-denied',
+        'response-unavailable',
+        'command_error',
+        'network_error',
+        'audio_decode_error',
+        'video_decode_error',
+        'audio_output_error',
+        'video_output_error',
+        'source_open_error',
+        'container_error',
+        'correlation_error',
+        'event_queue_overflow',
+        'mpv_error',
+        'required_engine_unavailable',
+        'initialize_failed',
+        'dispose_in_progress',
+        'not_initialized',
+        'invalid_argument',
+        'insecure_media_uri',
+        'window_error',
+        'native_command_error',
+        'native_playback_error',
+        'native_error',
+        'premature_end',
+        'stop_timeout',
+        'stop_failed',
+        'auth-required',
+        'auth-invalid',
+        'access-denied',
+        'incorrect-pin',
+        'unsupported',
+        'playback-unavailable',
+        'authorization-unavailable',
+        'invalid-library',
+        'playlist-unavailable',
+        'collection-unavailable',
+        'collection-scale-exceeded',
+        'response-too-large',
+        'library-page-invalid',
+        'library-page-too-large',
+        'library-page-not-progressing',
+        'library-scale-exceeded',
+        'playlist-page-invalid',
+        'playlist-page-too-large',
+        'playlist-page-not-progressing',
+        'playlist-scale-exceeded',
+      ];
+      for (final category in categories) {
+        diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
+          'code': category,
+        });
+      }
+      for (final category in [
+        'safe-looking-private-sentinel',
+        'https://private.example/?token=secret',
+        '/Users/private/title.mkv',
+        'Bearer private-secret',
+        'x' * 65,
+      ]) {
+        final snapshot = DiagnosticSupportSnapshot(
+          reportTime: DateTime.utc(2026, 10, 12),
+          timeZone: 'UTC',
+          appVersion: '1',
+          appBuild: '1',
+          platform: 'windows',
+          recordingEnabled: true,
+          plexServerSelected: false,
+          plexConnectionVerified: false,
+          playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+          events: [
+            DiagnosticEntry(
+              DateTime.utc(2026),
+              'playback',
+              'Native playback failed',
+              {'failureCode': category},
+            ),
+          ],
+        );
+        expect(Diagnostics.failureCategory(category), isNull);
+        expect(
+          diagnostics.buildSupportReport(snapshot),
+          isNot(contains(category)),
+        );
+      }
+      final report = reportFor(diagnostics);
+      for (final category in categories) {
+        expect(report, contains('code=$category)'));
+      }
+    },
+  );
+
+  test('display and renderer support facts are normalized independently', () {
+    final d = Diagnostics();
+    final snapshot = d.snapshot(
+      reportTime: DateTime.utc(2026),
+      timeZone: 'Eastern Standard Time',
+      appVersion: '1.0',
+      appBuild: '1',
+      platform: 'windows',
+      plexServerSelected: false,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(
+        state: PlayerState.paused,
+        displayReport: DisplayMatchingReport(
+          revision: 7,
+          session: DisplayMatchingSessionState.active,
+          observed: DisplayMatchingState.hdr,
+          outcome: DisplayMatchingOutcome.matched,
+          wrote: true,
+          owned: true,
+          reason: null,
+          route: DisplayMatchingRoute.hdrState,
+          activeColorMode: DisplayActiveColorMode.hdr,
+        ),
+        receivedTelemetry: PlayerTelemetry(
+          targetGamma: 'gamma2.2',
+          targetPrimaries: 'bt.709',
+          targetPixelFormat: 'rgb10a2',
+        ),
+      ),
+    );
+    final report = d.buildSupportReport(snapshot);
+    expect(report, contains('Windows display: hdr · hdrState · hdr'));
+    expect(
+      report,
+      contains(
+        'HDR matching: active · matched · revision=7 · wrote=true · owned=true',
+      ),
+    );
+    expect(report, contains('Renderer output: gamma2.2 · bt.709 · rgb10a2'));
+    expect(
+      Diagnostics.rendererOutputFact(
+        const PlayerTelemetry(
+          targetGamma: 'private-sentinel',
+          targetPrimaries: 'private-sentinel',
+          targetPixelFormat: 'private-sentinel',
+        ),
+      ),
+      isNot(contains('private-sentinel')),
+    );
+    d.dispose();
+  });
+
+  test('redacts sensitive text and stores only fixed event messages', () {
+    final diagnostics = Diagnostics();
+    diagnostics.enabled = true;
+    final redacted = Diagnostics.redact(
+      'Bearer abc https://plex.test/file?X-Plex-Token=secret /Users/person/movie.mkv',
+    );
+    expect(redacted, 'Bearer [REDACTED] [URL] [PATH]');
+    diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
+      'container': 'mpeg-ts',
+      'authorization': 'secret',
+    });
+    final entry = diagnostics.entries.single;
+    expect(entry.message, 'Cast portrait unavailable');
+    expect(entry.message, isNot(contains('abc')));
+    expect(entry.message, isNot(contains('secret')));
+    expect(entry.message, isNot(contains('/Users/person')));
+    expect(entry.context, {'container': 'mpeg-ts'});
+  });
+
+  test('stores only bounded structured context', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
+      'code': 'offline',
+      'failureCode': 'http_error',
+      'operation': 'seek',
+      'httpStatus': 401,
+      'count': 12,
+      'container': 'mpeg-ts',
+      'videoCodec': 'h264',
+      'audioCodec': 'eac3',
+      'dynamicRange': 'hdr10',
+      'videoOutput': 'gpu-next',
+      'hardwareDecoder': 'd3d11va',
+      'unknown': 'opaque-secret-sentinel',
+    });
+
+    expect(diagnostics.entries.single.context, {
+      'code': 'offline',
+      'failureCode': 'http_error',
+      'operation': 'seek',
+      'httpStatus': 401,
+      'count': 12,
+      'container': 'mpeg-ts',
+      'videoCodec': 'h264',
+      'audioCodec': 'eac3',
+      'dynamicRange': 'hdr10',
+      'videoOutput': 'gpu-next',
+      'hardwareDecoder': 'd3d11va',
+    });
+    expect(
+      () => diagnostics.entries.single.context['code'] = 'mutated',
+      throwsUnsupportedError,
+    );
+  });
+
+  test(
+    'replaces invalid or oversized strings and drops invalid primitives',
+    () {
+      final diagnostics = Diagnostics()..enabled = true;
+      diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
+        'code': 'opaque secret sentinel',
+        'failureCode': 'x' * 65,
+        'container': true,
+        'httpStatus': 99,
+        'count': -1,
+      });
+
+      expect(diagnostics.entries.single.context, {
+        'code': 'unexpected',
+        'failureCode': 'unexpected',
+      });
+    },
+  );
+
+  test('redacts authorization schemes and JSON auth tokens', () {
+    for (final value in {
+      'Authorization: Bearer bearer-secret': 'Authorization: Bearer [REDACTED]',
+      'Authorization: Basic basic-secret': 'Authorization: Basic [REDACTED]',
+      'Authorization: opaque-secret': 'Authorization: [REDACTED]',
+      'Bearer bearer-secret': 'Bearer [REDACTED]',
+      'Basic basic-secret': 'Basic [REDACTED]',
+      '{"authToken":"json-secret"}': '{"authToken":[REDACTED]}',
+      'X-Plex-Token=plex-secret': 'X-Plex-Token=[REDACTED]',
+    }.entries) {
+      final output = Diagnostics.redact(value.key);
+      expect(output, value.value);
+      expect(output, contains('[REDACTED]'));
+      expect(output, isNot(contains('secret')));
+    }
+  });
+
+  test('disabled diagnostics retain nothing and clear existing entries', () {
+    final diagnostics = Diagnostics();
+    var notifications = 0;
+    diagnostics.addListener(() => notifications++);
+    diagnostics.add(DiagnosticEvent.castPortraitUnavailable);
+    expect(diagnostics.entries, isEmpty);
+    expect(notifications, 0);
+
+    diagnostics.enabled = true;
+    diagnostics.add(DiagnosticEvent.castPortraitUnavailable);
+    expect(diagnostics.entries, hasLength(1));
+    expect(notifications, 2);
+
+    diagnostics.enabled = false;
+    expect(diagnostics.entries, isEmpty);
+    expect(notifications, 3);
+    diagnostics.enabled = false;
+    expect(notifications, 3);
+    diagnostics.dispose();
+
+    diagnostics.enabled = true;
+    expect(diagnostics.enabled, isFalse);
+    expect(notifications, 3);
+
+    diagnostics.add(DiagnosticEvent.castPortraitUnavailable);
+    expect(diagnostics.entries, isEmpty);
+    expect(notifications, 3);
+  });
+
+  test('retention remains bounded', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    for (var index = 0; index < 251; index++) {
+      diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
+        'count': index,
+      });
+    }
+
+    expect(diagnostics.entries, hasLength(250));
+    expect(diagnostics.entries.first.context, {'count': 1});
+  });
+
+  test('support report exports only typed facts and known producer events', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
+      'operation': 'seek',
+      'code': 'http_error',
+    });
+    diagnostics.add(DiagnosticEvent.nativePlaybackFailed, {
+      'videoCodec': 'safe-looking-secret-sentinel',
+    });
+    final snapshot = diagnostics.snapshot(
+      reportTime: DateTime.utc(2026, 9, 8, 12),
+      timeZone: 'Pacific Standard Time',
+      appVersion: '1.2.3',
+      appBuild: '42',
+      platform: 'windows',
+      plexServerSelected: true,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(
+        state: PlayerState.playing,
+        receivedTelemetry: PlayerTelemetry(
+          width: 1920,
+          height: 1080,
+          videoCodec: 'h264',
+          pixelFormat: 'yuv420p10le',
+          primaries: 'bt.2020',
+          colorMatrix: 'bt.2020-ncl',
+          signalPeak: 10,
+          videoOutput: 'safe-looking-secret-sentinel',
+        ),
+      ),
+    );
+
+    // An external snapshot still cannot admit an unknown event, even with
+    // otherwise recognized context. Typed producers do not replace this gate.
+    final report = diagnostics.buildSupportReport(
+      DiagnosticSupportSnapshot(
+        reportTime: snapshot.reportTime,
+        timeZone: snapshot.timeZone,
+        appVersion: snapshot.appVersion,
+        appBuild: snapshot.appBuild,
+        platform: snapshot.platform,
+        recordingEnabled: snapshot.recordingEnabled,
+        plexServerSelected: snapshot.plexServerSelected,
+        plexConnectionVerified: snapshot.plexConnectionVerified,
+        playback: snapshot.playback,
+        events: [
+          ...snapshot.events,
+          DiagnosticEntry(
+            snapshot.reportTime,
+            'safe-looking-area',
+            'safe-looking-secret-sentinel',
+            const {'videoCodec': 'h264'},
+          ),
+        ],
+      ),
+    );
+    expect(report, contains('Time zone: Pacific Standard Time'));
+    expect(report, contains('Playback method: Unknown'));
+    expect(report, contains('Plex server selected: Yes'));
+    expect(report, contains('Plex connection verified: No'));
+    expect(report, contains('Received video: 1920x1080'));
+    expect(report, contains('Received video codec: h264'));
+    expect(report, contains('Reported pixel format: yuv420p10le'));
+    expect(report, contains('Reported color primaries: bt.2020'));
+    expect(report, contains('Reported color matrix: bt.2020-ncl'));
+    expect(report, contains('Reported signal peak: 10.0'));
+    expect(report, contains('playback: Playback request failed'));
+    expect(report, contains('operation=seek'));
+    expect(report, contains('code=http_error'));
+    expect(report, isNot(contains('safe-looking-secret-sentinel')));
+    expect(
+      () => snapshot.events.add(
+        DiagnosticEntry(DateTime.now(), 'x', 'y', const {}),
+      ),
+      throwsUnsupportedError,
+    );
+  });
+
+  test(
+    'support report includes safe collection and portrait producer facts',
+    () {
+      final diagnostics = Diagnostics()..enabled = true;
+      diagnostics.add(DiagnosticEvent.someCollectionsCouldNotBeLoaded, {
+        'count': 2,
+      });
+      diagnostics.add(DiagnosticEvent.collectionDiscoveryUnavailable, {
+        'count': 1,
+      });
+      const portraitSources = [
+        'portrait_invalid',
+        'portrait_https',
+        'portrait_http',
+        'portrait_pms',
+      ];
+      const portraitFailures = [
+        'authorization',
+        'timeout',
+        'size',
+        'unavailable',
+        'transport',
+      ];
+      for (final source in portraitSources) {
+        for (final failure in portraitFailures) {
+          diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
+            'code': source,
+            'failureCode': failure,
+            'count': 1,
+          });
+        }
+      }
+      diagnostics.add(DiagnosticEvent.castPortraitUnavailable, {
+        'code': 'portrait_unknown_secret',
+        'failureCode': 'private-failure',
+        'count': 1,
+        'server': 'https://private.example/secret?X-Plex-Token=token-secret',
+        'path': '/Users/private/title.mkv',
+        'title': 'Private Title Sentinel',
+      });
+
+      final report = diagnostics.buildSupportReport(
+        diagnostics.snapshot(
+          reportTime: DateTime.utc(2026, 10, 8),
+          timeZone: 'UTC',
+          appVersion: '1.0.0',
+          appBuild: '1',
+          platform: 'windows',
+          plexServerSelected: true,
+          plexConnectionVerified: true,
+          playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+        ),
+      );
+
+      expect(
+        report,
+        contains(
+          'plex-library: Some collections could not be loaded (count=2)',
+        ),
+      );
+      expect(
+        report,
+        contains('plex-library: Collection discovery unavailable (count=1)'),
+      );
+      expect(
+        report,
+        contains(
+          'plex: Cast portrait unavailable (code=portrait_invalid, '
+          'failureCode=authorization, count=1)',
+        ),
+      );
+      for (final source in portraitSources) {
+        expect(report, contains('code=$source'));
+      }
+      for (final failure in portraitFailures) {
+        expect(report, contains('failureCode=$failure'));
+      }
+      expect(report, isNot(contains('portrait_unknown_secret')));
+      expect(report, isNot(contains('private-failure')));
+      expect(report, isNot(contains('private.example')));
+      expect(report, isNot(contains('Private Title Sentinel')));
+    },
+  );
+
+  test('library scan timing keeps only bounded redacted scan facts', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    diagnostics.add(DiagnosticEvent.libraryScanTiming, {
+      'scanPath': 'launch',
+      'libraryType': 'show',
+      'itemsMs': 1200,
+      'collectionsMs': 3400,
+      'showGenresMs': 560,
+      'items': 5000,
+      'collections': 300,
+      'members': 4200,
+      'shows': 80,
+      'title': 'Private Collection',
+    });
+    diagnostics.add(DiagnosticEvent.libraryScanTiming, {
+      'scanPath': 'Private Path',
+      'itemsMs': -1,
+      'collectionsMs': 86400001,
+      'members': 1000001,
+    });
+
+    expect(diagnostics.entries.first.context, {
+      'scanPath': 'launch',
+      'libraryType': 'show',
+      'itemsMs': 1200,
+      'collectionsMs': 3400,
+      'showGenresMs': 560,
+      'items': 5000,
+      'collections': 300,
+      'members': 4200,
+      'shows': 80,
+    });
+    expect(diagnostics.entries.last.context, {'scanPath': 'unexpected'});
+
+    final report = diagnostics.buildSupportReport(
+      diagnostics.snapshot(
+        reportTime: DateTime.utc(2026, 10, 7),
+        timeZone: 'UTC',
+        appVersion: '1.0.0',
+        appBuild: '1',
+        platform: 'windows',
+        plexServerSelected: true,
+        plexConnectionVerified: true,
+        playback: const PlaybackDiagnosticSnapshot(
+          state: PlayerState.idle,
+          receivedTelemetry: PlayerTelemetry(),
+        ),
+      ),
+    );
+    expect(
+      report,
+      contains(
+        'plex-library: Library scan timing (scanPath=launch, '
+        'libraryType=show, itemsMs=1200, collectionsMs=3400, '
+        'showGenresMs=560, items=5000, collections=300, members=4200, '
+        'shows=80)',
+      ),
+    );
+    expect(report, isNot(contains('Private')));
+    expect(report, isNot(contains('scanPath=unexpected')));
+  });
+
+  test('support report rejects unsafe metadata independently', () {
+    final diagnostics = Diagnostics();
+    final snapshot = diagnostics.snapshot(
+      reportTime: DateTime.utc(2026, 9, 8, 12),
+      timeZone: 'Pacific\nsecret',
+      appVersion: '1.2.3 private',
+      appBuild: '42',
+      platform: 'windows',
+      plexServerSelected: false,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(
+        state: PlayerState.idle,
+        receivedTelemetry: PlayerTelemetry(
+          pixelFormat: 'secret',
+          primaries: 'secret',
+          colorMatrix: 'secret',
+          signalPeak: double.infinity,
+        ),
+      ),
+    );
+
+    final report = diagnostics.buildSupportReport(snapshot);
+    expect(report, contains('Time zone: Unavailable'));
+    expect(report, contains('App: Unavailable (42)'));
+    expect(report, isNot(contains('secret')));
+    expect(report, isNot(contains('private')));
+    expect(report, isNot(contains('Reported signal peak:')));
+  });
+}

@@ -1,0 +1,65 @@
+<div class="viz-controls"><label class="form-label">Playback example<select class="form-select" id="dr-example"><option value="sdr">Direct Play · 1080p SDR</option><option value="hdr">Direct Stream · 4K HDR10</option><option value="transcode">Transcode · 1080p SDR</option><option value="idle">No active playback</option></select></label><label class="form-label">Event recording<select class="form-select" id="dr-record"><option value="on">On · recorded events</option><option value="empty">On · no events</option><option value="off">Off</option></select></label></div>
+<div id="diagnostics-refined"><div class="dr-frame"><section class="dr-screen" aria-label="Refined Diagnostics A, proportional 16:9 composition">
+<header><button id="dr-back">‹ &nbsp; Back</button><span class="dr-brand">LINEUP</span><span class="dr-support">Support</span></header>
+<div class="dr-heading"><div><h1>Diagnostics</h1><p>Playback information and recent support events.</p></div><button class="dr-primary" id="dr-copy">Copy redacted report</button></div>
+<div class="dr-workspace"><section class="dr-summary" aria-label="Current playback"><div class="dr-facts"><div><span>Playback</span><strong id="dr-playback">Playing · Direct Play</strong></div><div><span>Video</span><strong id="dr-video">1920 × 1080 · H.264</strong></div><div><span>Media signal</span><strong id="dr-signal">SDR · BT.709</strong></div><div><span>Plex</span><strong>Server responding</strong></div></div><details class="dr-tech"><summary>Technical details</summary><div class="dr-technical-content"><dl><div><dt>Lineup</dt><dd>0.1.0 · build 1</dd></div><div><dt>Platform</dt><dd>Windows</dd></div><div><dt>Hardware decoder</dt><dd id="dr-decoder">D3D11VA</dd></div><div><dt>Video output</dt><dd id="dr-output">gpu-next</dd></div><div><dt>Transfer / pixel format</dt><dd id="dr-transfer">BT.1886 · yuv420p</dd></div></dl><dl><div><dt>Video handling</dt><dd id="dr-vhandling">Original</dd></div><div><dt>Audio handling</dt><dd id="dr-ahandling">Original · AAC</dd></div><div><dt>Subtitle handling</dt><dd id="dr-shandling">Off</dd></div></dl></div></details></section>
+<section class="dr-events"><div class="dr-events-head"><h2>Recent events</h2><span class="dr-count" id="dr-count">6 events · newest first</span><div class="dr-recording"><span id="dr-status">Recording on</span><button id="dr-settings">Recording settings ›</button></div></div><div class="dr-list" id="dr-list"></div><div class="dr-empty" id="dr-empty" hidden><h3 id="dr-empty-title">No events recorded yet</h3><p id="dr-empty-copy">Reproduce the issue to collect support events.</p></div><div class="dr-retention">This session only · Up to 250 recent events retained</div></section></div>
+<footer><span>Reports exclude credentials, URLs and private paths. Review before sharing.</span><span id="dr-feedback" role="status">Synthetic preview · 16:9</span></footer>
+</section></div></div>
+<style>
+#diagnostics-refined{color-scheme:dark;color:#f3e8d2;margin-top:12px;--dr-film:#090806;--dr-booth:#12100d;--dr-line:#2b261e;--dr-quiet:#c7b99f;--dr-amber:#cc9f5b}
+#diagnostics-refined *{box-sizing:border-box}
+#diagnostics-refined .dr-frame{overflow:hidden;background:var(--dr-film)}
+#diagnostics-refined .dr-screen{width:1280px;height:720px;transform-origin:top left;background:var(--dr-film);padding:0 48px 24px;font:16px/1.45 Arial,sans-serif;display:flex;flex-direction:column}
+#diagnostics-refined header{height:64px;flex-shrink:0;display:flex;align-items:center;border-bottom:1px solid var(--dr-line);gap:32px;font-size:14px;color:var(--dr-quiet)}
+#diagnostics-refined .dr-brand{font-size:17px;letter-spacing:4px;color:#f3e8d2}
+#diagnostics-refined .dr-support{margin-left:auto}
+#diagnostics-refined .dr-heading{display:flex;align-items:center;justify-content:space-between;padding:24px 0;gap:24px}
+#diagnostics-refined h1{font-size:32px;font-weight:500;letter-spacing:-.6px;margin:0 0 5px}
+#diagnostics-refined p{margin:0;color:var(--dr-quiet)}
+#diagnostics-refined button{font:inherit;cursor:pointer;color:inherit;border:0;border-radius:5px;padding:11px 16px;background:transparent}
+#diagnostics-refined button:hover,#diagnostics-refined summary:hover{background:#1a1712}
+#diagnostics-refined header button{padding-left:0}
+#diagnostics-refined .dr-primary{background:var(--dr-amber);color:#090806;font-weight:500;white-space:nowrap}
+#diagnostics-refined .dr-primary:hover{background:#dcaf6b}
+#diagnostics-refined .dr-workspace{display:flex;flex-direction:column;gap:20px;min-height:0;flex:1}
+#diagnostics-refined .dr-summary{border:1px solid var(--dr-line);border-radius:8px;background:var(--dr-booth);padding:18px 22px 8px;flex-shrink:0}
+#diagnostics-refined .dr-facts{display:grid;grid-template-columns:1.18fr 1.14fr 1fr 1fr;gap:28px;padding-bottom:14px}
+#diagnostics-refined .dr-facts span{display:block;font-size:13px;color:var(--dr-quiet);margin-bottom:5px}
+#diagnostics-refined strong{font-size:17px;font-weight:500;display:block;overflow-wrap:anywhere}
+#diagnostics-refined .dr-tech{font-size:14px;border-top:1px solid var(--dr-line)}
+#diagnostics-refined .dr-tech summary{padding:10px 0 4px;cursor:pointer;width:100%}
+#diagnostics-refined .dr-technical-content{padding:12px 0 10px;display:grid;gap:15px}
+#diagnostics-refined dl{display:flex;gap:40px;flex-wrap:wrap;margin:0}
+#diagnostics-refined dt{font-size:12px;color:var(--dr-quiet)}
+#diagnostics-refined dd{margin:3px 0 0;color:#f3e8d2;font-size:14px}
+#diagnostics-refined .dr-events{display:flex;flex-direction:column;min-height:0;flex:1}
+#diagnostics-refined .dr-events-head{display:flex;align-items:center;gap:20px;margin-bottom:10px}
+#diagnostics-refined h2{font-size:19px;font-weight:500;margin:0}
+#diagnostics-refined .dr-count{color:var(--dr-quiet);font-size:13px}
+#diagnostics-refined .dr-recording{margin-left:auto;display:flex;gap:24px;align-items:center;font-size:13px;color:var(--dr-quiet)}
+#diagnostics-refined #dr-settings{font-size:14px;padding:7px 0}
+#diagnostics-refined .dr-list{overflow:auto;min-height:0;flex:1;border-top:1px solid var(--dr-line)}
+#diagnostics-refined .dr-event{border-bottom:1px solid var(--dr-line)}
+#diagnostics-refined .dr-event summary{display:grid;grid-template-columns:91px 112px 1fr 20px;gap:16px;align-items:baseline;padding:14px 12px;list-style:none;font-size:15px;cursor:pointer}
+#diagnostics-refined .dr-event summary::-webkit-details-marker{display:none}
+#diagnostics-refined .dr-event time,#diagnostics-refined .dr-area{color:var(--dr-quiet);font-size:13px;font-variant-numeric:tabular-nums}
+#diagnostics-refined .dr-chevron{color:var(--dr-quiet)}
+#diagnostics-refined .dr-event[open] .dr-chevron{transform:rotate(90deg)}
+#diagnostics-refined .dr-event dl{padding:0 12px 16px 247px;gap:28px}
+#diagnostics-refined .dr-retention{padding-top:12px;font-size:12px;color:var(--dr-quiet)}
+#diagnostics-refined footer{display:flex;justify-content:space-between;gap:20px;color:var(--dr-quiet);font-size:12px;padding-top:18px;flex-shrink:0}
+#diagnostics-refined .dr-empty{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border-top:1px solid var(--dr-line);gap:8px}
+#diagnostics-refined [hidden]{display:none!important}
+#diagnostics-refined h3{font-size:20px;font-weight:500;margin:0}
+#diagnostics-refined .dr-empty p{max-width:480px;font-size:15px}
+</style>
+<script>
+(()=>{const root=document.getElementById('diagnostics-refined'),frame=root.querySelector('.dr-frame'),screen=root.querySelector('.dr-screen'),list=root.querySelector('#dr-list');const get=id=>root.querySelector('#dr-'+id);
+const events=[['8:42:18 PM','Playback','Plex playback selected','Operation','playback'],['8:41:56 PM','Playback','Playback request failed','HTTP status','503'],['8:36:04 PM','Guide','Schedule request timed out','Operation','schedule'],['8:30:12 PM','Libraries','Some playlists could not be loaded','Count','2'],['8:25:33 PM','Playback','Plex playback selected','Operation','playback'],['8:17:09 PM','Playback','Plex playback selected','Operation','playback']];
+list.innerHTML=events.map(e=>'<details class="dr-event"><summary><time>'+e[0]+'</time><span class="dr-area">'+e[1]+'</span><span>'+e[2]+'</span><span class="dr-chevron" aria-hidden="true">›</span></summary><dl><div><dt>'+e[3]+'</dt><dd>'+e[4]+'</dd></div></dl></details>').join('');
+const examples={sdr:['Playing · Direct Play','1920 × 1080 · H.264','SDR · BT.709','BT.1886 · yuv420p','Original','Original · AAC','Off'],hdr:['Playing · Direct Stream','3840 × 2160 · HEVC','HDR10 · BT.2020','PQ · yuv420p10','Copied · HEVC','Copied · AAC','Copied · SRT'],transcode:['Playing · Transcode','1920 × 1080 · H.264','SDR · BT.709','BT.1886 · yuv420p','Converted · HEVC → H.264','Converted · AC3 → AAC','Burned into video'],idle:['Stopped','Not available','Not available','Not available','Not available','Not available','Not available']};
+document.getElementById('dr-example').onchange=e=>{['playback','video','signal','transfer','vhandling','ahandling','shandling'].forEach((key,i)=>get(key).textContent=examples[e.target.value][i]);get('decoder').textContent=e.target.value==='idle'?'Not available':'D3D11VA';get('output').textContent=e.target.value==='idle'?'Not available':'gpu-next';};
+document.getElementById('dr-record').onchange=e=>{const empty=e.target.value!=='on',off=e.target.value==='off';list.hidden=empty;get('empty').hidden=!empty;get('status').textContent=off?'Recording off':'Recording on';get('count').textContent=empty?'0 events':'6 events · newest first';get('empty-title').textContent=off?'Diagnostic recording is off':'No events recorded yet';get('empty-copy').textContent=off?'Enable recording in Settings → Support, then reproduce the issue.':'Reproduce the issue to collect support events.';};
+get('copy').onclick=()=>get('feedback').textContent='Preview · report copied feedback';get('settings').onclick=()=>get('feedback').textContent='Opens Settings → Support';get('back').onclick=()=>get('feedback').textContent='Returns to the previous screen';function fit(){screen.style.transform='scale('+frame.clientWidth/1280+')';frame.style.height=frame.clientWidth*720/1280+'px';}new ResizeObserver(fit).observe(frame);fit();})();
+</script>

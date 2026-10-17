@@ -1,0 +1,46 @@
+<div class="viz-controls"><label class="form-label">Preview state<select class="form-select" id="pin-state"><option value="entry">Enter PIN</option><option value="error">Incorrect PIN</option><option value="checking">Checking PIN</option></select></label></div>
+<style>
+#pin-options{--film:#090806;--booth:#12100d;--raised:#1a1712;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;--error:#ff7768;font:16px/1.45 Arial,sans-serif;color:var(--paper);color-scheme:dark;max-width:640px;margin:16px auto}
+#pin-options *{box-sizing:border-box}
+#pin-options .pn-dialog{background:var(--booth);border:1px solid var(--strong);border-radius:8px;padding:28px;container-type:inline-size}
+#pin-options .pn-body{display:grid;grid-template-columns:minmax(0,1fr) 224px;gap:32px;align-items:center}
+#pin-options .pn-identity{text-align:left;min-width:0}
+#pin-options .pn-avatar{width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:var(--raised);border-radius:50%;font-size:24px;color:var(--support);margin-bottom:16px}
+#pin-options h2{font-size:24px;line-height:1.2;margin:0 0 8px}
+#pin-options .pn-name{font-size:16px;margin:0;color:var(--support);overflow-wrap:anywhere}
+#pin-options .pn-dots{display:flex;gap:12px;margin:24px 0 12px;min-height:20px}
+#pin-options .pn-dot{width:16px;height:16px;border-radius:50%;border:1px solid var(--strong);background:var(--film)}
+#pin-options .pn-dot.filled{background:var(--amber);border-color:var(--amber)}
+#pin-options .pn-hint{font-size:13px;color:var(--support);margin:0}
+#pin-options .pn-pad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#pin-options button{font:inherit;color:var(--paper);cursor:pointer;border-radius:8px;background:var(--raised);border:1px solid var(--strong);min-height:52px;padding:8px;max-width:100%}
+#pin-options button:hover{background:var(--quiet)}
+#pin-options button:disabled{opacity:.5;cursor:default}
+#pin-options .pn-control{font-size:12px}
+#pin-options .pn-footer{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-top:24px}
+#pin-options .pn-status{font-size:13px;color:var(--support);margin:0;flex:1;min-width:0}
+#pin-options .pn-status.error{color:var(--error)}
+#pin-options .pn-cancel{background:transparent;border-color:transparent;color:var(--support);font-size:14px;min-height:44px;padding:8px 12px}
+#pin-options[data-layout="stack"]{max-width:384px}
+#pin-options[data-layout="stack"] .pn-body{grid-template-columns:1fr;gap:24px}
+#pin-options[data-layout="stack"] .pn-identity{text-align:center}
+#pin-options[data-layout="stack"] .pn-avatar{margin-left:auto;margin-right:auto}
+#pin-options[data-layout="stack"] .pn-dots{justify-content:center}
+#pin-options[data-layout="stack"] .pn-pad{width:224px;max-width:100%;margin:auto}
+@container(max-width:460px){#pin-options .pn-body{grid-template-columns:1fr;gap:24px}#pin-options .pn-identity{text-align:center}#pin-options .pn-avatar{margin-left:auto;margin-right:auto}#pin-options .pn-dots{justify-content:center}#pin-options .pn-pad{width:224px;max-width:100%;margin:auto}}
+</style>
+<style>
+#pin-options .pn-dialog{padding:24px}
+#pin-options[data-layout="stack"] .pn-body{gap:16px}
+#pin-options .pn-person{display:flex;align-items:center;justify-content:center;gap:12px;margin:16px auto 0;max-width:280px}
+#pin-options[data-layout="stack"] .pn-person .pn-avatar{width:40px;height:40px;font-size:20px;flex:none;margin:0}
+#pin-options .pn-person .pn-name{text-align:left;font-size:15px}
+#pin-options .pn-dots{margin:20px 0 8px}
+#pin-options .pn-dot{border-color:var(--support)}
+#pin-options .pn-status{min-height:38px;display:flex;align-items:center;justify-content:center}
+#pin-options .pn-footer{margin-top:12px;justify-content:center}
+</style>
+<div id="pin-options" data-layout="stack"><section class="pn-dialog" aria-label="PIN dialog design preview"><div class="pn-body"><div class="pn-identity"><h2>Enter PIN</h2><div class="pn-person"><div class="pn-avatar" aria-hidden="true">A</div><p class="pn-name">Alexandra Montgomery-Sinclair</p></div><div class="pn-dots" role="status" aria-label="0 of 4 digits entered"><span class="pn-dot"></span><span class="pn-dot"></span><span class="pn-dot"></span><span class="pn-dot"></span></div><p class="pn-status" role="status">Type or use the number pad.</p></div><div class="pn-pad" aria-label="Number pad"><button data-digit>1</button><button data-digit>2</button><button data-digit>3</button><button data-digit>4</button><button data-digit>5</button><button data-digit>6</button><button data-digit>7</button><button data-digit>8</button><button data-digit>9</button><button class="pn-control" data-delete>Delete</button><button data-digit>0</button><span aria-hidden="true"></span></div></div><footer class="pn-footer"><button class="pn-cancel" data-cancel>Cancel</button></footer></section></div>
+<script>
+(()=>{const root=document.getElementById('pin-options'),state=document.getElementById('pin-state'),status=root.querySelector('.pn-status');let count=0;function render(){const checking=state.value==='checking';root.querySelectorAll('.pn-dot').forEach((dot,i)=>dot.classList.toggle('filled',i<(checking?4:count)));root.querySelector('.pn-dots').setAttribute('aria-label',(checking?4:count)+' of 4 digits entered');root.querySelectorAll('button').forEach(b=>b.disabled=checking);root.querySelector('[data-delete]').disabled=checking||count===0;status.classList.toggle('error',state.value==='error');status.textContent=checking?'Checking PIN…':state.value==='error'?'Incorrect PIN. Try again.':'Type or use the number pad.';}function digit(){if(state.value==='checking')return;state.value='entry';count++;if(count===4)state.value='checking';render();}root.querySelectorAll('[data-digit]').forEach(b=>b.onclick=digit);root.querySelector('[data-delete]').onclick=()=>{count=Math.max(0,count-1);state.value='entry';render();};root.querySelector('[data-cancel]').onclick=()=>{count=0;render();status.textContent='Preview: return to profile selection.';};root.addEventListener('keydown',e=>{if(/^[0-9]$/.test(e.key)){e.preventDefault();digit();}else if(e.key==='Backspace'){e.preventDefault();if(state.value!=='checking'){count=Math.max(0,count-1);state.value='entry';render();}}else if(e.key==='Escape'&&state.value!=='checking'){e.preventDefault();root.querySelector('[data-cancel]').click();}});state.onchange=()=>{count=0;render();};render();})();
+</script>

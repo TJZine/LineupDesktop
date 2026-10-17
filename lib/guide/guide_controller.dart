@@ -1,0 +1,1276 @@
+import 'dart:async';
+import 'dart:collection';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import '../app/lineup_controller.dart';
+import '../channels/channel.dart';
+import '../channels/channel_artwork.dart';
+import '../channels/scheduler.dart';
+import '../diagnostics/diagnostics.dart';
+import '../settings/lineup_settings.dart';
+
+typedef GuideScheduleLoader = Future<ScheduleIndex> Function(Channel channel);
+
+abstract final class GuideGeometry {
+  static ({double left, double width}) programRect({
+    required DateTime windowStart,
+    required DateTime windowEnd,
+    required DateTime programStart,
+    required DateTime programEnd,
+    required double viewportWidth,
+  }) {
+    final total = windowEnd.difference(windowStart).inMicroseconds;
+    if (total <= 0 || viewportWidth <= 0) return (left: 0, width: 0);
+    final left =
+        (viewportWidth *
+                programStart.difference(windowStart).inMicroseconds /
+                total)
+            .clamp(0.0, viewportWidth)
+            .toDouble();
+    final right =
+        (viewportWidth *
+                programEnd.difference(windowStart).inMicroseconds /
+                total)
+            .clamp(0.0, viewportWidth)
+            .toDouble();
+    return (left: left, width: (right - left).clamp(0.0, viewportWidth));
+  }
+
+  static ({int first, int count}) visibleRows({
+    required double scrollOffset,
+    required double viewportHeight,
+    required double rowHeight,
+    required int totalRows,
+  }) {
+    if (totalRows <= 0 || rowHeight <= 0 || viewportHeight <= 0) {
+      return (first: 0, count: 0);
+    }
+    final first = (scrollOffset / rowHeight).floor().clamp(0, totalRows - 1);
+    final count = (viewportHeight / rowHeight).floor().clamp(
+      1,
+      totalRows - first,
+    );
+    return (first: first, count: count);
+  }
+}
+
+enum GuideLoadState { loading, retrying, ready, error }
+
+enum GuideArtworkKind { poster, backdrop, clearLogo }
+
+@immutable
+class GuideProgram {
+  const GuideProgram({required this.channelId, required this.scheduled});
+
+  final String channelId;
+  final ScheduledProgram scheduled;
+
+  String get id =>
+      '$channelId:${scheduled.item.id}:${scheduled.start.microsecondsSinceEpoch}';
+  bool isCurrentAt(DateTime now) =>
+      !now.isBefore(scheduled.start) && now.isBefore(scheduled.end);
+}
+
+@immutable
+class GuideRowData {
+  const GuideRowData({
+    required this.state,
+    this.programs = const [],
+    this.error,
+  });
+
+  final GuideLoadState state;
+  final List<GuideProgram> programs;
+  final Object? error;
+}
+
+class GuideController extends ChangeNotifier {
+  static const maximumCachedArtworkEntries = 12;
+  static const maximumConcurrentArtworkLoads = 4;
+
+  GuideController({
+    required this.lineup,
+    GuideScheduleLoader? loadSchedule,
+    DateTime Function()? clock,
+    this.maximumCachedRows = 64,
+    this.maximumConcurrentLoads = 4,
+    this.scheduleLoadTimeout = const Duration(seconds: 15),
+    this.currentProgramWaitTimeout = const Duration(seconds: 15),
+  }) : _loadSchedule = loadSchedule ?? lineup.loadScheduleFor,
+       _clock = clock ?? DateTime.now {
+    _channels = lineup.channels;
+    _contentGeneration = lineup.contentGeneration;
+    _updateVisibleChannels();
+    _settings = lineup.settings;
+    _windowStart = _initialWindowStart;
+    _focusTime = _clock();
+    _focusedChannelId = _channels.firstOrNull?.id;
+    lineup.addListener(_reconcileLineup);
+  }
+
+  final LineupController lineup;
+  final GuideScheduleLoader _loadSchedule;
+  final DateTime Function() _clock;
+  final int maximumCachedRows;
+  final int maximumConcurrentLoads;
+  final Duration scheduleLoadTimeout;
+  final Duration currentProgramWaitTimeout;
+  final LinkedHashMap<String, GuideRowData> _rows = LinkedHashMap();
+  final LinkedHashMap<String, ScheduleIndex> _schedules = LinkedHashMap();
+  final LinkedHashMap<String, _ArtworkRequest> _artwork = LinkedHashMap();
+  final Set<String> _failedChannelIds = {};
+  final Set<String> _retryingChannelIds = {};
+  final Map<String, int> _loadingGenerationByChannel = {};
+  final Queue<Channel> _pendingExplicit = Queue();
+  final Set<String> _explicitQueuedIds = {};
+  final Queue<Channel> _pendingViewport = Queue();
+  final Set<String> _viewportQueuedIds = {};
+  final Queue<_ArtworkRequest> _pendingArtwork = Queue();
+  final Set<Completer<void>> _rowWaiters = {};
+  final Set<_GuideLoadDeadline> _loadDeadlines = {};
+  List<Channel> _channels = const [];
+  Map<String, Channel> _channelById = const {};
+  List<Channel> _visibleChannels = const [];
+  Map<String, int> _visibleIndexById = const {};
+  Set<String> _availableLibraryIds = const {};
+  LineupSettings _settings = const LineupSettings();
+  late DateTime _windowStart;
+  late DateTime _focusTime;
+  String? _focusedChannelId;
+  String? _focusedProgramId;
+  bool _followingLive = true;
+  bool _inspectionActive = false;
+  GuideProgram? _inspectedProgram;
+  ({String channelId, DateTime time})? _pendingProgramFocus;
+  ({String channelId, String programId})? _selected;
+  String? _libraryFilterId;
+  String _searchQuery = '';
+  ({String channelId, String? programId})? _preservedFocused;
+  int _generation = 0;
+  late int _contentGeneration;
+  int _activeLoads = 0;
+  int _activeArtworkLoads = 0;
+  bool _disposed = false;
+  bool _projectionNotificationScheduled = false;
+  int? _projectionNotificationGeneration;
+  int? _projectionNotificationContentGeneration;
+  double _verticalRowPosition = 0;
+
+  List<Channel> get channels => _visibleChannels;
+
+  DateTime get windowStart => _windowStart;
+  DateTime get windowEnd =>
+      _windowStart.add(Duration(hours: _settings.guideHours));
+  DateTime get focusTime => _focusTime;
+  DateTime get now => _clock();
+  String? get focusedChannelId => _focusedChannelId;
+  String? get focusedProgramId => _focusedProgramId;
+  String? get selectedChannelId => _selected?.channelId;
+  String? get selectedProgramId => _selected?.programId;
+  String? get libraryFilterId => _libraryFilterId;
+  String get searchQuery => _searchQuery;
+  int get guideHours => _settings.guideHours;
+  bool get followingLive => _followingLive;
+  bool get nowOffScreen {
+    final current = now;
+    return current.isBefore(windowStart) || !current.isBefore(windowEnd);
+  }
+
+  bool get canBrowseEarlier => _windowStart.isAfter(_liveBoundary);
+  int get cachedRowCount => _rows.length;
+  int get activeLoadCount => _activeLoads;
+  int get scheduleGeneration => _generation;
+  double verticalOffsetFor(double rowHeight) =>
+      rowHeight.isFinite && rowHeight > 0
+      ? _verticalRowPosition * rowHeight
+      : 0;
+  int get focusedChannelIndex =>
+      _visibleIndexById[_focusedChannelId] ??
+      (_visibleChannels.isEmpty ? -1 : 0);
+  Channel? get focusedChannel => _channelById[_focusedChannelId];
+
+  GuideRowData row(String channelId) =>
+      _rows[channelId] ??
+      GuideRowData(
+        state: _retryingChannelIds.contains(channelId)
+            ? GuideLoadState.retrying
+            : _failedChannelIds.contains(channelId)
+            ? GuideLoadState.error
+            : GuideLoadState.loading,
+      );
+
+  GuideProgram? get selectedProgram {
+    final selected = _selected;
+    final id = selected?.programId;
+    final channelId = selected?.channelId;
+    if (id == null || channelId == null) return null;
+    return row(channelId).programs
+        .where((program) => program.id == id)
+        .firstOrNull;
+  }
+
+  GuideProgram? get focusedProgram {
+    final id = _focusedProgramId;
+    final channelId = _focusedChannelId;
+    if (id == null || channelId == null) return null;
+    final visible = row(channelId).programs
+        .where((program) => program.id == id)
+        .firstOrNull;
+    if (visible != null) return visible;
+    final inspected = _inspectedProgram;
+    return inspected?.id == id && inspected?.channelId == channelId
+        ? inspected
+        : null;
+  }
+
+  GuideProgram? currentProgram(String channelId, [DateTime? at]) {
+    final now = at ?? _clock();
+    final schedule = _schedules[channelId];
+    final channel = _channelById[channelId];
+    if (schedule != null && channel != null) {
+      try {
+        final scheduled = programAt(now, channel.anchor, schedule);
+        return GuideProgram(channelId: channelId, scheduled: scheduled);
+      } on ScheduleBuildException catch (error) {
+        _failProjection(channelId, error);
+        return null;
+      }
+    }
+    return row(channelId).programs
+        .where((program) => program.isCurrentAt(now))
+        .firstOrNull;
+  }
+
+  GuideProgram? nextProgram(String channelId, [DateTime? at]) {
+    final current = currentProgram(channelId, at);
+    final schedule = _schedules[channelId];
+    final channel = _channelById[channelId];
+    if (current == null || schedule == null || channel == null) return null;
+    try {
+      final scheduled = programAt(
+        current.scheduled.end,
+        channel.anchor,
+        schedule,
+      );
+      return GuideProgram(channelId: channelId, scheduled: scheduled);
+    } on ScheduleBuildException catch (error) {
+      _failProjection(channelId, error);
+      return null;
+    }
+  }
+
+  Future<GuideProgram?> ensureCurrentProgram(String channelId) async {
+    if (_disposed) return null;
+    final channel = _channelById[channelId];
+    if (channel == null) return null;
+    if (_schedules.containsKey(channelId)) return currentProgram(channelId);
+    final existing = _rows[channelId];
+    if (existing?.state == GuideLoadState.error) _rows.remove(channelId);
+    _failedChannelIds.remove(channelId);
+    final generation = _generation;
+    _request(channel, prioritize: true);
+    final completer = Completer<void>();
+    _rowWaiters.add(completer);
+    void changed() {
+      final value = row(channelId);
+      if (_schedules.containsKey(channelId) ||
+          !_isLoadInProgress(value.state)) {
+        if (!completer.isCompleted) completer.complete();
+      } else if (generation != _generation ||
+          !_channelById.containsKey(channelId)) {
+        if (!completer.isCompleted) completer.complete();
+      }
+    }
+
+    addListener(changed);
+    changed();
+    try {
+      await completer.future.timeout(currentProgramWaitTimeout);
+    } on TimeoutException {
+      lineup.diagnostics.add(DiagnosticEvent.guideCurrentProgramWaitTimedOut, {
+        'code': 'wait_timeout',
+      });
+      return null;
+    } finally {
+      _rowWaiters.remove(completer);
+      removeListener(changed);
+    }
+    return currentProgram(channelId);
+  }
+
+  Set<String> get availableLibraryIds => _availableLibraryIds;
+
+  Future<Uint8List?> artworkFor(
+    GuideProgram program, [
+    GuideArtworkKind kind = GuideArtworkKind.poster,
+  ]) {
+    if (_disposed) return Future.value();
+    final item = program.scheduled.item;
+    final path = switch (kind) {
+      GuideArtworkKind.poster => posterPath(item),
+      GuideArtworkKind.backdrop => item.backdrop,
+      GuideArtworkKind.clearLogo => item.clearLogo,
+    };
+    if (path == null || path.toString().isEmpty) return Future.value();
+    return _artworkForPath(path, '${item.id}|${kind.name}|$path');
+  }
+
+  Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) {
+    if (_disposed || path.toString().isEmpty) return Future.value();
+    final key = width == null && height == null
+        ? 'path|$path'
+        : 'path|${width}x$height|$path';
+    return _artworkForPath(path, key, width: width, height: height);
+  }
+
+  Future<Uint8List?> _artworkForPath(
+    Uri path,
+    String key, {
+    int? width,
+    int? height,
+  }) {
+    final existing = _artwork.remove(key);
+    if (existing != null) {
+      _artwork[key] = existing;
+      return existing.completer.future;
+    }
+    final completer = Completer<Uint8List?>();
+    final request = _ArtworkRequest(
+      key,
+      path,
+      completer,
+      _generation,
+      width: width,
+      height: height,
+    );
+    _artwork[key] = request;
+    _pendingArtwork.add(request);
+    while (_artwork.length > maximumCachedArtworkEntries) {
+      final evicted = _artwork.keys.first;
+      _artwork.remove(evicted);
+      _pendingArtwork.removeWhere((request) {
+        if (request.key != evicted) return false;
+        if (!request.completer.isCompleted) request.completer.complete(null);
+        return true;
+      });
+    }
+    _pumpArtwork();
+    return completer.future;
+  }
+
+  void _pumpArtwork() {
+    if (_disposed) return;
+    while (_activeArtworkLoads < maximumConcurrentArtworkLoads &&
+        _pendingArtwork.isNotEmpty) {
+      final request = _pendingArtwork.removeFirst();
+      if (!identical(_artwork[request.key], request)) {
+        if (!request.completer.isCompleted) request.completer.complete(null);
+        continue;
+      }
+      _activeArtworkLoads++;
+      unawaited(_loadArtwork(request));
+    }
+  }
+
+  Future<void> _loadArtwork(_ArtworkRequest request) async {
+    try {
+      Uint8List? value;
+      try {
+        value = await lineup.artworkForPath(
+          request.path,
+          width: request.width,
+          height: request.height,
+        );
+      } catch (_) {
+        value = null;
+      }
+      final cached = identical(_artwork[request.key], request);
+      final current = request.generation == _generation && cached;
+      if (!current && cached) _artwork.remove(request.key);
+      if (!request.completer.isCompleted) {
+        request.completer.complete(current ? value : null);
+      }
+    } finally {
+      _activeArtworkLoads--;
+      if (!_disposed) _pumpArtwork();
+    }
+  }
+
+  /// Cached viewport results can be evicted by explicit offscreen work without
+  /// changing the channel snapshot or schedule generation.
+  bool needsViewportRefresh(int firstIndex, int visibleCount) {
+    if (_disposed) return false;
+    final first = firstIndex.clamp(0, channels.length);
+    final last = (firstIndex + visibleCount).clamp(first, channels.length);
+    for (var index = first; index < last; index++) {
+      final id = channels[index].id;
+      if (!_rows.containsKey(id) &&
+          !_failedChannelIds.contains(id) &&
+          !_retryingChannelIds.contains(id) &&
+          _loadingGenerationByChannel[id] != _generation &&
+          !_explicitQueuedIds.contains(id) &&
+          !_viewportQueuedIds.contains(id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void requestViewport(int firstIndex, int visibleCount) {
+    final visible = channels;
+    _pendingViewport.clear();
+    _viewportQueuedIds.clear();
+    if (visible.isEmpty) return;
+    final first = firstIndex.clamp(0, visible.length);
+    final last = (firstIndex + visibleCount).clamp(first, visible.length);
+    final start = (first - 3).clamp(0, visible.length);
+    final end = (last + 6).clamp(0, visible.length);
+    for (var index = first; index < last; index++) {
+      _request(visible[index], viewport: true, pump: false);
+    }
+    for (var index = last; index < end; index++) {
+      _request(visible[index], viewport: true, pump: false);
+    }
+    for (var index = first - 1; index >= start; index--) {
+      _request(visible[index], viewport: true, pump: false);
+    }
+    _pump();
+  }
+
+  void requestChannels(Iterable<Channel> channels) {
+    for (final channel in channels) {
+      _request(channel);
+    }
+  }
+
+  Future<void> retry(String channelId) async {
+    if (_disposed || !_failedChannelIds.contains(channelId)) return;
+    final channel = _channelById[channelId];
+    if (channel == null) return;
+    _failedChannelIds.remove(channelId);
+    _retryingChannelIds.add(channelId);
+    _putRow(channelId, const GuideRowData(state: GuideLoadState.retrying));
+    notifyListeners();
+    _request(channel, prioritize: true, retrying: true);
+  }
+
+  /// Retries the authoritative failed rows, including filtered and offscreen rows.
+  void retryFailedRows() {
+    if (_disposed) return;
+    final failed = _failedChannelIds
+        .map((id) => _channelById[id])
+        .nonNulls
+        .toList();
+    for (final channel in failed) {
+      _failedChannelIds.remove(channel.id);
+      _retryingChannelIds.add(channel.id);
+      _putRow(channel.id, const GuideRowData(state: GuideLoadState.retrying));
+      _request(channel, retrying: true, pump: false);
+    }
+    if (failed.isEmpty) return;
+    notifyListeners();
+    _pump();
+  }
+
+  void focusProgram(GuideProgram program) {
+    _focusedChannelId = program.channelId;
+    _focusedProgramId = program.id;
+    _focusTime = _programFocusTime(program);
+    _retainInspection();
+    notifyListeners();
+  }
+
+  void selectProgram(GuideProgram program) {
+    _focusedChannelId = program.channelId;
+    _focusedProgramId = program.id;
+    _selected = (channelId: program.channelId, programId: program.id);
+    _focusTime = _programFocusTime(program);
+    _retainInspection();
+    notifyListeners();
+  }
+
+  GuideProgram? selectFocusedProgram() {
+    final program = focusedProgram;
+    if (program != null) selectProgram(program);
+    return program;
+  }
+
+  void rememberVerticalOffset(double value, double rowHeight) {
+    if (value.isFinite && value >= 0 && rowHeight.isFinite && rowHeight > 0) {
+      _verticalRowPosition = value / rowHeight;
+    }
+  }
+
+  void moveVertical(int offset) {
+    final visible = channels;
+    if (visible.isEmpty) return;
+    final current = focusedChannelIndex;
+    final target = ((current < 0 ? 0 : current) + offset).clamp(
+      0,
+      visible.length - 1,
+    );
+    final programIntent =
+        _focusedProgramId != null || _pendingProgramFocus != null;
+    _pendingProgramFocus = null;
+    _focusedChannelId = visible[target].id;
+    if (_followingLive && !_inspectionActive) _focusTime = _clock();
+    _selectAtFocusTime();
+    if (_inspectionActive) {
+      if (!programIntent) _focusedProgramId = null;
+      _inspectedProgram = focusedProgram;
+      if (programIntent && _focusedProgramId == null) {
+        _pendingProgramFocus = (
+          channelId: _focusedChannelId!,
+          time: _focusTime,
+        );
+      }
+    }
+    notifyListeners();
+  }
+
+  void page(int offset, int visibleRows) {
+    if (channels.isEmpty) return;
+    moveVertical(offset * visibleRows.clamp(1, channels.length));
+  }
+
+  void moveHorizontal(int offset) {
+    if (offset == 0) return;
+    _inspectionActive = false;
+    _inspectedProgram = null;
+    _pendingProgramFocus = null;
+    final programs = _focusedChannelId == null
+        ? const <GuideProgram>[]
+        : row(_focusedChannelId!).programs;
+    final current = programs.indexWhere(
+      (program) => program.id == _focusedProgramId,
+    );
+    if (offset > 0 && current == -1 && programs.isNotEmpty) {
+      _focusedProgramId = programs.first.id;
+      _retainInspection();
+      notifyListeners();
+      return;
+    }
+    if (offset < 0 && !canBrowseEarlier && current <= 0) {
+      _focusedProgramId = null;
+      _retainInspection();
+      notifyListeners();
+      return;
+    }
+    if (current >= 0 &&
+        current + offset >= 0 &&
+        current + offset < programs.length) {
+      final selected = programs[current + offset];
+      _focusedProgramId = selected.id;
+      _focusTime = _programFocusTime(selected);
+      if (_focusTime.isBefore(_windowStart) ||
+          !_focusTime.isBefore(windowEnd)) {
+        _shiftWindow(offset);
+      }
+    } else {
+      _focusTime = _focusTime.add(Duration(minutes: 30 * offset));
+      _shiftWindow(offset);
+      final latest = windowEnd.isAfter(_windowStart)
+          ? windowEnd.subtract(const Duration(microseconds: 1))
+          : _windowStart;
+      if (_focusTime.isBefore(_windowStart)) {
+        _focusTime = _windowStart;
+      } else if (_focusTime.isAfter(latest)) {
+        _focusTime = latest;
+      }
+      _selectAtFocusTime();
+    }
+    _retainInspection();
+    notifyListeners();
+  }
+
+  void playToNow() {
+    _followingLive = true;
+    _inspectionActive = false;
+    _inspectedProgram = null;
+    _pendingProgramFocus = null;
+    final now = _clock();
+    _focusTime = now;
+    _windowStart = _floorHalfHour(now);
+    _reloadRows();
+  }
+
+  /// Refresh from the existing presentation clock; only transitions reproject.
+  void refreshForPresentation() {
+    if (_disposed || !_followingLive) return;
+    final current = _clock();
+    final target = _floorHalfHour(current);
+    if (!_inspectionActive) _focusTime = current;
+    if (target != _windowStart) {
+      _windowStart = target;
+      _reloadRows(preserveErrors: true);
+    } else if (!_inspectionActive) {
+      final previous = _focusedProgramId;
+      _selectAtFocusTime();
+      if (previous != _focusedProgramId) notifyListeners();
+    }
+  }
+
+  void _retainInspection() {
+    _pendingProgramFocus = null;
+    _inspectionActive = true;
+    _inspectedProgram = focusedProgram;
+  }
+
+  void moveWindow(int halfHours) {
+    if (halfHours == 0) return;
+    final next = _windowStart.add(Duration(minutes: halfHours * 30));
+    final target = next.isBefore(_liveBoundary) ? _liveBoundary : next;
+    if (target == _windowStart) {
+      if (halfHours < 0) {
+        _focusedProgramId = null;
+        notifyListeners();
+      }
+      return;
+    }
+    _pendingProgramFocus = null;
+    _followingLive = false;
+    _windowStart = target;
+    _reloadRows();
+  }
+
+  void setSearchQuery(String value) {
+    final query = value.trim().toLowerCase();
+    if (_searchQuery == query) return;
+    _rememberInspection();
+    _searchQuery = query;
+    _applyFilters();
+    _finishFilterSessionIfInactive();
+    notifyListeners();
+  }
+
+  Future<bool> setGuideHours(int hours) async {
+    if (!LineupSettings.guideHoursOptions.contains(hours) ||
+        hours == guideHours) {
+      return true;
+    }
+    try {
+      await lineup.updateSettings(
+        (current) => current.copyWith(guideHours: hours),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void setLibraryFilter(String? libraryId) {
+    final next = libraryId != null && !_availableLibraryIds.contains(libraryId)
+        ? null
+        : libraryId;
+    if (_libraryFilterId == next) return;
+    _rememberInspection();
+    _libraryFilterId = next;
+    _applyFilters();
+    _finishFilterSessionIfInactive();
+    notifyListeners();
+  }
+
+  void _shiftWindow(int direction) {
+    moveWindow(direction);
+  }
+
+  void _selectAtFocusTime() {
+    final channelId = _focusedChannelId;
+    if (channelId == null) return;
+    final programs = row(channelId).programs;
+    var match = programs
+        .where(
+          (program) =>
+              !_focusTime.isBefore(program.scheduled.start) &&
+              _focusTime.isBefore(program.scheduled.end),
+        )
+        .firstOrNull;
+    if (match == null && programs.isNotEmpty) {
+      match = programs.reduce((nearest, candidate) {
+        final nearestDistance = _distanceFrom(_focusTime, nearest);
+        final candidateDistance = _distanceFrom(_focusTime, candidate);
+        return candidateDistance < nearestDistance ? candidate : nearest;
+      });
+    }
+    _focusedProgramId = match?.id;
+  }
+
+  DateTime _programFocusTime(GuideProgram program) {
+    if (!_focusTime.isBefore(program.scheduled.start) &&
+        _focusTime.isBefore(program.scheduled.end)) {
+      return _focusTime;
+    }
+    final current = _clock();
+    if (!current.isBefore(program.scheduled.start) &&
+        current.isBefore(program.scheduled.end)) {
+      return current;
+    }
+    return program.scheduled.start.add(
+      Duration(
+        microseconds:
+            program.scheduled.end
+                .difference(program.scheduled.start)
+                .inMicroseconds ~/
+            2,
+      ),
+    );
+  }
+
+  void _request(
+    Channel channel, {
+    bool viewport = false,
+    bool prioritize = false,
+    bool retrying = false,
+    bool pump = true,
+  }) {
+    if (_disposed || !_channelById.containsKey(channel.id)) return;
+    if (_loadingGenerationByChannel[channel.id] == _generation) return;
+    if (!retrying &&
+        (_rows.containsKey(channel.id) ||
+            _failedChannelIds.contains(channel.id))) {
+      return;
+    }
+    final cachedSchedule = _schedules[channel.id];
+    if (cachedSchedule != null) {
+      _putRow(channel.id, _projectedRow(channel, cachedSchedule));
+      _updateFocusAndSelection(channel.id);
+      notifyListeners();
+      return;
+    }
+    if (viewport) {
+      if (_explicitQueuedIds.contains(channel.id) ||
+          !_viewportQueuedIds.add(channel.id)) {
+        return;
+      }
+      _pendingViewport.add(channel);
+    } else {
+      if (_viewportQueuedIds.remove(channel.id)) {
+        _pendingViewport.removeWhere((queued) => queued.id == channel.id);
+      }
+      if (!_explicitQueuedIds.add(channel.id)) {
+        if (prioritize) {
+          _pendingExplicit.removeWhere((queued) => queued.id == channel.id);
+          _pendingExplicit.addFirst(channel);
+        }
+        return;
+      }
+      if (prioritize) {
+        _pendingExplicit.addFirst(channel);
+      } else {
+        _pendingExplicit.add(channel);
+      }
+    }
+    if (pump) _pump();
+  }
+
+  void _pump() {
+    if (_disposed) return;
+    while (_activeLoads < maximumConcurrentLoads &&
+        (_pendingExplicit.isNotEmpty || _pendingViewport.isNotEmpty)) {
+      final explicit = _pendingExplicit.isNotEmpty;
+      final channel = explicit
+          ? _pendingExplicit.removeFirst()
+          : _pendingViewport.removeFirst();
+      if (explicit) {
+        _explicitQueuedIds.remove(channel.id);
+      } else {
+        _viewportQueuedIds.remove(channel.id);
+      }
+      final generation = _generation;
+      _activeLoads++;
+      _loadingGenerationByChannel[channel.id] = generation;
+      _putRow(
+        channel.id,
+        GuideRowData(
+          state: _retryingChannelIds.contains(channel.id)
+              ? GuideLoadState.retrying
+              : GuideLoadState.loading,
+        ),
+      );
+      final cachedSchedule = _schedules.remove(channel.id);
+      final loading = cachedSchedule == null
+          ? _loadScheduleWithTimeout(channel)
+          : Future<ScheduleIndex>.value(cachedSchedule);
+      if (cachedSchedule != null) _schedules[channel.id] = cachedSchedule;
+      unawaited(_loadRow(channel, generation, loading));
+    }
+  }
+
+  Future<void> _loadRow(
+    Channel channel,
+    int generation,
+    Future<ScheduleIndex> loading,
+  ) async {
+    try {
+      final schedule = await loading;
+      if (_disposed ||
+          generation != _generation ||
+          !_channelById.containsKey(channel.id)) {
+        return;
+      }
+      _loadingGenerationByChannel.remove(channel.id);
+      _failedChannelIds.remove(channel.id);
+      _retryingChannelIds.remove(channel.id);
+      _putSchedule(channel.id, schedule);
+      _putRow(channel.id, _projectedRow(channel, schedule));
+      _updateFocusAndSelection(channel.id);
+    } catch (error) {
+      if (_disposed ||
+          generation != _generation ||
+          !_channelById.containsKey(channel.id)) {
+        return;
+      }
+      _loadingGenerationByChannel.remove(channel.id);
+      _retryingChannelIds.remove(channel.id);
+      _schedules.remove(channel.id);
+      _failedChannelIds.add(channel.id);
+      if (error is TimeoutException) {
+        lineup.diagnostics.add(DiagnosticEvent.guideScheduleLoadTimedOut, {
+          'code': 'timeout',
+        });
+      }
+      _putRow(
+        channel.id,
+        GuideRowData(state: GuideLoadState.error, error: error),
+      );
+    } finally {
+      _activeLoads--;
+      if (!_disposed) {
+        _pump();
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<ScheduleIndex> _loadScheduleWithTimeout(Channel channel) {
+    final result = Completer<ScheduleIndex>();
+    late final _GuideLoadDeadline deadline;
+    final timeout = Timer(scheduleLoadTimeout, () {
+      _loadDeadlines.remove(deadline);
+      if (!result.isCompleted) {
+        result.completeError(TimeoutException('Guide schedule load timed out'));
+      }
+    });
+    deadline = _GuideLoadDeadline(timeout, result);
+    _loadDeadlines.add(deadline);
+    void releaseDeadline() {
+      timeout.cancel();
+      _loadDeadlines.remove(deadline);
+    }
+
+    unawaited(_forwardScheduleResult(channel, result));
+    return result.future.whenComplete(releaseDeadline);
+  }
+
+  Future<void> _forwardScheduleResult(
+    Channel channel,
+    Completer<ScheduleIndex> result,
+  ) async {
+    try {
+      final schedule = await _loadSchedule(channel);
+      if (!result.isCompleted) result.complete(schedule);
+    } catch (error, stackTrace) {
+      if (!result.isCompleted) result.completeError(error, stackTrace);
+    }
+  }
+
+  void _putRow(String id, GuideRowData value) {
+    _rows.remove(id);
+    _rows[id] = value;
+    while (_rows.length > maximumCachedRows) {
+      final evicted = _rows.keys.firstWhere(
+        (id) => !_isLoadInProgress(_rows[id]!.state),
+        orElse: () => _rows.keys.first,
+      );
+      _rows.remove(evicted);
+    }
+  }
+
+  void _putSchedule(String id, ScheduleIndex value) {
+    _schedules.remove(id);
+    _schedules[id] = value;
+    while (_schedules.length > maximumCachedRows) {
+      _schedules.remove(_schedules.keys.first);
+    }
+  }
+
+  void _failProjection(
+    String channelId,
+    Object error, {
+    bool scheduleNotification = true,
+  }) {
+    _schedules.remove(channelId);
+    _retryingChannelIds.remove(channelId);
+    _failedChannelIds.add(channelId);
+    _putRow(channelId, GuideRowData(state: GuideLoadState.error, error: error));
+    if (scheduleNotification) _scheduleProjectionNotification();
+  }
+
+  void _scheduleProjectionNotification() {
+    if (_disposed) return;
+    final generation = _generation;
+    final contentGeneration = _contentGeneration;
+    if (_projectionNotificationScheduled &&
+        _projectionNotificationGeneration == generation &&
+        _projectionNotificationContentGeneration == contentGeneration) {
+      return;
+    }
+    _projectionNotificationScheduled = true;
+    _projectionNotificationGeneration = generation;
+    _projectionNotificationContentGeneration = contentGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_projectionNotificationGeneration == generation &&
+          _projectionNotificationContentGeneration == contentGeneration) {
+        _projectionNotificationScheduled = false;
+      }
+      if (_disposed ||
+          generation != _generation ||
+          contentGeneration != _contentGeneration) {
+        return;
+      }
+      notifyListeners();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  GuideRowData _projectedRow(Channel channel, ScheduleIndex schedule) {
+    try {
+      return GuideRowData(
+        state: GuideLoadState.ready,
+        programs:
+            scheduleWindow(_windowStart, windowEnd, channel.anchor, schedule)
+                .map(
+                  (scheduled) =>
+                      GuideProgram(channelId: channel.id, scheduled: scheduled),
+                )
+                .toList(growable: false),
+      );
+    } on ScheduleBuildException catch (error) {
+      _failProjection(channel.id, error, scheduleNotification: false);
+      return GuideRowData(state: GuideLoadState.error, error: error);
+    }
+  }
+
+  void _updateFocusAndSelection(String channelId) {
+    final pending = _pendingProgramFocus;
+    if (pending?.channelId == channelId && _focusedChannelId == channelId) {
+      final program = currentProgram(channelId, pending!.time);
+      if (program != null) {
+        _focusTime = pending.time;
+        _focusedProgramId = program.id;
+        _inspectedProgram = program;
+        _pendingProgramFocus = null;
+      }
+    }
+    if (_focusedChannelId == channelId && !_inspectionActive) {
+      _selectAtFocusTime();
+    }
+    final selected = _selected;
+    if (selected?.channelId != channelId) return;
+    final selectedId = selected?.programId;
+    if (selectedId == null ||
+        !row(channelId).programs.any((program) => program.id == selectedId)) {
+      _selected = null;
+    }
+  }
+
+  void _reprojectCachedRows({bool preserveErrors = false}) {
+    final retained = _rows.entries
+        .where(
+          (entry) =>
+              (_isLoadInProgress(entry.value.state) ||
+                  (preserveErrors &&
+                      entry.value.state == GuideLoadState.error)) &&
+              _channelById.containsKey(entry.key),
+        )
+        .toList(growable: false);
+    _rows.clear();
+    for (final entry in retained) {
+      _rows[entry.key] = entry.value;
+    }
+    for (final entry in _schedules.entries.toList(growable: false)) {
+      final channel = _channelById[entry.key];
+      if (channel != null) {
+        _rows[entry.key] = _projectedRow(channel, entry.value);
+      }
+    }
+    while (_rows.length > maximumCachedRows) {
+      final evicted = _rows.keys.firstWhere(
+        (id) => !_isLoadInProgress(_rows[id]!.state),
+        orElse: () => _rows.keys.first,
+      );
+      _rows.remove(evicted);
+    }
+    for (final entry in _schedules.entries.toList(growable: false)) {
+      if (_rows.containsKey(entry.key)) _updateFocusAndSelection(entry.key);
+    }
+  }
+
+  void _reloadRows({bool clearSchedules = false, bool preserveErrors = false}) {
+    if (clearSchedules) {
+      _inspectionActive = false;
+      _inspectedProgram = null;
+      _pendingProgramFocus = null;
+      _failedChannelIds.clear();
+      _retryingChannelIds.clear();
+      _loadingGenerationByChannel.clear();
+      if (_followingLive) _focusTime = _clock();
+      _generation++;
+      _pendingExplicit.clear();
+      _explicitQueuedIds.clear();
+      _pendingViewport.clear();
+      _viewportQueuedIds.clear();
+      _rows.clear();
+      _schedules.clear();
+    } else {
+      _reprojectCachedRows(preserveErrors: preserveErrors);
+    }
+    if (clearSchedules) _artwork.clear();
+    if (clearSchedules) {
+      for (final request in _pendingArtwork) {
+        if (!request.completer.isCompleted) request.completer.complete(null);
+      }
+      _pendingArtwork.clear();
+    }
+    notifyListeners();
+  }
+
+  void _reconcileLineup() {
+    final old = _channels;
+    final focusedIndex = focusedChannelIndex;
+    final next = lineup.channels;
+    final contentChanged = _contentGeneration != lineup.contentGeneration;
+    _contentGeneration = lineup.contentGeneration;
+    final lineupChanged =
+        contentChanged ||
+        (!identical(old, next) && !_listEqualsBy(old, next, _channelEquals));
+    final schedulesChanged = contentChanged || !_sameSchedulesById(old, next);
+    final settingsChanged = _settings.guideHours != lineup.settings.guideHours;
+    _channels = next;
+    _settings = lineup.settings;
+    if (contentChanged) {
+      _libraryFilterId = null;
+      _searchQuery = '';
+      _preservedFocused = null;
+      _focusedProgramId = null;
+      _selected = null;
+    }
+    if (lineupChanged) {
+      _updateVisibleChannels();
+      if (_libraryFilterId != null &&
+          !availableLibraryIds.contains(_libraryFilterId)) {
+        _libraryFilterId = null;
+        _updateVisibleChannels();
+      }
+      if (!_visibleIndexById.containsKey(_focusedChannelId)) {
+        if (_visibleChannels.isEmpty) {
+          _focusedChannelId = null;
+        } else {
+          final fallback = focusedIndex < 0
+              ? 0
+              : focusedIndex.clamp(0, _visibleChannels.length - 1);
+          _focusedChannelId = _visibleChannels[fallback].id;
+        }
+        _focusedProgramId = null;
+      }
+      if (!_visibleIndexById.containsKey(_selected?.channelId)) {
+        _selected = null;
+      }
+      _reloadRows(clearSchedules: schedulesChanged);
+    } else if (settingsChanged) {
+      _reloadRows();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  void _updateVisibleChannels() {
+    _channelById = {for (final channel in _channels) channel.id: channel};
+    _availableLibraryIds = {
+      for (final channel in _channels) ..._sourceLibraryIds(channel.source),
+    };
+    final filter = _libraryFilterId;
+    final query = _searchQuery;
+    _visibleChannels = _channels
+        .where((channel) {
+          if (filter != null &&
+              !_sourceLibraryIds(channel.source).contains(filter)) {
+            return false;
+          }
+          return query.isEmpty ||
+              channel.name.toLowerCase().contains(query) ||
+              '${channel.number}'.contains(query);
+        })
+        .toList(growable: false);
+    _visibleIndexById = {
+      for (var index = 0; index < _visibleChannels.length; index++)
+        _visibleChannels[index].id: index,
+    };
+  }
+
+  DateTime get _initialWindowStart => _liveBoundary;
+  DateTime get _liveBoundary => _floorHalfHour(_clock());
+
+  void _rememberInspection() {
+    final channelId = _focusedChannelId;
+    if (channelId == null || _preservedFocused != null) return;
+    _preservedFocused = (channelId: channelId, programId: _focusedProgramId);
+  }
+
+  void _finishFilterSessionIfInactive() {
+    if (_libraryFilterId != null || _searchQuery.isNotEmpty) return;
+    _preservedFocused = null;
+  }
+
+  void _applyFilters() {
+    _pendingProgramFocus = null;
+    _updateVisibleChannels();
+    if (_visibleChannels.isEmpty) {
+      _focusedChannelId = null;
+      _focusedProgramId = null;
+      _selected = null;
+      return;
+    }
+    if (_visibleIndexById.containsKey(_focusedChannelId)) {
+      if (!_visibleIndexById.containsKey(_selected?.channelId)) {
+        _selected = null;
+      }
+      return;
+    }
+    final preserved = _preservedFocused;
+    if (preserved != null &&
+        _visibleIndexById.containsKey(preserved.channelId)) {
+      _focusedChannelId = preserved.channelId;
+      _focusedProgramId = preserved.programId;
+      _preservedFocused = null;
+    } else {
+      _focusedChannelId = _visibleChannels.first.id;
+      _focusedProgramId = null;
+    }
+    _inspectionActive =
+        _inspectedProgram?.id == _focusedProgramId &&
+        _inspectedProgram?.channelId == _focusedChannelId;
+    if (!_inspectionActive) _selectAtFocusTime();
+    if (!_visibleIndexById.containsKey(_selected?.channelId)) {
+      _selected = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _pendingProgramFocus = null;
+    _failedChannelIds.clear();
+    _retryingChannelIds.clear();
+    _loadingGenerationByChannel.clear();
+    lineup.removeListener(_reconcileLineup);
+    _generation++;
+    _pendingExplicit.clear();
+    _explicitQueuedIds.clear();
+    _pendingViewport.clear();
+    _viewportQueuedIds.clear();
+    for (final deadline in _loadDeadlines) {
+      deadline.timer.cancel();
+      if (!deadline.result.isCompleted) {
+        deadline.result.completeError(StateError('Guide disposed'));
+      }
+    }
+    _loadDeadlines.clear();
+    for (final request in _pendingArtwork) {
+      if (!request.completer.isCompleted) request.completer.complete(null);
+    }
+    _pendingArtwork.clear();
+    _artwork.clear();
+    for (final waiter in _rowWaiters) {
+      if (!waiter.isCompleted) waiter.complete();
+    }
+    _rowWaiters.clear();
+    super.dispose();
+  }
+}
+
+class _GuideLoadDeadline {
+  const _GuideLoadDeadline(this.timer, this.result);
+
+  final Timer timer;
+  final Completer<ScheduleIndex> result;
+}
+
+class _ArtworkRequest {
+  const _ArtworkRequest(
+    this.key,
+    this.path,
+    this.completer,
+    this.generation, {
+    this.width,
+    this.height,
+  });
+
+  final String key;
+  final Uri path;
+  final Completer<Uint8List?> completer;
+  final int generation;
+  final int? width;
+  final int? height;
+}
+
+bool _channelEquals(Channel left, Channel right) =>
+    left.id == right.id &&
+    left.number == right.number &&
+    left.name == right.name &&
+    canonicalScheduleIdentity(left) == canonicalScheduleIdentity(right);
+
+bool _isLoadInProgress(GuideLoadState state) => switch (state) {
+  GuideLoadState.loading || GuideLoadState.retrying => true,
+  GuideLoadState.ready || GuideLoadState.error => false,
+};
+
+bool _sameSchedulesById(List<Channel> left, List<Channel> right) {
+  if (left.length != right.length) return false;
+  final identities = {
+    for (final channel in left) channel.id: canonicalScheduleIdentity(channel),
+  };
+  return right.every(
+    (channel) => identities[channel.id] == canonicalScheduleIdentity(channel),
+  );
+}
+
+bool _listEqualsBy<T>(List<T> left, List<T> right, bool Function(T, T) equals) {
+  if (identical(left, right)) return true;
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (!equals(left[index], right[index])) return false;
+  }
+  return true;
+}
+
+DateTime _floorHalfHour(DateTime value) {
+  // Subtract elapsed time from the actual instant, retaining the timezone and
+  // the identity of either repeated local hour during a fall-back transition.
+  return value.subtract(
+    Duration(
+      minutes: value.minute % 30,
+      seconds: value.second,
+      milliseconds: value.millisecond,
+      microseconds: value.microsecond,
+    ),
+  );
+}
+
+int _distanceFrom(DateTime time, GuideProgram program) {
+  if (time.isBefore(program.scheduled.start)) {
+    return program.scheduled.start.difference(time).inMicroseconds;
+  }
+  return time.difference(program.scheduled.end).inMicroseconds;
+}
+
+Set<String> _sourceLibraryIds(ContentSource source) => switch (source) {
+  LibrarySource(:final libraryId) => {libraryId},
+  MixedSource(:final sources) => {
+    for (final source in sources) ..._sourceLibraryIds(source),
+  },
+  ManualSource() || PlaylistSource() => const {},
+};

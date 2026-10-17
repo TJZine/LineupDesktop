@@ -1,0 +1,530 @@
+# Lineup Desktop User Guide
+
+**Status:** Pre-release guidance for private Windows testers and portable
+Flutter UI evaluation.
+
+Lineup Desktop builds scheduled virtual television channels from a Plex library
+and presents them through a desktop Guide and Player. This guide describes the
+current Flutter-native application. It does not apply to the historical
+Electron implementation preserved on `electron-ui`.
+
+## Before you start
+
+| Requirement | Current expectation |
+| --- | --- |
+| Operating system | Windows 10 or Windows 11, x64, for native playback and packaged testing |
+| Graphics runtime | A current GPU driver or Vulkan Runtime that provides `vulkan-1.dll` |
+| Plex | A Plex account and a reachable Plex Media Server with accessible movie or TV libraries |
+| Build | A complete private portable package supplied by the maintainer; no public release is available yet |
+| Network | Access to Plex authentication and to the selected Plex server, directly or through an available remote/relay connection |
+
+macOS 12 or newer can run the portable Flutter application for UI and workflow
+development, but media playback is intentionally reported as unsupported.
+
+## Install a private Windows build
+
+1. Obtain the package and its SHA-256 hash directly from the maintainer.
+2. Verify the archive hash before extracting it.
+3. Extract the entire archive to a normal user-writable directory.
+4. Read `SYSTEM-REQUIREMENTS.txt`, `BUILD-INFO.txt`, and
+   `BUILD-PROVENANCE.json` in the package.
+5. Launch `lineup_desktop.exe`.
+
+Do not move only `lineup_desktop.exe`; the adjacent DLLs and `data` directory
+are part of the application. Do not run Lineup Desktop as Administrator.
+
+A private pre-release build may be unsigned. Proceed past an operating-system
+warning only when the package came through the expected private testing channel
+and its hash matches the maintainer-provided value.
+
+## First-run setup
+
+### 1. Link Plex
+
+Select **Sign in to Plex**. Scan the displayed QR code or visit `plex.tv/link`
+on another device and enter the four-character code. The screen shows the
+remaining expiration time.
+
+When a code expires or Plex rejects or cannot complete the current link
+attempt, Lineup stops waiting and presents **Request a new code**. If secure
+credential storage cannot be confirmed, use **Retry secure cancellation**
+before starting another attempt. Cancelling sign-in removes the pending
+credential state before returning to the welcome screen.
+
+### 2. Choose a Plex Home profile
+
+Select the person who is watching. Protected profiles open a four-digit PIN
+keypad and also accept number-row or numpad input.
+
+Profile cards show `PIN`, `Admin`, and `Restricted` only when the current Plex
+Home response establishes those facts. `Active` identifies the currently
+selected profile when the picker is reopened; it is not a focus indicator.
+
+The profile determines the secure credential scope, selected server, saved
+lineup, and related persisted state. Switching profiles does not intentionally
+reuse another profile's server or lineup.
+
+### 3. Select a Plex Media Server
+
+Choose a discovered server. Lineup prioritizes usable direct connections before
+relay connections. Each row distinguishes an owned server from a shared one. **Current** marks
+the connected server, while **Previously used** identifies a saved selection. Only the selected server shows its measured path and
+latency; 500 ms or more is labeled **Very slow**, and a relay is labeled
+**Limited** rather than failed. Lower measured latencies show their route and
+value without a Slow warning.
+
+Plex supplies each discovered server with its own PMS credential, separate from
+the Plex.tv account or Home-profile credential. Lineup keeps that server
+credential only for the running session and uses it only to contact that PMS;
+it is not saved in application state or shown in the interface.
+
+When no server appears:
+
+- confirm Plex Media Server is running and reachable;
+- select **Retry discovery**;
+- switch profiles when the expected server belongs to another profile; or
+- select another server. The picker also offers **Sign out** when you need to
+  link Plex again; signing out uses a confirmation and stops playback.
+
+### 4. Build the initial lineup
+
+Channel Setup has three stages:
+
+1. **Choose libraries** and scan their media. You can cancel a running scan,
+   retry only failed libraries, or continue with the ready subset.
+2. **Configure channels** using playlists, collections, recently added content,
+   genres, studios, actors, decades, and directors. Select per-library or grouped
+   sources, playback order, minimum programs, and the generated-channel limit.
+3. **Review** the complete roster and explicitly apply the plan.
+
+Scans report pages, items, and ready, empty, unsupported, cancelled, or failed
+outcomes. Continuing commits the selected ready libraries; cancelled or failed
+scans preserve the previous committed selection. Successful libraries remain
+available when retrying failures in the same profile/server scope.
+
+Collection discovery supports at most 100,000 records per collection listing and
+100,000 collection member occurrences per library scan. Each listing or member
+stream also stops at 1,000 pages. Repeated membership
+across collections and reads used to recover recreated collections count toward
+the member limit. If setup reports a collection limit, reduce the collection
+inventory in Plex before rescanning; retrying an unchanged inventory will reach
+the same limit. Saved channels are preserved, and incomplete collection discovery
+cannot confirm that a saved source has disappeared. A saved lineup that requires
+those collections cannot restore or commit that library until discovery succeeds.
+Temporary collection failures instead offer **Retry**.
+
+If the selected server has no usable movie or show libraries, setup offers
+**Switch server** and a quiet **Sign out** action. Sign out uses the same
+confirmation as the server picker, stops playback, and returns to Plex linking.
+
+Allocation takes one eligible original from each enabled source in order,
+repeats, and skips exhausted sources. Additional versions are off by default
+and are allocated only after originals. Mini-marathons can include specials
+when enabled, including additional Mini-marathon versions. Exclusions distinguish
+the configured channel limit from exhausted channel numbers.
+
+For an existing lineup, **Update and add** preserves matching generated
+identities, **Replace generated channels** replaces generated programming while
+keeping custom channels, and **Add as new channels** appends new identities.
+Review shows current/final counts and unchanged, updated, added, and removed
+entries; search by name or number and filter the change categories. Removals
+require confirmation. A changed lineup invalidates the review and requires a
+fresh explicit apply. Saving is atomic: failure preserves the previous lineup
+and review choices. An unchanged plan offers **View lineup** without saving.
+Success offers **View lineup** and **Add a custom channel**.
+
+## Main destinations
+
+| Destination | Purpose |
+| --- | --- |
+| Guide | Browse the schedule, inspect focused programs, filter by library, jump to now, tune current programs, and open the Player |
+| Channels | Generate a lineup or create, inspect, duplicate, edit, and delete individual channels |
+| Settings | Configure appearance, Guide, playback, accessibility, account, and support preferences |
+| Diagnostics | Review bounded, redacted support events from the current session |
+| Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
+
+**Windows playback acceptance:** the current Guide presentation is Classic PiP
+only. Earlier owner smoke notes also mentioned a full-screen Overlay surface,
+but that path is retired and is not a current user-facing option. The complete
+exact-commit physical matrix is still pending, so broad format/HDR/device/
+package wording remains provisional rather than unsupported-by-design.
+
+Guide, Player, Settings, and Diagnostics use immersive surfaces. Activate the
+visible **Open Lineup menu** control on one of those surfaces to open the
+anchored **Lineup** menu. It offers Guide, Player when playback exists, Channels,
+Settings, and **Account**; Account opens Settings with its Account category
+selected. Channels uses the persistent management rail. Settings uses one
+immersive category rail and, when playback is active, keeps the same Player
+surface behind it.
+
+## Guide
+
+Lineup distinguishes four identities that may be visible at the same time:
+
+- **Focused**: the program currently being inspected with the keyboard, remote,
+  or pointer.
+- **Selected**: the explicit program selection.
+- **Tuned**: the channel currently playing.
+- **Airing**: the program whose schedule includes the current time.
+
+Moving focus does not retune playback. Activating a currently airing program
+tunes its channel and closes the Guide to the Player.
+
+The full Guide uses **Classic with PiP**: the schedule remains primary and the
+active video appears in a responsive picture-in-picture area. PiP is the sole
+full Guide presentation; the retired full-screen Overlay layout is not
+available. The Guide and Player share one playback session.
+
+The Guide toolbar always shows a library picker and channel search. The picker
+offers **All libraries** or one library, and search accepts a channel name or
+number within that scope. **Jump to now** returns the time window and focus to
+the current schedule. While the Guide follows live, its window and focus track
+the presentation clock. Moving to an earlier or later window stops that live
+following and preserves the browsed window and explicitly inspected program
+until you choose **Now** again. When the current time is off screen, the
+button shows `← Now` for a future window or `Now →` for a past window; its
+tooltip and accessible label are **Return to live**. When the current time is
+visible, it is simply **Now**.
+
+The Guide uses a detailed two-hour window by default, with three- and
+four-hour options. Its standard layout targets five channel rows;
+the rows reflow when the window or text scale requires more room. There is no
+configurable past window or row-density preference.
+
+Focused program cells reveal long titles with a slow ticker; unfocused cells
+remain stable and ellipsized. Reduce Motion disables the ticker. The program
+information area can use artwork-derived color bleed, the current theme, or a
+Plex backdrop, and can prefer Plex clear title logos when available. Missing or
+failed logos fall back to text, as do logos that would render too short or narrow
+in their slot. When a program has a Plex poster reference, the normal
+artwork geometry remains stable while it loads or if loading fails. Only a
+program with no poster reference at all omits that slot so the existing details
+can use the available width without decorative placeholder art.
+
+Beside the picture, program identity and synopsis share the information area.
+The synopsis uses the available height, with an ellipsis when it cannot fit;
+without a synopsis, identity uses the whole area. The time line shows remaining
+time for a currently airing program, duration for a future program, and the time
+range alone for a past program. Year and genres appear beneath it, or share the
+line with middle-dot separators when space is compact.
+
+## Player
+
+On Windows, **Settings > Playback > Match display HDR in fullscreen** is on
+by default, after **DVR playback controls**. Its subtitle is: "Switch Windows
+HDR on for HDR programs and off for SDR programs while fullscreen, then restore
+your display setting."
+
+Matching starts when fullscreen playback is visible in Player with the full
+Guide closed. Opening the full Guide after matching starts keeps the session
+active. HDR programs select HDR and SDR programs select SDR, including when
+Windows HDR was already on. Leaving fullscreen, turning the setting off, Stop,
+an error, signing out, or closing Lineup releases the display and restores the
+setting it found. A manual HDR change suspends matching and is respected.
+Moving to another display releases the old target and evaluates the new one.
+
+Eligible program starts may briefly show **Preparing playback**, then
+**Starting playback…** after two seconds, while playback is held for the display
+transition. The hold releases after a successful switch and a 1.5-second settle,
+or sooner when no switch is needed or matching cannot proceed. A change request
+has a four-second hold deadline; unknown video parameters have a bounded
+fallback. User Play releases the hold immediately, and user Pause cancels its
+automatic resume when DVR controls are enabled. Holds also work with DVR
+controls off and contribute to continuation lateness.
+
+Decoded PQ and HLG select HDR. Dolby Vision is presented as HDR10, not true Dolby
+Vision; profile 7 uses its HDR10 base layer. HDR10+ is presented as static HDR10.
+These content and transition rows still need integrated physical acceptance.
+Both Windows 10 and Windows 11 matching routes are enabled according to detected
+capabilities; Windows 11 remains unverified on the borrowed machine.
+
+Lineup permits one instance per Windows user session. A second launch restores
+and focuses the existing window and ignores the new launch's arguments,
+including a local-media argument.
+
+A separate guardian attempts original-state restoration if the main app exits
+abnormally. Lineup changes no display state unless the guardian is confirmed
+armed. Power loss, an OS crash, a shutdown that cuts recovery short, or ending
+the guardian together with Lineup can leave Windows in its last display state.
+
+Move the pointer or click/tap the Player to show the on-screen controls. The OSD
+uses a responsive shallow broadcast layout at 1280×720 and 1920×1080. The
+channel bug is in the top-right. When **Prefer official title artwork** is
+enabled, the lower-left/lower band uses official Plex title artwork when
+available. When the preference is disabled, or the artwork is missing or fails
+to load, it falls back to text. Secondary actions sit in the lower-right. The
+timeline tier immediately above the edge-to-edge progress line shows
+`current / total • time left` on the left when duration is known and
+`Up next • scheduled start • title` on the right. Metadata and actions are
+restrained, and the progress line is anchored to the absolute bottom. By
+default, the **DVR playback controls** setting is off: transport buttons are
+hidden and Player-local pause/play, seek, stop, rewind, and fast-forward
+keyboard/media shortcuts are blocked. Page Up/Page Down channel surfing,
+number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen
+remain available. Enabling **DVR playback controls** restores the transport UI
+and those shortcuts; it changes Flutter presentation/input policy only, not
+native or libmpv behavior. It provides:
+
+- current channel and program information;
+- playback position; seeking when DVR playback controls are enabled;
+- previous channel, play/pause, and next channel when DVR playback controls are enabled;
+- available audio and subtitle tracks;
+- sleep timer state;
+- fullscreen entry and exit.
+
+The sleep timer choices are **Off**, **30 minutes**, **60 minutes**, and **90
+minutes**. A selected deadline continues while playback is paused and across
+channel or program changes, Guide browsing, and other overlays; selecting a
+duration starts that countdown again. Manual stop, sign-out, and app exit
+cancel the timer.
+
+Unavailable tracks or unsupported native actions remain disabled rather than
+showing controls that cannot work. The Guide retains the catalog media facts it
+displays, including resolution, dynamic range, and audio facts. Expanded Now
+Playing includes rating, resolution, HDR, a short video codec name such as HEVC
+or H.264, audio codec, and channel count in its format chips. Decoded dimensions
+and hardware-decoder facts appear in Diagnostics.
+
+Track panels show the selection confirmed by native playback. A requested
+change remains marked pending until that confirmation arrives; a failed change
+keeps the prior confirmed selection and shows an inline error.
+Language labels use their self-names. A regional qualifier appears in the
+primary label when it distinguishes same-language tracks of that type with
+different supplied regions; otherwise the region remains a secondary drawer
+fact. The OSD uses the same primary-label policy.
+
+Press `I` or `Down` to expand the bottom OSD into persistent Now Playing
+details without leaving playback. The expanded panel shares the OSD actions,
+Up Next, timing and full-width progress lane. It shows the loaded
+program's title, one line of episode/runtime/year/genre facts, format chips,
+poster, official title artwork, and a synopsis clamped to three lines.
+When **Prefer official title artwork** is enabled, an available Plex clear logo
+leads the identity; text is the fallback when the logo is missing, disabled,
+fails, or would render too small to read. Actual native playback duration is
+preferred, with schedule timing used when native duration is unavailable.
+
+When Plex supplies cast facts, up to four actor portraits appear in one row,
+with names and roles beneath them. Full cast facts remain available to
+accessibility. Missing or failed headshots use a neutral person silhouette,
+never fabricated initials, and no cast space is reserved when cast facts are
+absent. Pointer movement leaves the expanded reading surface open. Press `I`,
+`Enter`, `Esc`, or Back, or choose **Close**, to collapse it to the OSD. `A` or
+`C` opens the requested track list directly when that track type is available.
+
+The mini Guide displays a bounded group of nearby channels without leaving
+playback. Selecting a row replaces the current tune through the same Player
+owner.
+
+When one Plex item contains sequential media parts, Lineup continues through
+them under the same tune. When DVR playback controls are enabled, progress and
+cross-part seeking use aggregate timing only when the required part durations
+are known; otherwise the Player shows the current part's timing rather than
+estimating missing boundaries.
+
+At the natural end of a channel's final media part, Lineup immediately starts
+the next scheduled program from its beginning, even if the media finishes
+before its scheduled slot ends. Small loading delays are carried rather than
+skipping the next program's opening. If that program's scheduled start is more
+than 30 seconds in the past, for example after a DVR pause, Lineup instead joins
+whatever is airing now at its live position. A manual tune or **Retry** also
+joins live.
+
+If a stream ends more than 30 seconds before its known duration, Lineup shows
+the existing playback error with **Retry** instead of advancing. Failed
+continuations do not retry automatically. Player title, progress context, and
+**Up Next** follow the loaded program; the Guide and mini Guide remain on the
+wall-clock schedule. User tune, Stop, sleep-timer expiry, sign-out, and lineup
+or content changes supersede a pending continuation.
+
+The timed OSD remains open while keyboard focus is inside its controls. Leaving
+the active OSD restarts its full timeout. The Mini Guide has no inactivity
+timeout: it stays open while browsing or reading until you tune a row, open the
+full Guide, or close it explicitly. Reduce Motion removes Player overlay
+transition time, and audio/subtitle panels initially focus the selected track
+(or **Off** when no subtitle is selected). These behaviors are deterministically
+tested in Flutter; physical Windows screen-reader and assistive-technology
+validation remains pending.
+
+The committed macOS goldens cover Flutter composition at compact, 1280×720,
+and 1920×1080 sizes, including the rich Now Playing surface, the theme chooser,
+and matched rich/reference-free Guide details with synthetic artwork. They do
+not prove Windows native video layering, DPI/fullscreen behavior, keyboard or
+screen-reader support, media compatibility, or package readiness; those remain
+physical Windows acceptance work at the exact tested commit.
+
+## Keyboard and remote controls
+
+Media and remote keys depend on what the operating system and input device
+report to Flutter.
+
+| Context | Action | Keys |
+| --- | --- | --- |
+| Management screens | Move between controls | `Tab` / `Shift+Tab` |
+| Management screens | Activate focused control | `Enter` or `Space` |
+| Anywhere in the ready app | Open Guide / Player / Settings | `Ctrl+G` / `Ctrl+P` / `Ctrl+,` |
+| Anywhere in the ready app | Open destination 1-5 | `Ctrl+1` Guide, `Ctrl+2` Channels, `Ctrl+3` Settings, `Ctrl+4` Diagnostics, `Ctrl+5` Player |
+| Anywhere in the ready app | Open Settings directly | `F3` |
+| Guide | Move between channels | `Up` / `Down` |
+| Guide | Move between scheduled programs | `Left` / `Right` |
+| Guide | Move by a visible page | `Page Up` / `Page Down` |
+| Guide | Jump to the current time | `Home`, `P`, or Media Play |
+| Guide | Select/tune a currently airing program and open Player | `Enter`, numpad `Enter`, `Space`, or Select |
+| Guide | Close Guide to Player when playback exists; otherwise open the Lineup menu | `Esc`, `Backspace`, Back, `G`, or `F2` |
+| Player | Open full Guide | `G` or `F2` |
+| Player | Show mini Guide | `Up` |
+| Player | Show OSD / expand Now Playing | `Enter` shows OSD; `I` or `Down` expands Now Playing; `I` or `Enter` collapses it |
+| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
+| Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
+| Player | Previous/next channel | `Page Up` / `Page Down` |
+| Player | Enter a channel number | Number keys; confirm with `Enter`, numpad `Enter`, or Select while the entry overlay is open |
+| Player | Audio / subtitle tracks | `A` / `C` |
+| Player | Sleep timer | `S` |
+| Player | Toggle fullscreen | `F` or `F11` |
+| Player | Collapse Now Playing to OSD; close other overlays; otherwise return to Guide | `Esc`, `Backspace`, or Back |
+| Mini Guide | Browse nearby channels | `Up` / `Down` |
+| Mini Guide | Move seven channels | `Page Up` / `Page Down` |
+| Mini Guide | Tune focused channel | `Enter`, `Space`, or Select |
+| Mini Guide | Open full Guide | `Right` |
+| Mini Guide | Close | `Esc`, `Backspace`, or Back |
+
+Dedicated media transport keys are context-sensitive. In the Player, Media
+Play, Pause, Stop, Rewind, and Fast Forward are handled when available only with
+**DVR playback controls** enabled. In the Guide, Media Play jumps to the current
+time regardless of that setting. Page Up/Page Down, number entry, Guide/Mini
+Guide tuning, tracks, sleep, menu, and fullscreen also do not depend on the
+setting. The timed OSD follows the configured 2–15 second auto-hide duration.
+
+## Channels
+
+**Generate lineup** is the bulk workflow. It proposes generator-owned channels,
+then lets you replace generated channels, add generated channels, or refresh
+matching generated channels after review. All three modes preserve every custom
+channel. Refresh also preserves a matching generated channel's number, visible
+name, schedule anchor, and shuffle identity while updating its generated
+programming recipe. Before applying, Review shows the full proposed final
+roster. Search it by channel number or name, or filter for protected custom,
+added/updated, or removed entries. Replace keeps its protection confirmation
+visible while you inspect the roster. Completion offers **View lineup** or the
+separate **Add a custom channel** action.
+
+**Add a custom channel** opens the full-page Channel Studio for one custom channel.
+Studio also opens when you edit a custom channel, inspect a generated channel,
+or choose **Duplicate as custom** from generated inspection. Generated
+programming remains read-only, but its name and number can be saved with **Save
+identity**. Duplication creates a separate custom draft with a new identity and
+the lowest available channel number; it does not alter the generated source.
+
+Custom Studio programming uses **Library** with metadata filters or an
+explicitly ordered **Hand-picked** list. Existing playlist and mixed sources
+remain inspectable and preserved until deliberately replaced. Hand-picked programming has separate **Browse** and
+**Rundown** stages; matching and selected counts stay visible, and search and
+filter state is preserved when you switch between them. Search, local facets,
+visible-result bulk selection, and Move earlier/Move later controls keep large
+lists usable without a network request per edit. A previously saved hand-picked
+item that is not in the current playable inventory remains labeled
+**Unavailable — retained until removed**; it is not scheduled, but Studio does
+not silently delete it.
+
+Playback rhythms are **In order**, **Mix it up**, and **Mini-marathons**.
+Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
+grouping. **Air Check** uses the same content resolver and deterministic
+scheduler as Guide and Player to show what is on now, what follows, cycle and
+timing facts, why content was included, and actionable unavailable or invalid
+states. A new channel saves the same schedule anchor and shuffle identity that
+Air Check previewed. Shuffled schedules canonicalize each media occurrence by
+its media identity and duration before applying the seed, so a PMS response
+that merely changes input order does not reshuffle the schedule. An existing
+shuffled schedule can make one accepted transition at a schedule-version
+boundary while retaining its pre-boundary cycle; **In order** and
+**Mini-marathons** keep their existing ordering policies.
+
+Saving and tuning are separate. Save is enabled only for a dirty, valid draft.
+A successful save leaves Studio in a clean saved state and makes **Tune in**
+the primary action; editing again disables Tune until the new draft is saved. A
+tune failure does not undo the saved channel. A save failure preserves both the
+prior lineup and the complete draft; retry after correcting the reported
+source, schedule, number, or storage issue. If the underlying channel changed
+while Studio was open, choose **Use saved version…** or **Replace saved version
+with my draft…**. Both paths require an explicit confirmation, and a second
+intervening change is rejected again. Leaving a dirty draft asks whether to
+discard changes or keep editing.
+
+Deletion requires confirmation and cannot be undone.
+
+## Settings
+
+| Category | Current controls |
+| --- | --- |
+| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Mint Noir, and Satellite Blue; three Player overlay-transparency choices; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
+| Guide | Visible hours of 2, 3, or 4; whether to show channel sources; and whether to show the now-playing channel and program in Guide |
+| Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; optional DVR playback controls; Match display HDR in fullscreen (default on) |
+| Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
+| Account | Switch Plex Home profile, show the profile picker on startup, switch the Plex Media Server, and sign out of Plex |
+| Support | Enable or disable bounded redacted diagnostic recording and open Diagnostics |
+
+Settings save immediately. The edited control is temporarily disabled while its
+save is pending. When persistence fails, the previous value remains active and
+the screen shows an error.
+
+## Diagnostics and safe support reports
+
+Diagnostics are disabled by default. Enable **Record redacted diagnostics** in
+**Settings > Support** before reproducing a problem that needs support context.
+
+Technical details and the support report include **Windows display**, **HDR
+matching**, and **Renderer output**, with normalized values. Display state is
+reported by Windows; it does not verify the TV's picture. Source HDR metadata,
+renderer output, and Windows display state are separate observations.
+
+The application stores diagnostic context only from a small allowlist of
+bounded structured facts; arbitrary exception and native message text is not
+recorded. It also redacts known credentials, authorization headers,
+token-bearing URLs, and private paths as defense in depth. Diagnostics may
+still describe private activity, so review them before sharing anything:
+
+1. Inspect every line and screenshot.
+2. Remove private media titles or account details that are not needed.
+3. Never include a Plex token, authentication header, tokenized URL, or
+   credential-store content.
+4. Include the source commit or package `BUILD-INFO.txt`, Windows version, GPU
+   and driver, display resolution/scaling, connection type, and exact
+   reproduction steps.
+
+Use the repository bug-report template for ordinary issues. Report
+vulnerabilities only through the private process in
+[SECURITY.md](../SECURITY.md).
+
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| Plex link code expired | Select **Request a new code** and complete linking before the new timer expires. |
+| No Plex servers found | Confirm the server is online and reachable, retry discovery, switch profile, choose another server, or use the server picker's confirmed **Sign out** action to link Plex again. |
+| The app reports playback unsupported on macOS | This is expected. macOS currently supports portable UI development, not native playback. |
+| Windows reports that `vulkan-1.dll` is missing | Install or update the GPU vendor's current driver or an appropriate Vulkan Runtime. Do not copy a driver DLL from another machine into the package. |
+| Audio plays but video is black or hidden | Record the exact window size, display scaling, fullscreen state, Guide layout, whether audio continues, and whether the problem follows a resize/minimize/restore transition. Treat this as a native-composition failure and report it with the current commit. |
+| A replacement channel leaves stale audio/video | Stop testing that scenario, record both channel transitions and timestamps, and report it as a native playback-lifetime failure. |
+| A setting or lineup change fails | The previous state should remain. Retry after confirming the Plex server and local storage are available. |
+| A banner says saved app data was corrupt | Lineup preserved state with invalid text encoding, malformed JSON, or invalid schema in a separate file and started with empty state. Dismiss the banner after reviewing the resulting setup. Other storage read failures stop startup instead of resetting data. |
+| A private portable package does not launch | Verify the complete package was extracted, `SYSTEM-REQUIREMENTS.txt` is satisfied, the archive hash matches, and the GPU driver supplies `vulkan-1.dll`. |
+
+## Known limitations
+
+- There is no supported public installer, updater, or release channel.
+- Windows native playback and packaging have not yet completed the full
+  physical acceptance matrix on the current branch.
+- macOS playback is intentionally unsupported.
+- Scheduled program continuation is implemented; its native end-of-file
+  behavior and boundary scenarios still require physical Windows acceptance.
+- Audio-output selection and passthrough controls are not exposed.
+- The native player deliberately has no application codec/container/HDR
+  allowlist. Representative codec, HDR, TrueHD/DTS-to-PCM, text/image subtitle,
+  multi-monitor, and high-DPI coverage remains deeper validation work rather
+  than a reason to force browser-style transcode, subtitle burn-in, or a
+  passthrough decode gate.
+- Alternate Plex media-version selection and failed/cancelled Home-profile token
+  compensation remain later work. Sequential parts of the selected version are
+  implemented and deterministically tested.
+- Gamepad, signing, and clean-system package coverage remain later release work.
+- Pre-release behavior and persisted state may change before the first public
+  version.

@@ -1,0 +1,6 @@
+
+PRODUCT_NAME = Lineup Desktop
+
+PRODUCT_BUNDLE_IDENTIFIER = com.tjzine.lineupDesktop
+
+PRODUCT_COPYRIGHT = Copyright © 2026 TJZine. All rights reserved.

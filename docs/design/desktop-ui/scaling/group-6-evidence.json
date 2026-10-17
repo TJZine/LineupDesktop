@@ -1,0 +1,198 @@
+{
+  "scope": "Group 6 remaining Player status widgets",
+  "reference": {
+    "logicalSize": "1920x1080",
+    "devicePixelRatio": 1,
+    "textScaleFactor": 1,
+    "baselineManifest": "build/desktop-ui/scaling/status-baseline-manifest.json",
+    "baselineContactSheet": {
+      "path": "build/desktop-ui/scaling/status-before-contact.png",
+      "sha256": "9f5ab6992898d7f32692d3df19928a5909eb2fb4dd9ec69d7b8beee1dd8bc510"
+    }
+  },
+  "source": {
+    "baseCommit": "47fc66a8b35c684990678e4e52441093a82512f9",
+    "sourcePath": "lib/playback/player_view.dart",
+    "sourceSha256": "178019b10a81c6e7669d2f6f2bd1b29e46133afc00ba81f97440ff012123c960",
+    "harnessPath": "build/desktop-ui/scaling/status_test.dart",
+    "harnessSha256": "94f7f69c327fb2c82a25694a2b8741276f55ca2a43246c39cfe7c24aa19a22e0"
+  },
+  "referenceComparison": {
+    "captureDirectory": "build/desktop-ui/scaling/status-final/1080-final2",
+    "allStatesByteIdenticalToBaseline": true,
+    "states": {
+      "error": "1c8d7e98f30124f57472115dbd0d45473d72e8d9a388adc2cadb0fccd30cba5e",
+      "loading": "086587498f9fd0816596ac1c3899c735886d5e69f4b063c51c74018a70ba5aca",
+      "number": "44d71504b3c117f06166c7cbf02618f99b46afb3383f996dda4bafe544cf3f7d",
+      "surface-error": "d2c01a0ef0080091edddc49b86838efe34ba3f104a94ed0096a3d0cf0615a005",
+      "unsupported": "f7677f1c7ba41a9d7674a88d50c41135e7b0fb402dc35ccdbbe065f774d7019a"
+    }
+  },
+  "matrix": [
+    {
+      "label": "2560x1440-DPR1-text1",
+      "directory": "build/desktop-ui/scaling/status-final-rerun/2560x1440",
+      "physicalCaptureSize": "2560x1440",
+      "statesPassed": [
+        "error",
+        "loading",
+        "number",
+        "surface-error",
+        "unsupported"
+      ]
+    },
+    {
+      "label": "3840x2160-DPR1-text1",
+      "directory": "build/desktop-ui/scaling/status-final-rerun/native-4k",
+      "physicalCaptureSize": "3840x2160",
+      "statesPassed": [
+        "error",
+        "loading",
+        "number",
+        "surface-error",
+        "unsupported"
+      ]
+    },
+    {
+      "label": "3840x2160-DPR2-text2",
+      "directory": "build/desktop-ui/scaling/status-final-rerun/4k-dpr2-text2",
+      "physicalCaptureSize": "3840x2160",
+      "devicePixelRatio": 2,
+      "textScaleFactor": 2,
+      "statesPassed": [
+        "error",
+        "loading",
+        "number",
+        "surface-error",
+        "unsupported"
+      ]
+    },
+    {
+      "label": "1280x720-DPR1-text2",
+      "directory": "build/desktop-ui/scaling/status-final-rerun/1280x720-text2",
+      "physicalCaptureSize": "1280x720",
+      "textScaleFactor": 2,
+      "statesPassed": [
+        "error",
+        "loading",
+        "number",
+        "surface-error",
+        "unsupported"
+      ]
+    }
+  ],
+  "targetedChecks": [
+    "Retryable error at 1920x1080",
+    "Retryable error at 3840x2160 with text scale 2 and four-digit channel number",
+    "Retryable error in a 320x180 PlayerView at text scale 2; Retry and Close made reachable via scroll",
+    "Surface error in a 320x180 PiP at text scale 2 with long backend reason",
+    "Surface error in a 640x360 PiP at 3840x2160 with long backend reason"
+  ],
+  "visualEvidence": {
+    "centralCrops": {
+      "path": "build/desktop-ui/scaling/status-final-evidence/status-central-crops.png",
+      "sha256": "9198d8e118cefeb8bbdf0bfdd81e02ea703c9feef48e0ab33d6a6b6178ecfcda"
+    },
+    "fullFrames": {
+      "path": "build/desktop-ui/scaling/status-final-evidence/status-full-frames.png",
+      "sha256": "ff7ed80cd04a3178d19d2f7307a8a6c4bfa9ddbfb0c78cca7a197e0385c2749a"
+    }
+  },
+  "verification": {
+    "dartFormat": "passed",
+    "flutterAnalyzePlayerView": "passed",
+    "flutterAnalyzeHarness": "passed",
+    "playerViewFocusedTests": "67 passed",
+    "statusHarnessDefault": "5 passed",
+    "statusHarnessMatrix": "4 runs x 5 states passed",
+    "gitDiffCheck": "passed"
+  },
+  "limitations": [
+    "Evidence was captured with the macOS Flutter harness using synthetic players; it is not physical Windows, DirectComposition, HDR, native media, or packaged-app validation.",
+    "The exact 1080p result is byte-identical to the preserved local baseline; larger-size conclusions are supported by matrix captures and visual inspection rather than pixel comparison to a separately approved design baseline.",
+    "The loading captures are deterministic snapshots after a fixed pump interval, not animation-timing claims."
+  ],
+  "independentReview": "Not run; not specifically recommended for this localized, test-covered scaling change.",
+  "rawCaptureSha256": {
+    "build/desktop-ui/scaling/status-final/1080/error.png": "1c8d7e98f30124f57472115dbd0d45473d72e8d9a388adc2cadb0fccd30cba5e",
+    "build/desktop-ui/scaling/status-final/1080/loading.png": "086587498f9fd0816596ac1c3899c735886d5e69f4b063c51c74018a70ba5aca",
+    "build/desktop-ui/scaling/status-final/1080/number.png": "44d71504b3c117f06166c7cbf02618f99b46afb3383f996dda4bafe544cf3f7d",
+    "build/desktop-ui/scaling/status-final/1080/surface-error.png": "d2c01a0ef0080091edddc49b86838efe34ba3f104a94ed0096a3d0cf0615a005",
+    "build/desktop-ui/scaling/status-final/1080/unsupported.png": "f7677f1c7ba41a9d7674a88d50c41135e7b0fb402dc35ccdbbe065f774d7019a",
+    "build/desktop-ui/scaling/status-final/1080-final2/error.png": "1c8d7e98f30124f57472115dbd0d45473d72e8d9a388adc2cadb0fccd30cba5e",
+    "build/desktop-ui/scaling/status-final/1080-final2/loading.png": "086587498f9fd0816596ac1c3899c735886d5e69f4b063c51c74018a70ba5aca",
+    "build/desktop-ui/scaling/status-final/1080-final2/number.png": "44d71504b3c117f06166c7cbf02618f99b46afb3383f996dda4bafe544cf3f7d",
+    "build/desktop-ui/scaling/status-final/1080-final2/surface-error.png": "d2c01a0ef0080091edddc49b86838efe34ba3f104a94ed0096a3d0cf0615a005",
+    "build/desktop-ui/scaling/status-final/1080-final2/unsupported.png": "f7677f1c7ba41a9d7674a88d50c41135e7b0fb402dc35ccdbbe065f774d7019a",
+    "build/desktop-ui/scaling/status-final/1280x720-text2/error.png": "42638fda8309448d14e8955758f2af0312726689b85645b32ad3e9b5aa667f56",
+    "build/desktop-ui/scaling/status-final/1280x720-text2/loading.png": "b82decef59ee70ced1f7cc793f15a1b7df65859501dee1a91a73539520d5ae7f",
+    "build/desktop-ui/scaling/status-final/1280x720-text2/number.png": "4498c03cfb061d02209209d38a4fd00d09ac2f69db3fb8faafaff124ebf1e77e",
+    "build/desktop-ui/scaling/status-final/1280x720-text2/surface-error.png": "e5e6a8eb68f77b6771a7ccd34c71593834aabb2a456155f08fdcf91aa9147b3b",
+    "build/desktop-ui/scaling/status-final/1280x720-text2/unsupported.png": "35ca55deee0d844eaa2a8631447181f29b39f018cc71a03f19515ebca5497fb3",
+    "build/desktop-ui/scaling/status-final/2560x1440/error.png": "3bd3e8fc832714996f897da8a8ac11a4f5711ade1523fd38b0fb443d3ffc1585",
+    "build/desktop-ui/scaling/status-final/2560x1440/loading.png": "b53b3de37eb720edfce3cb36bd4ed1465e346f30097de42815bf602d89fa094c",
+    "build/desktop-ui/scaling/status-final/2560x1440/number.png": "64b413cd43e28577c6956432764fd46b3c93a09190a1b8ca9a96de5f0711237b",
+    "build/desktop-ui/scaling/status-final/2560x1440/surface-error.png": "6eca987c432f4eb2fcb7ff2656ea722b6f40c18ef9440f98d8d809afb3f17b5b",
+    "build/desktop-ui/scaling/status-final/2560x1440/unsupported.png": "7799e05f6f264ddac04b99a78101be0ab9687622c6aed555f7ce82e2c9782d1b",
+    "build/desktop-ui/scaling/status-final/4k-dpr2-text2/error.png": "e691f3055cbf54793802cffaa328775bcfd566b0ba4e5d7a33986b241f492659",
+    "build/desktop-ui/scaling/status-final/4k-dpr2-text2/loading.png": "185cd739e4941fb37e8009f360180276f0dd1d514af2667d78543670317b341b",
+    "build/desktop-ui/scaling/status-final/4k-dpr2-text2/number.png": "d07724912fdbdd43591ee037c8997563a93205757537033eac55c40eccb1a25e",
+    "build/desktop-ui/scaling/status-final/4k-dpr2-text2/surface-error.png": "964330e935c42370f3937c66d6da11b69331f7f7ed33c78f3b2866d02b803808",
+    "build/desktop-ui/scaling/status-final/4k-dpr2-text2/unsupported.png": "6dda097e0760e42e201f0a5ed408677814d40f441d68fa6e46e93b029a7da439",
+    "build/desktop-ui/scaling/status-final/compact-error-320x180-text2-retry/error.png": "ed6031981294b2f3ac3562a9aaf3c25d4cc0dfb4584ecd04597ec64a6a1db215",
+    "build/desktop-ui/scaling/status-final/compact-error-320x180-text2-retry-final/error.png": "ed6031981294b2f3ac3562a9aaf3c25d4cc0dfb4584ecd04597ec64a6a1db215",
+    "build/desktop-ui/scaling/status-final/compact-error-320x180-text2-retry-final2/error.png": "ed6031981294b2f3ac3562a9aaf3c25d4cc0dfb4584ecd04597ec64a6a1db215",
+    "build/desktop-ui/scaling/status-final/compact-surface-320x180-text2/surface-error.png": "69200fd48d64dbc7b077b41c365473c3be0a1523cea58ac4456ac16e4e337bc5",
+    "build/desktop-ui/scaling/status-final/native-4k/error.png": "4d4f2bdf77a81e6e68d7efbb81f85db2215bd5a1a528a2c8c4ec4d0a1e94c9ca",
+    "build/desktop-ui/scaling/status-final/native-4k/loading.png": "a77ff06a36407194d517b4fd6d435c052a9366de9273387802ddf25935555d1f",
+    "build/desktop-ui/scaling/status-final/native-4k/number.png": "a7acaa02078b472fd4d9c212cc58e892b803a7b029634cde4ddec9afd37688a4",
+    "build/desktop-ui/scaling/status-final/native-4k/surface-error.png": "c1a60edf3f3fa7f549a4a8a6556961aa73ce40aa563e9adefd2184ea901acbf9",
+    "build/desktop-ui/scaling/status-final/native-4k/unsupported.png": "ed5df469d1ea3aaa79a1a9abd4d1c5a9d5a7c00c77e12afe3e81696712462c31",
+    "build/desktop-ui/scaling/status-final/native-4k-pip-640x360-retry/surface-error.png": "ab52318cec86d74d4de85362317ade4161449ed5a617e0df72af7ab8dc64f6e5",
+    "build/desktop-ui/scaling/status-final/native-4k-pip-640x360-retry-final2/surface-error.png": "ab52318cec86d74d4de85362317ade4161449ed5a617e0df72af7ab8dc64f6e5",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress/error.png": "88d74f90f021bddab0a2fa76e53d6aca78ba493087807cc7c50d821c410fcd4d",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress/number.png": "96b451a1c3fb2bd3ef7fa2a215f41ee9b197c09a74c31c0c3ff4067a33a553c0",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress/surface-error.png": "d28d9d36684797375989fc2fe7ff35e86a261b929ab36ebc1099bcd5799ac9de",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress/unsupported.png": "3093f76e347c95c1349ce09c0eb88dcbd1da7a64859d0f11e52c04846171955c",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress-final/error.png": "88d74f90f021bddab0a2fa76e53d6aca78ba493087807cc7c50d821c410fcd4d",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress-final/number.png": "96b451a1c3fb2bd3ef7fa2a215f41ee9b197c09a74c31c0c3ff4067a33a553c0",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress-final/unsupported.png": "3093f76e347c95c1349ce09c0eb88dcbd1da7a64859d0f11e52c04846171955c",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress-rerun/error.png": "88d74f90f021bddab0a2fa76e53d6aca78ba493087807cc7c50d821c410fcd4d",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress-rerun/number.png": "96b451a1c3fb2bd3ef7fa2a215f41ee9b197c09a74c31c0c3ff4067a33a553c0",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress-rerun/surface-error.png": "d28d9d36684797375989fc2fe7ff35e86a261b929ab36ebc1099bcd5799ac9de",
+    "build/desktop-ui/scaling/status-final/native-4k-text2-stress-rerun/unsupported.png": "3093f76e347c95c1349ce09c0eb88dcbd1da7a64859d0f11e52c04846171955c",
+    "build/desktop-ui/scaling/status-final/native4k-pip640x360/surface-error.png": "ab52318cec86d74d4de85362317ade4161449ed5a617e0df72af7ab8dc64f6e5",
+    "build/desktop-ui/scaling/status-final/native4k-pip640x360-retry-final/surface-error.png": "ab52318cec86d74d4de85362317ade4161449ed5a617e0df72af7ab8dc64f6e5",
+    "build/desktop-ui/scaling/status-final/native4k-text2-stress-final/error.png": "88d74f90f021bddab0a2fa76e53d6aca78ba493087807cc7c50d821c410fcd4d",
+    "build/desktop-ui/scaling/status-final/native4k-text2-stress-final/number.png": "96b451a1c3fb2bd3ef7fa2a215f41ee9b197c09a74c31c0c3ff4067a33a553c0",
+    "build/desktop-ui/scaling/status-final/native4k-text2-stress-final/surface-error.png": "d28d9d36684797375989fc2fe7ff35e86a261b929ab36ebc1099bcd5799ac9de",
+    "build/desktop-ui/scaling/status-final/native4k-text2-stress-final/unsupported.png": "3093f76e347c95c1349ce09c0eb88dcbd1da7a64859d0f11e52c04846171955c",
+    "build/desktop-ui/scaling/status-final/retryable-1080-final/error.png": "facdae2cf17f59cef62488b2141dc5b98477df8fbe12af87125b117dc851602a",
+    "build/desktop-ui/scaling/status-final/retryable-4k-text2-button/error.png": "88d74f90f021bddab0a2fa76e53d6aca78ba493087807cc7c50d821c410fcd4d",
+    "build/desktop-ui/scaling/status-final/small-pip-320x180-text2/surface-error.png": "e5e6a8eb68f77b6771a7ccd34c71593834aabb2a456155f08fdcf91aa9147b3b",
+    "build/desktop-ui/scaling/status-final/small-pip-320x180-text2-final/surface-error.png": "e5e6a8eb68f77b6771a7ccd34c71593834aabb2a456155f08fdcf91aa9147b3b",
+    "build/desktop-ui/scaling/status-final/small-pip-320x180-text2-retry-final/surface-error.png": "0944b53114d5534a4e0fd0927c407f250b08861eb14aae481063eed6862dde4e",
+    "build/desktop-ui/scaling/status-final-rerun/1280x720-text2/error.png": "42638fda8309448d14e8955758f2af0312726689b85645b32ad3e9b5aa667f56",
+    "build/desktop-ui/scaling/status-final-rerun/1280x720-text2/loading.png": "b82decef59ee70ced1f7cc793f15a1b7df65859501dee1a91a73539520d5ae7f",
+    "build/desktop-ui/scaling/status-final-rerun/1280x720-text2/number.png": "4498c03cfb061d02209209d38a4fd00d09ac2f69db3fb8faafaff124ebf1e77e",
+    "build/desktop-ui/scaling/status-final-rerun/1280x720-text2/surface-error.png": "e5e6a8eb68f77b6771a7ccd34c71593834aabb2a456155f08fdcf91aa9147b3b",
+    "build/desktop-ui/scaling/status-final-rerun/1280x720-text2/unsupported.png": "35ca55deee0d844eaa2a8631447181f29b39f018cc71a03f19515ebca5497fb3",
+    "build/desktop-ui/scaling/status-final-rerun/2560x1440/error.png": "3bd3e8fc832714996f897da8a8ac11a4f5711ade1523fd38b0fb443d3ffc1585",
+    "build/desktop-ui/scaling/status-final-rerun/2560x1440/loading.png": "b53b3de37eb720edfce3cb36bd4ed1465e346f30097de42815bf602d89fa094c",
+    "build/desktop-ui/scaling/status-final-rerun/2560x1440/number.png": "64b413cd43e28577c6956432764fd46b3c93a09190a1b8ca9a96de5f0711237b",
+    "build/desktop-ui/scaling/status-final-rerun/2560x1440/surface-error.png": "6eca987c432f4eb2fcb7ff2656ea722b6f40c18ef9440f98d8d809afb3f17b5b",
+    "build/desktop-ui/scaling/status-final-rerun/2560x1440/unsupported.png": "7799e05f6f264ddac04b99a78101be0ab9687622c6aed555f7ce82e2c9782d1b",
+    "build/desktop-ui/scaling/status-final-rerun/4k-dpr2-text2/error.png": "e691f3055cbf54793802cffaa328775bcfd566b0ba4e5d7a33986b241f492659",
+    "build/desktop-ui/scaling/status-final-rerun/4k-dpr2-text2/loading.png": "185cd739e4941fb37e8009f360180276f0dd1d514af2667d78543670317b341b",
+    "build/desktop-ui/scaling/status-final-rerun/4k-dpr2-text2/number.png": "d07724912fdbdd43591ee037c8997563a93205757537033eac55c40eccb1a25e",
+    "build/desktop-ui/scaling/status-final-rerun/4k-dpr2-text2/surface-error.png": "964330e935c42370f3937c66d6da11b69331f7f7ed33c78f3b2866d02b803808",
+    "build/desktop-ui/scaling/status-final-rerun/4k-dpr2-text2/unsupported.png": "6dda097e0760e42e201f0a5ed408677814d40f441d68fa6e46e93b029a7da439",
+    "build/desktop-ui/scaling/status-final-rerun/native-4k/error.png": "4d4f2bdf77a81e6e68d7efbb81f85db2215bd5a1a528a2c8c4ec4d0a1e94c9ca",
+    "build/desktop-ui/scaling/status-final-rerun/native-4k/loading.png": "a77ff06a36407194d517b4fd6d435c052a9366de9273387802ddf25935555d1f",
+    "build/desktop-ui/scaling/status-final-rerun/native-4k/number.png": "a7acaa02078b472fd4d9c212cc58e892b803a7b029634cde4ddec9afd37688a4",
+    "build/desktop-ui/scaling/status-final-rerun/native-4k/surface-error.png": "c1a60edf3f3fa7f549a4a8a6556961aa73ce40aa563e9adefd2184ea901acbf9",
+    "build/desktop-ui/scaling/status-final-rerun/native-4k/unsupported.png": "ed5df469d1ea3aaa79a1a9abd4d1c5a9d5a7c00c77e12afe3e81696712462c31"
+  },
+  "rawCaptureNote": "The directory/configuration records identify accepted final reference and matrix captures. Additional retained targeted captures are hashed here for provenance; these do not independently establish that every image is from the final source.",
+  "rootReview": "Astra inspected the full production diff and labeled contact sheets, checked bounded Retry/Close harness interactions, and independently verified final source/harness hashes and all five unchanged1080 references."
+}

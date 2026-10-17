@@ -1,0 +1,563 @@
+# Architecture
+
+Lineup Desktop is a native Flutter/Dart application. The historical Electron
+implementation is preserved on `electron-ui` at the immutable
+`bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline. `initial-build` is a
+later historical Flutter-replatform milestone. Both are reference material,
+not runtime, source-compatibility, or migration targets.
+
+```text
+Flutter/Dart application
+    |
+    +-- Plex, channels, scheduling, settings, persistence, diagnostics
+    |
+    +-- Flutter Guide, OSD, navigation, focus, input, accessibility
+    |
+    +-- narrow native player boundary
+              |
+              +-- C++ / libmpv
+              +-- Windows native video presentation
+              +-- DirectComposition integration
+```
+
+## Accepted ownership
+
+The Dart application is a feature-oriented modular monolith with one bootstrap
+composition root. Product policy remains in Dart: Plex coordination, channels,
+deterministic schedules, settings, persistence, diagnostics, playback
+coordination, and every visible or accessible interaction. Dependencies are
+explicit constructor arguments. Feature state remains local until a real
+cross-feature asynchronous state graph justifies one mature state-management
+dependency.
+
+C++ is reserved for behavior that materially needs native ownership: libmpv
+lifetime and commands, decoded-frame presentation, Windows platform objects,
+DirectComposition, and native media telemetry. Native handles, mpv internals,
+and token-bearing URLs do not enter ordinary Flutter UI state.
+
+## Platform-neutral native player protocol
+
+The `NativePlayer` Dart interface is the application-facing platform seam.
+[The native player protocol](native-player-protocol.md) owns method/event shapes,
+bounds, token safety, lifecycle/load/stop/track correlation, passive presentation
+and fullscreen completion. `MethodChannelNativePlayer` owns transport;
+`createPlatformNativePlayer` selects the platform implementation. Dart owns playback
+policy; native backends implement media and platform mechanisms.
+
+macOS is a development surface; native playback is not yet implemented.
+A future backend must meet the protocol and the [macOS decision and presentation
+obligations](code-quality-implementation-plan.md#9-macos-strategy-and-deferred-port-backlog).
+The following section describes the current Windows implementation, not a
+requirement to copy Win32 mechanisms to another platform.
+
+## Windows presentation and ownership
+
+The production foundation uses one top-level `Lineup Desktop` window. Flutter's
+runner-owned view remains the ordinary UI, accessibility, focus, keyboard, and
+mouse owner. A disabled, non-activating native child presentation host is
+parented to that Flutter view and kept at the bottom of its child order. libmpv
+receives that host through its supported `wid` option and owns native D3D11
+video presentation inside it. The host is not a top-level or owned popup and
+cannot create a second taskbar or Alt+Tab entry.
+
+Flutter renders the Guide, navigation, OSD, dialogs, text, and interactive
+panels above video. Opaque Flutter regions cover video; transparent player
+regions reveal it. Frames do not cross the Dart boundary and are not copied
+through a Flutter texture. The native baseline explicitly requests
+`vo=gpu-next`, the D3D11 GPU API/context, and `hwdec=auto`.
+
+Stock Flutter 3.47.7 does not request ANGLE's DirectComposition EGL window
+surface mode, so it cannot provide the required transparent composition
+reliably. Lineup therefore owns the single-file patch in
+`tool/flutter_engine`, targeting the exact framework and engine identities in
+[Windows build metadata](../tool/windows/build-metadata.psd1). The runner opts
+in before engine startup; the patched engine records an exact-revision marker
+only after surface creation succeeds; native initialization rejects a missing or mismatched
+marker. This makes stock-engine or opaque fallback obvious.
+
+Plezy was studied for Windows composition behavior only; no GPL Plezy
+application source is present in Lineup. The engine change was evaluated
+separately from the BSD-3-Clause `flutter-plezy` patch series at the pinned
+commit recorded in `tool/flutter_engine/NOTICE`.
+
+The C++ `WindowsNativePlayer` is the only native player owner. Its worker
+executes queued media commands, reads mpv events, and copies bounded facts into
+the event queue. It posts a runner-window message; only the platform thread
+invokes the MethodChannel or changes runner-owned Windows objects. Native
+lifecycle generations reject events across dispose/recreate. Per-load IDs
+correlate media events across replacement loads; track request IDs correlate
+native command execution within the active load; separate stop IDs correlate
+idle confirmation. None substitutes for the others. Dart remains the owner of
+application playback coordination; Plex authentication, networking, channel
+policy, settings, Guide behavior, and navigation do not enter C++.
+
+Fullscreen HDR matching keeps that boundary. Dart's
+`lib/playback/display_matching.dart`, driven by `PlayerCoordinator`, owns
+session eligibility, desired state from the active load's first decoded transfer,
+and clock/generation-bound holds. Each eligible load uses `startPaused`;
+post-load session entry pauses only when a change is needed. The coordinator
+projects an active hold as preparing/loading in Player UI without rewriting
+playback state, overlays, or continuation presentation. Display reports are
+player-scoped and independent of load telemetry; renderer target parameters
+remain per-load Diagnostics facts.
+
+`display_dynamic_range.*` owns every DisplayConfig call on a dedicated worker,
+separate from the platform and mpv threads. Capability detection selects the
+HDR-state route or legacy advanced-color route. Original state and attempted/
+verified writes belong to each display target beyond an individual session.
+External changes suspend matching and relinquish ownership without restoration.
+Target remapping reports an ordered inactive edge before the new active or
+unavailable session, even when its Dart revision is unchanged. Release restores
+the original state conditionally; failed release retains the guardian record.
+
+`display_guardian.*` launches the same executable in hidden guardian mode with
+only its two pipe ends and a synchronize-only parent handle inherited. Versioned,
+sequenced records are acknowledged; a confirmed arm and attempted-state update
+precede a display write. On parent loss it conditionally restores a state matching
+Lineup's last attempted or verified write. Startup dispatch precedes COM/Flutter
+and the per-user-session instance mutex; a second ordinary launch focuses the
+existing window and ignores its arguments.
+
+`display_recovery.*` owns native process admission through a bounded, versioned
+user/logon-session recovery journal and cross-process gate. Before capture or
+matching writes, the display worker waits at most three seconds for explicit
+safe resolution of every predecessor target. Journal registration and recorded
+attempts precede mutation; guardian protection is acknowledged. Multiple
+per-target guardians coexist, with the gate held for journal/recovery operations
+rather than their lifetimes. Failed release, target loss, and uncertain helper
+termination retain records. Resolved record identities prohibit delayed guardian
+writes. An unowned/abandoned mutex or process exit cannot prove restoration.
+The only no-query orphan cleanup requires both mutation fields to be unknown
+and proof that the exact owning process generation has ended: no write could
+have preceded recorded intent. Attempted/verified records are never cleared by
+that rule.
+Journal corruption or admission timeout disables matching for that process,
+including player recreation and hot restart, while current-revision typed
+`unavailable`/`failed` reports with `guardian_unavailable` release Dart holds.
+Playback and bounded close remain usable; there is no new Player failure notice.
+Coordination and storage run on native workers, and acknowledgment waits do not
+hold the gate. See the [HDR implementation contracts](fullscreen-hdr-implementation-plan.md).
+
+Normal shutdown is asynchronous: stop accepting commands and invalidate the
+native generation, let the worker destroy libmpv, then handle its platform
+message, join the worker, destroy the presentation host, and complete disposal.
+Window close waits for that handshake and display release, with a three-second
+display deadline. Windows end-session release waits at most two seconds. The
+display worker destructor also has bounded emergency cleanup; a guardian covers
+abnormal parent loss, but cannot guarantee restoration across power loss or an
+OS shutdown that cuts recovery short. The runner destroys the native owner
+before the Flutter controller/messenger. Preserve this ordering when changing
+close or recreation; the destructor's five-second wait and termination fallback
+is emergency cleanup, not the normal path. See
+[native player lifetime](../windows/runner/native_player.cpp) and
+[runner message handling](../windows/runner/flutter_window.cpp).
+
+## Implemented now
+
+- Root Flutter project targeting only macOS and Windows.
+- Application bootstrap, a compact shared visual vocabulary, responsive page,
+  section, notice, empty-state and confirmation primitives, focus-aware
+  Material controls, semantic labels, navigation shell, and explicit startup
+  failure surface.
+  Saved-lineup restore can show the shell's dedicated loading surface after
+  native initialization, while catalog initialization is still pending. The
+  shell stays mounted when Switch server retires that restore; a native startup
+  failure takes precedence immediately, even while the catalog is unresolved.
+- A persisted four-theme Flutter system using `ThemeData` plus one semantic
+  `ThemeExtension`. Ember & Steel is the default; onboarding, management,
+  Guide, player, overlays, dialogs, progress and focus consume shared roles
+  without theme-specific native code or feature-widget theme branches.
+- Production Guide, Channels, Settings, Diagnostics, and shared player routes
+  consuming the persisted Channel Builder lineup without fixture-only paths.
+- One route-selection authority with a discoverable management shell for
+  Channels, Settings and Diagnostics, and an immersive shell for Guide and
+  Player. The immersive Lineup menu calls the same route owner; it is not a
+  second navigation system.
+- The Dart native-player seam and an explicit macOS unsupported development
+  backend. It never reports successful playback.
+- A Windows C++ libmpv owner, native child presentation, command/property/event
+  channel, track projection, decoder/output and quality/HDR observations,
+  fullscreen/resize/minimize handling, and clean recreation controls.
+- A retained Flutter Guide with lazy fixed-extent rows, shared time geometry,
+  distinct focus/selection/tuned/airing/hover treatment, bounded schedule and
+  artwork caches, stale-result rejection, library filters, accessible
+  visible-cell semantics, responsive PiP allocation, and selection/time/scroll
+  restoration across player transitions.
+  Rows snap to whole-row offsets and fill the bottom. Grid, picture and
+  information are full-bleed; the control row keeps a 12px reference inset.
+  The unchanged PiP footprint has square window-edge corners and rounded
+  interior corners, with matching Flutter masks and native aperture bounds.
+  The companion information area has identity and synopsis columns, with
+  progress across both. The synopsis uses available height and ellipsizes when
+  needed; missing synopsis gives identity the full width. Airing programs show
+  remaining time, future programs show duration, and past programs show only
+  their time range. Shared metadata lines use middle-dot separators.
+- One Flutter player coordinator and overlay model for contract-valid playback
+  projection, the status-sensitive OSD, and the expanded bottom-OSD Now Playing
+  surface with persistent-on-request rich details,
+  bounded five-row mini Guide, full Guide, channel entry, available
+  audio/subtitle tracks, recoverable/terminal errors, sleep timer, fullscreen
+  intent, cursor timeout, cancellable epoch-safe auto-hide, and input/focus
+  restoration. Rich Now Playing is one mutually exclusive Flutter overlay, not
+  a route or second playback owner. It reads the current scheduled program and
+  reuses `GuideController`'s bounded artwork futures/cache for poster, backdrop,
+  optional clear-logo, and cast-portrait bytes; artwork identity includes the
+  current content generation so replaced content cannot retain stale imagery.
+  Sized portrait cache entries also include physical width and height, measured
+  from painted bounds and device pixel ratio after the root canvas transform.
+  Ordered Plex parts remain one Flutter-owned playback lifetime: the
+  coordinator gives every native load its own generation, advances natural
+  completion once, and maps only known part boundaries. One part-load operation
+  owns readiness, the latest pending position, and authorization replacement
+  across tune, multipart advance, and part-changing seek. Native events remain
+  the track-state authority. Seeks into a loading part share its readiness and
+  apply the latest requested position after it loads, including authorization
+  recovery. Playback errors retain a native cleanup obligation even after UI
+  intent is retired. Windows stop completion uses a separate request identity
+  and confirms libmpv is idle with an empty playlist; failed or timed-out stops
+  remain retryable and replacement playback waits for cleanup.
+  Keyboard focus in the active timed OSD suspends dismissal; the Mini Guide has
+  no inactivity timeout and remains open until explicitly dismissed or an action
+  closes it, while track panels remain open until explicitly dismissed or an
+  action closes them.
+  Presentation generations reject stale focus callbacks. Player transitions
+  use Flutter's effective Reduce Motion setting, and track rails initially
+  focus the selected track. Product state does not move into the native player.
+  The Sleep picker is an OSD sub-state: opening or closing it retains the
+  mounted OSD presentation and suspends auto-hide while it is open. Other OSD
+  actions dismiss it before running; a video click dismisses it and resumes
+  the OSD timeout. Up opens the Mini Guide from the OSD as well as from the
+  unobstructed Player.
+- The Player OSD defaults to classic-TV behavior: transport buttons and
+  Player-local pause/play/seek/stop/rewind/fast-forward keyboard/media
+  shortcuts are suppressed, while channel surfing, number entry,
+  Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen remain owned by
+  Flutter. The persisted **DVR playback controls** preference restores the
+  transport UI and those shortcuts without changing native/libmpv behavior;
+  omitted legacy values migrate to false.
+- The OSD keeps channel identity in a top-right channel bug, restrained
+  metadata in the lower-left/lower band, secondary actions in the lower-right,
+  and an edge-to-edge absolute-bottom progress line. **Prefer official title
+  artwork** is enabled by default and reuses Plex clear logos across Guide and
+  Player, with text fallback when unavailable.
+- A Dart product engine for Plex PIN authentication, Plex Home profiles,
+  server discovery/probing, library and media parsing, privileged playback
+  descriptors, deterministic channels/schedules, channel suggestions,
+  playback policy, settings, redacted diagnostics, and durable state.
+- Plex.tv account and Home-profile credentials are used only with Plex.tv.
+  Resource discovery returns a separate PMS-issued credential for each server;
+  the controller retains it only in private runtime scope and uses it for that
+  server's probes, libraries, artwork, and playback. A bounded
+  authorization recovery refreshes the same server credential once without
+  exposing it through public models, persisted state, URLs, or diagnostics.
+  Cast portraits use the selected PMS photo transcoder with physical dimensions
+  and the PMS credential in a header. Accepted durable portrait sources are
+  bounded HTTP/HTTPS URLs without user info or fragments, or queryless PMS paths
+  without authority or traversal. The app never fetches those external sources
+  directly; other artwork retains its existing PMS-path restrictions. Portrait
+  failures use the existing fallback and bounded source/failure diagnostics
+  without URLs or names. Late portrait results after authorization or server
+  retirement are discarded; ordinary artwork retains its typed error contract.
+  Authenticated media requires HTTPS in both the Dart adapter and native
+  boundary. The PMS credential crosses the privileged load seam separately
+  from the URL and is applied as a per-load header, never as a global mpv
+  credential option. Authenticated mpv loads reject redirects because custom
+  headers can otherwise follow them; Dart Plex requests also disable redirects.
+  Windows sets `access-references=no` and `autoload-files=no` globally and fails
+  initialization if either is rejected. Nested references, including same-server
+  HLS/DASH, MOV references, and ordered chapters requiring external segments,
+  are unsupported. These options do not implement an origin-scoped transport;
+  see the [bounded reference audit](libmpv-authenticated-reference-investigation.md).
+  **Planned, not implemented:** Plex transcode and Direct Stream HLS/DASH
+  sessions will use a Dart-selected per-load reference policy. Direct Play
+  keeps references off; only Plex transcoder session playlists on the same
+  validated server receive per-file `access-references=yes`, restored by mpv
+  on unload. `autoload-files=no` remains global. Extend the gated
+  `authenticated_reference` test with authenticated session playback and
+  restoration after completion, stop and replacement when this is built,
+  retaining containment for Direct Play originals. The
+  [per-load feasibility check](libmpv-authenticated-reference-investigation.md#2026-10-03-per-load-reference-policy-feasibility)
+  establishes headless HLS feasibility, not implemented transcoding or
+  physical Windows acceptance.
+  Preserve native header-buffer clearing after command execution and queue
+  cleanup. See [Dart load validation](../lib/playback/method_channel_native_player.dart),
+  [native load options](../windows/runner/native_player.cpp), and the
+  [physical redirect scenarios](windows-native-validation.md#6-plex-end-to-end-campaign).
+- Profile and selected-server state remains scoped by Plex profile. The
+  application controller serializes whole state mutations through
+  snapshot/save/commit or rollback, serializes secure credential writes with
+  logout, rejects stale profile/server operations, clears unavailable runtime
+  server state without crossing scopes, and retains per-server lineups when a
+  saved selection is explicitly cleared. One content generation invalidates
+  Guide caches and player work across committed profile, server, and library
+  changes. Connection priority is applied before an eight-endpoint probe bound;
+  only the selected direct/local/relay type and its actually measured latency
+  are retained.
+- Upstream-shaped, remote-first onboarding for Plex QR/PIN linking, Home
+  profile/PIN selection, secure server recovery, and Channel Setup. Channel
+  Setup owns library selection, all eight source
+  strategies, priority and cross-library scope, series variants, build mode,
+  preview/review/confirmation, and atomic application for up to 1,000
+  channels. Actor/director proposals do not receive alternate copies or
+  variants. Custom channel editing, Settings, and diagnostics remain separate
+  Flutter workflows.
+- Channel Setup inventories up to four selected libraries concurrently while
+  preserving library and page order. Page size and pagination are bounded; it
+  reports page/item progress and item totals when available, rejects stale
+  results, and supports active cancellation. Playlist discovery checks scan
+  currentness between bounded batches. Cancelling or replacing a scan aborts
+  its active library and playlist requests, and each Plex request aborts when
+  its response deadline expires.
+  Empty libraries, unsupported media, transient failures, and cancellation are
+  distinct states. Generated, filtered-library, playlist, and mixed channels
+  expose their source read-only during editing; metadata-only saves preserve
+  source and generated identity.
+- State loading treats invalid UTF-8, malformed JSON, or schema-invalid JSON as
+  corruption, moves the original bytes into a uniquely reserved quarantine
+  directory beside `state.json`, and starts empty with a dismissible recovery
+  banner. Existing recovery artifacts remain untouched; the original byte file
+  is retained as `state.json` inside its operation-owned directory. Missing state
+  starts empty; transient read or quarantine failures stop startup instead of
+  silently replacing data.
+- Diagnostic producers supply fixed area/message text and normalized structured
+  facts, excluding raw exceptions, native messages, credentials, and media
+  descriptors. `Diagnostics.add` filters context keys, string syntax/length,
+  and numeric bounds; it does not determine whether an otherwise valid string
+  is secret. Its message redaction is defense in depth, not permission to log
+  arbitrary text. Diagnostics remain opt-in, clear when disabled, and retain
+  at most 250 entries. See [storage filtering](../lib/diagnostics/diagnostics.dart),
+  [logger tests](../test/diagnostics/diagnostics_test.dart), and producer tests in
+  [the controller suite](../test/app/lineup_controller_test.dart).
+- Keychain-backed credential ownership on macOS. Unsigned development builds
+  use the legacy macOS Keychain compatibility mode; production signing must
+  enable and validate the data-protection Keychain. Tokens remain outside
+  ordinary application state and durable JSON; selected-server persistence
+  stores only profile-scoped server identity.
+- Persisted Guide preferences own the two-, three- or four-hour span, channel
+  source labels, information background, the Now Playing context banner, and
+  player-control auto-hide duration. The full Guide is PiP-only with permanent
+  search/library controls;
+  retired layout, density, past-window and library-visibility keys are validated
+  on legacy reads and omitted from canonical writes. Existing Guide and player
+  coordinators consume updates directly; there is no second settings or overlay
+  owner.
+- A pinned, repository-owned Flutter Windows DirectComposition patch with the
+  adapted BSD notice and an exact runtime compatibility check.
+- Flutter format, analysis, tests, focused macOS golden verification and
+  application builds, focused Windows widget tests, pinned LGPL libmpv
+  application builds, conditional patched-engine builds, packaging rejection
+  checks, and portable Windows package uploads in CI.
+
+## Canonical source and schedule contracts
+
+These accepted contracts were frozen during the desktop campaign; the complete
+[dated decisions, R1 corrections and evidence](open-obligations.md#archive-recovery-and-preservation-map)
+remain recoverable. They constrain current data and projection behavior without
+prescribing the old campaign's classes or execution procedure.
+
+- `LibrarySource.filters` is `Map<LibraryFilter, List<String>>`; the enum
+  covers genre, collection, studio, actor, director and decade. `LibraryOrder`
+  separates supplied, title and addedDescending sequencing from membership.
+  JSON accepts legacy singleton strings; canonical values are sorted, deduplicated
+  lists. The sole valid legacy sort (`added:desc`) migrates to addedDescending.
+  Empty selection removes a restriction; malformed/unknown values reject.
+  People matching/identity uses trimmed lowercase values. Membership is OR within
+  each criterion, AND between criteria, deduplicated by media identity for Library
+  results. Manual and playlist occurrences and Mixed child order remain significant.
+- Supplied order preserves legacy/generated behavior. New custom Library In order
+  uses deterministic movie-title or show/season/episode order with identity ties;
+  playlist/manual order remains supplied. No new sorting menu.
+- Export canonical source and schedule identity from the channel model. Consumers
+  include controller validation/stale-base checks, builder source keys, Guide cache
+  reconciliation and Air Check recipe identity. Schedule identity includes anchor,
+  seed, mode, block size, specials, version and transition; runtime coverage adds
+  content generation. Categorical selection order is not a semantic edit.
+- Algorithm version 1 is decoded when absent; newly constructed recipes use v2.
+  Embed `ScheduleTransition` on Channel with fixed UTC boundary and full ordered
+  legacy `ChannelItem` cycle, retaining duration and occurrence multiplicity.
+  At first successful legacy resolution, use exactly the old algorithm and compute
+  the next boundary with floor-modulo from the original anchor. Persist snapshot
+  and boundary together before publishing the migrated schedule. Unresolved sources
+  remain legacy until successful resolution; no invented boundary or empty snapshot.
+- Project times before the boundary using the frozen periodic cycle phase-aligned
+  to that boundary. At the boundary start revised cycle zero. Retain the transition
+  on restarts and metadata-only saves. Explicit programming saves/builder updates
+  apply the reviewed recipe immediately and retire the transition. A timestamp
+  alone is insufficient. Existing library/playlist inventories were never persisted,
+  so this reproduces the legacy algorithm over the first available inventory; it
+  cannot reconstruct external Plex changes made before migration.
+- v2 Shuffle derives each permutation from stable seed/version/signed cycle integer
+  context, never runtime hashCode, clock randomness or tuning. Lookup computes the
+  cycle directly and bounds cached permutations. Cross-boundary repeat avoidance
+  must remain deterministic with bounded work (no recursive historical traversal);
+  preserve all occurrences and accept unavoidable tiny-pool limitations.
+- Mini-marathons use media kind and stable series identity from Plex metadata,
+  regular season/episode chronology, shortened season-end blocks, then specials
+  when enabled, then unknown chronology in supplied occurrence order. Movies get
+  individual turns. Unknown season is never Season 0. Existing block recipes retain
+  specials=true; new configuration defaults false. Sequential/block repeat their
+  fixed pattern. Projection retains its 1,000-occurrence bound and honest end.
+
+Source and schedule identity drive controller stale-base checks, Guide cache
+reconciliation and Air Check verification. Use current model/resolver/scheduler
+owners rather than introducing a second policy. Worker and synchronous projection
+must agree at identical clocks. Private transition snapshots never enter reports.
+
+## Changing asynchronous and persisted state
+
+In [LineupController](../lib/app/lineup_controller.dart), request currentness
+retires obsolete discovery and scan work; it does not by itself retire active
+playback authorization or an application mutation. Captured authorization belongs
+to the active profile/server lifetime, while channel mutations belong to the
+committed content scope. A same-scope server-list refresh preserves both. Leaving
+and re-entering a scope does not revive its old work. Content generation still
+invalidates Guide and Player consumers after committed content changes. Check
+the identity relevant to an operation before publishing success or failure. Scan
+cancellation also aborts active HTTP requests through
+[PlexClient](../lib/plex/plex_client.dart); rejecting a stale result alone does
+not release its connection. Controller race tests and the
+[IO transport tests](../test/plex/plex_io_transport_test.dart) cover these
+distinct obligations.
+
+The controller's state-operation queue owns snapshot/save/commit or rollback
+across features. `FileAppStore`'s write queue serializes file replacement; it
+does not protect controller snapshots. Credential writes and logout cleanup
+have their own ordered queue. Preserve these responsibilities when adding a
+mutation; see the delayed/failing state and credential tests in
+[lineup_controller_test.dart](../test/app/lineup_controller_test.dart).
+
+Profile and server selections stage their candidate from the latest committed
+state inside that queue, then persist it before publishing identity, credentials,
+connection, inventory, or lineup. The old runtime and its captured authorization
+and queued mutations remain valid while the selection's own save is pending and
+after a failed save. A successful save publishes synchronously and retires the old
+lifetime; returning to the same profile/server cannot revive captured work.
+Server publication uses any same-profile authorization refreshed during the save,
+retaining the chosen connection and validated access if discovery omits the target.
+Selection cancellation is hidden during the save and restored on failure. Once a
+save has started, a changed request epoch does not suppress its successful commit;
+logout still retires authorization immediately; successful credential cleanup then
+clears runtime after the state barrier completes.
+
+Settings transformations derive from committed settings inside the controller's
+queue. The controller persists the proposal before publishing it; a view may
+display a pending choice but does not own save ordering or settings merge policy.
+A failed change cannot reappear inside a later caller's captured snapshot.
+
+Logout initiation retires captured authorization and pre-logout queued mutation
+eligibility. An already-started successful write may publish to the still-active
+content scope before logout's state barrier clears runtime. If credential cleanup
+fails, the retained session keeps that committed effect; old authorization and
+queued work remain retired. Successful logout clears runtime after the barrier.
+
+Library scans stage per-library results outside the committed inventory. Retrying
+the same profile/server/selection reuses completed libraries; an explicit ready
+subset commit persists selection and schedule migration before publishing it.
+Successful saved-lineup restoration stages that same inventory against the
+committed content lifetime, so setup re-entry can commit a ready subset without
+rescanning. A failed or cancelled explicit refresh retains previous readiness,
+but retained evidence cannot prove that a generated source has disappeared.
+Restore has a distinct controller flag and per-library item/collection/show-genre
+phases. Server selection remembers its origin; returning to a cancelled restore
+restarts it. Server switching remains available during scan work, while a started
+setup state commit blocks picker transitions through save and runtime publication.
+Reviewed setup application and reorder compare the complete captured lineup
+inside the state-operation queue. Batch deletion compares only its confirmed
+targets, so unrelated changes do not invalidate the confirmation. A mismatch
+returns a distinct stale result without writing; the UI retains its draft and
+refreshes the consequences for renewed confirmation.
+
+[PersistedState](../lib/persistence/app_store.dart) requires an exact structural
+field set. Adding a required field can make previously valid state enter the
+corruption/quarantine path. For a schema change, choose compatible defaults or
+a targeted migration; an intentional reset requires an authorized data-loss
+decision. Exercise existing serialized state and failure/recovery behavior in
+[app_store_test.dart](../test/persistence/app_store_test.dart). Preserve strict
+validation of malformed data and the original bytes on recovery; do not add a
+generic migration framework without a current need.
+
+Before the first refinement-schema rewrite, the store retains the original bytes
+in a sibling backup. Backup or migration IO failures propagate without classifying
+valid legacy state as corrupt. Shuffled schedule input is canonicalized by media
+identity and duration, so a reordered PMS response does not change the seeded
+schedule. Schedule migration embeds the resolved legacy cycle and a UTC boundary
+before publishing the revised algorithm; pre-boundary lookup uses that frozen
+cycle, and explicit programming edits retire the transition. Sequential and
+block schedules continue using their existing ordering policies; the
+canonicalization change applies to shuffled input.
+The private backup and embedded media snapshot never belong in diagnostic reports.
+Recovery is deliberate: stop the application, preserve current state separately,
+and restore the backup only after deciding to discard subsequent changes. Never
+automatically restore it over newer state; older binaries are not declared
+compatible with newer fields. Preserve an existing backup across saves/restarts.
+
+## Interaction and asynchronous surface contracts
+
+The retained [design specification](desktop-ui-design-spec.md), [later approvals](desktop-ui-surface-approvals.md)
+and [Player/Guide supersessions](player-guide-polish-plan.md) own composition.
+The archived delivery matrix also established these operational constraints:
+
+- Editable fields consume Backspace; PIN's fourth digit submits and empty PIN
+  Backspace does nothing. Guide search uses Ctrl+F, Escape clears a nonempty
+  query, then returns focus from an empty field without cascading into route Back.
+- Menus/dialogs/pickers contain focus, restore the exact invoker and dismiss only
+  the top scope. A dismissing outside click is consumed. Player contextual Back
+  opens Guide; fullscreen retains its own controls. Settings Back returns to its
+  origin and Account cancellation returns to Account.
+- Guide click inspects; double-click/Enter/remote OK tunes only a currently airing
+  occurrence, rechecked on activation. Mini Guide Up/Down and inside wheel browse,
+  without hover selection or an inactivity timeout.
+- Dirty Studio/management has an explicit leave guard with the noncommitting
+  action initially focused; pending picker choices resolve before Save/Tune.
+  Pending mutations reject duplicate submit, retain drafts on failure and report
+  cleanup/rollback outcomes truthfully.
+- Async work publishes only to its matching request/source/profile/server/load/
+  draft context. It must not reclaim focus or auto-tune after navigation. Guide
+  retry revalidates the failed source/range without discarding valid sibling work
+  or adding an automatic competing retry layer. Extension failure preserves valid
+  prior preview coverage; a 1,000-occurrence cap must expose its honest end.
+- Ctrl+1/2/3/4/5 remain Guide/Channels/Settings/Diagnostics/Player. Preserve
+  supported letter/remote/media mappings; generic gamepad support and macOS
+  command-modifier changes require their own decision.
+
+## Integration and acceptance status
+
+The owner reports that native Player, current Classic PiP presentation, and
+fullscreen work at a surface level on Windows; older smoke notes also mentioned
+the retired full-screen Overlay path, which is not a current Guide option.
+Exact-commit remote Plex,
+representative HDR, broad codec/container/audio/subtitle, transition, and
+packaged-runtime acceptance remain deeper evidence work. This evidence boundary
+limits support claims, not playback attempts: the Windows libmpv backend accepts
+original Plex streams without a codec, container, or HDR allowlist and without
+treating native audio passthrough as a decode gate. It lets libmpv/FFmpeg demux,
+decode video and supported audio such as TrueHD and DTS-family tracks, convert
+audio to the system output (normally PCM), render subtitles, and tone-map as
+needed. This application-completeness batch adds no browser codec allowlist,
+compulsory server transcode/remux, subtitle burn-in framework, or passthrough
+decode gate. Passthrough, server fallback, and explicit subtitle sidecar loading
+remain separate capabilities justified only by a concrete product requirement
+or demonstrated native gap.
+
+## Dependency decision
+
+One behaviorful `ChangeNotifier` owns the current cross-feature asynchronous
+state graph; widgets retain local form and navigation state. A separate state
+framework would add forwarding and lifecycle ceremony without improving this
+single-owner graph. `http`, `xml`, `path_provider`, `qr_flutter`, `crypto`, and
+`flutter_secure_storage` provide maintained transport, Plex XML fallback,
+platform application-data paths, Flutter-rendered QR presentation, stable builder
+provenance hashes, and Keychain/platform-secure credential storage
+respectively. The macOS
+legacy-Keychain option is an explicit bridge
+for unsigned development, not plaintext storage or the production signing
+endpoint. No plaintext credential fallback exists.
+
+The Windows runtime additionally links libmpv dynamically at the native
+boundary. The pinned production asset uses mpv's LGPL mode and an LGPLv3
+FFmpeg configuration, with exact acquisition and binary checksums enforced by
+the preparation script and CMake. `docs/windows-runtime.md` records the source,
+configuration, obligations, and package policy.
+`flutter_lints` and `flutter_test` are development dependencies under their
+SDK/BSD licenses. Re-evaluate packages when a concrete feature can show a
+material reliability or ownership advantage.

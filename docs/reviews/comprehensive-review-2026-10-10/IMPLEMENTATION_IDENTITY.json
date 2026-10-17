@@ -1,0 +1,44 @@
+{
+  "head": "4fb7758034f4f47290fae13a4ea8275860ba1284",
+  "branch": "codex/desktop-ui-second-pass",
+  "implementation_sha256": {
+    "lib/app/channel_air_check.dart": "31483fe7caf66cdac1d8e349ae7a76f9e9ebbd99649c492f8725df38cf9112e8",
+    "lib/app/lineup_controller.dart": "c185f6ecec64df21f80b44faad784daeabef856fc69082368724e4bcd10edf0e",
+    "lib/app/onboarding_view.dart": "46e3d5ebc11e74a88d4554022ab6f8b950f26c22207947bccc93ddd7cec514ea",
+    "lib/channels/channel.dart": "556fbe7a95ed0531b2b399ab945f9199c3f18a5bbc3582f7373cdca3472f551e",
+    "lib/channels/schedule_worker.dart": "66d27e50ef43f31b7e6fbd434460b2845404365ca2ebe153c8aa75420d399750",
+    "lib/channels/scheduler.dart": "90448156cbb237fb4828e73bad7730f8f1871253351c4983fc3bb915db98a5d9",
+    "lib/guide/guide_controller.dart": "a79e3aa6da4650422933bc5a66c316df8147c6b41626eba611e61e42d42a27d6",
+    "lib/guide/guide_view.dart": "07055f2721105bbfa398f5fc0b86fbcaada25fa1849d5d50cb13303c6ca8a799",
+    "lib/playback/player_coordinator.dart": "d9059fa23aff0c0982df808992a1ecf8c380ede505f9d707646090c4f94124d9",
+    "test/app/channel_air_check_test.dart": "9d05da11d6cdf8e2f8feb8b3e893a8a46bf61ebe2203ed7c051471f8fbde0aeb",
+    "test/app/desktop_onboarding_test.dart": "1f49e8c4156f54b4ade9c420bcd2dff94a86886df6670ee99dd721a5a9638e9d",
+    "test/app/lineup_controller_test.dart": "33f84991e95f11c8e5d68e2894e485e5b3c83d672afc2aca7985bd8f67cb1347",
+    "test/channels/schedule_worker_test.dart": "f9484998e50e431121e62c142f4b9bfccd8fd0dad45cce846ab21c9026631b3a",
+    "test/channels/scheduler_test.dart": "c6d49a1cae655dc3a152822d361cb08c363af13de31db15d35add2abf6db4527",
+    "test/guide/guide_controller_test.dart": "f039077931077871146130500b921e325c39fc113ba82354cd74951ab100824e",
+    "test/guide/guide_view_test.dart": "649c3fd6a23ac5895380fc91fad3e25cd78cf6784634fe4ff6c767b0b2eb4515",
+    "test/persistence/app_store_test.dart": "6d25c04cc93ec191980275d27c7c4a39240842aaee9b6c41dd47250be32ef4a4",
+    "test/playback/player_coordinator_test.dart": "e71c6831fd49538394fa8f690adf6958787ba833c04459d8aba2869b16c80bfe",
+    "windows/runner/authenticated_reference_test.cpp": "99a7dfbe0dbda12ae16d5fde8c3ff8891f9777bbcaefbdaaa2e6e123ce530f51"
+  },
+  "baseline_file": "INPUT_IDENTITY.json",
+  "other_tracked_files_preserved": true,
+  "windows_runtime_acceptance": "deferred by user",
+  "p007": "deferred by user",
+  "verification": {
+    "full_new_york_suite": {
+      "exit_code": 0,
+      "passed": 1403,
+      "guide_alpha_included": true
+    },
+    "analyzer": "no issues",
+    "tracked_dart_format": {
+      "files": 90,
+      "changed": 0
+    },
+    "worker_race_trials": 300,
+    "independent_review": "all material findings resolved",
+    "windows": "not run; deferred"
+  }
+}

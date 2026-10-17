@@ -1,0 +1,478 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_builder.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/guide/guide_controller.dart';
+import 'package:lineup_desktop/persistence/app_store.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/player_coordinator.dart';
+import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
+
+import '../support/test_doubles.dart';
+
+void main() {
+  test(
+    'deterministic public seams exercise the portable product spine',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-product-spine-',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final store = FileAppStore(directory);
+      final credentials = MemoryCredentialStore();
+      final events = <String>[];
+      final plex = _ProductPlex(events);
+      var controller = LineupController(
+        store: store,
+        credentials: credentials,
+        plex: plex,
+        pinPollInterval: const Duration(milliseconds: 1),
+      );
+      final initialController = controller;
+      addTearDown(initialController.dispose);
+
+      await controller.initialize();
+      expect(controller.stage, SetupStage.welcome);
+
+      await controller.startLinking();
+      expect(controller.stage, SetupStage.linking);
+      plex.authorized = true;
+      await _until(() => controller.stage == SetupStage.profiles);
+
+      final child = controller.profiles.last;
+      await controller.selectProfile(child, pin: '2468');
+      expect(controller.stage, SetupStage.servers);
+
+      await controller.selectServer(plex.server);
+      expect(controller.stage, SetupStage.channelSetup);
+      expect(controller.connection?.relay, isFalse);
+      expect(controller.connection?.latency, const Duration(milliseconds: 18));
+
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(controller.libraryScanReadyIds, {'movies'});
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
+
+      final channel = _channel(1, anchor: _ProductPlex.now);
+      expect(
+        await controller.applyReviewedChannelPlan(
+          [channel],
+          mode: ChannelBuildMode.replace,
+          expectedBase: const [],
+        ),
+        ChannelPlanApplyResult.applied,
+      );
+      expect(controller.stage, SetupStage.channelSetup);
+      controller.completeChannelSetup();
+      expect(controller.stage, SetupStage.ready);
+
+      final guide = GuideController(
+        lineup: controller,
+        clock: () => _ProductPlex.now,
+      )..requestViewport(0, 1);
+      addTearDown(guide.dispose);
+      await _until(() => guide.currentProgram(channel.id) != null);
+      final expectedProgram = programAt(
+        _ProductPlex.now,
+        channel.anchor,
+        await controller.loadScheduleFor(channel),
+      );
+      final guideProgram = guide.currentProgram(channel.id)!;
+      expect(guideProgram.scheduled.item.id, expectedProgram.item.id);
+      expect(guideProgram.scheduled.start, expectedProgram.start);
+      expect(guideProgram.scheduled.end, expectedProgram.end);
+      final nativePlayer = _ProductPlayer(events);
+      addTearDown(nativePlayer.dispose);
+      final player = PlayerCoordinator(
+        player: nativePlayer,
+        lineup: controller,
+        guide: guide,
+      );
+      addTearDown(player.dispose);
+
+      await player.tune(channel.id);
+      expect(player.error, isNull);
+      expect(player.currentProgram!.scheduled.item.id, expectedProgram.item.id);
+      expect(player.currentProgram!.scheduled.start, expectedProgram.start);
+      expect(player.currentProgram!.scheduled.end, expectedProgram.end);
+      expect(controller.currentChannelId, channel.id);
+      expect(
+        nativePlayer.loadedUri?.queryParameters,
+        isNot(contains('X-Plex-Token')),
+      );
+      expect(nativePlayer.loadedPlexToken, 'pms-token');
+      nativePlayer.emitState(
+        PlayerState.playing,
+        generation: nativePlayer.generation,
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            selected: true,
+            language: 'eng',
+          ),
+          PlayerTrack(
+            id: 2,
+            type: PlayerTrackType.subtitle,
+            selected: false,
+            language: 'spa',
+          ),
+        ],
+      );
+      await Future<void>.delayed(Duration.zero);
+      player
+        ..showFullGuide()
+        ..showOsd()
+        ..showMiniGuide()
+        ..moveMiniGuide(1)
+        ..showOsd()
+        ..showTracks(PlayerTrackType.subtitle);
+      await player.selectTrack(PlayerTrackType.subtitle, 2);
+      expect(nativePlayer.selectedTracks, [(PlayerTrackType.subtitle, 2)]);
+
+      nativePlayer.emitState(
+        PlayerState.error,
+        generation: nativePlayer.generation,
+        message: 'failed https://plex.example/video?X-Plex-Token=secret',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(player.canRetry, isTrue);
+      expect(player.error, isNot(contains('secret')));
+      await player.retry();
+
+      await controller.updateSettings(
+        (current) =>
+            current.copyWith(nowWatchingBanner: false, osdAutoHideSeconds: 8),
+      );
+      expect(controller.settings.nowWatchingBanner, isFalse);
+
+      plex.offline = true;
+      await controller.refreshServers();
+      expect(controller.stage, SetupStage.servers);
+      expect(controller.error, contains('network'));
+      plex.offline = false;
+      await controller.refreshServers();
+      expect(controller.stage, SetupStage.servers);
+      await controller.selectServer(plex.server);
+      expect(controller.stage, SetupStage.ready);
+
+      final largeLineup = List.generate(
+        1000,
+        (index) => _channel(index + 1, anchor: _ProductPlex.now),
+        growable: false,
+      );
+      await controller.applyReviewedChannelPlan(
+        largeLineup,
+        mode: ChannelBuildMode.replace,
+        expectedBase: controller.channels,
+      );
+      expect(controller.channels, hasLength(1000));
+      expect(
+        (await store.load()).state.channelsByProfileServer['child']!['server']!,
+        hasLength(1000),
+      );
+
+      final restoredPlex = _ProductPlex(events)..authorized = true;
+      controller = LineupController(
+        store: store,
+        credentials: credentials,
+        plex: restoredPlex,
+      );
+      final restoredController = controller;
+      addTearDown(restoredController.dispose);
+      await controller.initialize();
+      expect(controller.stage, SetupStage.ready);
+      expect(controller.profile?.id, 'child');
+      expect(controller.server?.id, 'server');
+      expect(controller.channels, hasLength(1000));
+      expect(controller.settings.osdAutoHideSeconds, 8);
+
+      final restoredGuide = GuideController(
+        lineup: controller,
+        clock: () => _ProductPlex.now,
+      )..requestViewport(0, 1);
+      addTearDown(restoredGuide.dispose);
+      await _until(
+        () =>
+            restoredGuide.currentProgram(controller.channels.first.id) != null,
+      );
+      final restoredNativePlayer = _ProductPlayer(events);
+      addTearDown(restoredNativePlayer.dispose);
+      final restoredPlayer = PlayerCoordinator(
+        player: restoredNativePlayer,
+        lineup: controller,
+        guide: restoredGuide,
+      );
+      addTearDown(restoredPlayer.dispose);
+      await restoredPlayer.tune(controller.channels.first.id);
+      expect(await restoredPlayer.logout(), isTrue);
+      expect(restoredNativePlayer.stopCalls, 1);
+      expect(controller.stage, SetupStage.welcome);
+      expect(credentials.accountToken, isNull);
+      expect(credentials.profileTokens, isEmpty);
+      expect(
+        events,
+        containsAllInOrder([
+          'pin:create',
+          'pin:poll',
+          'account',
+          'profile:child',
+          'servers',
+          'connection:server',
+          'libraries',
+          'library:movies',
+          'player:load',
+          'player:track:subtitle:2',
+          'servers:offline',
+          'servers',
+        ]),
+      );
+    },
+  );
+}
+
+Future<void> _until(bool Function() condition) async {
+  final elapsed = Stopwatch()..start();
+  while (elapsed.elapsed < const Duration(seconds: 5)) {
+    if (condition()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+  fail('Timed out waiting for deterministic product state.');
+}
+
+Channel _channel(int number, {required DateTime anchor}) => Channel(
+  id: 'channel-$number',
+  number: number,
+  name: 'Channel $number',
+  source: const LibrarySource(
+    libraryId: 'movies',
+    libraryType: PlexLibraryType.movie,
+  ),
+  playbackMode: PlaybackMode.sequential,
+  anchor: anchor.subtract(const Duration(minutes: 5)),
+  shuffleSeed: number,
+  builderKey: 'generated-$number',
+);
+
+class _ProductPlex extends PlexClient {
+  _ProductPlex(this.events)
+    : super(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: testPlexHttpClient(),
+      );
+
+  static final now = DateTime.utc(2026, 8, 13, 12);
+  final List<String> events;
+  bool authorized = false;
+  bool offline = false;
+  final server = PlexServer(
+    id: 'server',
+    name: 'Test Server',
+    owned: true,
+    connections: [
+      PlexConnection(
+        uri: Uri.parse('https://plex.example:32400'),
+        local: true,
+        relay: false,
+      ),
+    ],
+  );
+
+  @override
+  Future<PlexPin> createPin() async {
+    events.add('pin:create');
+    return PlexPin(
+      id: 1,
+      code: 'ABCD',
+      expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+    );
+  }
+
+  @override
+  Future<String?> pollPin(PlexPin pin) async {
+    events.add('pin:poll');
+    return authorized ? 'account-token' : null;
+  }
+
+  @override
+  Future<void> cancelPin(PlexPin pin) async {}
+
+  @override
+  Future<PlexAccount> account(String token) async {
+    events.add('account');
+    return const PlexAccount(id: 'owner', name: 'Owner', email: '');
+  }
+
+  @override
+  Future<List<PlexHomeUser>> homeUsers(String accountToken) async => const [
+    PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+    PlexHomeUser(id: 'child', name: 'Child', protected: true),
+  ];
+
+  @override
+  Future<String> switchHomeUser(
+    String accountToken,
+    String userId,
+    String? pin,
+  ) async {
+    expect(pin, '2468');
+    events.add('profile:$userId');
+    return 'child-token';
+  }
+
+  @override
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
+    if (offline) {
+      events.add('servers:offline');
+      throw const PlexException('offline', 'The network is unavailable.');
+    }
+    events.add('servers');
+    return [PlexServerAccess(server: server, token: 'pms-token')];
+  }
+
+  @override
+  Future<PlexConnection> selectConnection(
+    PlexServer server,
+    String token,
+  ) async {
+    events.add('connection:${server.id}');
+    return PlexConnection(
+      uri: server.connections.single.uri,
+      local: true,
+      relay: false,
+      latency: const Duration(milliseconds: 18),
+    );
+  }
+
+  @override
+  Future<List<PlexLibrary>> libraries(Uri server, String token) async {
+    events.add('libraries');
+    return const [
+      PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+    ];
+  }
+
+  @override
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    void Function(PlexLibraryScanPhase phase)? onPhase,
+    Future<void>? cancelled,
+  }) async => PlexLibraryScan(
+    items: await libraryItems(
+      server,
+      token,
+      libraryId,
+      libraryType,
+      isCurrent: isCurrent,
+      onProgress: onProgress,
+      cancelled: cancelled,
+    ),
+  );
+
+  @override
+  Future<List<PlexMediaItem>> libraryItems(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    Future<void>? cancelled,
+  }) async {
+    events.add('library:$libraryId');
+    return List.generate(
+      12,
+      (index) => PlexMediaItem(
+        id: 'movie-$index',
+        title: 'Movie $index',
+        type: 'movie',
+        duration: const Duration(minutes: 30),
+        libraryId: libraryId,
+        parts: [PlexMediaPart(path: '/library/parts/$index/file.mp4')],
+        container: 'mp4',
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        dynamicRange: DynamicRange.sdr,
+      ),
+      growable: false,
+    );
+  }
+
+  @override
+  Future<PlexPlaylistCatalog> playlists(
+    Uri server,
+    String token, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+    void Function(PlexPlaylistProgress progress)? onProgress,
+  }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
+
+  @override
+  void close() {}
+}
+
+class _ProductPlayer extends FakeNativePlayer {
+  _ProductPlayer(this.eventLog)
+    : super(
+        initialStatus: const PlayerStatus(
+          state: PlayerState.idle,
+          message: 'Idle',
+        ),
+        duration: const Duration(minutes: 30),
+      );
+
+  final List<String> eventLog;
+  Uri? get loadedUri => loads.isEmpty ? null : loads.last;
+  String? get loadedPlexToken =>
+      loadPlexTokens.isEmpty ? null : loadPlexTokens.last;
+  int get stopCalls => stops;
+
+  @override
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+    );
+    eventLog.add('player:load');
+  }
+
+  void emitState(
+    PlayerState state, {
+    required int generation,
+    String? message,
+    List<PlayerTrack> tracks = const [],
+  }) {
+    super.emit(
+      PlayerStatus(
+        state: state,
+        message: message ?? state.name,
+        recoverable: state == PlayerState.error,
+      ),
+      eventGeneration: generation,
+      tracks: tracks,
+    );
+  }
+
+  @override
+  Future<void> selectTrack(PlayerTrackType type, int? id) async {
+    await super.selectTrack(type, id);
+    eventLog.add('player:track:${type.name}:$id');
+  }
+}

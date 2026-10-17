@@ -1,0 +1,909 @@
+import 'dart:convert';
+import 'dart:math';
+
+enum PlexLibraryType { movie, show }
+
+enum PlaybackMode { sequential, shuffle, block }
+
+enum LibraryFilter { genre, collection, studio, actor, director, decade }
+
+enum LibraryOrder { supplied, title, addedDescending }
+
+enum ChannelMediaKind { movie, episode, unknown }
+
+const currentScheduleVersion = 2;
+
+const maxRichCastMembers = 20;
+
+sealed class ContentSource {
+  const ContentSource();
+
+  Map<String, Object?> toJson();
+
+  static ContentSource fromJson(Object? value) {
+    try {
+      final json = _object(value, 'content source');
+      return switch (json['type']) {
+        'library' => () {
+          _requireFields(
+            json,
+            const {'type', 'libraryId', 'libraryType', 'includeWatched'},
+            const {'filters', 'order'},
+          );
+          final decoded = _libraryFields(json);
+          return LibrarySource(
+            libraryId: _string(json['libraryId']),
+            libraryType: _enumValue(
+              PlexLibraryType.values,
+              json['libraryType'],
+            ),
+            includeWatched: _boolean(json['includeWatched']),
+            filters: decoded.filters,
+            order: decoded.order,
+          );
+        }(),
+        'manual' => () {
+          _requireFields(json, const {'type', 'items'});
+          return ManualSource(
+            List<Object?>.from(_nonNull(json, 'items') as List)
+                .map(ChannelItem.fromJson)
+                .toList(),
+          );
+        }(),
+        'playlist' => () {
+          _requireFields(json, const {'type', 'playlistId'});
+          return PlaylistSource(_string(json['playlistId']));
+        }(),
+        'mixed' => () {
+          _requireFields(json, const {'type', 'interleave', 'sources'});
+          return MixedSource(
+            sources: List<Object?>.from(_nonNull(json, 'sources') as List)
+                .map(ContentSource.fromJson)
+                .toList(),
+            interleave: _boolean(json['interleave']),
+          );
+        }(),
+        _ => throw const FormatException('Unknown content source type'),
+      };
+    } on FormatException {
+      rethrow;
+    } catch (error) {
+      throw FormatException('Invalid content source', error);
+    }
+  }
+}
+
+class PlaylistSource extends ContentSource {
+  const PlaylistSource(this.playlistId);
+
+  final String playlistId;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'playlist',
+    'playlistId': playlistId,
+  };
+}
+
+class LibrarySource extends ContentSource {
+  const LibrarySource({
+    required this.libraryId,
+    required this.libraryType,
+    this.includeWatched = true,
+    this.filters = const {},
+    this.order = LibraryOrder.supplied,
+  });
+
+  final String libraryId;
+  final PlexLibraryType libraryType;
+  final bool includeWatched;
+  final Map<LibraryFilter, List<String>> filters;
+  final LibraryOrder order;
+
+  @override
+  Map<String, Object?> toJson() {
+    final canonicalFilters = {
+      for (final key in LibraryFilter.values)
+        if (_canonicalFilterValues(key, filters[key] ?? const [])
+            case final values when values.isNotEmpty)
+          key.name: values,
+    };
+    return {
+      'type': 'library',
+      'libraryId': libraryId,
+      'libraryType': libraryType.name,
+      'includeWatched': includeWatched,
+      if (canonicalFilters.isNotEmpty) 'filters': canonicalFilters,
+      if (order != LibraryOrder.supplied) 'order': order.name,
+    };
+  }
+}
+
+class ManualSource extends ContentSource {
+  const ManualSource(this.items);
+
+  final List<ChannelItem> items;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'manual',
+    'items': items.map((item) => item.toJson()).toList(),
+  };
+}
+
+class MixedSource extends ContentSource {
+  const MixedSource({required this.sources, this.interleave = false});
+
+  final List<ContentSource> sources;
+  final bool interleave;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'mixed',
+    'interleave': interleave,
+    'sources': sources.map((source) => source.toJson()).toList(),
+  };
+}
+
+bool hasNonemptyRetainedManualContent(ContentSource source) => switch (source) {
+  ManualSource(:final items) => items.isNotEmpty,
+  MixedSource(:final sources) => sources.any(hasNonemptyRetainedManualContent),
+  LibrarySource() || PlaylistSource() => false,
+};
+
+class ChannelItem {
+  const ChannelItem({
+    required this.id,
+    required this.title,
+    required this.duration,
+    this.showTitle,
+    this.showThumb,
+    this.poster,
+    this.backdrop,
+    this.clearLogo,
+    this.summary,
+    this.contentRating,
+    this.genres = const [],
+    this.year,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.resolution,
+    this.videoCodec,
+    this.audioCodec,
+    this.audioChannels,
+    this.dynamicRange,
+    this.cast = const [],
+    this.mediaKind = ChannelMediaKind.unknown,
+    this.seriesId,
+  }) : _frozen = false;
+
+  final bool _frozen;
+  final String id;
+  final String title;
+  final Duration duration;
+  final String? showTitle;
+  final String? showThumb;
+
+  final Uri? poster;
+  final Uri? backdrop;
+  final Uri? clearLogo;
+  final String? summary;
+  final String? contentRating;
+  final List<String> genres;
+  final int? year;
+  final int? seasonNumber;
+  final int? episodeNumber;
+  final String? resolution;
+  final String? videoCodec;
+  final String? audioCodec;
+  final int? audioChannels;
+  final String? dynamicRange;
+  final List<ChannelCastMember> cast;
+  final ChannelMediaKind mediaKind;
+  final String? seriesId;
+
+  ChannelItem._immutable(ChannelItem original)
+    : _frozen = true,
+      id = original.id,
+      title = original.title,
+      duration = original.duration,
+      showTitle = original.showTitle,
+      showThumb = original.showThumb,
+      poster = original.poster,
+      backdrop = original.backdrop,
+      clearLogo = original.clearLogo,
+      summary = original.summary,
+      contentRating = original.contentRating,
+      genres = List.unmodifiable(original.genres),
+      year = original.year,
+      seasonNumber = original.seasonNumber,
+      episodeNumber = original.episodeNumber,
+      resolution = original.resolution,
+      videoCodec = original.videoCodec,
+      audioCodec = original.audioCodec,
+      audioChannels = original.audioChannels,
+      dynamicRange = original.dynamicRange,
+      cast = List.unmodifiable(original.cast),
+      mediaKind = original.mediaKind,
+      seriesId = original.seriesId;
+
+  ChannelItem immutableCopy() => _frozen ? this : ChannelItem._immutable(this);
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'title': title,
+    'durationMs': duration.inMilliseconds,
+    if (showTitle != null) 'showTitle': showTitle,
+    'showThumb': ?canonicalPlexArtworkPathText(showThumb),
+    'poster': ?canonicalPlexArtworkPath(poster)?.toString(),
+    'backdrop': ?canonicalPlexArtworkPath(backdrop)?.toString(),
+    'clearLogo': ?canonicalPlexArtworkPath(clearLogo)?.toString(),
+    if (summary != null) 'summary': summary,
+    if (contentRating != null) 'contentRating': contentRating,
+    if (genres.isNotEmpty) 'genres': List<String>.of(genres, growable: false),
+    if (year != null) 'year': year,
+    if (seasonNumber != null) 'seasonNumber': seasonNumber,
+    if (episodeNumber != null) 'episodeNumber': episodeNumber,
+    if (resolution != null) 'resolution': resolution,
+    if (videoCodec != null) 'videoCodec': videoCodec,
+    if (audioCodec != null) 'audioCodec': audioCodec,
+    if (audioChannels != null) 'audioChannels': audioChannels,
+    if (dynamicRange != null) 'dynamicRange': dynamicRange,
+    if (cast.isNotEmpty)
+      'cast': cast.map((member) => member.toJson()).toList(growable: false),
+    if (mediaKind != ChannelMediaKind.unknown) 'mediaKind': mediaKind.name,
+    if (seriesId != null) 'seriesId': seriesId,
+  };
+
+  factory ChannelItem.fromJson(Object? value) {
+    try {
+      final json = _object(value, 'channel item');
+      _requireFields(
+        json,
+        const {'id', 'title', 'durationMs'},
+        const {
+          'showTitle',
+          'showThumb',
+          'poster',
+          'backdrop',
+          'clearLogo',
+          'summary',
+          'contentRating',
+          'genres',
+          'year',
+          'seasonNumber',
+          'episodeNumber',
+          'resolution',
+          'videoCodec',
+          'audioCodec',
+          'audioChannels',
+          'dynamicRange',
+          'cast',
+          'mediaKind',
+          'seriesId',
+        },
+      );
+      final durationMs = _integer(json['durationMs']);
+      // Duration stores signed 64-bit microseconds on the desktop runtime.
+      // Validate before multiplication so malformed persisted milliseconds
+      // cannot wrap into a positive, silently shortened program.
+      const maximumDurationMilliseconds = 9223372036854775807 ~/ 1000;
+      if (durationMs <= 0 || durationMs > maximumDurationMilliseconds) {
+        throw const FormatException('Invalid item duration');
+      }
+      return ChannelItem(
+        id: _string(json['id']),
+        title: _string(json['title']),
+        duration: Duration(milliseconds: durationMs),
+        showTitle: _optionalString(json, 'showTitle'),
+        showThumb: _optionalArtworkPath(json, 'showThumb'),
+        poster: _optionalArtworkUri(json, 'poster'),
+        backdrop: _optionalArtworkUri(json, 'backdrop'),
+        clearLogo: _optionalArtworkUri(json, 'clearLogo'),
+        summary: _optionalString(json, 'summary'),
+        contentRating: _optionalString(json, 'contentRating'),
+        genres: json.containsKey('genres')
+            ? List<String>.from(_nonNull(json, 'genres') as List)
+            : const [],
+        year: _optionalInteger(json, 'year'),
+        seasonNumber: _optionalInteger(json, 'seasonNumber'),
+        episodeNumber: _optionalInteger(json, 'episodeNumber'),
+        resolution: _optionalString(json, 'resolution'),
+        videoCodec: _optionalString(json, 'videoCodec'),
+        audioCodec: _optionalString(json, 'audioCodec'),
+        audioChannels: _optionalInteger(json, 'audioChannels'),
+        dynamicRange: _optionalString(json, 'dynamicRange'),
+        cast: json.containsKey('cast')
+            ? _persistedCastMembers(_nonNull(json, 'cast'))
+            : const [],
+        mediaKind: json.containsKey('mediaKind')
+            ? _enumValue(ChannelMediaKind.values, json['mediaKind'])
+            : ChannelMediaKind.unknown,
+        seriesId: _optionalString(json, 'seriesId'),
+      );
+    } on FormatException {
+      rethrow;
+    } catch (error) {
+      throw FormatException('Invalid channel item', error);
+    }
+  }
+}
+
+class ScheduleTransition {
+  final bool _frozen;
+  const ScheduleTransition({
+    required this.boundary,
+    required this.legacyCycleItems,
+  }) : _frozen = false;
+
+  ScheduleTransition._immutable(ScheduleTransition original)
+    : _frozen = true,
+      boundary = original.boundary,
+      legacyCycleItems = List.unmodifiable(
+        original.legacyCycleItems.map((item) => item.immutableCopy()),
+      );
+
+  ScheduleTransition immutableCopy() =>
+      _frozen ? this : ScheduleTransition._immutable(this);
+
+  final DateTime boundary;
+  final List<ChannelItem> legacyCycleItems;
+
+  Map<String, Object?> toJson() => {
+    'boundary': boundary.toUtc().toIso8601String(),
+    'legacyCycleItems': legacyCycleItems
+        .map((item) => item.toJson())
+        .toList(growable: false),
+  };
+
+  factory ScheduleTransition.fromJson(Object? value) {
+    final json = _object(value, 'schedule transition');
+    _requireFields(json, const {'boundary', 'legacyCycleItems'});
+    final items = List<Object?>.from(_nonNull(json, 'legacyCycleItems') as List)
+        .map(ChannelItem.fromJson)
+        .toList(growable: false);
+    if (items.isEmpty) {
+      throw const FormatException('Invalid schedule transition');
+    }
+    final boundaryValue = _string(json['boundary']);
+    if (!RegExp(r'(?:Z|[+-]\d{2}:\d{2})$').hasMatch(boundaryValue)) {
+      throw const FormatException('Invalid schedule transition boundary');
+    }
+    return ScheduleTransition(
+      boundary: DateTime.parse(boundaryValue).toUtc(),
+      legacyCycleItems: List.unmodifiable(items),
+    );
+  }
+}
+
+List<ChannelCastMember> _persistedCastMembers(Object value) {
+  final retained = <ChannelCastMember>[];
+  for (final raw in value as List) {
+    final member = ChannelCastMember.fromJson(raw);
+    if (retained.length < maxRichCastMembers) retained.add(member);
+  }
+  return List.unmodifiable(retained);
+}
+
+class ChannelCastMember {
+  ChannelCastMember({required this.name, this.role, Uri? portrait})
+    : portrait = canonicalPlexCastPortrait(portrait);
+
+  final String name;
+  final String? role;
+  final Uri? portrait;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    if (role != null) 'role': role,
+    if (portrait != null) 'portrait': portrait.toString(),
+  };
+
+  factory ChannelCastMember.fromJson(Object? value) {
+    final json = _object(value, 'cast member');
+    _requireFields(json, const {'name'}, const {'role', 'portrait'});
+    return ChannelCastMember(
+      name: _string(json['name']),
+      role: _optionalString(json, 'role'),
+      portrait: _optionalCastPortraitUri(json, 'portrait'),
+    );
+  }
+}
+
+/// Validates a Plex-supplied portrait source for fetching by the selected PMS
+/// photo transcoder. Absolute sources are never fetched by the app directly.
+Uri? canonicalPlexCastPortrait(Uri? value) {
+  if (value == null ||
+      value.toString().length > 2048 ||
+      _hasPortraitTraversal(value.toString()) ||
+      value.userInfo.isNotEmpty ||
+      value.hasFragment) {
+    return null;
+  }
+  if (value.isAbsolute) {
+    return (value.scheme == 'http' || value.scheme == 'https') &&
+            value.host.isNotEmpty
+        ? value
+        : null;
+  }
+  if (value.hasAuthority ||
+      value.hasQuery ||
+      !value.path.startsWith('/') ||
+      value.path == '/' ||
+      value.toString() != value.path) {
+    return null;
+  }
+  return value;
+}
+
+bool _hasPortraitTraversal(String value) {
+  var pathText = value.split(RegExp(r'[?#]')).first;
+  // Inspect raw text before Uri normalizes dot segments, then inspect bounded
+  // decoding passes so encoded separators cannot disguise traversal.
+  for (var pass = 0; pass < 4; pass++) {
+    if (pathText.contains('\\') ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(pathText) ||
+        pathText
+            .split('/')
+            .any((segment) => segment == '.' || segment == '..')) {
+      return true;
+    }
+    try {
+      final decoded = Uri.decodeComponent(pathText);
+      if (decoded == pathText) break;
+      pathText = decoded;
+    } on FormatException {
+      return true;
+    }
+  }
+  return false;
+}
+
+String? canonicalPlexCastPortraitText(String? value) {
+  if (value == null || value.length > 2048 || _hasPortraitTraversal(value)) {
+    return null;
+  }
+  return canonicalPlexCastPortrait(Uri.tryParse(value))?.toString();
+}
+
+/// Returns the only artwork-reference shape that may enter durable channel
+/// state: a queryless Plex metadata path with no URI authority or traversal.
+Uri? canonicalPlexArtworkPath(Uri? value) {
+  if (value == null ||
+      value.scheme.isNotEmpty ||
+      value.hasAuthority ||
+      value.hasQuery ||
+      value.hasFragment ||
+      !value.path.startsWith('/library/metadata/')) {
+    return null;
+  }
+  final suffix = value.path.substring('/library/metadata/'.length);
+  if (suffix.isEmpty ||
+      suffix
+          .split('/')
+          .any(
+            (segment) => segment.isEmpty || segment == '.' || segment == '..',
+          ) ||
+      value.pathSegments.any((segment) => segment == '.' || segment == '..')) {
+    return null;
+  }
+  return value.toString() == value.path ? value : null;
+}
+
+String? canonicalPlexArtworkPathText(String? value) {
+  if (value == null) return null;
+  return canonicalPlexArtworkPath(Uri.tryParse(value))?.toString();
+}
+
+class Channel {
+  const Channel({
+    required this.id,
+    required this.number,
+    required this.name,
+    required this.source,
+    required this.playbackMode,
+    required this.anchor,
+    required this.shuffleSeed,
+    this.blockSize,
+    this.builderKey,
+    bool includeSpecials = false,
+    this.scheduleVersion = currentScheduleVersion,
+    this.scheduleTransition,
+  }) : _frozen = false,
+       includeSpecials = playbackMode == PlaybackMode.block && includeSpecials;
+
+  final bool _frozen;
+  final String id;
+  final int number;
+  final String name;
+  final ContentSource source;
+  final PlaybackMode playbackMode;
+  final DateTime anchor;
+  final int shuffleSeed;
+  final int? blockSize;
+  final String? builderKey;
+  final bool includeSpecials;
+  final int scheduleVersion;
+  final ScheduleTransition? scheduleTransition;
+
+  void validate(Iterable<Channel> existing) {
+    _validateStructure();
+    if (existing.any(
+      (channel) => channel.id != id && channel.number == number,
+    )) {
+      throw const FormatException('Channel number is already in use');
+    }
+  }
+
+  void _validateStructure() {
+    if (id.trim().isEmpty || name.trim().isEmpty) {
+      throw const FormatException('Channel name is required');
+    }
+    if (number < 1 || number > 1000) {
+      throw const FormatException('Channel number must be between 1 and 1000');
+    }
+    if (playbackMode == PlaybackMode.block &&
+        (blockSize == null || blockSize! < 1)) {
+      throw const FormatException('Block size must be positive');
+    }
+    _validateSource(source, 0);
+    if (scheduleVersion < 1 ||
+        scheduleVersion > currentScheduleVersion ||
+        (scheduleTransition != null &&
+            scheduleVersion != currentScheduleVersion)) {
+      throw const FormatException('Invalid schedule version');
+    }
+    final transition = scheduleTransition;
+    if (transition != null &&
+        (transition.legacyCycleItems.isEmpty ||
+            transition.legacyCycleItems.any(
+              (item) => item.duration <= Duration.zero,
+            ))) {
+      throw const FormatException('Invalid schedule transition');
+    }
+  }
+
+  Channel._immutable(Channel original)
+    : _frozen = true,
+      id = original.id,
+      number = original.number,
+      name = original.name,
+      source = immutableContentSource(original.source),
+      playbackMode = original.playbackMode,
+      anchor = original.anchor,
+      shuffleSeed = original.shuffleSeed,
+      blockSize = original.blockSize,
+      builderKey = original.builderKey,
+      includeSpecials = original.includeSpecials,
+      scheduleVersion = original.scheduleVersion,
+      scheduleTransition = original.scheduleTransition?.immutableCopy();
+
+  Channel immutableCopy() => _frozen ? this : Channel._immutable(this);
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'number': number,
+    'name': name,
+    'source': source.toJson(),
+    'playbackMode': playbackMode.name,
+    'anchor': anchor.toUtc().toIso8601String(),
+    'shuffleSeed': shuffleSeed,
+    if (blockSize != null) 'blockSize': blockSize,
+    if (builderKey != null) 'builderKey': builderKey,
+    if (playbackMode == PlaybackMode.block) 'includeSpecials': includeSpecials,
+    'scheduleVersion': scheduleVersion,
+    if (scheduleTransition != null)
+      'scheduleTransition': scheduleTransition!.toJson(),
+  };
+
+  factory Channel.fromJson(Object? value) {
+    try {
+      final json = _object(value, 'channel');
+      _requireFields(
+        json,
+        const {
+          'id',
+          'number',
+          'name',
+          'source',
+          'playbackMode',
+          'anchor',
+          'shuffleSeed',
+        },
+        const {
+          'blockSize',
+          'builderKey',
+          'includeSpecials',
+          'scheduleVersion',
+          'scheduleTransition',
+        },
+      );
+      final mode = _enumValue(PlaybackMode.values, json['playbackMode']);
+      final version = json.containsKey('scheduleVersion')
+          ? _integer(json['scheduleVersion'])
+          : 1;
+      return Channel(
+        id: _string(json['id']),
+        number: _integer(json['number']),
+        name: _string(json['name']),
+        source: ContentSource.fromJson(json['source']),
+        playbackMode: mode,
+        anchor: DateTime.parse(_string(json['anchor'])).toUtc(),
+        shuffleSeed: _integer(json['shuffleSeed']),
+        blockSize: _optionalInteger(json, 'blockSize'),
+        builderKey: _optionalString(json, 'builderKey'),
+        includeSpecials: json.containsKey('includeSpecials')
+            ? _boolean(json['includeSpecials'])
+            : mode == PlaybackMode.block,
+        scheduleVersion: version,
+        scheduleTransition: json.containsKey('scheduleTransition')
+            ? ScheduleTransition.fromJson(json['scheduleTransition'])
+            : null,
+      );
+    } on FormatException {
+      rethrow;
+    } catch (error) {
+      throw FormatException('Invalid channel', error);
+    }
+  }
+}
+
+void validateChannels(Iterable<Channel> channels) {
+  final channelIds = <String>{};
+  final channelIdByNumber = <int, String>{};
+  for (final channel in channels) {
+    channel._validateStructure();
+    if (!channelIds.add(channel.id)) {
+      throw const FormatException('Channel ID is already in use');
+    }
+    final existingId = channelIdByNumber[channel.number];
+    if (existingId != null && existingId != channel.id) {
+      throw const FormatException('Channel number is already in use');
+    }
+    channelIdByNumber.putIfAbsent(channel.number, () => channel.id);
+  }
+}
+
+bool canonicalChannelValueEquals(Object? left, Object? right) {
+  if (left is Map && right is Map) {
+    return left.length == right.length &&
+        left.entries.every(
+          (entry) =>
+              right.containsKey(entry.key) &&
+              canonicalChannelValueEquals(entry.value, right[entry.key]),
+        );
+  }
+  if (left is List && right is List) {
+    return left.length == right.length &&
+        Iterable<int>.generate(left.length).every(
+          (index) => canonicalChannelValueEquals(left[index], right[index]),
+        );
+  }
+  return left == right;
+}
+
+String canonicalSourceIdentity(ContentSource source) =>
+    jsonEncode(source.toJson());
+
+String canonicalScheduleIdentity(Channel channel) => jsonEncode({
+  'source': channel.source.toJson(),
+  'mode': channel.playbackMode.name,
+  'anchor': channel.anchor.toUtc().toIso8601String(),
+  'seed': channel.shuffleSeed,
+  'blockSize': channel.playbackMode == PlaybackMode.block
+      ? channel.blockSize
+      : null,
+  'includeSpecials':
+      channel.playbackMode == PlaybackMode.block && channel.includeSpecials,
+  'scheduleVersion': channel.scheduleVersion,
+  'scheduleTransition': channel.scheduleTransition?.toJson(),
+});
+
+bool canonicalSourceEquals(ContentSource left, ContentSource right) =>
+    canonicalSourceIdentity(left) == canonicalSourceIdentity(right);
+
+String canonicalFilterIdentity(LibraryFilter filter, String value) {
+  final trimmed = value.trim();
+  return filter == LibraryFilter.actor || filter == LibraryFilter.director
+      ? trimmed.toLowerCase()
+      : trimmed;
+}
+
+int stableChannelSeed(String value) {
+  var hash = 0x811c9dc5;
+  for (final byte in utf8.encode(value)) {
+    hash = ((hash ^ byte) * 0x01000193) & 0xffffffff;
+  }
+  return hash;
+}
+
+String createChannelId() {
+  final random = Random.secure();
+  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+  return base64Url.encode(bytes).replaceAll('=', '');
+}
+
+String _string(Object? value) {
+  if (value is! String || value.trim().isEmpty) {
+    throw const FormatException('Required text is missing');
+  }
+  return value.trim();
+}
+
+Map<String, Object?> _object(Object? value, String name) {
+  if (value is! Map) throw FormatException('Invalid $name');
+  try {
+    return Map<String, Object?>.from(value);
+  } catch (error) {
+    throw FormatException('Invalid $name', error);
+  }
+}
+
+void _requireFields(
+  Map<String, Object?> json,
+  Set<String> required, [
+  Set<String> optional = const {},
+]) {
+  final keys = json.keys.toSet();
+  if (!keys.containsAll(required) ||
+      keys.difference({...required, ...optional}).isNotEmpty) {
+    throw const FormatException('Fields are not canonical');
+  }
+}
+
+Object _nonNull(Map<String, Object?> json, String key) =>
+    json[key] ?? (throw FormatException('Invalid $key'));
+
+bool _boolean(Object? value) {
+  if (value is! bool) throw const FormatException('Invalid Boolean');
+  return value;
+}
+
+int _integer(Object? value) {
+  if (value is! int) throw const FormatException('Invalid integer');
+  return value;
+}
+
+int? _optionalInteger(Map<String, Object?> json, String key) =>
+    json.containsKey(key) ? _integer(_nonNull(json, key)) : null;
+
+String? _optionalString(Map<String, Object?> json, String key) {
+  if (!json.containsKey(key)) return null;
+  final value = _nonNull(json, key);
+  if (value is! String) throw FormatException('Invalid $key');
+  return value;
+}
+
+T _enumValue<T extends Enum>(List<T> values, Object? value) {
+  if (value is! String) throw const FormatException('Invalid enum');
+  return values.where((candidate) => candidate.name == value).firstOrNull ??
+      (throw const FormatException('Invalid enum'));
+}
+
+({Map<LibraryFilter, List<String>> filters, LibraryOrder order}) _libraryFields(
+  Map<String, Object?> json,
+) {
+  var order = json.containsKey('order')
+      ? _enumValue(LibraryOrder.values, json['order'])
+      : LibraryOrder.supplied;
+  final output = <LibraryFilter, List<String>>{};
+  if (!json.containsKey('filters')) return (filters: output, order: order);
+  final raw = _object(_nonNull(json, 'filters'), 'filters');
+  for (final entry in raw.entries) {
+    if (entry.key == 'sort') {
+      if (entry.value != 'added:desc' || order != LibraryOrder.supplied) {
+        throw const FormatException('Unsupported content filter');
+      }
+      order = LibraryOrder.addedDescending;
+      continue;
+    }
+    final key = _enumValue(LibraryFilter.values, entry.key);
+    final values = entry.value is String
+        ? <String>[entry.value as String]
+        : List<Object?>.from(entry.value as List).map(_string).toList();
+    final canonical = _canonicalFilterValues(key, values);
+    if (canonical.isEmpty) {
+      throw const FormatException('Invalid content filter');
+    }
+    if (key == LibraryFilter.decade &&
+        canonical.any((value) => !RegExp(r'^[1-9]\d{2}0s$').hasMatch(value))) {
+      throw const FormatException('Invalid decade filter');
+    }
+    output[key] = canonical;
+  }
+  return (filters: Map.unmodifiable(output), order: order);
+}
+
+List<String> _canonicalFilterValues(
+  LibraryFilter key,
+  Iterable<String> values,
+) {
+  final normalized = <String, String>{};
+  for (final raw in values) {
+    final value = canonicalFilterIdentity(key, raw);
+    if (value.isEmpty) continue;
+    if (key == LibraryFilter.actor || key == LibraryFilter.director) {
+      normalized[value] = value;
+      continue;
+    }
+    normalized.update(
+      value,
+      (current) => current.compareTo(value) <= 0 ? current : value,
+      ifAbsent: () => value,
+    );
+  }
+  final output = normalized.values.toList()..sort();
+  return List.unmodifiable(output);
+}
+
+Uri? _optionalArtworkUri(Map<String, Object?> json, String key) {
+  if (!json.containsKey(key)) return null;
+  final value = _nonNull(json, key);
+  if (value is! String) throw FormatException('Invalid $key');
+  final uri = Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
+  return canonicalPlexArtworkPath(uri);
+}
+
+Uri? _optionalCastPortraitUri(Map<String, Object?> json, String key) {
+  if (!json.containsKey(key)) return null;
+  final value = _nonNull(json, key);
+  if (value is! String) throw FormatException('Invalid $key');
+  final uri = Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
+  return canonicalPlexCastPortraitText(value) == null ? null : uri;
+}
+
+String? _optionalArtworkPath(Map<String, Object?> json, String key) {
+  if (!json.containsKey(key)) return null;
+  final value = _nonNull(json, key);
+  if (value is! String) throw FormatException('Invalid $key');
+  final uri = Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
+  return canonicalPlexArtworkPath(uri)?.toString();
+}
+
+void _validateSource(ContentSource source, int depth) {
+  if (depth > 25) {
+    throw const FormatException('Content source is too deeply nested');
+  }
+  switch (source) {
+    case LibrarySource(:final libraryId):
+      if (libraryId.isEmpty) throw const FormatException('Library is required');
+    case ManualSource(:final items):
+      if (items.isEmpty ||
+          items.any((item) => item.duration <= Duration.zero)) {
+        throw const FormatException('Manual content cannot be empty');
+      }
+    case PlaylistSource(:final playlistId):
+      if (playlistId.isEmpty) {
+        throw const FormatException('Playlist is required');
+      }
+    case MixedSource(:final sources):
+      if (sources.isEmpty) {
+        throw const FormatException('Mixed content cannot be empty');
+      }
+      for (final child in sources) {
+        _validateSource(child, depth + 1);
+      }
+  }
+}
+
+/// Detaches nested aliases when programming enters committed controller state.
+ContentSource immutableContentSource(ContentSource source) => switch (source) {
+  LibrarySource() => LibrarySource(
+    libraryId: source.libraryId,
+    libraryType: source.libraryType,
+    includeWatched: source.includeWatched,
+    filters: Map.unmodifiable({
+      for (final entry in source.filters.entries)
+        entry.key: List<String>.unmodifiable(entry.value),
+    }),
+    order: source.order,
+  ),
+  ManualSource() => ManualSource(
+    List.unmodifiable(source.items.map((item) => item.immutableCopy())),
+  ),
+  MixedSource() => MixedSource(
+    sources: List.unmodifiable(source.sources.map(immutableContentSource)),
+    interleave: source.interleave,
+  ),
+  PlaylistSource() => source,
+};

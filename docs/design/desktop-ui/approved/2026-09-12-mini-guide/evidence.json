@@ -1,0 +1,33 @@
+{
+  "status": "Approved at 1080p",
+  "base_commit": "2d5d2cad15e4855f1a5db328a8867f242736b21b",
+  "sources": {
+    "lib/playback/player_view.dart": "21d730cae3d93fed8154a00d9dbea3780de97c1842f652bb62793706f7bbfbb5",
+    "test/playback/player_view_test.dart": "14a348e64d5533acc722fdab0097cc8f110a8a3353181b7d5e82209a8c4ab6c0"
+  },
+  "images": {
+    "mini-guide-dark-1920x1080.png": "62d5685e6860d7a9188096ae28655385767e395e5a23bc10fc2f1d3c39e701a9",
+    "mini-guide-browsing-1920x1080.png": "b1848ec0fd918ead94f744095789274bc293fbfd00aeba12536e13a4c1601fbe",
+    "mini-guide-bright-1920x1080.png": "a3462e0563bd40979cd78455bb6d42a2757b504587db76920024e3306aa4b02a"
+  },
+  "dpr": 1,
+  "text_scale": 1,
+  "fixture": "actual Flutter PlayerView over labeled synthetic painted light/dark scenes; no image compositing or decoded video",
+  "checks": "70 behavior checks plus 2 candidate capture cases passed; 2 baseline capture cases passed; targeted analysis and whitespace clean",
+  "remaining": [
+    "Grouped adaptive/accessibility checkpoint",
+    "Moving footage and physical Windows native input/rendering acceptance"
+  ],
+  "implementation_commit": "90497d128a51c3f23180d6a534ef544df91bcd97",
+  "approval": {
+    "quote": "yes. locked. now onto 28 the played OSD.",
+    "date": "2026-09-12",
+    "presented": [
+      "mini-guide-browsing-1920x1080.png",
+      "mini-guide-dark-1920x1080.png"
+    ],
+    "supplemental": [
+      "mini-guide-bright-1920x1080.png"
+    ]
+  }
+}

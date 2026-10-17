@@ -1,0 +1,231 @@
+{
+  "surface": "Lineup menu / surface 41",
+  "base": {
+    "branch": "dev/desktop-ui-refinement",
+    "commit": "f1cdb7422a5bcb44008034e3f314eb45609713f7",
+    "sourcePath": "lib/app/lineup_shell.dart",
+    "sourceBaseSHA256": "2a61abfe11c3c52bc272ff9b32ebaeec0a4df0d2925345829fd7494dfc29a811",
+    "sourceFinalSHA256": "9d51b8ba9f6fc41c102098dc0609ab1f924b0fa925adf71c8a4a354e916cde9c",
+    "harnessPath": "build/desktop-ui/scaling/menu_test.dart",
+    "harnessSHA256": "a207a127c9b8b2d860ef360538ed520e1ed30fcd5b9702ff9ecd9955bfe74ca9",
+    "pinnedFlutter": "3.47.2"
+  },
+  "scaleRule": "max(1, min(logicalWidth / 1920, logicalHeight / 1080))",
+  "rawCaptures": [
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-1920/settings-1920x1080.png",
+      "variant": "settings",
+      "physicalSize": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "0f0e33758c118541a0facfe96049dc154c9b2ea8bd98a72a7d81d2c533ec9de8"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-1920/settings-long-1920x1080.png",
+      "variant": "settings-long",
+      "physicalSize": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "08782230f6eabe7f434fb802a1749ff19a992ecfd609eb49ad2b9e6a75f2a3b4"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-1920/guide-1920x1080.png",
+      "variant": "guide",
+      "physicalSize": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "bc5c137c404e3565ae4eb491965f8f825101d981330fe2e5ab8df7bbb2e18785"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-1920/channels-1920x1080.png",
+      "variant": "channels",
+      "physicalSize": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "9a8c6d8acde33e4204887edc2fa475148edbd68a36d5109200e38f01f5aa8edc"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-1920/diagnostics-1920x1080.png",
+      "variant": "diagnostics",
+      "physicalSize": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "ec579afb2a5d62f2cab0e3e5cd1608a61ad146d62485d7770efea40f39d4494d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-1920/player-1920x1080.png",
+      "variant": "player",
+      "physicalSize": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "3876c97321c73b1421337e3689daa56fcc330c23ea358df086d8c348e6fcb7fc"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-1440-settings-long/settings-long-1440x810.png",
+      "variant": "settings-long",
+      "physicalSize": "1440x810",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "7f42fafd6728114b305882fffbcc0323119b59d77e24125395ebebffd65c8633"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-1440-guide/guide-1440x810.png",
+      "variant": "guide",
+      "physicalSize": "1440x810",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "7d37ba649052d440527ab260c8cba03b242f3c14bf8f408fbf0c77cc4eca79e8"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-2160-settings-long/settings-long-3840x2160.png",
+      "variant": "settings-long",
+      "physicalSize": "3840x2160",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "b5423c81f8d74389086134274c1839908ed76f82083ace29859ba1b2870ba88e"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-2160-guide/guide-3840x2160.png",
+      "variant": "guide",
+      "physicalSize": "3840x2160",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "83c1754b4e9c3ca66a628acca9e346bd6654d53d6abc7aea26c503a05fb92c2c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-2160-text2-settings-long/settings-long-3840x2160.png",
+      "variant": "settings-long",
+      "physicalSize": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "hash": "fac5c8ea5d9ad76499cc48686849a8df18684b24827ebe4e447f03a58963a9bf"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-2160-text2-guide/guide-3840x2160.png",
+      "variant": "guide",
+      "physicalSize": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "hash": "9e9d763421198ba90edaa1161511dbe15ef9838a807c8d8db8b5a92d38394482"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-2160-text2-player/player-3840x2160.png",
+      "variant": "player",
+      "physicalSize": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "hash": "177cc86f8c5087ed52c4f6e938234380912cc2f5961ab3a7fa315603fcf52e7d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-2160-dpr2-text2-settings-long/settings-long-3840x2160.png",
+      "variant": "settings-long",
+      "physicalSize": "3840x2160",
+      "dpr": 2,
+      "textScale": 2,
+      "hash": "50bb2aa7abc8698a0a58a9bed0b12f454a21a9ea0aed3a8dd276eca28aa20383"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-2160-dpr2-text2-guide/guide-3840x2160.png",
+      "variant": "guide",
+      "physicalSize": "3840x2160",
+      "dpr": 2,
+      "textScale": 2,
+      "hash": "62ed37d1aa1f532aa1f2131cc66f819741e0f1e9f03b26b0a5ae4633c8fc7a8b"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-720-text2-settings-long/settings-long-1280x720.png",
+      "variant": "settings-long",
+      "physicalSize": "1280x720",
+      "dpr": 1,
+      "textScale": 2,
+      "hash": "9cb182ba867972c48433a7c812490a5b6753254aef8d2ce977a1be53301fa963"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-720-text2-guide/guide-1280x720.png",
+      "variant": "guide",
+      "physicalSize": "1280x720",
+      "dpr": 1,
+      "textScale": 2,
+      "hash": "ee9f0fced3cbde53c57a0f05023b4c09bbabfd7a75c077902aaccf1ec1de73ce"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-exact-800-text2-settings-long-scroll/settings-long-scroll-800x450.png",
+      "variant": "settings-long-scroll",
+      "physicalSize": "800x450",
+      "dpr": 1,
+      "textScale": 2,
+      "hash": "1f287bdb043a0dbd11b088c403028131c2092b4148e6677e6c66e2277c25bd76"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-root-1440p-settings-long/settings-long-2560x1440.png",
+      "variant": "settings-long",
+      "physicalSize": "2560x1440",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "ed481b7cdbc794b10942d801f15f911196cf07fe1512e2cefc629e73894d4b4f"
+    },
+    {
+      "path": "build/desktop-ui/scaling/menu-root-1440p-guide/guide-2560x1440.png",
+      "variant": "guide",
+      "physicalSize": "2560x1440",
+      "dpr": 1,
+      "textScale": 1,
+      "hash": "dbd2ea2300ccb547ab3589fe60bafcba7e09f0280efe86722064d65280f7cd07"
+    }
+  ],
+  "comparisons": {
+    "baselineManifest": "build/desktop-ui/scaling/menu-baseline-manifest.json",
+    "normal1080Cases": 6,
+    "normal1080ByteIdentical": 6,
+    "result": "pass"
+  },
+  "checks": [
+    {
+      "command": "dart format lib/app/lineup_shell.dart",
+      "result": "pass"
+    },
+    {
+      "command": "flutter analyze --no-pub lib/app/lineup_shell.dart",
+      "result": "pass"
+    },
+    {
+      "command": "flutter test --no-pub test/app/desktop_navigation_test.dart test/app/ui_parity_test.dart",
+      "result": "pass",
+      "tests": 10
+    },
+    {
+      "command": "flutter test --no-pub build/desktop-ui/scaling/menu_test.dart",
+      "result": "pass",
+      "captureCases": 18
+    },
+    {
+      "command": "cmp each final normal1080 capture against menu-baseline-manifest.json",
+      "result": "pass",
+      "matches": "6/6"
+    },
+    {
+      "command": "git diff --check",
+      "result": "pass"
+    }
+  ],
+  "visualArtifacts": {
+    "rootAdaptiveSheet": "build/desktop-ui/scaling/menu-root-contact.png",
+    "rawImagesAreUnmodified": true
+  },
+  "interaction": {
+    "captureHarness": "Each invoker opens the production menu; Escape dismisses it and asserts invoker focus. The constrained case drags the menu to Account before capture.",
+    "existingBehaviorCoverage": "Destination clicks, Account navigation, outside-click dismissal, focus trapping, Escape restoration, and no-exception checks passed.",
+    "result": "pass"
+  },
+  "concerns": [
+    "Captures use synthetic fixture data and portable macOS Arial; they are not physical Windows acceptance.",
+    "Windows typography/input, native video layering, and live monitor-DPI transitions remain unvalidated.",
+    "The 4K/DPR2 cases intentionally use a 1920x1080 logical viewport and therefore remain at scale 1; no second DPR multiplication is applied.",
+    "The capture harness and all evidence artifacts are ignored working-tree outputs; no tracked tests or documentation were changed."
+  ],
+  "independentReview": {
+    "run": false,
+    "specificallyRecommended": false
+  },
+  "rootIntegration": "Astra verified source/harness/all raw capture hashes and six unchanged1080 pairs, reviewed menu source and adaptive sheets. Worker1440-labeled cases were1440x810; root added two true2560x1440 captures, both passed. Root replaced mislabeled derived contact sheets with an accurately labeled sheet; raw capture metadata remains authoritative."
+}

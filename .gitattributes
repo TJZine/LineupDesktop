@@ -1,0 +1,2 @@
+tool/flutter_engine/*.patch text eol=lf
+third_party/libmpv/licenses/* text eol=lf

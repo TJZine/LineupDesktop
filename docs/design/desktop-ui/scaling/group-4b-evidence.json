@@ -1,0 +1,300 @@
+{
+  "surface": "surface-29 Now Playing proportional scaling",
+  "base": "c349a91dcd393b6986a3829d26dbbe91512c02b4",
+  "source": {
+    "path": "lib/playback/player_view.dart",
+    "baseSha256": "8cef42bee8c5a5821669a669bcdeaac97c185b5e9b5d84e44cd429429febd121",
+    "finalSha256": "3a32ce78e1f25d7ded5ae82ce6eb5a8fb95f26f519177dff662f5d201f53773d"
+  },
+  "toolchain": {
+    "flutter": "3.47.2",
+    "flutterRevision": "d3b14c876900e553bc736ca19295fc09e3853e8e",
+    "dart": "3.13.2",
+    "timezone": "America/New_York"
+  },
+  "captures": [
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-1080/nowplaying-now-playing-default-bright-capture.png",
+      "sha256": "c4757e35d3ac5b008dca9a4c54d44a403648f1e50e168f10eb586e2cf30c72dd",
+      "physicalViewport": "1920x1080",
+      "logicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "bright",
+      "fixture": "populated cast and artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-1080/nowplaying-now-playing-default-dark-capture.png",
+      "sha256": "a1278969d60d40a589ef39b75c13aaf088e75b2c8ecddc07dfefb34a8b20dfa3",
+      "physicalViewport": "1920x1080",
+      "logicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "dark",
+      "fixture": "populated cast and artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-1440/nowplaying-now-playing-default-bright-capture.png",
+      "sha256": "029413b048de6816c8214ce34b469e4635a3e556007f035e384ff156f2d6ca45",
+      "physicalViewport": "2560x1440",
+      "logicalViewport": "2560x1440",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "bright",
+      "fixture": "populated cast and artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-1440/nowplaying-now-playing-default-dark-capture.png",
+      "sha256": "70b3d307473455b7cd204f55fa0ce5fabc473517f6cf7d9cc4160286aac505f8",
+      "physicalViewport": "2560x1440",
+      "logicalViewport": "2560x1440",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "dark",
+      "fixture": "populated cast and artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-2160/nowplaying-now-playing-default-bright-capture.png",
+      "sha256": "d12102d0b19d6c7c72ee207e4a4128db7beca99787f09de5847bc60f15ad08c0",
+      "physicalViewport": "3840x2160",
+      "logicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "bright",
+      "fixture": "populated cast and artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-2160/nowplaying-now-playing-default-dark-capture.png",
+      "sha256": "9ada8f498453404a55827860fda0247dbba7c7bc606eace38956b5d2ac0ac490",
+      "physicalViewport": "3840x2160",
+      "logicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "dark",
+      "fixture": "populated cast and artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-2160-dpr1-text200/nowplaying-now-playing-default-bright-capture.png",
+      "sha256": "fd37bb242fccc971dbc2bdb34ff8e0680ad84f05ec10c8d7ea91a3e019ab816f",
+      "physicalViewport": "3840x2160",
+      "logicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "scene": "bright",
+      "fixture": "populated cast and artwork; scrollable details with visible progress/time"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-2160-dpr1-text200/nowplaying-now-playing-default-dark-capture.png",
+      "sha256": "51a75560620b48b620c704f5433463da01dc592def2b4919c1dfb11018765310",
+      "physicalViewport": "3840x2160",
+      "logicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "scene": "dark",
+      "fixture": "populated cast and artwork; scrollable details with visible progress/time"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-2160-dpr2-text200/nowplaying-now-playing-default-bright-capture.png",
+      "sha256": "1daea1a8a10c2718fd45d758e693dd5f51d4a1fab80b10ea983e798e29894f24",
+      "physicalViewport": "3840x2160",
+      "logicalViewport": "1920x1080",
+      "dpr": 2,
+      "textScale": 2,
+      "scene": "bright",
+      "fixture": "populated cast and artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-2160-dpr2-text200/nowplaying-now-playing-default-dark-capture.png",
+      "sha256": "9a58119cedbb50812673513b8055c13772f4ac29d1504176f06077cc6a49e5a6",
+      "physicalViewport": "3840x2160",
+      "logicalViewport": "1920x1080",
+      "dpr": 2,
+      "textScale": 2,
+      "scene": "dark",
+      "fixture": "populated cast and artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-720-text200/nowplaying-now-playing-default-bright-capture.png",
+      "sha256": "a2605d6865d0e2cb47f5a5dfd88f5f411e7f25f7098184cea6c79478c54e9d6e",
+      "physicalViewport": "1280x720",
+      "logicalViewport": "1280x720",
+      "dpr": 1,
+      "textScale": 2,
+      "scene": "bright",
+      "fixture": "populated cast and artwork; scrollable details with visible progress/time"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-720-text200/nowplaying-now-playing-default-dark-capture.png",
+      "sha256": "f04f643ec261d700868772e63b940b2cb7b33dcdfbfc0b6ac8cb89651fd3d6ba",
+      "physicalViewport": "1280x720",
+      "logicalViewport": "1280x720",
+      "dpr": 1,
+      "textScale": 2,
+      "scene": "dark",
+      "fixture": "populated cast and artwork; scrollable details with visible progress/time"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-1080-nocast/nowplaying-now-playing-default-bright-capture.png",
+      "sha256": "5dad3f5f18275745ccd37c1f9157363578774623a34b5cab1aa92b40ce70eaa6",
+      "physicalViewport": "1920x1080",
+      "logicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "bright",
+      "fixture": "no cast; populated artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-1080-nocast/nowplaying-now-playing-default-dark-capture.png",
+      "sha256": "aa418180b8224a7b76638f5efe49b3c48c71a3c5ee1e45589e77c40d11202bb9",
+      "physicalViewport": "1920x1080",
+      "logicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "dark",
+      "fixture": "no cast; populated artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-1080-longcast/nowplaying-now-playing-default-bright-capture.png",
+      "sha256": "3436f75d70a82dd614f4a61dedeb0343cc15200e46cdb7aa935f944dd7e29305",
+      "physicalViewport": "1920x1080",
+      "logicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "bright",
+      "fixture": "long cast name; populated artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-1080-longcast/nowplaying-now-playing-default-dark-capture.png",
+      "sha256": "a42868d6a442d15b97a9c45997add8caa1b73bdcd53f2c2810d12a5c58b931f4",
+      "physicalViewport": "1920x1080",
+      "logicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "dark",
+      "fixture": "long cast name; populated artwork"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-2160-fallback/nowplaying-now-playing-text-bright-capture.png",
+      "sha256": "9aa95a20048064567a47bbc012778aff3b782a6a5cf9bea12f2ca612995e31c5",
+      "physicalViewport": "3840x2160",
+      "logicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "scene": "bright",
+      "fixture": "missing poster/logo artwork; text fallback"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-2160-fallback/nowplaying-now-playing-text-dark-capture.png",
+      "sha256": "1198ba4432231bcd5d638aa0ea013f0494211d242f9be7cc174ef28e4f21293c",
+      "physicalViewport": "3840x2160",
+      "logicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "scene": "dark",
+      "fixture": "missing poster/logo artwork; text fallback"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-text1080/nowplaying-now-playing-text-bright-capture.png",
+      "sha256": "eb4f30d1f3cc9a2d0982aa62fe458694f4fde6b1656da91976b2c5ca61415449",
+      "physicalViewport": "1920x1080",
+      "logicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "bright",
+      "fixture": "text title fallback"
+    },
+    {
+      "path": "build/desktop-ui/scaling/nowplaying-after-text1080/nowplaying-now-playing-text-dark-capture.png",
+      "sha256": "b0f09c3ed6a99a4162a75d1063c6fb2f004327c60e7c17f102abb3c3ed2bd270",
+      "physicalViewport": "1920x1080",
+      "logicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "scene": "dark",
+      "fixture": "text title fallback"
+    }
+  ],
+  "comparisons": [
+    {
+      "before": "build/desktop-ui/scaling/nowplaying-before-1080",
+      "after": "build/desktop-ui/scaling/nowplaying-after-1080",
+      "result": "bright and dark byte-identical"
+    },
+    {
+      "before": "build/desktop-ui/scaling/nowplaying-before-text1080",
+      "after": "build/desktop-ui/scaling/nowplaying-after-text1080",
+      "result": "bright and dark byte-identical"
+    },
+    {
+      "before": "build/desktop-ui/scaling/nowplaying-before-2160",
+      "after": "build/desktop-ui/scaling/nowplaying-after-2160",
+      "result": "bright and dark intentionally changed by proportional scaling"
+    },
+    {
+      "before": "build/desktop-ui/scaling/osd-final-1080-default",
+      "after": "build/desktop-ui/scaling/osd-after-check",
+      "result": "bright and dark byte-identical"
+    }
+  ],
+  "checks": [
+    {
+      "command": "flutter analyze lib/playback/player_view.dart",
+      "result": "passed"
+    },
+    {
+      "command": "dart format --output=none --set-exit-if-changed lib/playback/player_view.dart",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "flutter test --no-pub build/desktop-ui/scaling/nowplaying_test.dart --plain-name='Now Playing scene'",
+      "result": "2 passed at each matrix point; 20 final image captures"
+    },
+    {
+      "command": "flutter test --no-pub build/desktop-ui/scaling/osd_test.dart --plain-name='Player OSD scene'",
+      "result": "2 passed; 1080p bright/dark captures byte-identical to OSD final reference"
+    },
+    {
+      "command": "flutter test --no-pub test/playback/player_view_test.dart --plain-name='Now Playing'",
+      "result": "11 passed; 1 stale width assertion failed at line 3067 expecting retired 1500px 4K width and observing approved 2360px scaled width"
+    },
+    {
+      "command": "flutter test --no-pub test/playback/player_view_test.dart",
+      "result": "65 passed; 2 failures: the stale Now Playing width assertion above and the pre-existing track-panel font assertion at line 2193 (expected 21.6, actual 32.0)"
+    },
+    {
+      "command": "flutter test --no-pub test/ui/clear_logo_image_test.dart",
+      "result": "1 passed"
+    },
+    {
+      "command": "flutter test --no-pub test/guide/guide_view_test.dart --plain-name='clear logo'",
+      "result": "2 passed"
+    },
+    {
+      "command": "flutter test --no-pub test/app/desktop_navigation_test.dart",
+      "result": "6 passed"
+    },
+    {
+      "command": "flutter test --no-pub test/playback/player_view_test.dart --plain-name='OSD'",
+      "result": "17 passed"
+    }
+  ],
+  "limitations": [
+    "Portable macOS Flutter widget evidence only; no physical Windows/native layering, moving-video, DPI-transition, font, input, fullscreen, HDR, or packaging claims.",
+    "No tracked tests, goldens, or documentation were changed. The scaling harness switches and evidence remain ignored build artifacts.",
+    "The stale Now Playing width assertion and unrelated track-panel assertion were not weakened or changed under this lease."
+  ],
+  "rootIntegration": {
+    "verification": "13 Now Playing behavior tests pass after updating existing native4K expected shelf/poster dimensions; targeted source/test analysis and diff checks",
+    "visualInspection": "Astra inspected native4K artwork/cast and text200 scrollable shelf with progress/time visible",
+    "baseline": "Four Now Playing and two OSD1080 pairs confirmed byte-identical",
+    "remainingFailure": "Prior track-panel cap assertion remains for drawer integration"
+  },
+  "testSource": {
+    "path": "test/playback/player_view_test.dart",
+    "sha256": "ee45f9fcb485e93cc4d492436c05a24d5808964cb9cec780ae67c5df9c4febb2"
+  }
+}

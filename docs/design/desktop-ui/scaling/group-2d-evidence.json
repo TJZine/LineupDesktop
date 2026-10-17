@@ -1,0 +1,610 @@
+{
+  "baseline_commit": "199ebbf5",
+  "source_sha256": {
+    "lib/app/channel_studio_view.dart": "71adc43f43f1a88ca59180d0357e6ca4d5811a0c47407609f354374168e92931",
+    "lib/app/channel_air_check.dart": "ac03ab2f6960aa5408e28f45f5d20e89ffc5afa47eae4c323da435c3773908c3"
+  },
+  "normal_1080_comparisons": [
+    {
+      "state": "handpicked",
+      "baseline_sha256": "3b2603a12a82837ad8fa357e7525a6aa5450e83167038c504fca74e6b1f1504c",
+      "final_sha256": "3b2603a12a82837ad8fa357e7525a6aa5450e83167038c504fca74e6b1f1504c",
+      "byte_identical": true
+    },
+    {
+      "state": "mini-marathons",
+      "baseline_sha256": "9f15fc027ed5c4098ea84e9d8a0f03af2cf89fc6ec803d5b1c7d0744b2bcebad",
+      "final_sha256": "9f15fc027ed5c4098ea84e9d8a0f03af2cf89fc6ec803d5b1c7d0744b2bcebad",
+      "byte_identical": true
+    },
+    {
+      "state": "browse",
+      "baseline_sha256": "305bc2c9fad25c65c7cab875ad75c6e56a46e81e1d43e79956ee4c029cb52d14",
+      "final_sha256": "305bc2c9fad25c65c7cab875ad75c6e56a46e81e1d43e79956ee4c029cb52d14",
+      "byte_identical": true
+    },
+    {
+      "state": "library",
+      "baseline_sha256": "7001879f24e507783aa5d004bc8ce4232774be8469b99605a653eb5ea13b8c84",
+      "final_sha256": "7001879f24e507783aa5d004bc8ce4232774be8469b99605a653eb5ea13b8c84",
+      "byte_identical": true
+    },
+    {
+      "state": "filter-picker",
+      "baseline_sha256": "f7a919f007cb3ee2240b6f328ddc98d8e9b3d151930c3520d110f53eaa4b84e1",
+      "final_sha256": "f7a919f007cb3ee2240b6f328ddc98d8e9b3d151930c3520d110f53eaa4b84e1",
+      "byte_identical": true
+    },
+    {
+      "state": "library-filtered",
+      "baseline_sha256": "acb8869d80056bf911a384213709f2b67ef08e70f68726328e35501b5ac18bbe",
+      "final_sha256": "acb8869d80056bf911a384213709f2b67ef08e70f68726328e35501b5ac18bbe",
+      "byte_identical": true
+    },
+    {
+      "state": "playlist-empty",
+      "baseline_sha256": "cd4fd0216c748fe7da819c7b9d21d4afea6aed18824a8b69efd90b5cd3375b83",
+      "final_sha256": "cd4fd0216c748fe7da819c7b9d21d4afea6aed18824a8b69efd90b5cd3375b83",
+      "byte_identical": true
+    },
+    {
+      "state": "long-name",
+      "baseline_sha256": "c7a40673f8cec4ba573c5dfed6f548e7f31aedaeac002e4816de4399090028e9",
+      "final_sha256": "c7a40673f8cec4ba573c5dfed6f548e7f31aedaeac002e4816de4399090028e9",
+      "byte_identical": true
+    },
+    {
+      "state": "playback-dropdown",
+      "baseline_sha256": "140650771a60c1c4350f8be3cc377913bbc4945eb6c57f1a10d262764c4a5f39",
+      "final_sha256": "140650771a60c1c4350f8be3cc377913bbc4945eb6c57f1a10d262764c4a5f39",
+      "byte_identical": true
+    },
+    {
+      "state": "library-dropdown",
+      "baseline_sha256": "2aa633acf148df11b50c20bba85ce6075846676cdf26bb3259fc9758945c2f74",
+      "final_sha256": "2aa633acf148df11b50c20bba85ce6075846676cdf26bb3259fc9758945c2f74",
+      "byte_identical": true
+    },
+    {
+      "state": "move-program-dialog",
+      "baseline_sha256": "a5cc866e68f6fc8ccb152fbe6a77c4b9c3b8115bd82937545c13f0dc4f371ede",
+      "final_sha256": "a5cc866e68f6fc8ccb152fbe6a77c4b9c3b8115bd82937545c13f0dc4f371ede",
+      "byte_identical": true
+    },
+    {
+      "state": "save-tune-dialog",
+      "baseline_sha256": "74b82bcf4c67868c608b996ebf5a79256eb65ab1b64d5e4f3483895c1a73a2e2",
+      "final_sha256": "74b82bcf4c67868c608b996ebf5a79256eb65ab1b64d5e4f3483895c1a73a2e2",
+      "byte_identical": true
+    },
+    {
+      "state": "recovery",
+      "baseline_sha256": "92b78d88f557ff0a3fbc57e59d173ca601e6e6f4787143922de9d7844dc2ae94",
+      "final_sha256": "92b78d88f557ff0a3fbc57e59d173ca601e6e6f4787143922de9d7844dc2ae94",
+      "byte_identical": true
+    }
+  ],
+  "captures": [
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/block-size-dropdown.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "9c229c9fdf2aea3ee56189282cb21951d5cd9d60d8ed3d0af5f798a7750235c5"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/browse-add.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "ebf1e319d7d80df0cfaba95b36b6da9e2f2f044e15f05ee90721b029636822ac"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/browse-selection.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "2f51d578a65e67d831f0b3f1d4b64b04678b299727abaaa1d63548a062db34fc"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/browse.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "305bc2c9fad25c65c7cab875ad75c6e56a46e81e1d43e79956ee4c029cb52d14"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/filter-picker.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "f7a919f007cb3ee2240b6f328ddc98d8e9b3d151930c3520d110f53eaa4b84e1"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/handpicked.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "3b2603a12a82837ad8fa357e7525a6aa5450e83167038c504fca74e6b1f1504c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/library-dropdown.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "2aa633acf148df11b50c20bba85ce6075846676cdf26bb3259fc9758945c2f74"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/library-filtered.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "acb8869d80056bf911a384213709f2b67ef08e70f68726328e35501b5ac18bbe"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/library.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "7001879f24e507783aa5d004bc8ce4232774be8469b99605a653eb5ea13b8c84"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/long-name.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "c7a40673f8cec4ba573c5dfed6f548e7f31aedaeac002e4816de4399090028e9"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/media-type-dropdown.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "43896fa447713350fb8a98fb26bdd7ff256fb6a0f406307e0b8760a931c9600f"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/mini-marathons.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "9f15fc027ed5c4098ea84e9d8a0f03af2cf89fc6ec803d5b1c7d0744b2bcebad"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/move-program-dialog.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "a5cc866e68f6fc8ccb152fbe6a77c4b9c3b8115bd82937545c13f0dc4f371ede"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/playback-dropdown.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "140650771a60c1c4350f8be3cc377913bbc4945eb6c57f1a10d262764c4a5f39"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/playlist-empty.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "cd4fd0216c748fe7da819c7b9d21d4afea6aed18824a8b69efd90b5cd3375b83"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1080/save-tune-dialog.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "74b82bcf4c67868c608b996ebf5a79256eb65ab1b64d5e4f3483895c1a73a2e2"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/block-size-dropdown.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "a799818593ca40485fc052801f2d127f133c8a100d3254cd32c091e766392a83"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/browse-add.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "5eed03d80727e6197c68f657b79d0372202fad5578bef5c15bb402066532a740"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/browse-selection.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "f9757b90b454e80fdd1d44778241f1e9400d23df72df366a0e8a4f75a046f9dc"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/browse.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "ba37a113d64df495af3a23729d4b43ccc0c2d1672b79dcd9dcf7fb6255b7c08d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/filter-picker.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "a8d60f404c496f0fe542bc44346d306412ffe13d8e0de47aa61680eee1737a9f"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/handpicked.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "28da7cf45d506aca2423c83fa81b1b21979795cc36311da2c0a37ac8eab07a55"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/library-dropdown.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "6a98af226fc211083ef083ef5de1a423f309c819a2bfedfe332a6bff7e3356b2"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/library-filtered.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "81be0534bd31c00272a841c19f08922316517c7c60a9155a3e1a86e84c1976b2"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/library.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "3b5fb9a507441b40b470853e137380aa9a4cda792f4c6789bc29084258c4f25f"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/long-name.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "18d6399f8b19f9108f65285c24872eea66b1bee1b19d98b9f06328fa2dce652d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/media-type-dropdown.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "b636de8176130e9adcc73988adbada8b27c438fc6b0e33037b31f5c59aebcb99"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/mini-marathons.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "c876a519509b3509adddcf5b4f6ab2e1726a04ab4bd85a919edbe734d2cafeb4"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/move-program-dialog.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "741f57110eee30cde0875a8a1da7f08468a5bea7bc8d3f9547ba4b867e42dd4d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/playback-dropdown.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "6288a8e484540e07d6e589bdf001aa0838491b2d721f407e02f785298584d1be"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/playlist-empty.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "f1c11146aea5a6291c8eebec611065837a9e917f2b86eac2f337b4d694494a0b"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-1440/save-tune-dialog.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "6c3e6d81dc64e3b6dd92bf803f0860fdc115b7eb4db12ba3f460ae68b3cf73d1"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/block-size-dropdown.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "389429de391de8c0b87a4bba04cf2319d25d985891a95933cd0f798619b6d208"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/browse-add.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "2f86ec5bc734740d4120c8d85579ebe2628bc8e62c34194063dc20bce55dd627"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/browse-selection.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "30aaf7a077f1eaf5565107276969ece9850bddbbd076e8f71c4a11e209b1d774"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/browse.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "2c93a9ce17b9cf7bea8654d86cad9fa8287c55d57c2b3376f077398f9519fe39"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/filter-picker.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "f5bc09eb7ebc2c6cb2b46b49eeaad66fbb0735a06c70004dd823abaaa3867f4c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/handpicked.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "c49202a2cbafc7c4a7a90263226e5eb2ad7a2ba9b49f503c5338d42f2678c75c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/library-dropdown.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "38a72880b9d28442fc72520c6724c9d02f5fd51c143a7a9069b54e5026cd0e82"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/library-filtered.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "a046c40abb58bae6455737921961481310c820ee0bcc7e227a6e81c6b36257df"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/library.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "365829ee35b30dc9603118a7d3bd24dacd47170d370d39ec50bcf5358c0f5c32"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/long-name.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "e59adff0b0124c977cad74fbf05afdd68ab5b96e1b3eefe47f0fbae53293de50"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/media-type-dropdown.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "39aff6eb2cb5124836c198542adb99fe73e6d96acea873eab1e81b28408cf2fc"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/mini-marathons.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "2487910857a5e2dc2b64050d856a2bd5e8192730cd36de54ecc4d66ef0a0353f"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/move-program-dialog.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "70f431b377f106b1c97f06b288e309018dbc69d86430abab390e4c9c4e74eac3"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/playback-dropdown.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "fa7bded45326b6278484a57b00bd4e3f0df6d8fad89e2393d5505136ade1ed8c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/playlist-empty.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "4a40ab054917740b931cea473c5f68065c4f2e5c7d17c7c84e89feae2dc3ea9c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-full/save-tune-dialog.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "033e1dac7e9ca33a0c10e675eba23cea9abc2e325803af4edd86da8f746bf026"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/block-size-dropdown.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "f7f3caf615fc87622e470045ed58e67036eaf06567666db42b571ab1f6c7b346"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/browse-add.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "055df7841a72bb83bc36d8951d28a79b5bed89d87261496f45dbdcecb5a00931"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/browse-selection.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "d4f975045ef1322c99ac5faa3337e0649a19ce09ea12a7a1c88653027aa856df"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/browse.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "002c419741b2645e6e524e388b53e73060fbe62280f4936e3c8db728e0aaff71"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/filter-picker.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "022e97dfd12036052fef215553f4ac68d6e00d3ed1481b82bb31037d67274b15"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/handpicked.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "afd06ad179af999cedac604728deddb00465ba416e29137a7c517f343f384367"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/library-dropdown.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "8abd9ba3966b3e56ad153a7d5f2c55ec5d9d74913a25429197c7a04d332ddcb9"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/library-filtered.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "796178acfbabcaa5a61bae0223cb78cfb8662547c09d413349313a7e14fd7ae8"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/library.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "52e4f63fbe051ed8a466db1605511a33789252c46ba47ba5a27b262838daa3dd"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/long-name.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "cafc1f2692a38e6deabcbab90bba88a619fe33ed73edfdc77523412ef5b8936c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/media-type-dropdown.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "15c2b47f5530200ccad78b3f6c262175d96af24898e05703ce0f30ccad576a0a"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/mini-marathons.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "b8a5a8faa00069d3106f7418e17e75bdba3830635fc51099460ab302ddf295a2"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/move-program-dialog.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "413eb8bca232893d4d076f8dfa25bdff4efb912f1dfe266deb37c9b29d03a1d3"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/playback-dropdown.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "0730f5916e6af32ba3ee35b5117259ea11c409edb942c62c3294c12f19950c78"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/playlist-empty.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "6c595fdbfbb18df158c80303eaa70916fbc0dcf9e6d978821e355d911e759efb"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-2160-dpr2-text2/save-tune-dialog.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "0083aa65b80429a68fd92668ba48844edb9bb27930e3b07eb0405e938d496a76"
+    },
+    {
+      "path": "build/desktop-ui/scaling/studio-rowfix-recovery-1080/recovery.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "92b78d88f557ff0a3fbc57e59d173ca601e6e6f4787143922de9d7844dc2ae94"
+    }
+  ],
+  "limitations": "Portable synthetic Flutter evidence, not physical Windows validation. Checked Browse selection is not claimed pixel-identical: baseline and current inner-list scroll positions differ. Current fixtures exercise Add/Undo and explicit program-12 selection. Recovery at enlarged text was captured before the final isolated Browse row repair."
+}

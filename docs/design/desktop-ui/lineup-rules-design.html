@@ -1,0 +1,104 @@
+<style>
+#setup-wide{--film:#090806;--booth:#12100d;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;width:100%;margin:12px auto;color-scheme:dark}
+#setup-wide *{box-sizing:border-box}
+#setup-wide .wd-frame{position:relative;overflow:hidden;background:var(--film);border-radius:8px}
+#setup-wide .wd-screen{width:1280px;height:720px;transform-origin:top left;background:var(--film);color:var(--paper);font:16px/1.4 Arial,sans-serif;display:flex;flex-direction:column;padding:24px 32px}
+#setup-wide .wd-header{display:flex;align-items:center;justify-content:space-between;gap:32px;padding-bottom:20px}
+#setup-wide .wd-brand{color:var(--amber);font-size:14px;letter-spacing:1.5px;margin:0 0 6px}
+#setup-wide h2{font-size:28px;line-height:1.2;margin:0 0 6px;font-weight:600}
+#setup-wide p{margin:0;color:var(--support);font-size:14px}
+#setup-wide .wd-steps{font-size:14px;color:var(--support);white-space:nowrap}
+#setup-wide .wd-steps strong{color:var(--paper);font-weight:600}
+#setup-wide .wd-body{display:grid;grid-template-columns:176px minmax(0,1fr);gap:28px;flex:1;min-height:0}
+#setup-wide nav{display:flex;flex-direction:column;gap:8px}
+#setup-wide button,#setup-wide select{font:inherit;font-size:14px;color:var(--paper);background:var(--booth);border:1px solid var(--strong);border-radius:6px;padding:8px 12px;min-height:36px;cursor:pointer}
+#setup-wide button:hover{background:var(--quiet)}
+#setup-wide nav button{background:transparent;border-color:transparent;text-align:left;min-height:44px}
+#setup-wide nav button[aria-pressed="true"]{background:#2b2419}
+#setup-wide .wd-content{display:flex;flex-direction:column;min-height:0}
+#setup-wide .wd-intro{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:8px}
+#setup-wide h3{font-size:18px;margin:0;font-weight:600}
+#setup-wide .wd-scroll{overflow-y:auto;min-height:0;flex:1;padding-right:8px;scrollbar-color:var(--strong) var(--film);scrollbar-width:thin}
+#setup-wide .wd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px}
+#setup-wide .wd-source{padding:12px 0;border-bottom:1px solid var(--quiet);min-width:0}
+#setup-wide .wd-label{display:flex;align-items:center;gap:10px;cursor:pointer}
+#setup-wide input{width:18px;height:18px;accent-color:var(--amber);margin:0;flex:none}
+#setup-wide .wd-name{font-size:16px;font-weight:600;flex:1}
+#setup-wide .wd-count{font-size:13px;color:var(--support);white-space:nowrap}
+#setup-wide .wd-desc{margin:6px 0 0 28px;font-size:13px}
+#setup-wide .wd-examples{margin:4px 0 0 28px;font-size:13px;color:var(--paper);overflow-wrap:anywhere}
+#setup-wide .wd-group{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0 28px;font-size:13px;color:var(--support)}
+#setup-wide .wd-group select{font-size:13px;padding:4px 8px;min-height:32px}
+#setup-wide .wd-shared{display:none;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 28px;padding:12px 0;border-bottom:1px solid var(--quiet);margin-bottom:4px}
+#setup-wide .wd-shared .wd-group{margin:0}
+#setup-wide .wd-shared-title{grid-column:1/-1;font-size:13px;color:var(--support)}
+#setup-wide[data-design="shared"] .wd-shared{display:grid}
+#setup-wide[data-design="shared"] .wd-source .wd-group{display:none}
+#setup-wide .wd-footer{display:flex;align-items:center;justify-content:space-between;gap:24px;padding-top:16px;margin-top:16px;border-top:1px solid var(--quiet)}
+#setup-wide .wd-total strong{font-size:22px;color:var(--paper)}
+#setup-wide .wd-actions{display:flex;gap:12px}
+#setup-wide .wd-actions button{min-height:44px}
+#setup-wide .wd-primary{background:var(--amber);color:#060504;border-color:var(--amber);font-weight:600}
+#setup-wide .wd-back{background:transparent;border-color:transparent;color:var(--support)}
+#setup-wide .wd-message{color:var(--support);font-size:13px;max-width:540px}
+</style>
+<div class="viz-controls"><label class="form-label">Desktop size<select class="form-select" id="rules-size"><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select></label></div>
+<style>
+#setup-wide .rules-columns{display:grid;grid-template-columns:minmax(0,0.85fr) minmax(0,1.15fr);gap:40px;height:100%;overflow-y:auto}
+#setup-wide .rules-section h3{margin:0 0 8px}
+#setup-wide .rules-field{padding:24px 0;border-bottom:1px solid var(--quiet)}
+#setup-wide .rules-field label{display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:16px}
+#setup-wide .rules-field p{font-size:13px;margin-top:10px;max-width:380px}
+#setup-wide .rules-note{margin-top:24px;padding-left:14px;border-left:2px solid var(--amber)}
+#setup-wide .rules-note strong{display:block;font-size:15px;font-weight:600;margin-bottom:6px}
+#setup-wide .rules-note p{font-size:13px}
+#setup-wide .rules-list{list-style:none;padding:0;margin:16px 0 0}
+#setup-wide .rules-row{display:flex;align-items:center;gap:12px;min-height:42px;border-bottom:1px solid var(--quiet)}
+#setup-wide .rules-row:hover,#setup-wide .rules-row:focus-within{background:var(--booth)}
+#setup-wide .rules-rank{font-size:13px;color:var(--support);width:20px}
+#setup-wide .rules-name{flex:1;font-size:15px}
+#setup-wide .rules-row button{min-height:32px;padding:4px 10px;background:transparent;border-color:transparent}
+#setup-wide button:disabled{opacity:.35;cursor:default}
+#setup-wide .rules-rotation{margin-top:16px;color:var(--support);font-size:13px;line-height:1.7}
+#setup-wide[data-large="true"] .wd-screen{padding:36px 48px;font-size:20px}
+#setup-wide[data-large="true"] .wd-header{padding-bottom:32px}
+#setup-wide[data-large="true"] .wd-brand{font-size:18px;margin-bottom:10px}
+#setup-wide[data-large="true"] h2{font-size:38px;margin-bottom:10px}
+#setup-wide[data-large="true"] p,#setup-wide[data-large="true"] .wd-steps{font-size:18px}
+#setup-wide[data-large="true"] .wd-body{grid-template-columns:236px minmax(0,1fr);gap:40px}
+#setup-wide[data-large="true"] nav{gap:12px}
+#setup-wide[data-large="true"] button,#setup-wide[data-large="true"] select{font-size:18px;min-height:48px;padding:12px 16px}
+#setup-wide[data-large="true"] nav button{min-height:56px}
+#setup-wide[data-large="true"] h3{font-size:24px}
+#setup-wide[data-large="true"] .rules-columns{gap:64px}
+#setup-wide[data-large="true"] .rules-field{padding:36px 0}
+#setup-wide[data-large="true"] .rules-field label{font-size:22px}
+#setup-wide[data-large="true"] .rules-field p{font-size:18px;max-width:540px;margin-top:16px}
+#setup-wide[data-large="true"] .rules-note{margin-top:36px;padding-left:20px}
+#setup-wide[data-large="true"] .rules-note strong{font-size:21px}
+#setup-wide[data-large="true"] .rules-note p{font-size:18px}
+#setup-wide[data-large="true"] .rules-list{margin-top:24px}
+#setup-wide[data-large="true"] .rules-row{min-height:60px;gap:16px}
+#setup-wide[data-large="true"] .rules-row button{min-height:44px;padding:6px 14px}
+#setup-wide[data-large="true"] .rules-name{font-size:21px}
+#setup-wide[data-large="true"] .rules-rank{font-size:18px;width:28px}
+#setup-wide[data-large="true"] .rules-rotation{font-size:18px;margin-top:24px}
+#setup-wide[data-large="true"] .wd-footer{padding-top:24px;margin-top:24px}
+#setup-wide[data-large="true"] .wd-total strong{font-size:30px}
+</style>
+<div id="setup-wide"><div class="wd-frame"><section class="wd-screen" aria-label="Lineup rules proposal">
+<header class="wd-header"><div><div class="wd-brand">LINEUP</div><h2>Shape your lineup</h2><p>Choose the size and balance of your generated lineup.</p></div><div class="wd-steps">1 Libraries &nbsp; / &nbsp; <strong>2 Configure</strong> &nbsp; / &nbsp; 3 Review</div></header>
+<div class="wd-body"><nav aria-label="Configuration sections"><button>Channel sources</button><button>Playback order</button><button aria-pressed="true">Lineup rules</button></nav>
+<div class="rules-columns"><section class="rules-section"><h3>Channel limits</h3><p>Keep enough variety without overcrowding your guide.</p>
+<div class="rules-field"><label>Maximum generated channels<select id="rules-max"><option>50</option><option>100</option><option selected>200</option><option>300</option><option>500</option><option>750</option><option>1000</option></select></label><p>Includes additional versions. Custom and retained channels may bring the final lineup above this limit.</p></div>
+<div class="rules-field"><label>Minimum programs per channel<select id="rules-min"><option>1</option><option selected>5</option><option>10</option><option>20</option><option>50</option></select></label><p>Movies and individual episodes count as programs. Higher values exclude smaller channel candidates.</p></div>
+<div class="rules-note" aria-live="polite"><strong id="rules-impact">All 98 candidates fit</strong><p id="rules-detail">Your current selection is below the 200-channel limit.</p></div>
+</section><section class="rules-section"><h3>Source order</h3><p>Take one channel from each source, then repeat.</p><ol class="rules-list" aria-label="Source order"></ol><div class="rules-rotation" aria-live="polite"></div></section></div></div>
+<footer class="wd-footer"><div class="wd-total"><p><strong id="rules-total">98</strong> generated channels</p><p>Illustrative preview · Final changes appear in Review</p></div><div class="wd-message" role="status"></div><div class="wd-actions"><button class="wd-back">Back</button><button class="wd-primary">Review channels</button></div></footer>
+</section></div></div>
+<script>
+(()=>{const root=document.getElementById('setup-wide'),size=document.getElementById('rules-size'),screen=root.querySelector('.wd-screen'),frame=root.querySelector('.wd-frame'),max=document.getElementById('rules-max'),min=document.getElementById('rules-min');const sources=['Playlists','Collections','Recently added','Genres','Decades','Studios','Actors','Directors'];
+function resize(){const w=Number(size.value);root.dataset.large=String(w===1920);screen.style.width=w+'px';screen.style.height=w*9/16+'px';screen.style.transform='scale('+root.clientWidth/w+')';frame.style.height=root.clientWidth*9/16+'px';}
+function render(){const list=root.querySelector('.rules-list');list.replaceChildren();sources.forEach((name,index)=>{const row=document.createElement('li');row.className='rules-row';const rank=document.createElement('span');rank.className='rules-rank';rank.textContent=index+1;const label=document.createElement('span');label.className='rules-name';label.textContent=name;row.append(rank,label);[-1,1].forEach(direction=>{const b=document.createElement('button');b.textContent=direction<0?'↑':'↓';b.setAttribute('aria-label','Move '+name+(direction<0?' up':' down'));b.disabled=index+direction<0||index+direction>=sources.length;b.onclick=()=>{[sources[index],sources[index+direction]]=[sources[index+direction],sources[index]];render();const moved=list.children[index+direction];const preferred=moved.querySelectorAll('button')[direction<0?0:1];(preferred.disabled?moved.querySelector('button:not(:disabled)'):preferred).focus();};row.append(b);});list.append(row);});root.querySelector('.rules-rotation').textContent='Repeat this order until the limit is reached. Skip sources with no remaining channels.';const candidates=({1:118,5:98,10:82,20:63,50:31})[min.value],included=Math.min(candidates,Number(max.value));document.getElementById('rules-total').textContent=included;root.querySelector('.rules-note').style.borderColor=candidates>included?'var(--amber)':'var(--quiet)';document.getElementById('rules-impact').textContent=candidates>included?included+' included · '+(candidates-included)+' excluded by limit':'All '+candidates+' generated channels fit';document.getElementById('rules-detail').textContent=candidates>included?'The preview includes '+included+'. Increase the limit or review which channels are included.':'Your current selection is below the '+max.value+'-channel limit.';}
+size.onchange=resize;max.onchange=render;min.onchange=render;new ResizeObserver(resize).observe(root);root.querySelectorAll('nav button,.wd-actions button').forEach(b=>b.onclick=()=>root.querySelector('.wd-message').textContent='Layout preview: '+b.textContent+'.');render();resize();})();
+</script>

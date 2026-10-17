@@ -1,0 +1,35 @@
+<div class="viz-controls"><label class="form-label">Preview state<select class="form-select" id="scan-preview"><option value="mixed">Some libraries ready</option><option value="scanning">Scanning</option><option value="failed">No libraries ready</option></select></label></div>
+<style>
+#scan-design{--film:#090806;--booth:#12100d;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;--error:#ff7768;font:16px/1.45 Arial,sans-serif;color:var(--paper);color-scheme:dark;max-width:736px;margin:16px auto}
+#scan-design *{box-sizing:border-box}
+#scan-design .sc-screen{padding:28px;background:var(--film);border:1px solid var(--quiet);border-radius:8px}
+#scan-design .sc-brand{font-size:14px;letter-spacing:1.3px;color:var(--amber)}
+#scan-design .sc-content{max-width:576px;margin:24px auto 0}
+#scan-design .sc-step{font-size:12px;color:var(--support);margin:0 0 8px}
+#scan-design h2{font-size:26px;line-height:1.2;margin:0 0 8px}
+#scan-design .sc-summary{font-size:14px;color:var(--support);margin:0 0 20px}
+#scan-design .sc-row{padding:16px 0;border-bottom:1px solid var(--quiet)}
+#scan-design .sc-identity{display:flex;justify-content:space-between;align-items:baseline;gap:8px 20px;flex-wrap:wrap}
+#scan-design h3{font-size:16px;font-weight:600;line-height:1.4;margin:0;overflow-wrap:anywhere;flex:1;min-width:180px}
+#scan-design .sc-kind{font-size:13px;color:var(--support)}
+#scan-design .sc-state{font-size:14px;margin:6px 0 0;color:var(--support)}
+#scan-design .sc-state.error{color:var(--error)}
+#scan-design .sc-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:24px}
+#scan-design button{font:inherit;font-size:14px;border:1px solid var(--strong);background:var(--booth);color:var(--paper);border-radius:8px;min-height:44px;padding:10px 16px;cursor:pointer;max-width:100%}
+#scan-design button:hover{background:var(--quiet)}
+#scan-design .sc-primary{background:var(--amber);border-color:var(--amber);color:#060504;font-weight:600}
+#scan-design .sc-primary:hover{background:#f0d39a}
+#scan-design .sc-secondary{background:transparent;border-color:transparent;color:var(--support);padding-left:0}
+#scan-design .sc-note{font-size:13px;color:var(--support);margin:16px 0 0}
+#scan-design .sc-note:empty{display:none}
+#scan-design [hidden]{display:none!important}
+</style>
+<div id="scan-design"><section class="sc-screen" aria-label="Library scan design preview"><div class="sc-brand">LINEUP</div><div class="sc-content"><p class="sc-step">CHANNEL SETUP · 1 OF 3</p><h2>Review your libraries</h2><p class="sc-summary" role="status"></p><div class="sc-list">
+<div class="sc-row"><div class="sc-identity"><h3>Movies</h3><span class="sc-kind">Movies</span></div><p class="sc-state"></p></div>
+<div class="sc-row"><div class="sc-identity"><h3>TV Shows</h3><span class="sc-kind">TV shows</span></div><p class="sc-state"></p></div>
+<div class="sc-row"><div class="sc-identity"><h3>International Cinema and Restored Classics</h3><span class="sc-kind">Movies</span></div><p class="sc-state"></p></div>
+<div class="sc-row"><div class="sc-identity"><h3>Documentaries and Natural History</h3><span class="sc-kind">TV shows</span></div><p class="sc-state"></p></div>
+</div><footer class="sc-footer"><button class="sc-secondary" data-edit>Change selection</button><button data-retry>Retry failed scans</button><button class="sc-primary" data-continue>Continue with 2 libraries</button><button data-cancel hidden>Cancel scan</button></footer><p class="sc-note" role="status"></p></div></section></div>
+<script>
+(()=>{const root=document.getElementById('scan-design'),preview=document.getElementById('scan-preview'),note=root.querySelector('.sc-note');const variants={mixed:{title:'Review your libraries',summary:'2 libraries ready · 1 empty · 1 scan failed',rows:['Ready · 248 usable movies','Ready · 1,420 usable episodes','No media found','Couldn’t scan · The server did not respond.'],note:'Continuing uses Movies and TV Shows. The other 2 libraries will be excluded from this setup.'},scanning:{title:'Scanning your libraries',summary:'2 of 4 libraries checked',rows:['Ready · 248 usable movies','Scanning · 860 items checked','No media found','Waiting to scan'],note:''},failed:{title:'Review your libraries',summary:'No libraries are ready. Retry the failed scans or change your selection.',rows:['Couldn’t scan · The server did not respond.','Couldn’t scan · The server did not respond.','No media found','No media found'],note:''},cancelled:{title:'Scan cancelled',summary:'Your selections are preserved. Any existing lineup is unchanged.',rows:['Scan stopped','Scan stopped','Scan stopped','Scan stopped'],note:'Return to selection to edit your choices and start a fresh scan.'}};function render(){const mode=preview.value,data=variants[mode];root.querySelector('h2').textContent=data.title;root.querySelector('.sc-summary').textContent=data.summary;root.querySelectorAll('.sc-state').forEach((row,i)=>{row.textContent=data.rows[i];row.classList.toggle('error',data.rows[i].startsWith('Couldn’t'));});root.querySelector('[data-edit]').hidden=mode==='scanning';root.querySelector('[data-edit]').textContent=mode==='cancelled'?'Return to selection':'Change selection';root.querySelector('[data-retry]').hidden=!['mixed','failed'].includes(mode);root.querySelector('[data-continue]').hidden=mode!=='mixed';root.querySelector('[data-cancel]').hidden=mode!=='scanning';note.textContent=data.note;}preview.onchange=render;root.querySelector('[data-cancel]').onclick=()=>{note.textContent='Preview: scan cancelled; return directly to editable selection with choices preserved and the existing lineup unchanged.';};root.querySelector('[data-retry]').onclick=()=>note.textContent='Preview: retry only the failed scans; retain successful results from this attempt.';root.querySelector('[data-edit]').onclick=()=>note.textContent='Preview: return to the editable library list with your choices preserved.';root.querySelector('[data-continue]').onclick=()=>note.textContent='Preview: continue to channel configuration using Movies and TV Shows.';render();})();
+</script>

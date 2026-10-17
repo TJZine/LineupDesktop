@@ -1,0 +1,2181 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
+import 'package:lineup_desktop/app/lineup_app.dart';
+import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/lineup_shell.dart';
+import 'package:lineup_desktop/app/onboarding_view.dart';
+import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/guide/guide_view.dart';
+import 'package:lineup_desktop/persistence/app_store.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/native_video_surface.dart';
+import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
+
+import '../support/ui_fixture.dart';
+
+void main() {
+  testWidgets(
+    'shutdown observes delayed native failure without leaking details',
+    (tester) async {
+      final controller = _FakeController(
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
+      final player = _DelayedDisposalPlayer();
+      await tester.pumpWidget(
+        LineupBootstrap(player: player, controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(player.disposed, isTrue);
+      expect(tester.takeException(), isNull);
+      player.finishDisposal.completeError(
+        StateError('https://private.test/media?X-Plex-Token=secret-sentinel'),
+      );
+      await tester.pump();
+
+      final failure = tester.takeException();
+      expect(failure, isA<StateError>());
+      expect(failure.toString(), contains('Native player shutdown failed'));
+      expect(failure.toString(), isNot(contains('secret-sentinel')));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('position-only player events do not rebuild the Guide route', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    final player = _PositionEventPlayer();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LineupShell(player: player, controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final guide = tester.widget<GuideView>(find.byType(GuideView));
+    for (var step = 1; step <= 4; step++) {
+      player.emitPosition(Duration(milliseconds: step * 250));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        identical(tester.widget<GuideView>(find.byType(GuideView)), guide),
+        isTrue,
+      );
+    }
+    player.emitPosition(const Duration(seconds: 1), paused: true);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      identical(tester.widget<GuideView>(find.byType(GuideView)), guide),
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
+
+  testWidgets(
+    'startup mounts a progress surface while composition is pending',
+    (tester) async {
+      final composition = Completer<LineupBootstrap>();
+      final controller = _FakeController(
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        LineupStartup(createBootstrap: () => composition.future),
+      );
+      await tester.pump();
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'Starting Lineup Desktop',
+        ),
+        findsOneWidget,
+      );
+
+      composition.complete(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('No channels yet'), findsOneWidget);
+    },
+  );
+
+  testWidgets('startup reports synchronous composition failures safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupStartup(
+        createBootstrap: () {
+          throw StateError('/private/startup/secret-sentinel');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining('Restart the app'), findsOneWidget);
+    expect(find.textContaining('secret-sentinel'), findsNothing);
+  });
+
+  testWidgets('startup reports asynchronous composition failures safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupStartup(
+        createBootstrap: () async {
+          await Future<void>.delayed(Duration.zero);
+          throw StateError('/private/startup/secret-sentinel');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining('Restart the app'), findsOneWidget);
+    expect(find.textContaining('secret-sentinel'), findsNothing);
+  });
+
+  testWidgets('root Reduce Motion setting disables descendant animations', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+        stage: SetupStage.ready,
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      MediaQuery.disableAnimationsOf(
+        tester.element(find.text('No channels yet')),
+      ),
+      isTrue,
+    );
+  });
+
+  testWidgets('re-entered Channel Setup can return to the ready shell', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1280, 720)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    addTearDown(controller.dispose);
+    await controller.enterChannelSetup();
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    final cancel = find.widgetWithText(TextButton, 'Cancel');
+    expect(cancel, findsOneWidget);
+
+    await tester.tap(cancel);
+    expect(controller.stage, SetupStage.ready);
+  });
+
+  testWidgets('successful Channel Setup opens Channels after durable apply', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1280, 720)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _ChannelSetupController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('review-channels')),
+      400,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('channel-configuration')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.channelSetup);
+    expect(find.text('Your lineup is ready'), findsOneWidget);
+    expect(find.text('2 channels in your lineup'), findsOneWidget);
+    expect(find.text('View lineup'), findsOneWidget);
+    expect(find.text('Add a custom channel'), findsOneWidget);
+
+    await tester.tap(find.text('View lineup'));
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.ready);
+    expect(find.text('Channels'), findsWidgets);
+  });
+
+  testWidgets('Channel Setup Add custom opens a fresh exhausted draft', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1280, 720)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _ChannelSetupController(
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('review-channels')),
+      400,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('channel-configuration')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+    await tester.pumpAndSettle();
+
+    controller.fixtureActor.replaceChannels([
+      for (var number = 1; number <= 1000; number++)
+        Channel(
+          id: 'occupied-$number',
+          number: number,
+          name: 'Occupied $number',
+          source: const ManualSource([]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: number,
+        ),
+    ]);
+    controller.notifyListeners();
+    await tester.pump();
+    await tester.tap(find.text('Add a custom channel'));
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.ready);
+    expect(find.text('Create custom channel'), findsOneWidget);
+    expect(
+      find.textContaining('No channel numbers are available'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('studio-number')))
+          .controller!
+          .text,
+      isEmpty,
+    );
+  });
+
+  testWidgets('startup announcement is a labeled live region', (tester) async {
+    final controller = _LoadingController();
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pump();
+
+    final semantics = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == 'Starting Lineup Desktop',
+      ),
+    );
+    expect(semantics.properties.liveRegion, isTrue);
+
+    controller.completeInitialization();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('shows honest empty states and supports shell navigation', (
+    tester,
+  ) async {
+    final player = _FakePlayer();
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: player, controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No channels yet'), findsOneWidget);
+
+    await openDestination(tester, 'Settings');
+
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    expect(player.disposed, isTrue);
+  });
+
+  testWidgets('management sign out protects a dirty Studio draft', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _LogoutController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_studioChannel],
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byKey(const ValueKey('channel-row-studio')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Edited Studio channel',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+
+    expect(controller.logoutCalls, 0);
+    expect(find.text('Edited Studio channel'), findsWidgets);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign out of Plex'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sign out of Plex?'), findsOneWidget);
+    await tester.tap(find.text('Sign out'));
+    await tester.pumpAndSettle();
+
+    expect(controller.logoutCalls, 1);
+    expect(controller.stage, SetupStage.welcome);
+    expect(find.byKey(const Key('studio-name')), findsNothing);
+  });
+
+  testWidgets('management sign out is blocked while Studio saves', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _LogoutController(
+      blockSave: true,
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_studioChannel],
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byKey(const ValueKey('channel-row-studio')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Edited Studio channel',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save changes'));
+    await tester.pump();
+    expect(find.text('Saving channel…'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pump();
+
+    expect(controller.logoutCalls, 0);
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(find.text('Saving channel…'), findsOneWidget);
+
+    controller.releaseSave();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Guide and player routes transfer and restore focus explicitly', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _PlayingPlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+    await openDestination(tester, 'Player');
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+  });
+
+  testWidgets('Guide Backspace opens the Lineup menu without playback', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+  });
+
+  testWidgets('Ctrl destination shortcuts outrank Guide letter shortcuts', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _PlayingPlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+  });
+
+  testWidgets('F3 opens Settings from Guide and Player routes', (tester) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _PlayingPlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+  });
+
+  testWidgets('Settings switches profile/server routes and restores focus', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final selectedServer = PlexServer(
+      id: 'server',
+      name: 'Living Room',
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://plex.example:32400'),
+          local: true,
+          relay: false,
+        ),
+      ],
+      owned: true,
+    );
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        profile: const PlexHomeUser(
+          id: 'child',
+          name: 'Child',
+          protected: true,
+        ),
+        profiles: const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+          PlexHomeUser(id: 'child', name: 'Child', protected: true),
+        ],
+        servers: [selectedServer],
+        server: selectedServer,
+        connection: PlexConnection(
+          uri: Uri.parse('https://plex.example:32400'),
+          local: true,
+          relay: false,
+          latency: const Duration(milliseconds: 18),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    expect(find.text('Switch profile'), findsOneWidget);
+    expect(find.text('Switch server'), findsOneWidget);
+    expect(find.textContaining('Direct local · 18 ms'), findsOneWidget);
+
+    await tester.tap(find.text('Switch server'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a server'), findsOneWidget);
+    expect(find.text('Living Room'), findsOneWidget);
+    expect(find.text('‹ Settings · Account'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pump();
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+
+    await tester.tap(find.text('‹ Settings · Account'));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsWidgets);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+  });
+
+  testWidgets(
+    'Account profile transition hides the menu once cancellation is unsafe',
+    (tester) async {
+      final controller = _AccountProfileController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          profile: const PlexHomeUser(
+            id: 'owner',
+            name: 'Owner',
+            protected: false,
+          ),
+          profiles: const [
+            PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+            PlexHomeUser(id: 'child', name: 'Child', protected: false),
+          ],
+          server: const PlexServer(
+            id: 'server',
+            name: 'Living Room',
+            connections: [],
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      await openDestination(tester, 'Settings');
+      await tester.tap(find.text('Account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Switch profile'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Child'));
+      await tester.pumpAndSettle();
+
+      expect(controller.stage, SetupStage.servers);
+      expect(find.text('Choose a server'), findsOneWidget);
+      expect(find.byTooltip('Open Lineup menu'), findsNothing);
+    },
+  );
+
+  testWidgets('Account PIN menu route cancels the protected selection safely', (
+    tester,
+  ) async {
+    final controller = _AccountPinController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        profile: const PlexHomeUser(
+          id: 'owner',
+          name: 'Owner',
+          protected: false,
+        ),
+        profiles: const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+          PlexHomeUser(id: 'child', name: 'Child', protected: true),
+        ],
+        server: const PlexServer(
+          id: 'server',
+          name: 'Living Room',
+          connections: [],
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Switch profile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Child'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('Guide').last);
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.ready);
+    expect(find.byType(GuideView), findsOneWidget);
+  });
+
+  testWidgets('Account PIN keeps its step and origin during a pending retry', (
+    tester,
+  ) async {
+    final controller = _RetryPinController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        server: const PlexServer(id: 'server', name: 'Server', connections: []),
+        profiles: const [
+          PlexHomeUser(id: 'child', name: 'Child', protected: true),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Switch profile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Child'));
+    await tester.pumpAndSettle();
+    final pinStep = tester.element(find.byKey(const Key('profile-pin-sheet')));
+    for (final digit in ['1', '2', '3', '4']) {
+      await tester.tap(find.bySemanticsLabel(digit));
+      await tester.pump();
+    }
+    expect(controller.busy, isTrue);
+    expect(
+      tester.element(find.byKey(const Key('profile-pin-sheet'))),
+      same(pinStep),
+    );
+    expect(find.bySemanticsLabel('Checking PIN'), findsOneWidget);
+    expect(find.byTooltip('Open Lineup menu'), findsNothing);
+    for (final key in [
+      LogicalKeyboardKey.escape,
+      LogicalKeyboardKey.backspace,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+      expect(controller.stage, SetupStage.profiles);
+      expect(controller.profileSelectionCanceled, isFalse);
+    }
+    controller.rejectFirstAttempt();
+    await tester.pumpAndSettle();
+    expect(
+      tester.element(find.byKey(const Key('profile-pin-sheet'))),
+      same(pinStep),
+    );
+    expect(find.byKey(const Key('profile-pin-error')), findsOneWidget);
+    expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
+
+    controller
+      ..fixtureActor.cancelProfilePicker()
+      ..fixtureActor.present(LineupPresentation(stage: SetupStage.welcome))
+      ..fixtureActor.present(LineupPresentation(busy: false))
+      ..fixtureActor.present(LineupPresentation(error: (null,)));
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    controller.fixtureActor.present(
+      LineupPresentation(stage: SetupStage.profiles),
+    );
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-card-child')));
+    await tester.pumpAndSettle();
+    expect(find.text('‹ Profiles'), findsOneWidget);
+    expect(find.text('‹ Settings · Account'), findsNothing);
+  });
+
+  testWidgets('Guide activation tunes and returns to the full player', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          Channel(
+            id: 'channel',
+            number: 7,
+            name: 'Synthetic Seven',
+            source: const ManualSource([
+              ChannelItem(
+                id: 'program',
+                title: 'Synthetic Program',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: 7,
+          ),
+        ],
+      ),
+    );
+    final player = _FakePlayer();
+    await tester.pumpWidget(
+      LineupBootstrap(player: player, controller: controller),
+    );
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(player.loads, hasLength(1));
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsNothing);
+    expect(find.byType(NativeVideoSurface), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+  });
+
+  testWidgets('Guide activation opens Player while native tune is pending', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          Channel(
+            id: 'channel',
+            number: 7,
+            name: 'Synthetic Seven',
+            source: const ManualSource([
+              ChannelItem(
+                id: 'program',
+                title: 'Synthetic Program',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: 7,
+          ),
+        ],
+      ),
+    );
+    final player = _DelayedLoadPlayer();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      LineupBootstrap(player: player, controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await player.loadStarted.future;
+
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsNothing);
+    expect(find.byType(NativeVideoSurface), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+    player.releaseLoad();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('closing Guide returns to Player instead of management history', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          Channel(
+            id: 'channel',
+            number: 7,
+            name: 'Synthetic Seven',
+            source: const ManualSource([
+              ChannelItem(
+                id: 'program',
+                title: 'Synthetic Program',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: 7,
+          ),
+        ],
+        currentChannelId: 'channel',
+      ),
+    );
+    final player = _PlayingPlayer();
+    await tester.pumpWidget(
+      LineupBootstrap(player: player, controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await openDestination(tester, 'Settings');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Close Guide'));
+    await tester.pumpAndSettle();
+
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+    expect(find.byType(DropdownButton<LineupThemeName>), findsNothing);
+  });
+
+  testWidgets('onboarding link action is keyboard reachable', (tester) async {
+    final controller = _FakeController();
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.byType(FilledButton)),
+      matchesSemantics(
+        label: 'Sign in to Plex',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        isFocusable: true,
+        isFocused: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(controller.linkingRequested, isTrue);
+  });
+
+  for (final key in [LogicalKeyboardKey.space, LogicalKeyboardKey.select]) {
+    testWidgets('onboarding link action accepts ${key.keyLabel}', (
+      tester,
+    ) async {
+      final controller = _FakeController();
+      await tester.pumpWidget(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+
+      expect(controller.linkingRequested, isTrue);
+    });
+  }
+
+  testWidgets('Plex linking presents QR, PIN cells, and cancellation', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('QR code for plex.tv/link'), findsOneWidget);
+    expect(find.bySemanticsLabel('Plex link code A B C D'), findsOneWidget);
+    final cancel = find.text('Cancel');
+    await tester.ensureVisible(cancel);
+    await tester.tap(cancel);
+    expect(controller.linkingCanceled, isTrue);
+  });
+
+  testWidgets('linking cancellation failure moves focus to secure retry', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    final cancel = find.widgetWithText(TextButton, 'Cancel');
+    expect(cancel, findsOneWidget);
+    await tester.ensureVisible(cancel);
+
+    controller.requireSecureCancellation();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Retry secure cancellation',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(controller.linkingCanceled, isTrue);
+  });
+
+  testWidgets(
+    'terminal linking failure is live, focused, and keyboard retryable',
+    (tester) async {
+      final controller = _FakeController(
+        scenario: LineupScenario(
+          stage: SetupStage.linking,
+          activePin: PlexPin(
+            id: 1,
+            code: 'ABCD',
+            expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      controller.stopLinking();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Waiting for sign-in…'), findsNothing);
+      expect(
+        tester.getSemantics(find.text('Synthetic safe Plex failure.')),
+        matchesSemantics(
+          label: 'Synthetic safe Plex failure.',
+          isLiveRegion: true,
+        ),
+      );
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Retry secure cancellation',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(controller.linkingRequested, isTrue);
+    },
+  );
+
+  testWidgets('terminal linking failure fits compact onboarding', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 560);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        error: 'Synthetic safe Plex failure.',
+      ),
+    );
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Get a new code'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('busy profile selection moves focus to its enabled cancel', (
+    tester,
+  ) async {
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [child],
+        profileSelectionOrigin: SetupStage.ready,
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    controller.beginCancellableProfileSelection();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Cancel profile selection',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(controller.profileSelectionCanceled, isTrue);
+  });
+
+  testWidgets('profile cards expose only established role and active badges', (
+    tester,
+  ) async {
+    const active = PlexHomeUser(
+      id: 'active',
+      name: 'Primary',
+      protected: true,
+      admin: true,
+    );
+    const restricted = PlexHomeUser(
+      id: 'restricted',
+      name: 'Kids',
+      protected: false,
+      restricted: true,
+    );
+    const standard = PlexHomeUser(
+      id: 'standard',
+      name: 'Standard',
+      protected: false,
+      restricted: false,
+    );
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: const [standard, active, restricted],
+      ),
+    );
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PIN'), findsNothing);
+    expect(find.text('Admin'), findsOneWidget);
+    expect(find.text('Restricted'), findsOneWidget);
+    expect(find.text('Current'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('.*lock.*', caseSensitive: false)),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel(RegExp('.*Admin.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Restricted.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Current.*')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(controller.selectedProfile, standard);
+  });
+
+  testWidgets('profile cards show no Active badge without a current profile', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'standard', name: 'Standard', protected: false),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Active'), findsNothing);
+  });
+
+  testWidgets('focused profile name reveals the full name without reflow', (
+    tester,
+  ) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'first', name: 'First', protected: false),
+          PlexHomeUser(
+            id: 'long',
+            name: 'A very long profile name that needs the focused treatment',
+            protected: false,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('profile-name-full-first')), findsNothing);
+    expect(find.byKey(const ValueKey('profile-name-full-long')), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('profile-name-full-long')),
+      findsOneWidget,
+    );
+    final fullName = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const ValueKey('profile-name-full-long')),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(fullName.maxLines, isNull);
+    expect(fullName.style?.fontFamily, 'Inter');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unprotected profile failure remains visible in onboarding', (
+    tester,
+  ) async {
+    final controller = _FailingProfileController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [
+          PlexHomeUser(id: 'child', name: 'Child', protected: false),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Child'));
+    await tester.pump();
+    expect(find.text('Profile switch failed safely.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-feedback-slot')), findsOneWidget);
+  });
+
+  testWidgets('welcome link failure remains visible after start attempt', (
+    tester,
+  ) async {
+    final controller = _FailingLinkController();
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sign in to Plex'));
+    await tester.pump();
+    expect(find.text('Link start failed safely.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('welcome-feedback-slot')), findsOneWidget);
+  });
+
+  testWidgets('onboarding rebuilds without a listening parent', (tester) async {
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.linking,
+        activePin: PlexPin(
+          id: 1,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        ),
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Retry secure cancellation'), findsNothing);
+
+    controller.requireSecureCancellation();
+    await tester.pump();
+
+    expect(find.text('Retry secure cancellation'), findsOneWidget);
+  });
+
+  testWidgets('onboarding reflects state-only controller notifications', (
+    tester,
+  ) async {
+    const profile = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    const server = PlexServer(
+      id: 'server',
+      name: 'Living Room',
+      connections: [],
+      owned: true,
+    );
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [profile],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Child'), findsOneWidget);
+
+    controller
+      ..fixtureActor.discoverServers([server])
+      ..fixtureActor.present(LineupPresentation(stage: SetupStage.servers));
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.text('Living Room'), findsOneWidget);
+
+    controller.fixtureActor.present(
+      LineupPresentation(error: ('Server discovery needs attention.',)),
+    );
+    controller.notifyListeners();
+    await tester.pump();
+    expect(find.text('Server discovery needs attention.'), findsOneWidget);
+
+    controller
+      ..fixtureActor.present(LineupPresentation(stage: SetupStage.linking))
+      ..fixtureActor.present(LineupPresentation(error: (null,)))
+      ..fixtureActor.present(
+        LineupPresentation(
+          pin: (
+            PlexPin(
+              id: 1,
+              code: 'ABCD',
+              expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+            ),
+          ),
+        ),
+      );
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    controller.fixtureActor.present(
+      LineupPresentation(
+        pin: (
+          PlexPin(
+            id: 2,
+            code: 'WXYZ',
+            expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+          ),
+        ),
+      ),
+    );
+    controller.notifyListeners();
+    await tester.pump();
+    expect(find.bySemanticsLabel('Plex link code W X Y Z'), findsOneWidget);
+  });
+
+  testWidgets('server cards separate availability from selected facts', (
+    tester,
+  ) async {
+    final selected = PlexServer(
+      id: 'selected',
+      name: 'Studio',
+      owned: true,
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://local.synthetic.invalid:32400'),
+          local: true,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://remote.synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://relay.synthetic.invalid:32400'),
+          local: true,
+          relay: true,
+        ),
+      ],
+    );
+    final shared = PlexServer(
+      id: 'shared',
+      name: 'Shared',
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://shared.synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+        ),
+      ],
+    );
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        servers: [selected, shared],
+        server: selected,
+        connection: PlexConnection(
+          uri: Uri.parse('https://selected.synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+          latency: const Duration(milliseconds: 500),
+        ),
+        error: 'Lineup could not reach that Plex server. Try again.',
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Owned server'), findsOneWidget);
+    expect(find.text('Shared server'), findsOneWidget);
+    expect(find.text('Direct local available'), findsNothing);
+    expect(find.text('Direct remote available'), findsNothing);
+    expect(find.text('Relay available'), findsNothing);
+    expect(find.text('Direct remote · Very slow · 500 ms'), findsOneWidget);
+    expect(find.textContaining('Current connection:'), findsNothing);
+    expect(
+      find.text('Lineup could not reach that Plex server. Try again.'),
+      findsOneWidget,
+    );
+    for (final endpoint in [
+      'local.synthetic.invalid',
+      'remote.synthetic.invalid',
+      'relay.synthetic.invalid',
+      'shared.synthetic.invalid',
+      'selected.synthetic.invalid',
+      '32400',
+    ]) {
+      expect(find.textContaining(endpoint), findsNothing);
+    }
+  });
+
+  testWidgets('protected profile PIN submits after four remote digits', (
+    tester,
+  ) async {
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+    final controller = _FakeController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [child],
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Child'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-progress')), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('1'));
+    await tester.pump();
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const Key('profile-pin-progress')))
+          .properties
+          .label,
+      '1 of 4 digits entered',
+    );
+    for (final digit in ['2', '3', '4']) {
+      await tester.tap(find.bySemanticsLabel(digit));
+      await tester.pump();
+    }
+    expect(controller.selectedProfile, child);
+    expect(controller.selectedPin, '1234');
+  });
+
+  testWidgets('rejected profile PIN stays open and accepts a later retry', (
+    tester,
+  ) async {
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+    final controller = _RetryPinController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: const [child],
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Child'));
+    await tester.pumpAndSettle();
+
+    for (final digit in ['1', '2', '3', '4']) {
+      await tester.tap(find.bySemanticsLabel(digit));
+      await tester.pump();
+    }
+    expect(controller.attempts, 1);
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    expect(find.bySemanticsLabel('Checking PIN'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('1'));
+    expect(controller.attempts, 1);
+
+    controller.rejectFirstAttempt();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const Key('profile-pin-progress')))
+          .properties
+          .label,
+      '0 of 4 digits entered',
+    );
+    final errorSemantics = tester.widget<Semantics>(
+      find.byKey(const Key('profile-pin-error')),
+    );
+    expect(errorSemantics.properties.liveRegion, isTrue);
+    expect(
+      errorSemantics.properties.label,
+      'That PIN was not accepted. Try again.',
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Profile PIN digit 1',
+    );
+
+    for (final digit in ['4', '3', '2', '1']) {
+      await tester.tap(find.bySemanticsLabel(digit));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(controller.attempts, 2);
+    expect(controller.pins, ['1234', '4321']);
+    expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
+  });
+
+  testWidgets('presents initialization failures without entering the shell', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FailingPlayer(), controller: _FakeController()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    final failureSemantics = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == 'Lineup Desktop could not start',
+      ),
+    );
+    expect(failureSemantics.properties.liveRegion, isTrue);
+    expect(
+      find.ancestor(
+        of: find.text('Lineup Desktop could not start'),
+        matching: find.byType(ExcludeSemantics),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Restart the app'), findsOneWidget);
+    expect(find.textContaining(_nativeInitializeFailureMessage), findsNothing);
+    expect(find.text('Guide'), findsNothing);
+  });
+
+  testWidgets('real corrupt state reaches the live dismissible banner', (
+    tester,
+  ) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'lineup-bootstrap-test',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    File('${directory.path}/state.json').writeAsStringSync('{broken');
+    final store = _PreparedFileAppStore(
+      directory,
+      clock: () => DateTime.utc(2026, 8, 23),
+    );
+    await tester.runAsync(store.prepare);
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MaterialBanner), findsOneWidget);
+    final semantics = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == controller.startupRecoveryNotice,
+      ),
+    );
+    expect(semantics.properties.liveRegion, isTrue);
+    expect(controller.startupRecoveryNotice, isNot(contains('/')));
+    final theme = controller.settings.theme;
+
+    await tester.tap(find.widgetWithText(TextButton, 'Dismiss'));
+    await tester.pump();
+
+    expect(find.byType(MaterialBanner), findsNothing);
+    expect(controller.startupRecoveryNotice, isNull);
+    expect(controller.settings.theme, theme);
+  });
+
+  testWidgets('pre-existing quarantine directory survives startup recovery', (
+    tester,
+  ) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'lineup-bootstrap-test',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final stateFile = File(
+      '${directory.path}${Platform.pathSeparator}state.json',
+    );
+    stateFile.writeAsStringSync('{broken');
+    final instant = DateTime.utc(2026, 8, 23);
+    final quarantine = Directory(
+      '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}',
+    );
+    quarantine.createSync();
+    final marker = File('${quarantine.path}/marker');
+    marker.writeAsStringSync('existing recovery artifact');
+    final store = _PreparedFileAppStore(directory, clock: () => instant);
+    await tester.runAsync(store.prepare);
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MaterialBanner), findsOneWidget);
+    expect(controller.startupRecoveryNotice, isNotNull);
+    expect(stateFile.existsSync(), isFalse);
+    expect(quarantine.existsSync(), isTrue);
+    expect(marker.readAsStringSync(), 'existing recovery artifact');
+    final prefix =
+        '${directory.path}${Platform.pathSeparator}state.json.corrupt-';
+    final recoveredContainers = directory
+        .listSync()
+        .whereType<Directory>()
+        .where(
+          (entry) =>
+              entry.path.startsWith(prefix) && entry.path != quarantine.path,
+        )
+        .toList();
+    expect(recoveredContainers, hasLength(1));
+    expect(
+      File('${recoveredContainers.single.path}/state.json').readAsStringSync(),
+      '{broken',
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Dismiss'));
+    await tester.pump();
+
+    expect(find.byType(MaterialBanner), findsNothing);
+    expect(controller.startupRecoveryNotice, isNull);
+  });
+
+  testWidgets('state directory read failure makes startup fail visibly', (
+    tester,
+  ) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'lineup-bootstrap-test',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final stateDirectory = Directory('${directory.path}/state.json');
+    stateDirectory.createSync();
+    final store = _PreparedFileAppStore(directory);
+    await tester.runAsync(store.prepare);
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pump();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining(directory.path), findsNothing);
+    expect(stateDirectory.existsSync(), isTrue);
+    expect(
+      directory.listSync().where(
+        (entry) => entry.path.contains('state.json.corrupt-'),
+      ),
+      isEmpty,
+    );
+  });
+
+  testWidgets('makes a missing required Windows engine explicit', (
+    tester,
+  ) async {
+    final controller = _LoadingController(
+      scenario: LineupScenario(restoringSavedLineup: true),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(
+        player: _TypedRequiredEngineFailingPlayer(),
+        controller: controller,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'The required Lineup DirectComposition Flutter engine is not active.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
+    expect(find.byType(LineupShell), findsNothing);
+    controller.completeInitialization();
+    await tester.pumpAndSettle();
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+  });
+
+  testWidgets('retains required-engine guidance through player errors', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupBootstrap(
+        player: _TypedRequiredEngineFailingPlayer(),
+        controller: _FakeController(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'The required Lineup DirectComposition Flutter engine is not active.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
+  });
+}
+
+class _FakeController extends LineupController {
+  _FakeController({super.scenario})
+    : super(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        ),
+      );
+
+  bool linkingRequested = false;
+  bool linkingCanceled = false;
+  bool profileSelectionCanceled = false;
+  PlexHomeUser? selectedProfile;
+  String? selectedPin;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> startLinking() async {
+    linkingRequested = true;
+  }
+
+  @override
+  Future<bool> cancelLinking() async {
+    linkingCanceled = true;
+    return true;
+  }
+
+  void requireSecureCancellation() {
+    fixtureActor.present(LineupPresentation(secureCancellationRequired: true));
+    fixtureActor.present(
+      LineupPresentation(
+        error: ('Synthetic secure credential storage failure.',),
+      ),
+    );
+    notifyListeners();
+  }
+
+  void stopLinking() {
+    fixtureActor.present(LineupPresentation(pin: (null,)));
+    fixtureActor.present(
+      LineupPresentation(error: ('Synthetic safe Plex failure.',)),
+    );
+    notifyListeners();
+  }
+
+  void beginCancellableProfileSelection() {
+    fixtureActor.present(LineupPresentation(busy: true));
+    notifyListeners();
+  }
+
+  @override
+  void cancelProfileSelection() {
+    profileSelectionCanceled = true;
+  }
+
+  @override
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    selectedProfile = selected;
+    selectedPin = pin;
+    return true;
+  }
+
+  @override
+  LineupPlaybackRequest playbackFor(String itemId) =>
+      LineupPlaybackRequest.parts([
+        LineupPlaybackPart(uri: Uri.parse('lineup-test://synthetic')),
+      ]);
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    (channel.source as ManualSource).items,
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+  );
+}
+
+class _FailingProfileController extends _FakeController {
+  _FailingProfileController({super.scenario});
+
+  @override
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    fixtureActor.present(
+      LineupPresentation(error: ('Profile switch failed safely.',)),
+    );
+    notifyListeners();
+    return false;
+  }
+}
+
+class _FailingLinkController extends _FakeController {
+  _FailingLinkController();
+
+  @override
+  Future<void> startLinking() async {
+    fixtureActor.present(
+      LineupPresentation(error: ('Link start failed safely.',)),
+    );
+    notifyListeners();
+  }
+}
+
+class _AccountProfileController extends _FakeController {
+  _AccountProfileController({super.scenario});
+
+  @override
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    selectedProfile = selected;
+    selectedPin = pin;
+    fixtureActor.profileSelected(
+      selected,
+      servers: const [
+        PlexServer(id: 'next-server', name: 'Next server', connections: []),
+      ],
+    );
+    notifyListeners();
+    return true;
+  }
+}
+
+class _AccountPinController extends _FakeController {
+  _AccountPinController({super.scenario});
+
+  @override
+  void cancelProfileSelection() {
+    super.cancelProfileSelection();
+    fixtureActor.cancelProfilePicker();
+    notifyListeners();
+  }
+}
+
+final _studioChannel = Channel(
+  id: 'studio',
+  number: 7,
+  name: 'Studio channel',
+  source: const ManualSource([
+    ChannelItem(
+      id: 'program',
+      title: 'Studio program',
+      duration: Duration(hours: 1),
+    ),
+  ]),
+  playbackMode: PlaybackMode.sequential,
+  anchor: DateTime.utc(2026),
+  shuffleSeed: 7,
+);
+
+class _LogoutController extends _FakeController {
+  _LogoutController({super.scenario, bool blockSave = false})
+    : _saveRelease = blockSave ? Completer<void>() : null;
+
+  final Completer<void>? _saveRelease;
+  int logoutCalls = 0;
+
+  @override
+  Future<bool> logout() async {
+    logoutCalls++;
+    fixtureActor.present(LineupPresentation(stage: SetupStage.welcome));
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<Channel> saveChannel(
+    Channel channel, {
+    required Channel? expectedBase,
+  }) async {
+    final release = _saveRelease;
+    if (release != null) await release.future;
+    return channel;
+  }
+
+  void releaseSave() => _saveRelease?.complete();
+}
+
+class _ChannelSetupController extends _FakeController {
+  _ChannelSetupController({LineupScenario? scenario})
+    : super(
+        scenario: (scenario ?? const LineupScenario()).withDefaults(
+          LineupScenario(
+            connection: PlexConnection(
+              uri: Uri.parse('https://synthetic.invalid'),
+              local: true,
+              relay: false,
+            ),
+          ),
+        ),
+      );
+
+  @override
+  Set<String> get libraryScanReadyIds => _readyIds;
+
+  @override
+  Set<String> get libraryScanRetryIds => const {};
+
+  @override
+  Map<String, LibraryScanFact> get libraryScanFacts => _scanFacts;
+
+  Set<String> _readyIds = const {};
+  Map<String, LibraryScanFact> _scanFacts = const {};
+
+  @override
+  Future<bool> scanLibraries(
+    Set<String> ids, {
+    bool retryFailedOnly = false,
+  }) async {
+    fixtureActor.publishInventory(
+      media: [
+        for (var index = 0; index < 12; index++)
+          PlexMediaItem(
+            id: 'movie-$index',
+            title: 'Movie $index',
+            type: 'movie',
+            duration: const Duration(minutes: 90),
+            libraryId: 'movies',
+            parts: [PlexMediaPart(path: '/parts/movie-$index')],
+            genres: const ['Drama'],
+          ),
+      ],
+    );
+    _readyIds = Set.unmodifiable(ids);
+    _scanFacts = {
+      for (final id in ids)
+        id: const LibraryScanFact(
+          status: LibraryScanStatus.complete,
+          completedPages: 1,
+          completedItems: 12,
+          totalItems: 12,
+        ),
+    };
+    fixtureActor.reportScan(status: LibraryScanStatus.complete);
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<bool> commitLibraryScan(Set<String> readyIds) async {
+    fixtureActor.publishInventory(
+      selectedLibraryIds: Set.unmodifiable(readyIds),
+    );
+    return true;
+  }
+}
+
+class _RetryPinController extends _FakeController {
+  _RetryPinController({super.scenario});
+
+  final _firstAttempt = Completer<void>();
+  final List<String> pins = [];
+  int attempts = 0;
+
+  void rejectFirstAttempt() => _firstAttempt.complete();
+
+  @override
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    attempts++;
+    pins.add(pin!);
+    if (attempts == 1) {
+      fixtureActor.present(LineupPresentation(busy: true));
+      notifyListeners();
+      await _firstAttempt.future;
+      fixtureActor.present(LineupPresentation(busy: false));
+      fixtureActor.present(
+        LineupPresentation(error: ('That PIN was not accepted. Try again.',)),
+      );
+      notifyListeners();
+      return false;
+    }
+    selectedProfile = selected;
+    selectedPin = pin;
+    return true;
+  }
+}
+
+class _LoadingController extends _FakeController {
+  _LoadingController({super.scenario});
+
+  final _initialization = Completer<void>();
+
+  @override
+  Future<void> initialize() => _initialization.future;
+
+  void completeInitialization() => _initialization.complete();
+}
+
+class _PreparedFileAppStore extends FileAppStore {
+  _PreparedFileAppStore(super.directory, {super.clock});
+
+  AppStoreLoadResult? _result;
+  Object? _error;
+
+  Future<void> prepare() async {
+    try {
+      _result = await super.load();
+    } catch (error) {
+      _error = error;
+    }
+  }
+
+  @override
+  Future<AppStoreLoadResult> load() async {
+    // The fixture injects arbitrary failures to exercise propagation.
+    // ignore: only_throw_errors
+    if (_error case final error?) throw error;
+    return _result!;
+  }
+}
+
+typedef _MemoryStore = MemoryAppStore;
+typedef _MemoryCredentials = MemoryCredentialStore;
+typedef _FakePlayer = FakeNativePlayer;
+
+class _DelayedDisposalPlayer extends _FakePlayer {
+  final finishDisposal = Completer<void>();
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+    await finishDisposal.future;
+  }
+}
+
+class _PlayingPlayer extends _FakePlayer {
+  @override
+  PlayerStatus get status =>
+      const PlayerStatus(state: PlayerState.playing, message: 'Playing');
+}
+
+class _DelayedLoadPlayer extends _FakePlayer {
+  final loadStarted = Completer<void>();
+  final _loadRelease = Completer<void>();
+
+  @override
+  Future<void> load(
+    Uri media, {
+    String? plexToken,
+    int? generation,
+    bool startPaused = false,
+  }) async {
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+    );
+    loadStarted.complete();
+    await _loadRelease.future;
+  }
+
+  void releaseLoad() => _loadRelease.complete();
+}
+
+const _nativeInitializeFailureMessage = 'libmpv could not create a client.';
+const _requiredEngineNativeFailureMessage =
+    'native wording is not part of the application contract';
+
+class _FailingPlayer extends _FakePlayer {
+  @override
+  Future<void> initialize() async {
+    throw PlatformException(
+      code: 'initialize_failed',
+      message: _nativeInitializeFailureMessage,
+    );
+  }
+}
+
+class _TypedRequiredEngineFailingPlayer extends _FakePlayer {
+  @override
+  Future<void> initialize() async {
+    throw const PlayerUnavailable(
+      _requiredEngineNativeFailureMessage,
+      failureCode: 'required_engine_unavailable',
+    );
+  }
+}
+
+class _PositionEventPlayer extends _PlayingPlayer {
+  final _events = StreamController<PlayerEvent>.broadcast();
+  @override
+  Stream<PlayerEvent> get events => _events.stream;
+
+  void emitPosition(Duration position, {bool paused = false}) {
+    _events.add(
+      PlayerEvent(
+        status: paused
+            ? const PlayerStatus(state: PlayerState.paused, message: 'Paused')
+            : status,
+        position: position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: tracks,
+      ),
+    );
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _events.close();
+    await super.dispose();
+  }
+}
