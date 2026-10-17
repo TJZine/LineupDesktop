@@ -82,12 +82,13 @@ jobs:
           command -v ninja >/dev/null || missing_formulas+=(ninja)
           command -v pkg-config >/dev/null || missing_formulas+=(pkgconf)
           command -v cmake >/dev/null || missing_formulas+=(cmake)
+          command -v ffmpeg >/dev/null || missing_formulas+=(ffmpeg)
           if ((${#missing_formulas[@]})); then
             echo "Installing missing Homebrew formulas: ${missing_formulas[*]}"
             brew install "${missing_formulas[@]}"
           fi
 
-          for tool in meson ninja pkg-config cmake python3 git curl shasum xcrun xcodebuild; do
+          for tool in meson ninja pkg-config cmake ffmpeg python3 git curl shasum xcrun xcodebuild; do
             command -v "$tool" >/dev/null || {
               echo "Required build tool is unavailable: $tool" >&2
               exit 1
@@ -107,6 +108,45 @@ jobs:
           test -f "$runtime/lib/libmpv.2.dylib"
           echo "LINEUP_MPV_RUNTIME=$runtime" >> "$GITHUB_ENV"
           echo "Prepared LINEUP_MPV_RUNTIME=$runtime"
+      - name: Run required macOS authenticated-reference proof (no skip)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for tool in python3 ffmpeg openssl cmake git; do
+            command -v "$tool" >/dev/null || {
+              echo "Required authenticated-reference tool is unavailable: $tool" >&2
+              exit 1
+            }
+          done
+          for tool in /usr/bin/clang++ /usr/bin/lipo /usr/bin/otool; do
+            [[ -x "$tool" ]] || {
+              echo "Required macOS tool is unavailable: $tool" >&2
+              exit 1
+            }
+          done
+          : "${FLUTTER_ROOT:?FLUTTER_ROOT is not set by flutter-action}"
+          [[ -d "$FLUTTER_ROOT" ]] || {
+            echo "Pinned Flutter root is not a directory: $FLUTTER_ROOT" >&2
+            exit 1
+          }
+          : "${LINEUP_MPV_RUNTIME:?LINEUP_MPV_RUNTIME was not exported by runtime provisioning}"
+          [[ -d "$LINEUP_MPV_RUNTIME" ]] || {
+            echo "Prepared macOS runtime is not a directory: $LINEUP_MPV_RUNTIME" >&2
+            exit 1
+          }
+          : "${RUNNER_TEMP:?RUNNER_TEMP is not set}"
+          reference_output="$(mktemp -d "$RUNNER_TEMP/lineup-authenticated-reference.XXXXXX")"
+          [[ -z "$(ls -A "$reference_output")" ]] || {
+            echo "Authenticated-reference output directory is not empty: $reference_output" >&2
+            exit 1
+          }
+          python3 tool/macos/authenticated-reference/run.py \
+            --flutter-root "$FLUTTER_ROOT" \
+            --runtime "$LINEUP_MPV_RUNTIME" \
+            --output-dir "$reference_output" \
+            --ffmpeg "$(command -v ffmpeg)" \
+            --openssl "$(command -v openssl)"
       - name: Run macOS runtime embed integration check
         shell: bash
         run: tool/macos/mpv-runtime-embed-test.sh
