@@ -5,25 +5,30 @@ import 'package:lineup_desktop/playback/native_player_factory.dart';
 import 'package:lineup_desktop/playback/unsupported_native_player.dart';
 
 void main() {
-  test('macOS backend never masquerades as successful playback', () async {
-    final player = UnsupportedNativePlayer.macos();
+  test(
+    'unsupported backend never masquerades as successful playback',
+    () async {
+      final player = UnsupportedNativePlayer(
+        message: UnsupportedNativePlayer.platformMessage,
+      );
 
-    await player.initialize();
-    expect(player.status.state, PlayerState.unsupported);
-    expect(player.status.message, contains('not implemented'));
-    await expectLater(player.play(), throwsA(isA<PlayerUnavailable>()));
-    await expectLater(
-      player.load(Uri.parse('https://example.invalid/media')),
-      throwsA(
-        isA<PlayerUnavailable>().having(
-          (error) => error.message,
-          'message',
-          'Native playback is not implemented on macOS.',
+      await player.initialize();
+      expect(player.status.state, PlayerState.unsupported);
+      expect(player.status.message, contains('not implemented'));
+      await expectLater(player.play(), throwsA(isA<PlayerUnavailable>()));
+      await expectLater(
+        player.load(Uri.parse('https://example.invalid/media')),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.message,
+            'message',
+            'Native playback is not implemented on this platform.',
+          ),
         ),
-      ),
-    );
-    await player.dispose();
-  });
+      );
+      await player.dispose();
+    },
+  );
 
   test(
     'factory selects the method-channel or truthful unsupported backend',

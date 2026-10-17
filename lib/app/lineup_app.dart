@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../playback/native_player.dart';
@@ -10,12 +9,10 @@ import '../ui/lineup_canvas.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
-// Only the Windows backend has a required engine variant (DirectComposition);
-// the macOS backend never reports required_engine_unavailable.
+// Only the Windows backend reports required_engine_unavailable (its
+// DirectComposition engine variant); the macOS backend never does.
 const _requiredEngineFailureMessage =
     'The required Lineup DirectComposition Flutter engine is not active.';
-const _macOSRequiredEngineFailureMessage =
-    'The required Lineup video engine is not available.';
 
 class LineupStartup extends StatefulWidget {
   const LineupStartup({required this.createBootstrap, super.key});
@@ -312,9 +309,7 @@ class _StartupFailureBody extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(
                     requiredEngineFailure
-                        ? defaultTargetPlatform == TargetPlatform.macOS
-                              ? _macOSRequiredEngineFailureMessage
-                              : _requiredEngineFailureMessage
+                        ? _requiredEngineFailureMessage
                         : 'Restart the app. If the problem continues, report '
                               'the startup failure.',
                     textAlign: TextAlign.center,

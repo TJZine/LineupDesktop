@@ -1774,26 +1774,6 @@ void main() {
     );
     expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
   });
-
-  testWidgets(
-    'required-engine guidance does not name the Windows engine on macOS',
-    (tester) async {
-      await tester.pumpWidget(
-        LineupBootstrap(
-          player: _TypedRequiredEngineFailingPlayer(),
-          controller: _FakeController(),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('The required Lineup video engine is not available.'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('DirectComposition'), findsNothing);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
 }
 
 class _FakeController extends LineupController {
