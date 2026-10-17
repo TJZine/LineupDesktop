@@ -482,3 +482,54 @@ handed exclusive UI access to the human for actual Command key, text selection,
 Control-Command-F, live-resize/alignment and switching/transparency checks.
 Those answers remain pending. No automation or child may interfere with that
 human check. Licenses-screen direction remains pending; purchase work deferred.
+
+## Physical input results and visible HDR failure
+
+The human confirmed all requested physical keyboard checks pass: Command-3
+opens Settings, Command-1 opens Guide, Command-F focuses search, Command-A
+selects entered search text, Command-comma opens Settings, and
+Control-Command-F toggles fullscreen from Guide, its search field and Player.
+This supplies the physical modifier-key evidence unavailable through CUA.
+
+The same human check found a visible HDR switching defect in the combined
+Debug harness: switching to SDR channel 1 looks correct, but switching back to
+HDR channel 2 while in Player produces substantially dimmer output. Opening
+Guide restores brightness for that same clip; returning to Player preserves the
+correct appearance. The human explicitly clarified that screenshots cannot
+capture the brightness difference. Their direct observation establishes failure;
+layer flags or screenshots must not be substituted for physical HDR acceptance.
+Live-resize/alignment and exact transparency acceptance are not inferred from
+this response. The prior hidden-load probe does not settle this visible-switch
+scenario.
+
+Native worker `01a14bc0-ab3f-7c73-bb93-75341fdc3420` owns diagnosis and exclusive
+app/UI resources. It first preserves the current app/logs, then compares the
+visible HDR → SDR → HDR sequence with the same-clip Guide/Player transition.
+Source inspection shows that content color-space changes already request
+swapchain recreation; missing recreation is therefore not yet an established
+cause. Layer transaction publication and drawable/presentation state are
+distinct hypotheses. Temporary isolated-copy diagnostics are authorized if
+existing logs cannot distinguish them; production edits and accepted-runtime
+mutation are not. The controller coordinates any further human brightness
+observations. Experiment plan: `/tmp/lineup-visible-hdr-investigation/experiment.md`.
+
+## Hosted Windows contract startup failure
+
+Run `39079367554` passed Dart, shared-core contracts and Windows release policy.
+The Windows application and native contract executable built successfully, and
+the existing selected native suites passed. The newly selected
+`native_player_contract` failed at process startup with `0xc0000135` in 0.04
+seconds; no contract assertion ran. Its failure was propagated, not skipped.
+Mac portable/native and patched-engine/package jobs were still running at this
+observation.
+
+Windows worker `01a14bfd-7a31-7e50-9de6-e6318b5c1aac` owns the bounded CI
+diagnosis. Hash-verified PE imports confirm that the pinned libmpv imports
+`vulkan-1.dll`; the hosted image inventory does not list Vulkan, but the actual
+runner's missing DLL is not yet proven. The worker is preparing a minimal hosted
+dependency probe, preserving the real test and its failure status. Any workflow
+or focused CI-helper change requires independent review before controller
+integration and an authorized branch push/rerun. Runtime pins, production
+adapters and package policy remain outside this unit. CI observer
+`01a14bdd-a2a0-7ba0-bcb5-c06320493487` follows the remaining jobs read-only and
+reports a new failure or completion.
