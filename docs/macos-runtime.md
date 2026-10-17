@@ -413,13 +413,16 @@ document in the same commit.
   signed with the team identity; the executable needs an
   `@executable_path/../Frameworks` rpath. The `mpv_runtime.sh embed` build
   phase copies the current set and records its basenames in the private
-  `Contents/Frameworks/.lineup-mpv-runtime-manifest`, removing only previously
+  `Contents/Resources/.lineup-mpv-runtime-manifest`, removing only previously
   managed files and the current components' old numeric aliases. Signed files
-  are staged before publication; `.lineup-mpv-runtime-pending` records ownership
-  across a partial install so a retry can remove superseded names without
-  advancing the completed manifest. Current-name symlinks are replaced without
-  following them, while real directories reject the install. It preserves
-  unrelated bundle contents.
+  are staged before publication; `Contents/Resources/.lineup-mpv-runtime-pending`
+  records ownership across a partial install so a retry can remove superseded
+  names without advancing the completed manifest. A legacy manifest in
+  `Contents/Frameworks`
+  is validated and migrated to `Contents/Resources` only after safe publication,
+  so bookkeeping is not treated as code by app signing. Current-name symlinks
+  are replaced without following them, while real directories reject the
+  install. It preserves unrelated bundle contents.
   Ad hoc signing uses `--timestamp=none`; a non-ad-hoc identity requests
   Apple's secure `--timestamp`, while `CODE_SIGNING_ALLOWED=NO` skips signing.
   Real identity, sandbox, and package acceptance remain separate release

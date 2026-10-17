@@ -7,13 +7,18 @@ embed_script="$repo_root/macos/Runner/Scripts/mpv_runtime.sh"
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/lineup-mpv-embed-test.XXXXXX")
 app="$test_root/Lineup Desktop.app"
 frameworks="$app/Contents/Frameworks"
+resources="$app/Contents/Resources"
 runtime_one="$test_root/runtime-one"
 runtime_two="$test_root/runtime-two"
 runtime_three="$test_root/runtime-three"
 fake_bin="$test_root/bin"
 codesign_log="$test_root/codesign.log"
-manifest="$frameworks/.lineup-mpv-runtime-manifest"
-pending_manifest="$frameworks/.lineup-mpv-runtime-pending"
+manifest_name='.lineup-mpv-runtime-manifest'
+pending_manifest_name='.lineup-mpv-runtime-pending'
+manifest="$resources/.lineup-mpv-runtime-manifest"
+pending_manifest="$resources/.lineup-mpv-runtime-pending"
+legacy_manifest="$frameworks/.lineup-mpv-runtime-manifest"
+legacy_pending_manifest="$frameworks/.lineup-mpv-runtime-pending"
 
 cleanup() {
   rm -rf "$test_root"
@@ -89,8 +94,9 @@ make_runtime_three() {
 
 run_embed() {
   LINEUP_MPV_RUNTIME=$1 \
-    TARGET_BUILD_DIR="$app" \
-    FRAMEWORKS_FOLDER_PATH='Contents/Frameworks' \
+    TARGET_BUILD_DIR="$test_root" \
+    FRAMEWORKS_FOLDER_PATH='Lineup Desktop.app/Contents/Frameworks' \
+    UNLOCALIZED_RESOURCES_FOLDER_PATH='Lineup Desktop.app/Contents/Resources' \
     LC_ALL=C \
     PATH="$fake_bin:$PATH" \
     CODESIGN_LOG="$codesign_log" \
@@ -174,6 +180,16 @@ sign_count=$(wc -l < "$codesign_log" | tr -d '[:space:]')
 [ "$sign_count" = 4 ] || fail "Expected four ad hoc signing calls; got $sign_count."
 grep -F -- '--sign - --options runtime --timestamp=none' "$codesign_log" >/dev/null ||
   fail 'Ad hoc hardened signing did not use --timestamp=none and --options runtime.'
+
+# A valid pre-Resources manifest pair is migrated only after the active
+# Resources manifest has been published successfully.
+printf '%s\n' libmpv.2.dylib libavutil.61.dylib libMoltenVK.dylib libremoved.1.dylib > "$legacy_manifest"
+printf '%s\n' libmpv.2.dylib libavutil.61.dylib libMoltenVK.dylib libremoved.1.dylib > "$legacy_pending_manifest"
+CODE_SIGNING_ALLOWED=NO run_embed "$runtime_one"
+assert_missing "$legacy_manifest"
+assert_missing "$legacy_pending_manifest"
+assert_file "$manifest"
+assert_missing "$pending_manifest"
 
 # A later runtime adds a component and renames another. A signing failure must
 # leave the completed A state untouched, with no B orphan for a later C retry.
@@ -329,5 +345,73 @@ if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_two"; then
 fi
 assert_content "$outside_sentinel" 'outside sentinel'
 rm -f "$pending_manifest"
+
+printf '%s\n' '../outside-sentinel' > "$legacy_manifest"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_two"; then
+  fail 'An invalid legacy completed manifest was accepted.'
+fi
+assert_content "$outside_sentinel" 'outside sentinel'
+rm -f "$legacy_manifest"
+ln -s "$outside_sentinel" "$legacy_pending_manifest"
+if CODE_SIGNING_ALLOWED=NO run_embed "$runtime_two"; then
+  fail 'A symlinked legacy pending manifest was accepted.'
+fi
+assert_content "$outside_sentinel" 'outside sentinel'
+rm -f "$legacy_pending_manifest"
+
+# Use a real Mach-O app and dylib to prove that Resources bookkeeping does not
+# invalidate an ad-hoc app signature, and that the old Frameworks location is
+# the failure this test would catch.
+command -v cc >/dev/null || fail 'A C compiler is required for Mach-O signing proof.'
+[ -x /usr/bin/codesign ] || fail 'macOS codesign is required for signing proof.'
+mach_root="$test_root/mach-app-root"
+mach_app="$mach_root/Fixture.app"
+mach_frameworks="$mach_app/Contents/Frameworks"
+mach_resources="$mach_app/Contents/Resources"
+mach_runtime="$test_root/mach-runtime"
+mkdir -p "$mach_app/Contents/MacOS" "$mach_frameworks" "$mach_resources" \
+  "$mach_runtime/include/mpv" "$mach_runtime/lib"
+printf '%s\n' '/* fixture mpv header */' > "$mach_runtime/include/mpv/client.h"
+printf '%s\n' 'int lineup_fixture_value(void) { return 7; }' > "$test_root/mach-lib.c"
+cc -dynamiclib -Wl,-install_name,@rpath/libmpv.2.dylib \
+  -o "$mach_runtime/lib/libmpv.2.dylib" "$test_root/mach-lib.c"
+printf '%s\n' 'int main(void) { return 0; }' > "$test_root/mach-main.c"
+cc -o "$mach_app/Contents/MacOS/Fixture" "$test_root/mach-main.c"
+cat > "$mach_app/Contents/Info.plist" <<'MACH_PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.example.lineup-embed-fixture</string>
+<key>CFBundleExecutable</key><string>Fixture</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+</dict></plist>
+MACH_PLIST
+printf '%s\n' libmpv.2.dylib > "$mach_frameworks/$manifest_name"
+printf '%s\n' libmpv.2.dylib > "$mach_frameworks/$pending_manifest_name"
+if /usr/bin/codesign --force --sign - --timestamp=none "$mach_app" \
+  > "$mach_root/legacy-codesign.log" 2>&1; then
+  if /usr/bin/codesign --force --sign - --timestamp=none "$mach_frameworks" \
+    >> "$mach_root/legacy-codesign.log" 2>&1; then
+    fail 'Legacy Frameworks bookkeeping unexpectedly passed code signing.'
+  fi
+fi
+
+LINEUP_MPV_RUNTIME="$mach_runtime" \
+  TARGET_BUILD_DIR="$mach_root" \
+  FRAMEWORKS_FOLDER_PATH='Fixture.app/Contents/Frameworks' \
+  UNLOCALIZED_RESOURCES_FOLDER_PATH='Fixture.app/Contents/Resources' \
+  CODE_SIGNING_ALLOWED=YES EXPANDED_CODE_SIGN_IDENTITY='' \
+  ENABLE_HARDENED_RUNTIME=NO PATH='/usr/bin:/bin:/usr/sbin:/sbin' \
+  "$embed_script" embed
+assert_file "$mach_resources/$manifest_name"
+assert_missing "$mach_resources/$pending_manifest_name"
+assert_missing "$mach_frameworks/$manifest_name"
+assert_missing "$mach_frameworks/$pending_manifest_name"
+/usr/bin/codesign --verify --verbose=2 "$mach_frameworks/libmpv.2.dylib" \
+  > "$mach_root/dylib-codesign.log" 2>&1
+/usr/bin/codesign --force --sign - --timestamp=none "$mach_app" \
+  > "$mach_root/app-codesign.log" 2>&1
+/usr/bin/codesign --verify --deep --strict "$mach_app" \
+  > "$mach_root/app-verify.log" 2>&1
 
 echo 'mpv runtime embedding integration test passed'

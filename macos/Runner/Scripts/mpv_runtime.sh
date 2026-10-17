@@ -203,14 +203,56 @@ embed() {
   done
   [ "$current_count" -gt 0 ] || fail "The libmpv runtime has no dylibs in '$runtime/lib'."
 
-  manifest="$destination/$manifest_name"
-  pending_manifest="$destination/$pending_manifest_name"
+  bundle_contents=$(dirname "$destination")
+  resources_folder_path="${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}"
+  if [ -n "$resources_folder_path" ]; then
+    case "$resources_folder_path" in
+      /*) resources_destination="$resources_folder_path" ;;
+      *) resources_destination="$TARGET_BUILD_DIR/$resources_folder_path" ;;
+    esac
+  else
+    resources_destination="$bundle_contents/Resources"
+  fi
+  case "$resources_destination" in
+    "$bundle_contents/Resources") ;;
+    *) fail "The app resources destination is not the bundle Resources directory: $resources_destination" ;;
+  esac
+  [ ! -L "$resources_destination" ] ||
+    fail "The app Resources destination must not be a symlink: $resources_destination"
+  mkdir -p "$resources_destination"
+
+  manifest="$resources_destination/$manifest_name"
+  pending_manifest="$resources_destination/$pending_manifest_name"
+  legacy_manifest="$destination/$manifest_name"
+  legacy_pending_manifest="$destination/$pending_manifest_name"
   read_manifest "$manifest"
-  manifest_exists=$read_exists
+  active_manifest_exists=$read_exists
   previous_entries=$read_entries
+  read_manifest "$legacy_manifest"
+  legacy_manifest_exists=$read_exists
+  for entry in $read_entries; do
+    if ! list_contains "$entry" "$previous_entries"; then
+      previous_entries="${previous_entries}${entry} "
+    fi
+  done
+  manifest_exists=0
+  if [ "$active_manifest_exists" -eq 1 ] || [ "$legacy_manifest_exists" -eq 1 ]; then
+    manifest_exists=1
+  fi
   read_manifest "$pending_manifest"
-  pending_exists=$read_exists
   pending_entries=$read_entries
+  active_pending_exists=$read_exists
+  read_manifest "$legacy_pending_manifest"
+  legacy_pending_exists=$read_exists
+  for entry in $read_entries; do
+    if ! list_contains "$entry" "$pending_entries"; then
+      pending_entries="${pending_entries}${entry} "
+    fi
+  done
+  pending_exists=0
+  if [ "$active_pending_exists" -eq 1 ] || [ "$legacy_pending_exists" -eq 1 ]; then
+    pending_exists=1
+  fi
 
   # A pending manifest owns names that may have been published before a
   # previous install was interrupted. Validate both manifests above before
@@ -261,6 +303,7 @@ embed() {
 
   write_manifest "$manifest" "$current_entries"
   rm -f "$pending_manifest"
+  rm -f "$legacy_manifest" "$legacy_pending_manifest"
 }
 
 case "${1:-}" in
