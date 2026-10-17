@@ -53,6 +53,9 @@ distribution remain gated by the relevant decisions and approvals.
   after all 26 cases passed and the exact corrected manifest was independently
   approved. C1b adds its required CI entry point in `0d7e195e`, also independently
   approved. Hosted execution remains outstanding.
+- R1c native runtime licenses/notices, patches and provenance resources are
+  integrated by `48e93064` after exact-manifest independent approval and actual
+  Release app resource/signature checks.
 
 ## Evidence and acceptance
 
@@ -152,7 +155,8 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | C1a adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow only; moving R1b and parent record excluded | Complete: approved with YAML/Bash, structural and controlled failure-path checks; no hosted execution |
 | C1b authenticated-reference CI | `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Existing build-macos workflow only: fixture prerequisites and no-skip real-runtime runner before app build | Complete, independently approved and integrated as `0d7e195e`; exact workflow SHA-256 `c1120a3d0c8c55c8694e0410d9d942263e49527447b8e905391b5acf1b77a682` |
 | C1b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow only | Complete: approved; exact Bash failure propagation/path probes and actual system-OpenSSL fixture certificate generation passed |
-| R1c native runtime resource packaging | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Existing embed script/fixture and runtime/Development docs; package existing licenses, notices, patches and BUILD-INFO under owned Resources subtree; no UI/API | Running; independent review and actual combined build required |
+| R1c native runtime resource packaging | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Existing embed script/fixture and runtime/Development docs; package existing licenses, notices, patches and BUILD-INFO under owned Resources subtree; no UI/API | Complete, independently approved and integrated as `48e93064`; actual Release bundle/resource/signature checks pass |
+| R1c adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen four-file packaging source; isolated fixtures/read-only app evidence | Complete: approved exact four files; independent real-runtime fixture and additional recovery/path probes passed |
 
 M3a is the lifecycle portion of M3, independent of the unresolved P6
 fullscreen product decision. It must preserve the pinned Flutter superclass's
@@ -268,10 +272,30 @@ HDR color/brightness, continuous resize quality, all-source fullscreen and
 final signed-package acceptance remain open. No extra source instrumentation
 or product UI changes were made for this observation.
 
-Active independent engineering is R1c packaging of the existing license,
-notice, patch and raw prepared-runtime identity files into a dedicated app
-Resources subtree. This is required regardless of Licenses-screen design;
-it does not approve a screen or establish legal compliance. Distinguish the
+R1c's frozen implementation packages the complete selected runtime's license
+and patch trees plus raw BUILD-INFO in `Contents/Resources/LineupNativeRuntime`.
+The extended production-script fixture retains the earlier signing/recovery
+checks and exercises resource completeness, obsolete-file removal, staging and
+rollback failures, symlink/special-file rejection and boundary sentinels. Its
+isolated real Mach-O app also embeds/signs all 18 accepted runtime libraries
+and compares all 53 resource files without mutating the prepared runtime.
+Four-file source aggregate:
+`31f38f4fdc0e9e000a3f05f3dee28b179c8318b198516f6fe45da0d183b67b12`.
+The controller's actual default Release build passed; its app resource file
+set/hashes and full hierarchy match the selected runtime, permissions are
+0755/0644, no stages/backups remain, and deep/strict ad-hoc bundle verification
+passed. Logs: `/tmp/lineup-r1c-integrated-app-build.log` and
+`/tmp/lineup-r1c-integrated-app-resources.json`. Independent review approved the exact four-file manifest and both correctness
+and maintainability. It ran the actual real-runtime signing fixture and extra
+backup/publication/rollback/cleanup fault probes, verified byte-complete retries
+(including optional Unicode/binary files and empty directories), and rejected
+nested links/FIFOs before library publication. The controller integrated the
+approved files as `48e93064`. No new visible UI, user-accessible
+license presentation, source hosting or legal approval is established.
+
+The independent engineering slices completed so far are integrated. R1c
+resource packaging is required regardless of Licenses-screen design; it does
+not approve a screen or establish legal compliance. Distinguish the
 prepared runtime's BUILD-INFO hashes from later signed binary/package hashes. M3b fullscreen events/Dart synchronization, remaining
 U1 command/menu behavior, R1 signed distribution and notices UI, and B1/B2
 remain gated by the relevant open product/design/account decisions. Resolve
@@ -281,3 +305,14 @@ Do not change approved Player layout. A new Licenses surface needs design
 agreement if an existing suitable surface cannot carry it. Signing/account
 inputs, legal review, product decisions, and physical hardware limits must
 remain explicit instead of being silently treated as complete.
+
+## Next decisions
+
+The controller has asked the human for the next bounded choices, without
+assuming answers: supported macOS release target (Apple Silicon/current bundle
+ID/current 12.0 deployment target with untested older-OS acceptance still
+required), native command/menu/fullscreen interactions, and whether to defer
+purchase design until playback is finished. These are pending, not approvals.
+No further child implementation is active. The next slice depends on those
+answers; Licenses UI design/wording, signing accounts, legal/source distribution,
+hosted CI and physical acceptance remain open as described above.
