@@ -183,7 +183,8 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
 - **Threads:** worker wakeups hop to the main queue through a weak adapter
   reference; every core and AppKit call runs on the main thread.
 - **Fullscreen:** native `toggleFullScreen:`, completed from the window's
-  did-enter/did-exit notifications, bounded by a five-second timeout.
+  did-enter/did-exit notifications. A toggle AppKit does not start within one
+  second, or a request not settled within five, fails with `window_error`.
 - **Lifetime:** window close and application termination call
   `PlayerCore::Shutdown()` synchronously: stop accepting commands, terminate
   libmpv on the worker, join it, then remove the layer. Asynchronous
