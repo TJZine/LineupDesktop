@@ -35,11 +35,12 @@ distribution remain gated by the relevant decisions and approvals.
   are already integrated. U1's fullscreen reconciliation depends on M3.
 - S2 through `bb53a3aa` is integrated by `61d475c4`, including the accepted
   FFmpeg GPL-file exclusions and generated license notices.
-- M1/M2 candidate: `macos/m1-m2-adapter` at
-  `0857c9060a67c5f4aee538ecb2849be4cb041bd5`, clean checkout
-  `.claude/worktrees/agent-ac696b17224d2358a`; merge base `bde729a1`.
-  Not integrated yet. Previous review was conditional on the core fixes;
-  takeover review targets those accepted changes and their proof.
+- M1/M2 through `0857c906`, plus the independently approved M12-R5 correction
+  `2b422e3e`, is integrated by `99788431`. Its source checkout remains
+  `.claude/worktrees/agent-ac696b17224d2358a` on `macos/m1-m2-adapter`.
+  Previous review was conditional on the core fixes; takeover review verified
+  them and corrected the remaining fullscreen contract mismatch.
+- K2 is integrated by `6ba61427` (separate macOS core-contract CI job).
 
 ## Evidence and acceptance
 
@@ -96,8 +97,17 @@ excludes active/pending transitions and the protocol text narrowed the agreed
 requirement. The controller accepted this finding. The correction and two
 real-adapter request-path XCTest cases are complete in the candidate checkout;
 all 10 native tests pass. Restoring only the old guard fails both new cases.
-The expanded native test wiring and correction are under independent review
-before integration.
+The expanded native test wiring and correction were independently approved
+before integration. The reviewer verified real request-path coverage, preservation
+of all eight earlier tests, the negative control, and unchanged Runner app target.
+
+Combined source `99788431` was then checked in the primary checkout with the
+accepted S2 runtime: `flutter build macos --debug` passed; all three portable
+Debug core CTests passed; the new native XCTest scheme passed all 10 tests;
+and the affected Guide alpha, unsupported-player, and Setup retry Dart suites
+passed all 12 tests. Flutter 3.47.7 was selected explicitly. These combined
+checks establish build/contract/alpha consistency, not a signed release or
+physical Windows/minimum-macOS acceptance.
 
 K2's separate macOS core-contract CI job was independently approved. It fetches
 only mpv headers at the runtime lock's exact commit, configures Debug, and
@@ -112,10 +122,10 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | Unit | Child chat | Executor | Source / ownership | State |
 | --- | --- | --- | --- | --- |
 | M12 targeted adversarial re-review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Immutable `0857c906`; read-only source, isolated portable test output; no app/runtime builds | Complete: requests M12-R5 correction; other reviewed fixes pass |
-| M12-R5 correction | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | M1/M2 checkout above; adapter guard, protocol text, focused production-path regression proof and minimal test wiring; no Git integration | Implementation complete, awaiting review; 10 native tests pass and old-guard negative control fails |
+| M12-R5 correction | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | M1/M2 checkout above; adapter guard, protocol text, focused production-path regression proof and minimal test wiring; no Git integration | Complete, reviewed and integrated via `2b422e3e` / `99788431` |
 | K2 macOS core-contract CI | `01a14bc1-7787-75f2-841a-48b715f3b209` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Primary checkout; only `.github/workflows/ci.yml`, one new job | Complete and independently approved; controller integrates |
 | K2 adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow diff against `61d475c4`; unrelated controller docs excluded | Complete: approved; hosted execution still outstanding |
-| M12-R5 targeted re-review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen six-file candidate working diff at `0857c906`, including new scheme/config | Running; completion/blocker callback to parent |
+| M12-R5 targeted re-review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen six-file candidate working diff at `0857c906`, including new scheme/config | Complete: approved; reviewed aggregate SHA-256 `49054e38cfb471d1e60315dc4aa40411bfddad87f4c1c302be979c894ade6ec0` |
 
 Next engineering slices are M3 (termination and fullscreen contract), the
 remaining U1 wiring, R1 (provisioning, embed/sign correctness, notices), and
