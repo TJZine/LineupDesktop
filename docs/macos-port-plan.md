@@ -430,6 +430,21 @@ Reusing their scripts needs a license check of the scripts themselves:
 
 S1 can start on a quick local build, and S2 makes it reproducible.
 
+**Spike S2 results (2026-10-17):** E2 is decided as a full self-build from
+upstream sources. No MPVKit or media-kit artifacts or scripts are used.
+`tool/macos/build-mpv.sh` builds arm64 for macOS 12.0 from
+`tool/macos/mpv-runtime.lock`: mpv `3186d369f` plus the embedding patch,
+FFmpeg 9.0.2 (LGPL 2.1+), libplacebo 7.360.1, MoltenVK 1.4.2, curl 8.23.0
+with OpenSSL 3.5.9 and Apple SecTrust, and the subtitle and AV1 stack. A
+clean build passes. Every dylib is `@rpath` and links only the runtime and
+the OS. VideoToolbox decode, HDR10, HLG, and Dolby Vision profile 5
+(`colormatrix=dolbyvision`) work through `gpu-next` on `macvk` into a host
+`CAMetalLayer`. `tls-verify=yes` accepts valid certificates and rejects bad
+ones through the system trust store. Identity, licenses, the TLS decision, and
+evidence are in [macos-runtime.md](macos-runtime.md). Still open:
+authenticated-reference parity, sandbox and hardened-runtime loading (R1),
+macOS 12–26 runtime tests, a CI build, x86_64, and the legal review.
+
 Pass criteria for the runtime:
 
 - an LGPL-only configuration that is verifiable from its build recipe;
