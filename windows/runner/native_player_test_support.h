@@ -2,6 +2,8 @@
 #define RUNNER_NATIVE_PLAYER_TEST_SUPPORT_H_
 
 #include "native_player.h"
+#include "encodable_value_conversion.h"
+#include "player_core/player_core_test_access.h"
 #include <flutter/method_result_functions.h>
 #include <flutter/standard_method_codec.h>
 #include <chrono>
@@ -84,26 +86,40 @@ inline bool Has(const Map& map, const char* key, const Value& expected) {
 }
 
 struct NativePlayerTestAccess {
-  static lineup::NativePlaybackState& State(WindowsNativePlayer& player) {
-    return player.playback_;
+  using CoreAccess = lineup::player::PlayerCoreTestAccess;
+  static lineup::player::PlayerCore& Core(WindowsNativePlayer& player) {
+    return player.core_;
+  }
+  static lineup::player::NativePlaybackState& State(WindowsNativePlayer& player) {
+    return CoreAccess::State(player.core_);
   }
   static void Event(WindowsNativePlayer& player, const mpv_event& event) {
-    player.HandleMpvEvent(event, player.generation_.load());
+    CoreAccess::Event(player.core_, event);
   }
   static void Queue(WindowsNativePlayer& player, uint64_t generation,
                     native_test::Map event) {
-    player.QueueEvent(generation, std::move(event));
+    const native_test::Value wrapped(std::move(event));
+    auto converted = lineup::ToValueMap(&wrapped);
+    native_test::Check(converted.has_value(), "test event map");
+    CoreAccess::Queue(player.core_, generation, std::move(*converted));
   }
-  static void Drain(WindowsNativePlayer& player) { player.DrainEvents(); }
-  static uint64_t Generation(WindowsNativePlayer& player) { return player.generation_.load(); }
+  static void Drain(WindowsNativePlayer& player) {
+    CoreAccess::Drain(player.core_, [&player](const lineup::player::ValueMap& event) {
+      player.SendEvent(event);
+    });
+  }
+  static uint64_t Generation(WindowsNativePlayer& player) {
+    return CoreAccess::Generation(player.core_);
+  }
   static bool Disposed(WindowsNativePlayer& player) {
-    return player.disposed_ && player.worker_finished_ && !player.event_thread_.joinable() &&
-           !player.video_host_ && !player.mpv_ && !player.accepting_commands_ &&
-           player.commands_.empty() && player.events_.empty() &&
-           !player.playback_.active_load();
+    return CoreAccess::Disposed(player.core_) && !player.video_host_;
   }
-  static bool WorkerFinished(WindowsNativePlayer& player) { return player.worker_finished_.load(); }
-  static bool ShutdownStarted(WindowsNativePlayer& player) { return player.shutdown_started_; }
+  static bool WorkerFinished(WindowsNativePlayer& player) {
+    return CoreAccess::WorkerFinished(player.core_);
+  }
+  static bool ShutdownStarted(WindowsNativePlayer& player) {
+    return CoreAccess::ShutdownStarted(player.core_);
+  }
   static void Invoke(WindowsNativePlayer& player, const char* method,
                      native_test::Reply& reply, native_test::Map arguments = {}) {
     auto result = std::make_unique<flutter::MethodResultFunctions<native_test::Value>>(
@@ -120,42 +136,33 @@ struct NativePlayerTestAccess {
         method, std::make_unique<native_test::Value>(std::move(arguments))), std::move(result));
   }
   static void OpenWorkerlessCommandClient(WindowsNativePlayer& player) {
-    native_test::Check(!player.event_thread_.joinable() &&
-                       player.worker_finished_.load(), "workerless command fixture");
-    native_test::Check(player.mpv_ == nullptr && !player.accepting_commands_,
+    auto& core = player.core_;
+    native_test::Check(CoreAccess::Workerless(core), "workerless command fixture");
+    native_test::Check(CoreAccess::Client(core) == nullptr &&
+                       !CoreAccess::AcceptingCommands(core),
                        "OpenWorkerlessCommandClient client state");
-    player.mpv_ = mpv_create();
-    native_test::Check(player.mpv_ != nullptr, "command fixture client");
-    native_test::Check(mpv_set_option_string(player.mpv_, "vo", "null") >= 0 &&
-                       mpv_set_option_string(player.mpv_, "ao", "null") >= 0 &&
-                       mpv_set_option_string(player.mpv_, "idle", "yes") >= 0 &&
-                       mpv_set_option_string(player.mpv_, "config", "no") >= 0 &&
-                       mpv_initialize(player.mpv_) >= 0, "command fixture initialization");
-    player.accepting_commands_ = true;
+    mpv_handle* client = mpv_create();
+    native_test::Check(client != nullptr, "command fixture client");
+    native_test::Check(mpv_set_option_string(client, "vo", "null") >= 0 &&
+                       mpv_set_option_string(client, "ao", "null") >= 0 &&
+                       mpv_set_option_string(client, "idle", "yes") >= 0 &&
+                       mpv_set_option_string(client, "config", "no") >= 0 &&
+                       mpv_initialize(client) >= 0, "command fixture initialization");
+    CoreAccess::OpenWorkerlessClient(core, client);
   }
   static void CloseWorkerlessCommandClient(WindowsNativePlayer& player) {
-    native_test::Check(!player.event_thread_.joinable() &&
-                       player.worker_finished_.load(), "workerless command fixture");
-    native_test::Check(player.mpv_ != nullptr,
+    auto& core = player.core_;
+    native_test::Check(CoreAccess::Workerless(core), "workerless command fixture");
+    native_test::Check(CoreAccess::Client(core) != nullptr,
                        "CloseWorkerlessCommandClient client state");
-    player.accepting_commands_ = false;
-    player.commands_.clear();
-    player.queued_command_bytes_ = 0;
-    mpv_terminate_destroy(player.mpv_);
-    player.mpv_ = nullptr;
-    player.playback_.Reset();
+    mpv_terminate_destroy(CoreAccess::CloseWorkerlessClient(core));
   }
   static void DrainCommandsSynchronously(WindowsNativePlayer& player) {
-    native_test::Check(!player.event_thread_.joinable() &&
-                       player.worker_finished_.load(), "workerless command fixture");
-    native_test::Check(player.mpv_ != nullptr,
+    auto& core = player.core_;
+    native_test::Check(CoreAccess::Workerless(core), "workerless command fixture");
+    native_test::Check(CoreAccess::Client(core) != nullptr,
                        "DrainCommandsSynchronously client state");
-    while (!player.commands_.empty()) {
-      auto command = std::move(player.commands_.front());
-      player.commands_.pop_front();
-      player.RunCommand(command, player.generation_.load());
-    }
-    player.queued_command_bytes_ = 0;
+    CoreAccess::RunQueuedCommands(core);
   }
 };
 #endif

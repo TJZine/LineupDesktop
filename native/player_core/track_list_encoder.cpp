@@ -1,10 +1,25 @@
-#include "track_list_encoder.h"
+#include "player_core/track_list_encoder.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <utility>
 
-namespace lineup {
+namespace lineup::player {
+
+namespace {
+
+constexpr size_t kMaxMetadataBytes = 64 * 1024;
+constexpr size_t kMaxMetadataStringBytes = 4096;
+
+}  // namespace
+
+std::string AsciiLower(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char byte) {
+    return static_cast<char>(std::tolower(byte));
+  });
+  return value;
+}
 
 std::string BoundedUtf8(const char* input, size_t limit, bool* valid_utf8) {
   if (valid_utf8) *valid_utf8 = true;
@@ -67,17 +82,47 @@ const char* TrackType(const mpv_node* node) {
   return nullptr;
 }
 
+const mpv_node* FindNode(const mpv_node& map, const char* key) {
+  if (map.format != MPV_FORMAT_NODE_MAP || !map.u.list) {
+    return nullptr;
+  }
+  return FindTrackNode(*map.u.list, key);
 }
 
-flutter::EncodableValue EncodeTrackList(const mpv_node& node) {
-  using flutter::EncodableValue;
-  flutter::EncodableList tracks;
+Value EncodeWhitelistedNode(const mpv_node* node, size_t& remaining_bytes) {
+  if (!node) {
+    return Value();
+  }
+  switch (node->format) {
+    case MPV_FORMAT_STRING:
+      if (node->u.string) {
+        const size_t limit = std::min(kMaxMetadataStringBytes, remaining_bytes);
+        std::string value = BoundedUtf8(node->u.string, limit);
+        remaining_bytes -= value.size();
+        return Value(std::move(value));
+      }
+      return Value("");
+    case MPV_FORMAT_FLAG:
+      return Value(node->u.flag != 0);
+    case MPV_FORMAT_INT64:
+      return Value(node->u.int64);
+    case MPV_FORMAT_DOUBLE:
+      return Value(node->u.double_);
+    default:
+      return Value();
+  }
+}
+
+}  // namespace
+
+Value EncodeTrackList(const mpv_node& node) {
+  ValueList tracks;
   size_t remaining_optional_string_bytes = 64 * 1024;
   constexpr size_t kMaxStringBytes = 4096;
   constexpr int kMaxTracks = 256;
   if (node.format != MPV_FORMAT_NODE_ARRAY || !node.u.list ||
       !node.u.list->values) {
-    return EncodableValue(tracks);
+    return Value(tracks);
   }
   const int count = std::min(node.u.list->num, kMaxTracks);
   for (int index = 0; index < count; ++index) {
@@ -95,10 +140,10 @@ flutter::EncodableValue EncodeTrackList(const mpv_node& node) {
         !selected || selected->format != MPV_FORMAT_FLAG) {
       continue;
     }
-    flutter::EncodableMap value = {
-        {EncodableValue("id"), EncodableValue(id->u.int64)},
-        {EncodableValue("type"), EncodableValue(type)},
-        {EncodableValue("selected"), EncodableValue(selected->u.flag != 0)},
+    ValueMap value = {
+        {"id", Value(id->u.int64)},
+        {"type", Value(type)},
+        {"selected", Value(selected->u.flag != 0)},
     };
     for (const char* key : {"title", "lang", "codec", "demux-channels"}) {
       const auto* fact = FindTrackNode(map, key);
@@ -114,24 +159,51 @@ flutter::EncodableValue EncodeTrackList(const mpv_node& node) {
         continue;
       }
       remaining_optional_string_bytes -= text.size();
-      value.emplace(EncodableValue(key), EncodableValue(std::move(text)));
+      value.emplace(key, Value(std::move(text)));
     }
     const auto* channels = FindTrackNode(map, "demux-channel-count");
     if (channels && channels->format == MPV_FORMAT_INT64 &&
         channels->u.int64 > 0) {
-      value.emplace(EncodableValue("demux-channel-count"),
-                    EncodableValue(channels->u.int64));
+      value.emplace("demux-channel-count", Value(channels->u.int64));
     }
     for (const char* key : {"forced", "external", "hearing-impaired",
                             "visual-impaired", "commentary"}) {
       const auto* fact = FindTrackNode(map, key);
       if (fact && fact->format == MPV_FORMAT_FLAG) {
-        value.emplace(EncodableValue(key), EncodableValue(fact->u.flag != 0));
+        value.emplace(key, Value(fact->u.flag != 0));
       }
     }
     tracks.emplace_back(std::move(value));
   }
-  return EncodableValue(std::move(tracks));
+  return Value(std::move(tracks));
 }
 
+Value EncodeVideoParameters(const mpv_node& node) {
+  ValueMap parameters;
+  size_t remaining_bytes = kMaxMetadataBytes;
+  for (const char* key : {"w", "h", "pixelformat", "hw-pixelformat",
+                          "primaries", "gamma", "colormatrix", "sig-peak"}) {
+    parameters[key] = EncodeWhitelistedNode(FindNode(node, key), remaining_bytes);
+  }
+  return Value(parameters);
 }
+
+Value EncodeVideoTargetParameters(const mpv_node& node) {
+  ValueMap parameters;
+  for (const char* key : {"gamma", "primaries", "pixelformat"}) {
+    const mpv_node* value = FindNode(node, key);
+    std::string normalized;
+    if (value && value->format == MPV_FORMAT_STRING && value->u.string) {
+      normalized = AsciiLower(BoundedUtf8(value->u.string, 64));
+      if (normalized.empty() || !std::all_of(normalized.begin(), normalized.end(),
+          [](unsigned char byte) {
+            return (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+                   byte == '-' || byte == '_' || byte == '.';
+          })) normalized.clear();
+    }
+    parameters[key] = normalized.empty() ? Value() : Value(normalized);
+  }
+  return Value(parameters);
+}
+
+}  // namespace lineup::player

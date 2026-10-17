@@ -40,7 +40,7 @@ int InitializeTestClient(mpv_handle* client) {
 
 namespace {
 WindowsNativePlayer::MpvOperations TestOperations() {
-  WindowsNativePlayer::MpvOperations operations;
+  auto operations = lineup::player::LibmpvOperations();
   operations.create = CreateTestClient;
   operations.initialize = InitializeTestClient;
   operations.set_option_string = SetTestOption;
