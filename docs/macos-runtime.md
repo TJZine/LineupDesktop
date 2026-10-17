@@ -411,7 +411,19 @@ document in the same commit.
 
 - All 18 dylibs from `dist/arm64/lib` in `Contents/Frameworks`. Each must be
   signed with the team identity; the executable needs an
-  `@executable_path/../Frameworks` rpath. Provisioning and signing are R1 work.
+  `@executable_path/../Frameworks` rpath. The `mpv_runtime.sh embed` build
+  phase copies the current set and records its basenames in the private
+  `Contents/Frameworks/.lineup-mpv-runtime-manifest`, removing only previously
+  managed files and the current components' old numeric aliases. Signed files
+  are staged before publication; `.lineup-mpv-runtime-pending` records ownership
+  across a partial install so a retry can remove superseded names without
+  advancing the completed manifest. Current-name symlinks are replaced without
+  following them, while real directories reject the install. It preserves
+  unrelated bundle contents.
+  Ad hoc signing uses `--timestamp=none`; a non-ad-hoc identity requests
+  Apple's secure `--timestamp`, while `CODE_SIGNING_ALLOWED=NO` skips signing.
+  Real identity, sandbox, and package acceptance remain separate release
+  checks.
 - In the Licenses screen (§4.8): every text under `dist/arm64/licenses`, both
   the curated license files and each component's generated `NOTICES.txt`:
   - mpv; FFmpeg with the IJG notice; libplacebo; glslang; fast_float;
