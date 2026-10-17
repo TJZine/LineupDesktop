@@ -52,37 +52,42 @@ void main() {
   }
 
   group('command modifier', () {
-    // The binding verifies this global before tearDown callbacks run, so each
-    // test also resets it inline.
-    tearDown(() => debugDefaultTargetPlatformOverride = null);
+    // The binding verifies the override before tearDown callbacks run, so each
+    // test resets it in a finally block.
 
     testWidgets('is Command on macOS and Ctrl does not trigger', (
       tester,
     ) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-      await expectChord(
-        tester,
-        triggers: meta,
-        rejected: control,
-        reason: 'macOS',
-      );
-      debugDefaultTargetPlatformOverride = null;
+      try {
+        debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+        await expectChord(
+          tester,
+          triggers: meta,
+          rejected: control,
+          reason: 'macOS',
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets('is Ctrl elsewhere and Command does not trigger', (
       tester,
     ) async {
-      for (final platform in TargetPlatform.values) {
-        if (platform == TargetPlatform.macOS) continue;
-        debugDefaultTargetPlatformOverride = platform;
-        await expectChord(
-          tester,
-          triggers: control,
-          rejected: meta,
-          reason: '$platform',
-        );
+      try {
+        for (final platform in TargetPlatform.values) {
+          if (platform == TargetPlatform.macOS) continue;
+          debugDefaultTargetPlatformOverride = platform;
+          await expectChord(
+            tester,
+            triggers: control,
+            rejected: meta,
+            reason: '$platform',
+          );
+        }
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
       }
-      debugDefaultTargetPlatformOverride = null;
     });
   });
 }

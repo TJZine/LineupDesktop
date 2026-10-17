@@ -6,6 +6,8 @@ import 'dart:ui' show Tristate;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -1113,6 +1115,48 @@ void main() {
     expect(fixture.native.transportCommands, 0);
     expect(fixture.native.fullscreenValues, isEmpty);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('macOS Command leaves Player keys for the app menu', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(
+          controller: fixture.player,
+          focusNode: focus,
+          openGuide: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    focus.requestFocus();
+    await tester.pump();
+
+    Future<int> fullscreenAfter({required bool command}) async {
+      final before = fixture.native.fullscreenValues.length;
+      if (command) await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      if (command) await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+      return fixture.native.fullscreenValues.length - before;
+    }
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      expect(await fullscreenAfter(command: true), 0);
+      expect(await fullscreenAfter(command: false), 1);
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      expect(await fullscreenAfter(command: true), 1);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });

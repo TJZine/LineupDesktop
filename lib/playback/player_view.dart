@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -203,6 +204,9 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         dvr: controller.lineup.settings.dvrControlsEnabled,
         unsupported: controller.status.state == PlayerState.unsupported,
         initialPress: event is KeyDownEvent,
+        commandPressed:
+            defaultTargetPlatform == TargetPlatform.macOS &&
+            HardwareKeyboard.instance.isMetaPressed,
         hasProgram:
             event.logicalKey == LogicalKeyboardKey.arrowDown &&
                 (controller.overlay == PlayerOverlay.none ||

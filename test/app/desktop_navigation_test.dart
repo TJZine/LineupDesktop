@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -70,17 +71,96 @@ void main() {
   testWidgets('native app menu openSettings is ignored before setup is ready', (
     tester,
   ) async {
+    const active = PlexHomeUser(id: 'a', name: 'Active', protected: false);
+    const other = PlexHomeUser(id: 'b', name: 'Other', protected: false);
+    // A cancellable picker is the one non-ready state where _select would
+    // otherwise cancel the picker and navigate.
     final fixture = UiFixture(
-      scenario: LineupScenario(stage: SetupStage.welcome),
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: const [active, other],
+        profileSelectionOrigin: SetupStage.ready,
+      ),
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    expect(fixture.controller.stage, SetupStage.welcome);
+    expect(fixture.controller.stage, SetupStage.profiles);
+    expect(fixture.controller.profileSelectionCanCancel, isTrue);
 
     await _sendAppMenu(tester, 'openSettings');
-    expect(fixture.controller.stage, SetupStage.welcome);
+    expect(fixture.controller.stage, SetupStage.profiles);
     expect(find.byKey(const Key('settings-app-menu')), findsNothing);
-    expect(find.byKey(const Key('classic-guide')), findsNothing);
+  });
+
+  testWidgets('native app menu openSettings does not act under a dialog', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          Channel(
+            id: 'one',
+            number: 1,
+            name: 'One',
+            source: ManualSource([
+              ChannelItem(
+                id: 'one-program',
+                title: 'One program',
+                duration: const Duration(minutes: 30),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 1,
+            builderKey: 'generated:one',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await _routeShortcut(tester, 1);
+    _expectDestination('Channels');
+    final actions = find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+    );
+    await tester.ensureVisible(actions);
+    await tester.tap(actions);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cancel'), findsOneWidget);
+
+    await _sendAppMenu(tester, 'openSettings');
+    expect(find.text('Cancel'), findsOneWidget);
+    _expectDestination('Channels');
+    expect(find.byKey(const Key('settings-app-menu')), findsNothing);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cancel'), findsNothing);
+    _expectDestination('Channels');
+  });
+
+  testWidgets('native app menu openSettings closes an open Lineup menu', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      player: FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+
+    await _sendAppMenu(tester, 'openSettings');
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+    _expectDestination('Settings');
   });
 
   testWidgets(

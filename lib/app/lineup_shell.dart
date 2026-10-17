@@ -327,6 +327,10 @@ class _LineupShellState extends State<LineupShell> {
   Future<void> _handleAppMenuCall(MethodCall call) async {
     if (call.method != 'openSettings') throw MissingPluginException();
     if (!mounted || widget.controller.stage != SetupStage.ready) return;
+    // A dialog route above the shell owns input, as it does for the chord.
+    // The in-app Lineup menu is a widget in this tree, so it does not count;
+    // _select closes it.
+    if (ModalRoute.of(context)?.isCurrent != true) return;
     await _select(ShellDestination.settings);
   }
 

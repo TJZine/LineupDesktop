@@ -28,8 +28,8 @@ Future<void> openPlexLink() async {
   }
 }
 
-/// The sandboxed macOS app cannot spawn `open`; native code opens the fixed
-/// link URL itself and accepts no URL from Dart.
+/// Sandboxed builds open the link through NSWorkspace rather than spawning
+/// `open`; native code accepts no URL from Dart.
 Future<void> _openPlexLinkMacOS() async {
   final bool opened;
   try {

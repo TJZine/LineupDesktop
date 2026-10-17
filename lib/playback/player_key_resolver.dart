@@ -93,7 +93,11 @@ PlayerCommand resolvePlayerKey(
   required bool unsupported,
   required bool initialPress,
   required bool hasProgram,
+  // macOS only: Command chords belong to the app menu and system, so no
+  // Player action may claim them. Ctrl handling is unchanged.
+  bool commandPressed = false,
 }) {
+  if (commandPressed) return PlayerAction.ignored;
   if (_backKeys.contains(key)) {
     return switch (overlay) {
       PlayerOverlay.none => PlayerAction.backToGuide,
