@@ -3518,15 +3518,30 @@ void main() {
       loadSchedule: (channel) async => _schedule(channel),
     );
     final search = find.byKey(const Key('guide-channel-search'));
-    Future<bool> searchFocusedAfterChord(LogicalKeyboardKey modifier) async {
+    var findReachedParent = false;
+    Future<bool> searchFocusedAfterChord(
+      LogicalKeyboardKey modifier, {
+      bool withControl = false,
+    }) async {
+      findReachedParent = false;
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         MaterialApp(
           builder: LineupCanvas.builder,
-          home: GuideView(
-            controller: guide,
-            onClose: () {},
-            onTune: (_) async {},
+          home: Focus(
+            canRequestFocus: false,
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.keyF) {
+                findReachedParent = true;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: GuideView(
+              controller: guide,
+              onClose: () {},
+              onTune: (_) async {},
+            ),
           ),
         ),
       );
@@ -3535,9 +3550,15 @@ void main() {
       await tester.tap(find.byKey(ValueKey(program.id)));
       await tester.pumpAndSettle();
       expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+      if (withControl) {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      }
       await tester.sendKeyDownEvent(modifier);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
       await tester.sendKeyUpEvent(modifier);
+      if (withControl) {
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      }
       await tester.pump();
       return tester.widget<TextField>(search).focusNode!.hasFocus;
     }
@@ -3552,6 +3573,15 @@ void main() {
         await searchFocusedAfterChord(LogicalKeyboardKey.metaLeft),
         isTrue,
       );
+      expect(
+        await searchFocusedAfterChord(
+          LogicalKeyboardKey.metaLeft,
+          withControl: true,
+        ),
+        isFalse,
+        reason: 'Control-Command-F belongs to native fullscreen',
+      );
+      expect(findReachedParent, isTrue);
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       expect(
         await searchFocusedAfterChord(LogicalKeyboardKey.metaLeft),

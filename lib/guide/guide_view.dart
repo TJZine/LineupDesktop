@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -573,7 +575,14 @@ class _GuideViewState extends State<GuideView>
         keyboard.isControlPressed ||
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
-    if (key == LogicalKeyboardKey.keyF && commandModifier(keyboard)) {
+    // Let macOS redispatch Control-Command-F to the native fullscreen menu.
+    final nativeFullscreenChord =
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        keyboard.isControlPressed &&
+        keyboard.isMetaPressed;
+    if (key == LogicalKeyboardKey.keyF &&
+        commandModifier(keyboard) &&
+        !nativeFullscreenChord) {
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
