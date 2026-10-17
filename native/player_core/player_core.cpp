@@ -207,7 +207,7 @@ std::optional<ClassifiedFailure> ClassifyMpvFailure(
   return std::nullopt;
 }
 
-// Wipes a converted token argument when the load handler returns. The
+// Wipes a converted token argument when the call returns, on every path. The
 // platform codec's own decoded copy is outside the core's control.
 class TokenArgumentScrubber {
  public:
@@ -479,6 +479,9 @@ void PlayerCore::FinishDispose() {
 
 std::optional<CallResult> PlayerCore::HandleCommand(std::string_view method,
                                                     ValueMap* arguments) {
+  // Established before any return so that no rejection path, including
+  // not_initialized, leaves the converted token behind.
+  const TokenArgumentScrubber scrubber(arguments);
   if (!accepting_commands_) {
     return CallResult::Failure("not_initialized",
                                "The native player is not initialized.");
@@ -554,7 +557,6 @@ std::optional<CallResult> PlayerCore::HandleCommand(std::string_view method,
 }
 
 CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
-  const TokenArgumentScrubber scrubber(arguments);
   const auto* uri = FindString(arguments, "uri");
   const auto load_id =
       arguments ? AsInt(Find(*arguments, "loadId")) : std::nullopt;

@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 #include <deque>
 #include <functional>
 #include <iostream>
@@ -18,6 +20,56 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+// Observes the authenticated header buffer at deallocation without reading
+// freed memory: the replaced array delete inspects the watched buffer just
+// before releasing it. PlexHeader allocates with new char[].
+namespace {
+std::atomic<const char*> watched_header{nullptr};
+std::atomic<size_t> watched_size{0};
+std::atomic<bool> watched_freed{false};
+std::atomic<bool> watched_wiped{false};
+std::atomic<bool> header_live_at_wait{false};
+
+void WatchHeader(const char* header) {
+  watched_size = std::strlen(header);
+  watched_freed = false;
+  watched_wiped = false;
+  header_live_at_wait = false;
+  watched_header = header;
+}
+
+void ResetHeaderWatch() {
+  watched_header = nullptr;
+  watched_freed = false;
+  watched_wiped = false;
+  header_live_at_wait = false;
+}
+
+void ObserveArrayDelete(void* pointer) noexcept {
+  const char* expected = static_cast<const char*>(pointer);
+  if (!pointer || !watched_header.compare_exchange_strong(expected, nullptr)) {
+    return;
+  }
+  const auto* bytes = static_cast<const char*>(pointer);
+  watched_wiped = std::all_of(bytes, bytes + watched_size.load(),
+                              [](char byte) { return byte == 0; });
+  watched_freed = true;
+}
+}  // namespace
+
+void* operator new[](std::size_t size) {
+  if (void* pointer = std::malloc(size == 0 ? 1 : size)) return pointer;
+  std::abort();
+}
+void operator delete[](void* pointer) noexcept {
+  ObserveArrayDelete(pointer);
+  std::free(pointer);
+}
+void operator delete[](void* pointer, std::size_t) noexcept {
+  ObserveArrayDelete(pointer);
+  std::free(pointer);
+}
 
 namespace {
 
@@ -196,6 +248,7 @@ int FakeCommandNode(mpv_handle*, mpv_node* node, mpv_node* result) {
   for (int index = 0; index < options.num; ++index) {
     if (std::strcmp(options.keys[index], "http-header-fields") == 0) {
       fake->authenticated_header = options.values[index].u.string;
+      WatchHeader(options.values[index].u.string);
     } else if (std::strcmp(options.keys[index], "curl-max-redirects") == 0) {
       fake->authenticated_redirects = options.values[index].u.string;
     }
@@ -204,6 +257,10 @@ int FakeCommandNode(mpv_handle*, mpv_node* node, mpv_node* result) {
 }
 
 mpv_event* FakeWaitEvent(mpv_handle*, double) {
+  // The worker must clear an executed load's header before it waits again.
+  if (watched_header.load() && !watched_freed.load()) {
+    header_live_at_wait = true;
+  }
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
   std::lock_guard lock(fake->mutex);
   fake->current = mpv_event{};
@@ -326,6 +383,20 @@ void PumpUntil(PlayerCore& core, Events& events, const std::function<bool()>& re
 
 void Drain(PlayerCore& core, Events& events) {
   PlayerCoreTestAccess::Drain(core, events.Sink());
+}
+
+// A load rejected before initialization, during disposal, or after disposal
+// keeps the not_initialized result and still wipes the converted token.
+bool RejectedLoadWipesToken(PlayerCore& core) {
+  ValueMap arguments{{"uri", Value("https://media.invalid/a")},
+                     {"loadId", Value(int64_t{1})},
+                     {"plexToken", Value("rejected-token")}};
+  const auto result = core.HandleCommand("load", &arguments);
+  const auto& token = std::get<std::string>(arguments["plexToken"]);
+  return result && result->error && result->error->code == "not_initialized" &&
+         result->error->message == "The native player is not initialized." &&
+         token.size() == 14 &&
+         std::all_of(token.begin(), token.end(), [](char byte) { return byte == 0; });
 }
 
 void OpenWorkerless(PlayerCore& core) {
@@ -651,6 +722,7 @@ void Validation(PlayerCore& core) {
   Reply early;
   Call(core, "play", early);
   Check(early.errors == 1 && early.error == "not_initialized", "commands require initialization");
+  Check(RejectedLoadWipesToken(core), "pre-initialize load wipes the converted token");
   Check(core.HandleCommand("setVideoRect", nullptr)->error->code == "not_initialized",
         "platform methods also require initialization");
   OpenWorkerless(core);
@@ -714,6 +786,7 @@ void Validation(PlayerCore& core) {
   CloseWorkerless(core);
 
   OpenWorkerless(core);
+  ResetHeaderWatch();
   ValueMap authenticated{{"uri", https}, {"loadId", Value(int64_t{5})},
                          {"plexToken", Value("tok,en\\x")}};
   Reply reply;
@@ -727,6 +800,7 @@ void Validation(PlayerCore& core) {
         fake->authenticated_redirects == "0" &&
         fake->authenticated_uri == "https://media.invalid/file.mkv",
         "authenticated load scopes the escaped header and forbids redirects");
+  Check(watched_freed && watched_wiped, "header buffer is wiped before deallocation");
   CloseWorkerless(core);
 }
 
@@ -851,6 +925,23 @@ void Lifecycle() {
         "worker events keep load identity");
   received.clear();
 
+  ResetHeaderWatch();
+  Reply authenticated;
+  Call(core, "load", authenticated, {{"uri", Value("https://media.invalid/b")},
+                                     {"loadId", Value(int64_t{6})},
+                                     {"plexToken", Value("worker-token")}});
+  Check(authenticated.successes == 1, "worker authenticated load acceptance");
+  PumpUntil(core, events, [&] { return watched_freed.load(); },
+            "worker releases the executed header");
+  {
+    std::lock_guard lock(fake->mutex);
+    Check(fake->authenticated_header == "X-Plex-Token: worker-token",
+          "worker executed the authenticated load");
+  }
+  Check(watched_wiped && !header_live_at_wait,
+        "worker wipes the header before deallocation and before waiting again");
+  received.clear();
+
   fake->idle = false;
   Reply stop;
   Call(core, "stop", stop, {{"stopId", Value(int64_t{901})}});
@@ -889,6 +980,7 @@ void Lifecycle() {
   Reply command;
   Call(core, "play", command);
   Check(command.error == "not_initialized", "commands stop with disposal");
+  Check(RejectedLoadWipesToken(core), "load during disposal wipes the converted token");
   core.QueuePlatformEvent({{"type", Value("display")}});
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
   while (!PlayerCoreTestAccess::WorkerFinished(core) &&
@@ -906,6 +998,7 @@ void Lifecycle() {
   Reply already;
   Call(core, "dispose", already);
   Check(already.successes == 1, "repeated disposal is successful");
+  Check(RejectedLoadWipesToken(core), "post-dispose load wipes the converted token");
 
   received.clear();
   Reply recreate;

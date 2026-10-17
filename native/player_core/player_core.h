@@ -113,7 +113,8 @@ class PlayerCore {
   // Returns not_initialized for any method before initialization. Returns
   // std::nullopt for an initialized call the core does not own; the platform
   // then handles it or reports it as not implemented. `arguments` is null
-  // when the call has no map argument. A load scrubs its token argument.
+  // when the call has no map argument. A `plexToken` string in `arguments`
+  // is wiped before this returns, whatever the outcome.
   std::optional<CallResult> HandleCommand(std::string_view method,
                                           ValueMap* arguments);
   // Delivers queued events from the current generation in order, then
