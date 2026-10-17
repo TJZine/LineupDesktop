@@ -158,7 +158,8 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | R1c native runtime resource packaging | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Existing embed script/fixture and runtime/Development docs; package existing licenses, notices, patches and BUILD-INFO under owned Resources subtree; no UI/API | Complete, independently approved and integrated as `48e93064`; actual Release bundle/resource/signature checks pass |
 | R1c adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen four-file packaging source; isolated fixtures/read-only app evidence | Complete: approved exact four files; independent real-runtime fixture and additional recovery/path probes passed |
 | M3b fullscreen observation/reconciliation | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Native adapter player-scoped events, Dart playback interface/transport/coordinator, affected fakes/tests and protocol docs; no app/menu files | Running after P6 approval; independent review and Windows CI required |
-| U1 native command delivery | `01a14bfd-7a31-7e50-9de6-e6318b5c1aac` (`local`) | `worker`: `gpt-6.1-sol`, medium | App/Guide keyboard routing, Mac app/window/menu files and focused test/app coverage only; excludes M3b playback/native-player files | Investigation running; distinguish real defect from automation/focus limits before correcting |
+| U1 native command delivery | `01a14bfd-7a31-7e50-9de6-e6318b5c1aac` (`local`) | `worker`: `gpt-6.1-sol`, medium | App/Guide keyboard routing, Mac app/window/menu files and focused test/app coverage only; excludes M3b playback/native-player files | Complete, independently approved and integrated as `38426fb4`; 106 affected tests pass and old code fails the new assertion |
+| U1 shortcut adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen Guide source/test only; M3b and parent record excluded | Complete: approved exact two-file patch; source, platform behavior, focus propagation and negative-control attribution verified |
 
 M3a is the lifecycle portion of M3, independent of the unresolved P6
 fullscreen product decision. It must preserve the pinned Flutter superclass's
@@ -356,3 +357,31 @@ with the existing theme and a standard Flutter component list/text viewer for
 Dart dependencies plus native resources. The human's direction choice is pending;
 no UI implementation is assigned. Legal wording, source hosting and signed
 release gates remain separate. Purchase work stays deferred.
+
+U1's source-bound isolated probe at `980e5319` establishes the automation limit:
+CUA's Command/Control chords send generic modifier flags with a key-code-0
+flags-changed event and no device-side modifier bits; pinned Flutter therefore
+observes the digit key with `isMetaPressed`/`isControlPressed` false. This does
+not justify a native navigation workaround or establish broken physical keys.
+U1 separately traced a real app conflict: Guide Find accepts extra Control with
+Command-F and consumes Control-Command-F before native fullscreen redispatch.
+The worker is adding a meaningful failing-before test and a narrow correction.
+Physical-key navigation remains an acceptance step distinct from CUA results.
+
+U1 is complete and frozen at patch SHA-256
+`2e3d22a8c2e53712bf86bd5ccddbc84039047c42db569eab0cf6dc34aee02a26`:
+only `lib/guide/guide_view.dart` and `test/guide/guide_view_test.dart`. Its
+extended existing Find test proves Mac Command-F still focuses search while
+Control-Command-F reaches the parent unhandled, and preserves Windows cases.
+The old code fails that assertion; all 106 affected Guide/navigation tests pass
+after correction and focused analysis/format checks pass. No native keyboard
+routing workaround or pinned-engine modification was made. Source-bound CUA
+probe instrumentation remains outside the repo. Independent review is running;
+physical keyboard and stable combined fullscreen acceptance remain open.
+
+The independent U1 reviewer approved the exact frozen two-file correction,
+confirmed propagation through both Guide key handlers and preservation of Mac
+Command-F and non-Mac behavior, and verified the attributed 106-test evidence.
+No extra tests were run against moving M3b interface/fake inputs. The controller
+integrated the exact files as `38426fb4`. Combined M3b/U1 build and native/physical
+keyboard acceptance remain outstanding until the fullscreen source is frozen.
