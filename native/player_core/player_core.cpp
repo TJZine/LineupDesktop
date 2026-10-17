@@ -458,6 +458,11 @@ void PlayerCore::Shutdown() {
     StopEventThread();
     FinishDispose();
     disposed_ = true;
+    shutdown_started_ = false;
+    // The worker set this before posting its finished wakeup. Disposal is
+    // complete here, so that wakeup, delivered later, must not finish it
+    // again or join a worker started by a later Initialize.
+    dispose_ready_ = false;
   }
   dispose_reply_ = nullptr;
 }

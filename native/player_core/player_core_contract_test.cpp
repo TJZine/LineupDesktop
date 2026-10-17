@@ -1030,6 +1030,68 @@ void WakeupRetry() {
   core.Shutdown();
 }
 
+// Runs `step`, failing the suite instead of hanging if it does not return.
+void WithinDeadline(const char* obligation, const std::function<void()>& step) {
+  std::atomic<bool> done{false};
+  std::thread watchdog([&done, obligation] {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!done && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    if (!done) {
+      std::cerr << "FAILED (hang): " << obligation << '\n';
+      std::_Exit(1);
+    }
+  });
+  step();
+  done = true;
+  watchdog.join();
+}
+
+// A platform may call Shutdown while it keeps running (macOS does on window
+// close). The worker's finished wakeup was posted during Shutdown and is
+// delivered afterwards; it must not finish disposal a second time, and after
+// a new Initialize it must not join the new worker.
+void StaleWakeupAfterShutdown() {
+  {
+    FakeHost host;
+    PlayerCore core(FakeOperations(), host);
+    Events events;
+    Reply init;
+    Call(core, "initialize", init);
+    core.Shutdown();
+    Check(host.released == 1 && host.worker_finished_posts == 1,
+          "shutdown completes once and posts the finished wakeup");
+    WithinDeadline("stale wakeup after shutdown returns", [&] {
+      core.ProcessWakeup(events.Sink());
+    });
+    Check(host.released == 1 && PlayerCoreTestAccess::Disposed(core),
+          "a stale finished wakeup does not release output again");
+  }
+  {
+    FakeHost host;
+    PlayerCore core(FakeOperations(), host);
+    Events events;
+    Reply first;
+    Call(core, "initialize", first);
+    core.Shutdown();
+    Reply second;
+    Call(core, "initialize", second);
+    Check(second.successes == 1 && core.initialized(),
+          "the core reinitializes after a synchronous shutdown");
+    WithinDeadline("stale wakeup after reinitialize returns", [&] {
+      core.ProcessWakeup(events.Sink());
+    });
+    Check(core.initialized() && !core.disposed() && host.released == 1,
+          "a stale finished wakeup leaves the new session running");
+    Reply play;
+    Call(core, "play", play);
+    Check(play.successes == 1, "the new session still accepts commands");
+    core.Shutdown();
+    Check(host.released == 2, "the new session shuts down normally");
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -1045,6 +1107,7 @@ int main() {
   InitializeFailures();
   Lifecycle();
   WakeupRetry();
+  StaleWakeupAfterShutdown();
   fake = nullptr;
   return 0;
 }
