@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -53,6 +54,25 @@ FlutterError* WindowError(NSString* message) {
   return [FlutterError errorWithCode:@"window_error"
                              message:message
                              details:nil];
+}
+
+// The macOS runtime is built without Lua, so the `osc` and `ytdl` options
+// (which only disable the bundled OSC and ytdl_hook scripts) do not exist.
+// Requesting "no" for an option whose feature is absent is already
+// satisfied; every other option, value, and error is passed through.
+int SetOptionString(mpv_handle* mpv, const char* name, const char* value) {
+  const int status = mpv_set_option_string(mpv, name, value);
+  if (status == MPV_ERROR_OPTION_NOT_FOUND && std::strcmp(value, "no") == 0 &&
+      (std::strcmp(name, "osc") == 0 || std::strcmp(name, "ytdl") == 0)) {
+    return 0;
+  }
+  return status;
+}
+
+lineup::player::MpvOperations MacMpvOperations() {
+  auto operations = lineup::player::LibmpvOperations();
+  operations.set_option_string = &SetOptionString;
+  return operations;
 }
 
 struct FullscreenRequest {
@@ -214,7 +234,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
     _window = window;
     _displayRevision = -1;
     _host = std::make_unique<MacCoreHost>(self);
-    _core = std::make_unique<PlayerCore>(lineup::player::LibmpvOperations(),
+    _core = std::make_unique<PlayerCore>(MacMpvOperations(),
                                          *_host);
     _channel = [FlutterMethodChannel methodChannelWithName:kChannelName
                                            binaryMessenger:messenger];
@@ -373,8 +393,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
       // Lets libplacebo pick the HDR10/PQ swapchain for HDR content; MoltenVK
       // then sets the layer's color space, EDR, and HDR metadata.
       {"target-colorspace-hint", "yes"},
-  };
-  return std::nullopt;
+  };  return std::nullopt;
 }
 
 // The core calls this only after libmpv has been terminated (or was never
@@ -400,9 +419,11 @@ class MacCoreHost final : public lineup::player::CoreHost {
   const bool visible = lineup::VideoVisible(_videoRect, minimized, occluded);
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
-  if (visible) {
-    _videoView.frame = lineup::VideoFrame(*_videoRect);
-  }
+  // The frame never becomes empty: MoltenVK derives the swapchain extent
+  // from the layer bounds, and a zero extent makes mpv's video output fail
+  // to initialize for a load that starts while video is hidden. Visibility
+  // is controlled only by `hidden`.
+  _videoView.frame = lineup::RetainedVideoFrame(_videoRect, _videoView.frame);
   // A hidden layer also stops the patched mpv context from rendering.
   _videoView.hidden = !visible;
   [CATransaction commit];
@@ -570,7 +591,8 @@ class MacCoreHost final : public lineup::player::CoreHost {
   if (!layer) {
     return;
   }
-  NSScreen* screen = _window.screen;
+  NSWindow* window = _window;
+  NSScreen* screen = window.screen;
   CGColorSpaceRef colorspace = layer.colorspace;
   NSString* colorspaceName =
       colorspace ? (__bridge NSString*)CGColorSpaceGetName(colorspace) : nil;
@@ -578,13 +600,17 @@ class MacCoreHost final : public lineup::player::CoreHost {
       stringWithFormat:
           @"colorspace=%@ edr=%d edrMetadata=%d pixelFormat=%lu "
           @"drawable=%.0fx%.0f scale=%.1f hidden=%d headroom=%.2f "
-          @"potentialHeadroom=%.2f",
+          @"potentialHeadroom=%.2f window=%@ visible=%d occlusionVisible=%d "
+          @"fullscreen=%d",
           colorspaceName ?: @"none", layer.wantsExtendedDynamicRangeContent,
           layer.EDRMetadata != nil, (unsigned long)layer.pixelFormat,
           layer.drawableSize.width, layer.drawableSize.height,
           layer.contentsScale, layer.hidden,
           screen.maximumExtendedDynamicRangeColorComponentValue,
-          screen.maximumPotentialExtendedDynamicRangeColorComponentValue];
+          screen.maximumPotentialExtendedDynamicRangeColorComponentValue,
+          NSStringFromRect(window.frame), window.isVisible,
+          (window.occlusionState & NSWindowOcclusionStateVisible) != 0,
+          [self windowIsFullscreen]];
   if (![facts isEqualToString:_lastPresentationFacts]) {
     _lastPresentationFacts = facts;
     NSLog(@"[lineup-presentation] %@", facts);

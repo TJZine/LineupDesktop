@@ -201,6 +201,24 @@ using lineup::player::ValueMap;
   XCTAssertFalse(lineup::VideoVisible(area, false, true));
 }
 
+// Hiding must never empty the frame: the swapchain extent comes from the
+// layer bounds, and a zero extent fails mpv's video output for a load that
+// starts while video is hidden.
+- (void)testHiddenVideoKeepsANonEmptyFrame {
+  const CGRect previous = CGRectMake(40, 60, 640, 360);
+  XCTAssertTrue(CGRectEqualToRect(
+      lineup::RetainedVideoFrame(lineup::VideoRect{1, 2, 3, 4}, previous),
+      CGRectMake(1, 2, 3, 4)));
+  XCTAssertTrue(CGRectEqualToRect(
+      lineup::RetainedVideoFrame(lineup::VideoRect{5, 5, 0, 0}, previous),
+      previous));
+  XCTAssertTrue(CGRectEqualToRect(
+      lineup::RetainedVideoFrame(std::nullopt, previous), previous));
+  XCTAssertTrue(CGRectEqualToRect(
+      lineup::RetainedVideoFrame(std::nullopt, CGRectMake(0, 0, 0, 0)),
+      CGRectMake(0, 0, 1, 1)));
+}
+
 - (void)testDrawableSizeIsBoundsTimesBackingScale {
   CGSize size = lineup::DrawableSize(CGSizeMake(640, 360), 2);
   XCTAssertEqual(size.width, 1280);

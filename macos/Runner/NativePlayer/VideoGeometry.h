@@ -27,6 +27,13 @@ std::optional<VideoRect> ParseVideoRect(const player::ValueMap& arguments);
 // The video view frame inside a flipped (top-left origin) host view.
 CGRect VideoFrame(const VideoRect& rect);
 
+// The frame to keep while video may be hidden: the rectangle's frame when it
+// has area, otherwise the previous frame when that has area, otherwise a
+// 1x1 point frame at the origin. It is never empty, because the swapchain
+// extent comes from the layer bounds even while the layer is hidden.
+CGRect RetainedVideoFrame(const std::optional<VideoRect>& rect,
+                          CGRect previous);
+
 // Video is visible only with a non-empty rectangle while the window is
 // neither minimized nor occluded. Without a rectangle it stays hidden.
 bool VideoVisible(const std::optional<VideoRect>& rect, bool minimized,
