@@ -432,6 +432,48 @@ Flutter approval, repeated close/quit, concurrent Dart disposal, and both sides
 of the completion/deadline race. Real playback quit/close still needs observation
 with the current app and accepted runtime.
 
+### macOS authenticated-reference proof
+
+The standalone runner uses the production macOS adapter, Flutter method codec,
+shared core, and the selected real libmpv runtime. It does not build or launch a
+Flutter app/engine. Only injected test operations set the fixture CA and null
+video/audio outputs; production initialization and authenticated load options
+supply the security policy. No certificate is added to system trust.
+
+From the repository root, with Xcode, CMake, Python 3, OpenSSL and an FFmpeg
+fixture generator (with libx264 and DASH muxing) available:
+
+```sh
+python3 tool/macos/authenticated-reference/run.py \
+  --flutter-root /path/to/the/pinned/flutter \
+  --runtime "$PWD/build/macos-runtime/dist/arm64" \
+  --output-dir /tmp/lineup-authenticated-reference
+```
+
+Use an empty/new output directory. The script checks the pinned Flutter
+revision, runtime lock/BUILD-INFO, patch and dylib hashes, architecture and link
+closure; the child also verifies loaded image locations. CMake output, redacted
+child logs, source/artifact identities, and `report.json` remain in that
+folder. Certificates and media fixtures are temporary. Captured stdout/stderr
+containing the synthetic secret fail the run; raw diagnostics are not printed.
+Missing prerequisites, certificate setup, malformed child outcomes, timeouts,
+and empty/partial matrices fail rather than skip. Exit 0 requires all 26 cases.
+
+The matrix covers ordinary MP4/MKV progress without a later rejection; HLS
+same-origin/hostname/port/master/key, DASH, playlist, EDL, CUE, MOV, concat,
+IMF, VobSub and redirect failures with zero playback progress; required-option
+refusal before network IO; and wrong-CA rejection before HTTP. Redirects target
+separate real HTTPS and plaintext HTTP listeners, both included in the secondary
+request/token/URL audit. SDP is a bounded observation. Available
+FFmpeg demuxers are reported: an absent format's rejection proves fail-closed
+behavior, not traversal of its parser. Isolated negative controls deliberately
+allow references, disable TLS verification, send a token-bearing plaintext HTTP
+request, or inject an error after successful progress. The last control must
+fail both positive and ordinary-negative media classification. Those overrides
+are never used in production-policy cases. This proves headless synthetic
+adapter/core/runtime behavior; sandbox/hardened signing, real Plex, visible
+playback, supported CPUs and minimum-macOS acceptance remain separate.
+
 ### Real-protocol harness
 
 `test_driver/macos_native_harness.dart` is the synthetic `ui_harness.dart`
