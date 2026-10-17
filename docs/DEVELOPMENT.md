@@ -122,9 +122,9 @@ Additional targets cover native correlation and shutdown:
   against installed candidate assets. A retained blank-widget Dart entry point
   avoids opening user state or credentials through the application bootstrap.
 
-All are `EXCLUDE_FROM_ALL`; only `native_playback_state_test` is selected by
-CI. The state, core-contract, and conversion tests do not require a live
-engine or the patched engine:
+All are `EXCLUDE_FROM_ALL`; CI explicitly selects `native_playback_state_test`,
+`player_core_contract_test`, and `encodable_value_conversion_test`. These tests
+do not require a live engine or the patched engine:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target player_core_contract_test encodable_value_conversion_test

@@ -164,9 +164,10 @@ At the inspected revision, `test_driver/ui_harness.dart` is synthetic and
 `test/app/product_spine_test.dart` uses fake Plex/native boundaries. CI does
 not launch a real application E2E campaign. Native CTest targets remain
 excluded from the default application build. Windows CI explicitly builds and
-runs the encoder, playback-state, display-controller, and guardian suites after
-the stock-engine application build. Player-contract, runner-lifecycle, and
-authenticated-reference CTests remain separate explicit checks outside CI.
+runs the encoder, playback-state, core-contract, codec-conversion,
+display-controller, and guardian suites after the stock-engine application
+build. The Windows player-contract, runner-lifecycle, and authenticated-reference
+CTests remain separate explicit checks outside CI.
 Report the suites actually executed and their limits accurately.
 
 ### Commands and prerequisites
