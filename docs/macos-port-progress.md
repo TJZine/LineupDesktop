@@ -157,8 +157,8 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | C1b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow only | Complete: approved; exact Bash failure propagation/path probes and actual system-OpenSSL fixture certificate generation passed |
 | R1c native runtime resource packaging | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Existing embed script/fixture and runtime/Development docs; package existing licenses, notices, patches and BUILD-INFO under owned Resources subtree; no UI/API | Complete, independently approved and integrated as `48e93064`; actual Release bundle/resource/signature checks pass |
 | R1c adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen four-file packaging source; isolated fixtures/read-only app evidence | Complete: approved exact four files; independent real-runtime fixture and additional recovery/path probes passed |
-| M3b fullscreen observation/reconciliation | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Native adapter player-scoped events, Dart playback interface/transport/coordinator, affected fakes/tests and protocol docs; no app/menu files | Complete and frozen: 18-file aggregate `cb2c8edfefbe9a28eb119f9e4fa7cdacf0f3cab6b660cd2fd0370ab443d35201`; independent review and combined checks running |
-| M3b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen 18-file native/transport/coordinator/protocol diff; excludes parent record and disjoint workflow | Running; lifecycle, event ordering, reentrancy, pending-request races, Windows equivalence and maintainability |
+| M3b fullscreen observation/reconciliation | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Native adapter player-scoped events, Dart playback interface/transport/coordinator, affected fakes/tests and protocol docs; no app/menu files | Complete, independently approved and locally integrated as `e0f1b638`; final text-corrected aggregate `403853facc7368ca1a9999d336da6d47db954a623de0b3ae15457f0c395b4667`; Windows/physical gates open |
+| M3b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen 18-file native/transport/coordinator/protocol diff; excludes parent record and disjoint workflow | Complete: approved implementation and final rationale correction; no material correctness/ownership finding; Windows/physical gates retained |
 | C1c Windows adapter-contract CI | `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Existing build-windows workflow only: explicitly build/run native_player_contract_test with no skip | Complete, independently approved and integrated as `ee379d3d`; Windows execution remains open |
 | C1c adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen two-line Windows job change only; M3b excluded except prerequisite context | Complete: approved exact workflow; target dependencies, failure/no-skip semantics and unrelated structural equality verified |
 | U1 native command delivery | `01a14bfd-7a31-7e50-9de6-e6318b5c1aac` (`local`) | `worker`: `gpt-6.1-sol`, medium | App/Guide keyboard routing, Mac app/window/menu files and focused test/app coverage only; excludes M3b playback/native-player files | Complete, independently approved and integrated as `38426fb4`; 106 affected tests pass and old code fails the new assertion |
@@ -425,3 +425,26 @@ configuration/dependency flow, preserved PowerShell failure handling and no-test
 error, and unchanged unrelated workflow. This is source-wiring acceptance only;
 no Windows/hosted pass is claimed. The CMake per-test 45-second timeout still
 applies despite the CLI's 60-second default.
+
+M3b independent review approved implementation/correctness/ownership with a
+nonblocking P3 factual correction: a media load does not advance the native
+lifecycle generation. The controller corrected only the rationale in three
+source/test comments and the protocol paragraph: synchronous publication makes
+observations precede replies so the next serialized Dart toggle sees actual
+state. Initialize/dispose are the native generation boundaries. The final
+18-file manifest aggregate is
+`403853facc7368ca1a9999d336da6d47db954a623de0b3ae15457f0c395b4667`.
+The independent reviewer confirmed that only those four rationale texts
+changed and approved the final manifest; original execution evidence remains
+explicitly attributed to the preceding aggregate,
+with unchanged execution paths. Windows and physical acceptance remain gates.
+
+The controller integrated the exact final M3b manifest locally as `e0f1b638`.
+The required Windows native adapter contract is now selected in CI by
+`ee379d3d`, but no hosted run on these commits has been dispatched or passed.
+The next external action would be publishing the reviewed `platform/macos`
+branch to `origin` on GitHub to obtain actual Windows/macOS CI evidence; human
+authorization is being requested for that concrete action. No main-branch merge,
+release publication, account/signing setup or App Store submission is included.
+Mac unlock and Licenses UI direction questions remain pending. Physical-key
+acceptance is still needed because of the established CUA modifier limitation.
