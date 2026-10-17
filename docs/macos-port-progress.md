@@ -556,3 +556,14 @@ successful load does not itself prove the original test can start. No runtime
 acquisition or presumed Vulkan remedy was added. The current workflow cancels
 older runs on the same branch, so the controller will preserve the still-running
 macOS/package jobs before dispatching this diagnostic revision.
+
+The human confirmed phase E remains normally bright after returning from Guide
+to Player on the same clip. The physical baseline is therefore C dim → D
+restored → E still restored. The native worker is proceeding with the authorized
+isolated real-Flutter diagnostic copy, keeping production source and accepted
+runtime immutable. Initial diagnostic launches were invalid: reading a
+Metal-specific property from Core Animation's presentation-layer copy crashed
+the added instrumentation. The crash report identifies that probe-only read;
+the worker removed it before rebuilding. Those attempts establish no product
+regression or presentation result. Model-layer facts, generic presentation
+geometry and mpv swapchain logs remain the intended diagnostic evidence.
