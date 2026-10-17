@@ -21,7 +21,7 @@ required before the first paid submission** (see "Distribution notes" below).
 | Component | Exact source | License and distribution decision |
 | --- | --- | --- |
 | libmpv (`libmpv.2.dylib`) | mpv `v0.41.0-1092-g3186d369f`, full commit `3186d369f9f090cd1363be0ac46a037824b702c6` (the commit Windows pins), plus `tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch` (SHA-256 `9d070fc30414a80b1a418c6b15dee8071086298e7d6aed3236babf331f964b15`) | LGPL-2.1-or-later; built with `-Dgpl=false`. Ship the patch, the LGPL text, and the source links. |
-| FFmpeg (`libavcodec.63`, `libavformat.63`, `libavutil.61`, `libavfilter.12`, `libswscale.10`, `libswresample.7`) | Release 9.0.2, `https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz`, SHA-256 `8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e` | LGPL-2.1-or-later. Configured without `gpl`, `version3`, or `nonfree`; every `*_license()` reports `LGPL version 2.1 or later`. Contains the IJG-derived DCT files (`jfdctfst.c`, `jfdctint_template.c`, `jrevdct.c`): ship the IJG notice and the credit "This software is based in part on the work of the Independent JPEG Group". |
+| FFmpeg (`libavcodec.63`, `libavformat.63`, `libavutil.61`, `libavfilter.12`, `libswscale.10`, `libswresample.7`) | Release 9.0.2, `https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz`, SHA-256 `8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e` | LGPL-2.1-or-later. Configured without `gpl`, `version3`, or `nonfree`; every `*_license()` reports `LGPL version 2.1 or later`. Contains the IJG-derived DCT files (`jfdctfst.c`, `jfdctint_template.c`, `jrevdct.c`): ship the IJG notice and the credit "This software is based in part on the work of the Independent JPEG Group". FFmpeg 9.0.2 (and master) also has a few files with GPL-2.0+ headers that its LGPL configuration still builds. They are excluded, so no GPL file is compiled; `collect-notices.py` fails the build if one is:<br>• `libavfilter/perlin.c` and `qp_table.c/.h`: the `perlin` video source and the `codecview` debug filter are disabled (neither is used in playback).<br>• `libavcodec/aarch64/ac3dsp_init_aarch64.c` and `ac3dsp_neon.S`: not built, by `tool/macos/ffmpeg-patches/0001-…`. The AC-3 DSP falls back to C, and AC-3/E-AC-3 decode is unchanged.<br>• `libavutil/aarch64/crc.S`: not built, by `tool/macos/ffmpeg-patches/0002-…` with `--disable-arm-crc --disable-pmull --disable-eor3`. libavutil uses C CRC. |
 | libplacebo (`libplacebo.360.dylib`) | Tag `v7.360.1`, commit `cee9b076f2c63104ccfd497fa79c39a867293ec4`, with submodules, from `https://code.videolan.org/videolan/libplacebo.git` | LGPL-2.1-or-later. Vulkan, Dolby Vision reshaping (`dovi`), and lcms enabled. It also contains the header-only fast_float (MIT, Apache-2.0, or BSL-1.0) and statically linked glslang (below). |
 | glslang (static, inside libplacebo) | Release 16.6.0, `https://github.com/KhronosGroup/glslang/archive/refs/tags/16.6.0.tar.gz`, SHA-256 `9c09b901149c729df745057dafa815278aaa101b84d2b6e14f16a42de52f97f2` | BSD-3-Clause, BSD-2-Clause, MIT, and Apache-2.0. Its license file also contains GPL-3.0 text with the Bison exception, for the historical Bison parser skeleton; the exception permits distribution under any terms. **Flagged for the legal review.** |
 | MoltenVK (`libMoltenVK.dylib`) | Tag `v1.4.2`, commit `db66022459ffb663aa2b50f6b018bc2e124f5edf`, from `https://github.com/KhronosGroup/MoltenVK.git`. Its `fetchDependencies` revisions are pinned in the lock file and checked: Vulkan-Headers `e3b1eec0…`, SPIRV-Cross `6c09849f…`, SPIRV-Headers `29981f65…`, SPIRV-Tools `0d6fd73c…`, Vulkan-Tools `8c66b352…`, Volk `77689330…`, cereal `a56bad8b…` | Apache-2.0. Compiled into it: SPIRV-Cross (Apache-2.0 or MIT), SPIRV-Tools (Apache-2.0; its disassembler and utilities), the SPIRV-Headers grammar tables (Khronos MIT-style), and cereal (BSD-3-Clause). Vulkan-Tools and Volk are fetched but not linked. libplacebo and mpv link MoltenVK directly; there is no Vulkan loader and no ICD manifest search. |
@@ -57,7 +57,7 @@ item is the number of matching symbols.
 
 | Dylib | Code compiled in (symbol evidence) | Shipped license files (`dist/arm64/licenses/…`) |
 | --- | --- | --- |
-| libmpv | mpv, including its Swift code (1878 `$s5swift` symbols) and `ta` (42) | `mpv/LICENSE.LGPL`, `mpv/Copyright` (lists mpv's per-file permissive exceptions) |
+| libmpv | mpv, including its Swift code (1878 `$s5swift` symbols) and `ta` (42) | `mpv/LICENSE.LGPL`, `mpv/Copyright`, and the generated `mpv/NOTICES.txt` for files under other terms (below) |
 | libavcodec, libavformat, libavutil, libavfilter, libswscale, libswresample | FFmpeg. libavcodec includes the IJG DCT code (8: `ff_j_rev_dct*`, `ff_fdct_ifast*`, `ff_jpeg_fdct_islow*`). No GPL filters are present: 0 `ff_vf_{hqdn3d,boxblur,delogo,eq,pp7,spp,uspp}` | `ffmpeg/LICENSE.md`, `ffmpeg/COPYING.LGPLv2.1`, `ffmpeg/IJG-NOTICE.txt` (IJG notice plus the required credit) |
 | libplacebo | libplacebo; glslang (2144 `glslang::`, 352 `spv::` builder); fast_float (23); the generated Vulkan code from `vk.xml`. No xxhash (0) | `libplacebo/LICENSE`, `glslang/LICENSE.txt`, `fast_float/LICENSE-{MIT,APACHE,BOOST}`, `vulkan-headers/*` |
 | libMoltenVK | MoltenVK; SPIRV-Cross (5404 `MVK_spirv_cross::`); SPIRV-Tools (337 `spvtools::`); SPIRV-Headers grammar (57 `spvOpcode*`/operand-table symbols); cereal (80 `cereal::`). No Volk (0) | `moltenvk/LICENSE`, `spirv-cross/*`, `spirv-tools/LICENSE`, `spirv-headers/LICENSE`, `cereal/LICENSE`, `vulkan-headers/*` |
@@ -66,6 +66,74 @@ item is the number of matching symbols.
 | libfreetype | FreeType; BDF driver (26 `_bdf_`), PCF driver (33 `_pcf_`), `fthash` (11 `ft_hash_`) | `freetype/LICENSE.TXT`, `freetype/FTL.TXT`, `freetype/BDF-README`, `freetype/PCF-README`, `freetype/fthash-NOTICE.txt` |
 | libharfbuzz | HarfBuzz, including the USE shaper tables (114 `use` symbols) | `harfbuzz/COPYING`, `harfbuzz/ms-use-COPYING` |
 | libass, libdav1d, libfribidi, liblcms2 | Own code only (exported symbols are all `ass_`, `dav1d_`, `fribidi_`, or `cms`) | `libass/COPYING`, `dav1d/COPYING`, `fribidi/COPYING`, `lcms2/LICENSE` |
+
+That table covers whole third-party libraries. Individual files inside a
+component can carry their own terms too, so the per-file notices are generated.
+
+### Generated per-file notices
+
+The `dist` stage runs `tool/macos/collect-notices.py` for every component:
+
+1. It takes the files that actually went into the build: sources and the
+   headers they included. These come from ninja's dependency log and build
+   graph for meson and CMake, from make dependency files (`*.d`, automake
+   `.deps/*.Plo`, and Xcode intermediates), and from archive members for
+   MoltenVK's prebuilt SPIRV-Cross and SPIRV-Tools static libraries.
+2. It extracts each file's leading license comment.
+3. It keeps the headers with permissive terms that require the notice to
+   accompany binaries (BSD, MIT, ISC, Apache, zlib, Boost, IJG). For
+   permissive components, files carrying the project's own standard header
+   are skipped; their license file already covers them.
+4. It writes the de-duplicated texts, each with the files that carry it, to
+   `licenses/COMPONENT/NOTICES.txt`, next to the curated license files above.
+
+The tool also fails the build if any compiled file has a GPL-only header. The
+glslang Bison skeleton, which has the Bison exception, is allowed.
+
+**The notices are generated from the compiled sources. Per-file completeness
+remains a legal-review item**: notices placed outside a file's leading
+comments, or in generated files, are not detected.
+
+| Component | Compiled files scanned | Files with notice-bearing headers | Distinct notices emitted |
+| --- | ---: | ---: | ---: |
+| mpv | 413 | 17 | 8 |
+| ffmpeg | 3090 | 59 | 49 |
+| libplacebo | 130 | 5 | 4 |
+| glslang | 102 | 98 | 75 |
+| moltenvk (incl. SPIRV-Cross, SPIRV-Tools, cereal) | 425 | 282 | 119 |
+| openssl | 1556 | 0 | 0 |
+| curl | 460 | 2 | 2 |
+| lcms2 | 29 | 0 | 0 |
+| dav1d | 127 | 1 | 1 |
+| freetype | 416 | 17 | 17 |
+| fribidi | 59 | 0 | 0 |
+| harfbuzz | 399 | 1 | 1 |
+| libass | 58 | 2 | 2 |
+
+"Compiled files" includes the headers each source included, as long as they
+are in the component's own tree.
+
+The generated notices include, for example:
+
+- **mpv:** `audio/filter/af_scaletempo2_internals.h`, from Chromium (BSD-3);
+  `video/out/filter_kernels.c/.h`, from Glumpy (BSD); `osdep/timer-darwin.c`
+  (MIT); and the ISC files `ta/*`, `misc/thread_pool.c`,
+  `misc/thread_tools.c`, and `player/client.c`.
+- **libplacebo:** `src/filters.c` (Glumpy BSD) and `src/shaders/film_grain_av1.c`.
+- **FFmpeg:**
+  - audio: `ilbcdec.c` (WebRTC), `speexdec.c` (Xiph), `af_arnndn.c`
+    (RNNoise), `af_hdcd.c`, and `dsd.c`;
+  - video and JPEG 2000: `vvc/itx_1d.c`, `j2kenc.c`, `jpeg2000htdec.c`, and
+    `vf_gblur.c`;
+  - formats and utilities: the Ogg demuxers, `libavutil/uuid.c`, and
+    `avsscanf.c` (musl);
+  - the IJG files.
+- **libass:** `ass_strtod.c` (UC Regents/Sun).
+- **HarfBuzz:** `hb-ucd.cc` (ucdn).
+- **curl:** the ISC `inet_ntop`/`inet_pton`.
+
+No compiled file has a GPL-only header. FFmpeg's GPL-headered files are no
+longer built (see the component table).
 
 ### Build configuration
 
@@ -143,11 +211,20 @@ byte-identical, and the licenses and headers are identical.
 | Byte-identical | libMoltenVK, libass, the 6 FFmpeg libraries, libcrypto, libssl, libcurl, libdav1d, libfreetype, libfribidi, liblcms2, libplacebo |
 | Different | libharfbuzz, libmpv |
 
-libharfbuzz and libmpv have the same section sizes but different code bytes
-and UUIDs. The cause was not investigated. Before this change no dylib was
-expected to match, because the build paths were embedded. Signing replaces
-the ad-hoc signatures in any case. The provenance identity remains the source
-pins plus the lock file.
+libharfbuzz and libmpv differ from directory to directory but are stable within
+one directory: two builds in `build/macos-runtime` gave the same UUID. Their
+section sizes, symbols, strings, and instruction sequence (mnemonics) are
+identical. What differs is placement: their whole `__TEXT` content is shifted
+(16 bytes for libharfbuzz), so addresses, PC-relative offsets, LC_UUID, and
+the signature hashes differ. The cause is the link-time rpath that meson adds
+for the `prefix/ARCH/lib` dependencies, `-Wl,-rpath,<prefix>/lib`. Its
+length depends on the build directory, and it changes the size of the load
+commands. `dist` deletes that rpath, but the layout is already fixed. Making
+these two identical would need meson to stop adding the build rpath; that
+was not pursued.
+
+Signing replaces the ad-hoc signatures in any case. The provenance identity
+remains the source pins plus the lock file.
 
 ## TLS decision
 
@@ -207,7 +284,9 @@ an empty output directory, ending with `verify (arm64): passed`. A second
 - No library is present under two names. An earlier relocation bug shipped
   `libavutil.61.dylib` and `libavutil.61.1.102.dylib` together. That split
   FFmpeg's log callback, and this check catches it.
-- No load command references a machine path, and no shipped file contains one.
+- No load command references a machine path. No shipped file contains the
+  output directory, the repository path, `$HOME`, `/Users/`, `/private/tmp`,
+  or `/var/folders` (or `/private/var/folders`).
 - No dylib imports `dlopen`.
 - The minimum macOS version is 12.0.
 - FFmpeg: `FFMPEG_LICENSE "LGPL version 2.1 or later"`, `CONFIG_GPL`,
@@ -217,6 +296,16 @@ an empty output directory, ending with `verify (arm64): passed`. A second
 - curl: SecTrust, and no CA bundle, path, or fallback.
 - At runtime, every FFmpeg `*_license()` returns `LGPL version 2.1 or later`,
   and only `dist/arm64/lib` libraries load.
+- The shipped libavcodec's recorded configure line (`avcodec_configuration()`)
+  contains `--disable-gpl --disable-version3 --disable-nonfree
+  --disable-autodetect --disable-protocols` and the exact protocol list. It
+  does not enable gpl, version3, or nonfree.
+- `collect-notices.py` finds no compiled file with a GPL-only header.
+
+The FFmpeg, mpv, OpenSSL, and curl configuration checks read the build-tree
+headers (`config.h`, `config_components.h`, `configuration.h`,
+`curl_config.h`) that the shipped binaries were compiled from. The
+`avcodec_configuration()` check reads the shipped binary itself.
 
 Each of these checks was shown to fail on a deliberately broken copy of a
 build: one run per broken invariant, then a restored run that passes.
@@ -240,6 +329,7 @@ row below passed.
 | Dolby Vision profile 8.1 (local UHD Blu-ray-sourced clip), route C | `colormatrix=dolbyvision`, `gamma=pq` |
 | PGS subtitles + DTS (same clip, `sid=1`), route C | `current-tracks/sub/codec=hdmv_pgs_subtitle`, `audio/codec=dts`; sub decoder "HDMV Presentation Graphic Stream subtitles" |
 | PGS + DTS-HD MA, AVC (local Blu-ray remux, first PGS track), route C | `video/codec=h264`, `sub/codec=hdmv_pgs_subtitle`, `audio/codec=dts`; audio decoder "DCA (DTS Coherent Acoustics)", `s32p`. No subtitle event was due at the seek point, so this row shows track selection, not a decoded PGS frame; the previous row covers decode. |
+| AC-3, E-AC-3, FLAC (synthetic MKV; AC-3 runs on FFmpeg's C DSP and FLAC on its C CRC after the GPL-file exclusions) | `audio/codec=ac3`, `eac3`, `flac`, `samplerate=48000`; decoders "ATSC A/52A (AC-3)", "ATSC A/52B (AC-3, E-AC-3)", "FLAC (Free Lossless Audio Codec)" |
 | AV1 10-bit + TrueHD + ASS (synthetic MKV made with Homebrew ffmpeg, test media only), `--layer` | `video/codec=av1`, `audio/codec=truehd`, `sub/codec=ass`, `sub-text=<the ASS line>`, `pixelformat=yuv420p10`; decoders "dav1d AV1 decoder by VideoLAN" and "TrueHD" (`s32`) |
 
 **HTTPS checks:**
@@ -306,8 +396,10 @@ The output is `build/macos-runtime/dist/arm64/`:
 
 - `lib/`: the 18 dylibs
 - `include/mpv/`: the client headers
-- `licenses/`: one directory per component
-- `patches/`: the mpv patch series
+- `licenses/`: one directory per component, with the curated license files,
+  the generated `NOTICES.txt`, and `NOTICES-SUMMARY.txt` (the coverage
+  numbers)
+- `patches/mpv/` and `patches/ffmpeg/`: the patch series
 - `BUILD-INFO.txt`: the pin-file hash, the source list with licenses, the SDK,
   and each dylib's SHA-256
 
@@ -320,21 +412,25 @@ document in the same commit.
 - All 18 dylibs from `dist/arm64/lib` in `Contents/Frameworks`. Each must be
   signed with the team identity; the executable needs an
   `@executable_path/../Frameworks` rpath. Provisioning and signing are R1 work.
-- In the Licenses screen (§4.8): every text under `dist/arm64/licenses`
-  (mpv, FFmpeg with the IJG notice, libplacebo, glslang, fast_float,
-  MoltenVK, SPIRV-Cross, SPIRV-Tools, SPIRV-Headers, cereal, Vulkan-Headers,
-  OpenSSL, curl with its ISC notices, Little CMS, dav1d, FreeType with the FTL
-  credit and its BDF/PCF/fthash notices, FriBidi, HarfBuzz with ms-use,
-  libass).
+- In the Licenses screen (§4.8): every text under `dist/arm64/licenses`, both
+  the curated license files and each component's generated `NOTICES.txt`:
+  - mpv; FFmpeg with the IJG notice; libplacebo; glslang; fast_float;
+  - MoltenVK, SPIRV-Cross, SPIRV-Tools, SPIRV-Headers, cereal, and
+    Vulkan-Headers;
+  - OpenSSL; curl with its ISC notices; Little CMS; dav1d;
+  - FreeType with the FTL credit and its BDF/PCF/fthash notices; FriBidi;
+    HarfBuzz with ms-use; libass.
 - Two credits in the accompanying documentation:
   - "This software is based in part on the work of the Independent JPEG
     Group" (FFmpeg's IJG files, in `ffmpeg/IJG-NOTICE.txt`).
   - The FreeType Project credit required by the FTL.
 - An LGPL notice for mpv, FFmpeg, libplacebo, and FriBidi. It links the exact
-  sources above, the mpv patch, `tool/macos/build-mpv.sh`, and the lock file,
-  and states that users may replace those libraries and how.
-- The published mpv patch,
-  `tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch`.
+  sources above, the mpv and FFmpeg patches, `tool/macos/build-mpv.sh`, and the
+  lock file, and states that users may replace those libraries and how.
+- The published patches:
+  - `tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch`
+  - `tool/macos/ffmpeg-patches/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch`
+  - `tool/macos/ffmpeg-patches/0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch`
 - Before public distribution, mirror the exact source archives and Git
   snapshots to a project-controlled release, as for Windows.
 
