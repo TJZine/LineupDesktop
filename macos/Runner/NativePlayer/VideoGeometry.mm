@@ -17,23 +17,6 @@ CGFloat DrawableDimension(CGFloat points, CGFloat scale) {
 
 }  // namespace
 
-std::optional<VideoRect> ParseVideoRect(const player::ValueMap& arguments) {
-  using player::AsNumber;
-  using player::Find;
-  const auto left = AsNumber(Find(arguments, "left"));
-  const auto top = AsNumber(Find(arguments, "top"));
-  const auto width = AsNumber(Find(arguments, "width"));
-  const auto height = AsNumber(Find(arguments, "height"));
-  const auto scale = AsNumber(Find(arguments, "scale"));
-  if (!left || !top || !width || !height || !scale ||
-      !std::isfinite(*left) || !std::isfinite(*top) ||
-      !std::isfinite(*width) || !std::isfinite(*height) ||
-      !std::isfinite(*scale) || *width < 0 || *height < 0 || *scale <= 0) {
-    return std::nullopt;
-  }
-  return VideoRect{*left, *top, *width, *height};
-}
-
 CGRect VideoFrame(const VideoRect& rect) {
   return CGRectMake(rect.left, rect.top, rect.width, rect.height);
 }

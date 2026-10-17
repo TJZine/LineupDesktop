@@ -1,7 +1,5 @@
 #import <XCTest/XCTest.h>
 
-#include <cmath>
-#include <limits>
 #include <string>
 #include <variant>
 
@@ -141,62 +139,23 @@ using lineup::player::ValueMap;
 
 @implementation VideoGeometryTests
 
-- (ValueMap)rectLeft:(Value)left
-                 top:(Value)top
-               width:(Value)width
-              height:(Value)height
-               scale:(Value)scale {
-  return ValueMap{{"left", left},
-                  {"top", top},
-                  {"width", width},
-                  {"height", height},
-                  {"scale", scale}};
-}
-
-- (void)testParsesLogicalPointsAndIgnoresScale {
-  const auto rect = lineup::ParseVideoRect(
-      [self rectLeft:Value(10.5) top:Value(20) width:Value(640) height:Value(360.25)
-               scale:Value(2.0)]);
-  XCTAssertTrue(rect.has_value());
-  // The frame is in points with a top-left origin; the backing scale is
-  // applied to the layer, not to the frame.
-  const CGRect frame = lineup::VideoFrame(*rect);
+// Parsing and bounds are the core's (player_core_contract_test); these cover
+// only the macOS presentation rules.
+- (void)testFrameIsInPointsWithATopLeftOrigin {
+  // The backing scale is applied to the layer, not to the frame.
+  const CGRect frame = lineup::VideoFrame(lineup::VideoRect{10.5, 20, 640, 360.25, 2});
   XCTAssertEqual(frame.origin.x, 10.5);
   XCTAssertEqual(frame.origin.y, 20);
   XCTAssertEqual(frame.size.width, 640);
   XCTAssertEqual(frame.size.height, 360.25);
 }
 
-- (void)testRejectsInvalidRectangles {
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  const double inf = std::numeric_limits<double>::infinity();
-  const ValueMap invalid[] = {
-      [self rectLeft:Value(nan) top:Value(0) width:Value(1) height:Value(1) scale:Value(1)],
-      [self rectLeft:Value(0) top:Value(inf) width:Value(1) height:Value(1) scale:Value(1)],
-      [self rectLeft:Value(0) top:Value(0) width:Value(-1) height:Value(1) scale:Value(1)],
-      [self rectLeft:Value(0) top:Value(0) width:Value(1) height:Value(-0.5) scale:Value(1)],
-      [self rectLeft:Value(0) top:Value(0) width:Value(1) height:Value(1) scale:Value(0)],
-      [self rectLeft:Value(0) top:Value(0) width:Value(1) height:Value(1) scale:Value(-2)],
-      [self rectLeft:Value("0") top:Value(0) width:Value(1) height:Value(1) scale:Value(1)],
-      [self rectLeft:Value(0) top:Value(0) width:Value(true) height:Value(1) scale:Value(1)],
-      [self rectLeft:Value(0) top:Value(0) width:Value(1) height:Value() scale:Value(1)],
-      ValueMap{{"left", Value(0)}, {"top", Value(0)}, {"width", Value(1)}, {"height", Value(1)}},
-  };
-  for (const auto& arguments : invalid) {
-    XCTAssertFalse(lineup::ParseVideoRect(arguments).has_value());
-  }
-  // A zero-sized rectangle is valid; it hides the video.
-  XCTAssertTrue(lineup::ParseVideoRect(
-      [self rectLeft:Value(5) top:Value(5) width:Value(0) height:Value(0) scale:Value(1)])
-                    .has_value());
-}
-
 - (void)testVisibilityRequiresAreaAndAVisibleWindow {
-  const lineup::VideoRect area{0, 0, 320, 180};
+  const lineup::VideoRect area{0, 0, 320, 180, 2};
   XCTAssertTrue(lineup::VideoVisible(area, false, false));
   XCTAssertFalse(lineup::VideoVisible(std::nullopt, false, false));
-  XCTAssertFalse(lineup::VideoVisible(lineup::VideoRect{0, 0, 0, 180}, false, false));
-  XCTAssertFalse(lineup::VideoVisible(lineup::VideoRect{0, 0, 320, 0}, false, false));
+  XCTAssertFalse(lineup::VideoVisible(lineup::VideoRect{0, 0, 0, 180, 2}, false, false));
+  XCTAssertFalse(lineup::VideoVisible(lineup::VideoRect{0, 0, 320, 0, 2}, false, false));
   XCTAssertFalse(lineup::VideoVisible(area, true, false));
   XCTAssertFalse(lineup::VideoVisible(area, false, true));
 }
@@ -207,10 +166,10 @@ using lineup::player::ValueMap;
 - (void)testHiddenVideoKeepsANonEmptyFrame {
   const CGRect previous = CGRectMake(40, 60, 640, 360);
   XCTAssertTrue(CGRectEqualToRect(
-      lineup::RetainedVideoFrame(lineup::VideoRect{1, 2, 3, 4}, previous),
+      lineup::RetainedVideoFrame(lineup::VideoRect{1, 2, 3, 4, 1}, previous),
       CGRectMake(1, 2, 3, 4)));
   XCTAssertTrue(CGRectEqualToRect(
-      lineup::RetainedVideoFrame(lineup::VideoRect{5, 5, 0, 0}, previous),
+      lineup::RetainedVideoFrame(lineup::VideoRect{5, 5, 0, 0, 1}, previous),
       previous));
   XCTAssertTrue(CGRectEqualToRect(
       lineup::RetainedVideoFrame(std::nullopt, previous), previous));

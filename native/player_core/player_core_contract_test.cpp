@@ -1,6 +1,7 @@
 // Portable contract test for PlayerCore. Every libmpv entry point is a test
 // fake, so this target needs mpv headers but not libmpv itself.
 
+#include "player_core/platform_arguments.h"
 #include "player_core/player_core.h"
 #include "player_core/player_core_test_access.h"
 
@@ -1060,6 +1061,82 @@ void WakeupRetry() {
   core.Shutdown();
 }
 
+void PlatformArguments() {
+  using lineup::player::DisplayDesire;
+  using lineup::player::ParseDisplayMatchingArguments;
+  using lineup::player::ParseVideoRectArguments;
+  const auto display = [](Value revision, Value session, Value desired) {
+    return ValueMap{{"revision", std::move(revision)},
+                    {"session", std::move(session)},
+                    {"desired", std::move(desired)}};
+  };
+  {
+    const ValueMap valid = display(Value(int64_t{0}), Value(true), Value("hdr"));
+    const auto parsed = ParseDisplayMatchingArguments(&valid);
+    Check(parsed && parsed->revision == 0 && parsed->session &&
+          parsed->desired == DisplayDesire::hdr, "valid display request parses");
+    const ValueMap sdr = display(Value(int64_t{7}), Value(false), Value("sdr"));
+    const ValueMap unknown = display(Value(int64_t{8}), Value(false), Value("unknown"));
+    Check(ParseDisplayMatchingArguments(&sdr)->desired == DisplayDesire::sdr &&
+          ParseDisplayMatchingArguments(&unknown)->desired == DisplayDesire::unknown,
+          "every desired state parses");
+  }
+  const ValueMap invalid_display[] = {
+      display(Value(int64_t{-1}), Value(true), Value("hdr")),
+      display(Value(1.0), Value(true), Value("hdr")),
+      display(Value(int64_t{1}), Value(int64_t{1}), Value("hdr")),
+      display(Value(int64_t{1}), Value(true), Value("HDR")),
+      display(Value(int64_t{1}), Value(true), Value()),
+      ValueMap{{"revision", Value(int64_t{1})}, {"desired", Value("sdr")}},
+  };
+  for (const auto& arguments : invalid_display) {
+    Check(!ParseDisplayMatchingArguments(&arguments), "invalid display request is rejected");
+  }
+  Check(!ParseDisplayMatchingArguments(nullptr), "missing display arguments are rejected");
+
+  lineup::player::DisplayRevisionOrder order;
+  Check(order.Admit(0) && !order.Admit(0) && order.Admit(3) && !order.Admit(2) &&
+        !order.Admit(3) && order.Admit(4), "display revisions strictly increase");
+  order.Reset();
+  Check(order.Admit(0), "initialize resets the display revision");
+
+  const auto rect = [](Value left, Value top, Value width, Value height, Value scale) {
+    return ValueMap{{"left", std::move(left)},   {"top", std::move(top)},
+                    {"width", std::move(width)}, {"height", std::move(height)},
+                    {"scale", std::move(scale)}};
+  };
+  {
+    const auto parsed = ParseVideoRectArguments(
+        rect(Value(int64_t{10}), Value(-5.5), Value(640.0), Value(int64_t{360}), Value(2.0)));
+    Check(parsed && parsed->left == 10 && parsed->top == -5.5 && parsed->width == 640 &&
+          parsed->height == 360 && parsed->scale == 2, "integer and double bounds parse");
+    Check(ParseVideoRectArguments(
+              rect(Value(0.0), Value(0.0), Value(0.0), Value(0.0), Value(1.0))).has_value(),
+          "an empty rectangle is valid");
+  }
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  const ValueMap invalid_rects[] = {
+      rect(Value(nan), Value(0.0), Value(1.0), Value(1.0), Value(1.0)),
+      rect(Value(0.0), Value(inf), Value(1.0), Value(1.0), Value(1.0)),
+      rect(Value(0.0), Value(0.0), Value(-inf), Value(1.0), Value(1.0)),
+      rect(Value(0.0), Value(0.0), Value(1.0), Value(nan), Value(1.0)),
+      rect(Value(0.0), Value(0.0), Value(1.0), Value(1.0), Value(inf)),
+      rect(Value(0.0), Value(0.0), Value(-1.0), Value(1.0), Value(1.0)),
+      rect(Value(0.0), Value(0.0), Value(1.0), Value(-0.5), Value(1.0)),
+      rect(Value(0.0), Value(0.0), Value(1.0), Value(1.0), Value(0.0)),
+      rect(Value(0.0), Value(0.0), Value(1.0), Value(1.0), Value(-2.0)),
+      rect(Value("0"), Value(0.0), Value(1.0), Value(1.0), Value(1.0)),
+      rect(Value(0.0), Value(0.0), Value(true), Value(1.0), Value(1.0)),
+      rect(Value(0.0), Value(0.0), Value(1.0), Value(), Value(1.0)),
+      ValueMap{{"left", Value(0.0)}, {"top", Value(0.0)}, {"width", Value(1.0)},
+               {"height", Value(1.0)}},
+  };
+  for (const auto& arguments : invalid_rects) {
+    Check(!ParseVideoRectArguments(arguments), "invalid video bounds are rejected");
+  }
+}
+
 // Runs `step`, failing the suite instead of hanging if it does not return.
 void WithinDeadline(const char* obligation, const std::function<void()>& step) {
   std::atomic<bool> done{false};
@@ -1138,6 +1215,7 @@ int main() {
   Lifecycle();
   WakeupRetry();
   StaleWakeupAfterShutdown();
+  PlatformArguments();
   fake = nullptr;
   return 0;
 }

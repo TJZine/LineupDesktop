@@ -12,6 +12,7 @@
 
 #include "FoundationValueConversion.h"
 #include "VideoGeometry.h"
+#include "player_core/platform_arguments.h"
 #include "player_core/player_core.h"
 
 namespace {
@@ -196,7 +197,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
   std::unique_ptr<PlayerCore> _core;
   LineupVideoView* _videoView;
   std::optional<lineup::VideoRect> _videoRect;
-  int64_t _displayRevision;
+  lineup::player::DisplayRevisionOrder _displayRevisions;
   std::vector<FullscreenRequest> _fullscreenRequests;
   uint64_t _nextFullscreenRequest;
   BOOL _fullscreenTransitioning;
@@ -212,7 +213,6 @@ class MacCoreHost final : public lineup::player::CoreHost {
   if (self) {
     _videoHost = videoHost;
     _window = window;
-    _displayRevision = -1;
     _host = std::make_unique<MacCoreHost>(self);
     _core = std::make_unique<PlayerCore>(lineup::player::LibmpvOperations(),
                                          *_host);
@@ -253,7 +253,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   NSString* method = call.method;
   if ([method isEqualToString:@"initialize"]) {
-    _displayRevision = -1;
+    _displayRevisions.Reset();
     _core->DiscardQueuedEvents("display");
     SendResult(result, _core->Initialize());
     return;
@@ -277,10 +277,11 @@ class MacCoreHost final : public lineup::player::CoreHost {
   if ([method isEqualToString:@"setDisplayMatching"]) {
     [self setDisplayMatching:argumentMap result:result];
   } else if ([method isEqualToString:@"setVideoRect"]) {
-    const auto rect = argumentMap ? lineup::ParseVideoRect(*argumentMap)
-                                  : std::nullopt;
+    const auto rect = argumentMap
+                          ? lineup::player::ParseVideoRectArguments(*argumentMap)
+                          : std::nullopt;
     if (!rect) {
-      result(ArgumentError(@"Valid finite video bounds are required."));
+      result(ArgumentError(@(lineup::player::kInvalidVideoRectMessage)));
       return;
     }
     _videoRect = rect;
@@ -313,26 +314,19 @@ class MacCoreHost final : public lineup::player::CoreHost {
 // request's revision.
 - (void)setDisplayMatching:(const ValueMap*)arguments
                     result:(FlutterResult)result {
-  using lineup::player::AsInt;
-  using lineup::player::Find;
-  const auto revision =
-      arguments ? AsInt(Find(*arguments, "revision")) : std::nullopt;
-  const bool* session = lineup::player::FindBool(arguments, "session");
-  const std::string* desired =
-      lineup::player::FindString(arguments, "desired");
-  if (!revision || *revision < 0 || !session || !desired ||
-      (*desired != "hdr" && *desired != "sdr" && *desired != "unknown")) {
-    result(ArgumentError(@"A valid display matching request is required."));
+  const auto request =
+      lineup::player::ParseDisplayMatchingArguments(arguments);
+  if (!request) {
+    result(ArgumentError(@(lineup::player::kInvalidDisplayMatchingMessage)));
     return;
   }
-  if (*revision <= _displayRevision) {
-    result(ArgumentError(@"Display revision must strictly increase."));
+  if (!_displayRevisions.Admit(request->revision)) {
+    result(ArgumentError(@(lineup::player::kStaleDisplayRevisionMessage)));
     return;
   }
-  _displayRevision = *revision;
   _core->QueuePlatformEvent({
       {"type", Value("display")},
-      {"revision", Value(*revision)},
+      {"revision", Value(request->revision)},
       {"session", Value("unavailable")},
       {"observed", Value("unknown")},
       {"outcome", Value("failed")},

@@ -5,24 +5,15 @@
 
 #include <optional>
 
-#include "player_core/value.h"
+#include "player_core/platform_arguments.h"
 
 namespace lineup {
 
-// The `setVideoRect` rectangle in logical points with a top-left origin.
-// The protocol's `scale` is validated but not kept: AppKit views already work
-// in points, and the backing scale is applied to the layer instead.
-struct VideoRect {
-  double left = 0;
-  double top = 0;
-  double width = 0;
-  double height = 0;
-};
-
-// Validates `setVideoRect` arguments exactly as the protocol documents:
-// finite left, top, width, height, and scale; width >= 0, height >= 0, and
-// scale > 0. Returns nullopt for anything else.
-std::optional<VideoRect> ParseVideoRect(const player::ValueMap& arguments);
+// Presentation rules for a validated `setVideoRect` rectangle (parsed by
+// player::ParseVideoRectArguments), in logical points with a top-left
+// origin. The rectangle's `scale` is not used: AppKit views already work in
+// points, and the layer applies the window's backing scale instead.
+using VideoRect = player::VideoRectArguments;
 
 // The video view frame inside a flipped (top-left origin) host view.
 CGRect VideoFrame(const VideoRect& rect);

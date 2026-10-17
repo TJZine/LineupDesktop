@@ -36,6 +36,7 @@
 		5A1E0C00000000000D00D018 /* FoundationValueConversion.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D004 /* FoundationValueConversion.mm */; };
 		5A1E0C00000000000D00D019 /* VideoGeometry.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D006 /* VideoGeometry.mm */; };
 		5A1E0C00000000000D00D01A /* NativePlayerTests.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00D011 /* NativePlayerTests.mm */; };
+		5A1E0C00000000000D00E003 /* platform_arguments.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00E001 /* platform_arguments.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,6 +105,8 @@
 		5A1E0C00000000000D00D00F /* native_playback_state.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = native_playback_state.h; sourceTree = "<group>"; };
 		5A1E0C00000000000D00D010 /* value.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = value.h; sourceTree = "<group>"; };
 		5A1E0C00000000000D00D011 /* NativePlayerTests.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NativePlayerTests.mm; sourceTree = "<group>"; };
+		5A1E0C00000000000D00E001 /* platform_arguments.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = platform_arguments.cpp; sourceTree = "<group>"; };
+		5A1E0C00000000000D00E002 /* platform_arguments.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = platform_arguments.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -236,6 +239,8 @@
 		5A1E0C00000000000D00D01D /* player_core */ = {
 			isa = PBXGroup;
 			children = (
+				5A1E0C00000000000D00E002 /* platform_arguments.h */,
+				5A1E0C00000000000D00E001 /* platform_arguments.cpp */,
 				5A1E0C00000000000D00D00B /* player_core.h */,
 				5A1E0C00000000000D00D00A /* player_core.cpp */,
 				5A1E0C00000000000D00D00D /* mpv_operations.h */,
@@ -461,6 +466,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5A1E0C00000000000D00E003 /* platform_arguments.cpp in Sources */,
 				5A1E0C00000000000D00D012 /* LineupNativePlayer.mm in Sources */,
 				5A1E0C00000000000D00D013 /* FoundationValueConversion.mm in Sources */,
 				5A1E0C00000000000D00D014 /* VideoGeometry.mm in Sources */,
