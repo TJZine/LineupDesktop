@@ -831,14 +831,44 @@ void InitializeFailures() {
     fake->rejected_option = "tls-verify";
     fake->options.clear();
     PlayerCore core(FakeOperations(), host);
+    const CallResult result = core.Initialize();
+    fake->rejected_option.clear();
+    Check(result.error && result.error->code == "initialize_failed" &&
+          result.error->message == "libmpv initialization failed: fake mpv error" &&
+          host.cancelled == 1 && fake->destroyed == 1 &&
+          fake->options.back() == "tls-verify=yes" && !core.initialized(),
+          "security option failure stops initialization");
+  }
+  for (const char* absent : {"osc", "ytdl"}) {
+    FakeHost host;
+    fake->rejected_option = absent;
+    fake->options.clear();
+    PlayerCore core(FakeOperations(), host);
     Reply reply;
     Call(core, "initialize", reply);
     fake->rejected_option.clear();
-    Check(reply.error == "initialize_failed" && host.cancelled == 1 &&
-          fake->destroyed == 1 && fake->options.back() == "tls-verify=yes" &&
-          !core.initialized(), "security option failure stops initialization");
+    const bool continued =
+        std::find(fake->options.begin(), fake->options.end(), "hwdec=auto") !=
+        fake->options.end();
+    Check(reply.successes == 1 && core.initialized() && host.cancelled == 0 &&
+          continued, "a runtime without the osc or ytdl option still initializes");
+    core.Shutdown();
   }
   {
+    // Any other missing option keeps failing initialization with today's
+    // error, even though the fake reports the same option-not-found status.
+    FakeHost host;
+    fake->rejected_option = "input-media-keys";
+    PlayerCore core(FakeOperations(), host);
+    const CallResult result = core.Initialize();
+    fake->rejected_option.clear();
+    Check(result.error && result.error->code == "initialize_failed" &&
+          result.error->message == "libmpv initialization failed: fake mpv error" &&
+          host.cancelled == 1 && !core.initialized(),
+          "only the absent disabling options are accepted");
+  }
+  {
+    const int destroyed_before = fake->destroyed.load();
     FakeHost host;
     fake->rejected_observation = "track-list";
     PlayerCore core(FakeOperations(), host);
@@ -846,7 +876,7 @@ void InitializeFailures() {
     Call(core, "initialize", reply);
     fake->rejected_observation.clear();
     Check(reply.error == "initialize_failed" && host.cancelled == 1 &&
-          fake->destroyed == 2 && !core.initialized(),
+          fake->destroyed == destroyed_before + 1 && !core.initialized(),
           "observation failure stops initialization");
   }
   fake->created = 0;

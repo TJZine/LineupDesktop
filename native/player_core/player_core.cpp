@@ -124,6 +124,21 @@ static_assert(ParseHttpErrorStatus("http error = 503") == 503);
 static_assert(!ParseHttpErrorStatus("http error: 4040"));
 static_assert(!ParseHttpErrorStatus("http error while opening; retry 503"));
 
+// `osc` and `ytdl` only disable mpv's bundled Lua scripts, so a libmpv built
+// without Lua (the macOS runtime) does not define them. A feature that is not
+// compiled in is already disabled, so the core's "no" request for exactly
+// these two options is satisfied when the option does not exist. Every other
+// option failure, including any other value for these two, still fails
+// initialization.
+int DisablingOptionStatus(std::string_view name, std::string_view value,
+                          int status) {
+  if (status == MPV_ERROR_OPTION_NOT_FOUND && value == "no" &&
+      (name == "osc" || name == "ytdl")) {
+    return 0;
+  }
+  return status;
+}
+
 std::string PropertyString(const mpv_event_property& property) {
   if (property.format != MPV_FORMAT_STRING || !property.data) {
     return {};
@@ -333,7 +348,8 @@ CallResult PlayerCore::Initialize() {
   };
   for (const auto& [name, value] : core_options) {
     if (option_status >= 0) {
-      option_status = mpv_operations_.set_option_string(mpv_, name, value);
+      option_status = DisablingOptionStatus(
+          name, value, mpv_operations_.set_option_string(mpv_, name, value));
     }
   }
   for (const auto& [name, value] : output.options) {

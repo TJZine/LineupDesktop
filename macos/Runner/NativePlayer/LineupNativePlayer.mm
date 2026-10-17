@@ -4,7 +4,6 @@
 
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -54,25 +53,6 @@ FlutterError* WindowError(NSString* message) {
   return [FlutterError errorWithCode:@"window_error"
                              message:message
                              details:nil];
-}
-
-// The macOS runtime is built without Lua, so the `osc` and `ytdl` options
-// (which only disable the bundled OSC and ytdl_hook scripts) do not exist.
-// Requesting "no" for an option whose feature is absent is already
-// satisfied; every other option, value, and error is passed through.
-int SetOptionString(mpv_handle* mpv, const char* name, const char* value) {
-  const int status = mpv_set_option_string(mpv, name, value);
-  if (status == MPV_ERROR_OPTION_NOT_FOUND && std::strcmp(value, "no") == 0 &&
-      (std::strcmp(name, "osc") == 0 || std::strcmp(name, "ytdl") == 0)) {
-    return 0;
-  }
-  return status;
-}
-
-lineup::player::MpvOperations MacMpvOperations() {
-  auto operations = lineup::player::LibmpvOperations();
-  operations.set_option_string = &SetOptionString;
-  return operations;
 }
 
 struct FullscreenRequest {
@@ -234,7 +214,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
     _window = window;
     _displayRevision = -1;
     _host = std::make_unique<MacCoreHost>(self);
-    _core = std::make_unique<PlayerCore>(MacMpvOperations(),
+    _core = std::make_unique<PlayerCore>(lineup::player::LibmpvOperations(),
                                          *_host);
     _channel = [FlutterMethodChannel methodChannelWithName:kChannelName
                                            binaryMessenger:messenger];
