@@ -41,6 +41,16 @@ distribution remain gated by the relevant decisions and approvals.
   Previous review was conditional on the core fixes; takeover review verified
   them and corrected the remaining fullscreen contract mismatch.
 - K2 is integrated by `6ba61427` (separate macOS core-contract CI job).
+- M3a asynchronous native shutdown is integrated by `77469eeb` after
+  independent approval of its exact manifest and evidence.
+- R1a runtime embedding recovery and signing timestamps are integrated by
+  `f3217d87` after correction and independent approval of the exact three files.
+  A subsequent actual bundle-signing failure requires the focused follow-up below.
+- C1a full portable/native macOS CI and runtime provisioning are integrated by
+  `80bb7d34` after independent approval. Hosted execution is outstanding.
+- R1b real-runtime authenticated-reference proof is integrated by `9f766d33`
+  after all 26 cases passed and the exact corrected manifest was independently
+  approved. C1b owns its CI entry point.
 
 ## Evidence and acceptance
 
@@ -56,11 +66,13 @@ distribution remain gated by the relevant decisions and approvals.
   `LINEUP_MPV_RUNTIME`; R1/C1 own that missing provisioning. The patched
   Windows engine/package job was still running when inspected. This is not
   an overall green run or physical Windows acceptance.
-- Pending visible checks on the accepted runtime: HDR loaded while hidden
-  and then shown (M12-R2), fullscreen sources, Guide transparency, live
-  resize, HDR/SDR switching. Native fullscreen/Dart state synchronization
-  and graceful termination remain M3 work. User HDR/color judgment and the
-  full signed A1 acceptance matrix remain distinct from screenshots/logs.
+- M12-R2 passed a real-adapter/runtime SDR-visible → hidden HDR load →
+  same-rectangle show probe after the user unlocked the Mac. The layer became
+  PQ/EDR without another load or clip switch. This supports first-visible-frame
+  configuration; no forced reconfiguration fix is justified for this case.
+  Full Flutter composition, fullscreen sources, Guide transparency, live resize,
+  and user HDR/color judgment remain acceptance work. M3b fullscreen/Dart
+  synchronization remains gated by P6; M3a shutdown source is integrated.
 - One 12-second stop timeout was reported in four earlier harness runs on
   a loaded machine. Preserve as an unresolved observation; investigate if
   reproduced on the accepted runtime, without declaring a cause from load.
@@ -82,10 +94,11 @@ resize and transition quality are not accepted from this run. The attempted
 Control-Command-F did not exit fullscreen; native shortcut/menu wiring and
 state synchronization remain unresolved M3/P6 work. A Settings round-trip
 resumed the existing HDR clip; it did not establish the distinct R2 case of
-loading HDR while hidden, so R2 is still open. Guide aperture visibility was
+loading HDR while hidden, so it did not settle R2. The later dedicated probe below settles the tested
+mechanism. Guide aperture visibility was
 observed; exact Guide alpha comparison was not performed. Command-Q completed
 the worker shutdown and exited the instrumented process; bounded asynchronous
-termination remains M3 work. No fixture media identities or raw diagnostics
+termination was subsequently implemented and reviewed in M3a. No fixture media identities or raw diagnostics
 are part of shared evidence.
 
 M12 targeted re-review completed: the shared-core latch, faithful hang proof,
@@ -128,7 +141,14 @@ that an empty test selection fails. Hosted execution remains outstanding.
 | M12-R5 targeted re-review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen six-file candidate working diff at `0857c906`, including new scheme/config | Complete: approved; reviewed aggregate SHA-256 `49054e38cfb471d1e60315dc4aa40411bfddad87f4c1c302be979c894ade6ec0` |
 | M3a asynchronous termination | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | Primary checkout at `a93aefe35391a90897fbbdb5b86564e6ef1b9e9c`; macOS lifecycle source/tests and focused existing docs; no core/Windows/Git changes | Complete, reviewed and accepted; frozen 12-file aggregate `4f3a88a7128fdcce3579a07f3e488b53aeae890ea7a6662e7aba3ceaabac9561` |
 | M3a adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen M3a manifest; excludes controller record and disjoint R1a script work | Complete: approved; controller integrates exact reviewed files |
-| R1a embed cleanup and timestamps | `01a14bc1-7787-75f2-841a-48b715f3b209` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Only runtime embed script, isolated production-script integration tests, and runtime documentation; no shared app builds or signing services | Running; independent review required before integration |
+| R1a embed cleanup and timestamps | `01a14bc1-7787-75f2-841a-48b715f3b209` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Only runtime embed script, isolated production-script integration tests, and runtime documentation; no shared app builds or signing services | Integrated as `f3217d87`; real app signing exposed a metadata-location issue; focused follow-up running |
+| R1a adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen initial R1a script/test/runtime-doc diff; excludes parent record and R1b tooling | Complete: requests one confirmed P2 recovery correction; targeted re-review required |
+| R1a final boundary re-review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen script `fb6aa2341188f935aabb9ac379914843c2deb8f6508c16e360e9c80d7acc8b50`, updated actual-script regression fixture and runtime doc; excludes other slices | Complete: approved exact three-file correction; additional publication/cleanup failure probes recover safely |
+| R1b authenticated-reference parity | `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`local`) | `worker`: `gpt-6.1-sol`, medium | New macOS native test tooling and Development command; actual accepted runtime, isolated HTTPS fixtures; no core/Windows/app changes | Complete, independently approved and integrated as `9f766d33`; 26 actual-runtime cases pass |
+| R1b adversarial review | `01a14bbe-5fce-7320-b217-e131e586574a` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen four-file authenticated-reference unit; moving R1a/C1a and parent record excluded | Complete: both corrections independently approved; exact source, artifacts, runtime and focused classifier checks verified |
+| C1a macOS development CI | `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Only existing `build-macos` workflow job: full portable suite, source runtime provisioning, app build and existing native tests | Complete, independently approved and integrated as `80bb7d34`; hosted evidence outstanding |
+| C1a adversarial review | `01a14bde-efcf-7360-be74-9d2bc2668ea8` (`local`) | `reviewer`: `gpt-6.1-sol`, high | Frozen workflow only; moving R1b and parent record excluded | Complete: approved with YAML/Bash, structural and controlled failure-path checks; no hosted execution |
+| C1b authenticated-reference CI | `01a14bdd-a2a0-7ba0-bcb5-c06320493487` (`local`) | `worker_luna`: `gpt-5.6-luna`, xhigh | Existing build-macos workflow only: fixture prerequisites and no-skip real-runtime runner before app build | Running; independent review required before integration |
 
 M3a is the lifecycle portion of M3, independent of the unresolved P6
 fullscreen product decision. It must preserve the pinned Flutter superclass's
@@ -153,10 +173,75 @@ requires a functioning main queue; it does not claim to recover a pre-existing
 main-thread freeze. R1a addresses only the accepted stale-dylib and timestamp issues;
 full provisioning, signing-account inputs, notices UI, and C1 remain open.
 
-Next engineering slices are M3 (termination and fullscreen contract), the
-remaining U1 wiring, R1 (provisioning, embed/sign correctness, notices), and
-K2/C1 (native/portable CI and runtime provisioning). Resolve dependencies
-against current source rather than interpreting this list as a serial pipeline.
+R2 controller experiment: a disposable `/tmp` native probe compiles the actual
+production adapter/core against the accepted runtime. Two earlier attempts
+remained occluded while the Mac was locked; they are invalid visibility
+evidence. After the user unlocked it, the controller raised the real window
+and observed SDR with a visible layer, loaded HDR while the layer was hidden,
+then showed the exact same rectangle without another load or clip switch.
+The layer retained Rec.709 while hidden and changed to
+`kCGColorSpaceITUR_2100_PQ`, EDR enabled and HDR metadata present after showing.
+The probe passed and disposed successfully. Local log:
+`/tmp/lineup-hidden-hdr-probe/unlocked-sdr-hidden-hdr.log`.
+This establishes the actual adapter/runtime mechanism on this Mac, not full
+Flutter composition, visible highlight brightness, or final signed A1 acceptance.
+Probe code remains outside the repository.
+
+R1a review caught two concrete failure boundaries before integration: a
+partial runtime B installation could leave B-only names untracked after a
+later different C, and `mv -f` could follow a current-name directory symlink.
+The final correction stages/signs before publishing, records pending ownership
+for retries, validates both manifests before deletion, rejects real directories,
+and safely replaces exact-name symlinks. Its production-script fixture covers
+signing/install failures, changed-runtime recovery, malformed manifests,
+legacy migration, outside-write sentinels, and timestamp selection. Independent
+review approved the exact script/test/doc hashes and additionally verified
+pending/completed-manifest publication failures and stale-cleanup failures.
+The controller integrated those files as `f3217d87`. This is local embed/recovery
+evidence, not real team-identity signing or App Store submission.
+
+R1b's initial 25-case actual-runtime matrix passed, but review found two
+inherited checker weaknesses: the HTTP redirect target used a TLS listener
+that could hide plaintext attempts, and ordinary negative cases did not reject
+progress followed by a later error. These findings do not establish a production
+token leak. Correction is authorized only in the new macOS tooling: use an
+actual plaintext listener/audit with a sensitivity control, require no progress
+for ordinary negatives, and retain the explicit unsupported-SDP limit. The
+same gaps exist in the Windows fixture; its old results do not establish these
+stronger claims, and Windows source changes are outside this round's authority.
+
+The R1b correction now uses a real plaintext listener and combines its audit
+with the secondary HTTPS audit. A deliberate synthetic plaintext-token control
+receives HTTP 200 and is rejected by the ordinary-negative classifier. The
+existing actual-codec progress-then-error control is rejected by both positive
+and negative classifiers. The complete real-runtime matrix passes all 26 cases,
+with no new production policy changes. Exact four-file aggregate:
+`0d01ad9246b01d79bc75f4184319f511d3cdddfcfc2499ce344b6d4668af518f`.
+The independent re-review approved both concrete corrections, checked the exact
+manifest/source/artifact/runtime binding and the recorded matrix, and directly
+exercised both classifiers. The controller integrated the exact files as
+`9f766d33`. C1b is adding the explicit CI entry point and fixture prerequisites.
+
+The controller's actual Debug app build with the integrated R1a script then
+failed at bundle signing: `Contents/Frameworks/.lineup-mpv-runtime-manifest`
+was treated as unsigned code. The earlier fake-signer fixture did not establish
+whole-bundle signing. A focused follow-up must put metadata in Resources,
+safely migrate completed/pending ownership from incremental Frameworks output,
+and exercise real ad-hoc bundle signing without excluding resource validation.
+No signed-app success is claimed for `f3217d87`. The controller owns the next
+actual Flutter build after the corrected source is frozen and reviewed.
+
+The controller ran the complete portable macOS suite with pinned Flutter 3.47.7
+and `TZ=America/New_York`: all 1,728 tests passed. Local log:
+`/tmp/lineup-c1a-macos-portable-full.log`. This includes the exact Guide alpha
+checks and Dart contracts; it does not establish physical composition or HDR.
+
+Active independent engineering is the R1a Resources/signing follow-up and C1b
+authenticated-reference CI. M3b fullscreen events/Dart synchronization, remaining
+U1 command/menu behavior, R1 signed distribution and notices UI, and B1/B2
+remain gated by the relevant open product/design/account decisions. Resolve
+dependencies against current source rather than treating the package list as
+a serial pipeline.
 Do not change approved Player layout. A new Licenses surface needs design
 agreement if an existing suitable surface cannot carry it. Signing/account
 inputs, legal review, product decisions, and physical hardware limits must
