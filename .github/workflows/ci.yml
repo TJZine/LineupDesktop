@@ -55,6 +55,75 @@ jobs:
         run: flutter test test/app/guide_opacity_test.dart
       - run: flutter build macos
 
+  macos-player-core:
+    name: Verify macOS shared player core contracts
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Acquire headers from the pinned mpv source
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in git cmake ctest; do
+            command -v "$tool" >/dev/null || {
+              echo "Required tool is unavailable: $tool" >&2
+              exit 1
+            }
+          done
+
+          # shellcheck source=../../tool/macos/mpv-runtime.lock
+          source tool/macos/mpv-runtime.lock
+          : "${MPV_GIT:?MPV_GIT is missing from the runtime lock}"
+          : "${MPV_COMMIT:?MPV_COMMIT is missing from the runtime lock}"
+
+          mpv_source="$RUNNER_TEMP/lineup-mpv-source"
+          git init --quiet "$mpv_source"
+          git -C "$mpv_source" remote add origin "$MPV_GIT"
+          git -C "$mpv_source" fetch --no-tags --depth 1 origin "$MPV_COMMIT"
+          git -C "$mpv_source" checkout --quiet --detach "$MPV_COMMIT"
+
+          actual_commit="$(git -C "$mpv_source" rev-parse HEAD)"
+          if [[ "$actual_commit" != "$MPV_COMMIT" ]]; then
+            echo "Fetched mpv commit $actual_commit, expected $MPV_COMMIT." >&2
+            exit 1
+          fi
+          mpv_header="$mpv_source/include/mpv/client.h"
+          if [[ ! -f "$mpv_header" ]]; then
+            echo "Pinned mpv source has no expected header: $mpv_header" >&2
+            exit 1
+          fi
+          echo "Using mpv source $MPV_GIT at $actual_commit"
+          echo "LINEUP_MPV_INCLUDE_DIR=$mpv_source/include" >> "$GITHUB_ENV"
+      - name: Configure shared player core in Debug mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$RUNNER_TEMP/lineup-player-core-build"
+          cmake -S native/player_core -B "$build_dir" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DLINEUP_MPV_INCLUDE_DIR="$LINEUP_MPV_INCLUDE_DIR"
+      - name: Build shared player core contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/lineup-player-core-build" \
+            --config Debug \
+            --target track_list_encoder_test native_playback_state_test player_core_contract_test \
+            --parallel 2
+      - name: Run shared player core contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$RUNNER_TEMP/lineup-player-core-build"
+          for native_test in track_list_encoder native_playback_state player_core_contract; do
+            ctest --test-dir "$build_dir" -C Debug \
+              -R "^${native_test}$" \
+              --output-on-failure --no-tests=error --parallel 1 --timeout 60
+          done
+
   windows-release-policy:
     name: Verify Windows release policy
     runs-on: ubuntu-latest

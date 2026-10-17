@@ -1,6 +1,9 @@
 # macOS playback port plan
 
-Status: proposed, 2026-10-17. Planning only; nothing here is implemented.
+Status: implementation in progress, 2026-10-17. See the
+[execution record](macos-port-progress.md) for integrated slices, evidence,
+open product decisions, and acceptance gates. Unresolved proposals below
+remain proposals.
 Base: `main` at `022b05aa`, whose tree is identical to `cleanup` at `b00478bc`.
 
 This plan builds on the existing authorities and proposes ways to resolve
