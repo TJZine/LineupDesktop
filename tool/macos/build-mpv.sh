@@ -217,6 +217,7 @@ stamp_value() {
     if [[ "$name" == MPV ]]; then
       cat "$patch_dir"/*.patch
     fi
+    component_patch_sum "$name"
   } | shasum -a 256 | cut -d' ' -f1
 }
 stage_done() {
@@ -246,14 +247,35 @@ fetch_archive() {
     die "SHA-256 mismatch for $file: expected $sha, got $actual"
   local dest="$src_root/$(archive_dir "$name")"
   local marker="$dest/.lineup-sha256"
-  if [[ -f "$marker" && "$(cat "$marker")" == "$sha" ]]; then
+  local identity="$sha $(component_patch_sum "$name")"
+  if [[ -f "$marker" && "$(cat "$marker")" == "$identity" ]]; then
     return
   fi
   rm -rf "$dest" "$dest.tmp"
   mkdir -p "$dest.tmp"
   tar -xf "$file" -C "$dest.tmp" --strip-components 1
-  printf '%s\n' "$sha" > "$dest.tmp/.lineup-sha256"
+  local patch
+  for patch in $(component_patches "$name"); do
+    log "Applying $(basename "$patch")"
+    patch -p1 --quiet --forward -d "$dest.tmp" < "$patch"
+  done
+  printf '%s\n' "$identity" > "$dest.tmp/.lineup-sha256"
   mv "$dest.tmp" "$dest"
+}
+# Archive components may carry a patch series in tool/macos/NAME-patches/
+# (for example ffmpeg-patches/), applied in order after extraction.
+component_patches() {
+  local dir="$script_dir/$(tr '[:upper:]' '[:lower:]' <<<"$1")-patches"
+  [[ "$1" != MPV && -d "$dir" ]] && ls "$dir"/*.patch 2>/dev/null || true
+}
+component_patch_sum() {
+  local patches
+  patches=$(component_patches "$1")
+  if [[ -n "$patches" ]]; then
+    cat $patches | shasum -a 256 | cut -d' ' -f1
+  else
+    echo none
+  fi
 }
 archive_dir() {
   local version_ref="${1}_VERSION"
@@ -420,6 +442,7 @@ build_moltenvk() {
   (cd "$src" && XCODE_XCCONFIG_FILE="$work/bin/xcode.xcconfig" \
     xcodebuild build -quiet -project MoltenVKPackaging.xcodeproj \
     -scheme "MoltenVK Package (macOS only)" -destination generic/platform=macOS \
+    -derivedDataPath "$work/moltenvk-derived" \
     MACOSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET")
   local dylib="$src/Package/Release/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib"
   [[ -f "$dylib" ]] || die "MoltenVK build did not produce $dylib"
@@ -674,7 +697,9 @@ build_dist() {
   done
 
   cp -R "$prefix/include/mpv" "$dist/include/mpv"
-  cp "$patch_dir"/*.patch "$dist/patches/"
+  mkdir -p "$dist/patches/mpv" "$dist/patches/ffmpeg"
+  cp "$patch_dir"/*.patch "$dist/patches/mpv/"
+  cp $(component_patches FFMPEG) "$dist/patches/ffmpeg/"
 
   local component dir entry
   for component in "${license_components[@]}"; do
@@ -689,7 +714,31 @@ build_dist() {
   printf '%s\n' "This software is based in part on the work of the Independent JPEG Group." \
     >> "$dist/licenses/ffmpeg/IJG-NOTICE.txt"
 
+  generate_notices
   write_build_info > "$dist/BUILD-INFO.txt"
+}
+
+# Writes licenses/COMPONENT/NOTICES.txt for every built component from the
+# files it actually compiled (tool/macos/collect-notices.py), and fails if a
+# compiled file carries a GPL-only header.
+generate_notices() {
+  local name build extra
+  local moltenvk_archives="$(moltenvk_src)/External/build/Release"
+  for name in mpv ffmpeg libplacebo glslang moltenvk openssl curl lcms2 dav1d \
+      freetype fribidi harfbuzz libass; do
+    extra=()
+    case "$name" in
+      moltenvk) build="$work/moltenvk-derived"
+        extra=(--archive "$moltenvk_archives/SPIRVCross.xcframework/macos-arm64_x86_64/libSPIRVCross.a"
+          --archive "$moltenvk_archives/SPIRVTools.xcframework/macos-arm64_x86_64/libSPIRVTools.a") ;;
+      *) build="$work/$name" ;;
+    esac
+    mkdir -p "$dist/licenses/$name"
+    python3 -I "$script_dir/collect-notices.py" --component "$name" \
+      --source "$(license_source_dir "$name")" --build "$build" \
+      ${extra[@]+"${extra[@]}"} --fail-on-gpl \
+      --out "$dist/licenses/$name/NOTICES.txt" | tee -a "$dist/licenses/NOTICES-SUMMARY.txt"
+  done
 }
 
 write_build_info() {
@@ -697,8 +746,8 @@ write_build_info() {
   echo "Pin file SHA-256: $(sha256_of "$lock_file")"
   echo "Patches:"
   local patch
-  for patch in "$patch_dir"/*.patch; do
-    echo "  $(basename "$patch") $(sha256_of "$patch")"
+  for patch in "$patch_dir"/*.patch $(component_patches FFMPEG); do
+    echo "  $(basename "$(dirname "$patch")")/$(basename "$patch") $(sha256_of "$patch")"
   done
   echo "Sources:"
   local name version_ref url_ref sha_ref git_ref commit_ref license_ref
@@ -767,7 +816,9 @@ stage_verify() {
 
   log "verify ($arch): no build-machine paths in shipped files"
   local hits
-  hits=$(LC_ALL=C grep -rlaF -e "$out_dir" -e "$repo_root" -e "/Users/" "$dist" || true)
+  hits=$(LC_ALL=C grep -rlaF -e "$out_dir" -e "$repo_root" -e "/Users/" \
+    -e "$HOME" -e "/private/var/folders" -e "/var/folders/" -e "/private/tmp" \
+    "$dist" || true)
   [[ -z "$hits" ]] || verify_fail "build-machine paths in: $(tr '\n' ' ' <<<"$hits")"
 
   log "verify ($arch): license and configuration invariants"
@@ -820,6 +871,19 @@ stage_verify() {
   fi
   if grep '^loaded: ' <<<"$licenses" | grep -v "^loaded: $dist/lib/\|^loaded: $smoke" >/dev/null; then
     verify_fail "a library outside dist/$arch/lib was loaded"
+  fi
+  # The configure line recorded in the shipped libavcodec (the build-tree
+  # headers above are the primary check; this one reads the binary).
+  local shipped_config flag
+  shipped_config=$(sed -n 's/^avcodec_configuration: //p' <<<"$licenses")
+  for flag in --disable-gpl --disable-version3 --disable-nonfree \
+      --disable-autodetect --disable-protocols \
+      "--enable-protocol='file,crypto,data,http,https,httpproxy,tcp,tls'"; do
+    [[ " $shipped_config " == *" $flag "* ]] ||
+      verify_fail "shipped libavcodec was not configured with $flag"
+  done
+  if grep -Eq -- '--enable-(gpl|version3|nonfree)( |$)' <<<"$shipped_config"; then
+    verify_fail "shipped libavcodec enables gpl, version3 or nonfree"
   fi
 
   $failed && die "runtime verification failed for $arch"
