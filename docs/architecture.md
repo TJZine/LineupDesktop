@@ -49,13 +49,13 @@ The libmpv mechanics behind the protocol live in the platform-neutral
 the bounded command queue and worker, load/stop/track correlation, the bounded
 event queue and generation filtering, token handling, and telemetry encoding.
 A platform adapter owns the channel and codec conversion, presentation, and
-window lifecycle; the Windows adapter is `windows/runner/native_player.*`.
+window lifecycle; the Windows adapter is `windows/runner/native_player.*` and
+the macOS adapter is `macos/Runner/NativePlayer/LineupNativePlayer.*`.
 
-macOS is a development surface; native playback is not yet implemented.
-A future backend must meet the protocol and the [macOS decision and presentation
-obligations](code-quality-implementation-plan.md#9-macos-strategy-and-deferred-port-backlog).
-The following section describes the current Windows implementation, not a
-requirement to copy Win32 mechanisms to another platform.
+macOS is not yet a release platform; the [port plan](macos-port-plan.md) owns
+its decisions and remaining packages. The following section describes the
+Windows implementation, not a requirement to copy Win32 mechanisms to another
+platform. The macOS presentation is summarized after it.
 
 ## Windows presentation and ownership
 
@@ -160,6 +160,39 @@ is emergency cleanup, not the normal path. See
 [Windows adapter](../windows/runner/native_player.cpp), and
 [runner message handling](../windows/runner/flutter_window.cpp).
 
+## macOS presentation and ownership
+
+The Swift runner (`macos/Runner/MainFlutterWindow.swift`) makes the window and
+the `FlutterViewController` background clear and installs a container view
+controller. Its flipped, passive, black video host view fills the content area
+below the transparent `FlutterView`. The Objective-C++ adapter owns a
+`PlayerCore` and implements its `CoreHost`:
+
+- **Output:** `PrepareOutput` adds a passive `CAMetalLayer`-backed view to the
+  host and passes the layer as `wid` with `gpu-next`, Vulkan (MoltenVK),
+  `macvk`, and `target-colorspace-hint=yes`. The runtime's embedding patch
+  renders into that layer and reads `drawableSize` each frame. MoltenVK sets
+  the layer's color space, EDR, and HDR metadata from libplacebo's swapchain
+  choice; the adapter does not drive HDR state.
+- **Rectangle:** logical top-left points map directly to the flipped host;
+  `contentsScale` and `drawableSize` follow the backing scale, with implicit
+  animations disabled. The layer is hidden for a zero rectangle and while the
+  window is minimized or occluded; a hidden layer also stops mpv rendering,
+  but not playback. The frame never becomes empty, because MoltenVK derives
+  the swapchain extent from the layer bounds even while it is hidden.
+- **Threads:** worker wakeups hop to the main queue through a weak adapter
+  reference; every core and AppKit call runs on the main thread.
+- **Fullscreen:** native `toggleFullScreen:`, completed from the window's
+  did-enter/did-exit notifications. A toggle AppKit does not start within one
+  second, or a request not settled within five, fails with `window_error`.
+- **Lifetime:** window close and application termination call
+  `PlayerCore::Shutdown()` synchronously: stop accepting commands, terminate
+  libmpv on the worker, join it, then remove the layer. Asynchronous
+  `applicationShouldTerminate:` sequencing and the native fullscreen event are
+  port package M3.
+- **Display matching:** always reported unavailable (`unsupported_api`), as
+  [the protocol](native-player-protocol.md#macos-backend) records.
+
 ## Implemented now
 
 - Root Flutter project targeting only macOS and Windows.
@@ -181,8 +214,9 @@ is emergency cleanup, not the normal path. See
   Channels, Settings and Diagnostics, and an immersive shell for Guide and
   Player. The immersive Lineup menu calls the same route owner; it is not a
   second navigation system.
-- The Dart native-player seam and an explicit macOS unsupported development
-  backend. It never reports successful playback.
+- The Dart native-player seam. Windows and macOS use the method-channel
+  backend; other platforms use an explicit unsupported backend that never
+  reports successful playback.
 - A Windows C++ libmpv owner, native child presentation, command/property/event
   channel, track projection, decoder/output and quality/HDR observations,
   fullscreen/resize/minimize handling, and clean recreation controls.

@@ -1,0 +1,10 @@
+// Compile the real adapter in the unhosted tests, without launching Flutter.
+#include "../Flutter/ephemeral/Flutter-Generated.xcconfig"
+#include "../Runner/Configs/NativePlayer.xcconfig"
+
+SWIFT_OBJC_BRIDGING_HEADER =
+CLANG_ENABLE_OBJC_ARC = YES
+// Flutter keeps both host architectures in the darwin-x64 XCFramework.
+FRAMEWORK_SEARCH_PATHS = $(inherited) "$(FLUTTER_ROOT)/bin/cache/artifacts/engine/darwin-x64/FlutterMacOS.xcframework/macos-arm64_x86_64"
+OTHER_LDFLAGS = $(inherited) -framework FlutterMacOS -framework Cocoa -framework QuartzCore
+LD_RUNPATH_SEARCH_PATHS = $(inherited) "$(FLUTTER_ROOT)/bin/cache/artifacts/engine/darwin-x64/FlutterMacOS.xcframework/macos-arm64_x86_64" "$(LINEUP_MPV_RUNTIME)/lib"

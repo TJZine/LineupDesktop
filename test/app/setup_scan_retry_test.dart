@@ -297,7 +297,7 @@ Future<void> _showSetup(WidgetTester tester, _ScanFixture fixture) async {
       builder: LineupCanvas.builder,
       home: LineupShell(
         controller: fixture.controller,
-        player: createPlatformNativePlayer(isWindows: false, isMacOS: true),
+        player: createPlatformNativePlayer(isWindows: false, isMacOS: false),
       ),
     ),
   );

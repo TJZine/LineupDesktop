@@ -2,6 +2,7 @@
 #include "display_guardian.h"
 
 #include "encodable_value_conversion.h"
+#include "player_core/platform_arguments.h"
 
 #include <algorithm>
 #include <chrono>
@@ -124,7 +125,7 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
     if (!SetVideoRect(*argument_map)) {
-      result->Error("invalid_argument", "Valid finite video bounds are required.");
+      result->Error("invalid_argument", lineup::player::kInvalidVideoRectMessage);
       return;
     }
   } else if (method == "setFullscreen") {
@@ -154,20 +155,18 @@ void WindowsNativePlayer::SendEvent(const ValueMap& event) {
 
 bool WindowsNativePlayer::SetDisplayMatching(const ValueMap* arguments,
                                              std::string& error) {
-  const auto revision = arguments
-      ? lineup::player::AsInt(lineup::player::Find(*arguments, "revision"))
-      : std::nullopt;
-  const auto* session = lineup::player::FindBool(arguments, "session");
-  const auto* desired = lineup::player::FindString(arguments, "desired");
-  if (!revision || *revision < 0 || !session || !desired ||
-      (*desired != "hdr" && *desired != "sdr" && *desired != "unknown")) {
-    error = "A valid display matching request is required.";
+  using lineup::player::DisplayDesire;
+  const auto request = lineup::player::ParseDisplayMatchingArguments(arguments);
+  if (!request) {
+    error = lineup::player::kInvalidDisplayMatchingMessage;
     return false;
   }
-  const auto state = *desired == "hdr" ? lineup::DisplayState::hdr :
-      *desired == "sdr" ? lineup::DisplayState::sdr : lineup::DisplayState::unknown;
-  if (!display_->Submit({*revision, *session, state})) {
-    error = "Display revision must strictly increase.";
+  const auto state = request->desired == DisplayDesire::hdr ? lineup::DisplayState::hdr :
+      request->desired == DisplayDesire::sdr ? lineup::DisplayState::sdr :
+                                               lineup::DisplayState::unknown;
+  // The display controller orders revisions inside its own request state.
+  if (!display_->Submit({request->revision, request->session, state})) {
+    error = lineup::player::kStaleDisplayRevisionMessage;
     return false;
   }
   return true;
@@ -236,24 +235,17 @@ void WindowsNativePlayer::OnDisposeRequested() {
 }
 
 bool WindowsNativePlayer::SetVideoRect(const ValueMap& arguments) {
-  using lineup::player::AsNumber;
-  using lineup::player::Find;
-  const auto left = AsNumber(Find(arguments, "left"));
-  const auto top = AsNumber(Find(arguments, "top"));
-  const auto width = AsNumber(Find(arguments, "width"));
-  const auto height = AsNumber(Find(arguments, "height"));
-  const auto scale = AsNumber(Find(arguments, "scale"));
-  if (!left || !top || !width || !height || !scale ||
-      !std::isfinite(*left) || !std::isfinite(*top) ||
-      !std::isfinite(*width) || !std::isfinite(*height) ||
-      !std::isfinite(*scale) || *width < 0 || *height < 0 || *scale <= 0) {
+  const auto rect = lineup::player::ParseVideoRectArguments(arguments);
+  if (!rect) {
     return false;
   }
   video_rect_ = {
-      static_cast<LONG>(std::lround(*left * *scale)),
-      static_cast<LONG>(std::lround(*top * *scale)),
-      static_cast<LONG>(std::lround((*left + std::max(0.0, *width)) * *scale)),
-      static_cast<LONG>(std::lround((*top + std::max(0.0, *height)) * *scale)),
+      static_cast<LONG>(std::lround(rect->left * rect->scale)),
+      static_cast<LONG>(std::lround(rect->top * rect->scale)),
+      static_cast<LONG>(
+          std::lround((rect->left + std::max(0.0, rect->width)) * rect->scale)),
+      static_cast<LONG>(
+          std::lround((rect->top + std::max(0.0, rect->height)) * rect->scale)),
   };
   video_rect_set_ = true;
   if (!video_host_) {

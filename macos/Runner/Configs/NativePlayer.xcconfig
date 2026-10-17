@@ -1,0 +1,22 @@
+// Runner target settings for the native player adapter and the shared
+// libmpv player core (native/player_core).
+//
+// LINEUP_MPV_RUNTIME is the prepared LGPL libmpv runtime directory, with
+// lib/ (the @rpath dylibs) and include/mpv/. It defaults to the repository's
+// runtime build output. Override it for a runtime elsewhere by setting
+// LINEUP_MPV_RUNTIME in the environment of `flutter build macos` or
+// xcodebuild, or in the untracked NativePlayer.local.xcconfig next to this
+// file.
+LINEUP_MPV_RUNTIME = $(LINEUP_MPV_RUNTIME:default=$(SRCROOT)/../build/macos-runtime/dist/arm64)
+#include? "NativePlayer.local.xcconfig"
+
+// The runtime provides an arm64 slice only; an x86_64 slice depends on the
+// open Intel-support decision (plan P3) and the runtime build (R1).
+ARCHS = arm64
+
+CLANG_CXX_LANGUAGE_STANDARD = c++17
+HEADER_SEARCH_PATHS = $(inherited) "$(SRCROOT)/../native"
+// Third-party headers: their documentation warnings are not ours to fix.
+SYSTEM_HEADER_SEARCH_PATHS = $(inherited) "$(LINEUP_MPV_RUNTIME)/include"
+OTHER_LDFLAGS = $(inherited) "$(LINEUP_MPV_RUNTIME)/lib/libmpv.2.dylib"
+SWIFT_OBJC_BRIDGING_HEADER = Runner/Runner-Bridging-Header.h

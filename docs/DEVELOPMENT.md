@@ -61,7 +61,7 @@ block unrelated portable work; report the specific unverified scenario.
 | Dart policy, models, async work | Pinned Flutter SDK; focused tests plus the relevant full format/analyze/test checks below | Deterministic contracts; no Xcode application build or Windows engine provisioning required |
 | Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the required alpha suite and optional local visual checks below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
 | Persistence or credentials | Controller/store/transport failure, rollback, scope-isolation, and secret-flow tests named in [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Deterministic recovery/currentness; OS credential storage and physical filesystem behavior need platform observation |
-| macOS development app | Xcode and macOS setup below; `flutter run -d macos` or `flutter build macos` as relevant | Development UI/runtime or build evidence; the macOS player explicitly reports unsupported playback |
+| macOS development app and player | Xcode, the libmpv runtime (`LINEUP_MPV_RUNTIME`), and macOS setup below; `flutter build macos`, the `RunnerTests` XCTests, and the real-protocol harness as relevant | Build, conversion/rect contract, and protocol-flow evidence; visual layering, HDR output, and fullscreen need a physical observation on a visible display |
 | Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing, repository-derived release inputs, production launch/exit contracts with fixture platform executables, and pinned policy inputs; no native Windows or package execution proof |
 | Native player contract / C++ integration | Dart adapter/coordinator tests, lifetime/currentness inspection, Windows C++ toolchain and prepared libmpv; `flutter build windows` | Contract and stock-engine compile/link proof; not a runnable or packageable Lineup player |
 | Patched engine / portable package | Full Windows provisioning below; release wrapper and [package acceptance](windows-native-validation.md#8-portable-package-acceptance) | Artifact-bound build/package checks; launch, media, HDR, layering, fullscreen, input, and support claims require [physical Windows acceptance](windows-native-validation.md) |
@@ -363,15 +363,78 @@ Player layouts and separate approval for structural proposals.
 For macOS application builds/runs, install Xcode and its command-line tools on
 macOS 12 or newer. Resolve relevant Xcode/macOS warnings from `flutter doctor`;
 those application prerequisites do not gate unrelated Dart checks. The
-application currently targets macOS 12.0. macOS is a development surface; native
-playback is not yet implemented. See [the protocol](native-player-protocol.md) and
-the [macOS backlog](open-obligations.md#macos-media-backlog).
+application currently targets macOS 12.0 on Apple silicon (arm64 only).
+macOS is not yet a release platform; the port plan is
+[macos-port-plan.md](macos-port-plan.md). The macOS player implements
+[the protocol](native-player-protocol.md) with the Objective-C++ adapter in
+`macos/Runner/NativePlayer/` on the shared core in `native/player_core/`.
+
+### libmpv runtime
+
+The Runner links the prepared LGPL libmpv runtime (the S2 build with the
+`CAMetalLayer` `--wid` embedding patch) and embeds its `lib/*.dylib` files into
+`Contents/Frameworks`, signed with the app's identity. The runtime location
+is the single build setting `LINEUP_MPV_RUNTIME`, defined in
+`macos/Runner/Configs/NativePlayer.xcconfig`. It defaults to
+`build/macos-runtime/dist/arm64` in the repository. The build fails early, with
+a message naming the path, when `include/mpv/client.h` or `lib/libmpv.2.dylib`
+is missing. To use a runtime elsewhere, either set it in the environment of
+the build:
+
+```sh
+LINEUP_MPV_RUNTIME=/path/to/macos-runtime/arm64 flutter build macos
+```
+
+or write `LINEUP_MPV_RUNTIME = /path/to/macos-runtime/arm64` in the untracked
+`macos/Runner/Configs/NativePlayer.local.xcconfig`, which takes precedence over
+the environment. Runtime provisioning, pinning, and App Store signing are
+package R1 of the port plan.
 
 ```sh
 flutter config --enable-macos-desktop
 flutter run -d macos
 flutter build macos
 ```
+
+### Native unit tests
+
+`macos/RunnerTests` holds unhosted XCTests for the Foundation/`Value`
+conversion and the video rectangle rules. They need an application build
+first (for the generated Flutter configuration) and the runtime setting:
+
+```sh
+flutter build macos --debug
+cd macos
+xcodebuild test -workspace Runner.xcworkspace -scheme Runner \
+  -destination 'platform=macOS' -only-testing:RunnerTests
+```
+
+### Real-protocol harness
+
+`test_driver/macos_native_harness.dart` is the synthetic `ui_harness.dart`
+composition with the real `MethodChannelNativePlayer` and local media. The app
+is sandboxed, so it can read media only inside its container. Copy test media
+there and pass absolute paths separated by `|`:
+
+```sh
+media="$HOME/Library/Containers/com.tjzine.lineupDesktop/Data/tmp/lineup-media"
+mkdir -p "$media" && cp sdr.mp4 hdr10.mp4 "$media/"
+flutter build macos --debug -t test_driver/macos_native_harness.dart \
+  "--dart-define=LINEUP_HARNESS_MEDIA=$media/sdr.mp4|$media/hdr10.mp4" \
+  --dart-define=LINEUP_HARNESS_EXERCISE=true
+LINEUP_PRESENTATION_LOG=1 \
+  "build/macos/Build/Products/Debug/Lineup Desktop.app/Contents/MacOS/Lineup Desktop"
+```
+
+Channel N plays media N modulo the list. With `LINEUP_HARNESS_EXERCISE=true`
+the harness loads each file in turn through the real player, with seek,
+volume, track selection, fullscreen, and video rectangle changes on the
+first, then stops. It prints every call outcome, state, telemetry change, and
+display report with a `[harness]` prefix, and never prints media paths.
+`LINEUP_PRESENTATION_LOG=1` makes the adapter log the video layer's color
+space, EDR, EDR metadata, drawable size, visibility, and the screen's EDR
+headroom whenever they change. Neither is evidence of visual correctness.
+HDR judgments need a physical observation on an unlocked, visible display.
 
 ## Windows native player
 

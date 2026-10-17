@@ -1,10 +1,9 @@
 # `lineup/native_player` protocol
 
 This document specifies the Dart/native boundary used by `NativePlayer`. The
-wire is platform-neutral even though the current native implementation uses
-libmpv and Windows presentation APIs. A future platform backend may implement
-the same Dart contract without copying the Windows implementation's private
-types.
+wire is platform-neutral. The Windows and macOS adapters implement it on the
+shared libmpv core in `native/player_core/`, each with its own presentation;
+neither copies the other's private types.
 
 The specification was cross-checked against:
 
@@ -15,6 +14,7 @@ The specification was cross-checked against:
 - `native/player_core/track_list_encoder.cpp`
 - `windows/runner/native_player.cpp` and `.h` (Windows adapter)
 - `windows/runner/display_dynamic_range.*`
+- `macos/Runner/NativePlayer/LineupNativePlayer.mm` (macOS adapter)
 
 ## Channel and call shape
 
@@ -43,7 +43,7 @@ The native result is `null` unless a result map is shown.
 | `pause` | None | `null` or `command_queue_full`. |
 | `seek` | `seconds: num`, finite and >= 0 | `null`, `invalid_argument`, or `command_queue_full`. |
 | `stop` | `stopId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `stopResult`. |
-| `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The native implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
+| `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
 | `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
 | `setVolume` | `volume: num`, finite and 0–100 inclusive | `null`, `invalid_argument`, or `command_queue_full`. |
@@ -272,9 +272,37 @@ policy and may be unavailable on another backend:
 A backend without equivalent information should report unavailable/unknown
 values truthfully (`DisplayMatchingSessionState.unavailable`, an appropriate
 `reason`, `route: none`, `activeColorMode: null` or `unknown`, and null
-telemetry facts) rather than fabricating Windows values. macOS currently uses
-the explicit unsupported backend; this document does not authorize a macOS
-media implementation.
+telemetry facts) rather than fabricating Windows values.
+
+## macOS backend
+
+`macos/Runner/NativePlayer/LineupNativePlayer.mm` implements this protocol on
+the shared core, with these platform-specific values:
+
+- `initialize` never returns `required_engine_unavailable`; the stock Flutter
+  macOS engine composites a transparent `FlutterView` over the video layer.
+- libmpv renders with `vo=gpu-next`, `gpu-api=vulkan`, `gpu-context=macvk`,
+  and `target-colorspace-hint=yes` into an adapter-owned `CAMetalLayer` passed
+  as `wid` (the runtime's embedding patch). HDR output is EDR on that layer,
+  selected by mpv from the content; there is no display mode switch.
+- `setDisplayMatching` validates its arguments and the strictly increasing
+  revision exactly as above, returns `null`, and queues a `display` report
+  for that revision with `session: unavailable`, `observed: unknown`,
+  `outcome: failed`, `wrote: false`, `owned: false`,
+  `reason: unsupported_api`, `route: none`, and `activeColorMode: null`. This
+  is `DisplayMatchingReport.unavailable(revision: r)`.
+- `setVideoRect` places the video in logical points with a top-left origin
+  (a flipped host view) and ignores `scale`, because AppKit views are in
+  points; the layer's `contentsScale` and `drawableSize` follow the window's
+  backing scale. Video is hidden for a zero rectangle and while the window is
+  minimized or occluded; the layer keeps a non-empty frame while hidden.
+- `setFullscreen` uses the window's native fullscreen. Nonmatching requests
+  complete after AppKit reports the transition. It fails with `window_error`
+  when AppKit does not start the transition within one second or complete
+  the request within five. A request for the window's current state succeeds
+  immediately, even when a transition is running or pending.
+- Closing the window or quitting synchronously completes disposal: commands
+  stop, libmpv terminates on its worker, then the video layer is removed.
 
 ## Dart/C++ differences recorded at this revision
 

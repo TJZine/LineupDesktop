@@ -633,8 +633,8 @@ ordering constraints, and independent packages can run in parallel.
 | S2 | Reproducible self-built runtime with the patch series (§4.4) | S1 patch drafted (done) | Build script, runtime identity, `macos-runtime.md` |
 | K1 | Extract the shared mpv core; Windows uses it with no behavior change | — (starts immediately) | `native/player_core/`, Windows tests green, a Windows acceptance item added to the batched pass |
 | K2 | Run the core contract tests on macOS (CMake + CTest, or an XCTest target) | K1 | Native tests in macOS CI |
-| M1 | macOS adapter: channel, codec, core wiring, display report `unavailable` | K1, S2 | Playback with audio, track and stop correlation |
-| M2 | macOS presentation and HDR (route chosen by S1) | S1, M1 | Video under Flutter with the Guide alpha and HDR output |
+| M1 | macOS adapter: channel, codec, core wiring, display report `unavailable` | K1, S2 | Playback with audio, track and stop correlation. **Implemented 2026-10-17**; the real-protocol harness passes initialize, load, replacement, seek, volume, track, stop, close, and quit |
+| M2 | macOS presentation and HDR (route chosen by S1) | S1, M1 | Video under Flutter with the Guide alpha and HDR output. **Implemented 2026-10-17**; layer HDR facts observed, visible-display layering, HDR/SDR switching, and fullscreen still to be observed |
 | M3 | Fullscreen protocol event and termination ordering (§4.6) | M1, D0 (P6) | Protocol doc updated; Windows and macOS both emit it |
 | U1 | Port Dart changes (§4.7) | D0 (P5), M3 for fullscreen | Factory switch, copy, capability-driven settings, ⌘ |
 | R1 | Runtime provisioning, App Store signing, `macos-runtime.md`, Licenses screen | S2, D0 (P3) | Reproducible signed build uploadable to App Store Connect |

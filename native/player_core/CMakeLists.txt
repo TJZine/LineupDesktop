@@ -50,6 +50,7 @@ function(lineup_player_core_settings TARGET)
 endfunction()
 
 add_library(lineup_player_core STATIC
+  "platform_arguments.cpp"
   "player_core.cpp"
   "track_list_encoder.cpp"
 )

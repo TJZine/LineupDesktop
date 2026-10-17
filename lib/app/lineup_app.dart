@@ -9,6 +9,8 @@ import '../ui/lineup_canvas.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
+// Only the Windows backend reports required_engine_unavailable (its
+// DirectComposition engine variant); the macOS backend never does.
 const _requiredEngineFailureMessage =
     'The required Lineup DirectComposition Flutter engine is not active.';
 
