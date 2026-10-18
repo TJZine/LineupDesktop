@@ -1454,3 +1454,27 @@ upgrade/subtree recreation needs isolated validation first. The same fresh-chat
 accessibility reviewer independently checked the durable evidence and privacy
 claims with no material discrepancies. Candidate real-app results will be
 recorded in the closing report; M-02/M-03 tests do not close M-04.
+
+### Post-audit combined gates and runtime blocker — 2026-10-18
+
+Reviewed product source `1b2f64f4eaf584807f70e668a5502ab088a54537` built cleanly
+as the real Release app through the canonical identity wrapper. Bundle manifest
+SHA-256: `d5417b6ae680ab203001791897321b053b6dd91c14818d71d160482eb900efce`.
+Final local canonical formatting, analyzer, 1,787 Dart tests and three portable
+core CTests passed. [Windows verification run 39163235848](https://github.com/TJZine/LineupDesktop/actions/runs/39163235848)
+passed both jobs, including the affected Dart suites, stock-engine Windows app
+build and all canonical native contract/authenticated-reference checks. Its
+`685eec76645510e59bdbc9f3dc542be73e62ebb3` snapshot differs from the product only
+in the narrowed CI workflow, independently checked before dispatch. It excludes
+release/packaging/signing jobs. No in-progress run was cancelled.
+
+Candidate real-app acceptance is blocked at the user-only Keychain handoff;
+a process sample confirms `SecItemCopyMatching` / `SecKeychainItemCopyContent`
+while startup waits. The handoff was requested; no credential bypass was used.
+The required corrected first-fullscreen-tune/actual pause checks, real 30-press
+sequence, Diagnostics/export identity and native AX confirmation remain open.
+The [closing report](handoffs/macos-post-audit-fix-report.md) records each item,
+review, evidence limits and a single consolidated human-only checklist. M-04
+remains unresolved with its exact evidence and attempted reduction. No Player
+layout, HDR/Dolby Vision picture-quality acceptance, main merge, distribution
+release, signing policy or engine code was changed.
