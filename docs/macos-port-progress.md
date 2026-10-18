@@ -727,3 +727,22 @@ Local handoff/progress-only commits are not published by this dispatch and have
 no product-input difference. This run must establish actual loader preparation
 and native-contract execution. Existing read-only CI observation continues;
 HDR investigation remains paused for the requested Opus handoff.
+
+Windows run `39095353188` successfully provisioned the pinned Vulkan loader and
+loaded both Vulkan and libmpv. Its native contract then reached a real assertion
+failure, `disposed owner permits immediate close`, rather than failing at
+process startup. Investigation found a pre-existing ordering defect:
+`BeginWindowClose` called `EndSession` (which marks display release pending)
+before checking already-completed shutdown, making immediate close race with
+the display worker. Independent review approved the exact three-file correction
+patch SHA-256 `beacc768d2746fcbfb88e50aa4dd93c45b499b5b87bfd79cfe44256bf01c5e04`.
+
+The completed-state guard now precedes new release work; the asynchronous tail
+and three-second timeout policy remain unchanged. The existing contract fixture
+waits for actual close readiness, consumes it once, separately establishes real
+display release, and retains immediate/repeated close assertions. It now forwards
+the actual timer parameter as production does. Source/whitespace checks pass;
+no Windows compiler/runtime is available locally, so actual hosted compilation
+and passing-after contract execution remain required. Only the three Windows
+files and controller record are integrated; concurrent Opus artifacts and all
+HDR investigation resources are excluded.

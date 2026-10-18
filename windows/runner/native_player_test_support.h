@@ -114,6 +114,12 @@ struct NativePlayerTestAccess {
   static bool Disposed(WindowsNativePlayer& player) {
     return CoreAccess::Disposed(player.core_) && !player.video_host_;
   }
+  static bool WindowCloseReady(const WindowsNativePlayer& player) {
+    return player.window_close_ready_;
+  }
+  static bool DisplayReleaseComplete(const WindowsNativePlayer& player) {
+    return player.display_->ReleaseComplete();
+  }
   static bool WorkerFinished(WindowsNativePlayer& player) {
     return CoreAccess::WorkerFinished(player.core_);
   }

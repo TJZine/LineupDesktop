@@ -366,10 +366,11 @@ bool WindowsNativePlayer::HandleWindowMessage(UINT message, WPARAM wparam) {
 }
 
 bool WindowsNativePlayer::BeginWindowClose() {
-  display_->EndSession();
+  // EndSession marks display work pending, even after a completed release.
   if (core_.disposed() && display_->ReleaseComplete()) {
     return true;
   }
+  display_->EndSession();
   window_close_requested_ = true;
   display_close_timeout_ = false;
   ::SetTimer(top_level_window_, kPlatformEventMessage, 3000, nullptr);
