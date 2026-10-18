@@ -1478,3 +1478,34 @@ review, evidence limits and a single consolidated human-only checklist. M-04
 remains unresolved with its exact evidence and attempted reduction. No Player
 layout, HDR/Dolby Vision picture-quality acceptance, main merge, distribution
 release, signing policy or engine code was changed.
+
+### Post-audit Release checks resumed after Keychain — 2026-10-18
+
+The user completed the pending authentication handoff. The unchanged real
+Release candidate `1b2f64f4` then passed its bounded checks: first-fullscreen
+tune reported Playing, native K held the paused position for 10.34 seconds and
+resumed advancing playback; the subsequent manual step tune retained correct
+state. Thirty native Page Down presses over 3.97 seconds moved channel 1 to 31,
+with native load IDs advancing only from 1 to 2. The regression separately
+checks every immediate displayed increment. Diagnostics technical details and
+its copied export showed the expected version and full built-source identity;
+the inspected export had no observed URL/token/private-path leak.
+
+Native AX snapshots now expose directory management/filter/row controls and
+named row menus, Player transport/window actions and Guide Earlier/Later.
+Studio rundown labels retain semantics-test evidence; spoken/native full-surface
+acceptance remains a human check. M-04 reproduced despite these repairs: 614
+bridge failures (373 pending-node, 241 removed-node), first after the initial
+fullscreen tune/overlay sequence. Some route snapshots recover, so native names
+appearing does not establish general AX health. The investigation now records
+this short production reproduction and retains the negative media-free attempt.
+No engine patch/reset workaround was applied. DVR was restored Off; native Quit
+completed libmpv shutdown. The closing report replaces its former Keychain
+blocker with these results and retains one consolidated human-only checklist.
+
+The fresh-chat accessibility reviewer independently reconciled the final runtime
+records, screenshots, native snapshots and report wording. It corrected the
+burst duration to the key-action record (3.972 seconds; capture timing is
+separate), then found no remaining material evidence or privacy discrepancies.
+Product/build inputs and bundle hashes remain identical to the CI-verified
+candidate; only evidence documents changed after its build.

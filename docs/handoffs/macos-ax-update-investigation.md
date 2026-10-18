@@ -2,8 +2,8 @@
 
 Status: **unresolved**. This follows the [macOS discovery audit](macos-app-audit-report.md).
 The Dart repairs for M-02/M-03 address directory semantics boundaries and icon
-names separately. They do not establish that M-04 is fixed. Real Release/native
-AX acceptance of candidate `1b2f64f4` was pending when this note was prepared.
+names separately. They do not establish that M-04 is fixed. The corrected
+Release candidate `1b2f64f4` subsequently reproduced M-04 as recorded below.
 
 ## Recorded failure and toolchain
 
@@ -26,6 +26,30 @@ including returning from Settings after enabling DVR and revealing controls.
 | Engine | `deb287481e3ce9468f3434937ced4240a70539ca` |
 | Host | arm64, macOS 27.0.1 (26A434) |
 | Original audit app | `platform/macos`, `fa1760872ffc69dd61644cb09e0b0a64a130f5f4`, Release |
+
+## Corrected-candidate production reproduction
+
+The unchanged real Release bundle at `1b2f64f4` reproduced the bridge failure:
+
+1. Complete startup with existing state; obtain the native Guide AX tree.
+2. Enter native fullscreen from Guide before any media load.
+3. Select a currently airing program, then reveal Now Playing with `I`.
+4. Inspect the native tree and stderr; the visible overlay remains rendered,
+   while the tree can collapse to its application container.
+5. Navigate through Settings/Channels and back to Player; some full trees recover,
+   including corrected icon names, but later transition errors continue.
+
+In `/tmp/lineup-audit/post-fix-app.log`, line 19 is the first rejected update
+(removed node 134); line 678 is the last (removed node 569). The completed run
+contains **614** errors: **373** pending-node and **241** removed-node failures.
+It exited through native Quit with completed libmpv shutdown. The first-tune
+status/pause fix passed separately; video playback did not establish AX health.
+Native directory, Player-return and Guide snapshots exposed the repaired
+controls between bursts. Thus M-02/M-03 had real effects while M-04 remained.
+
+This is a short reproducible **production sequence**, not a standalone engine
+reproducer. The media-free reduction below still returned a negative result;
+the first invalid semantics delta remains the missing discriminating evidence.
 
 ## Source evidence and limit
 
@@ -160,12 +184,12 @@ launched and supplies no additional native evidence.
 
 ## Follow-up proposal
 
-On the exact candidate after the Dart repairs, repeat the bounded production
-sequence with semantics enabled: playback, Guide open/close, management views,
-Settings DVR enable, Player return and controls reveal. Compare native tree
-contents and new bridge errors; widget tests alone cannot close M-04.
+The corrected-candidate run confirmed that the failure persists through playback,
+Guide/Player overlays and management navigation. The next useful evidence is an
+upstream-ready reduction with the first rejected delta; repeating the same broad
+route sweep would not identify its owner. Widget tests alone cannot close M-04.
 
-If failure persists, prepare an upstream Flutter report with the identities,
+Prepare an upstream Flutter investigation draft with the identities,
 sanitized error strings and sequence above. Capture the semantics delta immediately
 before the **first** rejected native update on synthetic content: node IDs,
 parent/child ordering, roles and flags, with all labels scrubbed. Reduce that
