@@ -7297,7 +7297,105 @@ void main() {
     expect(player.stops, 2);
   });
 
-  test('failed channel replacement retains the prior channel', () async {
+  for (final forward in [false, true]) {
+    testWidgets(
+      'channel step after a failed direct tune starts from the displayed Retry target: forward=$forward',
+      (tester) async {
+        final lineup = _TestLineup(count: 4);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = _SecondLoadFailurePlayer(
+          failure: const PlayerUnavailable('Offline'),
+        );
+        addTearDown(player.close);
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+        final initial = coordinator.tune('channel-0');
+        await tester.pump();
+        expect(await initial, isTrue);
+        final failed = coordinator.tune('channel-2');
+        await tester.pump();
+        expect(await failed, isFalse);
+        expect(lineup.currentChannelId, 'channel-0');
+        expect(coordinator.currentChannel?.id, 'channel-2');
+        expect(coordinator.tuning, isFalse);
+        expect(coordinator.overlay, PlayerOverlay.error);
+
+        final step = forward
+            ? coordinator.nextChannel()
+            : coordinator.previousChannel();
+        final target = forward ? 'channel-3' : 'channel-b';
+        expect(coordinator.currentChannel?.id, target);
+        await tester.pump(const Duration(milliseconds: 250));
+        await step;
+        expect(lineup.currentChannelId, target);
+        expect(coordinator.currentChannel?.id, target);
+        expect(lineup.lastPlaybackItemId, forward ? 'program-3' : 'program-1');
+        coordinator.dispose();
+      },
+    );
+  }
+
+  test('superseding failure presents the latest requested channel and Retry tunes it', () async {
+    final lineup = _TestLineup(count: 3, failSecondPlaybackRequest: true);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingEventPlayer();
+    addTearDown(player.close);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    final errorChannels = <String?>[];
+    coordinator.addListener(() {
+      if (coordinator.error != null) {
+        errorChannels.add(coordinator.currentChannel?.id);
+      }
+    });
+
+    final obsolete = coordinator.tune('channel-b');
+    await player.firstLoadStarted.future;
+    final newest = coordinator.tune('channel-2');
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(coordinator.error, isNull);
+    player.releaseFirstLoad.completeError(StateError('obsolete load failed'));
+    expect(await Future.wait([obsolete, newest]), [isFalse, isFalse]);
+
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(coordinator.canRetry, isTrue);
+    expect(errorChannels, isNotEmpty);
+    expect(errorChannels, everyElement('channel-2'));
+    expect(coordinator.currentChannel?.id, 'channel-2');
+    expect(coordinator.currentProgram?.channelId, 'channel-2');
+    expect(coordinator.nextProgram?.channelId, 'channel-2');
+
+    await coordinator.retry();
+    expect(lineup.lastPlaybackItemId, 'program-2');
+    expect(lineup.currentChannelId, 'channel-2');
+    expect(coordinator.currentChannel?.id, 'channel-2');
+    expect(coordinator.error, isNull);
+  });
+
+  test('failed replacement preserves committed selection and presents Retry target', () async {
     final lineup = _TestLineup(
       playbackParts: _parts(
         first: const Duration(hours: 2),
@@ -7327,6 +7425,12 @@ void main() {
     expect(player.stops, 2);
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.overlay, PlayerOverlay.error);
+    expect(coordinator.currentChannel?.id, 'channel-b');
+    expect(coordinator.currentProgram?.channelId, 'channel-b');
+    await coordinator.retry();
+    expect(lineup.currentChannelId, 'channel-b');
+    expect(coordinator.currentChannel?.id, 'channel-b');
+    expect(coordinator.error, isNull);
     await coordinator.stop();
     expect(player.stops, 3);
   });

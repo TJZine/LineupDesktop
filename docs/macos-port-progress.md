@@ -1424,3 +1424,18 @@ paused readiness and stale-load rejection. Fresh-chat adversarial review
 verified mpv coalescing behavior/platform bool conversion and found no material
 issues. Temporary state tracing was removed. Candidate Release reproduction,
 actual pause/resume and shared-core Windows CI remain pending combined checks.
+
+### Post-audit Q-03 — current error-slate identity (2026-10-18)
+
+Failed tunes retain the committed channel, but the slate previously read that
+old selection while Retry used the new request. Error presentation now derives
+channel/program/Up next from the same requested channel as Retry. Surfing from
+a settled error also starts from that visible target. Healthy playback keeps
+its loaded-program identity. Coordinator tests pass (297), covering late old
+native errors/load failures, newer failure identity, Retry and both step
+directions after a failed direct tune; all 120 PlayerView tests pass. Fresh-chat
+review `01a150ae-7c43-7840-b703-0f404ed44396` caught the error-surf origin
+inconsistency; its correction and regressions were re-reviewed with no remaining
+material findings. The earlier full Dart suite passed 1,785 tests; this final
+step-origin correction was then checked by the complete coordinator suite.
+Shared-Dart Windows CI and bounded real-app integration remain pending.

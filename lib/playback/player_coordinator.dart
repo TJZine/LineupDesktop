@@ -244,9 +244,15 @@ class PlayerCoordinator extends ChangeNotifier {
   PlayerTrackType? get pendingTrackType => _trackConfirmation.type;
   int? get pendingTrackId => _trackConfirmation.id;
   String? get trackSelectionError => _trackConfirmation.error;
+  // A failed tune keeps the committed selection intact. Its slate must show
+  // the requested channel that Retry will load, rather than that old selection.
+  String? get _requestedPresentationChannelId =>
+      _channelStepTargetId ?? (_error != null ? _retryChannelId : null);
+
   Channel? get currentChannel {
     final index =
-        _channelIndexById[_channelStepTargetId ?? lineup.currentChannelId];
+        _channelIndexById[_requestedPresentationChannelId ??
+            lineup.currentChannelId];
     return index == null ? null : _indexedChannels[index];
   }
 
@@ -270,7 +276,7 @@ class PlayerCoordinator extends ChangeNotifier {
       displayHoldActive ? PlayerState.loading : status.state;
 
   GuideProgram? get currentProgram {
-    final target = _channelStepTargetId;
+    final target = _requestedPresentationChannelId;
     if (target != null) {
       return _resolvingProgram ?? guide.currentProgram(target);
     }
@@ -281,7 +287,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   GuideProgram? get nextProgram {
-    final target = _channelStepTargetId;
+    final target = _requestedPresentationChannelId;
     if (target != null) return guide.nextProgram(target);
     final id = lineup.currentChannelId;
     final represented = _resolvingProgram ?? _active?.program;
@@ -1349,7 +1355,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (channels.isEmpty) return;
     if (_disposed) return;
     final target =
-        _channelStepTargetId ??
+        _requestedPresentationChannelId ??
         (_tuning ? _retryChannelId : null) ??
         lineup.currentChannelId;
     final index = _channelIndexById[target] ?? 0;
