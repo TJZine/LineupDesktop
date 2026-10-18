@@ -3612,6 +3612,24 @@ void main() {
       ),
       findsNothing,
     );
+    for (final tooltip in [
+      'Audio track: English — Original theatrical mix; Stereo; AAC',
+      'Audio track: Español; Latinoamérica; 5.1 surround; Dolby Digital Plus',
+    ]) {
+      await _showReachableTooltip(tester, tooltip);
+      final reachable = tester.semantics.simulatedAccessibilityTraversal();
+      expect(
+        reachable.where((node) => node.label == selectedLabel),
+        hasLength(1),
+      );
+      expect(
+        reachable.where((node) => node.label == alternateLabel),
+        hasLength(1),
+      );
+      Tooltip.dismissAllToolTips();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   }, semanticsEnabled: true);
@@ -3676,6 +3694,35 @@ void main() {
             .isSelected,
         Tristate.isTrue,
       );
+
+      for (final tooltip in [
+        'Subtitle track: English — Festival edition; SDH; SRT (text)',
+        'Subtitle track: English — Forced; PGS (image)',
+      ]) {
+        await _showReachableTooltip(tester, tooltip);
+        final reachable = tester.semantics.simulatedAccessibilityTraversal();
+        final confirmed = reachable.singleWhere(
+          (node) => node.label == confirmedLabel,
+        );
+        final pending = reachable.singleWhere(
+          (node) => node.label == '$requestedLabel Pending.',
+        );
+        expect(
+          confirmed.getSemanticsData().flagsCollection.isSelected,
+          Tristate.isTrue,
+        );
+        expect(
+          pending.getSemanticsData().flagsCollection.isSelected,
+          Tristate.isFalse,
+        );
+        expect(
+          pending.getSemanticsData().hasAction(SemanticsAction.tap),
+          isTrue,
+        );
+        Tooltip.dismissAllToolTips();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+      }
 
       final pendingNodeId = tester.getSemantics(pendingFinder).id;
       fixture.lineup.notifyListeners();
@@ -3743,6 +3790,18 @@ void main() {
     expect(data.flagsCollection.isButton, isTrue);
     expect(data.flagsCollection.isSelected, Tristate.isTrue);
     expect(data.hasAction(SemanticsAction.tap), isTrue);
+    await _showReachableTooltip(tester, 'Off');
+    final reachableOff = tester.semantics
+        .simulatedAccessibilityTraversal()
+        .singleWhere((node) => node.label == 'Select subtitle track: Off.');
+    expect(
+      reachableOff.getSemanticsData().flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
+    expect(
+      reachableOff.getSemanticsData().hasAction(SemanticsAction.tap),
+      isTrue,
+    );
     off.owner!.performAction(off.id, SemanticsAction.tap);
     await tester.pump();
     expect(fixture.native.selectedTracks, [(PlayerTrackType.subtitle, null)]);
@@ -5249,6 +5308,46 @@ void main() {
         ),
         findsOneWidget,
       );
+      final canonical = tester.semantics
+          .simulatedAccessibilityTraversal()
+          .singleWhere((node) => node.label.startsWith('Now playing.'))
+          .label;
+      final visualLabels = [
+        for (final member in cast.take(4)) ...[
+          member.name,
+          if (member.role != null) member.role!,
+        ],
+        tester
+            .widget<Text>(find.byKey(const Key('player-now-playing-title')))
+            .data!,
+        tester
+            .widget<Text>(find.byKey(const Key('player-now-playing-editorial')))
+            .data!,
+        tester
+            .widget<Text>(find.byKey(const Key('player-now-playing-summary')))
+            .data!,
+      ];
+      expect(
+        tester.semantics.simulatedAccessibilityTraversal().map(
+          (node) => node.label,
+        ),
+        isNot(anyElement(isIn(visualLabels))),
+      );
+      for (final message in [
+        'Alexander Maximilian Montgomery',
+        cast.first.role!,
+      ]) {
+        await _showReachableTooltip(tester, message);
+        expect(
+          tester.semantics.simulatedAccessibilityTraversal().where(
+            (node) => node.label == canonical,
+          ),
+          hasLength(1),
+        );
+        Tooltip.dismissAllToolTips();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+      }
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -6804,3 +6903,29 @@ Rect _drawnRect(WidgetTester tester, Finder finder) {
 
 Size _drawnSize(WidgetTester tester, Finder finder) =>
     _drawnRect(tester, finder).size;
+
+/// An excluded origin can still have a local node. Walk from the view's root
+/// through Flutter's accessibility traversal to prove the overlay is reachable.
+Future<void> _showReachableTooltip(WidgetTester tester, String message) async {
+  expect(
+    tester.semantics.simulatedAccessibilityTraversal().where(
+      (node) => node.label == message,
+    ),
+    isEmpty,
+  );
+  final tooltip = find.byWidgetPredicate(
+    (widget) => widget is Tooltip && widget.message == message,
+  );
+  expect(tooltip, findsOneWidget);
+  expect(tester.state<TooltipState>(tooltip).ensureTooltipVisible(), isTrue);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 200));
+  final overlay = tester.semantics.simulatedAccessibilityTraversal().where(
+    (node) => node.label == message,
+  );
+  expect(overlay, hasLength(1));
+  expect(
+    overlay.single.getSemanticsData().hasAction(SemanticsAction.tap),
+    isFalse,
+  );
+}

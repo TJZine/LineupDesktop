@@ -1652,3 +1652,25 @@ the old initializer made both failed-target and pending-preview regressions fail
 Targeted analysis passed. Fresh read-only adversarial review
 `mini_guide_review_v2` approved the two-file change with no material findings.
 Real-app and shared-code Windows checks are recorded separately after integration.
+
+
+## 2026-10-18 — Pro review follow-up: reachable static tooltip origins
+
+Standalone stock Release comparisons preceded application changes. The original
+permanent-exclusion control rejected Show; both reachable cast-style and canonical
+track-row structures passed ten message changes, exclusion/restoration and reopening
+with zero AX errors. Native row activation worked. Source and instructions live in
+`tool/macos/ax-tooltip-repro/static_origins.dart` and its README; private captures
+remain under `/tmp/lineup-audit/m04-static-origins/`.
+
+Now Playing keeps its complete accessible summary but excludes only redundant
+visual facts, leaving cast name/role tooltip origins reachable. Track tooltips now
+wrap the canonical actionable row rather than living inside its exclusion, including
+subtitle Off. Full hover information and Player geometry are retained. Four tests
+open cast/audio/subtitle/Off tooltips and check traversal from the accessibility
+root; all fail on the old structure and pass with the repair. Player 122/122 passed,
+targeted analysis and formatting passed. Fresh adversarial review `static_review_v2`
+approved source, tests, stock controls and evidence limits with no material findings.
+The investigation now records that Flutter's retained error string can suppress
+notifications after later successful updates; no engine source or upstream issue
+was changed. Integrated Release and Windows results follow separately.

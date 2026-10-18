@@ -248,3 +248,34 @@ A separate fresh review accepted the transition mitigation and its behavioral
 tests before source integration, with no blocking findings. Final evidence and
 GPT Pro handoff review checked the successful CI, runtime summaries and links,
 retaining the confirmed cast-hover failure as an open acceptance limit.
+
+
+## Pro review follow-up: static origins and recovery notifications
+
+The Pro review correctly identified an additional consequence of the pinned
+common desktop bridge's retained error string. `CommitUpdates` ignores the
+boolean result of `AXTree::Unserialize` in both its reparenting prepass and main
+update. Successful `Unserialize` does not clear the stored error. A later valid
+main update can mutate the tree but return before `OnAccessibilityEvent` and
+`event_generator_.ClearEvents`; the prepass can also stop on an old error. Thus
+message totals are neither independent rejection counts nor proof of recovery.
+The exact spoken consequences in historical Lineup runs remain unknown.
+
+The proposed upstream report should include the stock reproduction and five-delta
+fixture, plus a failure → valid update regression proving notification delivery
+through both paths. Failure handling should use each current boolean result,
+consulting the error string only to describe that failure. This recovery correction
+is separate from reconciling unreachable semantics records and does not itself fix
+the first rejection. No engine source was changed and no upstream issue was posted.
+
+Before application changes, the separate stock
+[`static_origins.dart`](../../tool/macos/ax-tooltip-repro/static_origins.dart)
+Release comparison established healthy native AX without a forced Dart handle.
+The default permanent-exclusion control rejected Show. Both repaired structures
+passed Show → ten message changes → Exclude → Change → Restore → Show with zero
+AX errors: a reachable tooltip outside a redundant visual leaf exclusion, and a
+tooltip outside an actionable canonical row's exclusion. The row's native AX
+activation incremented its counter. Full hover text and canonical labels remained
+present. These are topology/lifecycle controls, not a spoken VoiceOver assessment.
+Raw logs and AX snapshots are private under
+`/tmp/lineup-audit/m04-static-origins/`.

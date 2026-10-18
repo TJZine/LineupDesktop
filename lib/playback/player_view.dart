@@ -1375,54 +1375,65 @@ class _NowPlaying extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (size.width >= 700 && size.height >= 500) ...[
-                      SizedBox(
-                        key: const Key('player-now-playing-poster'),
-                        width: posterWidth,
-                        height: math.min(posterWidth * 1.5, maxHeight - 64),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: posterPath == null
-                              ? _ArtworkFallback(roles: roles)
-                              : _PlayerArtwork(
-                                  key: ValueKey((
-                                    artworkIdentity,
-                                    GuideArtworkKind.poster,
-                                    posterPath,
-                                  )),
-                                  future: controller.guide.artworkFor(program),
-                                  fit: BoxFit.cover,
-                                  fallback: _ArtworkFallback(roles: roles),
-                                ),
+                      ExcludeSemantics(
+                        child: SizedBox(
+                          key: const Key('player-now-playing-poster'),
+                          width: posterWidth,
+                          height: math.min(posterWidth * 1.5, maxHeight - 64),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: posterPath == null
+                                ? _ArtworkFallback(roles: roles)
+                                : _PlayerArtwork(
+                                    key: ValueKey((
+                                      artworkIdentity,
+                                      GuideArtworkKind.poster,
+                                      posterPath,
+                                    )),
+                                    future: controller.guide.artworkFor(
+                                      program,
+                                    ),
+                                    fit: BoxFit.cover,
+                                    fallback: _ArtworkFallback(roles: roles),
+                                  ),
+                          ),
                         ),
                       ),
                       SizedBox(width: dense ? 24 : 32),
                     ],
                     Expanded(
-                      child: ExcludeSemantics(
-                        child: SingleChildScrollView(
-                          key: const Key('player-now-playing-details'),
-                          primary: false,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (controller.lineup.settings.preferClearLogos &&
-                                  logoPath != null)
-                                _NowPlayingIdentity(
-                                  key: ValueKey((
-                                    artworkIdentity,
-                                    GuideArtworkKind.clearLogo,
-                                    logoPath,
-                                  )),
-                                  controller: controller,
-                                  program: program,
-                                  compact: dense,
-                                )
-                              else
-                                _NowPlayingTitle(item: item, compact: dense),
-                              if (editorial.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
+                      child: SingleChildScrollView(
+                        key: const Key('player-now-playing-details'),
+                        primary: false,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // The summary owns these visual facts. Keep the cast
+                            // tooltip origins outside any semantics exclusion.
+                            ExcludeSemantics(
+                              child:
+                                  controller.lineup.settings.preferClearLogos &&
+                                      logoPath != null
+                                  ? _NowPlayingIdentity(
+                                      key: ValueKey((
+                                        artworkIdentity,
+                                        GuideArtworkKind.clearLogo,
+                                        logoPath,
+                                      )),
+                                      controller: controller,
+                                      program: program,
+                                      compact: dense,
+                                    )
+                                  : _NowPlayingTitle(
+                                      item: item,
+                                      compact: dense,
+                                    ),
+                            ),
+                            if (editorial.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              ExcludeSemantics(
+                                child: Text(
                                   editorial,
                                   key: const Key(
                                     'player-now-playing-editorial',
@@ -1434,10 +1445,12 @@ class _NowPlaying extends StatelessWidget {
                                     dense: dense,
                                   ),
                                 ),
-                              ],
-                              if (badges.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                Wrap(
+                              ),
+                            ],
+                            if (badges.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              ExcludeSemantics(
+                                child: Wrap(
                                   key: const Key('player-now-playing-badges'),
                                   spacing: 8,
                                   runSpacing: 8,
@@ -1446,10 +1459,12 @@ class _NowPlaying extends StatelessWidget {
                                       _NowPlayingBadge(label: badge),
                                   ],
                                 ),
-                              ],
-                              if (item.summary case final summary?) ...[
-                                const SizedBox(height: 12),
-                                ConstrainedBox(
+                              ),
+                            ],
+                            if (item.summary case final summary?) ...[
+                              const SizedBox(height: 12),
+                              ExcludeSemantics(
+                                child: ConstrainedBox(
                                   constraints: const BoxConstraints(
                                     maxWidth: 900,
                                   ),
@@ -1467,17 +1482,17 @@ class _NowPlaying extends StatelessWidget {
                                         ),
                                   ),
                                 ),
-                              ],
-                              if (item.cast.isNotEmpty) ...[
-                                const SizedBox(height: 14),
-                                _NowPlayingCast(
-                                  controller: controller,
-                                  cast: item.cast,
-                                  dense: dense,
-                                ),
-                              ],
+                              ),
                             ],
-                          ),
+                            if (item.cast.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              _NowPlayingCast(
+                                controller: controller,
+                                cast: item.cast,
+                                dense: dense,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
@@ -1955,23 +1970,25 @@ class _NowPlayingCastColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox.square(
-          key: ValueKey('player-now-playing-cast-portrait-$index'),
-          dimension: diameter,
-          child: ClipOval(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: roles.elevatedSurface,
-                border: Border.all(color: roles.subtleBorder),
-                shape: BoxShape.circle,
+        ExcludeSemantics(
+          child: SizedBox.square(
+            key: ValueKey('player-now-playing-cast-portrait-$index'),
+            dimension: diameter,
+            child: ClipOval(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: roles.elevatedSurface,
+                  border: Border.all(color: roles.subtleBorder),
+                  shape: BoxShape.circle,
+                ),
+                child: portrait == null
+                    ? _CastFallback(index: index, roles: roles)
+                    : _CastPortrait(
+                        portrait: portrait,
+                        controller: controller,
+                        fallback: _CastFallback(index: index, roles: roles),
+                      ),
               ),
-              child: portrait == null
-                  ? _CastFallback(index: index, roles: roles)
-                  : _CastPortrait(
-                      portrait: portrait,
-                      controller: controller,
-                      fallback: _CastFallback(index: index, roles: roles),
-                    ),
             ),
           ),
         ),
@@ -1981,13 +1998,15 @@ class _NowPlayingCastColumn extends StatelessWidget {
           child: Tooltip(
             message: member.name,
             excludeFromSemantics: true,
-            child: Text(
-              displayName,
-              key: ValueKey('player-now-playing-cast-name-$index'),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.start,
-              style: nameStyle,
+            child: ExcludeSemantics(
+              child: Text(
+                displayName,
+                key: ValueKey('player-now-playing-cast-name-$index'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.start,
+                style: nameStyle,
+              ),
             ),
           ),
         ),
@@ -1997,14 +2016,17 @@ class _NowPlayingCastColumn extends StatelessWidget {
             width: width,
             child: Tooltip(
               message: role,
-              child: Text(
-                role,
-                key: ValueKey('player-now-playing-cast-role-$index'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.start,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: roles.secondaryText, fontSize: 14),
+              excludeFromSemantics: true,
+              child: ExcludeSemantics(
+                child: Text(
+                  role,
+                  key: ValueKey('player-now-playing-cast-role-$index'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.start,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: roles.secondaryText, fontSize: 14),
+                ),
               ),
             ),
           ),
@@ -2997,35 +3019,34 @@ class _TracksState extends State<_Tracks> {
                                                       ? _selectedRowKey
                                                       : null,
                                                   color: Colors.transparent,
-                                                  child: Semantics(
-                                                    label: pending
-                                                        ? '$semanticLabel Pending.'
-                                                        : semanticLabel,
-                                                    button: true,
-                                                    selected: selected,
-                                                    onTap: selectTrack,
-                                                    excludeSemantics: true,
-                                                    child: LineupRowSurface(
+                                                  child: Tooltip(
+                                                    message: tooltip,
+                                                    excludeFromSemantics: true,
+                                                    child: Semantics(
+                                                      label: pending
+                                                          ? '$semanticLabel Pending.'
+                                                          : semanticLabel,
+                                                      button: true,
                                                       selected: selected,
-                                                      child: ListTile(
-                                                        key: Key(
-                                                          off
-                                                              ? 'playback-track-off'
-                                                              : 'playback-track-${widget.type.name}-${track!.id}',
-                                                        ),
-                                                        autofocus: selected,
+                                                      onTap: selectTrack,
+                                                      excludeSemantics: true,
+                                                      child: LineupRowSurface(
                                                         selected: selected,
-                                                        minTileHeight: null,
-                                                        contentPadding:
-                                                            EdgeInsets.symmetric(
-                                                              horizontal: 12,
-                                                              vertical: 8,
-                                                            ),
-                                                        title: Tooltip(
-                                                          message: tooltip,
-                                                          excludeFromSemantics:
-                                                              true,
-                                                          child: Text(
+                                                        child: ListTile(
+                                                          key: Key(
+                                                            off
+                                                                ? 'playback-track-off'
+                                                                : 'playback-track-${widget.type.name}-${track!.id}',
+                                                          ),
+                                                          autofocus: selected,
+                                                          selected: selected,
+                                                          minTileHeight: null,
+                                                          contentPadding:
+                                                              EdgeInsets.symmetric(
+                                                                horizontal: 12,
+                                                                vertical: 8,
+                                                              ),
+                                                          title: Text(
                                                             title,
                                                             maxLines: 3,
                                                             overflow:
@@ -3042,47 +3063,49 @@ class _TracksState extends State<_Tracks> {
                                                                           .w500,
                                                                 ),
                                                           ),
-                                                        ),
-                                                        subtitle:
-                                                            metadata.isEmpty
-                                                            ? null
-                                                            : Text(
-                                                                metadataText,
-                                                                maxLines: 3,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                                softWrap: true,
-                                                                style: textTheme
-                                                                    .bodyMedium
-                                                                    ?.copyWith(
-                                                                      color:
-                                                                          supportingText,
-                                                                    ),
-                                                              ),
-                                                        trailing: SizedBox(
-                                                          width: 30,
-                                                          child: Center(
-                                                            child: pending
-                                                                ? SizedBox.square(
-                                                                    dimension:
-                                                                        18,
-                                                                    child: CircularProgressIndicator(
-                                                                      strokeWidth:
-                                                                          2,
-                                                                    ),
-                                                                  )
-                                                                : selected
-                                                                ? Icon(
-                                                                    Icons.check,
-                                                                    color: roles
-                                                                        .progressFill,
-                                                                    size: 24,
-                                                                  )
-                                                                : const SizedBox.shrink(),
+                                                          subtitle:
+                                                              metadata.isEmpty
+                                                              ? null
+                                                              : Text(
+                                                                  metadataText,
+                                                                  maxLines: 3,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                  softWrap:
+                                                                      true,
+                                                                  style: textTheme
+                                                                      .bodyMedium
+                                                                      ?.copyWith(
+                                                                        color:
+                                                                            supportingText,
+                                                                      ),
+                                                                ),
+                                                          trailing: SizedBox(
+                                                            width: 30,
+                                                            child: Center(
+                                                              child: pending
+                                                                  ? SizedBox.square(
+                                                                      dimension:
+                                                                          18,
+                                                                      child: CircularProgressIndicator(
+                                                                        strokeWidth:
+                                                                            2,
+                                                                      ),
+                                                                    )
+                                                                  : selected
+                                                                  ? Icon(
+                                                                      Icons
+                                                                          .check,
+                                                                      color: roles
+                                                                          .progressFill,
+                                                                      size: 24,
+                                                                    )
+                                                                  : const SizedBox.shrink(),
+                                                            ),
                                                           ),
+                                                          onTap: selectTrack,
                                                         ),
-                                                        onTap: selectTrack,
                                                       ),
                                                     ),
                                                   ),

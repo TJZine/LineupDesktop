@@ -75,6 +75,24 @@ transition guards deliberately preserve existing visual tooltips inside permanen
 content exclusions; they do not repair that separate path. Permanently setting
 TooltipVisibility to false there would remove the hover feature.
 
+## Static-origin repair comparison
+
+`static_origins.dart` is a separate stock-widget control. Copy it to the disposable
+project's `lib/main.dart` instead of `main.dart`. Its default puts a tooltip under
+a permanent exclusion, preserving the failing control. Build it with
+`--dart-define=REPRO_REACHABLE_ORIGIN=true` to place the tooltip outside the
+exclusion of its redundant visual text, beneath the canonical summary. Also add
+`--dart-define=REPRO_TRACK_ROW=true` to compare a tooltip around a canonical,
+actionable `Semantics(excludeSemantics: true)` row.
+
+Restart between variants and establish healthy native AX before Show. Both
+reachable-origin Release variants passed Show → ten message changes → Exclude →
+Change → Restore → Show with zero AX error messages. The row's accessible action
+also incremented its activation counter. The default rejected Show with an
+unreachable-node error. No forced semantics handle or engine modification was
+used. The standalone results justified applying equivalent structure to Lineup;
+they do not establish spoken output or integrated application acceptance.
+
 ## Captured boundary evidence
 
 [first-rejection.json](first-rejection.json) contains five traced deltas from the
