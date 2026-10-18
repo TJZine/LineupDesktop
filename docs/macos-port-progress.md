@@ -1018,3 +1018,51 @@ controller check confirmed `39098816614` had completed the patched-engine build
 and was compiling Lineup against it, with package upload still pending. Every
 other job remained successful. The run is still protected: no push or new
 dispatch until the controller verifies its terminal result.
+
+The fresh diagnostic isolated the missing-sample cause: CoreAudio ChannelMap
+initialization fails, then mpv successfully falls back to AVFoundation on the
+same load (48 kHz stereo and advancing audio/video timestamps). The cached
+`audio_output_error` is deferred detail for a later failed `END_FILE`; it does
+not represent ongoing failed playback. The old observer nevertheless retired
+its sample on that cache alone. Diagnostic runs remain failed timing attempts;
+there is no user-facing playback or performance acceptance claim from them.
+
+The controller authorized a narrow passive-observer correction: retain cached
+terminal-error detail, but retire samples on actual command/terminal/lifecycle
+failures rather than the mere presence of that detail. Regression proof must
+cover initial and explicit seek observations, retained later error provenance,
+and unchanged actual-error suppression. A new fresh independent review is
+required before integration. No audio-backend policy, error-cache clearing,
+HDR behavior or benchmark failure guard is changed to obtain timings.
+
+The narrow correction is now local commit `d116ad7a`. Fresh independent review
+chat `01a14dd0-57e4-7c53-829c-65c86d570266` found no material correctness or
+design issue across the four frozen files. The revised production-handler
+regression fails before the correction and all three portable native suites
+pass afterward. Later terminal errors still retain and publish their cached
+detail. Windows execution remains pending.
+
+The fresh worker's final disposable foreground smoke passed all four joins
+with matched landing observations, current load identities, healthy
+AVFoundation output, advancing audio/video and stable SDR/PQ routes. Computer
+use activated the exact running bundle through Finder; all rows recorded
+foreground state and fixed geometry. Both the driver and independently rerun
+standalone analyzer accepted the complete run, with no counted timing summary.
+Earlier failed smokes remain failed. Evidence:
+`/tmp/lineup-l2-fresh/benchmark-next/smoke03-report.md` and
+`runs/foreground-03/`, manifest SHA-256
+`91d14f236cd2507e4093e5e1a923b224dda9d5b28baa9ae9dbcb3c4399ed42e5`.
+This build includes `d116ad7a` plus a never-merge measurement probe. No counted
+synthetic or protected Plex run is released before Windows native/auth CI.
+The app exited and released the shared runtime resource.
+
+At 07:36 UTC on October 18, protected CI `39098816614` remained in progress.
+Its actual logs establish that the first engine build used Ninja 1.11.1 via
+depot_tools, while the next step selected Chocolatey Ninja 1.13.2. That command
+reported an old build-log version and began rebuilding the same 6,049-edge
+graph despite an unchanged `build.ninja`. Separate worker chat
+`01a14df1-7784-7001-8a1a-744b791ee9d1` (Sol medium) owns read-only diagnosis,
+a proposed repair in `/tmp/lineup-l2-ci-repair/`, and the terminal-result watch.
+It cannot edit the checkout, integrate, push, dispatch, cancel CI or use the
+app. Any accepted CI repair will be reviewed and committed separately from L2.
+The controller still owns the no-push/no-dispatch gate and Git integration.
