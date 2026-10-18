@@ -11,6 +11,7 @@ import socket
 import ssl
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -64,8 +65,47 @@ class Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
     block_on_close = False
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lock = threading.Lock()
+        self.failed = False
+        self.errors = []
+        self.errors_omitted = 0
+
+    def record_error(self, error, phase):
+        # Keep peer disconnects distinct from fixture faults. In particular,
+        # the wrong-CA client can close before sending any HTTP request.
+        if isinstance(error, (ConnectionResetError, BrokenPipeError, ssl.SSLEOFError)):
+            code = "peer_disconnect"
+        elif (phase == "tls_accept" and isinstance(error, ssl.SSLError) and
+              getattr(error, "reason", None) in ("TLSV1_ALERT_UNKNOWN_CA", "SSLV3_ALERT_BAD_CERTIFICATE")):
+            code = "certificate_rejected"
+        else:
+            code = "unexpected_error"
+        # Never include exception text, arbitrary class names, addresses, or
+        # traceback data: these can contain request URLs or credentials.
+        classes = (ConnectionResetError, BrokenPipeError, ssl.SSLEOFError,
+                   ssl.SSLError, TimeoutError, OSError, RuntimeError, ValueError)
+        category = next((kind.__name__ for kind in classes if isinstance(error, kind)), "Exception")
+        diagnostic = {"phase": phase, "code": code, "exception": category}
+        for name in ("errno", "winerror"):
+            value = getattr(error, name, None)
+            diagnostic[name] = value if type(value) is int else None
+        with self.lock:
+            if code == "unexpected_error":
+                self.failed = True
+            for entry in self.errors:
+                if all(entry[key] == value for key, value in diagnostic.items()):
+                    entry["count"] += 1
+                    break
+            else:
+                if len(self.errors) < 16:
+                    self.errors.append({**diagnostic, "count": 1})
+                else:
+                    self.errors_omitted += 1
+
     def handle_error(self, *_):
-        self.failed = True
+        self.record_error(sys.exc_info()[1], "handler")
 
     def get_request(self):
         connection, address = super().get_request()
@@ -74,6 +114,13 @@ class Server(http.server.ThreadingHTTPServer):
             return connection, address
         try:
             return self.context.wrap_socket(connection, server_side=True), address
+        except Exception as error:
+            connection.close()
+            self.record_error(error, "tls_accept")
+            # BaseServer consumes OSError from get_request, without calling
+            # handle_error. Record it above, including unexpected runtime
+            # faults, and let the listener continue without a raw traceback.
+            raise OSError("fixture_tls_accept_failed") from None
         except BaseException:
             connection.close()
             raise
@@ -141,10 +188,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Range", f"bytes {first}-{last}/{size}")
         self.end_headers()
         if send_body:
-            try:
-                self.wfile.write(body[first:last + 1])
-            except OSError:
-                pass
+            self.wfile.write(body[first:last + 1])
 
 def certificate(root, openssl):
     config = root / "leaf.cnf"
@@ -167,6 +211,23 @@ def certificate(root, openssl):
 
 def atom(name, body):
     return struct.pack(">I", len(body) + 8) + name.encode("ascii") + body
+
+
+def finish_servers(servers, threads):
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+    for thread in threads:
+        thread.join(timeout=3)
+        if thread.is_alive():
+            raise RuntimeError("server termination timed out")
+    # TLS accept runs on the listener thread and can record an error after
+    # the final per-case audit. Its completed sticky failure must still fail
+    # the matrix, even if every earlier row had a clean snapshot.
+    for server in servers:
+        with server.lock:
+            if server.failed:
+                raise RuntimeError("fixture_server_error")
 
 
 def main():
@@ -235,9 +296,7 @@ def matrix(args, nonzero_start):
             for transport in (context, context, None):
                 server = Server(("127.0.0.1", 0), Handler)
                 server.context = transport
-                server.failed = False
                 server.authenticated = len(servers) == 0
-                server.lock = threading.Lock()
                 server.requests = []
                 server.range_requests = 0
                 server.partial_responses = 0
@@ -293,7 +352,10 @@ def matrix(args, nonzero_start):
                             "B_token": any(token for _, token, _ in secondary),
                             "secondary_A_token": any(token for request, token, _ in a.requests if request != path),
                             "token_in_url": any(url for server in servers for _, _, url in server.requests),
-                            "server_error": any(server.failed for server in servers)}
+                            "server_error": any(server.failed for server in servers),
+                            "server_diagnostics": {name: [dict(entry) for entry in server.errors]
+                                                   for name, server in zip(("A", "B", "plain"), servers)},
+                            "server_diagnostics_omitted": sum(server.errors_omitted for server in servers)}
 
             def invoke(name, path, ca="ca.pem", mode=None):
                 for server in servers:
@@ -365,13 +427,7 @@ def matrix(args, nonzero_start):
                           not media_pass(result, fields, observed, True))
                 record({"case": "control-ignore-start-delayed", "pass": passed, **observed, **fields})
         finally:
-            for server in servers:
-                server.shutdown()
-                server.server_close()
-            for thread in threads:
-                thread.join(timeout=3)
-                if thread.is_alive():
-                    raise RuntimeError("server termination timed out")
+            finish_servers(servers, threads)
     expected = {name for name, *_ in cases} | {
         "reject-option-access-references", "reject-option-autoload-files", "untrusted-ca", "control-http-token"}
     if nonzero_start:
