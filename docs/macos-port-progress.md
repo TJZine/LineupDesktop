@@ -1509,3 +1509,44 @@ burst duration to the key-action record (3.972 seconds; capture timing is
 separate), then found no remaining material evidence or privacy discrepancies.
 Product/build inputs and bundle hashes remain identical to the CI-verified
 candidate; only evidence documents changed after its build.
+
+### M-04 standalone reduction and owner diagnosis — 2026-10-18
+
+A three-button stock Flutter app now reproduces M-04's removed-node rejection:
+Show tooltip → Exclude origin → Change tooltip message. Native AX is active and
+healthy before the sequence. The tooltip remains physically mounted after its
+traversal subtree is discarded, then emits an update for the unreachable text
+node. Flutter's common desktop accessibility bridge forwards that record to
+`ui::AXTree`, which rejects it rather than applying the unreachable-node discard
+rule. This is Flutter framework/bridge interoperability, not missing Lineup Dart
+labels or a custom semantics configuration. It is not established as macOS-only.
+
+The [source, instructions and sanitized delta fixture](../tool/macos/ax-tooltip-repro/README.md)
+and [investigation](handoffs/macos-ax-update-investigation.md) record the exact
+accepted-then-rejected sequence. Targeted analysis, formatting and Release build
+passed. A freshly generated stock runner reproduced the error with only the
+three-button source copied in: no tracing, native observer, media, plugins,
+custom animation, custom semantics node or forced activation. The reachable-tooltip
+message-change control passed. Plain exclusion without a later message change
+and exclusion without a shown tooltip also passed in the traced prototype.
+
+The animated retiring-tooltip reduction produced both logged error forms.
+Investigation also found that AXTree retains its error string and the bridge
+checks that string instead of the update's return value; earlier 1,508/614 totals
+are log-message counts, not independent-rejection counts. A separate forced
+semantics activation positive was identified as a confound and excluded.
+
+Two instrumented real Release runs and an unchanged Release control did not
+reproduce the historical short sequence during this follow-up. Thus the stock
+reproducer establishes the failure mechanism and runtime owner, while the exact
+first historical production delta and real-app acceptance remain open. No
+application workaround or engine patch was integrated. The investigation proposes
+an upstream report and a bounded, untested TooltipVisibility workaround experiment.
+No upstream issue was published. Product source remains unchanged; no shared
+Dart/core change or new Windows CI claim is involved. DVR and VoiceOver were
+restored Off, and the real app quit normally.
+
+Fresh independent adversarial review validated the fixture, stock-runner identity,
+runtime rejection, source ownership and privacy; no material issue remained.
+Its minor wording correction distinguishes the absence of custom animation from
+Tooltip's built-in fade. Exact historical production causality remains unclaimed.

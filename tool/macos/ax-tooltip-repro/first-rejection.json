@@ -1,0 +1,196 @@
+{
+  "description": "First five Dart semantics deltas from the standalone manual tooltip reproduction. Native accessibility enabled before the baseline snapshot. Labels, values, flags and rectangles omitted. Node IDs are ephemeral.",
+  "steps": [
+    "Enable native accessibility and capture baseline",
+    "Show tooltip",
+    "Exclude origin while tooltip remains mounted",
+    "Change tooltip message"
+  ],
+  "batches": [
+    {
+      "sequence": 1,
+      "source_line": 5,
+      "nodes": [
+        {
+          "id": 0,
+          "children": [
+            1
+          ],
+          "hitChildren": [
+            1
+          ],
+          "traversalParent": -1
+        },
+        {
+          "id": 1,
+          "children": [
+            2
+          ],
+          "hitChildren": [
+            2
+          ],
+          "traversalParent": -1
+        },
+        {
+          "id": 2,
+          "children": [
+            3
+          ],
+          "hitChildren": [
+            3
+          ],
+          "traversalParent": -1
+        },
+        {
+          "id": 3,
+          "children": [
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "hitChildren": [
+            8,
+            7,
+            6,
+            5,
+            4
+          ],
+          "traversalParent": -1
+        },
+        {
+          "id": 4,
+          "children": [],
+          "hitChildren": [],
+          "traversalParent": -1
+        },
+        {
+          "id": 5,
+          "children": [],
+          "hitChildren": [],
+          "traversalParent": -1
+        },
+        {
+          "id": 6,
+          "children": [],
+          "hitChildren": [],
+          "traversalParent": -1
+        },
+        {
+          "id": 7,
+          "children": [],
+          "hitChildren": [],
+          "traversalParent": -1
+        },
+        {
+          "id": 8,
+          "children": [],
+          "hitChildren": [],
+          "traversalParent": -1
+        }
+      ]
+    },
+    {
+      "sequence": 2,
+      "source_line": 7,
+      "nodes": [
+        {
+          "id": 1,
+          "children": [
+            2
+          ],
+          "hitChildren": [
+            9,
+            2
+          ],
+          "traversalParent": -1
+        },
+        {
+          "id": 9,
+          "children": [],
+          "hitChildren": [],
+          "traversalParent": 8
+        },
+        {
+          "id": 8,
+          "children": [
+            9
+          ],
+          "hitChildren": [],
+          "traversalParent": -1
+        }
+      ]
+    },
+    {
+      "sequence": 3,
+      "source_line": 8,
+      "nodes": [
+        {
+          "id": 9,
+          "children": [
+            10
+          ],
+          "hitChildren": [
+            10
+          ],
+          "traversalParent": 8
+        },
+        {
+          "id": 10,
+          "children": [],
+          "hitChildren": [],
+          "traversalParent": -1
+        },
+        {
+          "id": 8,
+          "children": [
+            9
+          ],
+          "hitChildren": [],
+          "traversalParent": -1
+        }
+      ]
+    },
+    {
+      "sequence": 4,
+      "source_line": 10,
+      "nodes": [
+        {
+          "id": 3,
+          "children": [
+            4,
+            5,
+            6,
+            7
+          ],
+          "hitChildren": [
+            7,
+            6,
+            5,
+            4
+          ],
+          "traversalParent": -1
+        }
+      ]
+    },
+    {
+      "sequence": 5,
+      "source_line": 12,
+      "nodes": [
+        {
+          "id": 10,
+          "children": [],
+          "hitChildren": [],
+          "traversalParent": -1
+        }
+      ]
+    }
+  ],
+  "first_native_rejection": {
+    "after_sequence": 5,
+    "source_line": 13,
+    "message": "10 will not be in the tree and is not the new root"
+  },
+  "capture_variant": "Instrumented manual prototype with an additional unused Reset button; final main.dart removes Reset and tracing."
+}

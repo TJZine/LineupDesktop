@@ -1,23 +1,72 @@
 # macOS accessibility update investigation — M-04
 
-Status: **unresolved**. This follows the [macOS discovery audit](macos-app-audit-report.md).
-The Dart repairs for M-02/M-03 address directory semantics boundaries and icon
-names separately. They do not establish that M-04 is fixed. The corrected
-Release candidate `1b2f64f4` subsequently reproduced M-04 as recorded below.
+Status: **Flutter runtime interoperability defect reproduced standalone; application
+workaround not implemented.** A small stock-widget sequence reproduces the same
+removed-node rejection as M-04. Its exact delta and rejecting owner are now known.
+The first historical production delta was not captured, so this does not attribute
+every historical message to that sequence or close real-app acceptance.
 
-## Recorded failure and toolchain
+## Conclusion and owning boundary
 
-The original local `/tmp/lineup-audit/app.log` contains **1,508** failures:
+A retained `Tooltip` can remain physically mounted after an ancestor
+`ExcludeSemantics` removes its origin from traversal. Changing the tooltip message
+then emits an update for its now-unreachable text node. Flutter's common desktop
+`AccessibilityBridge`, used by macOS, forwards that record to `ui::AXTree`, which
+rejects an unknown non-root node. It does not apply the documented discard rule
+for unreachable semantics nodes.
 
-- 1,218: `Nodes left pending by the update: <node id>`.
-- 290: `<node id> will not be in the tree and is not the new root`.
-- First, line 71: `Failed to update ui::AXTree, error: 2026 will not be in the tree and is not the new root`.
-- Last, line 2066: the same removed-node error for node 490.
+This is Flutter framework/native adapter interoperability, not an incorrect Lineup
+label, missing directory boundary, or application-owned semantics node. The
+reproducer uses supported stock widgets, with native accessibility already active
+and healthy. It needs no media, native player, custom animation, custom render object,
+forced Dart semantics handle, or startup race. The adapter is shared desktop
+code; this investigation does not claim the defect is exclusive to macOS.
 
-Every occurrence was logged from `flutter/shell/platform/common/accessibility_bridge.cc(114)`.
-Node IDs are ephemeral semantics identifiers. Raw logs remain local.
-The audit reproduced bursts during Guide/Player overlays and management navigation,
-including returning from Settings after enabling DVR and revealing controls.
+No application repair or engine patch was made. M-02/M-03's Dart repairs remain
+separate from this runtime failure.
+
+## Standalone reproduction and first rejection
+
+The [standalone source and instructions](../../tool/macos/ax-tooltip-repro/README.md)
+create a stock Flutter macOS project outside this repository. Activate native AX,
+confirm its healthy baseline, then select:
+
+1. **Show tooltip**.
+2. **Exclude origin**.
+3. **Change tooltip message**.
+
+The final three-button source contains no tracing. Release reproduced:
+
+```text
+[ERROR:flutter/shell/platform/common/accessibility_bridge.cc(114)] Failed to update ui::AXTree, error: 9 will not be in the tree and is not the new root
+```
+
+IDs vary. The earlier traced prototype had one additional unused Reset button;
+its [sanitized five-delta fixture](../../tool/macos/ax-tooltip-repro/first-rejection.json)
+records the exact first rejection:
+
+| Batch | Traversal state | Native result |
+| --- | --- | --- |
+| 1 | Complete root 0; origin 8 reachable | Accepted |
+| 2–3 | Tooltip overlay 9 and text 10 grafted under origin 8 | Accepted |
+| 4 | Parent 3 drops origin 8; nodes 8, 9, 10 become unreachable | Accepted |
+| 5 | Only tooltip text 10 updates, still unreachable | Rejected: node 10 is not in the tree |
+
+Before exclusion, text 10's traversal ancestry is
+`0 → 1 → 2 → 3 → 8 → 9 → 10`. Overlay 9 remains physically attached elsewhere:
+node 1 has hit-test children `[9, 2]` while its traversal children are `[2]`.
+Removing the origin therefore removes traversal reachability without physically
+detaching the overlay. Its subsequent dirty text record still reaches the engine.
+The retained traversal graph is complete and acyclic; the rejected batch adds no
+reachable missing child, cycle or duplicate parent. The initial native tree was
+established and four accepted batches preceded the rejection.
+
+The full animated reduction separately generated both the removed-node and
+pending-node error forms. Its initial full snapshot contained a complete root
+component plus disconnected tooltip nodes; the manual reduction above eliminates
+that timing requirement.
+
+## Toolchain and source evidence
 
 | Input | Identity |
 | --- | --- |
@@ -25,179 +74,123 @@ including returning from Settings after enabling DVR and revealing controls.
 | Framework | `abaf9c523780a608bd46686fd5e53740a07077f8` |
 | Engine | `deb287481e3ce9468f3434937ced4240a70539ca` |
 | Host | arm64, macOS 27.0.1 (26A434) |
-| Original audit app | `platform/macos`, `fa1760872ffc69dd61644cb09e0b0a64a130f5f4`, Release |
+| Product source during follow-up | `2496c45e`; app code unchanged since `1b2f64f4` |
 
-## Corrected-candidate production reproduction
+These are paths in the pinned Flutter checkout, not application code:
 
-The unchanged real Release bundle at `1b2f64f4` reproduced the bridge failure:
+- `packages/flutter/lib/src/widgets/raw_tooltip.dart:801–891`: the tooltip uses
+  `OverlayPortal` and its overlay carries semantics.
+- `packages/flutter/lib/src/widgets/overlay.dart:1833–1838`: overlay semantics can
+  disappear with the origin's semantics while the overlay remains visible.
+- `packages/flutter/lib/src/semantics/semantics.dart:4217–4269`: traversal grafting
+  and physical ancestry are distinct. `SemanticsNode.detach` at 3267–3313 walks
+  physical children. At 5064, `SemanticsOwner` serializes an attached dirty node;
+  traversal reachability is not a prerequisite there.
+- `engine/src/flutter/lib/ui/semantics.dart:1812–1815`: the public retention rule
+  discards nodes unreachable from root after an update; unchanged nodes need not
+  be resent.
+- `engine/src/flutter/shell/platform/common/accessibility_bridge.cc:50–124`:
+  `CommitUpdates` converts all supplied records and calls `AXTree::Unserialize`.
+  It does not discard this unreachable record before the stricter validator.
+- `engine/src/flutter/third_party/accessibility/ax/ax_tree.cc:1330–1350` rejects
+  the unknown non-root node. Lines 1779–1787 reject nodes left pending.
+- Android's `shell/platform/android/io/flutter/view/AccessibilityBridge.java:1582–1634`
+  and iOS's `shell/platform/darwin/ios/framework/Source/accessibility_bridge.mm:199–203`
+  explicitly traverse from root and remove unreachable objects. These paths are
+  relative to `engine/src/flutter/` and corroborate the retention rule.
 
-1. Complete startup with existing state; obtain the native Guide AX tree.
-2. Enter native fullscreen from Guide before any media load.
-3. Select a currently airing program, then reveal Now Playing with `I`.
-4. Inspect the native tree and stderr; the visible overlay remains rendered,
-   while the tree can collapse to its application container.
-5. Navigate through Settings/Channels and back to Player; some full trees recover,
-   including corrected icon names, but later transition errors continue.
+The grafted snapshot can have different physical hit-test and traversal ancestry.
+The specific native traversal-grafting documentation at `lib/ui/semantics.dart:1879–1887`
+permits that distinction; the framework's comment at `semantics.dart:4203–4209`
+limits its same-length assumption to web. The rejected node itself has both child
+lists empty. Classification rests on the accepted traversal history and the
+unreachable-node retention rule, not an assumption that physical and traversal
+ancestry must coincide.
 
-In `/tmp/lineup-audit/post-fix-app.log`, line 19 is the first rejected update
-(removed node 134); line 678 is the last (removed node 569). The completed run
-contains **614** errors: **373** pending-node and **241** removed-node failures.
-It exited through native Quit with completed libmpv shutdown. The first-tune
-status/pause fix passed separately; video playback did not establish AX health.
-Native directory, Player-return and Guide snapshots exposed the repaired
-controls between bursts. Thus M-02/M-03 had real effects while M-04 remained.
+There is also a logging defect: the bridge ignores `Unserialize`'s boolean return
+and checks the tree's stored error string, which `AXTree::Unserialize` does not
+clear on success. Repeated messages can therefore include a stale error. Counts
+below are **log messages**, not counts of independent invalid updates. Capturing
+the first rejection is essential.
 
-This is a short reproducible **production sequence**, not a standalone engine
-reproducer. The media-free reduction below still returned a negative result;
-the first invalid semantics delta remains the missing discriminating evidence.
+## Verification and controls
 
-## Source evidence and limit
+- Final source formatting and targeted Flutter analysis passed; Release compiled.
+  A fresh `flutter create` runner, copying only the final source, reproduced the
+  same rejection with no native observer, pass-through builder or native changes.
+- Final uninstrumented source: reachable tooltip Show → Change message control
+  produced zero AX errors; fresh Show → Exclude → Change produced the rejection.
+- Traced manual prototype: exclusion without a shown tooltip, and Show → Exclude
+  without a later message change, produced no rejection.
+- Plain synthetic Lineup routes, frequent synthetic playback updates, matching
+  native window/container, startup MaterialApp replacement, 60 clipping cycles,
+  and 60 tooltip show/hide cycles did not reproduce the failure.
+- A separate forced-`ensureSemantics` positive was rejected as production evidence:
+  it lost the initial native snapshot during late activation. The matched
+  unforced control completed with zero errors. The final manual reproduction has
+  no forced handle and starts from a healthy native tree.
+- Two instrumented real Release runs and an unchanged Release control did not
+  reproduce M-04 in this follow-up. Checks included the recorded fullscreen →
+  tune → Now Playing sequence; the instrumented runs also exercised route/DVR
+  transitions, directory navigation and superseding channel loads. The unchanged
+  control rules out tracing as the sole explanation for these negative results.
+  They do not invalidate earlier positive production evidence.
+- Native engine binary hash matched the earlier failing candidate. DVR was
+  restored Off. VoiceOver was restored Off after temporary activation controls.
+  The real app quit normally; raw captures remain local under `/tmp/lineup-audit/`.
 
-Paths below are relative to the pinned Flutter SDK's `engine/src/flutter/`:
+## Historical production evidence and limits
 
-- `shell/platform/common/accessibility_bridge.cc:50–124`: `CommitUpdates()`
-  computes reparent removals and ordered updates, calls `tree_->Unserialize(update)`,
-  clears pending updates, then logs the tree error and returns before dispatching
-  accessibility events. Line 114 emits the observed message.
-- The same file, lines 214–280, constructs reparent-removal and parent-before-child
-  updates.
-- `third_party/accessibility/ax/ax_tree.cc:1330–1350` rejects a node update whose
-  ID will not exist in the updated tree and is not its new root.
-- The same file, lines 1779–1787, rejects nodes left pending after an update.
+Original audit app `fa1760872ffc69dd61644cb09e0b0a64a130f5f4`, Release:
+`/tmp/lineup-audit/app.log` contains 1,508 messages (1,218 pending-node,
+290 removed-node). First at line 71: removed node 2026; last at 2066: removed
+node 490. All were emitted at `accessibility_bridge.cc(114)`.
 
-This locates the observed failure at the Flutter semantics-to-native AX boundary.
-It does not identify the first invalid delta, establish an engine-only cause, or
-link the directory/name issues causally to M-04. No engine patch was applied.
+Corrected candidate `1b2f64f4`, Release: `/tmp/lineup-audit/post-fix-app.log`
+contains 614 messages (373 pending-node, 241 removed-node), first at line 19
+(removed node 134), last at 678 (removed node 569). Its short observed sequence
+was native Guide AX capture → native fullscreen → current programme tune →
+Now Playing, followed by management navigation. Visible UI continued rendering;
+some AX snapshots collapsed to the application container, while other routes
+recovered. The first logged error followed fullscreen/media-surface activity.
 
-## Minimal attempted reduction — negative result
+These logs contain neither the first Dart delta nor native AX activation history.
+Lineup uses tooltip widgets and outgoing `ExcludeSemantics`, so the standalone
+sequence is relevant to its current UI. The evidence establishes the failure
+class and runtime ownership; it does not prove which historic tooltip/node or
+transition produced the first production rejection. M-04 remains open for that
+exact linkage and real-app acceptance. No private media data enters the fixture.
 
-A disposable Flutter macOS application forced semantics on and scheduled 200
-swaps, 350 ms apart, using 200 ms `AnimatedSwitcher` transitions. It retained the
-app's outgoing-child `ExcludeFocus(ExcludeSemantics(...))` pattern, a directory
-TextField/buttons and a tooltip-only icon, without media or production data.
-The formatted source below is the executed attempt, with formatting-only changes:
+The old forced-semantics 200-swap attempt had zero errors, but native bridge
+activation was not established. Its negative result is not an AX health control.
 
-```dart
-import 'dart:async';
+## Upstream report and bounded workaround proposal
 
-import 'package:flutter/material.dart';
+The source, toolchain identities, controls and five-delta fixture above are an
+upstream-ready report package for Flutter's desktop semantics adapter. Report
+that the adapter rejects a dirty node after its traversal subtree was discarded,
+while a stock Tooltip overlay remains physically attached. Include the separate
+stale-error logging behavior without treating every repeat as a new rejection.
+No upstream issue has been published.
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized().ensureSemantics();
-  runApp(const MaterialApp(home: Repro()));
-}
+The upstream correction must reconcile Flutter's retained/traversal semantics
+with AXTree, including unreachable records and retained subtrees. Suppressing
+unreachable framework records or adapting them in the bridge are upstream design
+choices. This round does not patch the engine or select that implementation.
 
-class Repro extends StatefulWidget {
-  const Repro({super.key});
-  @override
-  State<Repro> createState() => _ReproState();
-}
+A bounded application workaround experiment would coordinate
+`TooltipVisibility(visible: !excluded)` with the owner excluding an outgoing
+surface. It must preserve the explicit accessible names already added for M-03.
+It is **untested**, not an approved repair. Calling `dismissAllToolTips()` alone
+leaves a reverse-animation lifetime and may retain the same failure window.
+Any workaround requires its own regression, real-app check and independent review
+before integration. No Player layout change is proposed.
 
-class _ReproState extends State<Repro> {
-  int phase = 0;
-  late final Timer timer;
-  @override
-  void initState() {
-    super.initState();
-    timer = Timer.periodic(const Duration(milliseconds: 350), (_) {
-      setState(() => phase++);
-      if (phase == 200) timer.cancel();
-    });
-  }
+## Independent review
 
-  @override
-  void dispose() {
-    timer.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Stack(
-      children: [
-        const Center(child: Text('Background')),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          layoutBuilder: (currentChild, previousChildren) => Stack(
-            children: [
-              for (final child in previousChildren)
-                ExcludeFocus(child: ExcludeSemantics(child: child)),
-              if (currentChild != null) currentChild,
-            ],
-          ),
-          child: phase % 3 == 0
-              ? Center(key: ValueKey(phase), child: const Text('Player'))
-              : phase % 3 == 1
-              ? Center(
-                  key: ValueKey(phase),
-                  child: Column(
-                    children: [
-                      const TextField(
-                        decoration: InputDecoration(
-                          hintText: 'Search channels',
-                        ),
-                      ),
-                      for (int i = 0; i < 10; i++)
-                        FilledButton(
-                          onPressed: () {},
-                          child: Text('Channel $i'),
-                        ),
-                    ],
-                  ),
-                )
-              : Center(
-                  key: ValueKey(phase),
-                  child: IconButton(
-                    tooltip: 'Pause',
-                    onPressed: () {},
-                    icon: const Icon(Icons.pause),
-                  ),
-                ),
-        ),
-      ],
-    ),
-  );
-}
-```
-
-To recreate, create the disposable project, save the source above as `lib/main.dart`,
-then build and launch it. Use the pinned Flutter executable:
-
-```sh
-FLUTTER=/Users/tristan/.cache/lineup-flutter/3.47.7/flutter/bin/flutter
-"$FLUTTER" create --platforms=macos --project-name lineup_ax_repro \
-  --org dev.lineup.audit /tmp/lineup-audit/ax-repro
-cd /tmp/lineup-audit/ax-repro
-# Save the source above as lib/main.dart before building.
-"$FLUTTER" build macos --release
-open -n build/macos/Build/Products/Release/lineup_ax_repro.app \
-  --stdout /tmp/lineup-audit/ax-repro-open.log \
-  --stderr /tmp/lineup-audit/ax-repro-open.log
-```
-
-**Observed result: zero AXTree errors across the 200 scheduled transitions.** The
-app was stopped afterward. This attempt did not reproduce M-04 and establishes
-no fix or successful workaround. Original source and output remain local at
-`/tmp/lineup-audit/ax-repro/lib/overlay_attempt.dart`, `ax-repro-build.log` and
-`ax-repro-open.log`. A later static directory experiment was prepared but not
-launched and supplies no additional native evidence.
-
-## Follow-up proposal
-
-The corrected-candidate run confirmed that the failure persists through playback,
-Guide/Player overlays and management navigation. The next useful evidence is an
-upstream-ready reduction with the first rejected delta; repeating the same broad
-route sweep would not identify its owner. Widget tests alone cannot close M-04.
-
-Prepare an upstream Flutter investigation draft with the identities,
-sanitized error strings and sequence above. Capture the semantics delta immediately
-before the **first** rejected native update on synthetic content: node IDs,
-parent/child ordering, roles and flags, with all labels scrubbed. Reduce that
-transition into a media-free reproducible project. Describe the current minimal
-attempt explicitly as non-reproducing.
-
-A Flutter-version comparison or semantics-subtree recreation is a possible
-isolated workaround experiment after identifying the triggering transition;
-neither is established or applied here. Restart did not prevent recurrence in
-the audit. No engine patch, upstream publication or successful runtime acceptance
-is claimed by this investigation.
+A fresh adversarial read-only review checked all five changed files, the fixture
+against the raw five-delta trace, final stock-runner identity, runtime log and
+pinned source ownership. It found no material correctness, classification or
+privacy issue. Its minor wording finding was corrected: the reproduction needs
+no **custom** animation; stock Tooltip still has its built-in fade. The reviewer
+explicitly retained the historical-production and workaround-efficacy limits.
