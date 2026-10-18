@@ -1066,3 +1066,37 @@ a proposed repair in `/tmp/lineup-l2-ci-repair/`, and the terminal-result watch.
 It cannot edit the checkout, integrate, push, dispatch, cancel CI or use the
 app. Any accepted CI repair will be reviewed and committed separately from L2.
 The controller still owns the no-push/no-dispatch gate and Git integration.
+
+The CI worker prepared an eight-line workflow-only proposal to persist the
+already pinned depot_tools path and existing engine toolchain environment into
+later steps. Both Ninja invocations and all build/provenance checks remain.
+Patch `/tmp/lineup-l2-ci-repair/ci-toolchain.patch` has SHA-256
+`4aa4699acfb3f9b5064888129b983a3032d8e37b4fb082d971a1b5a436bb36ef`.
+Fresh independent reviewer `01a14df4-38af-7543-ba8b-524a1ea5a63b` (Sol high)
+owns source review; primary workflow has not changed. Actual local Ninja
+version-switch reproduction supports the diagnosis, but is not Windows or
+PowerShell execution. The protected run remained active at proposal time.
+
+The fresh CI reviewer approved that exact proposal with no material findings,
+after tracing downstream Ninja, Python, Git, Flutter and package-tool selection.
+The primary workflow still matches the frozen before hash. This is source
+review, not Windows execution. The controller independently confirmed the
+protected run was still in progress at 07:42 UTC; integration/push/dispatch
+remain held until its terminal result.
+
+The controller independently verified the old run reached `completed` /
+`cancelled` on October 18 at approximately 07:57 UTC. All six other jobs
+succeeded; the package job was cancelled during the second engine build near
+its three-hour limit and package upload was skipped. Neither controller nor
+worker cancelled it. This is an incomplete package result, not a CI pass.
+The old-run no-push/no-dispatch protection is now satisfied.
+
+The independently reviewed eight-line repair was integrated as the separate
+commit `fa43f41c` (`fix(ci): retain pinned engine toolchain across build steps`).
+Its workflow hash exactly matches the approved after snapshot; patch checks,
+whitespace and Ruby YAML parsing passed. Both real Ninja invocations and all
+seven jobs/concurrency policy remain. New Windows execution must still verify
+tool identity continuity, valid incremental work and package completion.
+The combined L2 candidate is now eligible for its authorized branch push and
+fresh CI dispatch. Counted synthetic/Plex measurement remains held until the
+new Windows native and authenticated-reference job passes.
