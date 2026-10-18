@@ -203,6 +203,38 @@ origins or an upstream runtime repair without removing those features. The
 GPT Pro review handoff explicitly includes this limitation. Historical production
 causality and spoken assistive-technology acceptance also remain open.
 
+### Release verification of the mitigation
+
+Candidate `296ab90588b6d1312e7a1b992142077fed1146c3` was built with the canonical
+wrapper and identity `0.1.0`, `1@296ab90588b6d1312e7a1b992142077fed1146c3`.
+Native AX was healthy before interaction. Pointer movement exposed real tooltips:
+
+- Guide menu tooltip → app menu: tooltip removed, menu controls accessible;
+  dismissing the menu restored tooltip availability.
+- Player Exit full screen tooltip → audio options: outgoing OSD tooltip removed;
+  returning to OSD restored it.
+- Player menu tooltip → app menu: removed while playback/background updates
+  continued for five seconds; menu AX remained populated.
+
+There were zero AX errors through these guarded transitions. The subsequent
+explicit Now Playing → hover cast-name tooltip check reproduced the unguarded
+static path: first error at line 24, removed node 268. The completed log contained
+55 messages, including possible stale repeats. This directly confirms a remaining
+production trigger, not just a hypothetical code path. It does not identify the
+first historical audit delta or establish that all prior failures shared it.
+
+The app quit normally. Raw screenshots, AX captures, stderr, runtime summary and
+binary/define identities stay private under
+`/tmp/lineup-audit/m04-lineup-workaround/`. No media information is copied here.
+The result is **targeted transition verification passed; general M-04 acceptance
+still failed at cast hover**, not a clean accessibility acceptance result.
+
+The full local 1,792-test suite, canonical formatting and analysis passed. Windows
+[verification run 39170620921](https://github.com/TJZine/LineupDesktop/actions/runs/39170620921)
+also passed. Its verification commit `159fd599aee9ab8c7074ca292e517116342d89b9`
+differs from the product candidate only in the isolated CI workflow, without
+release/package jobs. See the progress entry for the native-check scope and limits.
+
 ## Independent review
 
 A fresh adversarial read-only review checked all five changed files, the fixture
@@ -211,3 +243,8 @@ pinned source ownership. It found no material correctness, classification or
 privacy issue. Its minor wording finding was corrected: the reproduction needs
 no **custom** animation; stock Tooltip still has its built-in fade. The reviewer
 explicitly retained the historical-production and workaround-efficacy limits.
+
+A separate fresh review accepted the transition mitigation and its behavioral
+tests before source integration, with no blocking findings. Final evidence and
+GPT Pro handoff review checked the successful CI, runtime summaries and links,
+retaining the confirmed cast-hover failure as an open acceptance limit.

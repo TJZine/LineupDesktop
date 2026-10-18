@@ -2,11 +2,15 @@
 
 Source: `platform/macos`; audited baseline `fa176087`, reviewed product candidate
 `1b2f64f4eaf584807f70e668a5502ab088a54537`. The audit plan/report were committed
-first as `3cf2cce7`. Later evidence-only commits do not change candidate app inputs.
+first as `3cf2cce7`. The later M-04 transition mitigation is candidate
+`296ab90588b6d1312e7a1b992142077fed1146c3`; results for the earlier seven-fix
+candidate below retain their original source and binary identities.
 No main merge, distribution release, signing changes or engine patch was made.
 
 Status: **seven code fixes implemented, independently reviewed and CI verified.
-Required bounded Release checks completed; M-04 remains unresolved and reproduced.**
+Required bounded Release checks completed. A later M-04 transition mitigation
+passed targeted Release checks; M-04 remains open with a confirmed cast-tooltip
+failure outside that mitigation.**
 
 ## Results
 
@@ -19,9 +23,9 @@ Required bounded Release checks completed; M-04 remains unresolved and reproduce
 | Q-03 · `1b2f64f4` | Error presentation used committed selection while Retry used latest request. Error channel/program/Up next and subsequent surfing now use Retry's target. | 297 coordinator tests, including obsolete late failures, Retry and both surfing directions; 120 PlayerView tests. Fresh review `01a150ae-7c43-7840-b703-0f404ed44396` caught the surfing-origin inconsistency; corrected and re-reviewed clean. | Controlled obsolete-failure/new-error/Retry regressions pass. No new real offline run was attempted. |
 | M-02 · `b512d612` | Search semantics merged a text-field role into the directory root, making macOS hide descendant controls as a text-field leaf. Search now owns a named semantics container. | Directory ancestry/actions regression; removing only the boundary fails. Fresh group review `01a150aa-dfa2-7221-b4dd-64711c978c50`: repair accepted. | Native directory tree exposed management/filter/row controls (22 buttons, 14 named row menus), replacing the audit’s search-only tree. Search still appeared as a bare native text field in the tool snapshot; spoken output remains a human check. |
 | M-03 · `0fa2606e` | Tooltip-only icons populate tooltip semantics, while macOS AX names use the separate label. Explicit names match existing tooltip/spec names across the requested controls. | Four semantics tests; 274 affected widget tests. Fresh group review caught/restored the adaptive directory-menu icon; correction re-reviewed clean. | Native snapshots exposed Previous channel, Pause, Next channel, Lineup menu, Exit full screen, Guide Earlier/Later and directory action names. Studio rundown names have semantics-test evidence; spoken/native per-surface acceptance remains bounded by M-04. |
-| M-04 · open | Flutter's bridge rejects incremental AXTree updates. The first invalid delta and Dart-versus-engine cause remain unknown. | [Exact sanitized evidence, attempted reduction and upstream proposal](macos-ax-update-investigation.md). The media-free 200-transition attempt did not reproduce; no engine patch or unproved workaround. Evidence note independently checked. | Reproduced after first fullscreen tune/overlay interaction; native Player AX content temporarily disappeared. 614 bridge errors persisted despite M-02/M-03 repairs. Other route snapshots recovered, so restored names do not close M-04. |
+| M-04 · `296ab905`, bounded; open | A retained Tooltip can emit an unreachable node after its traversal origin is excluded; Flutter's common desktop bridge rejects it. TooltipVisibility now removes overlays at both shell menu exclusions and Player retirement. Permanently excluded content is not repaired. | [Stock repro, five-delta fixture, controls and source diagnosis](macos-ax-update-investigation.md). Five new behavioral regression cases; full 1,792-test suite, analysis and formatting passed. Fresh adversarial review accepted the bounded mitigation, retaining its static-tooltip limitation. | Visible Guide/menu and OSD/audio-options tooltip removal/restoration passed with zero AX errors. Subsequent cast-name hover reproduced the remaining static path: first removed-node error at line 24, node 268. General M-04 acceptance remains failed/open. |
 
-## Candidate and checks
+## Original seven-fix candidate and checks
 
 Release `lib/main.dart`, Flutter 3.47.7, accepted arm64 runtime; macOS 27.0.1.
 Bundle manifest SHA-256: `d5417b6ae680ab203001791897321b053b6dd91c14818d71d160482eb900efce`.
@@ -50,16 +54,30 @@ directory. The runtime summary records observed positions, native load IDs and
 AX error counts without media labels. DVR was restored Off and native Quit
 completed libmpv shutdown normally. No picture-quality reassessment was made.
 
-M-04 remains the open engineering item: candidate log lines 19–678 contain 373
-pending-node and 241 removed-node failures. A short production reproduction and
-upstream/minimization proposal are in the linked investigation. This is not proof
-of an engine-only cause; the media-free reduction still does not reproduce.
+The earlier M-04 candidate log lines 19–678 contain 373 pending-node and 241
+removed-node messages. The later stock reduction reproduced the failure, including
+a healthy native tree before the first rejected unreachable-tooltip update.
+Runtime ownership is now established for that mechanism; the exact first
+historical delta remains uncaptured. Counts may include stale error repeats.
+
+The later mitigation candidate `296ab905` passed the standalone comparison,
+regressions and targeted real Release transitions described above. It also
+confirmed a remaining real cast-tooltip failure. See the linked investigation
+and latest progress entry for the new candidate's Windows CI and full evidence.
 No engine patch, speculative reset or upstream message was made. The human-only
 checks below remain separate from the automated/native-tool evidence.
 
+The mitigation's [Windows verification run 39170620921](https://github.com/TJZine/LineupDesktop/actions/runs/39170620921)
+passed Dart verification, affected Windows UI suites, Windows compilation and eight
+native/authenticated-reference CTests. Commit `159fd599aee9ab8c7074ca292e517116342d89b9`
+has exactly product candidate `296ab905`'s inputs except for its narrowed workflow.
+No active run was cancelled. The [GPT Pro review prompt](macos-post-audit-adversarial-review-prompt.md)
+requests an independent review of the full fix round and the remaining cast/track
+tooltip design question.
+
 ## One final human checklist
 
-Run these once on the candidate above; record failures with generic descriptions.
+Run these once on the latest built candidate `296ab905`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 - [ ] Physical K pauses/resumes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.

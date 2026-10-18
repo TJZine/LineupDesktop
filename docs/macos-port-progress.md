@@ -1580,3 +1580,36 @@ M-04 remains open for that broader runtime path, exact historical production
 linkage and human assistive-technology acceptance. The final GPT Pro review prompt
 will challenge this boundary and request stronger alternatives that preserve UI
 features. No engine patch, merge, distribution release or signing work is included.
+
+The real Release candidate `296ab90588b6d1312e7a1b992142077fed1146c3` used canonical
+identity `0.1.0`, `1@296ab90588b6d1312e7a1b992142077fed1146c3`. Native pointer/AX
+checks passed visible Guide tooltip → menu exclusion/restoration, visible Player
+OSD tooltip → audio-options retirement/restoration, and Player menu exclusion with
+five seconds of continuing background updates. No AX errors occurred through those
+guarded scenarios. A later Now Playing cast-name hover reproduced the unguarded
+static-tooltip error (first at line 24, node 268; 55 logged messages by shutdown).
+Thus transition checks passed, but general M-04 acceptance remains open with a
+confirmed real-app residual. Raw evidence and identity hashes remain private in
+`/tmp/lineup-audit/m04-lineup-workaround/`; the app quit normally.
+
+Windows verification [run 39170620921](https://github.com/TJZine/LineupDesktop/actions/runs/39170620921)
+passed both Dart verification and the Windows job (affected UI suites, stock-engine
+app compile/link and eight selected native/authenticated-reference CTests).
+Verification commit `159fd599aee9ab8c7074ca292e517116342d89b9` has product candidate
+`296ab90588b6d1312e7a1b992142077fed1146c3` as its parent and differs only in the
+narrowed CI workflow. The isolated `dev/macos-tooltip-verification` workflow omits
+macOS runtime provisioning and all release/package jobs. Live runs were checked
+before dispatch; none was in progress and none was cancelled. Windows CI establishes
+portable/build/contracts evidence, not physical Windows media or assistive output.
+
+The [fresh GPT Pro review prompt](handoffs/macos-post-audit-adversarial-review-prompt.md)
+covers the entire post-audit range through the immutable mitigation candidate and
+explicitly requests stronger solutions for the confirmed static-tooltip residual.
+No broader M-04 acceptance is claimed. The original consolidated human checklist
+remains in the closing report.
+
+The final evidence/prompt review independently checked immutable identities,
+CI-only workflow differences, successful jobs/CTests, test logs, runtime/build
+summaries, privacy and relative links; no material findings remained. Product
+inputs remain at `296ab905`; the closing documentation does not relabel earlier
+binary evidence or claim that the static cast failure is fixed.
