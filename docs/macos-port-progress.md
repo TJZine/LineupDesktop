@@ -653,3 +653,23 @@ failure-control checks pass. Full helper execution, Windows loader closure and
 the actual contract remain hosted gates; a loader supplies no GPU driver or
 physical playback proof. The controller will preserve the current run's ongoing
 macOS/package jobs before dispatching this prerequisite revision.
+
+Hosted run `39087575645` has now passed the complete macOS portable/native job:
+required authenticated-reference proof, embed integration, app build and native
+tests. This supplies hosted recovery evidence for the fixture correction at
+`5740cc98`; it does not close physical HDR acceptance. Its patched-engine/package
+job remains in progress, so no next dispatch has occurred yet.
+
+The human rapid foreground sequence reproduced HDR remaining dim for at least
+five seconds on the unchanged original app. No Guide/fullscreen/resize repair
+was requested. The worker preserved exact process/binary/runtime identities,
+then performed bounded read-only model inspection and detached. The post-reply,
+post-debugger snapshot reports PQ, EDR and metadata enabled, drawable 1600×1200
+matching bounds 800×600 at scale 2, windowed and visible. It is not a pristine
+foreground capture: debugger pause/getters may affect scheduling, and the
+bounded external trace ended before the human result. These nominal model facts
+neither establish correct presentation nor explain the failure. The worker is
+authorized to build an isolated, transition-only diagnostic copy for the rapid
+sequence, preserving original Flutter/runtime inputs and observing actual load,
+stop, playlist and color identities. No production HDR correction or speculative
+resize workaround is approved.
