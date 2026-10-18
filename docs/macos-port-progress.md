@@ -634,3 +634,22 @@ locally verified authenticated-reference fixture correction. It was queued at
 dispatch; no current-run pass is inferred from the preceding run. The same
 read-only CI observer owns meaningful failure/completion callbacks. Human rapid
 foreground HDR reproduction remains separate and pending.
+
+The diagnostic rerun's Windows job `117557271385` identifies unavailable Vulkan
+loading: the only inspected failures are `libmpv-2.dll` and `vulkan-1.dll`, both
+Win32 126; other inspected imports load successfully. This is stronger than the
+original generic startup status, although 126 can also name a transitive failure.
+
+The independent reviewer approved the CI-only prerequisite patch SHA-256
+`2c32d3870bdb06c1c3d1a32d63d70efa81237c8027afa1cbdb00b81ad65d277e`.
+It selectively extracts a hash-pinned official LunarG 1.4.335.0 non-installer
+components ZIP into a new `RUNNER_TEMP` directory. The selected AMD64 loader
+exports all ten Vulkan functions imported by the pinned mpv; archive/DLL hashes,
+PE identity, license and official inventory were independently checked. Only
+the required contract test and its failure diagnostics receive that temporary
+PATH entry, restored in `finally`. Production runtime/package inputs, the real
+test and no-skip behavior are unchanged. Static/AST and isolated PowerShell
+failure-control checks pass. Full helper execution, Windows loader closure and
+the actual contract remain hosted gates; a loader supplies no GPU driver or
+physical playback proof. The controller will preserve the current run's ongoing
+macOS/package jobs before dispatching this prerequisite revision.

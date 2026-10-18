@@ -280,6 +280,10 @@ jobs:
             ctest --test-dir .\build\windows\x64 -C Release -R "^${nativeTest}$" --output-on-failure --no-tests=error --parallel 1 --timeout 30
           }
           ctest --test-dir .\build\windows\x64 -C Release -R '^display_guardian$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
+          $vulkanRoot = Join-Path $env:RUNNER_TEMP 'lineup-ci-vulkan'
+          & .\tool\windows\prepare-ci-vulkan.ps1 -Destination $vulkanRoot
+          $originalPath = $env:PATH
+          $env:PATH = "$vulkanRoot;$originalPath"
           try {
             ctest --test-dir .\build\windows\x64 -C Release -R '^native_player_contract$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
           } catch {
@@ -290,6 +294,8 @@ jobs:
               Write-Warning "Native startup diagnostics failed: $($_.Exception.Message)"
             }
             throw $testFailure
+          } finally {
+            $env:PATH = $originalPath
           }
 
   release-inputs:

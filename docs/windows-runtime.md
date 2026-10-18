@@ -49,6 +49,25 @@ stale identities or modified build artifacts before creating output.
 `BUILD-INFO.txt` and `BUILD-PROVENANCE.json` preserve that verified identity in
 the portable package.
 
+## CI-only Vulkan loader
+
+`tool/windows/prepare-ci-vulkan.ps1` stages the official LunarG non-installer
+[components ZIP](https://sdk.lunarg.com/sdk/download/1.4.335.0/windows/VulkanRT-X64-1.4.335.0-Components.zip),
+version `1.4.335.0`, under a new directory in the Windows job's `RUNNER_TEMP`.
+The [official download inventory](https://vulkan.lunarg.com/sdk/files.json)
+publishes archive SHA-256
+`4F856DA356FFB1C16FBFC792CAE70F6E6873680E6B62BC132B9D7131CBC97FE2`.
+The helper extracts only the AMD64 `vulkan-1.dll` (SHA-256
+`5C42CA8EA4BC43EE17FFE8FCDAFBA36E377C2AF29722CB09F400C24D9D80FB73`)
+and the included MIT/Apache-2.0 license text. The loader exports all Vulkan
+functions imported by the pinned libmpv and imports Windows system libraries.
+
+CI adds this directory to its process `PATH` around the required native player
+contract CTest and restores `PATH` even on failure. It installs no runtime,
+changes no system settings, and copies nothing into the application or package.
+This is a CI prerequisite; the system-loader requirement and physical release
+acceptance below still apply.
+
 ## Vulkan-loader release gate
 
 The selected libmpv DLL imports `vulkan-1.dll` even when Lineup selects D3D11

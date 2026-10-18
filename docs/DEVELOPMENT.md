@@ -132,7 +132,11 @@ ctest --test-dir .\build\windows\x64 -C Release -R '^(player_core_contract|encod
 ```
 
 CI also builds and runs `native_player_contract_test` against the stock
-Flutter DLL and prepared libmpv. If its CTest fails, CI runs
+Flutter DLL and prepared libmpv. The Windows job stages a hash-pinned official
+LunarG Vulkan loader under `RUNNER_TEMP` and adds it to the process `PATH` only
+for that CTest, restoring `PATH` afterward. This supplies a loader, not a GPU
+driver or physical playback acceptance; see [CI provenance](windows-runtime.md#ci-only-vulkan-loader).
+If its CTest fails, CI runs
 `tool/windows/diagnose-native-startup.ps1` against the exact test executable
 before reporting the original failure. The diagnostic prints the built DLL
 hashes, PE imports, and named Windows loader results; it installs no runtime
