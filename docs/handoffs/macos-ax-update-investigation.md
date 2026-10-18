@@ -279,3 +279,42 @@ activation incremented its counter. Full hover text and canonical labels remaine
 present. These are topology/lifecycle controls, not a spoken VoiceOver assessment.
 Raw logs and AX snapshots are private under
 `/tmp/lineup-audit/m04-static-origins/`.
+
+
+## Guide Now: independently reduced missing portal origin
+
+The clean `352a74aa` Release follow-up established healthy native AX, then rejected
+an actual Guide Now tooltip hover before any menu interaction. This narrows the
+previous preflight (Guide/menu/fullscreen, first removed-node error 138), whose
+first action was not isolated. The node number alone does not identify a widget.
+
+A full-shell Dart probe found the overlay physically reachable by raw child DFS,
+but absent from effective accessibility traversal. Its traversal-child identifier
+had no matching traversal-parent identifier. Later's tooltip retained a matching
+pair. Now's Tooltip sits above a TextButton semantics boundary; its origin marker
+can merge upward into a shared annotated ancestor containing another portal marker.
+`SemanticsConfiguration.absorb` retains only one traversal-parent identifier. The
+grafting path removes the overlay from physical traversal expecting to reattach
+it at an origin that is now absent. A raw `visitChildren` walk therefore is not
+sufficient proof of effective traversal reachability.
+
+The new stock [`button_origins.dart`](../../tool/macos/ax-tooltip-repro/button_origins.dart)
+contains two ordinary Tooltip/TextButton siblings beneath a shared annotated
+Semantics widget. It reproduces the missing pair portably, and fresh native
+Release rejects Show. Bare siblings without the shared annotation did not
+reproduce this control; those discarded models are not positive evidence.
+An explicit outer `Semantics(container: true, explicitChildNodes: true)` preserves
+an independent origin. Native Release exposed both the canonical button and its
+full hover text through ten button activations/message updates with zero AX errors.
+A boundary inside Tooltip or removing `excludeFromSemantics` did not fix the
+portable control. No engine source, forced Dart handle or framework patch was used.
+
+Lineup applies that outer boundary only to the affected Now tooltip. Two full-shell
+regressions cover Now and Return to live, asserting visible overlay construction,
+canonical button name/action and hover-label reachability through effective root
+traversal. Both fail on the original structure. This adds a framework portal-marker
+merging reproduction to the upstream evidence; it does not repair Flutter's common
+bridge or establish every historical failure's cause. Native equivalent-Lineup
+acceptance is recorded separately in the closing report. Private controls and
+probe logs remain under `/tmp/lineup-audit/m04-static-origins/` and
+`/tmp/lineup-audit/m04-review-round/`.

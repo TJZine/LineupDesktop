@@ -93,6 +93,25 @@ unreachable-node error. No forced semantics handle or engine modification was
 used. The standalone results justified applying equivalent structure to Lineup;
 they do not establish spoken output or integrated application acceptance.
 
+## Shared button-origin comparison
+
+`button_origins.dart` reduces a second production trigger, Guide's Now tooltip.
+Copy it to the stock project's `lib/main.dart`. Two ordinary Tooltip/TextButton
+siblings share an annotated Semantics ancestor. In the default variant, their
+portal parent identifiers merge into that ancestor and one identifier is lost.
+Show creates a visible overlay whose traversal-child identifier has no matching
+origin. A fresh native Release run rejected Show with an unknown-node error.
+
+Build with `--dart-define=REPRO_REACHABLE_ORIGIN=true` to give the second tooltip
+an explicit outer semantics container with explicit child nodes. A fresh Release
+comparison exposed its full tooltip and preserved its actionable button through
+ten activations/message updates with zero AX errors. The canonical button and
+hover text both reached version 10. No forced Dart semantics or engine patch was
+used. A separate boundary *inside* the tooltip and removing its
+`excludeFromSemantics` flag failed the portable control; placement of the origin
+boundary matters. Native acceptance of the equivalent Lineup correction remains
+a separate gate.
+
 ## Captured boundary evidence
 
 [first-rejection.json](first-rejection.json) contains five traced deltas from the

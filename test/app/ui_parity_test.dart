@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -103,6 +104,65 @@ void main() {
     expect(find.text('Open Lineup menu'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for (final returnToLive in [false, true]) {
+    testWidgets(
+      'Guide Now tooltip stays reachable with its button (return to live: $returnToLive)',
+      (tester) async {
+        final fixture = _guideFocusFixture();
+        await tester.pumpWidget(fixture.build());
+        await tester.pumpAndSettle();
+        final guide = tester
+            .widget<GuideView>(find.byType(GuideView))
+            .controller;
+        if (returnToLive) guide.moveWindow(4);
+        await tester.pumpAndSettle();
+        final label = returnToLive ? 'Return to live' : 'Now';
+        final button = find.byKey(const Key('guide-now'));
+        final tooltip = find.ancestor(
+          of: button,
+          matching: find.byType(Tooltip),
+        );
+        expect(tester.widget<Tooltip>(tooltip).message, label);
+        expect(
+          tester.state<TooltipState>(tooltip).ensureTooltipVisible(),
+          isTrue,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Text && widget.textSpan?.toPlainText() == label,
+          ),
+          findsOneWidget,
+        );
+        // A local overlay node can exist without being grafted into the view's
+        // accessibility tree. Traverse from the root to establish reachability.
+        final reachable = tester.semantics.simulatedAccessibilityTraversal();
+        expect(
+          reachable.where(
+            (node) =>
+                node.label == label &&
+                node.getSemanticsData().flagsCollection.isButton &&
+                node.getSemanticsData().hasAction(SemanticsAction.tap),
+          ),
+          hasLength(1),
+        );
+        expect(
+          reachable.where(
+            (node) =>
+                node.label == label &&
+                !node.getSemanticsData().hasAction(SemanticsAction.tap),
+          ),
+          hasLength(1),
+        );
+        expect(fixture.player.loads, isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      semanticsEnabled: true,
+    );
+  }
 
   for (final showTooltip in [false, true]) {
     testWidgets(

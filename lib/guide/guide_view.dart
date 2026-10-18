@@ -1299,28 +1299,34 @@ class _GuideControls extends StatelessWidget {
             semanticLabel: 'Earlier by 30 minutes',
           ),
         ),
-        Tooltip(
-          message: returnToLive ? 'Return to live' : 'Now',
-          excludeFromSemantics: true,
-          child: TextButton(
-            key: const Key('guide-now'),
-            focusNode: nowFocus,
-            style: returnToLive
-                ? LineupTheme.buttonStyle(
-                    roles,
-                    LineupButtonTier.secondary,
-                  ).copyWith(
-                    shape: WidgetStatePropertyAll(
-                      RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+        // Give this tooltip its own origin. Merging sibling portal identifiers
+        // into one ancestor can leave the overlay outside accessibility traversal.
+        Semantics(
+          container: true,
+          explicitChildNodes: true,
+          child: Tooltip(
+            message: returnToLive ? 'Return to live' : 'Now',
+            excludeFromSemantics: true,
+            child: TextButton(
+              key: const Key('guide-now'),
+              focusNode: nowFocus,
+              style: returnToLive
+                  ? LineupTheme.buttonStyle(
+                      roles,
+                      LineupButtonTier.secondary,
+                    ).copyWith(
+                      shape: WidgetStatePropertyAll(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                    ),
-                  )
-                : null,
-            onPressed: controller.playToNow,
-            child: Text(
-              nowLabel,
-              semanticsLabel: returnToLive ? 'Return to live' : null,
+                    )
+                  : null,
+              onPressed: controller.playToNow,
+              child: Text(
+                nowLabel,
+                semanticsLabel: returnToLive ? 'Return to live' : null,
+              ),
             ),
           ),
         ),

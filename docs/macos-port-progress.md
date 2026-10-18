@@ -1674,3 +1674,25 @@ approved source, tests, stock controls and evidence limits with no material find
 The investigation now records that Flutter's retained error string can suppress
 notifications after later successful updates; no engine source or upstream issue
 was changed. Integrated Release and Windows results follow separately.
+
+
+## 2026-10-18 — M-04 follow-up: Guide Now portal origin
+
+Real Release candidate `352a74aa` started with healthy AX, then a Now tooltip hover
+rejected before any menu opened. Portable probes separated physical child DFS
+from effective accessibility traversal: the overlay existed but its traversal-child
+identifier had no matching origin. Sibling tooltip markers merged into a common
+annotated ancestor. A faithful two-button stock reduction, `button_origins.dart`,
+reproduces this with ordinary widgets. Its default native Release rejects Show;
+an explicit outer origin boundary preserves full hover text and the actionable
+button through ten activations/message updates with zero AX errors. Simpler
+unannotated models did not reproduce it and are not counted as positive controls.
+
+Only after that native comparison, Guide's Now tooltip received an explicit outer
+semantics container/child boundary, preserving layout, label, action and persistent
+focus. Now and Return-to-live regressions check visible overlay construction,
+canonical actionable identity and effective root traversal; both fail on the old
+structure. All 80 combined shell/Guide tests passed. Full analysis and canonical
+formatting passed, and the full 1,807-test suite passed. Fresh adversarial review
+`now_origin_review` found no material issues before integration. Final combined
+Release/Windows verification follows separately. No engine change was made.
