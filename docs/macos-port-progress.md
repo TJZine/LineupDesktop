@@ -1100,3 +1100,71 @@ tool identity continuity, valid incremental work and package completion.
 The combined L2 candidate is now eligible for its authorized branch push and
 fresh CI dispatch. Counted synthetic/Plex measurement remains held until the
 new Windows native and authenticated-reference job passes.
+
+The old job's final annotation confirms `The job has exceeded the maximum
+execution time of 3h0m0s`; its second Ninja invocation reached only
+5,375/6,049 edges before cancellation. Final sanitized evidence is preserved
+under `/tmp/lineup-l2-ci-repair/`. After independently checking terminal state,
+the controller pushed `57f62c9422556fd1f4b1ba8d870adc228061a841` normally to
+`origin/platform/macos` and dispatched CI run `39109697512` at 07:59:14 UTC.
+The CI worker now owns that run's verification in
+`/tmp/lineup-l2-ci-39109697512/`, including prompt notification of the actual
+Windows native/auth gate and eventual full-run/package result. No subsequent
+same-branch dispatch or cancellation is planned while that run executes.
+
+The new Windows job actually ran and passed all seven native contract suites,
+then failed its 48-case authenticated-reference matrix (44 passed, four
+failed). Both untrusted-CA cases set `server_error`; the two later nonzero
+delayed controls inherited that sticky flag despite expected landing/progress
+results. No timeout or token leak was observed. Exact exception details were
+swallowed, so a specific Windows disconnect exception is an inference rather
+than observed evidence. The Mac fixture already distinguishes three expected
+peer-disconnect types from fatal unexpected handler errors; Windows does not.
+Fresh worker `01a14e0d-afa6-73b3-a65f-1415a5ad5fe7` (Sol medium) owns only the
+Windows fixture repair and meaningful error-boundary controls. Root owns fresh
+review and integration; counted measurement remains blocked. The current
+engine/package and Mac jobs continue without cancellation.
+
+The Windows fixture worker froze its two-file candidate under
+`/tmp/lineup-l2-windows-fixture-fix/`, patch SHA-256
+`b2f257f5ab0b7c9fae415e9a41dac3ec400d8fc8e950a225b848947828403832`.
+Seven actual loopback/error-boundary controls passed on local Python 3.15 and
+3.11; they do not identify the swallowed Windows exception or establish the
+Windows matrix. Expected disconnects remain distinct from sticky unexpected
+faults; bounded sanitized diagnostics will expose future attribution. Fresh
+independent reviewer `01a14e12-eadf-7d43-b94d-d66d2932aec7` (Sol high) owns
+the two-file review, including whether its TLS-accept handling and complexity
+are justified. The human requested a candid explanation of the delays; the
+controller identified the failed timing harness, duplicate CI engine build and
+current fixture failure, and kept the remaining work limited to the Windows
+gate and requested latency measurements. HDR remains accepted.
+
+The fresh reviewer identified one accepted P2: the native child may exit after
+a TLS socket closes but before the server records an unexpected error. A
+per-case snapshot can therefore precede the fatal flag; listener teardown
+waits for that path but did not reconcile the final profile result. The worker
+owns a focused finalization correction and deterministic late-error control,
+with no sleeps, flag resets or product changes. This is source-traced review
+evidence, not a reproduced explanation of the original Windows failure.
+
+Revision two adds the final sticky-failure check after existing listener
+shutdown/join. Its eighth control uses the actual finalizer and a barrier to
+publish an unexpected TLS error after a clean snapshot; the old finalization
+fails that control and the correction passes. All eight controls passed on
+local Python 3.15 and 3.11. Frozen patch SHA-256 is now
+`d88b8bfacadb8b5ceb31c3c0cda8692373f51f283ecd6c3e2ea3cab57444d6f4`;
+revision one remains preserved. The same fresh reviewer owns focused re-review
+of its finding. No Windows rerun or counted measurement has yet passed.
+
+The fresh reviewer approved revision two and closed the late-TLS P2. It
+confirmed that listener completion precedes the final locked sticky-failure
+check and that production finalization prevents a passing matrix return after
+a late TLS fault. The original Windows exception remains unknown; the new
+diagnostics and exact Windows 48-case execution must settle acceptance.
+
+The controller is preparing a focused draft PR against `platform/macos` for
+the reviewed fixture-only correction and progress notes. Existing CI change
+filters can run the native/reference jobs without requesting another engine
+build for these test-only changes. Its distinct head branch also preserves
+the in-progress `platform/macos` engine/package run. No CI check is skipped or
+weakened; package evidence remains attributed to that original run.
