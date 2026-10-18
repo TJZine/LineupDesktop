@@ -14,7 +14,8 @@ Read `AGENTS.md` and `.agents/project.md` first.
   current `platform/macos` HEAD (`fa176087` or later; record the exact SHA).
   Use the pinned Flutter at `/Users/tristan/.cache/lineup-flutter/3.47.7/flutter`
   and the accepted runtime `build/macos-runtime/dist/arm64`.
-  - Prefer `flutter build macos --release`. If Release fails to build or
+  - Prefer `dart tool/macos/build_app.dart build --release` so Diagnostics uses
+    the pubspec version/build and full Git HEAD identity. If Release fails to build or
     launch, record that as an audit finding and fall back to Debug.
   - Build once, record the bundle hashes, and use that one bundle for the
     whole audit.

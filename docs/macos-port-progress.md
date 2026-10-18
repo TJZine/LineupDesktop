@@ -1335,3 +1335,17 @@ and dirty guards. Independent fresh-chat adversarial review
 `01a150a7-9075-7b52-a52a-7b8e7465da30` found no material issues and independently
 ran the suite. Real Release interaction and shared-Dart Windows CI are pending
 the combined candidate; widget tests do not establish physical input behavior.
+
+### Post-audit Q-01 — canonical macOS build identity (2026-10-18)
+
+Bare Flutter macOS commands omitted the defines consumed by Diagnostics.
+`tool/macos/build_app.dart` now owns macOS build/run identity using the Windows
+release contract: pubspec version and numeric build followed by full Git HEAD.
+The wrapper rejects metadata overrides; active development/audit commands and
+the macOS CI app build use it. There is no runtime identity fallback. Dirty
+local builds are documented as carrying HEAD identity, not clean provenance.
+Six focused tests and targeted analysis pass on Flutter 3.47.7, including a
+subprocess invocation and failure/exit propagation. Fresh-chat adversarial review
+`01a150a8-1507-7950-9c5b-592e88c70b17` independently repeated these checks and
+found no material issues. Real Release Diagnostics/export inspection remains
+pending the combined candidate.

@@ -61,7 +61,7 @@ block unrelated portable work; report the specific unverified scenario.
 | Dart policy, models, async work | Pinned Flutter SDK; focused tests plus the relevant full format/analyze/test checks below | Deterministic contracts; no Xcode application build or Windows engine provisioning required |
 | Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the required alpha suite and optional local visual checks below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
 | Persistence or credentials | Controller/store/transport failure, rollback, scope-isolation, and secret-flow tests named in [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Deterministic recovery/currentness; OS credential storage and physical filesystem behavior need platform observation |
-| macOS development app and player | Xcode, the libmpv runtime (`LINEUP_MPV_RUNTIME`), and macOS setup below; `flutter build macos`, the `RunnerTests` XCTests, and the real-protocol harness as relevant | Build, conversion/rect contract, and protocol-flow evidence; visual layering, HDR output, and fullscreen need a physical observation on a visible display |
+| macOS development app and player | Xcode, the libmpv runtime (`LINEUP_MPV_RUNTIME`), and macOS setup below; `dart tool/macos/build_app.dart build`, the `RunnerTests` XCTests, and the real-protocol harness as relevant | Build, conversion/rect contract, and protocol-flow evidence; visual layering, HDR output, and fullscreen need a physical observation on a visible display |
 | Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing, repository-derived release inputs, production launch/exit contracts with fixture platform executables, and pinned policy inputs; no native Windows or package execution proof |
 | Native player contract / C++ integration | Dart adapter/coordinator tests, lifetime/currentness inspection, Windows C++ toolchain and prepared libmpv; `flutter build windows` | Contract and stock-engine compile/link proof; not a runnable or packageable Lineup player |
 | Patched engine / portable package | Full Windows provisioning below; release wrapper and [package acceptance](windows-native-validation.md#8-portable-package-acceptance) | Artifact-bound build/package checks; launch, media, HDR, layering, fullscreen, input, and support claims require [physical Windows acceptance](windows-native-validation.md) |
@@ -405,7 +405,8 @@ is missing. To use a runtime elsewhere, either set it in the environment of
 the build:
 
 ```sh
-LINEUP_MPV_RUNTIME=/path/to/macos-runtime/arm64 flutter build macos
+LINEUP_MPV_RUNTIME=/path/to/macos-runtime/arm64 \
+  dart tool/macos/build_app.dart build --release
 ```
 
 or write `LINEUP_MPV_RUNTIME = /path/to/macos-runtime/arm64` in the untracked
@@ -432,9 +433,23 @@ it is not a manifest of the signed app/package's library hashes.
 
 ```sh
 flutter config --enable-macos-desktop
-flutter run -d macos
-flutter build macos
+dart tool/macos/build_app.dart run
+dart tool/macos/build_app.dart build --release
 ```
+
+Use `tool/macos/build_app.dart` for macOS application builds and runs, including
+CI and audit candidates. It passes the same identity defines as the Windows
+release build: `LINEUP_VERSION` is the version name in `pubspec.yaml`, and
+`LINEUP_BUILD` is its numeric build number followed by `@` and the full Git HEAD
+commit. Diagnostics and its copied export read these defines directly; there is
+no platform identity fallback. Missing or ambiguous metadata fails the build.
+The wrapper owns version/build inputs and rejects identity overrides and
+`--dart-define-from-file`; other Flutter options and inline defines are forwarded.
+It uses the selected Flutter from PATH, which must satisfy the pinned toolchain
+check above. Local dirty builds are allowed, but their HEAD identifies the base
+commit only: record the dirty source state separately, and do not claim an exact
+committed candidate until rebuilding from the committed tree. This identity is
+not a release/package provenance or signing assertion.
 
 ### Native unit tests
 
@@ -449,7 +464,7 @@ establish physical playback. Use the generated Flutter configuration from an
 application build and the accepted `LINEUP_MPV_RUNTIME` setting:
 
 ```sh
-flutter build macos --debug
+dart tool/macos/build_app.dart build --debug
 xcodebuild test -project macos/Runner.xcodeproj -scheme NativePlayerTests \
   -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath /tmp/lineup-native-tests CODE_SIGNING_ALLOWED=NO
@@ -533,7 +548,7 @@ there and pass absolute paths separated by `|`:
 ```sh
 media="$HOME/Library/Containers/com.tjzine.lineupDesktop/Data/tmp/lineup-media"
 mkdir -p "$media" && cp sdr.mp4 hdr10.mp4 "$media/"
-flutter build macos --debug -t test_driver/macos_native_harness.dart \
+dart tool/macos/build_app.dart build --debug -t test_driver/macos_native_harness.dart \
   "--dart-define=LINEUP_HARNESS_MEDIA=$media/sdr.mp4|$media/hdr10.mp4" \
   --dart-define=LINEUP_HARNESS_EXERCISE=true
 LINEUP_PRESENTATION_LOG=1 \

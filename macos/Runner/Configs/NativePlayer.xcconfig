@@ -4,7 +4,7 @@
 // LINEUP_MPV_RUNTIME is the prepared LGPL libmpv runtime directory, with
 // lib/ (the @rpath dylibs) and include/mpv/. It defaults to the repository's
 // runtime build output. Override it for a runtime elsewhere by setting
-// LINEUP_MPV_RUNTIME in the environment of `flutter build macos` or
+// LINEUP_MPV_RUNTIME in the environment of `dart tool/macos/build_app.dart build` or
 // xcodebuild, or in the untracked NativePlayer.local.xcconfig next to this
 // file.
 LINEUP_MPV_RUNTIME = $(LINEUP_MPV_RUNTIME:default=$(SRCROOT)/../build/macos-runtime/dist/arm64)

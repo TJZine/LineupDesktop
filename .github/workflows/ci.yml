@@ -152,7 +152,7 @@ jobs:
         run: tool/macos/mpv-runtime-embed-test.sh
       - name: Build macOS application with the prepared runtime
         shell: bash
-        run: flutter build macos
+        run: dart tool/macos/build_app.dart build --release
       - name: Run NativePlayerTests in Debug without code signing
         shell: bash
         run: |
