@@ -113,7 +113,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          for tool in python3 ffmpeg openssl cmake git; do
+          for tool in python3 ffmpeg ffprobe openssl cmake git; do
             command -v "$tool" >/dev/null || {
               echo "Required authenticated-reference tool is unavailable: $tool" >&2
               exit 1
@@ -282,8 +282,24 @@ jobs:
           ctest --test-dir .\build\windows\x64 -C Release -R '^display_guardian$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
           $vulkanRoot = Join-Path $env:RUNNER_TEMP 'lineup-ci-vulkan'
           & .\tool\windows\prepare-ci-vulkan.ps1 -Destination $vulkanRoot
+          # Fixture generators only: never copied into the application/package.
+          # Versioned archive and publisher checksum: https://www.gyan.dev/ffmpeg/builds/
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP 'lineup-reference-tools'
+          $fixtureArchive = Join-Path $env:RUNNER_TEMP 'lineup-reference-tools.zip'
+          Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip' -OutFile $fixtureArchive -ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 180
+          if ((Get-FileHash -Algorithm SHA256 -LiteralPath $fixtureArchive).Hash -ne '60F467265B1E312373DBCD92200C2618A74850F98D3D078E94296BB3FA2047BA') {
+            throw 'SHA-256 mismatch for the pinned authenticated-reference fixture tools.'
+          }
+          Expand-Archive -LiteralPath $fixtureArchive -DestinationPath $fixtureRoot
+          $fixtureBin = Join-Path $fixtureRoot 'ffmpeg-9.0.2-essentials_build/bin'
+          foreach ($fixtureTool in @('ffmpeg.exe', 'ffprobe.exe')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $fixtureBin $fixtureTool) -PathType Leaf)) {
+              throw "Missing authenticated-reference fixture tool: $fixtureTool"
+            }
+          }
+          cmake --build .\build\windows\x64 --config Release --target authenticated_reference_test
           $originalPath = $env:PATH
-          $env:PATH = "$vulkanRoot;$originalPath"
+          $env:PATH = "$fixtureBin;$vulkanRoot;$originalPath"
           try {
             ctest --test-dir .\build\windows\x64 -C Release -R '^native_player_contract$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
           } catch {
@@ -294,6 +310,12 @@ jobs:
               Write-Warning "Native startup diagnostics failed: $($_.Exception.Message)"
             }
             throw $testFailure
+          } finally {
+            $env:PATH = $originalPath
+          }
+          $env:PATH = "$fixtureBin;$vulkanRoot;$originalPath"
+          try {
+            ctest --test-dir .\build\windows\x64 -C Release -R '^authenticated_reference$' --output-on-failure --no-tests=error --parallel 1 --timeout 180
           } finally {
             $env:PATH = $originalPath
           }

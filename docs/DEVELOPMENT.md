@@ -179,8 +179,9 @@ close while work is pending.
 
 The gated `authenticated_reference_test` target compiles the production native
 player and drives its existing method channel against the exact prepared DLL.
-It is `EXCLUDE_FROM_ALL`, with no CI gate change. Python 3, an FFmpeg executable
-with the `libx264` encoder and DASH muxer, and OpenSSL are required. Put them on
+It is `EXCLUDE_FROM_ALL` for application builds and explicitly selected by CI.
+Python 3, FFmpeg with the `libx264` encoder and DASH muxer, FFprobe, and OpenSSL
+are required. Put them on
 PATH before running CTest; Python is resolved when the test runs, so ordinary
 application configuration and builds do not require it. The runner also recognizes
 Git for Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
@@ -204,6 +205,12 @@ waits, socket operations and server joins are bounded; an overall 150-second
 runner deadline leaves cleanup time before CTest's 180-second timeout.
 Only normalized request counts, token-presence booleans and playback outcomes
 are emitted. Servers, media, keys and certificates are removed after each run.
+Both omitted-start and nonzero-start profiles run the full reference matrix.
+The latter supplies `startSeconds: 3.5` through the production load channel
+against a six-second fixture whose actual one-second keyframe index is checked
+with FFprobe. The starting position alone cannot count as playback progress.
+CI provisions checksum-pinned fixture tools only in the job's temporary
+directory; they are not application/runtime inputs.
 The [dated reference mitigation record](libmpv-authenticated-reference-investigation.md#2026-10-03-mitigation-disable-reference-following)
 records the before/after evidence and source-audit limits. To reproduce the
 negative comparison locally, remove only the two reference-hardening options,
@@ -476,8 +483,8 @@ Flutter app/engine. Only injected test operations set the fixture CA and null
 video/audio outputs; production initialization and authenticated load options
 supply the security policy. No certificate is added to system trust.
 
-From the repository root, with Xcode, CMake, Python 3, OpenSSL and an FFmpeg
-fixture generator (with libx264 and DASH muxing) available:
+From the repository root, with Xcode, CMake, Python 3, OpenSSL, FFprobe and an
+FFmpeg fixture generator (with libx264 and DASH muxing) available:
 
 ```sh
 python3 tool/macos/authenticated-reference/run.py \
@@ -495,7 +502,11 @@ containing the synthetic secret fail the run; raw diagnostics are not printed.
 Missing prerequisites, certificate setup, malformed child outcomes, timeouts,
 and empty/partial matrices fail rather than skip. A malformed child outcome
 reports the fixed case name, child exit status/signal, and field-validation
-category without printing child output or arguments. Exit 0 requires all 26 cases.
+category without printing child output or arguments. Exit 0 requires the complete
+reference matrix with both omitted and nonzero initial start, including all
+sensitivity controls. Nonzero-start positives verify the fixture's actual
+keyframe index and require playback advancement after the matched initial
+restart; the position jump alone cannot satisfy progress.
 
 The matrix covers ordinary MP4/MKV progress without a later rejection; HLS
 same-origin/hostname/port/master/key, DASH, playlist, EDL, CUE, MOV, concat,
@@ -731,11 +742,13 @@ engine metadata, and rejects stale markers or modified build artifacts.
 Linux, the required macOS alpha suite and an application build on macOS, portable
 PowerShell release-policy validation, and focused widget tests plus a
 stock-engine C++/CMake application build on Windows Server 2022 followed by
-the existing encoder, playback-state, display-controller, and guardian CTests.
+the encoder, playback-state, shared-core, codec-conversion, display-controller,
+guardian, player-contract and authenticated-reference CTests.
 The native suites use real contract assertions and controlled fixtures; the
-guardian includes Win32 subprocess coverage. The player-contract,
-runner-lifecycle, and authenticated-reference CTests remain separate explicit
-checks and are not selected by CI.
+guardian includes Win32 subprocess coverage. The player contract loads the
+pinned runtime with a CI-only Vulkan loader. The reference matrix uses temporary
+synthetic HTTPS fixtures and null audio/video outputs. The runner-lifecycle
+CTest remains a separate explicit check, outside CI.
 
 The expensive patched-engine/package job is conditional on engine and direct
 package-policy inputs selected by `release-inputs`. Ordinary `lib/` or

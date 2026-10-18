@@ -21,6 +21,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 
 TOKEN = "lineup-synthetic-reference-test"
 REPO = pathlib.Path(__file__).resolve().parents[3]
@@ -151,7 +152,9 @@ def outcomes(result, case):
         raise HarnessOutcomeError(result, case, "non_ascii_output") from None
     except ValueError:
         raise HarnessOutcomeError(result, case, "malformed_fields") from None
-    required = {"runtime_bound", "messenger_contract", "initialized", "progressed", "rejected", "timed_out"}
+    required = {"runtime_bound", "messenger_contract", "initialized", "progressed", "rejected", "timed_out",
+                "start_configured", "landing_confirmed", "initial_paused", "play_released",
+                "delay_exercised", "ignored_start"}
     missing = sorted(required - fields.keys())
     invalid_values = sum(value not in ("0", "1") for value in fields.values())
     if missing or invalid_values:
@@ -167,7 +170,9 @@ def media_pass(result, fields, audit, positive):
             fields["timed_out"] == "0" and audit["A_token"] and not audit["B_token"] and
             not audit["secondary_A_token"] and not audit["token_in_url"] and
             not audit["server_error"] and
-            (positive is None or ((fields["progressed"] == "1" and fields["rejected"] == "0")
+            (positive is None or ((fields["initial_paused"] == "1" and fields["play_released"] == "1" and
+                                   fields["ignored_start"] == "0" and fields["landing_confirmed"] == "1" and
+                                   fields["progressed"] == "1" and fields["rejected"] == "0")
                                   if positive else (fields["progressed"] == "0" and fields["rejected"] == "1"))))
 
 
@@ -200,27 +205,67 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        self.serve_resource(send_body=True)
+
+    def do_HEAD(self):
+        self.serve_resource(send_body=False)
+
+    def serve_resource(self, send_body):
+        range_header = self.headers.get("Range")
+        decoded_path = urllib.parse.unquote(self.path)
+        token_url = TOKEN in decoded_path or "x-plex-token" in decoded_path.lower()
         with self.server.lock:
-            self.server.requests.append((self.path, any(TOKEN in value for _, value in self.headers.items()), TOKEN in self.path))
+            self.server.requests.append((self.path, any(TOKEN in value for _, value in self.headers.items()), token_url))
+            if range_header:
+                self.server.range_requests = getattr(self.server, "range_requests", 0) + 1
         if self.server.authenticated and self.headers.get("X-Plex-Token") != TOKEN:
             self.send_response(401)
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        body, content_type = self.server.files.get(self.path, (b"", "application/octet-stream"))
         if self.path.startswith("/redirect"):
             self.send_response(302)
             self.send_header("Location", self.server.redirect)
-        else:
-            self.send_response(200 if body else 404)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        body, content_type = self.server.files.get(self.path, (b"", "application/octet-stream"))
+        size = len(body)
+        first, last = 0, size - 1
+        partial = bool(range_header and size)
+        if partial:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header)
+            valid = match is not None and any(match.groups())
+            if valid:
+                start, end = match.groups()
+                if start:
+                    first = int(start)
+                    last = min(int(end), size - 1) if end else size - 1
+                    valid = first < size and first <= last
+                else:
+                    suffix = int(end)
+                    valid = suffix > 0
+                    first = max(0, size - suffix)
+            if not valid:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            with self.server.lock:
+                self.server.partial_responses = getattr(self.server, "partial_responses", 0) + 1
+        self.send_response(206 if partial else 200 if body else 404)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(last - first + 1 if size else 0))
+        if partial:
+            self.send_header("Content-Range", f"bytes {first}-{last}/{size}")
         self.end_headers()
-        try:
-            self.wfile.write(body)
-        except OSError:
-            pass
-
+        if send_body:
+            try:
+                self.wfile.write(body[first:last + 1])
+            except OSError:
+                pass
 
 def certificate(root, openssl):
     config = root / "leaf.cnf"
@@ -245,14 +290,34 @@ def atom(name, body):
     return struct.pack(">I", len(body) + 8) + name.encode("ascii") + body
 
 
-def matrix(args, harness):
+def matrix(args, harness, nonzero_start):
     records = []
+    profile = "nonzero-start" if nonzero_start else "omitted-start"
+    duration = 6 if nonzero_start else 1
     with tempfile.TemporaryDirectory(prefix="lineup-reference-fixtures-") as temporary:
         root = pathlib.Path(temporary)
         context = certificate(root, args.openssl)
         mp4 = root / "media.mp4"
+        encoder_options = (["-g", "10", "-keyint_min", "10", "-sc_threshold", "0", "-bf", "0"]
+                           if nonzero_start else [])
         run([args.ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=c=blue:s=64x64:r=10",
-             "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(mp4)])
+             "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p", *encoder_options,
+             "-movflags", "+faststart", str(mp4)])
+        frame_index = json.loads(run([
+            args.ffprobe, "-v", "error", "-select_streams", "v:0", "-show_frames",
+            "-show_entries", "frame=key_frame,best_effort_timestamp_time", "-of", "json", str(mp4)]))
+        frames = frame_index["frames"]
+        keyframes = [float(frame["best_effort_timestamp_time"])
+                     for frame in frames if frame["key_frame"] == 1]
+        if nonzero_start and (len(frames) != 60 or keyframes != list(range(6))):
+            raise RuntimeError("unexpected_fixture_keyframes")
+        fixture_identity = {"start_profile": profile, "frame_count": len(frames),
+                            "keyframe_seconds": keyframes,
+                            "start_seconds": 3.5 if nonzero_start else None,
+                            "expected_landing_seconds": 3.0 if nonzero_start else None,
+                            "mp4_sha256": hashlib.sha256(mp4.read_bytes()).hexdigest()}
+        (OUTPUT / (profile + "-fixture-index.json")).write_text(
+            json.dumps(fixture_identity, indent=2) + "\n")
         run([args.ffmpeg, "-v", "error", "-i", str(mp4), "-c", "copy", str(root / "media.mkv")])
         run([args.ffmpeg, "-v", "error", "-i", str(mp4), "-c", "copy", "-f", "mpegts", str(root / "segment.ts")])
         run([args.ffmpeg, "-v", "error", "-i", str(mp4), "-c", "copy", "-f", "dash", str(root / "media.mpd")])
@@ -269,6 +334,8 @@ def matrix(args, harness):
                 server.authenticated = len(servers) == 0
                 server.lock = threading.Lock()
                 server.requests = []
+                server.range_requests = 0
+                server.partial_responses = 0
                 server.files = {"/" + f.name: (f.read_bytes(), "application/octet-stream")
                                 for f in root.iterdir() if f.suffix in (".mp4", ".mkv", ".ts", ".m4s")}
                 servers.append(server)
@@ -281,7 +348,7 @@ def matrix(args, harness):
             hostname_b = f"https://localhost:{b.server_port}"
 
             def hls(url):
-                return ("#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\n" + url + "\n#EXT-X-ENDLIST\n").encode()
+                return (f"#EXTM3U\n#EXT-X-TARGETDURATION:{duration}\n#EXTINF:{duration},\n" + url + "\n#EXT-X-ENDLIST\n").encode()
 
             dash = (root / "media.mpd").read_text(encoding="utf-8")
             dash = dash.replace('initialization="', 'initialization="' + origin_b + "/")
@@ -316,6 +383,7 @@ def matrix(args, harness):
                     return {"A_requests": len(a.requests), "B_requests": len(secondary),
                             "B_https_requests": len(b.requests), "B_http_requests": len(plain.requests),
                             "B_http_token": any(token for _, token, _ in plain.requests),
+                            "A_range_requests": a.range_requests, "A_partial_responses": a.partial_responses,
                             "A_token": any(token for request, token, _ in a.requests if request == path),
                             "B_token": any(token for _, token, _ in secondary),
                             "secondary_A_token": any(token for request, token, _ in a.requests if request != path),
@@ -326,14 +394,21 @@ def matrix(args, harness):
                 for server in servers:
                     with server.lock:
                         server.requests.clear()
+                        server.range_requests = 0
+                        server.partial_responses = 0
                 command = [str(harness), str(root / ca), origin_a + path]
                 if mode:
                     command.append(mode)
-                result = captured(command, timeout=22, label=name)
-                return result, outcomes(result, name), audit(path)
+                if nonzero_start:
+                    command.append("--nonzero-start")
+                result = captured(command, timeout=22, label=profile + "-" + name)
+                fields = outcomes(result, name)
+                if fields["start_configured"] != str(int(nonzero_start)):
+                    raise HarnessOutcomeError(result, name, "wrong_start_profile")
+                return result, fields, audit(path)
 
             def record(name, passed, fields, observed, **extra):
-                row = {"case": name, "pass": bool(passed), **observed, **fields, **extra}
+                row = {"case": name, "start_profile": profile, "pass": bool(passed), **observed, **fields, **extra}
                 records.append(row)
                 print(json.dumps(row, sort_keys=True), flush=True)
 
@@ -407,6 +482,18 @@ def matrix(args, harness):
             passed = (result.returncode == 0 and fields["initialized"] == "1" and
                       observed["B_requests"] > 0 and not media_pass(result, fields, observed, False))
             record("control-allow-references", passed, fields, observed, scope="reference-policy-detection-sensitive")
+            if nonzero_start:
+                result, fields, observed = invoke("control-delayed-start", "/media.mp4", mode="control-delayed-start")
+                passed = (media_pass(result, fields, observed, True) and fields["delay_exercised"] == "1" and
+                          observed["A_partial_responses"] > 0)
+                record("control-delayed-start", passed, fields, observed, scope="stationary-landing-after-delayed-consumption")
+                result, fields, observed = invoke("control-ignore-start-delayed", "/media.mp4", mode="control-ignore-start-delayed")
+                passed = (media_pass(result, fields, observed, None) and fields["delay_exercised"] == "1" and
+                          fields["ignored_start"] == "1" and fields["initial_paused"] == "1" and
+                          fields["play_released"] == "1" and fields["landing_confirmed"] == "0" and
+                          fields["progressed"] == "0" and fields["rejected"] == "0" and
+                          not media_pass(result, fields, observed, True))
+                record("control-ignore-start-delayed", passed, fields, observed, scope="ignored-start-detected-after-delayed-consumption")
         finally:
             for server, thread in zip(servers, threads):
                 if thread.is_alive():
@@ -416,6 +503,13 @@ def matrix(args, harness):
                 thread.join(timeout=3)
                 if thread.is_alive():
                     raise RuntimeError("server_termination_timeout")
+    expected = {name for name, *_ in cases} | {
+        "control-http-token", "reject-option-access-references", "reject-option-autoload-files",
+        "untrusted-ca", "control-late-error", "control-disable-tls", "control-allow-references"}
+    if nonzero_start:
+        expected |= {"control-delayed-start", "control-ignore-start-delayed"}
+    if len(records) != (28 if nonzero_start else 26) or {row["case"] for row in records} != expected:
+        raise RuntimeError("incomplete_profile_matrix")
     return records
 
 
@@ -428,6 +522,7 @@ def main():
     parser.add_argument("--output-dir", type=pathlib.Path)
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--openssl", default="openssl")
+    parser.add_argument("--ffprobe", default="ffprobe")
     args = parser.parse_args()
     if sys.platform != "darwin" or not args.flutter_root:
         raise RuntimeError("macos_and_prepared_flutter_required")
@@ -440,6 +535,7 @@ def main():
     args.runtime = args.runtime.resolve(strict=True)
     args.flutter_root = args.flutter_root.resolve(strict=True)
     args.ffmpeg, args.openssl = tool(args.ffmpeg), tool(args.openssl)
+    args.ffprobe = tool(args.ffprobe)
     cmake = tool("cmake")
     identity = validate_runtime(args.runtime, args.flutter_root)
     source_paths = [*pathlib.Path(__file__).parent.glob("*.*"),
@@ -466,9 +562,10 @@ def main():
         raise RuntimeError("missing_harness")
     metadata["harness_sha256"] = sha(harness)
     (OUTPUT / "identity.json").write_text(json.dumps(metadata, indent=2) + "\n")
-    records = matrix(args, harness)
+    records = [row for nonzero_start in (False, True)
+               for row in matrix(args, harness, nonzero_start)]
     # Empty, partial, or accidentally narrowed test selections cannot pass.
-    passed = len(records) == 26 and all(row["pass"] for row in records)
+    passed = len(records) == 54 and all(row["pass"] for row in records)
     report = {"pass": passed, "cases": records, "runtime": identity,
               "harness_sha256": metadata["harness_sha256"], "source_head": metadata["source_head"]}
     (OUTPUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
