@@ -477,7 +477,11 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                     : IconButton(
                         tooltip: 'Clear channel program search',
                         onPressed: () => setState(_rundownSearch.clear),
-                        icon: Icon(Icons.clear, size: 24),
+                        icon: Icon(
+                          Icons.clear,
+                          size: 24,
+                          semanticLabel: 'Clear channel program search',
+                        ),
                       ),
               ),
               onChanged: (_) => setState(() {}),

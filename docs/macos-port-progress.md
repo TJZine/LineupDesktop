@@ -1613,3 +1613,13 @@ CI-only workflow differences, successful jobs/CTests, test logs, runtime/build
 summaries, privacy and relative links; no material findings remained. Product
 inputs remain at `296ab905`; the closing documentation does not relabel earlier
 binary evidence or claim that the static cast failure is fixed.
+# 2026-10-18 — Pro review follow-up: Studio clear-search name
+
+The conditional manual-rundown clear-search action still supplied only tooltip
+semantics. Its icon now supplies the matching explicit action name while retaining
+the tooltip and existing layout. The extended Studio regression enters a query,
+checks label/button/tap semantics, activates Clear and verifies the query empties.
+The focused test passed. A fresh adversarial read-only review
+(`studio_label_review_v2`) approved the two-file change with no material findings.
+Combined Release/native AX and Windows CI verification are pending below; this
+entry does not claim spoken output or physical Windows acceptance.

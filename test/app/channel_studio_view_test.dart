@@ -62,6 +62,30 @@ void main() {
       find.byTooltip('Move First later in channel Manual'),
     );
     expect(move.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    await tester.enterText(
+      find.byKey(const Key('studio-rundown-search')),
+      'First',
+    );
+    await tester.pumpAndSettle();
+    final clearSearch = find.byTooltip('Clear channel program search');
+    final clearNode = tester.getSemantics(clearSearch);
+    expect(clearNode.label, 'Clear channel program search');
+    expect(clearNode.getSemanticsData().flagsCollection.isButton, isTrue);
+    expect(clearNode.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    await tester.tap(clearSearch);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('studio-rundown-search')))
+          .controller!
+          .text,
+      isEmpty,
+    );
+    expect(
+      find.byTooltip('Move First later in channel Manual'),
+      findsOneWidget,
+    );
+    expect(clearSearch, findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   }, semanticsEnabled: true);
   testWidgets(
