@@ -695,3 +695,25 @@ next authorized isolated diagnostic observes actual returned Metal drawable
 format/size and selected presented callbacks, preserving normal acquisition and
 lifetime behavior. It requires another matched physical rapid failure before
 interpretation. No production playback change or HDR workaround has landed.
+
+The user requested an Opus 5.5 investigation handoff. Further HDR experiments are
+paused; all timed controllers and external observers were stopped and the
+current diagnostic app was left untouched. The latest physical endpoint is
+bright after a reported same-channel HDR reselection. Frozen evidence is indexed
+at `/tmp/lineup-visible-hdr-investigation/opus-freeze-index.json`.
+
+The latest drawable trial sampled 94 acquisitions with no actual texture
+format/extent mismatch; 85 of 94 selected callbacks had positive presentation
+times. These do not measure pixel payload or physical luminance. Crucial
+qualification: the trial contains an actual 1600×1200 → 425×239 → 1600×1200
+extent roundtrip during load 10, and final HDR load 19 follows SDR load 18.
+Several other HDR→HDR pairs exist. The human's same-channel repair observation
+cannot yet be uniquely assigned to one native pair or separated from all geometry
+history. No root cause or correction is established.
+
+The self-contained handoff is `docs/handoffs/macos-hdr-investigation-opus.md`.
+A compact, hash-manifest-verified bundle of that handoff, selected frozen traces,
+diagnostic patches and relevant source snapshots is
+`/tmp/lineup-opus-hdr-handoff.tar.gz`. The bundle excludes runtime binaries and
+private process dumps. Existing read-only CI observation remains separate; no
+new HDR probes or production changes are queued.
