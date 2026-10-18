@@ -42,6 +42,43 @@ final _extremeWideArtwork = base64Decode(
 
 void main() {
   testWidgets(
+    'Player icon actions have accessible names in OSD and Now Playing',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      for (final overlay in [PlayerOverlay.osd, PlayerOverlay.nowPlaying]) {
+        if (overlay == PlayerOverlay.osd) {
+          fixture.player.showOsd();
+        } else {
+          fixture.player.showNowPlaying();
+        }
+        await tester.pumpAndSettle();
+        for (final label in [
+          'Previous channel',
+          'Pause',
+          'Next channel',
+          'Full screen',
+        ]) {
+          final node = tester.getSemantics(find.byTooltip(label));
+          expect(node.label, label, reason: '$overlay');
+          expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
+          expect(
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+  testWidgets(
     'presentation getters distinguish watching from selected and held state',
     (tester) async {
       for (final state in PlayerState.values) {

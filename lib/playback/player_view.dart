@@ -664,7 +664,10 @@ class _Osd extends StatelessWidget {
               },
         padding: null,
         iconSize: 28,
-        icon: const Icon(Icons.skip_previous),
+        icon: const Icon(
+          Icons.skip_previous,
+          semanticLabel: 'Previous channel',
+        ),
       ),
       IconButton(
         style: actionStyle,
@@ -686,6 +689,11 @@ class _Osd extends StatelessWidget {
                   controller.status.state == PlayerState.playing)
               ? Icons.pause
               : Icons.play_arrow,
+          semanticLabel:
+              (controller.displayHoldActive ||
+                  controller.status.state == PlayerState.playing)
+              ? 'Pause'
+              : 'Play',
         ),
       ),
       IconButton(
@@ -699,7 +707,7 @@ class _Osd extends StatelessWidget {
               },
         padding: null,
         iconSize: 28,
-        icon: const Icon(Icons.skip_next),
+        icon: const Icon(Icons.skip_next, semanticLabel: 'Next channel'),
       ),
     ];
     final selectedAudio = controller.tracks
@@ -795,7 +803,7 @@ class _Osd extends StatelessWidget {
             },
             padding: null,
             iconSize: 20,
-            icon: const Icon(Icons.menu),
+            icon: const Icon(Icons.menu, semanticLabel: 'Lineup menu'),
           ),
         ),
       IconButton(
@@ -811,6 +819,9 @@ class _Osd extends StatelessWidget {
         iconSize: 20,
         icon: Icon(
           controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+          semanticLabel: controller.fullscreen
+              ? 'Exit full screen'
+              : 'Full screen',
         ),
       ),
     ];
@@ -2249,7 +2260,11 @@ class _MiniGuide extends StatelessWidget {
                                     padding: EdgeInsets.zero,
                                     onPressed: () =>
                                         controller.moveMiniGuide(-1),
-                                    icon: Icon(Icons.arrow_upward, size: 24),
+                                    icon: Icon(
+                                      Icons.arrow_upward,
+                                      size: 24,
+                                      semanticLabel: 'Previous channel',
+                                    ),
                                   ),
                                   IconButton(
                                     tooltip: 'Next channel',
@@ -2260,7 +2275,11 @@ class _MiniGuide extends StatelessWidget {
                                     padding: EdgeInsets.zero,
                                     onPressed: () =>
                                         controller.moveMiniGuide(1),
-                                    icon: Icon(Icons.arrow_downward, size: 24),
+                                    icon: Icon(
+                                      Icons.arrow_downward,
+                                      size: 24,
+                                      semanticLabel: 'Next channel',
+                                    ),
                                   ),
                                 ],
                               ),

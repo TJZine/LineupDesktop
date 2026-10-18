@@ -42,6 +42,41 @@ final _narrowLogoPng = base64Decode(
 );
 
 void main() {
+  testWidgets('Guide toolbar icons expose explicit accessible names', (
+    tester,
+  ) async {
+    final lineup = _Lineup(1);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: LineupCanvas.builder,
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final label in [
+      'Close Guide',
+      'Earlier by 30 minutes',
+      'Later by 30 minutes',
+    ]) {
+      final node = tester.getSemantics(find.byTooltip(label));
+      expect(node.label, label);
+      expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
+    }
+    final later = tester.getSemantics(find.byTooltip('Later by 30 minutes'));
+    expect(later.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, semanticsEnabled: true);
   test('full-bleed layout and row snapping use the whole viewport', () {
     for (final size in const [
       Size(1280, 720),

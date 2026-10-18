@@ -1041,7 +1041,7 @@ class _Toolbar extends StatelessWidget {
                 ? BoxConstraints(minWidth: 48, minHeight: 48)
                 : null,
             iconSize: 24,
-            icon: const Icon(Icons.close),
+            icon: const Icon(Icons.close, semanticLabel: 'Close Guide'),
           ),
         ],
       ),
@@ -1183,7 +1183,10 @@ class _GuideControls extends StatelessWidget {
                 tooltip: 'Remove library filter',
                 onPressed: () => controller.setLibraryFilter(null),
                 iconSize: 17,
-                icon: const Icon(Icons.close),
+                icon: const Icon(
+                  Icons.close,
+                  semanticLabel: 'Remove library filter',
+                ),
               ),
             ],
           );
@@ -1224,7 +1227,11 @@ class _GuideControls extends StatelessWidget {
                   : IconButton(
                       tooltip: 'Clear search',
                       onPressed: searchController.clear,
-                      icon: Icon(Icons.close, size: 17),
+                      icon: Icon(
+                        Icons.close,
+                        size: 17,
+                        semanticLabel: 'Clear search',
+                      ),
                     ),
             ),
           ),
@@ -1249,7 +1256,10 @@ class _GuideControls extends StatelessWidget {
               ? () => controller.moveWindow(-1)
               : null,
           iconSize: 24,
-          icon: const Icon(Icons.chevron_left),
+          icon: const Icon(
+            Icons.chevron_left,
+            semanticLabel: 'Earlier by 30 minutes',
+          ),
         ),
         Tooltip(
           message: returnToLive ? 'Return to live' : 'Now',
@@ -1280,7 +1290,10 @@ class _GuideControls extends StatelessWidget {
           tooltip: 'Later by 30 minutes',
           onPressed: () => controller.moveWindow(1),
           iconSize: 24,
-          icon: const Icon(Icons.chevron_right),
+          icon: const Icon(
+            Icons.chevron_right,
+            semanticLabel: 'Later by 30 minutes',
+          ),
         ),
         SizedBox(width: 8),
         DropdownButtonHideUnderline(

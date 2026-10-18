@@ -636,7 +636,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
         IconButton(
           tooltip: 'Remove from channel',
           onPressed: _saving ? null : () => _removeManual(entry),
-          icon: const Icon(Icons.close),
+          icon: const Icon(Icons.close, semanticLabel: 'Remove from channel'),
         ),
       ],
     );

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -21,6 +22,48 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('Studio rundown icon actions expose accessible names', (
+    tester,
+  ) async {
+    const first = ChannelItem(
+      id: 'first',
+      title: 'First',
+      duration: Duration(minutes: 20),
+    );
+    const second = ChannelItem(
+      id: 'second',
+      title: 'Second',
+      duration: Duration(minutes: 20),
+    );
+    final channel = _channel(
+      id: 'manual',
+      number: 1,
+      name: 'Manual',
+      source: const ManualSource([first, second]),
+    );
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(channels: [channel]),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: channel),
+    );
+    await tester.pumpAndSettle();
+    for (final label in [
+      'Move First earlier in channel Manual',
+      'Move First later in channel Manual',
+      'Remove from channel',
+    ]) {
+      final node = tester.getSemantics(find.byTooltip(label).first);
+      expect(node.label, label);
+      expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
+    }
+    final move = tester.getSemantics(
+      find.byTooltip('Move First later in channel Manual'),
+    );
+    expect(move.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, semanticsEnabled: true);
   testWidgets(
     'NF-12 conflict replacement clears browse undo and pending choices',
     (tester) async {

@@ -64,6 +64,7 @@ void main() {
     outsideTextField(row);
     expect(row.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     final actions = tester.getSemantics(find.byTooltip('Actions for First'));
+    expect(actions.label, 'Actions for First');
     outsideTextField(actions);
     expect(actions.getSemanticsData().flagsCollection.isButton, isTrue);
     expect(actions.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);

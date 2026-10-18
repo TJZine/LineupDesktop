@@ -545,6 +545,11 @@ class ChannelsViewState extends State<ChannelsView> {
                                         tooltip: 'Actions for ${channel.name}',
                                         padding: EdgeInsets.all(8),
                                         iconSize: 24,
+                                        icon: Icon(
+                                          Icons.adaptive.more,
+                                          semanticLabel:
+                                              'Actions for ${channel.name}',
+                                        ),
                                         menuPadding: EdgeInsets.zero,
                                         onSelected: (action) =>
                                             switch (action) {

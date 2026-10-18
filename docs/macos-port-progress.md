@@ -1380,3 +1380,15 @@ removing only the boundary makes it fail. The affected accessibility suites pass
 and found no material issue with the directory repair. Native macOS AX exposure
 and Windows CI remain pending the combined candidate. This does not establish
 a fix for the separately observed bridge validation errors (M-04).
+
+### Post-audit M-03 — icon control accessible names (2026-10-18)
+
+Tooltip-only icons populated Flutter's tooltip semantics, while macOS derives
+AX labels from the separate name field. Explicit icon semantic labels now match
+existing tooltips/spec names for Now Playing, Guide toolbar, DVR transport,
+Mini Guide arrows, directory row menus and Studio rundown actions. Existing
+focus, callbacks, disabled states and Player layout are unchanged. Four focused
+semantics tests and all 274 affected widget tests pass. Fresh-chat review
+`01a150aa-dfa2-7221-b4dd-64711c978c50` found one adaptive-icon visual regression;
+the icon was restored to `Icons.adaptive.more`, tested and re-reviewed with the
+finding closed. Native AX/spoken output and Windows CI remain separate gates.
