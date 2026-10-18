@@ -679,6 +679,57 @@ void main() {
   );
 
   test(
+    'readiness observes a load hold resumed without a pause notification',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(
+        Uri.parse('file:///held.mp4'),
+        startPaused: true,
+      );
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments!['loadId']! as int;
+      // The unavailable display report releases the hold before readiness.
+      // mpv can coalesce pause true/false and send no new pause notification.
+      await player.play();
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+        'paused': false,
+      });
+      await load;
+      expect(player.status.state, PlayerState.playing);
+      expect(player.status.message, 'playing');
+
+      final pausedLoad = player.load(Uri.parse('file:///paused.mp4'));
+      await Future<void>.delayed(Duration.zero);
+      final pausedId = calls.last.arguments!['loadId']! as int;
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+        'paused': false,
+      });
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': pausedId,
+        'state': 'playing',
+        'paused': true,
+      });
+      await pausedLoad;
+      expect(player.status.state, PlayerState.paused);
+    },
+  );
+
+  test(
     'routes valid player-scoped display reports and rejects stale data',
     () async {
       final calls = <MethodCall>[];

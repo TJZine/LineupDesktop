@@ -116,6 +116,7 @@ struct FakeMpv {
   std::vector<std::string> seek_targets;
   std::atomic<double> seek_position{0};
   std::atomic<bool> seeking{false};
+  std::atomic<bool> paused{false};
   std::atomic<bool> reject_volume{false};
   std::string log_level;
   std::string authenticated_header;
@@ -202,6 +203,10 @@ int FakeGetProperty(mpv_handle*, const char* name, mpv_format format, void* data
     *static_cast<int64_t*>(data) = *fake->playlist_id;
     return 0;
   }
+  if (std::strcmp(name, "pause") == 0 && format == MPV_FORMAT_FLAG) {
+    *static_cast<int*>(data) = fake->paused ? 1 : 0;
+    return 0;
+  }
   if (std::strcmp(name, "time-pos") == 0 && format == MPV_FORMAT_DOUBLE) {
     *static_cast<double*>(data) = fake->seek_position;
     return 0;
@@ -222,6 +227,10 @@ int FakeGetProperty(mpv_handle*, const char* name, mpv_format format, void* data
 }
 
 int FakeSetProperty(mpv_handle*, const char* name, mpv_format format, void* data) {
+  if (std::strcmp(name, "pause") == 0 && format == MPV_FORMAT_FLAG) {
+    fake->paused = *static_cast<int*>(data) != 0;
+    return 0;
+  }
   if (std::strcmp(name, "volume") == 0 && format == MPV_FORMAT_DOUBLE &&
       fake->reject_volume) return MPV_ERROR_COMMAND;
   if (std::strcmp(name, "aid") == 0 && format == MPV_FORMAT_INT64) {
@@ -935,6 +944,40 @@ void SeekPolicyAndObservation(PlayerCore& core) {
   CloseWorkerless(core);
 }
 
+void ReadinessPauseSnapshot(PlayerCore& core) {
+  OpenWorkerless(core);
+  for (const bool resume : {true, false}) {
+    const int64_t id = resume ? 301 : 302;
+    fake->playlist_id = id + 1000;
+    Reply load;
+    Call(core, "load", load, {{"uri", Value("file:///fixture.mp4")},
+                              {"loadId", Value(id)}, {"startPaused", Value(true)},
+                              {"startSeconds", Value(18.25)}});
+    Check(load.successes == 1, "held initial join admitted");
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+    if (resume) {
+      Reply play;
+      Call(core, "play", play);
+      PlayerCoreTestAccess::RunQueuedCommands(core);
+    }
+    // No property-change notification: mpv may coalesce pause true/false.
+    Start(core, id + 1000);
+    mpv_event loaded{};
+    loaded.event_id = MPV_EVENT_FILE_LOADED;
+    PlayerCoreTestAccess::Event(core, loaded);
+    Events events;
+    Drain(core, events);
+    const auto ready = std::find_if(events.received.begin(), events.received.end(),
+        [id](const ValueMap& event) { return Has(event, "state", Value("playing")) &&
+                                         Has(event, "loadId", Value(id)); });
+    Check(ready != events.received.end() &&
+          Has(*ready, "loadId", Value(id)) &&
+          Has(*ready, "paused", Value(!resume)),
+          "readiness carries actual pause independently of requested startPaused");
+  }
+  CloseWorkerless(core);
+}
+
 void InitialJoinObservation(PlayerCore& core) {
   OpenWorkerless(core);
   std::ostringstream log;
@@ -1581,6 +1624,7 @@ int main() {
     Commands(core);
     SeekPolicyAndObservation(core);
     InitialJoinObservation(core);
+    ReadinessPauseSnapshot(core);
     Validation(core);
   }
   InitializeFailures();

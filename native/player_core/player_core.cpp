@@ -1003,10 +1003,21 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
                  StateEvent("loading", "Loading media", playback_.event_load()));
       break;
     }
-    case MPV_EVENT_FILE_LOADED:
+    case MPV_EVENT_FILE_LOADED: {
+      int observed_pause = -1;
+      if (mpv_operations_.get_property(mpv_, "pause", MPV_FORMAT_FLAG,
+                                       &observed_pause) < 0) {
+        observed_pause = -1;
+      }
       ObserveSeekLanding(event.event_id);
-      QueueEvent(generation, StateEvent("playing", "Playing", playback_.event_load()));
+      auto ready = StateEvent("playing", "Playing", playback_.event_load());
+      // A load hold can pause and resume before mpv emits another observed
+      // property change. Publish the current flag atomically with readiness,
+      // rather than leaving Dart to infer it from the requested load intent.
+      if (observed_pause >= 0) ready["paused"] = Value(observed_pause != 0);
+      QueueEvent(generation, std::move(ready));
       break;
+    }
     case MPV_EVENT_END_FILE: {
       const auto* end = static_cast<mpv_event_end_file*>(event.data);
       const auto load_id = playback_.EndFile(

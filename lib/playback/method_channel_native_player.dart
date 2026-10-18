@@ -519,6 +519,9 @@ class MethodChannelNativePlayer implements NativePlayer {
       'error' => PlayerState.error,
       _ => PlayerState.idle,
     };
+    if (state == PlayerState.playing && event['paused'] is bool) {
+      _paused = event['paused']! as bool;
+    }
     final failureCode = switch (event['failureCode']) {
       final String code => _normalizedPlaybackFailureCode(code),
       _ => null,

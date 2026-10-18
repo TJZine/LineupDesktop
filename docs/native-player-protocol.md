@@ -126,6 +126,10 @@ Keys:
 - `message`: a bounded diagnostic/status string.
 - `loadId`: optional for load-scoped events; the initialization-ready `idle`
   event has no `loadId`.
+- `paused`: bool snapshot of the actual libmpv pause flag on file-readiness
+  `playing` events when the native query succeeds. It overrides the Dart load
+  intent cache; pause/resume can coalesce without a property notification. Raw
+  `playing` still completes load readiness even when this flag is true.
 - `failureCode`: present for an error state.
 - `httpStatus`: optional integer, used with `http_error` for 4xx/5xx status.
 

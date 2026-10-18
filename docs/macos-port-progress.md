@@ -1392,3 +1392,35 @@ semantics tests and all 274 affected widget tests pass. Fresh-chat review
 `01a150aa-dfa2-7221-b4dd-64711c978c50` found one adaptive-icon visual regression;
 the icon was restored to `Icons.adaptive.more`, tested and re-reviewed with the
 finding closed. Native AX/spoken output and Windows CI remain separate gates.
+
+### Post-audit M-01 — observed readiness pause state (2026-10-18)
+
+Diagnosed before changing production behavior on a real instrumented Release
+build from the audit source. A fresh process, Guide, native fullscreen, then
+first manual tune reproduced the mismatch. Sanitized sequence in local
+`/tmp/lineup-audit/fix-diagnosis-relaunch.log`: initial native pause property
+had no load identity and value false; Dart began load 1 with cached pause true;
+FILE_LOADED queried actual pause false; raw playing reached Dart with cached
+pause still true. No intervening pause notification was emitted. The first
+incorrect reported state was Dart's readiness projection using requested
+`startPaused`, not a native paused-state event. Windowed/manual tunes with
+cached pause false reported correctly in the same experiment.
+
+The start-of-load display hold and its early resume are involved: pause and
+resume can coalesce before mpv emits another changed-property notification.
+The cache and pause/display policy predate L1/L2. L1 keyframe seeks and L2
+per-file start joins do not supply playback-state confirmation; the bug does
+not justify changing their accepted join precision or adding a paused landing
+barrier. The fix samples the actual pause flag at native file readiness and
+carries it atomically with the readiness event. Dart consumes the typed
+current-load snapshot before status projection. Raw readiness still completes
+when truly paused. Toggle uses that corrected observed status; no extra toggle
+heuristic, seek, display-hold or pause policy was added.
+
+All 53 transport tests and all three portable core CTests pass. Regressions
+cover a held initial join resumed without a pause notification, genuinely
+paused readiness and stale-load rejection. Fresh-chat adversarial review
+`01a150ad-4978-7353-8ab4-18686ac7bc61` independently repeated these checks,
+verified mpv coalescing behavior/platform bool conversion and found no material
+issues. Temporary state tracing was removed. Candidate Release reproduction,
+actual pause/resume and shared-core Windows CI remain pending combined checks.
