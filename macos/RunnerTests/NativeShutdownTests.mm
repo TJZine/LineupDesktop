@@ -1,4 +1,6 @@
 #import <XCTest/XCTest.h>
+#import <QuartzCore/QuartzCore.h>
+#import <objc/runtime.h>
 
 #import "LineupNativePlayer.h"
 #import "LineupPlayerLifecycle.h"
@@ -7,6 +9,9 @@
 #include <chrono>
 #include <condition_variable>
 #include <memory>
+#include <future>
+#include <string>
+#include <vector>
 #include <mutex>
 #include <thread>
 
@@ -51,6 +56,75 @@ lineup::player::MpvOperations ControlledOperations() {
   };
   return operations;
 }
+
+// Observe framework calls at the real owned-layer boundary. Only the selected
+// test thread substitutes these methods; unrelated AppKit calls still use the
+// original implementations. This proves publication ordering, not GPU output.
+struct LayerPublicationTrace {
+  std::vector<std::string> calls;
+  CGColorSpaceRef colorspace = nullptr;
+  BOOL edr = NO;
+  __unsafe_unretained CAEDRMetadata* metadata = nil;
+  MTLPixelFormat format = MTLPixelFormatInvalid;
+  CGSize size = CGSizeZero;
+  __unsafe_unretained id drawable = nil;
+};
+thread_local LayerPublicationTrace* layerTrace = nullptr;
+std::atomic<IMP> originalLayerCalls[7];
+void TraceColorspace(id object, SEL selector, CGColorSpaceRef value) {
+  if (layerTrace) { layerTrace->calls.push_back("colorspace"); layerTrace->colorspace = value; }
+  else reinterpret_cast<void (*)(id, SEL, CGColorSpaceRef)>(originalLayerCalls[0].load())(object, selector, value);
+}
+void TraceEDR(id object, SEL selector, BOOL value) {
+  if (layerTrace) { layerTrace->calls.push_back("edr"); layerTrace->edr = value; }
+  else reinterpret_cast<void (*)(id, SEL, BOOL)>(originalLayerCalls[1].load())(object, selector, value);
+}
+void TraceMetadata(id object, SEL selector, CAEDRMetadata* value) {
+  if (layerTrace) { layerTrace->calls.push_back("metadata"); layerTrace->metadata = value; }
+  else reinterpret_cast<void (*)(id, SEL, CAEDRMetadata*)>(originalLayerCalls[2].load())(object, selector, value);
+}
+void TraceFormat(id object, SEL selector, MTLPixelFormat value) {
+  if (layerTrace) { layerTrace->calls.push_back("format"); layerTrace->format = value; }
+  else reinterpret_cast<void (*)(id, SEL, MTLPixelFormat)>(originalLayerCalls[3].load())(object, selector, value);
+}
+void TraceSize(id object, SEL selector, CGSize value) {
+  if (layerTrace) { layerTrace->calls.push_back("size"); layerTrace->size = value; }
+  else reinterpret_cast<void (*)(id, SEL, CGSize)>(originalLayerCalls[4].load())(object, selector, value);
+}
+void TraceFlush(id object, SEL selector) {
+  if (layerTrace) layerTrace->calls.push_back("flush");
+  else reinterpret_cast<void (*)(id, SEL)>(originalLayerCalls[5].load())(object, selector);
+}
+id TraceAcquisition(id object, SEL selector) {
+  if (layerTrace) { layerTrace->calls.push_back("acquire"); return layerTrace->drawable; }
+  return reinterpret_cast<id (*)(id, SEL)>(originalLayerCalls[6].load())(object, selector);
+}
+struct LayerPublicationHooks {
+  Method methods[7];
+  LayerPublicationHooks() {
+    SEL selectors[] = {@selector(setColorspace:), @selector(setWantsExtendedDynamicRangeContent:),
+        @selector(setEDRMetadata:), @selector(setPixelFormat:), @selector(setDrawableSize:),
+        @selector(flush), @selector(nextDrawable)};
+    IMP replacements[] = {reinterpret_cast<IMP>(TraceColorspace), reinterpret_cast<IMP>(TraceEDR),
+        reinterpret_cast<IMP>(TraceMetadata), reinterpret_cast<IMP>(TraceFormat),
+        reinterpret_cast<IMP>(TraceSize), reinterpret_cast<IMP>(TraceFlush),
+        reinterpret_cast<IMP>(TraceAcquisition)};
+    for (size_t i = 0; i < 7; ++i) {
+      methods[i] = i == 5 ? class_getClassMethod(CATransaction.class, selectors[i])
+                          : class_getInstanceMethod(CAMetalLayer.class, selectors[i]);
+      originalLayerCalls[i].store(method_getImplementation(methods[i]));
+      method_setImplementation(methods[i], replacements[i]);
+    }
+  }
+  ~LayerPublicationHooks() {
+    for (size_t i = 0; i < 7; ++i) method_setImplementation(methods[i], originalLayerCalls[i].load());
+  }
+};
+struct ScopedLayerTrace {
+  LayerPublicationTrace* previous;
+  explicit ScopedLayerTrace(LayerPublicationTrace& trace) : previous(layerTrace) { layerTrace = &trace; }
+  ~ScopedLayerTrace() { layerTrace = previous; }
+};
 }  // namespace
 
 @interface LineupNativePlayer (LifecycleTests)
@@ -64,8 +138,8 @@ lineup::player::MpvOperations ControlledOperations() {
 - (void)terminateAfterShutdownTimeout;
 @end
 
-// The real adapter and real core run throughout these tests. Only libmpv's
-// operations and the terminal process-exit action are controlled boundaries.
+// The real adapter and core run throughout. Lifecycle cases control libmpv
+// operations and terminal exit; layer cases also observe framework boundaries.
 @interface ShutdownTestPlayer : LineupNativePlayer
 @property(nonatomic) NSUInteger timeoutCount;
 @property(nonatomic) NSUInteger emergencyShutdownCount;
@@ -173,6 +247,93 @@ lineup::player::MpvOperations ControlledOperations() {
                                                                 arguments:nil]
                         result:^(id result) { XCTAssertTrue([result isKindOfClass:NSDictionary.class]); }];
   XCTAssertEqual(self.videoHost.subviews.count, 1u);
+}
+
+- (void)testOwnedLayerPublishesEveryOffMainSetterBeforeItReturnsWithoutAcquisition {
+  [self initializePlayer];
+  CAMetalLayer* layer = (CAMetalLayer*)self.videoHost.subviews.firstObject.layer;
+  CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
+  CAEDRMetadata* metadata = [CAEDRMetadata HDR10MetadataWithMinLuminance:0.01
+                                                       maxLuminance:1000
+                                                 opticalOutputScale:1];
+  LayerPublicationHooks hooks;
+  LayerPublicationTrace trace;
+  std::thread setter([&] {
+    @autoreleasepool {
+      ScopedLayerTrace observing(trace);
+      layer.colorspace = colorspace;
+      layer.wantsExtendedDynamicRangeContent = YES;
+      layer.EDRMetadata = metadata;
+      layer.pixelFormat = MTLPixelFormatRGB10A2Unorm;
+      // MoltenVK also makes this teardown mutation without acquiring again.
+      layer.drawableSize = CGSizeMake(1, 1);
+    }
+  });
+  setter.join();
+  XCTAssertTrue((trace.calls == std::vector<std::string>{"colorspace", "flush", "edr", "flush",
+      "metadata", "flush", "format", "flush", "size", "flush"}));
+  XCTAssertEqual(trace.colorspace, colorspace);
+  XCTAssertTrue(trace.edr);
+  XCTAssertEqual(trace.metadata, metadata);
+  XCTAssertEqual(trace.format, MTLPixelFormatRGB10A2Unorm);
+  XCTAssertTrue(CGSizeEqualToSize(trace.size, CGSizeMake(1, 1)));
+  CGColorSpaceRelease(colorspace);
+}
+
+- (void)testOwnedLayerKeepsMainThreadTransactionsAndOriginalAcquisition {
+  [self initializePlayer];
+  CAMetalLayer* layer = (CAMetalLayer*)self.videoHost.subviews.firstObject.layer;
+  NSObject* token = [NSObject new];
+  LayerPublicationHooks hooks;
+  LayerPublicationTrace trace;
+  trace.drawable = token;
+  {
+    ScopedLayerTrace observing(trace);
+    layer.colorspace = nullptr;
+    layer.wantsExtendedDynamicRangeContent = NO;
+    layer.EDRMetadata = nil;
+    layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    layer.drawableSize = CGSizeMake(640, 360);
+    XCTAssertEqual((id)[layer nextDrawable], token);
+  }
+  XCTAssertTrue((trace.calls == std::vector<std::string>{"colorspace", "edr", "metadata",
+      "format", "size", "acquire"}));
+}
+
+- (void)testDifferentAcquisitionThreadCannotConsumeSetterThreadPublication {
+  [self initializePlayer];
+  CAMetalLayer* layer = (CAMetalLayer*)self.videoHost.subviews.firstObject.layer;
+  NSObject* token = [NSObject new];
+  LayerPublicationHooks hooks;
+  LayerPublicationTrace setterTrace;
+  LayerPublicationTrace otherTrace;
+  setterTrace.drawable = token;
+  otherTrace.drawable = token;
+  std::promise<void> setterReturned;
+  std::promise<void> allowAcquisition;
+  auto release = allowAcquisition.get_future();
+  std::thread setter([&] {
+    @autoreleasepool {
+      ScopedLayerTrace observing(setterTrace);
+      layer.drawableSize = CGSizeMake(1, 1);
+      setterReturned.set_value();
+      release.wait(); // A remains alive and has not acquired yet.
+      [layer nextDrawable];
+    }
+  });
+  setterReturned.get_future().wait();
+  XCTAssertTrue((setterTrace.calls == std::vector<std::string>{"size", "flush"}));
+  std::thread other([&] {
+    @autoreleasepool {
+      ScopedLayerTrace observing(otherTrace);
+      [layer nextDrawable];
+    }
+  });
+  other.join();
+  allowAcquisition.set_value();
+  setter.join();
+  XCTAssertTrue((otherTrace.calls == std::vector<std::string>{"acquire"}));
+  XCTAssertTrue((setterTrace.calls == std::vector<std::string>{"size", "flush", "acquire"}));
 }
 
 - (void)testFullscreenSnapshotAndNativeNotificationsUseProductionEventPath {

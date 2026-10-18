@@ -135,6 +135,47 @@ class MacCoreHost final : public lineup::player::CoreHost {
 
 }  // namespace
 
+// MoltenVK configures this owned layer on mpv's VO thread, which has no
+// run loop to commit implicit Core Animation transactions. Publish each
+// off-main mutation on its calling thread: a later acquisition may occur
+// elsewhere, and teardown's 1x1 resize may have no following acquisition.
+// Main-thread mutations retain AppKit's normal transaction boundaries.
+@interface LineupMetalLayer : CAMetalLayer
+@end
+
+@implementation LineupMetalLayer
+
+- (void)publishOffMainTransaction {
+  if (!NSThread.isMainThread) [CATransaction flush];
+}
+
+- (void)setColorspace:(CGColorSpaceRef)colorspace {
+  [super setColorspace:colorspace];
+  [self publishOffMainTransaction];
+}
+
+- (void)setWantsExtendedDynamicRangeContent:(BOOL)wants {
+  [super setWantsExtendedDynamicRangeContent:wants];
+  [self publishOffMainTransaction];
+}
+
+- (void)setEDRMetadata:(CAEDRMetadata*)metadata {
+  [super setEDRMetadata:metadata];
+  [self publishOffMainTransaction];
+}
+
+- (void)setPixelFormat:(MTLPixelFormat)format {
+  [super setPixelFormat:format];
+  [self publishOffMainTransaction];
+}
+
+- (void)setDrawableSize:(CGSize)size {
+  [super setDrawableSize:size];
+  [self publishOffMainTransaction];
+}
+
+@end
+
 // The passive view whose CAMetalLayer libmpv renders into. It never takes
 // hit-testing, focus, or an accessibility role (protocol obligation 4). The
 // host sets its frame; the view keeps the layer's contentsScale and
@@ -157,7 +198,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
 }
 
 - (CALayer*)makeBackingLayer {
-  CAMetalLayer* layer = [CAMetalLayer layer];
+  CAMetalLayer* layer = [LineupMetalLayer layer];
   layer.framebufferOnly = YES;
   layer.backgroundColor = NSColor.blackColor.CGColor;
   return layer;
@@ -755,7 +796,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
           @"colorspace=%@ edr=%d edrMetadata=%d pixelFormat=%lu "
           @"drawable=%.0fx%.0f scale=%.1f hidden=%d headroom=%.2f "
           @"potentialHeadroom=%.2f window=%@ visible=%d occlusionVisible=%d "
-          @"fullscreen=%d",
+          @"fullscreen=%d active=%d key=%d",
           colorspaceName ?: @"none", layer.wantsExtendedDynamicRangeContent,
           layer.EDRMetadata != nil, (unsigned long)layer.pixelFormat,
           layer.drawableSize.width, layer.drawableSize.height,
@@ -764,7 +805,7 @@ class MacCoreHost final : public lineup::player::CoreHost {
           screen.maximumPotentialExtendedDynamicRangeColorComponentValue,
           NSStringFromRect(window.frame), window.isVisible,
           (window.occlusionState & NSWindowOcclusionStateVisible) != 0,
-          [self windowIsFullscreen]];
+          [self windowIsFullscreen], NSApp.isActive, window.isKeyWindow];
   if (reason || ![facts isEqualToString:_lastPresentationFacts]) {
     _lastPresentationFacts = facts;
     NSLog(@"[lineup-presentation] %@%@%@", reason ?: @"", reason ? @": " : @"",

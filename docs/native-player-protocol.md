@@ -322,6 +322,11 @@ the shared core, with these platform-specific values:
   and `target-colorspace-hint=yes` into an adapter-owned `CAMetalLayer` passed
   as `wid` (the runtime's embedding patch). HDR output is EDR on that layer,
   selected by mpv from the content; there is no display mode switch.
+  The owned layer publishes MoltenVK's off-main color space, EDR, metadata,
+  pixel format, and drawable-size mutations immediately on the setter's
+  calling thread. This also covers teardown and threads that never acquire
+  another drawable; acquisition on another thread cannot publish that
+  transaction. Main-thread mutations retain normal AppKit transactions.
 - `setDisplayMatching` validates its arguments and the strictly increasing
   revision exactly as above, returns `null`, and queues a `display` report
   for that revision with `session: unavailable`, `observed: unknown`,
