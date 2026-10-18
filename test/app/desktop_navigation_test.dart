@@ -416,6 +416,59 @@ void main() {
     expect(find.text('Player controls auto-hide'), findsOneWidget);
   });
 
+  for (final expireInSettings in [false, true]) {
+    for (final useEscape in [false, true]) {
+      testWidgets(
+        'Settings ${useEscape ? "Escape" : "Back"} returns to Guide '
+        'after sleep expiry ${expireInSettings ? "in Settings" : "in Player"}',
+        (tester) async {
+          final nativePlayer = FixturePlayer()
+            ..emit(
+              const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+            );
+          final fixture = UiFixture(
+            player: nativePlayer,
+            scenario: LineupScenario(stage: SetupStage.ready),
+          );
+          await tester.pumpWidget(fixture.build());
+          await tester.pumpAndSettle();
+          await _routeShortcut(tester, 4);
+          final player = tester
+              .widget<PlayerView>(find.byType(PlayerView))
+              .controller;
+          player.setSleepTimer(const Duration(seconds: 5));
+
+          if (expireInSettings) {
+            await _sendAppMenu(tester, 'openSettings');
+            expect(find.text('‹ Back to Player'), findsOneWidget);
+          }
+          await tester.pump(const Duration(seconds: 5));
+          await tester.pumpAndSettle();
+          expect(nativePlayer.stops, 1);
+          expect(player.status.message, 'Playback stopped by timer');
+          if (!expireInSettings) {
+            await _sendAppMenu(tester, 'openSettings');
+          }
+          expect(find.byType(PlayerSurface), findsNothing);
+          expect(find.text('‹ Back to Guide'), findsOneWidget);
+
+          if (useEscape) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          } else {
+            await tester.tap(find.text('‹ Back to Guide'));
+          }
+          await tester.pumpAndSettle();
+          _expectDestination('Guide');
+          expect(find.byKey(const Key('settings-app-menu')), findsNothing);
+          expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+          await _sendAppMenu(tester, 'openSettings');
+          expect(find.text('‹ Back to Guide'), findsOneWidget);
+        },
+      );
+    }
+  }
+
   for (final (index, name) in [(0, 'Guide'), (1, 'Channels'), (4, 'Player')]) {
     testWidgets('Settings keeps $name origin through Diagnostics and menu', (
       tester,

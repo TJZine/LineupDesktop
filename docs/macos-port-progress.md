@@ -1322,3 +1322,16 @@ and the separately attributed engine/package job passed. **Measured Plex
 performance is inconclusive**, with no established gain, no accepted timing
 summary and no retry. The requested bounded closure is complete. Stop here;
 no further harness, HDR, design or release work is authorized by this closure.
+
+### Post-audit M-05 — Settings return after timer expiry (2026-10-18)
+
+The Settings button and Escape handler consumed their return origin before
+`_select(player)` could reject an unavailable playback surface. Both now use
+one resolved destination: Guide when the Player origin has no surface. The
+label follows that destination; successful navigation owns origin consumption.
+All 46 desktop-navigation tests pass on pinned Flutter 3.47.7, including four
+sleep-expiry cases (before/while Settings, button/Escape), Diagnostics origins
+and dirty guards. Independent fresh-chat adversarial review
+`01a150a7-9075-7b52-a52a-7b8e7465da30` found no material issues and independently
+ran the suite. Real Release interaction and shared-Dart Windows CI are pending
+the combined candidate; widget tests do not establish physical input behavior.

@@ -222,6 +222,17 @@ class _LineupShellState extends State<LineupShell> {
   bool get _hasPlaybackSurface =>
       _player.hasPlaybackIntent || _player.error != null;
 
+  ShellDestination? get _settingsBackDestination =>
+      _settingsReturnDestination == ShellDestination.player &&
+          !_hasPlaybackSurface
+      ? ShellDestination.guide
+      : _settingsReturnDestination;
+
+  void _returnFromSettings() {
+    final destination = _settingsBackDestination;
+    if (destination != null) unawaited(_select(destination));
+  }
+
   bool get _onboardingMenuAvailable {
     final controller = widget.controller;
     if (!_onboardingFromAccount || controller.busy) return false;
@@ -390,9 +401,7 @@ class _LineupShellState extends State<LineupShell> {
         (event.logicalKey == LogicalKeyboardKey.escape ||
             event.logicalKey == LogicalKeyboardKey.backspace ||
             event.logicalKey == LogicalKeyboardKey.goBack)) {
-      final returnDestination = _settingsReturnDestination!;
-      _settingsReturnDestination = null;
-      unawaited(_select(returnDestination));
+      _returnFromSettings();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.f3 &&
@@ -754,18 +763,12 @@ class _LineupShellState extends State<LineupShell> {
       menuFocusNode: _settingsMenuFocus,
       onOpenMenu: _openAppMenu,
       backLabel:
-          '‹ Back to ${switch (_settingsReturnDestination) {
+          '‹ Back to ${switch (_settingsBackDestination) {
             ShellDestination.player => "Player",
             ShellDestination.channels => "Channels",
             _ => "Guide",
           }}',
-      onBack: _settingsReturnDestination == null
-          ? null
-          : () {
-              final returnDestination = _settingsReturnDestination!;
-              _settingsReturnDestination = null;
-              unawaited(_select(returnDestination));
-            },
+      onBack: _settingsBackDestination == null ? null : _returnFromSettings,
       category: _settingsCategory,
       onCategoryChanged: (category) => setState(() {
         _settingsCategory = category;
