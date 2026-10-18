@@ -579,3 +579,28 @@ presentation-layer reads and mpv debug options, and reused the original
 perturb timing. The worker is next comparing a fresh launch of the unchanged
 original binary with the same endpoint sequence. No production correction,
 causal conclusion or HDR acceptance follows from these non-reproductions.
+
+The unchanged original binary's fresh comparison was confounded by Stage
+Manager: the human saw dimmer output in its miniature and correct output after
+both focusing and entering fullscreen. Activation and extent changes were not
+separated, so this does not explain the original failing process. The controller
+requested one human-driven, fixed-size windowed SDR/HDR sequence with Lineup
+remaining foreground until brightness is judged. That answer remains pending;
+automated scene changes and runtime-proof processes are paused meanwhile.
+
+Hosted macOS runtime provisioning and identity validation passed in run
+`39079367554`, but its required authenticated-reference proof failed with
+`invalid_harness_outcome`, exit 2, before any case outcome. Investigation found
+a definite fixture defect introduced by the expanded fullscreen observation
+path: successful initialization now reads the window's `styleMask`, while the
+headless `ReferenceWindow` double implemented no such selector. The exact hosted
+exception remains inferred because child status/output were not exposed.
+
+The independent reviewer approved the exact three-file fixture/diagnostic patch
+SHA-256 `f9aea51deabf8a73db289d4da72cd065bf958e6553525a8406c9c9c6d51ab348`.
+The fake reports a truthful borderless/windowed style; malformed harness outcomes
+now expose only safe case/status/signal/validation fields while retaining exit 2.
+Pure parser/control-flow checks pass, including malformed/non-ASCII/missing
+fields and private-sentinel exclusion. Production adapter/core/runtime inputs
+remain unchanged. Actual isolated 26-case proof and hosted recovery remain
+pending; no prior passing matrix is relabeled as proof of this combination.

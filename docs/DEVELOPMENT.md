@@ -489,7 +489,9 @@ child logs, source/artifact identities, and `report.json` remain in that
 folder. Certificates and media fixtures are temporary. Captured stdout/stderr
 containing the synthetic secret fail the run; raw diagnostics are not printed.
 Missing prerequisites, certificate setup, malformed child outcomes, timeouts,
-and empty/partial matrices fail rather than skip. Exit 0 requires all 26 cases.
+and empty/partial matrices fail rather than skip. A malformed child outcome
+reports the fixed case name, child exit status/signal, and field-validation
+category without printing child output or arguments. Exit 0 requires all 26 cases.
 
 The matrix covers ordinary MP4/MKV progress without a later rejection; HLS
 same-origin/hostname/port/master/key, DASH, playlist, EDL, CUE, MOV, concat,

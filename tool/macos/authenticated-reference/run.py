@@ -135,11 +135,29 @@ def validate_runtime(runtime, flutter):
             "libraries": dict(sorted(identities.items()))}
 
 
-def outcomes(result):
-    fields = dict(field.split("=") for field in result.stdout.decode("ascii").strip().split())
+class HarnessOutcomeError(RuntimeError):
+    def __init__(self, result, case, validation, **details):
+        super().__init__("invalid_harness_outcome")
+        # Never include child output, argument values, or exception text.
+        self.summary = {"case": case, "child_returncode": result.returncode,
+                        "child_signal": -result.returncode if result.returncode < 0 else None,
+                        "field_validation": validation, **details}
+
+
+def outcomes(result, case):
+    try:
+        fields = dict(field.split("=") for field in result.stdout.decode("ascii").strip().split())
+    except UnicodeDecodeError:
+        raise HarnessOutcomeError(result, case, "non_ascii_output") from None
+    except ValueError:
+        raise HarnessOutcomeError(result, case, "malformed_fields") from None
     required = {"runtime_bound", "messenger_contract", "initialized", "progressed", "rejected", "timed_out"}
-    if not required.issubset(fields) or any(value not in ("0", "1") for value in fields.values()):
-        raise RuntimeError("invalid_harness_outcome")
+    missing = sorted(required - fields.keys())
+    invalid_values = sum(value not in ("0", "1") for value in fields.values())
+    if missing or invalid_values:
+        raise HarnessOutcomeError(result, case, "invalid_fields",
+                                  missing_required_fields=missing,
+                                  invalid_value_count=invalid_values)
     return fields
 
 
@@ -312,7 +330,7 @@ def matrix(args, harness):
                 if mode:
                     command.append(mode)
                 result = captured(command, timeout=22, label=name)
-                return result, outcomes(result), audit(path)
+                return result, outcomes(result, name), audit(path)
 
             def record(name, passed, fields, observed, **extra):
                 row = {"case": name, "pass": bool(passed), **observed, **fields, **extra}
@@ -464,5 +482,8 @@ if __name__ == "__main__":
     except Exception as error:
         # Exception text can contain tool diagnostics, paths, headers, or URLs.
         reason = str(error) if isinstance(error, RuntimeError) else type(error).__name__
-        print(json.dumps({"pass": False, "prerequisite_error": reason}), flush=True)
+        failure = {"pass": False, "prerequisite_error": reason}
+        if isinstance(error, HarnessOutcomeError):
+            failure["harness_outcome"] = error.summary
+        print(json.dumps(failure), flush=True)
         raise SystemExit(2)

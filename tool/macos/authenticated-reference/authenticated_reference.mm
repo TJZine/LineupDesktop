@@ -86,6 +86,9 @@ bool RuntimeBound() {
 @interface ReferenceWindow : NSObject
 @end
 @implementation ReferenceWindow
+// The adapter publishes the observed fullscreen state during initialization.
+// This headless window double always represents a windowed host.
+- (NSWindowStyleMask)styleMask { return NSWindowStyleMaskBorderless; }
 - (BOOL)isMiniaturized { return NO; }
 - (NSWindowOcclusionState)occlusionState { return NSWindowOcclusionStateVisible; }
 @end
