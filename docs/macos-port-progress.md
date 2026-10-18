@@ -799,3 +799,18 @@ been asked to choose fail-without-advancing versus exact-seek fallback for an
 unavailable predecessor; that dependent policy remains pending. The worker
 continues intent/currentness design, including a faithful correlated observed
 landing rather than logging enqueue success or pre-seek time position.
+
+The human clarified and superseded the strict L1 interpretation: exact entry
+position does not matter for live-TV joins. Use plain `absolute+keyframes` for
+schedule/tune/recovery joins; explicit user seeks remain exact. Do not add a
+failure path, exact fallback or paused landing guard. The no-predecessor mpv
+fallback is accepted; end-of-program rollover still needs verification. Landed
+versus target logging must remain passive and truthful. Earlier strict
+never-past/fail-closed design obligations above are withdrawn.
+
+The human also explicitly approved H1's simple off-main setter-thread flush
+without a redundant acquisition barrier. Physical acceptance must additionally
+check black/wrong-color flashes between channels and switch-latency regression.
+If flashes occur, the authorized fallback is the proven pre-acquisition barrier
+plus setter-thread flush only for writes on threads that will not acquire again.
+That fallback is conditional on evidence, not part of the initial implementation.
