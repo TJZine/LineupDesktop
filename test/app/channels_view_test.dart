@@ -11,6 +11,64 @@ import 'package:lineup_desktop/ui/lineup_controls.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('directory exposes search, management actions and channel rows', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_channel('first', 2, 'First')],
+      ),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+    await tester.pumpAndSettle();
+
+    void outsideTextField(SemanticsNode node) {
+      SemanticsNode? ancestor = node;
+      while (ancestor != null) {
+        expect(
+          ancestor.getSemanticsData().flagsCollection.isTextField,
+          isFalse,
+          reason: 'Directory controls must not be children of a text field',
+        );
+        ancestor = ancestor.parent;
+      }
+    }
+
+    final search = tester.getSemantics(
+      find.byKey(const Key('channels-search')),
+    );
+    expect(search.label, contains('Search channels'));
+    expect(search.getSemanticsData().flagsCollection.isTextField, isTrue);
+    for (final label in [
+      'Generate lineup',
+      'Add a custom channel',
+      'Select',
+      'Reorder channels',
+    ]) {
+      final node = tester.getSemantics(find.text(label).first);
+      expect(node.getSemanticsData().label, contains(label));
+      outsideTextField(node);
+      expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    }
+    for (final label in ['All', 'Custom', 'Generated']) {
+      final node = tester.getSemantics(find.text(label).first);
+      expect(node.getSemanticsData().label, label);
+      outsideTextField(node);
+    }
+    final row = tester.getSemantics(find.text('First'));
+    expect(row.label, contains('First'));
+    outsideTextField(row);
+    expect(row.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    final actions = tester.getSemantics(find.byTooltip('Actions for First'));
+    outsideTextField(actions);
+    expect(actions.getSemanticsData().flagsCollection.isButton, isTrue);
+    expect(actions.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, semanticsEnabled: true);
   testWidgets(
     'selection survives search and batch delete receives the reviewed channels',
     (tester) async {

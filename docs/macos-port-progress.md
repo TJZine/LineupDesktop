@@ -1367,3 +1367,16 @@ regression in the first patch; the corrected patch and added regression were
 re-reviewed with no material findings. Real-app 30-press replay and Windows CI
 remain pending the combined candidate. This is burst coalescing, not a latency
 benchmark.
+
+### Post-audit M-02 — directory accessibility boundary (2026-10-18)
+
+The directory search TextField merged its text-field role into the full-page
+semantics ancestor, placing management actions and rows below a native
+text-field leaf. Search now owns an explicit semantics container and name.
+The regression checks management/filter/row actions outside text-field ancestry;
+removing only the boundary makes it fail. The affected accessibility suites pass
+(274 tests, including Q-02's separate timing migration). Fresh-chat review
+`01a150aa-dfa2-7221-b4dd-64711c978c50` independently ran the new semantics tests
+and found no material issue with the directory repair. Native macOS AX exposure
+and Windows CI remain pending the combined candidate. This does not establish
+a fix for the separately observed bridge validation errors (M-04).

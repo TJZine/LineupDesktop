@@ -753,14 +753,18 @@ class ChannelsViewState extends State<ChannelsView> {
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
-        final search = TextField(
-          key: const Key('channels-search'),
-          enabled: !_saving,
-          controller: _search,
-          focusNode: _searchFocus,
-          style: _channelBodyStyle(context),
-          decoration: InputDecoration(hintText: 'Search by name or number'),
-          onChanged: (_) => setState(() {}),
+        final search = Semantics(
+          container: true,
+          label: 'Search channels',
+          child: TextField(
+            key: const Key('channels-search'),
+            enabled: !_saving,
+            controller: _search,
+            focusNode: _searchFocus,
+            style: _channelBodyStyle(context),
+            decoration: InputDecoration(hintText: 'Search by name or number'),
+            onChanged: (_) => setState(() {}),
+          ),
         );
         final wide = constraints.maxWidth >= 1200 && textScale < 1.4;
         if (wide) {
