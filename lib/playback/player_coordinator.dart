@@ -949,6 +949,7 @@ class PlayerCoordinator extends ChangeNotifier {
         plexToken: request?.plexToken,
         generation: load.generation,
         startPaused: startPaused,
+        startPosition: load.nativeStartPosition,
       ),
     );
     unawaited(
@@ -1041,7 +1042,10 @@ class PlayerCoordinator extends ChangeNotifier {
       while (load.target != null) {
         final target = load.target!;
         final mode = load.seekMode;
-        if (mode == SeekMode.exact || load.resumePosition != target) {
+        // The initial join belongs to native load options. Readiness/status
+        // can overwrite resumePosition; it must not decide seek ownership.
+        // Exact overrides still dispatch even at the same numeric target.
+        if (mode == SeekMode.exact || target != load.nativeStartPosition) {
           try {
             await player.seek(target, mode: mode);
           } catch (_) {
@@ -2262,7 +2266,8 @@ class _PlaybackLoad {
     required this.seekMode,
     required this.replacing,
     required this.authorizationRetried,
-  }) : startTarget = target;
+  }) : startTarget = target,
+       nativeStartPosition = seekMode == SeekMode.keyframes ? target : null;
 
   final int generation;
   final int tuneGeneration;
@@ -2270,6 +2275,8 @@ class _PlaybackLoad {
   final int partIndex;
   final bool authorizationRetried;
   final Duration? startTarget;
+  // Immutable record of the initial target passed to NativePlayer.load.
+  final Duration? nativeStartPosition;
   Duration lastPositivePosition = Duration.zero;
   Duration? lastPositiveDuration;
   Duration? target;

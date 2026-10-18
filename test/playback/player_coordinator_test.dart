@@ -464,7 +464,8 @@ void main() {
         f.now = f.now.add(const Duration(seconds: 30));
         await f.coordinator.toggleFullscreen();
         await f.coordinator.tune('channel-b');
-        expect(p.seekModes, [SeekMode.keyframes]);
+        expect(p.seeks, isEmpty);
+        expect(p.loadStartPositions, [const Duration(seconds: 30)]);
         expect(p.pausedStarts, [true]);
         if (userPaused) await f.coordinator.pause();
         p.position = const Duration(seconds: 28);
@@ -1017,7 +1018,11 @@ void main() {
         addTearDown(fixture.close);
         fixture.now = fixture.now.add(Duration(seconds: startSeconds));
         await fixture.coordinator.tune('channel-b');
-        expect(fixture.player.seeks, [Duration(seconds: startSeconds)]);
+        expect(fixture.player.seeks, isEmpty);
+        expect(
+          fixture.player.loadStartPositions.first,
+          Duration(seconds: startSeconds),
+        );
         final loaded = fixture.coordinator.currentProgram!;
         fixture.player.position = Duration.zero;
         fixture.player.duration = const Duration(seconds: 60);
@@ -1035,7 +1040,11 @@ void main() {
           );
           expect(fixture.coordinator.error, isNull);
           expect(fixture.coordinator.hasPlaybackIntent, isTrue);
-          expect(fixture.player.seeks, [Duration(seconds: startSeconds)]);
+          expect(fixture.player.seeks, isEmpty);
+          expect(
+            fixture.player.loadStartPositions.first,
+            Duration(seconds: startSeconds),
+          );
         } else {
           expect(fixture.player.loads, hasLength(1));
           expect(fixture.coordinator.hasPlaybackIntent, isFalse);
@@ -1099,10 +1108,10 @@ void main() {
       expect(fixture.coordinator.currentProgram!.scheduled.item.id, expected);
       expect(fixture.coordinator.currentProgram!.id, isNot(ended.id));
       expect(fixture.player.loads, hasLength(2));
-      expect(
-        fixture.player.seeks,
-        lateness <= 30 ? isEmpty : [Duration(seconds: lateness % 120)],
-      );
+      expect(fixture.player.loadStartPositions, [
+        null,
+        lateness <= 30 ? null : Duration(seconds: lateness % 120),
+      ]);
     });
   }
 
@@ -1192,7 +1201,10 @@ void main() {
           fixture.now = fixture.now.add(const Duration(seconds: 160));
           await fixture.coordinator.retry();
           expect(fixture.lineup.lastPlaybackItemId, 'short-1');
-          expect(fixture.player.seeks.last, const Duration(seconds: 40));
+          expect(
+            fixture.player.loadStartPositions.last,
+            const Duration(seconds: 40),
+          );
         },
       );
     }
@@ -1667,7 +1679,10 @@ void main() {
       fixture.now = fixture.now.add(const Duration(seconds: 160));
       await fixture.coordinator.retry();
       expect(fixture.player.loads, hasLength(3));
-      expect(fixture.player.seeks.last, const Duration(seconds: 40));
+      expect(
+        fixture.player.loadStartPositions.last,
+        const Duration(seconds: 40),
+      );
     },
   );
 
@@ -1687,7 +1702,10 @@ void main() {
         expect(fixture.coordinator.error, isNull);
         if (resolution == 'missing successor') {
           expect(fixture.player.loads, hasLength(2));
-          expect(fixture.player.seeks.last, const Duration(seconds: 40));
+          expect(
+            fixture.player.loadStartPositions.last,
+            const Duration(seconds: 40),
+          );
         } else {
           expect(fixture.player.loads, hasLength(1));
           expect(fixture.coordinator.hasPlaybackIntent, isFalse);
@@ -1742,7 +1760,11 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(lineup.recoveryCalls, 1);
-      expect(player.seeks.last, const Duration(milliseconds: 601007));
+      expect(
+        player.loadStartPositions.last,
+        const Duration(milliseconds: 601007),
+      );
+      expect(player.seeks, isEmpty);
       final replacement = player.loadGenerations.last;
       player.emitStatus(PlayerState.playing, generation: replacement);
       await tester.pump();
@@ -2311,7 +2333,11 @@ void main() {
         Uri.parse('https://media.test/program?quality=original'),
       );
       expect(player.loadPlexTokens.single, 'test-token');
-      expect(player.seeks.single, greaterThanOrEqualTo(Duration.zero));
+      expect(
+        player.loadStartPositions.single,
+        greaterThanOrEqualTo(Duration.zero),
+      );
+      expect(player.seeks, isEmpty);
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.overlay, PlayerOverlay.osd);
       expect(tuned, isTrue);
@@ -4426,7 +4452,8 @@ void main() {
 
     expect(lineup.currentChannelId, 'channel-b');
     expect(player.loads, hasLength(2));
-    expect(player.seeks, hasLength(1));
+    expect(player.seeks, isEmpty);
+    expect(player.loadStartPositions, hasLength(2));
     expect(results, [isFalse, isTrue]);
     await coordinator.stop();
     expect(player.stops, 2);
@@ -5520,35 +5547,38 @@ void main() {
     expect(coordinator.error, isNull);
   });
 
-  test('terminal error during seek cannot settle tune as successful', () async {
-    final lineup = _TestLineup();
-    final guide = GuideController(
-      lineup: lineup,
-      loadSchedule: (channel) async => _schedule(channel),
-    )..requestViewport(0, 2);
-    await Future<void>.delayed(Duration.zero);
-    final player = _BlockingControlPlayer();
-    addTearDown(player.close);
-    final coordinator = PlayerCoordinator(
-      player: player,
-      lineup: lineup,
-      guide: guide,
-    );
-    addTearDown(lineup.dispose);
-    addTearDown(guide.dispose);
-    addTearDown(coordinator.dispose);
+  test(
+    'terminal error during initial load cannot settle tune as successful',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _BlockingEventPlayer();
+      addTearDown(player.close);
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
-    final tune = coordinator.tune('channel-b');
-    await player.seekStarted.future;
-    player.emitError(generation: player.loadGenerations.single);
-    await Future<void>.delayed(Duration.zero);
-    player.releaseSeek.complete();
-    final tuned = await tune;
+      final tune = coordinator.tune('channel-b');
+      await player.firstLoadStarted.future;
+      player.emitError(generation: player.loadGenerations.single);
+      await Future<void>.delayed(Duration.zero);
+      player.releaseFirstLoad.complete();
+      final tuned = await tune;
 
-    expect(lineup.currentChannelId, 'channel-0');
-    expect(coordinator.overlay, PlayerOverlay.error);
-    expect(tuned, isFalse);
-  });
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(coordinator.overlay, PlayerOverlay.error);
+      expect(tuned, isFalse);
+    },
+  );
 
   test(
     'terminal error during persistence restores the previous channel',
@@ -5677,14 +5707,61 @@ void main() {
         addTearDown(f.close);
         f.now = f.now.add(Duration(seconds: elapsed));
         expect(await f.coordinator.tune('channel-b'), isTrue);
-        expect(
-          f.player.seeks,
-          elapsed <= 2 ? isEmpty : [Duration(seconds: elapsed)],
+        expect(f.player.loadStartPositions, [
+          elapsed <= 2 ? null : Duration(seconds: elapsed),
+        ]);
+        expect(f.player.seeks, isEmpty);
+      },
+    );
+  }
+
+  test(
+    'native initial target ownership survives readiness position updates',
+    () async {
+      final player = _BlockingEventPlayer();
+      final f = _ContinuationFixture(player: player);
+      addTearDown(f.close);
+      f.now = f.now.add(const Duration(seconds: 30));
+      final tune = f.coordinator.tune('channel-b');
+      await player.firstLoadStarted.future;
+      player.position = const Duration(seconds: 28);
+      player.emitStatus(
+        PlayerState.playing,
+        generation: player.loadGenerations.single,
+      );
+      await pumpEventQueue(times: 2);
+      player.releaseFirstLoad.complete();
+      expect(await tune, isTrue);
+      expect(player.loadStartPositions, [const Duration(seconds: 30)]);
+      expect(player.seeks, isEmpty);
+      expect(f.coordinator.position, const Duration(seconds: 28));
+    },
+  );
+
+  for (final elapsed in [60, 119]) {
+    test(
+      'initial join at part boundary/near end $elapsed preserves successor rollover',
+      () async {
+        final f = _ContinuationFixture(
+          parts: _parts(
+            first: const Duration(seconds: 60),
+            second: const Duration(seconds: 60),
+          ),
         );
-        expect(
-          f.player.seekModes,
-          elapsed <= 2 ? isEmpty : [SeekMode.keyframes],
-        );
+        addTearDown(f.close);
+        f.now = f.now.add(Duration(seconds: elapsed));
+        expect(await f.coordinator.tune('channel-b'), isTrue);
+        final original = f.coordinator.currentProgram!;
+        expect(f.player.loads.single.path, '/part-2.mkv');
+        expect(f.player.loadStartPositions, [Duration(seconds: elapsed - 60)]);
+        expect(f.player.seeks, isEmpty);
+        f.now = original.scheduled.end;
+        f.endNaturally();
+        await pumpEventQueue(times: 8);
+        expect(f.coordinator.currentProgram!.id, isNot(original.id));
+        expect(f.player.loads.last.path, '/part-1.mkv');
+        expect(f.player.loadStartPositions.last, isNull);
+        expect(f.coordinator.error, isNull);
       },
     );
   }
@@ -5710,51 +5787,55 @@ void main() {
         await pumpEventQueue(times: 10);
         expect(f.player.loads, hasLength(2));
         expect(
-          f.player.seeks.last,
+          f.player.loadStartPositions.last,
           Duration(seconds: explicitSeekCompleted ? 20 : 30),
         );
-        expect(f.player.seekModes.last, SeekMode.keyframes);
+        expect(
+          f.player.seekModes,
+          explicitSeekCompleted ? [SeekMode.exact] : isEmpty,
+        );
         expect(f.coordinator.error, isNull);
       },
     );
   }
 
   for (final recover in [false, true]) {
-    test(
-      'explicit seek overrides pending join and its recovery exactly (recover=$recover)',
-      () async {
-        final player = _BlockingControlPlayer();
-        final f = _ContinuationFixture(
-          player: player,
-          recoverAuthorization: recover,
-        );
-        addTearDown(f.close);
-        f.now = f.now.add(const Duration(seconds: 30));
-        final tune = f.coordinator.tune('channel-b');
-        await player.seekStarted.future;
-        expect(player.seekModes, [SeekMode.keyframes]);
-        final seek = f.coordinator.seekTo(const Duration(seconds: 20));
-        if (recover) {
-          player.emitError(
-            recoverable: true,
-            generation: player.loadGenerations.last,
-            failureCode: 'http_error',
-            httpStatus: 401,
+    for (final seconds in [0, 20, 30]) {
+      test(
+        'explicit seek overrides pending join and its recovery exactly (recover=$recover, target=$seconds)',
+        () async {
+          final player = _BlockingEventPlayer();
+          final f = _ContinuationFixture(
+            player: player,
+            recoverAuthorization: recover,
           );
-          await pumpEventQueue(times: 10);
-        }
-        player.releaseSeek.complete();
-        expect(await tune, isTrue);
-        await seek;
-        expect(player.seeks, [
-          const Duration(seconds: 30),
-          const Duration(seconds: 20),
-        ]);
-        expect(player.seekModes, [SeekMode.keyframes, SeekMode.exact]);
-        expect(player.loads, hasLength(recover ? 2 : 1));
-        expect(f.coordinator.error, isNull);
-      },
-    );
+          addTearDown(f.close);
+          f.now = f.now.add(const Duration(seconds: 30));
+          final tune = f.coordinator.tune('channel-b');
+          await player.firstLoadStarted.future;
+          expect(player.seeks, isEmpty);
+          expect(player.loadStartPositions, [const Duration(seconds: 30)]);
+          final seek = f.coordinator.seekTo(Duration(seconds: seconds));
+          if (recover) {
+            player.emitError(
+              recoverable: true,
+              generation: player.loadGenerations.last,
+              failureCode: 'http_error',
+              httpStatus: 401,
+            );
+            await pumpEventQueue(times: 10);
+          }
+          player.releaseFirstLoad.complete();
+          expect(await tune, isTrue);
+          await seek;
+          expect(player.seeks, [Duration(seconds: seconds)]);
+          if (recover) expect(player.loadStartPositions.last, isNull);
+          expect(player.seekModes, [SeekMode.exact]);
+          expect(player.loads, hasLength(recover ? 2 : 1));
+          expect(f.coordinator.error, isNull);
+        },
+      );
+    }
   }
 
   test('an older completed seek cannot change recovery mode of the latest pending seek', () async {
@@ -5811,7 +5892,7 @@ void main() {
 
     expect(player.loads.single.path, '/part-2.mkv');
     expect(
-      player.seeks.single,
+      player.loadStartPositions.single,
       allOf(
         greaterThanOrEqualTo(const Duration(minutes: 29)),
         lessThanOrEqualTo(const Duration(minutes: 31)),
@@ -5844,21 +5925,22 @@ void main() {
 
     expect(player.loads.map((uri) => uri.path), ['/part-2.mkv', '/part-2.mkv']);
     expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
-    expect(player.seekModes.last, SeekMode.keyframes);
+    expect(player.seeks, isEmpty);
     expect(
-      player.seeks.where(
+      player.loadStartPositions.where(
         (value) =>
+            value != null &&
             value >= const Duration(minutes: 29) &&
             value <= const Duration(minutes: 31),
       ),
-      hasLength(1),
+      hasLength(2),
     );
     await coordinator.stop();
     expect(player.stops, 1);
   });
 
   test(
-    'authorization during initial seek settles the replacement tune',
+    'authorization during initial load settles the replacement tune',
     () async {
       final lineup = _TestLineup(
         recoverAuthorization: true,
@@ -5868,7 +5950,7 @@ void main() {
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
       );
-      final player = _BlockingControlPlayer();
+      final player = _BlockingEventPlayer();
       final coordinator = PlayerCoordinator(
         player: player,
         lineup: lineup,
@@ -5880,8 +5962,8 @@ void main() {
       addTearDown(coordinator.dispose);
 
       final tune = coordinator.tune('channel-b');
-      await player.seekStarted.future;
-      final target = player.seeks.single;
+      await player.firstLoadStarted.future;
+      final target = player.loadStartPositions.single;
       player.emitError(
         recoverable: true,
         generation: player.loadGenerations.single,
@@ -5895,11 +5977,12 @@ void main() {
       ]);
       expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
       expect(coordinator.tuning, isTrue);
-      player.releaseSeek.complete();
+      player.releaseFirstLoad.complete();
 
       expect(await tune, isTrue);
-      expect(player.seeks, [target, target]);
-      expect(player.seekModes, [SeekMode.keyframes, SeekMode.keyframes]);
+      expect(player.loadStartPositions, [target, target]);
+      expect(player.seeks, isEmpty);
+      expect(player.seekModes, isEmpty);
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.error, isNull);
       expect(lineup.recoveryCalls, 1);
@@ -6157,14 +6240,14 @@ void main() {
     expect(coordinator.error, isNull);
   });
 
-  test('blocked recovery seek is inert after a newer tune', () async {
+  test('blocked recovery load is inert after a newer tune', () async {
     final lineup = _TestLineup(recoverAuthorization: true);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     )..requestViewport(0, 2);
     await Future<void>.delayed(Duration.zero);
-    final player = _BlockingSecondSeekPlayer();
+    final player = _BlockingSecondLoadPlayer();
     final coordinator = PlayerCoordinator(
       player: player,
       lineup: lineup,
@@ -6182,10 +6265,10 @@ void main() {
       failureCode: 'http_error',
       httpStatus: 401,
     );
-    await player.secondSeekStarted.future;
+    await player.secondLoadStarted.future;
 
     await coordinator.tune('channel-0');
-    player.releaseSecondSeek.complete();
+    player.releaseSecondLoad.complete();
     await pumpEventQueue(times: 5);
 
     expect(lineup.currentChannelId, 'channel-0');
@@ -6431,7 +6514,7 @@ void main() {
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
-    final player = _BlockingSecondSeekPlayer();
+    final player = _BlockingFirstSeekPlayer();
     final coordinator = PlayerCoordinator(
       player: player,
       lineup: lineup,
@@ -6444,16 +6527,13 @@ void main() {
     await coordinator.tune('channel-b');
 
     final first = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
-    await player.secondSeekStarted.future;
+    await player.firstSeekStarted.future;
     final latest = coordinator.seekTo(const Duration(hours: 2));
-    player.releaseSecondSeek.complete();
+    player.releaseFirstSeek.complete();
     await Future.wait([first, latest]);
 
     expect(player.loads.map((uri) => uri.path), ['/part-1.mkv', '/part-2.mkv']);
-    expect(player.seeks.sublist(1), [
-      const Duration(minutes: 5),
-      Duration.zero,
-    ]);
+    expect(player.seeks, [const Duration(minutes: 5), Duration.zero]);
     expect(coordinator.error, isNull);
   });
 
@@ -6772,7 +6852,7 @@ void main() {
 
     expect(player.loads.map((uri) => uri.path), ['/part-2.mkv', '/part-2.mkv']);
     expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
-    expect(player.seeks.last, const Duration(minutes: 12));
+    expect(player.loadStartPositions.last, const Duration(minutes: 12));
     await coordinator.stop();
   });
 
@@ -6822,7 +6902,7 @@ void main() {
         'test-token-1',
         'test-token-2',
       ]);
-      expect(player.seeks.last, const Duration(minutes: 7));
+      expect(player.loadStartPositions.last, const Duration(minutes: 7));
       expect(lineup.recoveryCalls, 1);
       expect(coordinator.error, isNull);
 
@@ -6881,7 +6961,7 @@ void main() {
       'test-token-1',
       'test-token-2',
     ]);
-    expect(player.seeks.last, const Duration(minutes: 7));
+    expect(player.loadStartPositions.last, const Duration(minutes: 7));
     await coordinator.stop();
   });
 
@@ -7157,8 +7237,15 @@ class _ContinuationStatePlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length != 2) return;
     for (final state in [
       PlayerState.loading,
@@ -7528,8 +7615,15 @@ mixin _BlocksFirstLoad on _Player {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length == 1) {
       firstLoadStarted.complete();
       await releaseFirstLoad.future;
@@ -7582,6 +7676,7 @@ class _BlockingStopPlayer extends _Player {
 }
 
 class _BlockingStopEventPlayer extends _EventPlayer {
+  _BlockingStopEventPlayer() : super(sync: true);
   final stopStarted = Completer<void>();
   final releaseStop = Completer<void>();
 
@@ -7591,8 +7686,15 @@ class _BlockingStopEventPlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     emitStatus(PlayerState.playing, generation: generation);
   }
 
@@ -7621,8 +7723,15 @@ class _PreemptibleLoadPlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     calls.add('load');
     if (loads.length != 1) return;
     final pending = _pendingLoad = Completer<void>();
@@ -7659,8 +7768,15 @@ class _LoadFailurePlayer extends _Player {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     Error.throwWithStackTrace(failure, StackTrace.current);
   }
 }
@@ -7765,8 +7881,15 @@ class _SecondLoadFailurePlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length == 2 && !failSeek) {
       Error.throwWithStackTrace(failure, StackTrace.current);
     }
@@ -7791,8 +7914,15 @@ class _BlockingSecondLoadPlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length != 2) return;
     secondLoadStarted.complete();
     await releaseSecondLoad.future;
@@ -7809,8 +7939,15 @@ class _BlockingFailingSecondLoadPlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length != 2) return;
     secondLoadStarted.complete();
     await releaseSecondLoad.future;
@@ -7835,8 +7972,15 @@ class _SynchronousAuthorizationPlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length > failures) return;
     emitError(
       recoverable: true,
@@ -7857,8 +8001,15 @@ class _AsyncInitialAuthorizationPlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length != 1) return;
     emitError(
       recoverable: true,
@@ -7879,8 +8030,15 @@ class _SuccessfulPartAuthorizationPlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length != 2) return;
     position = const Duration(minutes: 7);
     _events.add(
@@ -7911,8 +8069,15 @@ class _PartAuthorizationFailurePlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length != 2) return;
     emitError(
       recoverable: true,
@@ -7932,8 +8097,15 @@ class _FailingPartAuthorizationRetryPlayer
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length == 3) throw StateError('authorization retry failed');
   }
 }
@@ -7951,8 +8123,15 @@ class _BlockingFailingPartAuthorizationRetryPlayer
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
+    await super.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+      startPaused: startPaused,
+      startPosition: startPosition,
+    );
     if (loads.length != 3) return;
     retryLoadStarted.complete();
     await releaseRetryLoad.future;
@@ -8090,17 +8269,17 @@ class _BlockingFailingTrackPlayer extends _Player {
   }
 }
 
-class _BlockingSecondSeekPlayer extends _EventPlayer {
-  final secondSeekStarted = Completer<void>();
-  final releaseSecondSeek = Completer<void>();
+class _BlockingFirstSeekPlayer extends _EventPlayer {
+  final firstSeekStarted = Completer<void>();
+  final releaseFirstSeek = Completer<void>();
 
   @override
   Future<void> seek(Duration value, {SeekMode mode = SeekMode.exact}) async {
     seeks.add(value);
     seekModes.add(mode);
-    if (seeks.length != 2) return;
-    secondSeekStarted.complete();
-    await releaseSecondSeek.future;
+    if (seeks.length != 1) return;
+    firstSeekStarted.complete();
+    await releaseFirstSeek.future;
   }
 }
 
@@ -8159,12 +8338,14 @@ class _DisplayPlayer extends _EventPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     await super.load(
       media,
       plexToken: plexToken,
       generation: generation,
       startPaused: startPaused,
+      startPosition: startPosition,
     );
     pausedStarts.add(startPaused);
     if (failReplacementBeforeReady && loads.length == 2) {
@@ -8254,12 +8435,14 @@ class _BlockingDisplayPlayer extends _DisplayPlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     await super.load(
       media,
       plexToken: plexToken,
       generation: generation,
       startPaused: startPaused,
+      startPosition: startPosition,
     );
     if (loads.length != 2) return;
     secondLoadStarted.complete();

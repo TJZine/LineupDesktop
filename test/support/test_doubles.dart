@@ -105,6 +105,7 @@ class FakeNativePlayer implements NativePlayer {
   final loadStartPaused = <bool>[];
   final seeks = <Duration>[];
   final seekModes = <SeekMode>[];
+  final loadStartPositions = <Duration?>[];
   @override
   bool fullscreen = false;
   final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
@@ -145,6 +146,7 @@ class FakeNativePlayer implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     loads.add(media);
     loadPlexTokens.add(plexToken);
@@ -152,6 +154,7 @@ class FakeNativePlayer implements NativePlayer {
     _eventGeneration = nextGeneration;
     loadGenerations.add(generation);
     loadStartPaused.add(startPaused);
+    loadStartPositions.add(startPosition);
     if (emitLoadingOnLoad) {
       _emitSnapshot(
         const PlayerStatus(state: PlayerState.loading, message: 'Loading'),

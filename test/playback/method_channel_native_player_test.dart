@@ -447,10 +447,16 @@ void main() {
       final load = player.load(
         Uri.parse('https://plex.example/media/sample.mp4'),
         plexToken: 'test-token',
+        startPosition: const Duration(microseconds: 18250001),
       );
       await Future<void>.delayed(Duration.zero);
       final loadId = calls.last.arguments!['loadId']! as int;
       expect(calls.last.arguments!['plexToken'], 'test-token');
+      expect(calls.last.arguments!['startSeconds'], 18.250001);
+      expect(
+        calls.last.arguments!['uri'],
+        'https://plex.example/media/sample.mp4',
+      );
 
       await _sendNativeEvent(messenger, {
         'type': 'property',
@@ -1253,6 +1259,44 @@ void main() {
     );
   });
 
+  test(
+    'initial start validates before dispatch and preserves zero as an option',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final media = Uri.parse('https://media.example/a%20b?quality=original');
+      await expectLater(
+        player.load(media, startPosition: const Duration(microseconds: -1)),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (e) => e.failureCode,
+            'failureCode',
+            'invalid_argument',
+          ),
+        ),
+      );
+      expect(calls.where((c) => c.method == 'load'), isEmpty);
+      final loaded = player.load(media, startPosition: Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      final call = calls.last;
+      expect(call.arguments['startSeconds'], 0.0);
+      expect(call.arguments['uri'], media.toString());
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'state': 'playing',
+        'loadId': call.arguments['loadId'],
+      });
+      await loaded;
+    },
+  );
+
   test('authenticated loads require an HTTPS authority in Dart', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
@@ -1287,6 +1331,7 @@ void main() {
     final loadCall = calls.singleWhere((call) => call.method == 'load');
     final loadId = loadCall.arguments!['loadId']! as int;
     expect(loadCall.arguments!['plexToken'], isNull);
+    expect(loadCall.arguments.containsKey('startSeconds'), isFalse);
     await _sendNativeEvent(messenger, {
       'type': 'state',
       'loadId': loadId,

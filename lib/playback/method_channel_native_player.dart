@@ -141,7 +141,14 @@ class MethodChannelNativePlayer implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
+    if (startPosition != null && startPosition < Duration.zero) {
+      throw const PlayerUnavailable(
+        'The initial playback position must be non-negative.',
+        failureCode: 'invalid_argument',
+      );
+    }
     if (plexToken != null &&
         (media.scheme.toLowerCase() != 'https' ||
             !media.hasAuthority ||
@@ -182,6 +189,9 @@ class MethodChannelNativePlayer implements NativePlayer {
         'plexToken': plexToken,
         'loadId': loadId,
         'startPaused': startPaused,
+        if (startPosition != null)
+          'startSeconds':
+              startPosition.inMicroseconds / Duration.microsecondsPerSecond,
       });
       final failure = await completion;
       if (failure != null) {

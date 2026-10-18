@@ -256,6 +256,7 @@ class _CountingPlayer extends FixturePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     commands.add('load');
     await super.load(media, plexToken: plexToken, generation: generation);

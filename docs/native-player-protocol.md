@@ -38,7 +38,7 @@ The native result is `null` unless a result map is shown.
 | `initialize` | None | `{clientApiVersion: int}`. Errors: `required_engine_unavailable`, `initialize_failed`. Initialization advances the native lifecycle generation, resets display matching revision, and purges queued display events. |
 | `dispose` | None | `null` after the worker has finished. `dispose_in_progress` if another disposal is pending. Repeated disposal is successful. |
 | `setDisplayMatching` | `revision: int >= 0`, `session: bool`, `desired: "hdr"`, `"sdr"`, or `"unknown"` | `null`; `invalid_argument` for malformed data or a native revision that is not strictly increasing. Dart ignores a revision that is not newer before making the call. |
-| `load` | `uri: String`, 1–32,768 bytes; `loadId: int >= 0`; `plexToken: String?`, either null or 1–8,192 printable ASCII bytes from `0x21`–`0x7e`; `startPaused: bool?` | `null`; `invalid_argument`, `insecure_media_uri`, or `command_queue_full`. An authenticated load requires an HTTPS URI with an authority. |
+| `load` | `uri: String`, 1–32,768 bytes; `loadId: int >= 0`; `plexToken: String?`, either null or 1–8,192 printable ASCII bytes from `0x21`–`0x7e`; `startPaused: bool?`; `startSeconds: num?`, omitted or finite and >= 0 (explicit null is invalid) | `null`; `invalid_argument`, `insecure_media_uri`, or `command_queue_full`. An authenticated load requires an HTTPS URI with an authority. |
 | `play` | None | `null` or `command_queue_full`. |
 | `pause` | None | `null` or `command_queue_full`. |
 | `seek` | `seconds: num`, finite and >= 0; `mode: "exact"` or `"keyframes"`, optional, default `"exact"` | `null`, `invalid_argument`, or `command_queue_full`. |
@@ -240,14 +240,21 @@ argument.
 ### Seeks
 
 Dart owns seek intent. Schedule/tune joins and ordinary authorization recovery
-joins select `keyframes`; the existing schedule join skips a seek when elapsed
-is at most two seconds. Explicit user seeks select `exact`, including a seek
+joins pass an optional initial position in `load.startSeconds`; the existing
+schedule join omits it when elapsed is at most two seconds. The core supplies
+string-valued per-file `start` and `hr-seek=no` options in a `loadfile` node map
+at index -1. Authenticated header and redirect options share that map, without
+modifying URI bytes or weakening reference restrictions. Each coordinator load
+records its native initial target explicitly and omits its post-load join seek;
+status updates to the resume position cannot reintroduce that seek. Explicit
+user seeks select `exact`, including a seek
 that overrides a pending join, crosses parts, or immediately recovers that
 unfinished operation. Completing a user seek does not make later playback
 recovery joins exact. Sequential part loads preserve the current operation's
 intent; program rollover resolves the newly scheduled program normally.
 
-The core executes `absolute+exact` or `absolute+keyframes`. In pinned mpv
+Explicit seek commands execute `absolute+exact` or `absolute+keyframes`.
+An exact command overrides the per-file `hr-seek=no` setting. In pinned mpv
 `3186d369f9f090cd1363be0ac46a037824b702c6`, absolute keyframe seeks use the
 backward demux preference, while positive relative seeks use `SEEK_FORWARD`.
 The lavf path uses FFmpeg's `AVSEEK_FLAG_BACKWARD`. This is a preference, not a
@@ -257,24 +264,29 @@ if that seek fails. No exact fallback, admission pause, or extra retry is added.
 Existing `startPaused` display holds and explicit pause intent are unchanged.
 
 Seek command success means queue acceptance. The native worker emits a passive
-`seek landing` diagnostic only for an executed, current-load command followed
-by a `SEEK`/`PLAYBACK_RESTART` pair, with `seeking=false` and a finite native
-`time-pos`. Fields are load ID, mode, target, observed seconds, and signed
-`observed-target` offset; no URI, token, title, or raw mpv output is included.
-An initial restart or ordinary position snapshot cannot confirm a seek.
-Samples expire after ten seconds; replacement, stop, end/error, overflow, and
-stale load identity invalidate them. Overlapping commands or duplicate seek
-notifications make samples ambiguous and suppress logging until the next load.
-A seek that emits no seek/restart pair produces no landing diagnostic. Logging
-never changes playback, waits for completion, pauses, retries, or adds a seek.
+`seek landing` diagnostic for an executed, current-load seek command followed
+by a `SEEK`/`PLAYBACK_RESTART` pair. An initial `start` load instead opens a
+window only after its matching `START_FILE` and `FILE_LOADED`; the subsequent
+initial restart can produce one sample. A restart before either matching event
+cannot confirm the initial join. Both paths require `seeking=false` and a finite,
+non-negative native `time-pos`. Fields are load ID, mode, target, observed
+seconds, and signed `observed-target` offset; no URI, token, title, or raw mpv
+output is included. Initial joins report `mode=keyframes`.
 
-This is a post-seek restart observation, not an exact per-request or first-frame
-PTS protocol: mpv supplies no seek request ID, and `time-pos` is sampled when the
+Samples expire ten seconds after native command execution. Replacement, stop,
+matching end/error, command failure, overflow, and stale load identity invalidate
+them. An older file's end cannot retire the new load's pending initial sample.
+Overlapping seek commands (including an exact user override) or duplicate seek
+notifications make samples ambiguous and suppress logging until the next load.
+A load/seek without its matching restart produces no landing diagnostic.
+Logging never changes playback, waits for completion, pauses, retries, or adds
+a seek.
+
+This is a restart observation, not an exact per-request or first-frame PTS
+protocol: mpv supplies no seek request ID, and `time-pos` is sampled when the
 worker consumes the restart. It may include playback progress since landing.
-The current load contract sets no per-file start option; adding one must account
-for its own initial seek before reusing this observation window. Dart keeps
-commanded resume intent separate from observed UI position and never treats a
-commanded target as landing evidence.
+Dart keeps commanded resume intent separate from observed UI position and never
+treats a commanded target as landing evidence.
 
 ### Stops
 

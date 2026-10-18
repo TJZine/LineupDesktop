@@ -35,6 +35,10 @@ abstract interface class NativePlayer {
   /// [generation] identifies the current load and may be projected on emitted
   /// events so callers can reject stale work.
   ///
+  /// [startPosition] requests a non-negative, nonexact initial join using
+  /// per-file `start` and `hr-seek=no`. Explicit [seek] calls remain authoritative.
+  /// A null position leaves the backend's ordinary beginning-of-file behavior.
+  ///
   /// [plexToken] is sensitive authentication material. Implementations that
   /// perform network media loads must require HTTPS and send it only as an
   /// `X-Plex-Token` request header. They must not follow redirects while the
@@ -48,6 +52,7 @@ abstract interface class NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   });
   Future<void> setDisplayMatching(DisplayMatchingRequest request);
   Future<void> play();

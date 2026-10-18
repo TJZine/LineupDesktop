@@ -621,6 +621,14 @@ CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
     }
     command.start_paused = *paused;
   }
+  if (const auto* start = Find(*arguments, "startSeconds")) {
+    const auto seconds = AsNumber(start);
+    if (!seconds || !std::isfinite(*seconds) || *seconds < 0) {
+      return CallResult::Failure("invalid_argument",
+                                 "startSeconds must be finite and non-negative.");
+    }
+    command.start_seconds = *seconds;
+  }
   if (plex_token) {
     command.plex_header = PlexHeader(*plex_token);
   }
@@ -699,7 +707,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       status =
           mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
       if (status >= 0) {
-        if (payload.plex_header.empty()) {
+        if (payload.plex_header.empty() && !payload.start_seconds) {
           const char* value[] = {"loadfile", payload.uri.c_str(), "replace",
                                  nullptr};
           status = mpv_operations_.command(mpv_, value);
@@ -717,18 +725,34 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           values[3].format = MPV_FORMAT_INT64;
           values[3].u.int64 = -1;
           values[4].format = MPV_FORMAT_NODE_MAP;
-          // mpv reuses custom headers on redirects, so authenticated loads
-          // must remain on their original HTTPS request.
-          mpv_node option_values[2]{};
-          option_values[0].format = MPV_FORMAT_STRING;
-          option_values[0].u.string = payload.plex_header.data();
-          option_values[1].format = MPV_FORMAT_STRING;
-          option_values[1].u.string = const_cast<char*>("0");
-          char* option_keys[2] = {
-              const_cast<char*>("http-header-fields"),
-              const_cast<char*>("curl-max-redirects"),
+          // String per-file options share one map. Never append options or
+          // authentication material to the media URI.
+          mpv_node option_values[4]{};
+          char* option_keys[4]{};
+          int option_count = 0;
+          auto option = [&](const char* key, char* value) {
+            option_keys[option_count] = const_cast<char*>(key);
+            option_values[option_count].format = MPV_FORMAT_STRING;
+            option_values[option_count++].u.string = value;
           };
-          mpv_node_list option_list{2, option_values, option_keys};
+          if (!payload.plex_header.empty()) {
+            // mpv reuses custom headers on redirects; authenticated loads
+            // must remain on their original HTTPS request.
+            option("http-header-fields", payload.plex_header.data());
+            option("curl-max-redirects", const_cast<char*>("0"));
+          }
+          std::string start;
+          if (payload.start_seconds) {
+            std::ostringstream seconds;
+            seconds << std::setprecision(std::numeric_limits<double>::max_digits10)
+                    << *payload.start_seconds;
+            start = seconds.str();
+            option("start", start.data());
+            // mpv's initial absolute seek uses default precision. Explicit
+            // absolute+exact commands still override this per-file setting.
+            option("hr-seek", const_cast<char*>("no"));
+          }
+          mpv_node_list option_list{option_count, option_values, option_keys};
           values[4].u.list = &option_list;
           mpv_node_list command_list{5, values, nullptr};
           mpv_node command_node{};
@@ -748,6 +772,11 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
                 FailureStateEvent("correlation_error", std::nullopt,
                                   payload.load_id,
                                   "Playback correlation exceeded native limits"));
+          } else if (payload.start_seconds) {
+            seek_observation_ = SeekObservation{
+                payload.load_id, *payload.start_seconds, SeekMode::keyframes,
+                SeekObservationPhase::load_start,
+                std::chrono::steady_clock::now() + std::chrono::seconds(10)};
           }
         }
       }
@@ -779,7 +808,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       if (status >= 0 && !seek_observation_ambiguous_ && load &&
           playback_.event_load() == load) {
         seek_observation_ = SeekObservation{
-            *load, payload.seconds, payload.mode, false,
+            *load, payload.seconds, payload.mode, SeekObservationPhase::seek_start,
             std::chrono::steady_clock::now() + std::chrono::seconds(10)};
       }
     } else if constexpr (std::is_same_v<Payload, StopCommand>) {
@@ -901,24 +930,36 @@ void PlayerCore::ObserveSeekLanding(mpv_event_id event) {
   auto& sample = *seek_observation_;
   if (std::chrono::steady_clock::now() > sample.deadline ||
       playback_.active_load() != sample.load_id ||
-      playback_.event_load() != sample.load_id ||
       (playback_.failure() && playback_.failure()->load_id == sample.load_id)) {
     seek_observation_.reset();
     seek_observation_ambiguous_ = true;
     return;
   }
-  if (event == MPV_EVENT_SEEK) {
-    if (sample.started) {
-      seek_observation_.reset();
-      seek_observation_ambiguous_ = true;
-    } else {
-      sample.started = true;
+  // A new load can have older events queued ahead of its START_FILE. Neither
+  // those events nor a pre-FILE_LOADED restart open its observation window.
+  if (sample.phase == SeekObservationPhase::load_start) return;
+  if (playback_.event_load() != sample.load_id) {
+    seek_observation_.reset();
+    seek_observation_ambiguous_ = true;
+    return;
+  }
+  if (event == MPV_EVENT_FILE_LOADED) {
+    if (sample.phase == SeekObservationPhase::file_loaded) {
+      sample.phase = SeekObservationPhase::initial_restart;
     }
     return;
   }
-  // A load's initial restart, or a property update alone, cannot confirm seek
-  // landing. Read the current native position only after its SEEK/restart pair.
-  if (!sample.started) return;
+  if (sample.phase == SeekObservationPhase::file_loaded) return;
+  if (event == MPV_EVENT_SEEK) {
+    if (sample.phase == SeekObservationPhase::seek_restart) {
+      seek_observation_.reset();
+      seek_observation_ambiguous_ = true;
+    } else {
+      sample.phase = SeekObservationPhase::seek_restart;
+    }
+    return;
+  }
+  if (sample.phase == SeekObservationPhase::seek_start) return;
   double position = 0;
   int seeking = 1;
   if (mpv_operations_.get_property(mpv_, "seeking", MPV_FORMAT_FLAG, &seeking) >= 0 &&
@@ -939,10 +980,20 @@ void PlayerCore::ObserveSeekLanding(mpv_event_id event) {
 void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
   switch (event.event_id) {
     case MPV_EVENT_START_FILE: {
-      ResetSeekObservation();
       const auto* start = static_cast<mpv_event_start_file*>(event.data);
       const auto transition = playback_.StartFile(
           start ? std::optional<int64_t>(start->playlist_entry_id) : std::nullopt);
+      if (seek_observation_) {
+        if (seek_observation_->phase == SeekObservationPhase::load_start) {
+          if (playback_.event_load() == seek_observation_->load_id &&
+              playback_.active_load() == seek_observation_->load_id) {
+            seek_observation_->phase = SeekObservationPhase::file_loaded;
+          }
+        } else {
+          seek_observation_.reset();
+          seek_observation_ambiguous_ = true;
+        }
+      }
       if (!transition.within_capacity) {
         QueueEvent(generation,
             FailureStateEvent("correlation_error", std::nullopt,
@@ -954,13 +1005,17 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       break;
     }
     case MPV_EVENT_FILE_LOADED:
+      ObserveSeekLanding(event.event_id);
       QueueEvent(generation, StateEvent("playing", "Playing", playback_.event_load()));
       break;
     case MPV_EVENT_END_FILE: {
-      ResetSeekObservation();
       const auto* end = static_cast<mpv_event_end_file*>(event.data);
       const auto load_id = playback_.EndFile(
           end ? std::optional<int64_t>(end->playlist_entry_id) : std::nullopt);
+      if (seek_observation_ && seek_observation_->load_id == load_id) {
+        seek_observation_.reset();
+        seek_observation_ambiguous_ = true;
+      }
       if (end && end->reason == MPV_END_FILE_REASON_REDIRECT) {
         if (!playback_.Redirect(load_id, end->playlist_insert_id,
                                 end->playlist_insert_num_entries)) {

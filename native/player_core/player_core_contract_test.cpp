@@ -121,6 +121,8 @@ struct FakeMpv {
   std::string authenticated_header;
   std::string authenticated_redirects;
   std::string authenticated_uri;
+  std::map<std::string, std::string> load_options;
+  int node_load_status = 0;
   std::string rejected_option;
   std::string rejected_observation;
   std::optional<LoadOutcome> controlled_load;
@@ -262,11 +264,14 @@ int FakeCommandNode(mpv_handle*, mpv_node* node, mpv_node* result) {
       node->u.list->values[3].format == MPV_FORMAT_INT64 &&
       node->u.list->values[3].u.int64 == -1 &&
       node->u.list->values[4].format == MPV_FORMAT_NODE_MAP &&
-      node->u.list->values[4].u.list->num == 2;
+      node->u.list->values[4].u.list->num >= 2;
   if (!shape) return MPV_ERROR_INVALID_PARAMETER;
   const auto& options = *node->u.list->values[4].u.list;
   fake->authenticated_uri = node->u.list->values[1].u.string;
+  fake->load_options.clear();
   for (int index = 0; index < options.num; ++index) {
+    RequireLoadFixture(options.values[index].format == MPV_FORMAT_STRING);
+    fake->load_options[options.keys[index]] = options.values[index].u.string;
     if (std::strcmp(options.keys[index], "http-header-fields") == 0) {
       fake->authenticated_header = options.values[index].u.string;
       WatchHeader(options.values[index].u.string);
@@ -274,7 +279,7 @@ int FakeCommandNode(mpv_handle*, mpv_node* node, mpv_node* result) {
       fake->authenticated_redirects = options.values[index].u.string;
     }
   }
-  return 0;
+  return fake->node_load_status;
 }
 
 mpv_event* FakeWaitEvent(mpv_handle*, double) {
@@ -748,7 +753,11 @@ void SeekPolicyAndObservation(PlayerCore& core) {
     Check(condition, obligation);
   };
   auto begin = [&](int64_t load) {
-    PlayerCoreTestAccess::State(core).AcceptLoad(load, load + 1000);
+    fake->playlist_id = load + 1000;
+    Reply reply;
+    Call(core, "load", reply, {{"uri", Value("file:///seek-test.mkv")},
+                                {"loadId", Value(load)}});
+    PlayerCoreTestAccess::RunQueuedCommands(core);
     Start(core, load + 1000);
   };
   auto event = [&](mpv_event_id id) {
@@ -893,6 +902,119 @@ void SeekPolicyAndObservation(PlayerCore& core) {
   CloseWorkerless(core);
 }
 
+void InitialJoinObservation(PlayerCore& core) {
+  OpenWorkerless(core);
+  std::ostringstream log;
+  auto* original = std::cerr.rdbuf(log.rdbuf());
+  const auto check = [&](bool condition, const char* obligation) {
+    if (!condition) std::cerr.rdbuf(original);
+    Check(condition, obligation);
+  };
+  auto event = [&](mpv_event_id id) {
+    mpv_event value{};
+    value.event_id = id;
+    PlayerCoreTestAccess::Event(core, value);
+  };
+  auto load = [&](int64_t id, double target = 18.25) {
+    log.str("");
+    fake->playlist_id = id + 1000;
+    Reply reply;
+    Call(core, "load", reply, {{"uri", Value("https://media.invalid/a%20b?quality=original")},
+                                {"loadId", Value(id)}, {"startSeconds", Value(target)}});
+    check(reply.successes == 1, "initial join admitted");
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+  };
+  auto ready = [&](int64_t id) {
+    Start(core, id + 1000);
+    event(MPV_EVENT_FILE_LOADED);
+  };
+  fake->seek_position = 16;
+  fake->seeking = false;
+  load(201);
+  check(fake->load_options.size() == 2 && fake->load_options["hr-seek"] == "no" &&
+        fake->load_options["start"] == "18.25" &&
+        fake->authenticated_uri == "https://media.invalid/a%20b?quality=original",
+        "unauthenticated start is a string node map with unchanged URI");
+  event(MPV_EVENT_FILE_LOADED);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  Start(core, 1201);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "pre-START and pre-FILE_LOADED restart cannot confirm initial landing");
+  event(MPV_EVENT_FILE_LOADED);
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().find("loadId=201 mode=keyframes target=18.250000 observed=16.000000 offset=-2.250000") != std::string::npos,
+        "matched initial restart logs a truthful keyframe offset");
+  const auto first = log.str();
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str() == first, "initial landing logs at most once");
+
+  load(202, 0);
+  End(core, 1201);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  ready(202);
+  fake->seek_position = 0;
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().find("loadId=202 mode=keyframes target=0.000000 observed=0.000000") != std::string::npos,
+        "previous end cannot retire the new initial sample; zero start remains observable");
+
+  load(203);
+  load(204);
+  ready(203);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "superseded load restart cannot satisfy the new initial window");
+  ready(204);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().find("loadId=204") != std::string::npos,
+        "only the matching replacement START/FILE_LOADED opens its window");
+
+  for (int failure = 0; failure < 8; ++failure) {
+    const int64_t id = 210 + failure;
+    load(id);
+    ready(id);
+    if (failure == 0) {
+      Reply reply;
+      Call(core, "seek", reply, {{"seconds", Value(10.0)}, {"mode", Value("exact")}});
+      PlayerCoreTestAccess::RunQueuedCommands(core);
+      event(MPV_EVENT_SEEK);
+      check(fake->seek_flags.back() == "absolute+exact", "explicit exact overrides per-file hr-seek=no");
+    } else if (failure == 1) {
+      fake->seeking = true;
+    } else if (failure == 2) {
+      fake->seek_position = std::numeric_limits<double>::quiet_NaN();
+    } else if (failure == 3) {
+      End(core, id + 1000);
+    } else if (failure == 4) {
+      PlayerCoreTestAccess::ExpireSeekObservation(core);
+    } else if (failure == 5) {
+      fake->reject_volume = true;
+      Reply reply;
+      Call(core, "setVolume", reply, {{"volume", Value(50.0)}});
+      PlayerCoreTestAccess::RunQueuedCommands(core);
+      fake->reject_volume = false;
+    } else if (failure == 6) {
+      PlayerCoreTestAccess::State(core).RecordFailure("source_open_error", std::nullopt);
+    } else {
+      event(MPV_EVENT_SEEK);
+      event(MPV_EVENT_SEEK);
+    }
+    event(MPV_EVENT_PLAYBACK_RESTART);
+    check(log.str().empty(), "ambiguous, seeking, invalid, ended, expired or failed initial sample is suppressed");
+    fake->seeking = false;
+    fake->seek_position = 16;
+    End(core, id + 1000);
+  }
+  fake->node_load_status = MPV_ERROR_COMMAND;
+  load(220);
+  fake->node_load_status = 0;
+  ready(220);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "rejected load cannot create an initial landing sample");
+  std::cerr.rdbuf(original);
+  CloseWorkerless(core);
+  fake->playlist_id.reset();
+}
+
 void Validation(PlayerCore& core) {
   Reply early;
   Call(core, "play", early);
@@ -939,6 +1061,13 @@ void Validation(PlayerCore& core) {
         accepts("load", {{"uri", Value("http://media.invalid/a")}, {"loadId", Value(int64_t{1})},
                          {"plexToken", Value()}, {"startPaused", Value(true)}}),
         "token, HTTPS, and startPaused validation");
+  for (const Value& invalid : {Value(), Value("3"), Value(true), Value(-1.0),
+                              Value(std::numeric_limits<double>::infinity()),
+                              Value(std::numeric_limits<double>::quiet_NaN())}) {
+    Check(rejects("load", {{"uri", https}, {"loadId", Value(int64_t{1})},
+                           {"startSeconds", invalid}}, "invalid_argument"),
+          "initial start requires a finite non-negative number");
+  }
   Check(rejects("seek", {{"seconds", Value(-0.5)}}, "invalid_argument") &&
         rejects("seek", {{"seconds", Value(std::numeric_limits<double>::infinity())}},
                 "invalid_argument") &&
@@ -968,7 +1097,7 @@ void Validation(PlayerCore& core) {
   OpenWorkerless(core);
   ResetHeaderWatch();
   ValueMap authenticated{{"uri", https}, {"loadId", Value(int64_t{5})},
-                         {"plexToken", Value("tok,en\\x")}};
+                         {"plexToken", Value("tok,en\\x")}, {"startSeconds", Value(18.2500001)}};
   Reply reply;
   Record(reply, *core.HandleCommand("load", &authenticated));
   const auto& scrubbed = std::get<std::string>(authenticated["plexToken"]);
@@ -980,6 +1109,10 @@ void Validation(PlayerCore& core) {
         fake->authenticated_redirects == "0" &&
         fake->authenticated_uri == "https://media.invalid/file.mkv",
         "authenticated load scopes the escaped header and forbids redirects");
+  Check(fake->load_options.size() == 4 &&
+        fake->load_options["hr-seek"] == "no" &&
+        std::stod(fake->load_options["start"]) == 18.2500001,
+        "string start and hr-seek compose with authenticated options without rounding");
   Check(watched_freed && watched_wiped, "header buffer is wiped before deallocation");
   CloseWorkerless(core);
 }
@@ -1070,6 +1203,7 @@ void Lifecycle() {
   auto& received = events.received;
   fake->options.clear();
   fake->observations.clear();
+  fake->commands.clear();
   Reply init;
   Call(core, "initialize", init);
   Check(init.successes == 1 &&
@@ -1389,6 +1523,7 @@ int main() {
     CorrelationAndPressure(core);
     Commands(core);
     SeekPolicyAndObservation(core);
+    InitialJoinObservation(core);
     Validation(core);
   }
   InitializeFailures();

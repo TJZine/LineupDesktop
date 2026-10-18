@@ -6595,6 +6595,7 @@ class _Native implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     loadCalls++;
     if (failLoad) throw const PlayerUnavailable('synthetic load failure');

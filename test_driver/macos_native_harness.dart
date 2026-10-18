@@ -173,6 +173,7 @@ class HarnessLoggingPlayer implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) => _call(
     'load generation=$generation',
     () => _player.load(
@@ -180,6 +181,7 @@ class HarnessLoggingPlayer implements NativePlayer {
       plexToken: plexToken,
       generation: generation,
       startPaused: startPaused,
+      startPosition: startPosition,
     ),
   );
   @override

@@ -56,6 +56,7 @@ class UnsupportedNativePlayer implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async => _unavailable();
 
   @override

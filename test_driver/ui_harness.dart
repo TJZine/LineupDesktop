@@ -147,6 +147,7 @@ class HarnessPlayer implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     if (_disposed) return;
     final operation = ++_loadEpoch;

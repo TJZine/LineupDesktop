@@ -443,6 +443,7 @@ class _ProductPlayer extends FakeNativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     await super.load(
       media,

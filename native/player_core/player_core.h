@@ -171,6 +171,7 @@ class PlayerCore {
     std::string uri;
     PlexHeader plex_header;
     bool start_paused = false;
+    std::optional<double> start_seconds = std::nullopt;
   };
   struct PlayCommand {};
   struct PauseCommand {};
@@ -179,11 +180,14 @@ class PlayerCore {
     double seconds;
     SeekMode mode;
   };
+  enum class SeekObservationPhase {
+    load_start, file_loaded, initial_restart, seek_start, seek_restart,
+  };
   struct SeekObservation {
     int64_t load_id;
     double target;
     SeekMode mode;
-    bool started = false;
+    SeekObservationPhase phase;
     std::chrono::steady_clock::time_point deadline;
   };
   struct StopCommand {

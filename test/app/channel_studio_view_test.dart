@@ -5729,6 +5729,7 @@ class _AgreementPlayer extends FixturePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     loaded = media;
     await super.load(media, plexToken: plexToken, generation: generation);
@@ -5994,6 +5995,7 @@ class _DelayedStudioPlayer extends FixturePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     started.complete();

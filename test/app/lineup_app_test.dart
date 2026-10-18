@@ -2116,6 +2116,7 @@ class _DelayedLoadPlayer extends _FakePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     await super.load(
       media,
