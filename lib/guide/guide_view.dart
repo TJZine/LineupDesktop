@@ -316,6 +316,16 @@ class _GuideViewState extends State<GuideView>
   final _menuFocus = FocusNode(debugLabel: 'Guide Lineup menu');
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
+  // TooltipVisibility replaces each tooltip's child when the menu opens.
+  // Keep these invokers alive so closing the menu can restore exact focus.
+  final _closeFocus = FocusNode(debugLabel: 'Close Guide');
+  final _earlierFocus = FocusNode(debugLabel: 'Guide earlier');
+  final _nowFocus = FocusNode(debugLabel: 'Guide now');
+  final _laterFocus = FocusNode(debugLabel: 'Guide later');
+  final _clearSearchFocus = FocusNode(debugLabel: 'Guide clear search');
+  final _removeLibraryFilterFocus = FocusNode(
+    debugLabel: 'Guide remove library filter',
+  );
   final _searchController = TextEditingController();
   late String _observedSearchQuery;
   late int _searchContentGeneration;
@@ -371,6 +381,12 @@ class _GuideViewState extends State<GuideView>
     _menuFocus.dispose();
     _guideFocus.dispose();
     _searchFocus.dispose();
+    _closeFocus.dispose();
+    _earlierFocus.dispose();
+    _nowFocus.dispose();
+    _laterFocus.dispose();
+    _clearSearchFocus.dispose();
+    _removeLibraryFilterFocus.dispose();
     _searchController
       ..removeListener(_searchChanged)
       ..dispose();
@@ -654,6 +670,7 @@ class _GuideViewState extends State<GuideView>
     onClose: widget.onClose,
     onOpenMenu: widget.onOpenMenu,
     menuFocus: _menuFocus,
+    closeFocus: _closeFocus,
   );
 
   Widget _showcase(GuideLayoutPolicy policy) => SizedBox(
@@ -683,6 +700,11 @@ class _GuideViewState extends State<GuideView>
             railWidth: policy.channelRailWidth,
             searchController: _searchController,
             searchFocus: _searchFocus,
+            earlierFocus: _earlierFocus,
+            nowFocus: _nowFocus,
+            laterFocus: _laterFocus,
+            clearSearchFocus: _clearSearchFocus,
+            removeLibraryFilterFocus: _removeLibraryFilterFocus,
             onSearchKey: _searchKey,
           ),
         ),
@@ -976,6 +998,7 @@ class _Toolbar extends StatelessWidget {
     required this.onClose,
     required this.onOpenMenu,
     required this.menuFocus,
+    required this.closeFocus,
   });
   final GuideController controller;
   final String? watchingChannelId;
@@ -983,6 +1006,7 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onClose;
   final LineupMenuCallback? onOpenMenu;
   final FocusNode menuFocus;
+  final FocusNode closeFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -1036,6 +1060,7 @@ class _Toolbar extends StatelessWidget {
           SizedBox(width: 8),
           IconButton(
             tooltip: 'Close Guide',
+            focusNode: closeFocus,
             onPressed: onClose,
             constraints: enlargedControls
                 ? BoxConstraints(minWidth: 48, minHeight: 48)
@@ -1056,6 +1081,11 @@ class _GuideControls extends StatelessWidget {
     required this.railWidth,
     required this.searchController,
     required this.searchFocus,
+    required this.earlierFocus,
+    required this.nowFocus,
+    required this.laterFocus,
+    required this.clearSearchFocus,
+    required this.removeLibraryFilterFocus,
     required this.onSearchKey,
   });
 
@@ -1063,6 +1093,11 @@ class _GuideControls extends StatelessWidget {
   final double railWidth;
   final TextEditingController searchController;
   final FocusNode searchFocus;
+  final FocusNode earlierFocus;
+  final FocusNode nowFocus;
+  final FocusNode laterFocus;
+  final FocusNode clearSearchFocus;
+  final FocusNode removeLibraryFilterFocus;
   final FocusOnKeyEventCallback onSearchKey;
 
   Future<void> _saveHours(BuildContext context, int hours) async {
@@ -1181,6 +1216,7 @@ class _GuideControls extends StatelessWidget {
               ),
               IconButton(
                 tooltip: 'Remove library filter',
+                focusNode: removeLibraryFilterFocus,
                 onPressed: () => controller.setLibraryFilter(null),
                 iconSize: 17,
                 icon: const Icon(
@@ -1226,6 +1262,7 @@ class _GuideControls extends StatelessWidget {
                   ? null
                   : IconButton(
                       tooltip: 'Clear search',
+                      focusNode: clearSearchFocus,
                       onPressed: searchController.clear,
                       icon: Icon(
                         Icons.close,
@@ -1251,6 +1288,7 @@ class _GuideControls extends StatelessWidget {
       children: [
         IconButton(
           key: const Key('guide-earlier'),
+          focusNode: earlierFocus,
           tooltip: 'Earlier by 30 minutes',
           onPressed: controller.canBrowseEarlier
               ? () => controller.moveWindow(-1)
@@ -1266,6 +1304,7 @@ class _GuideControls extends StatelessWidget {
           excludeFromSemantics: true,
           child: TextButton(
             key: const Key('guide-now'),
+            focusNode: nowFocus,
             style: returnToLive
                 ? LineupTheme.buttonStyle(
                     roles,
@@ -1287,6 +1326,7 @@ class _GuideControls extends StatelessWidget {
         ),
         IconButton(
           key: const Key('guide-later'),
+          focusNode: laterFocus,
           tooltip: 'Later by 30 minutes',
           onPressed: () => controller.moveWindow(1),
           iconSize: 24,

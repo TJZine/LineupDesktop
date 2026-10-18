@@ -1613,7 +1613,8 @@ CI-only workflow differences, successful jobs/CTests, test logs, runtime/build
 summaries, privacy and relative links; no material findings remained. Product
 inputs remain at `296ab905`; the closing documentation does not relabel earlier
 binary evidence or claim that the static cast failure is fixed.
-# 2026-10-18 — Pro review follow-up: Studio clear-search name
+
+## 2026-10-18 — Pro review follow-up: Studio clear-search name
 
 The conditional manual-rundown clear-search action still supplied only tooltip
 semantics. Its icon now supplies the matching explicit action name while retaining
@@ -1623,3 +1624,18 @@ The focused test passed. A fresh adversarial read-only review
 (`studio_label_review_v2`) approved the two-file change with no material findings.
 Combined Release/native AX and Windows CI verification are pending below; this
 entry does not claim spoken output or physical Windows acceptance.
+
+
+## 2026-10-18 — Pro review follow-up: tooltip invoker focus
+
+TooltipVisibility teardown replaced the Guide controls' implicit focus nodes,
+while the shell retained the old invoker. Six tooltip-owned buttons now use
+Guide-owned focus nodes; shell restoration requires an attached, mounted,
+focusable target and falls back to route focus when the invoker disappeared.
+Eight full-shell regressions cover Later with/without an open tooltip, the other
+five controls and removed-invoker fallback; activation verifies 30-minute browsing
+without tuning. Parity 15/15 and Guide 63/63 passed, targeted analysis and formatting
+passed. Fresh adversarial review `focus_review_v2` found no material issues.
+Immediate tooltip teardown and inherited visibility restrictions remain covered.
+Combined Release and Windows acceptance are pending, rather than inferred from
+widget checks.

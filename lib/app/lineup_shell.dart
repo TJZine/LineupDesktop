@@ -326,8 +326,14 @@ class _LineupShellState extends State<LineupShell> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (restoreInvoker && restoreControl && invoker?.context != null) {
-        invoker!.requestFocus();
+      // Detached nodes can retain a context after their control is removed.
+      if (restoreInvoker &&
+          restoreControl &&
+          invoker != null &&
+          invoker.parent != null &&
+          invoker.context?.mounted == true &&
+          invoker.canRequestFocus) {
+        invoker.requestFocus();
       } else {
         _restoreRouteFocus();
       }
