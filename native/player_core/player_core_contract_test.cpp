@@ -19,6 +19,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -111,6 +112,11 @@ struct FakeMpv {
   std::vector<std::string> options;
   std::vector<std::string> observations;
   std::vector<std::string> commands;
+  std::vector<std::string> seek_flags;
+  std::vector<std::string> seek_targets;
+  std::atomic<double> seek_position{0};
+  std::atomic<bool> seeking{false};
+  std::atomic<bool> reject_volume{false};
   std::string log_level;
   std::string authenticated_header;
   std::string authenticated_redirects;
@@ -194,6 +200,14 @@ int FakeGetProperty(mpv_handle*, const char* name, mpv_format format, void* data
     *static_cast<int64_t*>(data) = *fake->playlist_id;
     return 0;
   }
+  if (std::strcmp(name, "time-pos") == 0 && format == MPV_FORMAT_DOUBLE) {
+    *static_cast<double*>(data) = fake->seek_position;
+    return 0;
+  }
+  if (std::strcmp(name, "seeking") == 0 && format == MPV_FORMAT_FLAG) {
+    *static_cast<int*>(data) = fake->seeking ? 1 : 0;
+    return 0;
+  }
   if (std::strcmp(name, "idle-active") == 0 && format == MPV_FORMAT_FLAG) {
     *static_cast<int*>(data) = fake->idle ? 1 : 0;
     return 0;
@@ -206,6 +220,8 @@ int FakeGetProperty(mpv_handle*, const char* name, mpv_format format, void* data
 }
 
 int FakeSetProperty(mpv_handle*, const char* name, mpv_format format, void* data) {
+  if (std::strcmp(name, "volume") == 0 && format == MPV_FORMAT_DOUBLE &&
+      fake->reject_volume) return MPV_ERROR_COMMAND;
   if (std::strcmp(name, "aid") == 0 && format == MPV_FORMAT_INT64) {
     fake->selected_track = *static_cast<int64_t*>(data);
     return fake->track_status;
@@ -225,6 +241,10 @@ int FakeCommand(mpv_handle*, const char** args) {
   }
   std::lock_guard lock(fake->mutex);
   fake->commands.push_back(args[0]);
+  if (std::strcmp(args[0], "seek") == 0) {
+    fake->seek_flags.push_back(args[2]);
+    fake->seek_targets.push_back(args[1]);
+  }
   if (std::strcmp(args[0], "stop") == 0 && fake->reject_stop) {
     return MPV_ERROR_COMMAND;
   }
@@ -719,6 +739,160 @@ void Commands(PlayerCore& core) {
   CloseWorkerless(core);
 }
 
+void SeekPolicyAndObservation(PlayerCore& core) {
+  OpenWorkerless(core);
+  std::ostringstream log;
+  auto* original = std::cerr.rdbuf(log.rdbuf());
+  const auto check = [&](bool condition, const char* obligation) {
+    if (!condition) std::cerr.rdbuf(original);
+    Check(condition, obligation);
+  };
+  auto begin = [&](int64_t load) {
+    PlayerCoreTestAccess::State(core).AcceptLoad(load, load + 1000);
+    Start(core, load + 1000);
+  };
+  auto event = [&](mpv_event_id id) {
+    mpv_event value{};
+    value.event_id = id;
+    PlayerCoreTestAccess::Event(core, value);
+  };
+  auto seek = [&](double target, const char* mode = nullptr) {
+    ValueMap arguments{{"seconds", Value(target)}};
+    if (mode) arguments["mode"] = Value(mode);
+    Reply reply;
+    Call(core, "seek", reply, arguments);
+    check(reply.successes == 1, "seek mode accepted");
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+  };
+  begin(77);
+  seek(18.25, "keyframes");
+  check(fake->seek_flags.back() == "absolute+keyframes", "join uses absolute keyframes, never relative/nearest flags");
+  Property(core);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "acceptance, telemetry, and initial restart cannot invent a landing");
+  fake->seek_position = 16;
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().find("loadId=77 mode=keyframes target=18.250000 observed=16.000000 offset=-2.250000") != std::string::npos,
+        "landing logs actual native position and negative offset");
+  const auto first = log.str();
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str() == first, "one sample per observed seek");
+  log.str("");
+  seek(20.25);
+  check(fake->seek_flags.back() == "absolute+exact", "omitted mode remains absolute exact");
+  fake->seek_position = 20.5;
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().find("mode=exact target=20.250000 observed=20.500000 offset=0.250000") != std::string::npos,
+        "positive landing offset remains truthful");
+  log.str("");
+  seek(30);
+  seek(31);
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  seek(32);
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "overlapping/coalesced seeks suppress ambiguous samples for the load");
+  begin(78);
+  seek(40);
+  event(MPV_EVENT_SEEK);
+  PlayerCoreTestAccess::State(core).AcceptLoad(79, 1079);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "a replacement invalidates the old load sample");
+  begin(79);
+  seek(40);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "same-position/no-SEEK restart is not confirmation");
+  PlayerCoreTestAccess::ExpireSeekObservation(core);
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "late restart cannot revive an expired sample");
+  begin(80);
+  seek(50);
+  event(MPV_EVENT_SEEK);
+  fake->seek_position = std::numeric_limits<double>::quiet_NaN();
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "invalid native position is not a landing");
+  fake->seek_position = 49;
+  seek(50);
+  event(MPV_EVENT_SEEK);
+  End(core, 1080, MPV_ERROR_GENERIC);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "terminal load error invalidates landing sample");
+  begin(81);
+  seek(50);
+  event(MPV_EVENT_SEEK);
+  Reply stop;
+  Call(core, "stop", stop, {{"stopId", Value(int64_t{901})}});
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "stop invalidates landing sample");
+  begin(82);
+  const double boundary = 1.0000009;
+  seek(boundary, "keyframes");
+  check(std::stod(fake->seek_targets.back()) == boundary,
+        "seek target round-trips without rounding forward to a boundary");
+  begin(82);
+  seek(0, "keyframes");
+  fake->seek_position = 0;
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().find("target=0.000000 observed=0.000000 offset=0.000000") != std::string::npos,
+        "zero-boundary keyframe join remains absolute and observable");
+  log.str("");
+  begin(83);
+  seek(1, "keyframes");
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "duplicate seek notifications cannot be misattributed");
+  begin(84);
+  seek(1, "keyframes");
+  event(MPV_EVENT_SEEK);
+  fake->seeking = true;
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "a still-seeking native snapshot cannot confirm landing");
+  fake->seeking = false;
+  begin(85);
+  seek(1, "keyframes");
+  event(MPV_EVENT_SEEK);
+  PlayerCoreTestAccess::State(core).RecordFailure("source_open_error", std::nullopt);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "a recorded current-load failure invalidates landing");
+  End(core, 1085);
+  begin(86);
+  Events command_errors;
+  Drain(core, command_errors);
+  command_errors.received.clear();
+  seek(10, "keyframes");
+  fake->seek_position = 9;
+  fake->reject_volume = true;
+  Reply volume;
+  Call(core, "setVolume", volume, {{"volume", Value(50.0)}});
+  check(volume.successes == 1, "volume failure occurs after command admission");
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  fake->reject_volume = false;
+  Drain(core, command_errors);
+  check(command_errors.received.size() == 1 &&
+        Has(command_errors.received[0], "loadId", Value(int64_t{86})) &&
+        Has(command_errors.received[0], "state", Value("error")) &&
+        Has(command_errors.received[0], "failureCode", Value("command_error")),
+        "actual command-error producer retains its current-load wire result");
+  check(!PlayerCoreTestAccess::State(core).failure(),
+        "command-error regression does not rely on the failure detail cache");
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "published command failure discards the earlier seek sample");
+  seek(11, "keyframes");
+  event(MPV_EVENT_SEEK);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "command failure keeps the load ambiguous for later restarts");
+  std::cerr.rdbuf(original);
+  CloseWorkerless(core);
+}
+
 void Validation(PlayerCore& core) {
   Reply early;
   Call(core, "play", early);
@@ -769,6 +943,11 @@ void Validation(PlayerCore& core) {
         rejects("seek", {{"seconds", Value(std::numeric_limits<double>::infinity())}},
                 "invalid_argument") &&
         accepts("seek", {{"seconds", Value(int64_t{3})}}) &&
+        accepts("seek", {{"seconds", Value(0.0)}, {"mode", Value("keyframes")}}) &&
+        accepts("seek", {{"seconds", Value(3.0)}, {"mode", Value("exact")}}) &&
+        rejects("seek", {{"seconds", Value(3.0)}, {"mode", Value("nearest")}}, "invalid_argument") &&
+        rejects("seek", {{"seconds", Value(3.0)}, {"mode", Value()}}, "invalid_argument") &&
+        rejects("seek", {{"seconds", Value(3.0)}, {"mode", Value(true)}}, "invalid_argument") &&
         rejects("stop", {{"stopId", Value(int64_t{0})}}, "invalid_argument") &&
         rejects("setVolume", {{"volume", Value(100.5)}}, "invalid_argument") &&
         rejects("setVolume", {{"volume", Value(std::numeric_limits<double>::quiet_NaN())}},
@@ -1209,6 +1388,7 @@ int main() {
     PlayerCore core(FakeOperations(), host);
     CorrelationAndPressure(core);
     Commands(core);
+    SeekPolicyAndObservation(core);
     Validation(core);
   }
   InitializeFailures();

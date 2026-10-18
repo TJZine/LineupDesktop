@@ -68,7 +68,10 @@ class UnsupportedNativePlayer implements NativePlayer {
   Future<void> pause() async => _unavailable();
 
   @override
-  Future<void> seek(Duration position) async => _unavailable();
+  Future<void> seek(
+    Duration position, {
+    SeekMode mode = SeekMode.exact,
+  }) async => _unavailable();
 
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async => _unavailable();

@@ -11,6 +11,10 @@
 namespace lineup::player {
 
 struct PlayerCoreTestAccess {
+  static void ExpireSeekObservation(PlayerCore& core) {
+    if (core.seek_observation_)
+      core.seek_observation_->deadline = std::chrono::steady_clock::time_point::min();
+  }
   static NativePlaybackState& State(PlayerCore& core) { return core.playback_; }
   static void Event(PlayerCore& core, const mpv_event& event) {
     core.HandleMpvEvent(event, core.generation_.load());

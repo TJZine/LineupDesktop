@@ -6,6 +6,8 @@
 #include <cstring>
 #include <exception>
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 #include <limits>
 #include <type_traits>
 
@@ -496,6 +498,7 @@ void PlayerCore::FinishDispose() {
     wakeup_posted_ = false;
   }
   playback_.Reset();
+  ResetSeekObservation();
 }
 
 std::optional<CallResult> PlayerCore::HandleCommand(std::string_view method,
@@ -529,7 +532,14 @@ std::optional<CallResult> PlayerCore::HandleCommand(std::string_view method,
       return CallResult::Failure("invalid_argument",
                                  "Seek seconds must be non-negative.");
     }
-    if (!QueueCommand(SeekCommand{*seconds})) {
+    const auto* mode_value = Find(*arguments, "mode");
+    const auto* mode = mode_value ? std::get_if<std::string>(mode_value) : nullptr;
+    if (mode_value && (!mode || (*mode != "exact" && *mode != "keyframes"))) {
+      return CallResult::Failure("invalid_argument", "Seek mode must be exact or keyframes.");
+    }
+    const SeekMode seek_mode = mode && *mode == "keyframes"
+                                   ? SeekMode::keyframes : SeekMode::exact;
+    if (!QueueCommand(SeekCommand{*seconds, seek_mode})) {
       return QueueFullError();
     }
     return CallResult::Success();
@@ -684,6 +694,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
   std::visit([&](auto& payload) {
     using Payload = std::decay_t<decltype(payload)>;
     if constexpr (std::is_same_v<Payload, LoadCommand>) {
+      ResetSeekObservation();
       int paused = payload.start_paused ? 1 : 0;
       status =
           mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
@@ -749,11 +760,30 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       status =
           mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
     } else if constexpr (std::is_same_v<Payload, SeekCommand>) {
-      const std::string seconds = std::to_string(payload.seconds);
-      const char* value[] = {"seek", seconds.c_str(), "absolute+exact",
-                             nullptr};
+      std::ostringstream seconds_stream;
+      seconds_stream << std::setprecision(std::numeric_limits<double>::max_digits10)
+                     << payload.seconds;
+      const std::string seconds = seconds_stream.str();
+      const char* flags = payload.mode == SeekMode::keyframes
+                              ? "absolute+keyframes" : "absolute+exact";
+      const char* value[] = {"seek", seconds.c_str(), flags, nullptr};
       status = mpv_operations_.command(mpv_, value);
+      // Passive observation only. Overlapping commands have no libmpv request
+      // IDs, so suppress their landing samples for this load instead of
+      // attributing an older restart to the newest target.
+      if (seek_observation_) {
+        seek_observation_.reset();
+        seek_observation_ambiguous_ = true;
+      }
+      const auto load = playback_.active_load();
+      if (status >= 0 && !seek_observation_ambiguous_ && load &&
+          playback_.event_load() == load) {
+        seek_observation_ = SeekObservation{
+            *load, payload.seconds, payload.mode, false,
+            std::chrono::steady_clock::now() + std::chrono::seconds(10)};
+      }
     } else if constexpr (std::is_same_v<Payload, StopCommand>) {
+      ResetSeekObservation();
       const char* value[] = {"stop", nullptr};
       status = mpv_operations_.command(mpv_, value);
       if (status < 0) {
@@ -791,6 +821,10 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
     const auto* load = std::get_if<LoadCommand>(&command);
     const std::optional<int64_t> error_load_id =
         load ? std::optional<int64_t>(load->load_id) : playback_.active_load();
+    // This error need not populate playback_.failure(). A later restart
+    // cannot be attributed safely after the published command failure.
+    seek_observation_.reset();
+    seek_observation_ambiguous_ = true;
     QueueEvent(generation,
                FailureStateEvent("command_error", std::nullopt,
                                  error_load_id,
@@ -857,9 +891,55 @@ void PlayerCore::EventLoop(uint64_t generation) {
   worker_finished_ = true;
 }
 
+void PlayerCore::ResetSeekObservation() {
+  seek_observation_.reset();
+  seek_observation_ambiguous_ = false;
+}
+
+void PlayerCore::ObserveSeekLanding(mpv_event_id event) {
+  if (!seek_observation_) return;
+  auto& sample = *seek_observation_;
+  if (std::chrono::steady_clock::now() > sample.deadline ||
+      playback_.active_load() != sample.load_id ||
+      playback_.event_load() != sample.load_id ||
+      (playback_.failure() && playback_.failure()->load_id == sample.load_id)) {
+    seek_observation_.reset();
+    seek_observation_ambiguous_ = true;
+    return;
+  }
+  if (event == MPV_EVENT_SEEK) {
+    if (sample.started) {
+      seek_observation_.reset();
+      seek_observation_ambiguous_ = true;
+    } else {
+      sample.started = true;
+    }
+    return;
+  }
+  // A load's initial restart, or a property update alone, cannot confirm seek
+  // landing. Read the current native position only after its SEEK/restart pair.
+  if (!sample.started) return;
+  double position = 0;
+  int seeking = 1;
+  if (mpv_operations_.get_property(mpv_, "seeking", MPV_FORMAT_FLAG, &seeking) >= 0 &&
+      !seeking &&
+      mpv_operations_.get_property(mpv_, "time-pos", MPV_FORMAT_DOUBLE, &position) >= 0 &&
+      std::isfinite(position) && position >= 0) {
+    std::ostringstream line;
+    line << std::fixed << std::setprecision(6)
+         << "[lineup-player] seek landing loadId=" << sample.load_id
+         << " mode=" << (sample.mode == SeekMode::keyframes ? "keyframes" : "exact")
+         << " target=" << sample.target << " observed=" << position
+         << " offset=" << position - sample.target << '\n';
+    std::cerr << line.str();
+  }
+  seek_observation_.reset();
+}
+
 void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
   switch (event.event_id) {
     case MPV_EVENT_START_FILE: {
+      ResetSeekObservation();
       const auto* start = static_cast<mpv_event_start_file*>(event.data);
       const auto transition = playback_.StartFile(
           start ? std::optional<int64_t>(start->playlist_entry_id) : std::nullopt);
@@ -877,6 +957,7 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       QueueEvent(generation, StateEvent("playing", "Playing", playback_.event_load()));
       break;
     case MPV_EVENT_END_FILE: {
+      ResetSeekObservation();
       const auto* end = static_cast<mpv_event_end_file*>(event.data);
       const auto load_id = playback_.EndFile(
           end ? std::optional<int64_t>(end->playlist_entry_id) : std::nullopt);
@@ -912,6 +993,10 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       playback_.RetireLoad(load_id);
       break;
     }
+    case MPV_EVENT_SEEK:
+    case MPV_EVENT_PLAYBACK_RESTART:
+      ObserveSeekLanding(event.event_id);
+      break;
     case MPV_EVENT_LOG_MESSAGE:
       if (const auto* message =
               static_cast<mpv_event_log_message*>(event.data)) {
@@ -925,6 +1010,8 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       }
       break;
     case MPV_EVENT_QUEUE_OVERFLOW:
+      seek_observation_.reset();
+      seek_observation_ambiguous_ = true;
       QueueEvent(generation,
                  FailureStateEvent("event_queue_overflow", std::nullopt,
                                    playback_.event_load(),

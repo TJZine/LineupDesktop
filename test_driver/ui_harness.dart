@@ -198,7 +198,10 @@ class HarnessPlayer implements NativePlayer {
   }
 
   @override
-  Future<void> seek(Duration position) async {}
+  Future<void> seek(
+    Duration position, {
+    SeekMode mode = SeekMode.exact,
+  }) async {}
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async {}
   @override

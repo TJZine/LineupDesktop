@@ -266,7 +266,10 @@ class _CountingPlayer extends FixturePlayer {
   @override
   Future<void> pause() async => commands.add('pause');
   @override
-  Future<void> seek(Duration position) async => commands.add('seek');
+  Future<void> seek(
+    Duration position, {
+    SeekMode mode = SeekMode.exact,
+  }) async => commands.add('seek');
   @override
   Future<void> stop() async => commands.add('stop');
   @override

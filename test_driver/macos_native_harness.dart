@@ -192,8 +192,11 @@ class HarnessLoggingPlayer implements NativePlayer {
   @override
   Future<void> pause() => _call('pause', _player.pause);
   @override
-  Future<void> seek(Duration position) =>
-      _call('seek ${position.inSeconds}s', () => _player.seek(position));
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) =>
+      _call(
+        'seek ${position.inSeconds}s',
+        () => _player.seek(position, mode: mode),
+      );
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) => _call(
     'setVideoRect ${rect.left},${rect.top} ${rect.width}x${rect.height} '

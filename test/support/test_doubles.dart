@@ -104,6 +104,7 @@ class FakeNativePlayer implements NativePlayer {
   final loadGenerations = <int?>[];
   final loadStartPaused = <bool>[];
   final seeks = <Duration>[];
+  final seekModes = <SeekMode>[];
   @override
   bool fullscreen = false;
   final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
@@ -170,7 +171,10 @@ class FakeNativePlayer implements NativePlayer {
   Future<void> pause() async => pauseCalls++;
 
   @override
-  Future<void> seek(Duration value) async => seeks.add(value);
+  Future<void> seek(Duration value, {SeekMode mode = SeekMode.exact}) async {
+    seeks.add(value);
+    seekModes.add(mode);
+  }
 
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async => videoRects.add(rect);

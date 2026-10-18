@@ -6649,7 +6649,7 @@ class _Native implements NativePlayer {
   }
 
   @override
-  Future<void> seek(Duration position) async {
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) async {
     transportCommands++;
   }
 

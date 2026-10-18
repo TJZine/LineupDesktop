@@ -910,6 +910,28 @@ void main() {
     },
   );
 
+  test('seek mode is explicit on the wire and defaults to exact', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final player = MethodChannelNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    calls.clear();
+    await player.seek(
+      const Duration(microseconds: 1250123),
+      mode: SeekMode.keyframes,
+    );
+    await player.seek(Duration.zero);
+    expect(calls.map((call) => call.arguments), [
+      {'seconds': 1.250123, 'mode': 'keyframes'},
+      {'seconds': 0.0, 'mode': 'exact'},
+    ]);
+  });
+
   test('dispatches the complete bounded outgoing command contract', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
@@ -984,7 +1006,7 @@ void main() {
       'setVolume',
       'stop',
     ]);
-    expect(calls[2].arguments, {'seconds': 1.25});
+    expect(calls[2].arguments, {'seconds': 1.25, 'mode': 'exact'});
     expect(calls[3].arguments, {
       'left': 12.0,
       'top': 34.0,

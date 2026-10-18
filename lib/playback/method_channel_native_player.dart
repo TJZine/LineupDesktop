@@ -234,9 +234,11 @@ class MethodChannelNativePlayer implements NativePlayer {
   Future<void> pause() => _invoke('pause');
 
   @override
-  Future<void> seek(Duration position) => _invoke('seek', {
-    'seconds': position.inMicroseconds / Duration.microsecondsPerSecond,
-  });
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) =>
+      _invoke('seek', {
+        'seconds': position.inMicroseconds / Duration.microsecondsPerSecond,
+        'mode': mode.name,
+      });
 
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) => _invoke('setVideoRect', {

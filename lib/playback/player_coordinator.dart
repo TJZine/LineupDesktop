@@ -85,7 +85,6 @@ class PlayerCoordinator extends ChangeNotifier {
   late PlayerStatus _status;
   late Duration _position;
   late Duration _duration;
-  Duration _nativePosition = Duration.zero;
   late PlayerTelemetry _telemetry;
   late List<PlayerTrack> _tracks;
   StreamSubscription<PlayerEvent>? _subscription;
@@ -125,6 +124,7 @@ class PlayerCoordinator extends ChangeNotifier {
   bool _userPaused = false;
   int _trackSelectionGeneration = 0;
   int _seekGeneration = 0;
+  int? _pendingExplicitSeekGeneration;
   int _fullscreenEpoch = 0;
   int _nativeLoadGeneration = 0;
   _PlaybackLoad? _activeLoad;
@@ -467,10 +467,11 @@ class PlayerCoordinator extends ChangeNotifier {
             httpStatus: event.status.httpStatus,
           )
         : event.status;
-    if (event.status.state != PlayerState.error ||
-        event.position > Duration.zero ||
-        _nativePosition == Duration.zero) {
-      _nativePosition = event.position;
+    if (load != null &&
+        (event.status.state != PlayerState.error ||
+            event.position > Duration.zero ||
+            load.resumePosition == Duration.zero)) {
+      load.resumePosition = event.position;
     }
     final playback = _activeLoad?.request ?? _active?.request;
     if (playback != null &&
@@ -546,7 +547,7 @@ class PlayerCoordinator extends ChangeNotifier {
             recovery.result = _recoverAuthorization(
               recovery,
               identical(playback, _active?.request),
-              load.target ?? _nativePosition,
+              load.target ?? load.resumePosition,
               Future.sync(recover),
             );
             if (!load.pending) {
@@ -914,6 +915,7 @@ class PlayerCoordinator extends ChangeNotifier {
     LineupPlaybackRequest? request,
     int partIndex = 0,
     Duration? target,
+    SeekMode seekMode = SeekMode.exact,
     bool authorizationRetried = false,
   }) {
     if (_nativeStopOperation != null) {
@@ -925,6 +927,7 @@ class PlayerCoordinator extends ChangeNotifier {
       request: request,
       partIndex: partIndex,
       target: target,
+      seekMode: seekMode,
       replacing: _activeLoad != null,
       authorizationRetried: authorizationRetried,
     );
@@ -937,7 +940,6 @@ class PlayerCoordinator extends ChangeNotifier {
       userPaused: _userPaused,
     );
     _nativeCleanupRequired = true;
-    _nativePosition = Duration.zero;
     _telemetry = const PlayerTelemetry();
     _tracks = const [];
     _clearTrackSelection();
@@ -982,6 +984,7 @@ class PlayerCoordinator extends ChangeNotifier {
       request,
       target?.$1 ?? 0,
       target?.$2,
+      seekMode: SeekMode.keyframes,
     );
     if (loaded == null) {
       throw const PlayerUnavailable('Playback load was superseded.');
@@ -993,6 +996,7 @@ class PlayerCoordinator extends ChangeNotifier {
     LineupPlaybackRequest request,
     int partIndex,
     Duration? position, {
+    SeekMode seekMode = SeekMode.exact,
     bool authorizationRetried = false,
     _AuthorizationRecovery? recovery,
   }) {
@@ -1002,6 +1006,7 @@ class PlayerCoordinator extends ChangeNotifier {
       request: request,
       partIndex: partIndex,
       target: position,
+      seekMode: seekMode,
       authorizationRetried: authorizationRetried,
     );
     if (recovery != null) recovery.replacement = load;
@@ -1035,9 +1040,10 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       while (load.target != null) {
         final target = load.target!;
-        if (_nativePosition != target) {
+        final mode = load.seekMode;
+        if (mode == SeekMode.exact || load.resumePosition != target) {
           try {
-            await player.seek(target);
+            await player.seek(target, mode: mode);
           } catch (_) {
             if (load.recovery case final recovery?) {
               return await _completeLoadRecovery(recovery);
@@ -1049,8 +1055,9 @@ class PlayerCoordinator extends ChangeNotifier {
           return await _completeLoadRecovery(recovery);
         }
         if (!_ownsLoad(load)) return null;
-        _nativePosition = target;
-        if (load.target == target) load.target = null;
+        // Command acceptance is resume intent, not an observed landing.
+        load.resumePosition = target;
+        if (load.target == target && load.seekMode == mode) load.target = null;
       }
       return load.request;
     } catch (error) {
@@ -1071,6 +1078,9 @@ class PlayerCoordinator extends ChangeNotifier {
       rethrow;
     } finally {
       load.pending = false;
+      if (_pendingExplicitSeekGeneration != _seekGeneration) {
+        load.seekMode = SeekMode.keyframes;
+      }
     }
   }
 
@@ -1101,6 +1111,7 @@ class PlayerCoordinator extends ChangeNotifier {
       next,
       rejected.partIndex.clamp(0, next.parts.length - 1),
       rejected.target ?? localPosition,
+      seekMode: rejected.target != null ? rejected.seekMode : recovery.seekMode,
       authorizationRetried: true,
       recovery: recovery,
     );
@@ -1245,7 +1256,12 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       return;
     }
-    await _loadPartAtPosition(request, _activePartIndex + 1, null);
+    await _loadPartAtPosition(
+      request,
+      _activePartIndex + 1,
+      null,
+      seekMode: _activeLoad?.seekMode ?? SeekMode.keyframes,
+    );
     if (_advancingGeneration == completedGeneration) {
       _advancingGeneration = null;
     }
@@ -1371,12 +1387,16 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> seekTo(Duration position) async {
     final seekGeneration = ++_seekGeneration;
+    _pendingExplicitSeekGeneration = seekGeneration;
     final tuneGeneration = _tuneGeneration;
-    final playback = _active?.request;
+    final load = _activeLoad;
+    final playback =
+        load != null && load.pending && load.tuneGeneration == tuneGeneration
+        ? load.request ?? _active?.request
+        : _active?.request;
     final target = playback == null
         ? null
         : _interactivePartForPosition(playback, position);
-    final load = _activeLoad;
     void fail(Object error) {
       if (_ownsSeek(seekGeneration, tuneGeneration)) {
         _publishControlFailure('seek', error);
@@ -1386,6 +1406,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
     try {
       if (playback != null && target != null && load != null) {
+        load.seekMode = SeekMode.exact;
         if (target.$1 != load.partIndex) {
           if (await _loadPartAtPosition(playback, target.$1, target.$2) ==
               null) {
@@ -1400,6 +1421,7 @@ class PlayerCoordinator extends ChangeNotifier {
             await recovery.result;
           }
         } else {
+          load.target = target.$2;
           await player.seek(target.$2);
         }
       } else {
@@ -1414,8 +1436,22 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       fail(error);
       return;
+    } finally {
+      if (_pendingExplicitSeekGeneration == seekGeneration) {
+        _pendingExplicitSeekGeneration = null;
+        final current = _activeLoad;
+        if (_ownsSeek(seekGeneration, tuneGeneration) &&
+            current != null &&
+            !current.pending) {
+          current.seekMode = SeekMode.keyframes;
+          if (identical(current, load)) current.target = null;
+        }
+      }
     }
     if (!_ownsSeek(seekGeneration, tuneGeneration)) return;
+    if (load != null && _ownsLoad(load)) {
+      load.resumePosition = target?.$2 ?? position;
+    }
     showOsd();
   }
 
@@ -2223,6 +2259,7 @@ class _PlaybackLoad {
     required this.request,
     required this.partIndex,
     required this.target,
+    required this.seekMode,
     required this.replacing,
     required this.authorizationRetried,
   }) : startTarget = target;
@@ -2236,6 +2273,10 @@ class _PlaybackLoad {
   Duration lastPositivePosition = Duration.zero;
   Duration? lastPositiveDuration;
   Duration? target;
+  SeekMode seekMode;
+  // Resume intent until actual telemetry supersedes it; never used as a
+  // landing observation. Native restart diagnostics read libmpv directly.
+  Duration resumePosition = Duration.zero;
   bool replacing;
   bool pending = true;
   late final Future<void> readiness;
@@ -2244,9 +2285,10 @@ class _PlaybackLoad {
 }
 
 class _AuthorizationRecovery {
-  _AuthorizationRecovery(this.rejected);
+  _AuthorizationRecovery(this.rejected) : seekMode = rejected.seekMode;
 
   final _PlaybackLoad rejected;
+  final SeekMode seekMode;
   _PlaybackLoad? replacement;
   late final Future<LineupPlaybackRequest> result;
 }

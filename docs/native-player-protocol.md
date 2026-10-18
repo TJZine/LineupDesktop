@@ -41,7 +41,7 @@ The native result is `null` unless a result map is shown.
 | `load` | `uri: String`, 1–32,768 bytes; `loadId: int >= 0`; `plexToken: String?`, either null or 1–8,192 printable ASCII bytes from `0x21`–`0x7e`; `startPaused: bool?` | `null`; `invalid_argument`, `insecure_media_uri`, or `command_queue_full`. An authenticated load requires an HTTPS URI with an authority. |
 | `play` | None | `null` or `command_queue_full`. |
 | `pause` | None | `null` or `command_queue_full`. |
-| `seek` | `seconds: num`, finite and >= 0 | `null`, `invalid_argument`, or `command_queue_full`. |
+| `seek` | `seconds: num`, finite and >= 0; `mode: "exact"` or `"keyframes"`, optional, default `"exact"` | `null`, `invalid_argument`, or `command_queue_full`. |
 | `stop` | `stopId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `stopResult`. |
 | `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
@@ -236,6 +236,45 @@ state arrives. A matching error, timeout, explicit stop, or replacement settles
 the pending load and retires its active ID. The caller's product generation is
 kept in Dart and projected onto `PlayerEvent`; it is not sent as a native
 argument.
+
+### Seeks
+
+Dart owns seek intent. Schedule/tune joins and ordinary authorization recovery
+joins select `keyframes`; the existing schedule join skips a seek when elapsed
+is at most two seconds. Explicit user seeks select `exact`, including a seek
+that overrides a pending join, crosses parts, or immediately recovers that
+unfinished operation. Completing a user seek does not make later playback
+recovery joins exact. Sequential part loads preserve the current operation's
+intent; program rollover resolves the newly scheduled program normally.
+
+The core executes `absolute+exact` or `absolute+keyframes`. In pinned mpv
+`3186d369f9f090cd1363be0ac46a037824b702c6`, absolute keyframe seeks use the
+backward demux preference, while positive relative seeks use `SEEK_FORWARD`.
+The lavf path uses FFmpeg's `AVSEEK_FLAG_BACKWARD`. This is a preference, not a
+strict no-overshoot guarantee: cached demux seeking can select the first later
+keyframe when no predecessor exists, and lavf retries without the backward flag
+if that seek fails. No exact fallback, admission pause, or extra retry is added.
+Existing `startPaused` display holds and explicit pause intent are unchanged.
+
+Seek command success means queue acceptance. The native worker emits a passive
+`seek landing` diagnostic only for an executed, current-load command followed
+by a `SEEK`/`PLAYBACK_RESTART` pair, with `seeking=false` and a finite native
+`time-pos`. Fields are load ID, mode, target, observed seconds, and signed
+`observed-target` offset; no URI, token, title, or raw mpv output is included.
+An initial restart or ordinary position snapshot cannot confirm a seek.
+Samples expire after ten seconds; replacement, stop, end/error, overflow, and
+stale load identity invalidate them. Overlapping commands or duplicate seek
+notifications make samples ambiguous and suppress logging until the next load.
+A seek that emits no seek/restart pair produces no landing diagnostic. Logging
+never changes playback, waits for completion, pauses, retries, or adds a seek.
+
+This is a post-seek restart observation, not an exact per-request or first-frame
+PTS protocol: mpv supplies no seek request ID, and `time-pos` is sampled when the
+worker consumes the restart. It may include playback progress since landing.
+The current load contract sets no per-file start option; adding one must account
+for its own initial seek before reusing this observation window. Dart keeps
+commanded resume intent separate from observed UI position and never treats a
+commanded target as landing evidence.
 
 ### Stops
 

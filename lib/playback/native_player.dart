@@ -52,7 +52,9 @@ abstract interface class NativePlayer {
   Future<void> setDisplayMatching(DisplayMatchingRequest request);
   Future<void> play();
   Future<void> pause();
-  Future<void> seek(Duration position);
+
+  /// Completes on command acceptance, not on an observed playback landing.
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact});
   Future<void> setVideoRect(PlayerVideoRect rect);
 
   /// Requests a transition. A user change may supersede its target; follow
@@ -76,6 +78,10 @@ abstract interface class NativePlayer {
   Future<void> stop();
   Future<void> dispose();
 }
+
+/// Keyframe seeks use mpv's backward preference, including its beginning-of-file
+/// fallback when no preceding keyframe exists. Exact is for explicit user seeks.
+enum SeekMode { exact, keyframes }
 
 enum DisplayMatchingState { hdr, sdr, unknown }
 

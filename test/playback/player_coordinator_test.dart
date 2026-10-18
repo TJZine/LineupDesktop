@@ -454,6 +454,55 @@ void main() {
     });
   }
 
+  for (final userPaused in [false, true]) {
+    testWidgets(
+      'keyframe landing before target preserves display hold and pause=$userPaused',
+      (tester) async {
+        final p = _DisplayPlayer();
+        final f = _ContinuationFixture(player: p);
+        addTearDown(f.close);
+        f.now = f.now.add(const Duration(seconds: 30));
+        await f.coordinator.toggleFullscreen();
+        await f.coordinator.tune('channel-b');
+        expect(p.seekModes, [SeekMode.keyframes]);
+        expect(p.pausedStarts, [true]);
+        if (userPaused) await f.coordinator.pause();
+        p.position = const Duration(seconds: 28);
+        p.decode();
+        await tester.pump();
+        expect(f.coordinator.position, const Duration(seconds: 28));
+        expect(f.coordinator.displayHoldActive, !userPaused);
+        p.report(DisplayMatchingOutcome.matched);
+        await tester.pump();
+        expect(f.coordinator.displayHoldActive, isFalse);
+        expect(p.plays, userPaused ? 0 : 1);
+        f.coordinator.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'unknown transfer after a backward keyframe join retains the bounded readiness cap',
+    (tester) async {
+      final p = _DisplayPlayer();
+      final f = _ContinuationFixture(player: p);
+      addTearDown(f.close);
+      f.now = f.now.add(const Duration(seconds: 30));
+      await f.coordinator.toggleFullscreen();
+      await f.coordinator.tune('channel-b');
+      p.position = const Duration(seconds: 28);
+      p.emitStatus(PlayerState.paused, generation: p.loadGenerations.last);
+      f.now = f.now.add(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 5));
+      expect(f.coordinator.displayHoldActive, isTrue);
+      f.now = f.now.add(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      expect(f.coordinator.displayHoldActive, isFalse);
+      expect(p.plays, 1);
+      f.coordinator.dispose();
+    },
+  );
+
   for (final finish in ['settle', 'failed', 'deadline', 'no video']) {
     testWidgets('readiness before track-list keeps display hold: $finish', (
       tester,
@@ -1481,6 +1530,7 @@ void main() {
         'test-token-2',
       ]);
       expect(fixture.player.seeks, [const Duration(seconds: 40)]);
+      expect(fixture.player.seekModes, [SeekMode.exact]);
       expect(fixture.coordinator.error, isNull);
 
       await fixture.coordinator.seekTo(const Duration(seconds: 10));
@@ -5619,6 +5669,124 @@ void main() {
     });
   }
 
+  for (final elapsed in [0, 2, 3, 119]) {
+    test(
+      'schedule join mode at $elapsed seconds preserves the two-second skip',
+      () async {
+        final f = _ContinuationFixture();
+        addTearDown(f.close);
+        f.now = f.now.add(Duration(seconds: elapsed));
+        expect(await f.coordinator.tune('channel-b'), isTrue);
+        expect(
+          f.player.seeks,
+          elapsed <= 2 ? isEmpty : [Duration(seconds: elapsed)],
+        );
+        expect(
+          f.player.seekModes,
+          elapsed <= 2 ? isEmpty : [SeekMode.keyframes],
+        );
+      },
+    );
+  }
+
+  for (final explicitSeekCompleted in [false, true]) {
+    test(
+      'ordinary recovery joins use keyframes after completed explicit seek=$explicitSeekCompleted',
+      () async {
+        final f = _ContinuationFixture(recoverAuthorization: true);
+        addTearDown(f.close);
+        f.now = f.now.add(const Duration(seconds: 30));
+        expect(await f.coordinator.tune('channel-b'), isTrue);
+        if (explicitSeekCompleted) {
+          await f.coordinator.seekTo(const Duration(seconds: 20));
+          expect(f.player.seekModes.last, SeekMode.exact);
+        }
+        f.player.emitError(
+          recoverable: true,
+          generation: f.player.loadGenerations.last,
+          failureCode: 'http_error',
+          httpStatus: 401,
+        );
+        await pumpEventQueue(times: 10);
+        expect(f.player.loads, hasLength(2));
+        expect(
+          f.player.seeks.last,
+          Duration(seconds: explicitSeekCompleted ? 20 : 30),
+        );
+        expect(f.player.seekModes.last, SeekMode.keyframes);
+        expect(f.coordinator.error, isNull);
+      },
+    );
+  }
+
+  for (final recover in [false, true]) {
+    test(
+      'explicit seek overrides pending join and its recovery exactly (recover=$recover)',
+      () async {
+        final player = _BlockingControlPlayer();
+        final f = _ContinuationFixture(
+          player: player,
+          recoverAuthorization: recover,
+        );
+        addTearDown(f.close);
+        f.now = f.now.add(const Duration(seconds: 30));
+        final tune = f.coordinator.tune('channel-b');
+        await player.seekStarted.future;
+        expect(player.seekModes, [SeekMode.keyframes]);
+        final seek = f.coordinator.seekTo(const Duration(seconds: 20));
+        if (recover) {
+          player.emitError(
+            recoverable: true,
+            generation: player.loadGenerations.last,
+            failureCode: 'http_error',
+            httpStatus: 401,
+          );
+          await pumpEventQueue(times: 10);
+        }
+        player.releaseSeek.complete();
+        expect(await tune, isTrue);
+        await seek;
+        expect(player.seeks, [
+          const Duration(seconds: 30),
+          const Duration(seconds: 20),
+        ]);
+        expect(player.seekModes, [SeekMode.keyframes, SeekMode.exact]);
+        expect(player.loads, hasLength(recover ? 2 : 1));
+        expect(f.coordinator.error, isNull);
+      },
+    );
+  }
+
+  test('an older completed seek cannot change recovery mode of the latest pending seek', () async {
+    final player = _OrderedSeekPlayer();
+    final f = _ContinuationFixture(player: player, recoverAuthorization: true);
+    addTearDown(f.close);
+    await f.coordinator.tune('channel-b');
+    final first = f.coordinator.seekTo(const Duration(seconds: 10));
+    await player.started[0].future;
+    final latest = f.coordinator.seekTo(const Duration(seconds: 20));
+    await player.started[1].future;
+    player.released[0].complete();
+    await first;
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.last,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await pumpEventQueue(times: 10);
+    expect(player.loads, hasLength(2));
+    expect(player.seeks, [
+      const Duration(seconds: 10),
+      const Duration(seconds: 20),
+      const Duration(seconds: 20),
+    ]);
+    expect(player.seekModes, [SeekMode.exact, SeekMode.exact, SeekMode.exact]);
+    player.released[1].complete();
+    await latest;
+    expect(f.coordinator.error, isNull);
+  });
+
   test('known schedule elapsed starts directly in the matching part', () async {
     final lineup = _TestLineup(
       playbackParts: _parts(first: const Duration(minutes: 30)),
@@ -5676,6 +5844,7 @@ void main() {
 
     expect(player.loads.map((uri) => uri.path), ['/part-2.mkv', '/part-2.mkv']);
     expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
+    expect(player.seekModes.last, SeekMode.keyframes);
     expect(
       player.seeks.where(
         (value) =>
@@ -5730,6 +5899,7 @@ void main() {
 
       expect(await tune, isTrue);
       expect(player.seeks, [target, target]);
+      expect(player.seekModes, [SeekMode.keyframes, SeekMode.keyframes]);
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.error, isNull);
       expect(lineup.recoveryCalls, 1);
@@ -5764,6 +5934,7 @@ void main() {
 
     expect(player.loads.map((uri) => uri.path), ['/part-1.mkv', '/part-2.mkv']);
     expect(player.seeks.last, const Duration(minutes: 5));
+    expect(player.seekModes.last, SeekMode.exact);
     expect(
       player.loadGenerations.last!,
       greaterThan(player.loadGenerations.first!),
@@ -5803,6 +5974,7 @@ void main() {
       await Future.wait([seek, pause]);
 
       expect(player.seeks.last, const Duration(minutes: 5));
+      expect(player.seekModes.last, SeekMode.exact);
       expect(coordinator.error, isNull);
     },
   );
@@ -7580,11 +7752,11 @@ class _SecondLoadFailurePlayer extends _EventPlayer {
   final bool failSeek;
 
   @override
-  Future<void> seek(Duration position) async {
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) async {
     if (failSeek && loads.length == 2) {
       Error.throwWithStackTrace(failure, StackTrace.current);
     }
-    await super.seek(position);
+    await super.seek(position, mode: mode);
   }
 
   @override
@@ -7603,11 +7775,11 @@ class _SecondLoadFailurePlayer extends _EventPlayer {
 
 class _BlockingSecondLoadPlayer extends _EventPlayer {
   @override
-  Future<void> seek(Duration position) async {
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) async {
     if (secondLoadStarted.isCompleted && !releaseSecondLoad.isCompleted) {
       throw StateError('Destination part is not ready.');
     }
-    await super.seek(position);
+    await super.seek(position, mode: mode);
   }
 
   final secondLoadStarted = Completer<void>();
@@ -7812,6 +7984,21 @@ class _QueuedStopSecondLoadFailurePlayer extends _SecondLoadFailurePlayer {
 
 class _BlockingEventPlayer extends _EventPlayer with _BlocksFirstLoad {}
 
+class _OrderedSeekPlayer extends _EventPlayer {
+  final started = [Completer<void>(), Completer<void>()];
+  final released = [Completer<void>(), Completer<void>()];
+
+  @override
+  Future<void> seek(Duration value, {SeekMode mode = SeekMode.exact}) async {
+    final index = seeks.length;
+    await super.seek(value, mode: mode);
+    if (index < started.length) {
+      started[index].complete();
+      await released[index].future;
+    }
+  }
+}
+
 class _BlockingControlPlayer extends _EventPlayer {
   final seekStarted = Completer<void>();
   final releaseSeek = Completer<void>();
@@ -7819,8 +8006,9 @@ class _BlockingControlPlayer extends _EventPlayer {
   final releaseSelect = Completer<void>();
 
   @override
-  Future<void> seek(Duration value) async {
+  Future<void> seek(Duration value, {SeekMode mode = SeekMode.exact}) async {
     seeks.add(value);
+    seekModes.add(mode);
     if (!seekStarted.isCompleted) seekStarted.complete();
     await releaseSeek.future;
   }
@@ -7839,7 +8027,7 @@ class _FailingSeekPlayer extends _Player {
   final Object failure;
 
   @override
-  Future<void> seek(Duration position) async {
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) async {
     Error.throwWithStackTrace(failure, StackTrace.current);
   }
 }
@@ -7860,7 +8048,8 @@ class _FailingControlPlayer extends _Player {
   Future<void> pause() async => throw _failure;
 
   @override
-  Future<void> seek(Duration value) async => throw _failure;
+  Future<void> seek(Duration value, {SeekMode mode = SeekMode.exact}) async =>
+      throw _failure;
 
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async =>
@@ -7875,7 +8064,7 @@ class _BlockingFailingControlPlayer extends _Player {
   final releaseSeek = Completer<void>();
 
   @override
-  Future<void> seek(Duration value) async {
+  Future<void> seek(Duration value, {SeekMode mode = SeekMode.exact}) async {
     seekStarted.complete();
     await releaseSeek.future;
     throw const PlayerUnavailable(
@@ -7906,8 +8095,9 @@ class _BlockingSecondSeekPlayer extends _EventPlayer {
   final releaseSecondSeek = Completer<void>();
 
   @override
-  Future<void> seek(Duration value) async {
+  Future<void> seek(Duration value, {SeekMode mode = SeekMode.exact}) async {
     seeks.add(value);
+    seekModes.add(mode);
     if (seeks.length != 2) return;
     secondSeekStarted.complete();
     await releaseSecondSeek.future;

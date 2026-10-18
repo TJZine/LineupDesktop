@@ -4,6 +4,7 @@
 #include <mpv/client.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -173,8 +174,17 @@ class PlayerCore {
   };
   struct PlayCommand {};
   struct PauseCommand {};
+  enum class SeekMode { exact, keyframes };
   struct SeekCommand {
     double seconds;
+    SeekMode mode;
+  };
+  struct SeekObservation {
+    int64_t load_id;
+    double target;
+    SeekMode mode;
+    bool started = false;
+    std::chrono::steady_clock::time_point deadline;
   };
   struct StopCommand {
     int64_t stop_id;
@@ -203,6 +213,8 @@ class PlayerCore {
   void StopEventThread();
   void EventLoop(uint64_t generation);
   void HandleMpvEvent(const mpv_event& event, uint64_t generation);
+  void ObserveSeekLanding(mpv_event_id event);
+  void ResetSeekObservation();
   void QueueEvent(uint64_t generation, ValueMap value);
   void QueueStopResult(uint64_t generation, int64_t stop_id, bool success);
   void QueueTrackResult(uint64_t generation, int64_t load_id,
@@ -223,6 +235,8 @@ class PlayerCore {
   std::mutex event_mutex_;
   std::deque<QueuedEvent> events_;
   NativePlaybackState playback_;
+  std::optional<SeekObservation> seek_observation_;
+  bool seek_observation_ambiguous_ = false;
   Reply dispose_reply_;
   std::atomic<bool> dispose_ready_{false};
   std::atomic<bool> worker_finished_{true};
