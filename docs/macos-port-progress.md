@@ -1168,3 +1168,157 @@ filters can run the native/reference jobs without requesting another engine
 build for these test-only changes. Its distinct head branch also preserves
 the in-progress `platform/macos` engine/package run. No CI check is skipped or
 weakened; package evidence remains attributed to that original run.
+
+The fixture correction is local commit `a1875fc2`, followed by progress-only
+`359afb38`. The controller pushed that exact head to
+`dev/l2-windows-fixture` and opened draft PR #47 against the remote
+`platform/macos` head `57f62c94`. PR CI `39111084372` was queued at 08:20:48
+UTC; its fixture/doc-only diff uses the existing release-input filters. The
+original `39109697512` engine/package run remains uninterrupted. The CI worker
+owns both runs and will report the new actual Windows gate promptly. The
+benchmark worker may only prepare supplemental source-equivalence evidence;
+counted and protected Plex runs remain unreleased.
+
+
+### L2 final bounded controller run — 2026-10-18
+
+The replacement controller in chat `01a14e20-5cfd-7a61-ac19-6819dad1cd16`
+explicitly took Git, CI-decision and app ownership. Live recheck found
+`platform/macos` at `359afb385268bad653ec26ca37bb4646fca2a896`, two commits
+ahead of its remote, with only the expected progress and handoff documents
+dirty. PR #47 still targeted `platform/macos`. A GPT-6 Luna/low observer handled
+read-only CI waiting with waits between queries. After the human explicitly
+invoked `orchestrate-implementation-chats`, the controller stopped its
+subagent and reused existing separate observer chat
+`01a14df1-7784-7001-8a1a-744b791ee9d1` (GPT-6 Luna/low). The verified human
+authorization is controller turn `01a14e21-3297-74e2-8f56-e27ebd2b6b53`,
+message `01a14e2a-6ff2-7481-9556-f893ef3c1503`. The controller yielded, then
+resumed on the observer's terminal completion callback and independently
+rechecked both live runs before Git publication. No CI dispatch, rerun,
+cancellation, product change, HDR recheck or verification infrastructure work
+was performed in this closure. The latest human scope supersedes the old
+synthetic-then-Plex instruction: skip counted synthetic, run protected Plex
+once, record the result and stop.
+
+**Windows L2 gate passed.** PR #47 run
+[39111084372](https://github.com/TJZine/LineupDesktop/actions/runs/39111084372),
+declared head `359afb385268bad653ec26ca37bb4646fca2a896`, genuinely executed
+all seven native contract suites and the authenticated-reference CTest.
+[Windows job 117627181538](https://github.com/TJZine/LineupDesktop/actions/runs/39111084372/job/117627181538)
+succeeded; the authenticated CTest took 39.80 seconds with zero failures.
+GitHub tested merge ref `741a2dbe2555c2551107f9a63905daba822c5778`, with
+parents `57f62c94` and exact PR head `359afb38`; the fixture, native auth test
+and workflow blobs match that head. The source's strict complete 48-case
+all-pass return predicate establishes the matrix gate. Successful per-case
+JSON/disconnect categories are absent from the public CTest output; no
+specific old swallowed Windows exception is newly identified. Earlier 44/48
+failure remains attributed to run `39109697512`, not relabeled as a pass.
+
+The original run's
+[macOS portable/native job 117622978001](https://github.com/TJZine/LineupDesktop/actions/runs/39109697512/job/117622978001)
+passed at source `57f62c9422556fd1f4b1ba8d870adc228061a841`, including
+**54/54 authenticated-reference cases**. This is exact-source hosted Mac
+evidence in addition to the earlier frozen-source local matrix; it does not
+change the original run's failed Windows-fixture result.
+
+**Protected Plex performance verdict: inconclusive.** The frozen manifest
+SHA-256 is `91d14f236cd2507e4093e5e1a923b224dda9d5b28baa9ae9dbcb3c4399ed42e5`,
+build ID `185368181381652`, frozen production baseline `d116ad7a`. All 566
+source, six script, ten fixture and 110 app regular-file hashes matched;
+bundle file set/symlinks, probe patch and equivalence hashes also matched.
+Supplemental `/tmp/lineup-l2-fresh/benchmark-next/final-controller-equivalence.json`
+records that current tracked changes since the freeze affect only CI,
+Windows fixture/control and progress documentation. Mac playback/build/runtime
+inputs retain the frozen baseline plus the documented disposable probe.
+The accepted foreground smoke remains its original evidence, not a new run.
+
+After the actual Windows gate passed, the controller released only the exact
+protected campaign and ran the prepared `run.py --phase counted-plex` once
+as `protected-plex-final-01` (run ID `196382485489006`, start delay 45 seconds).
+The read-only protected loader reached all 24 planned rows: four warmups and
+20 counted trials, ten per arm, five per arm/cell. Seven rows passed and 17
+failed; process exit was 1 and `accepted=false`. The frozen analyzer produced
+no timing summary. No partial successful subset is used to claim gain or no
+gain.
+
+Fourteen rows failed `output_health_failed`: all 12 cell-zero rows carried
+widescreen dimensions below the frozen height predicate, and cell-one trials
+6/16 had unavailable initial audio PTS (`audioPtsStatus=-10`). Trial 20 failed
+`late_rejection` with `foreground_interrupted`; trials 21–24 started without
+foreground, and trials 22/24 failed `foreground_changed`. Controller app
+activation did not maintain foreground across the full campaign. These are
+recorded campaign failures, not proof of a production L2 or HDR defect. Host
+load was also high (before 98.19/56.64/30.04; after 59.39/54.35/31.71 on ten
+logical CPUs). The protected state and client-identity files remained
+byte-identical; the app exited and no Lineup process remained. No loader or
+Keychain error stopped this run.
+
+Exact retained numeric evidence is in
+`/tmp/lineup-l2-fresh/benchmark-next/runs/protected-plex-final-01/`:
+`results.json`, `execution.json`, `analysis.json`, `authorization.json`,
+`before.json`, `after.json`, and sanitized `controller-verdict.json` with
+SHA-256 identities. Raw private logs remain local and are not copied here.
+No harness predicate was changed, no synthetic campaign or retry was run,
+and no latency gain is claimed. L2 production implementation/review and
+correctness evidence remain valid as attributed; performance benefit is
+unestablished. H1/HDR and L1 remain accepted. Overall macOS distribution,
+legal, older-OS and physical Windows gates remain separate and incomplete.
+
+
+**Final CI and Git closure.** PR #47 run `39111084372` is terminal
+**success**: six jobs passed and its engine/package job was intentionally
+skipped by fixture-only filters. Its
+[Mac job 117627181574](https://github.com/TJZine/LineupDesktop/actions/runs/39111084372/job/117627181574)
+directly reports **54/54** passing authentication rows (26 omitted-start,
+28 nonzero-start), at actual merge source `741a2dbe`. That source's entire
+tree `2f5bab3da5bf1f68e1a32c6d9f380a50b20219ad` equals `359afb38`.
+Both hosted Mac runs used libmpv SHA-256
+`6c92b7f0844d8e76cbc888417c974e9987d9051a7b2dd38a0ea2a158276db604`,
+with lock SHA-256
+`7df202602cc5a0276a7ac8762b0b4289e33e2db4a01d8adc352ca438ab9e842c`.
+These remain headless real-adapter synthetic-HTTPS results. The original
+NativePlayerTests reported 23 tests, one skipped and zero failures.
+
+Original run `39109697512` is terminal **failure**, solely its preserved
+original Windows fixture failure. Its
+[engine/package job 117623036312](https://github.com/TJZine/LineupDesktop/actions/runs/39109697512/job/117623036312)
+**passed** at exact `57f62c9422556fd1f4b1ba8d870adc228061a841`.
+Actual workflow/release invocations kept the same depot_tools wrapper SHA-256
+`AC37DB7974B903BB1AB1E70DA276996CCA6EAADDFD914629607E8D430F4DF846`
+and Flutter Ninja child SHA-256
+`9FAE00EB7F25B587573023761CFB7F7E00488D29BFCE7E347A186B4E5DF56A79`,
+version 1.11.1. `build.ninja` remained unchanged; `.ninja_log` retained v5 and
+SHA-256 `90ADDA6A146E921CE399FA3323E843DC3399934349B52701449CC465ED2464E2`
+after the first build and through the release invocation. The second Ninja
+invocation at 09:34:52 UTC reported `no work to do`, with no log-reset warning.
+Application, provenance and packaging guards completed. This establishes the
+separate cross-step CI-toolchain correction on actual Windows; no package
+infrastructure blocker remains.
+
+The exact `57f62c94` release marker completed at 09:36:33 UTC and the portable
+ZIP was created at 09:36:42 UTC. Uploaded GitHub artifact
+`LineupDesktop-windows-x64`, ID `12131893342`, is 61,822,047 bytes with artifact
+digest `sha256:79ecdb41b1413d0bbcaaec81efa9b5d0287db5166df8fa608758907daae978eb`.
+This identifies the uploaded GitHub artifact; the inner ZIP was not independently
+downloaded or physically accepted. Exact terminal/source/toolchain evidence is
+in `/tmp/lineup-l2-ci-39109697512/final-terminal-report.md` and both run
+folders' `final-recheck.json`, `macos-auth-report.json` and Windows reports.
+`final-evidence-manifest.json` hashes matched on controller inspection.
+
+Only after both live runs were terminal, the controller normally pushed
+`platform/macos` from `57f62c94` to `359afb38`. GitHub automatically marked
+[PR #47](https://github.com/TJZine/LineupDesktop/pull/47) **merged** at
+09:39:30 UTC (05:39:30 EDT), merge identity `359afb385268bad653ec26ca37bb4646fca2a896`;
+no duplicate cherry-pick or extra merge commit was needed. The progress and
+controller handoff are committed together as this documentation-only closure.
+`main` remains `022b05aa491fe2d7397aae45a227bf024d21c5ec`; no release,
+distribution publication or merge to main occurred. Documentation verification
+is `git diff --check` plus evidence identities and linked source/run checks;
+no product tests were rerun for these prose-only changes.
+
+**Final L2 verdict:** production implementation/review and the corrected
+Windows authenticated-reference gate are complete; both hosted Mac auth gates
+and the separately attributed engine/package job passed. **Measured Plex
+performance is inconclusive**, with no established gain, no accepted timing
+summary and no retry. The requested bounded closure is complete. Stop here;
+no further harness, HDR, design or release work is authorized by this closure.
