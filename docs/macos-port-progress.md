@@ -1439,3 +1439,18 @@ inconsistency; its correction and regressions were re-reviewed with no remaining
 material findings. The earlier full Dart suite passed 1,785 tests; this final
 step-origin correction was then checked by the complete coordinator suite.
 Shared-Dart Windows CI and bounded real-app integration remain pending.
+
+### Post-audit M-04 — unresolved AX update failures (2026-10-18)
+
+The [durable investigation](handoffs/macos-ax-update-investigation.md) records
+1,508 original native AXTree validation errors, exact toolchain/error sites,
+and the complete attempted media-free reduction. That attempt schedules 200
+transitions and its preserved log has zero AXTree failures; it is explicitly
+not a successful reproducer. The initiating invalid update and Dart-versus-engine
+cause remain unproved. No engine patch or speculative bridge-reset workaround
+was applied. The proposed next step is a sanitized capture of the first rejected
+semantics delta and reduction to a standalone upstream report; any runtime
+upgrade/subtree recreation needs isolated validation first. The same fresh-chat
+accessibility reviewer independently checked the durable evidence and privacy
+claims with no material discrepancies. Candidate real-app results will be
+recorded in the closing report; M-02/M-03 tests do not close M-04.
