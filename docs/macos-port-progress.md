@@ -814,3 +814,55 @@ check black/wrong-color flashes between channels and switch-latency regression.
 If flashes occur, the authorized fallback is the proven pre-acquisition barrier
 plus setter-thread flush only for writes on threads that will not acquire again.
 That fallback is conditional on evidence, not part of the initial implementation.
+
+H1 independent adversarial review approved the frozen candidate aggregate
+`e442c94974fbbd811a2a6494da1ab3792b209724470a7ce2a55a5d3d1847b500`
+for physical A/B, not as physically accepted. Its isolated native run recorded
+22 passes plus one pre-existing destructive-probe skip; a plain-layer negative
+control failed the intended publication check. Matched arms were built from the
+same fixed snapshot with identical framework inputs. Arm A was launched on SDR
+channel 1, but **no human arm-A judgment was supplied**.
+
+The human then directed: “opus will perform any verification needed. we dont
+need to do that here”. New verification runs, physical prompts, measurements
+and CI polling/dispatch are stopped here. Workers may finish implementation and
+the explicitly requested independent code review; frozen candidate/review
+artifacts and remaining acceptance/measurement protocol will be handed to Opus.
+Existing test/CI observations remain attributed evidence, not a new pass. H1
+physical brightness/headroom/flash/latency/resize/fullscreen/shutdown acceptance,
+combined checks, L1 target-runtime/Windows CI and L2 measurement remain open.
+
+CI observation is stopped as directed. Last observed run `39095353188` at head
+`b0c38b5be5546c4cf00a96ff6b61deaf30dd28dd`: macOS portable/native job
+`117580539221` passed; Windows job `117580539403` passed loader setup/loading
+but failed the close-order assertion; patched-engine/package job `117580586571`
+was still building. The run was not terminal at that observation. Reviewed
+Windows close fix `94b459a0` has not yet received a hosted passing-after result.
+Opus must establish subsequent status; no further polling is queued here.
+
+L1 independent code review found one P2 passive-diagnostic gap: a later worker
+command could publish a current-load `command_error` without invalidating an
+earlier pending landing observation. The controller accepted the source finding
+and requested a narrow observer invalidation plus an existing fake-operations
+regression case. No new playback guard, error reclassification or wire contract
+is authorized. The correction/test are to be inspected but not executed here;
+Opus owns their execution. Final L1 approval and the single combined handoff
+await targeted re-review of that correction.
+
+L1 review is now closed. The production observer invalidation was approved;
+targeted re-review also caught an old-load failure left in the new regression's
+setup. The controller retired load 85 through the existing End-file fixture
+before beginning load 86, and the reviewer approved that narrow correction.
+Final L1 patch `b8b375fc5af227570681950d527981bf1ecf8045a2219332eef64c3f76eaa98e`
+and `/tmp/lineup-l1/manifest-r2.json` bind the final source. Both native
+corrections and the new case remain unexecuted, assigned to Opus; historical
+native passes are not relabeled as final passing-after evidence.
+
+At the human's request to finish source/review and hand over verification, the
+reviewed code is saved locally as verification candidates: H1 `ce77d18d`, then
+L1/combined checkpoint `8bca5171fe73bb6b7b835e415f8372d8cef93902`. No new push,
+CI dispatch or verification run accompanies these checkpoints. Physical and
+target-runtime acceptance remain open. The single consolidated handoff is
+`docs/handoffs/macos-hdr-and-seek-opus-verification.md`; it covers both reviews,
+exact evidence boundaries, physical A/B, final corrected native tests, combined
+checks, Windows close-fix/core CI and the unexecuted L2 measurement proposal.
