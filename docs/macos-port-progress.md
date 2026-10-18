@@ -746,3 +746,56 @@ no Windows compiler/runtime is available locally, so actual hosted compilation
 and passing-after contract execution remain required. Only the three Windows
 files and controller record are integrated; concurrent Opus artifacts and all
 HDR investigation resources are excluded.
+
+## Authorized production follow-up to Opus findings
+
+The human explicitly resumed implementation from
+`docs/handoffs/macos-hdr-root-cause-and-switch-latency.md` at source
+`94b459a05c963f62efdf4ec4d0bd22344efe855d`. The Opus handoff remains an
+untracked user artifact and is preserved. Its historical status paragraph is
+superseded by this ledger's actual approvals and CI results.
+
+H1: worker `01a14bc0-ab3f-7c73-bb93-75341fdc3420` (`worker`, Sol medium) owns
+the production adapter-owned Metal layer flush, focused native proof and minimal
+related contracts. The accepted runtime is immutable; the diagnostic patch must
+never be merged. It must resolve off-main dirty-thread/mismatch semantics,
+preserve acquisition/lifecycle behavior, and return a frozen candidate for
+independent adversarial review. Physical arm A/B acceptance and in-app EDR
+headroom evidence remain mandatory. This worker initially owns exclusive Mac
+app/UI/native build resources.
+
+L1: worker `01a14bfd-7a31-7e50-9de6-e6318b5c1aac` (`worker`, Sol medium) owns
+seek intent through Dart transport/coordinator and the shared native core.
+The approved policy is keyframe at or before schedule position, never after it,
+for schedule/tune joins and their recovery reloads; explicit user seeks remain
+exact, including overrides during pending loads. Observed landed-versus-target
+offset must be logged safely, and end-of-program rollover verified. This slice
+may run Dart/isolated portable core checks in parallel but may not use the Mac
+app/native media resources during H1 acceptance. Shared-core changes require
+Windows CI and independent adversarial review before integration.
+
+L2 follows L1: measure per-file `loadfile start=` against the corrected join
+baseline, preserving the backward-join correctness floor, identity/currentness,
+token safety and comparable workloads/cache/resource conditions. Its benefit is
+unmeasured; no production start-option or stop-serialization optimization is
+included in L1. The benchmark-checklist skill governs the comparison. The
+controller retains scope, Git integration, combined verification and completion.
+
+H1 implementation decision: a transaction must be published on its setter
+thread. A dirty-thread marker cannot make another thread flush it, and teardown
+may set 1×1 without another acquisition. The controller authorized evaluating
+immediate publication after each relevant off-main setter in the adapter-owned
+subclass, avoiding redundant acquisition barriers when all mutations are already
+published. This timing differs from Opus's physically proven drawable arm and
+is not assumed equivalent: physical A/B plus teardown/black-flash acceptance
+must establish it before integration. H1 builds use an isolated baseline plus
+only H1 files so concurrent L1 core edits cannot contaminate their evidence.
+
+L1 source investigation found that mpv's normal absolute/keyframe path is
+backward, but its cached demuxer may return a packet after target if no better
+one exists, and lavf retries without BACKWARD after backward-seek failure.
+Changing flags alone therefore cannot prove strict never-past. The human has
+been asked to choose fail-without-advancing versus exact-seek fallback for an
+unavailable predecessor; that dependent policy remains pending. The worker
+continues intent/currentness design, including a faithful correlated observed
+landing rather than logging enqueue success or pre-seek time position.
