@@ -1688,8 +1688,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void showMiniGuide() {
-    _miniGuideChannelId =
-        lineup.currentChannelId ?? lineup.channels.firstOrNull?.id;
+    _miniGuideChannelId = currentChannel?.id ?? lineup.channels.firstOrNull?.id;
     final selected = miniGuideChannelIndex;
     _miniGuideWindowStart = _indexedChannels.length <= 5 || selected < 0
         ? 0

@@ -3708,6 +3708,165 @@ void main() {
   });
 
   test(
+    'mini Guide opens on the playing channel without tuning while browsing',
+    () async {
+      final lineup = _TestLineup(count: 8);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _Player();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      expect(await coordinator.tune('channel-0'), isTrue);
+
+      coordinator.showMiniGuide();
+
+      expect(coordinator.miniGuideChannelId, 'channel-0');
+      expect(coordinator.miniGuideChannels.map((channel) => channel.id), [
+        'channel-6',
+        'channel-7',
+        'channel-0',
+        'channel-b',
+        'channel-2',
+      ]);
+      coordinator.moveMiniGuide(1);
+      expect(coordinator.miniGuideChannelId, 'channel-b');
+      expect(coordinator.currentChannel?.id, 'channel-0');
+      expect(coordinator.watchingChannelId, 'channel-0');
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(lineup.playbackRequests, 1);
+      expect(player.loads, hasLength(1));
+
+      coordinator.showMiniGuide();
+      expect(coordinator.miniGuideChannelId, 'channel-0');
+    },
+  );
+
+  test(
+    'mini Guide opens on the failed Retry target without committing it',
+    () async {
+      final lineup = _TestLineup(count: 8);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _SecondLoadFailurePlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      expect(await coordinator.tune('channel-0'), isTrue);
+      expect(await coordinator.tune('channel-b'), isFalse);
+      expect(coordinator.currentChannel?.id, 'channel-b');
+
+      coordinator.showMiniGuide();
+
+      expect(coordinator.miniGuideChannelId, 'channel-b');
+      expect(coordinator.miniGuideChannels.map((channel) => channel.id), [
+        'channel-7',
+        'channel-0',
+        'channel-b',
+        'channel-2',
+        'channel-3',
+      ]);
+      coordinator.moveMiniGuide(3);
+      expect(coordinator.miniGuideChannelId, 'channel-4');
+      expect(coordinator.currentChannel?.id, 'channel-b');
+      expect(coordinator.watchingChannelId, isNull);
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(lineup.playbackRequests, 2);
+      expect(player.loads, hasLength(2));
+
+      await coordinator.retry();
+      expect(lineup.currentChannelId, 'channel-b');
+      expect(lineup.lastPlaybackItemId, 'program-1');
+    },
+  );
+
+  testWidgets('mini Guide opens on a pending channel step preview', (
+    tester,
+  ) async {
+    final lineup = _TestLineup(count: 8);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _Player();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    final initial = coordinator.tune('channel-0');
+    await tester.pump();
+    expect(await initial, isTrue);
+    final step = coordinator.nextChannel();
+    expect(coordinator.currentChannel?.id, 'channel-b');
+
+    coordinator.showMiniGuide();
+
+    expect(coordinator.miniGuideChannelId, 'channel-b');
+    coordinator.moveMiniGuide(2);
+    expect(coordinator.miniGuideChannelId, 'channel-3');
+    expect(coordinator.currentChannel?.id, 'channel-b');
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(lineup.playbackRequests, 1);
+    expect(player.loads, hasLength(1));
+
+    await tester.pump(const Duration(milliseconds: 250));
+    await step;
+    expect(lineup.currentChannelId, 'channel-b');
+    expect(lineup.lastPlaybackItemId, 'program-1');
+    expect(player.loads, hasLength(2));
+    coordinator.dispose();
+  });
+
+  for (final empty in [false, true]) {
+    test('mini Guide falls back without a current channel: empty=$empty', () {
+      final lineup = _TestLineup()..clearCurrentChannel();
+      if (empty) lineup.replaceChannels([]);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _Player();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      coordinator.showMiniGuide();
+
+      expect(coordinator.miniGuideChannelId, empty ? null : 'channel-0');
+      expect(coordinator.miniGuideChannelIndex, empty ? -1 : 0);
+      coordinator.moveMiniGuide(1);
+      expect(coordinator.miniGuideChannelId, empty ? null : 'channel-b');
+      expect(lineup.currentChannelId, isNull);
+      expect(lineup.playbackRequests, 0);
+      expect(player.loads, isEmpty);
+    });
+  }
+
+  test(
     'mini Guide pages by logical identity without mounting all channels',
     () async {
       final lineup = _TestLineup(count: 1000);

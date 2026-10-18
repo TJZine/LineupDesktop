@@ -1639,3 +1639,16 @@ passed. Fresh adversarial review `focus_review_v2` found no material issues.
 Immediate tooltip teardown and inherited visibility restrictions remain covered.
 Combined Release and Windows acceptance are pending, rather than inferred from
 widget checks.
+
+
+## 2026-10-18 — Mini Guide presentation-channel consistency
+
+The user approved opening Mini Guide around the channel currently represented by
+the Player, including a failed Retry target or pending rapid-step preview, instead
+of the last committed selection. Initialization now reuses `currentChannel` and
+retains the first-channel fallback. Browsing does not tune or overwrite committed
+playback, requested target or Retry identity. Coordinator 302/302 passed; restoring
+the old initializer made both failed-target and pending-preview regressions fail.
+Targeted analysis passed. Fresh read-only adversarial review
+`mini_guide_review_v2` approved the two-file change with no material findings.
+Real-app and shared-code Windows checks are recorded separately after integration.
