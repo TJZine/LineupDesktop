@@ -604,3 +604,21 @@ Pure parser/control-flow checks pass, including malformed/non-ASCII/missing
 fields and private-sentinel exclusion. Production adapter/core/runtime inputs
 remain unchanged. Actual isolated 26-case proof and hosted recovery remain
 pending; no prior passing matrix is relabeled as proof of this combination.
+
+The human completed the fixed-size foreground sequence and judged final HDR
+normally bright. They further identified rapid back-and-forth switching as the
+trigger: it fails when switching faster than the suggested 8-second waits.
+Slow-switch success does not close the defect. The native worker now focuses on
+rapid switching, with the accepted product/runtime inputs still immutable.
+
+After independent approval, actual isolated authenticated-reference verification
+on clean commit `4f4a80d4` exited 0 with all 26 required cases passing. Evidence:
+`/tmp/lineup-reference-window-style-after/report.json` and `identity.json`;
+report SHA-256 `e6b7b59db241e575a26e3356fe88475108f76a027557523c7fb3b378644c924d`;
+built harness `b8f50333519988b4a2e203f6f4db9aab309be84d7d8437e890c0e20eda92b885`.
+The accepted local runtime's lock, BUILD-INFO and libmpv identities match those
+recorded above. This is current local headless adapter/codec/core/runtime proof,
+including the matrix's negative controls; it does not establish hosted runtime
+or physical HDR acceptance. No production source, accepted runtime or primary
+generated output changed. The proof resource was released to the native worker
+for rapid-switch diagnosis. Hosted recovery remains required.
