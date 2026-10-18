@@ -929,8 +929,7 @@ void PlayerCore::ObserveSeekLanding(mpv_event_id event) {
   if (!seek_observation_) return;
   auto& sample = *seek_observation_;
   if (std::chrono::steady_clock::now() > sample.deadline ||
-      playback_.active_load() != sample.load_id ||
-      (playback_.failure() && playback_.failure()->load_id == sample.load_id)) {
+      playback_.active_load() != sample.load_id) {
     seek_observation_.reset();
     seek_observation_ambiguous_ = true;
     return;

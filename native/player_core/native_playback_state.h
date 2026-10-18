@@ -20,6 +20,8 @@ class NativePlaybackState {
     bool within_capacity;
     std::optional<int64_t> rejected_load;
   };
+  // Deferred log detail for a later failed END_FILE, not a live failure state.
+  // Backend probing can log an error and then recover with another backend.
   struct Failure {
     int64_t load_id;
     std::string code;

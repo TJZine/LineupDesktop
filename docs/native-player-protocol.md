@@ -282,6 +282,12 @@ A load/seek without its matching restart produces no landing diagnostic.
 Logging never changes playback, waits for completion, pauses, retries, or adds
 a seek.
 
+Classified mpv error logs are retained as detail for a later failed `END_FILE`.
+Their presence alone does not invalidate a matched restart: backend probing can
+fail and then recover with another output. Actual terminal and command errors
+still retire observations. A landing diagnostic reports position, not successful
+audio output or continued playback.
+
 This is a restart observation, not an exact per-request or first-frame PTS
 protocol: mpv supplies no seek request ID, and `time-pos` is sampled when the
 worker consumes the restart. It may include playback progress since landing.

@@ -475,6 +475,17 @@ void ErrorLog(PlayerCore& core) {
   PlayerCoreTestAccess::Event(core, event);
 }
 
+void AudioOutputProbeError(PlayerCore& core) {
+  mpv_event_log_message data{
+      "ao/coreaudio", "error",
+      "unable to set the input channel layout on the audio unit",
+      MPV_LOG_LEVEL_ERROR};
+  mpv_event event{};
+  event.event_id = MPV_EVENT_LOG_MESSAGE;
+  event.data = &data;
+  PlayerCoreTestAccess::Event(core, event);
+}
+
 void ParsedLoad(PlayerCore& core, int64_t load_id, std::optional<int64_t> playlist_id,
                 int command_status = 0) {
   const std::string uri = "https://native-contract.invalid/load-" + std::to_string(load_id);
@@ -867,10 +878,32 @@ void SeekPolicyAndObservation(PlayerCore& core) {
   begin(85);
   seek(1, "keyframes");
   event(MPV_EVENT_SEEK);
-  PlayerCoreTestAccess::State(core).RecordFailure("source_open_error", std::nullopt);
+  AudioOutputProbeError(core);
+  fake->seek_position = 0.75;
   event(MPV_EVENT_PLAYBACK_RESTART);
-  check(log.str().empty(), "a recorded current-load failure invalidates landing");
-  End(core, 1085);
+  check(log.str().find("loadId=85 mode=keyframes target=1.000000 observed=0.750000 offset=-0.250000") != std::string::npos,
+        "a matched explicit seek remains observable after a recovered backend probe error");
+  const auto recovered_seek = log.str();
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str() == recovered_seek, "recovered explicit seek logs at most once");
+  const auto& seek_detail = PlayerCoreTestAccess::State(core).failure();
+  check(seek_detail && seek_detail->load_id == 85 && seek_detail->code == "audio_output_error",
+        "explicit landing retains the classified log detail for a later terminal error");
+  log.str("");
+  seek(2, "keyframes");
+  event(MPV_EVENT_SEEK);
+  Events terminal_error;
+  Drain(core, terminal_error);
+  terminal_error.received.clear();
+  End(core, 1085, MPV_ERROR_GENERIC);
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().empty(), "actual terminal error still retires a pending explicit seek");
+  Drain(core, terminal_error);
+  check(terminal_error.received.size() == 1 &&
+        Has(terminal_error.received[0], "loadId", Value(int64_t{85})) &&
+        Has(terminal_error.received[0], "state", Value("error")) &&
+        Has(terminal_error.received[0], "failureCode", Value("audio_output_error")),
+        "later terminal error preserves the original classified audio detail");
   begin(86);
   Events command_errors;
   Drain(core, command_errors);
@@ -968,6 +1001,20 @@ void InitialJoinObservation(PlayerCore& core) {
   check(log.str().find("loadId=204") != std::string::npos,
         "only the matching replacement START/FILE_LOADED opens its window");
 
+  load(205);
+  ready(205);
+  AudioOutputProbeError(core);
+  fake->seek_position = 16;
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str().find("loadId=205 mode=keyframes target=18.250000 observed=16.000000 offset=-2.250000") != std::string::npos,
+        "a matched initial restart remains observable after a recovered backend probe error");
+  const auto recovered_initial = log.str();
+  event(MPV_EVENT_PLAYBACK_RESTART);
+  check(log.str() == recovered_initial, "recovered initial join logs at most once");
+  const auto& initial_detail = PlayerCoreTestAccess::State(core).failure();
+  check(initial_detail && initial_detail->load_id == 205 && initial_detail->code == "audio_output_error",
+        "initial landing retains the classified log detail for a later terminal error");
+
   for (int failure = 0; failure < 8; ++failure) {
     const int64_t id = 210 + failure;
     load(id);
@@ -993,7 +1040,17 @@ void InitialJoinObservation(PlayerCore& core) {
       PlayerCoreTestAccess::RunQueuedCommands(core);
       fake->reject_volume = false;
     } else if (failure == 6) {
-      PlayerCoreTestAccess::State(core).RecordFailure("source_open_error", std::nullopt);
+      AudioOutputProbeError(core);
+      Events terminal_error;
+      Drain(core, terminal_error);
+      terminal_error.received.clear();
+      End(core, id + 1000, MPV_ERROR_GENERIC);
+      Drain(core, terminal_error);
+      check(terminal_error.received.size() == 1 &&
+            Has(terminal_error.received[0], "loadId", Value(id)) &&
+            Has(terminal_error.received[0], "state", Value("error")) &&
+            Has(terminal_error.received[0], "failureCode", Value("audio_output_error")),
+            "failed initial load publishes its retained classified error detail");
     } else {
       event(MPV_EVENT_SEEK);
       event(MPV_EVENT_SEEK);
