@@ -622,3 +622,15 @@ including the matrix's negative controls; it does not establish hosted runtime
 or physical HDR acceptance. No production source, accepted runtime or primary
 generated output changed. The proof resource was released to the native worker
 for rapid-switch diagnosis. Hosted recovery remains required.
+
+Run `39079367554` is now terminal: Dart, shared core, Windows release policy and
+patched Flutter engine/package jobs passed; Windows contract startup and macOS
+authenticated-reference jobs failed as recorded above. The controller preserved
+the long-running engine/package job until completion, then dispatched
+[39087575645](https://github.com/TJZine/LineupDesktop/actions/runs/39087575645)
+at exact pushed head `5740cc9855724b0e473b6956fddde2c2f24b9099`.
+This run includes the reviewed Windows loader diagnostics and the reviewed,
+locally verified authenticated-reference fixture correction. It was queued at
+dispatch; no current-run pass is inferred from the preceding run. The same
+read-only CI observer owns meaningful failure/completion callbacks. Human rapid
+foreground HDR reproduction remains separate and pending.
