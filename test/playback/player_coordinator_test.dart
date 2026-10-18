@@ -1134,6 +1134,26 @@ void main() {
     },
   );
 
+  testWidgets(
+    'channel step keeps paused program and Up next across the Guide boundary',
+    (tester) async {
+      final fixture = _ContinuationFixture();
+      addTearDown(fixture.close);
+      final step = fixture.coordinator.nextChannel();
+      await tester.pump(const Duration(milliseconds: 250));
+      await step;
+      await fixture.coordinator.pause();
+      final loaded = fixture.coordinator.currentProgram!;
+      final successor = fixture.coordinator.nextProgram!;
+      fixture.now = loaded.scheduled.end.add(const Duration(seconds: 10));
+
+      expect(fixture.guide.currentProgram('channel-b')!.id, successor.id);
+      expect(fixture.coordinator.currentProgram!.id, loaded.id);
+      expect(fixture.coordinator.nextProgram!.id, successor.id);
+      fixture.coordinator.dispose();
+    },
+  );
+
   test(
     'early media completion immediately loads the future successor',
     () async {
@@ -4426,6 +4446,181 @@ void main() {
       expect(coordinator.overlay, PlayerOverlay.osd);
     },
   );
+
+  testWidgets(
+    '30 rapid channel steps publish every target and load only the final one',
+    (tester) async {
+      final lineup = _TestLineup(count: 40);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _Player();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      final steps = <Future<void>>[];
+      final published = <String?>[];
+      coordinator.addListener(
+        () => published.add(coordinator.currentChannel?.id),
+      );
+
+      for (var press = 1; press <= 30; press++) {
+        steps.add(coordinator.nextChannel());
+        expect(coordinator.currentChannel?.id, lineup.channels[press].id);
+        expect(published.last, lineup.channels[press].id);
+        expect(lineup.currentChannelId, 'channel-0');
+        await tester.pump(const Duration(milliseconds: 150));
+        expect(player.loads, isEmpty);
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+      await Future.wait(steps);
+
+      expect(player.loads, hasLength(1));
+      expect(lineup.playbackRequests, 1);
+      expect(lineup.lastPlaybackItemId, 'program-30');
+      expect(lineup.currentChannelId, 'channel-30');
+      expect(coordinator.currentChannel?.id, 'channel-30');
+      coordinator.dispose();
+    },
+  );
+
+  testWidgets(
+    'channel steps accumulate from a pending direct tune and reject its late load',
+    (tester) async {
+      final lineup = _TestLineup(count: 6);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _ControlledPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      final first = coordinator.tune('channel-b');
+      await tester.pump();
+      expect(player.firstLoadStarted.isCompleted, isTrue);
+      final up = coordinator.nextChannel();
+      expect(coordinator.currentChannel?.id, 'channel-2');
+      await tester.pump(const Duration(milliseconds: 150));
+      final down = coordinator.previousChannel();
+      expect(coordinator.currentChannel?.id, 'channel-b');
+      final finalStep = coordinator.previousChannel();
+      expect(coordinator.currentChannel?.id, 'channel-0');
+      player.releaseFirstLoad.complete();
+      await tester.pump();
+      expect(await first, isFalse);
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(player.loads, hasLength(1));
+      await tester.pump(const Duration(milliseconds: 250));
+      await Future.wait([up, down, finalStep]);
+
+      expect(player.loads, hasLength(2));
+      expect(lineup.lastPlaybackItemId, 'program-0');
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(coordinator.error, isNull);
+      coordinator.dispose();
+    },
+  );
+
+  for (final replacement in ['tune', 'step', 'stop']) {
+    testWidgets(
+      'reentrant $replacement owns the deferred channel step lifecycle',
+      (tester) async {
+        final lineup = _TestLineup(count: 6);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = _Player();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+        Future<void>? newer;
+        var replaced = false;
+        coordinator.addListener(() {
+          if (replaced) return;
+          replaced = true;
+          newer = switch (replacement) {
+            'tune' => coordinator.tune('channel-3'),
+            'step' => coordinator.nextChannel(),
+            _ => coordinator.stop(),
+          };
+        });
+
+        final outer = coordinator.nextChannel();
+        await tester.pump(const Duration(milliseconds: 250));
+        await Future.wait([outer, newer!]);
+        expect(player.loads, hasLength(replacement == 'stop' ? 0 : 1));
+        if (replacement != 'stop') {
+          expect(
+            lineup.currentChannelId,
+            replacement == 'tune' ? 'channel-3' : 'channel-2',
+          );
+        }
+        coordinator.dispose();
+      },
+    );
+  }
+
+  for (final action in ['tune', 'stop', 'scope', 'sleep', 'dispose']) {
+    testWidgets('$action cancels a channel step before its deferred load', (
+      tester,
+    ) async {
+      final lineup = _TestLineup(count: 6);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _Player();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      final step = coordinator.nextChannel();
+      expect(coordinator.currentChannel?.id, 'channel-b');
+      switch (action) {
+        case 'tune':
+          unawaited(coordinator.tune('channel-3'));
+        case 'stop':
+          unawaited(coordinator.stop());
+        case 'scope':
+          lineup.changeContentScope();
+        case 'sleep':
+          coordinator.setSleepTimer(Duration.zero);
+        case 'dispose':
+          coordinator.dispose();
+      }
+      await tester.pump(const Duration(seconds: 1));
+      await step;
+      expect(player.loads, hasLength(action == 'tune' ? 1 : 0));
+      if (action == 'tune') {
+        expect(lineup.lastPlaybackItemId, 'program-3');
+        expect(coordinator.currentChannel?.id, 'channel-3');
+      }
+      coordinator.dispose();
+    });
+  }
 
   test('superseded tune cannot seek or replace the winning request', () async {
     final lineup = _TestLineup();

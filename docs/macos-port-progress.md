@@ -1349,3 +1349,21 @@ subprocess invocation and failure/exit propagation. Fresh-chat adversarial revie
 `01a150a8-1507-7950-9c5b-592e88c70b17` independently repeated these checks and
 found no material issues. Real Release Diagnostics/export inspection remains
 pending the combined candidate.
+
+### Post-audit Q-02 — accumulate channel-step intent (2026-10-18)
+
+Page Up/Down previously used the last committed channel while tunes were
+pending, dropping increments. Every press now publishes the next requested
+channel immediately and supersedes older intent; a 250 ms quiet interval admits
+only the final target to the existing serialized tune queue. Persistent channel
+selection still commits only on successful playback. Stop, scope retirement,
+sleep expiry and disposal cancel deferred work. Settled playback releases the
+preview so program identity remains attached to loaded media across schedule
+boundaries. Coordinator tests pass (294), including 30 presses spaced 150 ms,
+pending-load supersession, lifecycle/reentrant cancellation and paused program
+identity; the existing Player surfing test covers immediate preview then commit.
+Fresh-chat review `01a150a9-448a-7781-ae3f-6a59104e9c52` found a program-identity
+regression in the first patch; the corrected patch and added regression were
+re-reviewed with no material findings. Real-app 30-press replay and Windows CI
+remain pending the combined candidate. This is burst coalescing, not a latency
+benchmark.

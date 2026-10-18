@@ -94,6 +94,9 @@ class PlayerCoordinator extends ChangeNotifier {
   Timer? _cursorTimer;
   Timer? _noticeTimer;
   Timer? _busyTimer;
+  Timer? _channelStepTimer;
+  Completer<bool>? _channelStepCompletion;
+  String? _channelStepTargetId;
   String? _notice;
   String? _busyLabel;
   (int, bool, PlayerState)? _busyIdentity;
@@ -242,7 +245,8 @@ class PlayerCoordinator extends ChangeNotifier {
   int? get pendingTrackId => _trackConfirmation.id;
   String? get trackSelectionError => _trackConfirmation.error;
   Channel? get currentChannel {
-    final index = _channelIndexById[lineup.currentChannelId];
+    final index =
+        _channelIndexById[_channelStepTargetId ?? lineup.currentChannelId];
     return index == null ? null : _indexedChannels[index];
   }
 
@@ -266,6 +270,10 @@ class PlayerCoordinator extends ChangeNotifier {
       displayHoldActive ? PlayerState.loading : status.state;
 
   GuideProgram? get currentProgram {
+    final target = _channelStepTargetId;
+    if (target != null) {
+      return _resolvingProgram ?? guide.currentProgram(target);
+    }
     final id = lineup.currentChannelId;
     return _resolvingProgram ??
         _active?.program ??
@@ -273,6 +281,8 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   GuideProgram? get nextProgram {
+    final target = _channelStepTargetId;
+    if (target != null) return guide.nextProgram(target);
     final id = lineup.currentChannelId;
     final represented = _resolvingProgram ?? _active?.program;
     if (represented != null) {
@@ -677,7 +687,13 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<bool> tune(String channelId) => _tune(channelId);
 
-  Future<bool> _tune(String channelId, {GuideProgram? endedProgram}) {
+  Future<bool> _tune(
+    String channelId, {
+    GuideProgram? endedProgram,
+    bool channelStep = false,
+  }) {
+    _cancelPendingChannelStep(clearTarget: !channelStep);
+    if (channelStep) _channelStepTargetId = channelId;
     final deadline = _sleepDeadline;
     if (deadline != null && !_clock().isBefore(deadline)) {
       return _expireSleepTimer(_sleepEpoch).then((_) => false);
@@ -699,11 +715,27 @@ class PlayerCoordinator extends ChangeNotifier {
       _presentOverlay(PlayerOverlay.osd);
     }
     notifyListeners();
-    final operation = _tuneOperations.then(
-      (_) => _performTune(channelId, generation, nativeStop, endedProgram),
-    );
-    _tuneOperations = operation.then<void>((_) {}).catchError((_) {});
-    return operation;
+    if (_disposed || generation != _tuneGeneration) {
+      return Future.value(false);
+    }
+    Future<bool> dispatch() {
+      final operation = _tuneOperations.then(
+        (_) => _performTune(channelId, generation, nativeStop, endedProgram),
+      );
+      _tuneOperations = operation.then<void>((_) {}).catchError((_) {});
+      return operation;
+    }
+
+    if (!channelStep) return dispatch();
+    // Each step publishes and supersedes older intent immediately. Only the
+    // target remaining after a quiet interval enters the serialized load queue.
+    final completion = _channelStepCompletion = Completer<bool>();
+    _channelStepTimer = Timer(const Duration(milliseconds: 250), () {
+      _channelStepTimer = null;
+      _channelStepCompletion = null;
+      completion.complete(dispatch());
+    });
+    return completion.future;
   }
 
   Future<void> loadInitialMedia(Uri media) async {
@@ -847,6 +879,7 @@ class PlayerCoordinator extends ChangeNotifier {
         return false;
       }
       _tuning = false;
+      _channelStepTargetId = null;
       _canRetry = false;
       _error = null;
       if (endedProgram == null) {
@@ -1314,9 +1347,22 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> _tuneOffset(int offset) async {
     final channels = _indexedChannels;
     if (channels.isEmpty) return;
-    final index = _channelIndexById[lineup.currentChannelId] ?? 0;
-    final next = ((index < 0 ? 0 : index) + offset) % channels.length;
-    await tune(channels[next < 0 ? next + channels.length : next].id);
+    if (_disposed) return;
+    final target =
+        _channelStepTargetId ??
+        (_tuning ? _retryChannelId : null) ??
+        lineup.currentChannelId;
+    final index = _channelIndexById[target] ?? 0;
+    final next = (index + offset) % channels.length;
+    await _tune(channels[next].id, channelStep: true);
+  }
+
+  void _cancelPendingChannelStep({bool clearTarget = true}) {
+    _channelStepTimer?.cancel();
+    _channelStepTimer = null;
+    _channelStepCompletion?.complete(false);
+    _channelStepCompletion = null;
+    if (clearTarget) _channelStepTargetId = null;
   }
 
   Future<void> togglePlayback() {
@@ -1331,6 +1377,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> pause() => _setPlaybackPaused(true);
 
   Future<void> stop() async {
+    _cancelPendingChannelStep();
     _clearSleepTimer();
     final generation = ++_tuneGeneration;
     ++_controlGeneration;
@@ -1814,6 +1861,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> _expireSleepTimer(int epoch) async {
     if (_disposed || epoch != _sleepEpoch) return;
+    _cancelPendingChannelStep();
     _sleepTimer?.cancel();
     _sleepTimer = null;
     _sleepDuration = null;
@@ -2061,6 +2109,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _resetScopeState() {
+    _cancelPendingChannelStep();
     _clearTransientStatus();
     _cancelOverlayTimer();
     _clearSleepTimer();
@@ -2185,6 +2234,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   @override
   void dispose() {
+    _cancelPendingChannelStep();
     _clearTransientStatus();
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();

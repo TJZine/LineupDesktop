@@ -1390,12 +1390,12 @@ void main() {
     );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
-    await tester.pump();
-    await tester.pump();
+    expect(fixture.player.currentChannel?.id, 'channel-1');
+    await tester.pump(const Duration(milliseconds: 250));
     expect(fixture.lineup.currentChannelId, 'channel-1');
     await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
-    await tester.pump();
-    await tester.pump();
+    expect(fixture.player.currentChannel?.id, 'channel');
+    await tester.pump(const Duration(milliseconds: 250));
     expect(fixture.lineup.currentChannelId, 'channel');
     final afterSurfing = fixture.native.transportCommands;
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
