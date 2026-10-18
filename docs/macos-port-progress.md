@@ -717,3 +717,13 @@ diagnostic patches and relevant source snapshots is
 `/tmp/lineup-opus-hdr-handoff.tar.gz`. The bundle excludes runtime binaries and
 private process dumps. Existing read-only CI observation remains separate; no
 new HDR probes or production changes are queued.
+
+Run `39087575645` is now terminal: all jobs passed except the diagnosed Windows
+native-loader prerequisite failure; the patched-engine/package job also passed.
+The controller then dispatched the pending reviewed CI prerequisite at remote
+head `b0c38b5be5546c4cf00a96ff6b61deaf30dd28dd`:
+[39095353188](https://github.com/TJZine/LineupDesktop/actions/runs/39095353188).
+Local handoff/progress-only commits are not published by this dispatch and have
+no product-input difference. This run must establish actual loader preparation
+and native-contract execution. Existing read-only CI observation continues;
+HDR investigation remains paused for the requested Opus handoff.
