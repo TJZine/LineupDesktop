@@ -673,3 +673,25 @@ authorized to build an isolated, transition-only diagnostic copy for the rapid
 sequence, preserving original Flutter/runtime inputs and observing actual load,
 stop, playlist and color identities. No production HDR correction or speculative
 resize workaround is approved.
+
+The transition-logging candidate also physically reproduced the dim rapid-switch
+result. Its frozen trace ends on coherent HDR load/playlist 9 with current source
+and target PQ/bt2020, layer PQ/EDR/metadata enabled, expected drawable extent and
+current/potential display headroom both 16. No later load/stop replaces it. Native
+invocation timing does not establish sub-100ms switching: the last SDR→HDR gap
+was about 3.64 seconds, so requested key cadence and executed loads remain
+distinct. Frozen trace SHA-256
+`79ccb3decc672ed1fb735cf7a1c159afd1f8da6f51bcdb0c6ea97681fdd3052d`.
+These facts narrow wrong-final-load and nominal model-state explanations, without
+proving framebuffer values, acquired drawable configuration or actual presentation.
+An independent source review confirmed those observational gaps and found no
+established root cause or justified production correction.
+
+A proposed debugger-only control never ran: its foreground-stability gate was
+not met, and no attachment, flush or app-code action occurred. The human later
+reported the app was already bright when brought forward; that supplies no
+causal control result. The pending controller was disarmed and stopped. The
+next authorized isolated diagnostic observes actual returned Metal drawable
+format/size and selected presented callbacks, preserving normal acquisition and
+lifetime behavior. It requires another matched physical rapid failure before
+interpretation. No production playback change or HDR workaround has landed.
