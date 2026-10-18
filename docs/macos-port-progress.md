@@ -1001,3 +1001,20 @@ visibly played. The app shut down cleanly. This failed smoke is preserved;
 backgrounding is not a sufficient explanation, and no latency result is
 accepted. The worker is tracing the disposable harness's event/observation
 window before another frozen foreground smoke. Production source is unchanged.
+
+At the human's request, the long-running benchmark worker was stopped and its
+resources released. Fresh diagnostic chat `01a14dc2-e884-7700-a324-b34616408fa1`
+(Sol high) takes over the single unresolved cached-failure/measurement question
+in a new isolated directory. The authoritative old state is
+`/tmp/lineup-l2-production/benchmark/takeover-state.json`; v1 source/app manifests
+do not describe the later trace builds. Trace 04 exited normally when stopped
+before producing results, so its exit 0 is explicitly **not** a passing smoke.
+No counted synthetic or Plex measurement has run. Several app copies share the
+same bundle ID; PID/executable identity must accompany computer-use foreground
+checks. Accepted production, reviews and Mac correctness evidence remain intact.
+
+The old CI watch was interrupted before a terminal result. An independent
+controller check confirmed `39098816614` had completed the patched-engine build
+and was compiling Lineup against it, with package upload still pending. Every
+other job remained successful. The run is still protected: no push or new
+dispatch until the controller verifies its terminal result.
