@@ -866,3 +866,138 @@ target-runtime acceptance remain open. The single consolidated handoff is
 `docs/handoffs/macos-hdr-and-seek-opus-verification.md`; it covers both reviews,
 exact evidence boundaries, physical A/B, final corrected native tests, combined
 checks, Windows close-fix/core CI and the unexecuted L2 measurement proposal.
+
+### L2 production follow-up — 2026-10-18
+
+The human accepted H1 and L1 after Opus's verification recorded in
+`docs/handoffs/macos-hdr-and-seek-verification-report.md` (`42ab5784`). That
+report includes physical combined acceptance, 1750 Dart passes, portable core
+3/3, Mac native 22 passes plus the existing destructive-probe skip, and Windows
+native passing-after evidence for `94b459a0`. Its stated rollover, older-OS,
+physical Windows and release limits remain. The earlier verification stop is
+superseded by the new instruction to implement and verify L2 in this chat.
+
+L2 source starts at clean `platform/macos` / `42ab5784`. Schedule, tune and
+ordinary recovery joins will use per-file string `start` and `hr-seek=no`
+options on `loadfile` at index -1, preserving URL bytes and credential,
+redirect and reference policy. Dart owns the initial target explicitly;
+mutable observed/resume position must not decide whether a post-load join
+seek is needed. Explicit user seeks remain exact, including supersession
+while loading. The native landing observer gains a matched, bounded initial
+restart window. The existing <=2-second join skip and pause/display/stop
+semantics remain. No diagnostic patch is integrated.
+
+Dispatch: implementation chat `01a14bfd-7a31-7e50-9de6-e6318b5c1aac`
+(worker / Sol medium) owns production load/coordinator/core contracts, related
+tests and protocol documentation. Chat `01a14bc0-ab3f-7c73-bb93-75341fdc3420`
+(worker / Sol medium) owns only the existing Mac/Windows authenticated-reference
+harnesses and runners, extending real matrices for nonzero initial starts and
+actual post-landing progression. Chat `01a14bdd-a2a0-7ba0-bcb5-c06320493487`
+(worker_luna / Luna xhigh) performed bounded read-only CI status diagnosis.
+The controller owns Git, progress documentation, stable combined checks,
+independent adversarial review, runtime resource scheduling and the repeated
+Plex ABBA measurement. No new child chats were created. Original human
+orchestration/callback authorization remains parent turn
+`01a14bbd-70f9-7943-b707-1f8a7e70a35c`; the new L2 instruction is parent turn
+`01a14d94-87e0-7402-b184-bc3f038a73bd`.
+
+As of 05:57 UTC, CI `39098816614` at `cc6dc2e2` is still in progress: all
+other jobs passed, while patched-engine/package job `117590790547` is building.
+No actual failure is visible in the available buffered log. Its terminal
+result must be checked before any branch push or dispatch; a packaging failure
+will be handled as a separate change. No push, cancellation or replacement
+dispatch has been performed for L2.
+
+Remaining L2 gates: freeze source, focused/combined portable checks, independent
+adversarial review and remediation, real authenticated-reference matrices,
+target-runtime correctness controls (including part boundaries, near-end and
+rollover, exact user seeks, recovery and pause/currentness), Windows CI, then
+matched Plex ABBA timing with all failed/missing samples retained. Opus's
+disposable timing is feasibility evidence, not a measurement of the final
+production candidate. `/tmp/lineup-l2-apps/l2-diagnostic.patch` must never be
+merged.
+
+L2 production source is frozen at aggregate
+`733a150151ae02326256d6c148f9b1c3fea921b38b44ea8724bd25e8cc425ee8`
+(`/tmp/lineup-l2-production/manifest.json`). At the human's explicit request,
+both adversarial reviews use fresh chats: production review
+`01a14d9e-a7eb-7ed2-b32c-f5f7d06cd3b7` and reference-proof review
+`01a14d9d-d87e-7343-b3ca-708debeeabc1`, each reviewer / Sol high. The production
+review approved all 18 owned files with no material finding; runtime acceptance
+remains separate. Focused checks passed 501 playback-related plus 127 other
+Dart tests and portable core 3/3. The controller's full combined suite passed
+1758 tests with the pinned SDK on the Eastern-time host.
+
+The first real Mac reference campaign passed omitted-start 26/26 and nonzero
+22/26. Four alternate positive/control cases failed their landing/progress
+assertion, with no authorization rejection, timeout or observed credential
+leak. The fresh review independently established that a current property query
+after a queued restart is consumer-delay-dependent and can misclassify landing.
+An isolated diagnostic observed the alternate fixture actually restarting at
+zero. These are unresolved proof/fixture questions, not established production
+authentication failures. The worker is diagnosing exact command options and
+fixture seekability; no production repair has been inferred from the failure.
+Authorized harness corrections include a test-only stationary observation phase
+followed by real advancement, a real ignored-start sensitivity control, and a
+real plaintext redirect listener/control for Windows. Production pause policy
+is unchanged. Targeted re-review and a fresh full matrix are required.
+
+The controller added explicit Windows authenticated-reference build/run wiring
+and Mac FFprobe preflight to CI. Fixture executables are a publisher-checksummed
+versioned FFmpeg archive in `RUNNER_TEMP`, separate from all application/runtime
+inputs. The downloaded archive hash and expected executable entries were
+checked locally; workflow YAML parses. These checks do not execute Windows.
+The fresh reference reviewer will inspect this wiring with the harness repair.
+The production worker now owns the exclusive Flutter Mac app resource for
+disposable real-coordinator correctness controls; the reference worker uses
+separate standalone headless outputs. No L2 push or CI dispatch has occurred.
+
+The fixture failure is now explained by an isolated same-bytes comparison:
+the old HTTPS server ignored byte-range requests, reported unseekable input,
+and mpv played from zero despite receiving `start=3.5` / `hr-seek=no`.
+Correct single-range 206 responses produced a seek and a three-second keyframe
+landing. The repaired fixture preserves authentication before every response.
+Five focused real Mac checks passed, including delayed correct and deliberately
+ignored starts. The fresh reference reviewer approved the corrected four harness
+files plus CI/docs changes, closing both findings in source. Full corrected
+Mac 54-case and Windows 48-case results remain required; the earlier failed
+52-case campaign is preserved as failed evidence.
+
+Reviewed source is saved as local verification candidates: production
+`770396e1` and reference/CI proof `7cb730f8`. Source hashes match the approved
+production and corrected-auth manifests. These commits do not claim completed
+runtime/Windows/Plex acceptance. CI `39098816614` was still building its package
+at the last check, so neither candidate has been pushed or dispatched.
+
+The corrected real Mac reference campaign passed 54/54 (26 omitted-start,
+28 nonzero-start), including delayed correct and ignored-start controls, with
+no child timeout/server error. Evidence and executed-source attribution are in
+`/tmp/lineup-l2-auth/macos-matrix-corrected/`; all tested product/harness hashes
+match the local candidates. The original failed campaign remains preserved.
+
+The disposable real-coordinator Mac probe passed 14 bounded cases with 22 native
+loads, 9 exact seeks, two actual last-part EOF-to-successor transitions and four
+authorization replacements. Two opening failures were real native TLS 401s;
+two same-load timing failures were explicitly injected signals with real
+replacement playback. It covered initial zero/2-second controls, a non-keyframe
+join, pending same/latest exact intent, cross-part exact zero, ordinary recovery
+after completed exact seeking, pause and stale tune retirement. Evidence:
+`/tmp/lineup-l2-production/runtime-acceptance/report.md`. Active display holds
+remain Dart proof on this unsupported Mac matching route; no physical Windows,
+Plex performance, sandbox/distribution or first-frame claim follows. The probe
+has exited cleanly and released app resources; its patch must never be merged.
+
+The worker is preparing a new disposable, explicitly correlated production A/B
+measurement harness. Counted timing is not released until Windows CI passes.
+No timing or production change from the old L2 diagnostic patch is adopted.
+
+The human explicitly assigned all remaining verification to the agent, using
+computer use for application interactions; HDR remains accepted from the prior
+Claude session and is not reopened for human brightness judgments. The
+controller activated the prepared measurement app with computer use for
+`development-02`. Its records confirmed foreground throughout, but three of
+four development joins lacked a qualified measurement observation while video
+visibly played. The app shut down cleanly. This failed smoke is preserved;
+backgrounding is not a sufficient explanation, and no latency result is
+accepted. The worker is tracing the disposable harness's event/observation
+window before another frozen foreground smoke. Production source is unchanged.
