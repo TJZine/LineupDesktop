@@ -3,7 +3,8 @@
 Standalone runtime investigation for [M-04](../../../docs/handoffs/macos-ax-update-investigation.md).
 This uses only stock Flutter widgets. It contains no Lineup application code,
 media, credentials, plugins, custom semantics nodes, or forced semantics handle.
-It does not patch Flutter or implement an application workaround.
+It does not patch Flutter. Its optional define compares an application workaround
+against the failing default.
 
 ## Run
 
@@ -52,6 +53,20 @@ For controls, restart the process between sequences:
 - Show → Change message, without excluding the origin: no rejection expected.
 - Exclude origin, without showing/updating a tooltip: no rejection expected.
 - Show → Exclude origin, without changing the message: no rejection expected.
+
+## Workaround comparison
+
+The default retains the failing behavior. Rebuild the same stock project with:
+
+```sh
+"$FLUTTER" build macos --release --dart-define=REPRO_TOOLTIP_VISIBILITY=true
+```
+
+Repeat Show → Exclude → Change. This variant coordinates `TooltipVisibility`
+with the excluded origin, removing its `RawTooltip` overlay immediately. The
+native Release comparison produced zero AX errors after ten message changes;
+the default variant rejects the first change. This is an application mitigation,
+not a Flutter engine repair. Native accessibility must be active for both runs.
 
 ## Captured boundary evidence
 

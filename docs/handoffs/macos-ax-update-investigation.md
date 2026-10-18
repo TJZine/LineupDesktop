@@ -1,7 +1,7 @@
 # macOS accessibility update investigation — M-04
 
-Status: **Flutter runtime interoperability defect reproduced standalone; application
-workaround not implemented.** A small stock-widget sequence reproduces the same
+Status: **Flutter runtime interoperability defect reproduced standalone; bounded
+application transition mitigation implemented.** A small stock-widget sequence reproduces the same
 removed-node rejection as M-04. Its exact delta and rejecting owner are now known.
 The first historical production delta was not captured, so this does not attribute
 every historical message to that sequence or close real-app acceptance.
@@ -22,8 +22,9 @@ and healthy. It needs no media, native player, custom animation, custom render o
 forced Dart semantics handle, or startup race. The adapter is shared desktop
 code; this investigation does not claim the defect is exclusive to macOS.
 
-No application repair or engine patch was made. M-02/M-03's Dart repairs remain
-separate from this runtime failure.
+The application mitigation now removes tooltip overlays when an app menu excludes
+its underlying route or a Player overlay retires. No engine patch was made.
+M-02/M-03's Dart repairs remain separate from this runtime failure.
 
 ## Standalone reproduction and first rejection
 
@@ -74,7 +75,7 @@ that timing requirement.
 | Framework | `abaf9c523780a608bd46686fd5e53740a07077f8` |
 | Engine | `deb287481e3ce9468f3434937ced4240a70539ca` |
 | Host | arm64, macOS 27.0.1 (26A434) |
-| Product source during follow-up | `2496c45e`; app code unchanged since `1b2f64f4` |
+| Product source during diagnosis | `2496c45e`; app code unchanged since `1b2f64f4` |
 
 These are paths in the pinned Flutter checkout, not application code:
 
@@ -178,13 +179,29 @@ with AXTree, including unreachable records and retained subtrees. Suppressing
 unreachable framework records or adapting them in the bridge are upstream design
 choices. This round does not patch the engine or select that implementation.
 
-A bounded application workaround experiment would coordinate
-`TooltipVisibility(visible: !excluded)` with the owner excluding an outgoing
-surface. It must preserve the explicit accessible names already added for M-03.
-It is **untested**, not an approved repair. Calling `dismissAllToolTips()` alone
-leaves a reverse-animation lifetime and may retain the same failure window.
-Any workaround requires its own regression, real-app check and independent review
-before integration. No Player layout change is proposed.
+The user authorized testing and applying the bounded application workaround.
+The same standalone source now supports `REPRO_TOOLTIP_VISIBILITY=true`:
+Show → Exclude → ten message changes produced zero native AX errors. Rebuilding
+the same source without the define reproduced the rejection on the first change.
+`TooltipVisibility(false)` removes `RawTooltip` immediately; calling
+`dismissAllToolTips()` alone leaves its reverse-animation lifetime active.
+
+Lineup applies this policy at both app-menu route exclusions (ready and
+account-onboarding) and only the retiring children of Player's `AnimatedSwitcher`.
+Shell scopes combine inherited visibility with their own exclusion condition;
+current Player children inherit their scope instead of overriding it with true.
+Regression tests exercise immediate removal, reopening/restoration and inherited
+false. Existing accessible names and the approved Player layout are preserved.
+Real Release and Windows verification are recorded in the follow-up progress entry.
+
+**Limit:** this is not global M-04 closure. A separate stock probe with the origin
+excluded from the outset also rejected a newly shown tooltip. Lineup's permanently
+excluded Now Playing details and track-row content still contain visual tooltips.
+Their existing hover information is preserved; the transition guards do not repair
+that pre-existing path. A broader correction should investigate reachable tooltip
+origins or an upstream runtime repair without removing those features. The
+GPT Pro review handoff explicitly includes this limitation. Historical production
+causality and spoken assistive-technology acceptance also remain open.
 
 ## Independent review
 

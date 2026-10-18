@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+const _useWorkaround = bool.fromEnvironment('REPRO_TOOLTIP_VISIBILITY');
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(home: TooltipRepro()));
@@ -40,16 +42,19 @@ class _TooltipReproState extends State<TooltipRepro> {
           const SizedBox(height: 40),
           ExcludeSemantics(
             excluding: _excluded,
-            child: Tooltip(
-              key: _tooltip,
-              message: 'Tooltip message $_messageVersion',
-              triggerMode: TooltipTriggerMode.manual,
-              showDuration: const Duration(hours: 1),
-              enableTapToDismiss: false,
-              child: const SizedBox(
-                width: 320,
-                height: 64,
-                child: Text('Tooltip origin'),
+            child: TooltipVisibility(
+              visible: !_useWorkaround || !_excluded,
+              child: Tooltip(
+                key: _tooltip,
+                message: 'Tooltip message $_messageVersion',
+                triggerMode: TooltipTriggerMode.manual,
+                showDuration: const Duration(hours: 1),
+                enableTapToDismiss: false,
+                child: const SizedBox(
+                  width: 320,
+                  height: 64,
+                  child: Text('Tooltip origin'),
+                ),
               ),
             ),
           ),

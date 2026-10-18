@@ -3,10 +3,104 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final accountPicker in [false, true]) {
+    testWidgets(
+      'app menu removes route tooltips and restores them on return (account picker: $accountPicker)',
+      (tester) async {
+        final fixture = UiFixture(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            profiles: const [
+              PlexHomeUser(id: 'one', name: 'One', protected: false),
+              PlexHomeUser(id: 'two', name: 'Two', protected: false),
+            ],
+          ),
+        );
+        await tester.pumpWidget(fixture.build());
+        await tester.pumpAndSettle();
+
+        if (accountPicker) {
+          await openDestination(tester, 'Settings');
+          await tester.tap(find.text('Account'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Switch profile'));
+          await tester.pumpAndSettle();
+          expect(fixture.controller.stage, SetupStage.profiles);
+        }
+
+        final menuTooltip = find.byWidgetPredicate(
+          (widget) => widget is Tooltip && widget.message == 'Open Lineup menu',
+        );
+        expect(
+          tester.state<TooltipState>(menuTooltip).ensureTooltipVisible(),
+          isTrue,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(find.text('Open Lineup menu'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(
+            Key(accountPicker ? 'onboarding-app-menu' : 'guide-app-menu'),
+          ),
+        );
+        await tester.pump();
+        expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+        expect(find.text('Open Lineup menu'), findsNothing);
+        expect(
+          tester.state<TooltipState>(menuTooltip).ensureTooltipVisible(),
+          isFalse,
+        );
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(
+          tester.state<TooltipState>(menuTooltip).ensureTooltipVisible(),
+          isTrue,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(find.text('Open Lineup menu'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets('shell preserves an outer tooltip visibility restriction', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(
+      TooltipVisibility(visible: false, child: fixture.build()),
+    );
+    await tester.pumpAndSettle();
+
+    final menuTooltip = find.byWidgetPredicate(
+      (widget) => widget is Tooltip && widget.message == 'Open Lineup menu',
+    );
+    expect(
+      tester.state<TooltipState>(menuTooltip).ensureTooltipVisible(),
+      isFalse,
+    );
+    await tester.tap(find.byKey(const Key('guide-app-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guide').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester.state<TooltipState>(menuTooltip).ensureTooltipVisible(),
+      isFalse,
+    );
+    expect(find.text('Open Lineup menu'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('shell keeps the deliberate destination inventory and focus', (
     tester,
   ) async {

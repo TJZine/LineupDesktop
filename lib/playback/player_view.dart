@@ -360,7 +360,16 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                       alignment: Alignment.center,
                       children: [
                         for (final child in previousChildren)
-                          ExcludeFocus(child: ExcludeSemantics(child: child)),
+                          ExcludeFocus(
+                            child: ExcludeSemantics(
+                              // Dispose tooltip overlays with their retiring
+                              // semantics origin, before further label updates.
+                              child: TooltipVisibility(
+                                visible: false,
+                                child: child,
+                              ),
+                            ),
+                          ),
                         ?currentChild,
                       ],
                     ),

@@ -708,9 +708,12 @@ class _LineupShellState extends State<LineupShell> {
             children: [
               ExcludeSemantics(
                 excluding: _appMenu != null,
-                child: ExcludeFocus(
-                  excluding: _appMenu != null,
-                  child: onboarding,
+                child: TooltipVisibility(
+                  visible: TooltipVisibility.of(context) && _appMenu == null,
+                  child: ExcludeFocus(
+                    excluding: _appMenu != null,
+                    child: onboarding,
+                  ),
                 ),
               ),
               if (_appMenu != null) _immersiveAppMenu(_hasPlaybackSurface),
@@ -823,18 +826,23 @@ class _LineupShellState extends State<LineupShell> {
             ExcludeSemantics(
               key: const Key('immersive-route-semantics'),
               excluding: _appMenu != null,
-              child: ExcludeFocus(
-                excluding: _appMenu != null,
-                child: SafeArea(
-                  child: ColoredBox(
-                    color:
-                        _destination == ShellDestination.settings ||
-                            _destination == ShellDestination.player ||
-                            (_destination == ShellDestination.guide &&
-                                hasPlaybackSurface)
-                        ? Colors.transparent
-                        : Theme.of(context).scaffoldBackgroundColor,
-                    child: routeView,
+              // A live tooltip overlay can outlast its excluded origin and
+              // send unreachable node updates to Flutter's desktop AX bridge.
+              child: TooltipVisibility(
+                visible: TooltipVisibility.of(context) && _appMenu == null,
+                child: ExcludeFocus(
+                  excluding: _appMenu != null,
+                  child: SafeArea(
+                    child: ColoredBox(
+                      color:
+                          _destination == ShellDestination.settings ||
+                              _destination == ShellDestination.player ||
+                              (_destination == ShellDestination.guide &&
+                                  hasPlaybackSurface)
+                          ? Colors.transparent
+                          : Theme.of(context).scaffoldBackgroundColor,
+                      child: routeView,
+                    ),
                   ),
                 ),
               ),

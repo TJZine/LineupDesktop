@@ -41,6 +41,67 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  for (final tooltipsVisible in [true, false]) {
+    testWidgets(
+      'retiring OSD removes tooltips and preserves inherited visibility $tooltipsVisible',
+      (tester) async {
+        final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: TooltipVisibility(
+              visible: tooltipsVisible,
+              child: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        fixture.player.showOsd();
+        await tester.pumpAndSettle();
+        final pauseTooltip = find.byWidgetPredicate(
+          (widget) => widget is Tooltip && widget.message == 'Pause',
+        );
+        expect(
+          tester.state<TooltipState>(pauseTooltip).ensureTooltipVisible(),
+          tooltipsVisible,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          find.text('Pause'),
+          tooltipsVisible ? findsOneWidget : findsNothing,
+        );
+
+        fixture.player.closeOverlay();
+        await tester.pump();
+        expect(pauseTooltip, findsOneWidget);
+        expect(find.text('Pause'), findsNothing);
+        expect(
+          tester.state<TooltipState>(pauseTooltip).ensureTooltipVisible(),
+          isFalse,
+        );
+
+        fixture.player.showOsd();
+        await tester.pumpAndSettle();
+        expect(pauseTooltip, findsOneWidget);
+        expect(
+          tester.state<TooltipState>(pauseTooltip).ensureTooltipVisible(),
+          tooltipsVisible,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          find.text('Pause'),
+          tooltipsVisible ? findsOneWidget : findsNothing,
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
   testWidgets(
     'Player icon actions have accessible names in OSD and Now Playing',
     (tester) async {

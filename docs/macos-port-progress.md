@@ -1550,3 +1550,33 @@ Fresh independent adversarial review validated the fixture, stock-runner identit
 runtime rejection, source ownership and privacy; no material issue remained.
 Its minor wording correction distinguishes the absence of custom animation from
 Tooltip's built-in fade. Exact historical production causality remains unclaimed.
+
+### M-04 tooltip transition mitigation — 2026-10-18
+
+The user authorized the TooltipVisibility experiment and application mitigation.
+The same stock Release source rejects its first tooltip message change with the
+default build; `REPRO_TOOLTIP_VISIBILITY=true` passed ten message changes after
+exclusion with native AX active and zero AX errors. Both shell app-menu exclusion
+branches now remove their underlying tooltip overlays immediately. Retiring Player
+overlays do the same, while current overlays inherit visibility. Shell scopes
+preserve any outer false restriction. Existing layout, explicit accessible names,
+and active-surface hover tooltips are preserved.
+
+Five new behavioral regression cases cover ready/account-picker routes, immediate
+tooltip removal, restoration/reopening and inherited false. Both affected files
+passed (122 Player tests and 7 shell tests). Fresh independent adversarial review
+found no blocking issue in this bounded mitigation. Required full checks, real
+Release verification and Windows CI are recorded after execution below.
+
+The restored original application source failed the new immediate-removal tests
+for ready/account routes and the visible retiring OSD, establishing that the
+regressions distinguish the prior behavior. Restoring the candidate passed the
+full 1,792-test macOS suite. Canonical formatting and full Flutter analysis passed.
+
+A separate native probe confirmed that showing a tooltip whose origin was excluded
+from the outset can also fail. Permanently excluded cast/track details retain their
+existing visual hover features and remain outside the transition mitigation.
+M-04 remains open for that broader runtime path, exact historical production
+linkage and human assistive-technology acceptance. The final GPT Pro review prompt
+will challenge this boundary and request stronger alternatives that preserve UI
+features. No engine patch, merge, distribution release or signing work is included.
