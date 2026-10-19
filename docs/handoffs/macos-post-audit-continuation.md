@@ -1,5 +1,53 @@
 # Continue the macOS post-audit fixes — 2026-10-19
 
+## Native closeout and focus repair — in progress
+
+The user explicitly requested native Slider role/notification checks and further
+input/focus investigation. Exact unmodified `8105f73c` was inspected in a fresh
+process: Slider's direct native parent is an unlabeled `AXGroup` (successful empty
+String title/description/value reads), exposing only Slider. Two successfully
+registered AXObserver streams in that same process received three real
+known-Slider value callbacks (22%, 31%, 33%, sampled when callbacks were handled).
+This establishes bounded native role and healthy delivery, not spoken behavior
+or recovery after rejection. The process quit normally with zero AX errors.
+
+A real-shell fixture with a current program now reproduces a preexisting focus
+gap: Escape menu dismissal clears remembered Player focus and restores only its
+invoker; pointer Close collapse, or Escape collapse plus hover, lets that focused
+OSD control retire. Focus then lands on the modal-route scope above both key
+handlers, and delivered Enter/Escape/F2 do nothing. Identical scratch results on
+`459fd726`, `5c6349d4` and `8105f73c` establish that this predates the Slider fixes.
+It is not the earlier rootScope hypothesis. Exact original native causality is
+still distinguished from this faithful Dart reproduction.
+
+Reviewed fix **`ffcaae6377bcdf16080ea742b40ff9960a580ed8`** hands focus to the
+existing Player root before its focused OSD retires, with owner/route/menu/modal/
+background guards. Five retained tests first pass three/fail two on the intended
+key behavior, then all pass; affected suites pass 196 and the full local suite
+1,857. Canonical format (160 files/0 changed), analysis and fresh independent
+review `01a155dc-e8de-7520-9c70-e19f6be5a9bf` pass. The exact canonical Release is
+built; final native verification is pending.
+
+[CI run 39321046092](https://github.com/TJZine/LineupDesktop/actions/runs/39321046092)
+is running on verification `70df5bd9dd51e19cd3d0f868a6e05cecadb3b8ba`, the exact
+product's direct child with only the isolated workflow changed. Both the new
+focus file and Slider semantics file are selected on Windows; no active run was
+cancelled. Linux completed successfully with 1,855 tests, canonical format and
+analysis clean. Windows portable UI verification passed; its native build and
+contract checks remain in progress. Overall completion has not yet been claimed.
+
+The passive diagnostic baseline (export `3a0bba29`, product `8105f73c` plus logging
+only) is running as PID 93228 and waiting on its new Keychain prompt. The user has
+been asked to clear it. Its source path is recorded in
+`/tmp/lineup-audit/m04-native-closeout/diagnostic-path.txt`; patch/identity/logs are
+in that directory. It is not the canonical product. Native and Dart allowlisted
+key/focus traces are intended to establish the failing event path without
+inferring delivery from a UI no-op. No tracing or engine change is integrated.
+DVR remains On for the ongoing tests; final channel/DVR/window/app cleanup is
+pending. Recheck actual processes and user reply before resuming native actions.
+Keep the one existing final human checklist; M-04 is not closed by these partial
+results. The closing report records the native evidence and remaining limits.
+
 ## Latest Opus review — no product change
 
 The third Opus report accepts bounded product `8105f73c` and establishes no new

@@ -3,7 +3,7 @@
 Source: `platform/macos`; audited baseline `fa176087`, reviewed product candidate
 `1b2f64f4eaf584807f70e668a5502ab088a54537`. The audit plan/report were committed
 first as `3cf2cce7`. The latest product candidate is
-`8105f73c9b5891e880d9fa292f0b26d679238a41`. Results for the earlier seven-fix
+`ffcaae6377bcdf16080ea742b40ff9960a580ed8`. Results for the earlier seven-fix
 candidate and the `296ab905` transition mitigation retain their original source
 and binary identities below.
 No main merge, distribution release, signing changes or engine patch was made.
@@ -743,9 +743,115 @@ The highest-value remaining input observation is a capture at the actual failure
 not a speculative focus workaround. Existing native role/delivery/spoken gaps and
 the one final human checklist remain open. No new user checklist was created.
 
+## Native role/delivery and Player focus closeout — in progress
+
+The user's explicit native follow-up ran on the exact unmodified `8105f73c`
+Release after all 106 bundle hashes matched its recorded identity. The passive,
+PID-scoped Swift helper used AX attribute reads and real AXObserver registrations;
+it changes no UI attributes/events and received existing accessibility trust
+without a new grant. All app actions remain separate from this observer.
+
+**Native group role:** Slider's direct parent is `AXGroup`, with successfully
+read empty String title, description and value. Its exposed native child list is
+`[AXSlider]`; the empty portal leaf is not exposed as a native child. This is an
+actual native role/empty-text observation, not an inference from Flutter semantics.
+It does not establish spoken group usefulness or announcement/order acceptance.
+
+**Healthy notification delivery:** explicit successful value-change subscriptions
+on discovered Slider elements received three real `AXValueChanged` callbacks in
+two streams in the same native process, with callback-time values 22%, 31%, 33%.
+CFEqual identity tied each receipt to a discovered Slider with successful
+registration; application focus notifications and aggregate callback counts were
+not counted as Slider value receipts. These are bounded delivery observations,
+not every-update coverage, event-payload values, separate-process repetitions,
+VoiceOver output or recovery after rejection. The unchanged app quit normally
+with zero AX/Flutter error messages.
+
+Raw typed-role snapshots, observer streams, helper source/binary hashes and the
+parsed `native-role-notification-summary.json` are local under
+`/tmp/lineup-audit/m04-native-closeout/`. Helper review
+`01a155a7-84ee-7641-b56d-fceb695328e3` checked API attribution/privacy and limits.
+Read failures, unsupported attributes, traversal limits or failed subscriptions
+cannot be interpreted as proof of absent elements/focus/events. The helper's
+native AX focus is not Flutter FocusManager state or key-delivery evidence.
+
+### Reproduced application focus defect
+
+The separate real-shell probe supplies the schedule/current program absent from
+the earlier Opus fixture and uses the actual shell-owned coordinator/tune path.
+Keyboard Escape closes the Lineup menu and restores its invoker after menu
+ExcludeFocus has removed Player from remembered focus history. Pointer Close
+collapse, or Escape collapse followed by video hover, allows timed OSD hide.
+Retiring/remounting its focused control then leaves focus on the modal-route
+scope above both Player and shell key handlers. HardwareKeyboard receives
+Enter/Escape/F2 but neither handler routes them. This is a demonstrated Dart
+application defect, not the unproven rootScope hypothesis.
+
+The same final scratch source at 800×632 and 1600×1000 yields eight passing
+controls/twelve intended key failures on current `8105f73c`, `5c6349d4` and
+`459fd726`. It predates both Slider changes. Pointer menu dismissal preserves
+Player focus and keys; Escape collapse with no pointer activity intentionally
+keeps keyboard auto-hide suspension, so it is not a failing hidden-state case.
+An adjacent menu-restored Slider disable retains Player routing and needs no
+broader focus reset.
+
+Product **`ffcaae6377bcdf16080ea742b40ff9960a580ed8`** transfers focus to the
+existing root before actual OSD → none retirement only when the focused control
+belongs to this Player, its root still owns and can request focus, the app is
+active and the modal route is current. No new focus wrapper, arbitrary-update
+reset, UI/semantics departure, invoker policy change or engine patch was added.
+Identical final retained tests first pass **3/fail 2** for delivered-key behavior
+on `8105f73c`, then pass **5/5**; they independently exercise Enter/Escape/F2 and
+protect menu/modal/background ownership. Existing affected suites pass **196**
+including all **22** Slider semantics tests. All **1,857** local tests pass;
+canonical format reports **160 files/0 changed**, and analysis is clean. Fresh
+read-only reviewer `01a155dc-e8de-7520-9c70-e19f6be5a9bf` checked exact source,
+negative controls and ownership/lifecycle guards before integration, finding no
+material issue. Private source/log identities are in
+`focus-investigation/implementation/summary.json` under the native-closeout root.
+
+### Pending runtime verification
+
+The exact `ffcaae63` canonical Release is built, AOT identity
+`1@ffcaae6377bcdf16080ea742b40ff9960a580ed8`, version/build `0.1.0` / `1`.
+Executable SHA-256 is
+`f80598ce711746192e1c3811c5a6a7c3ba7b1368554ec1b396e029993b66edda`;
+App.framework `2d32192b440a7de131f06b655db6320cdf57e0b02a80799696d96861f9b6c0ed`;
+106-entry compact sorted JSON bundle-manifest SHA-256
+`9da64b5b3f99c1e5c53c7a84bd81db7c1dbce1658618139e5da10d95d5d0527a`.
+Pinned engine and runtime BUILD-INFO hashes remain unchanged. No final native
+candidate acceptance has been claimed at this interim point.
+
+[CI run 39321046092](https://github.com/TJZine/LineupDesktop/actions/runs/39321046092)
+is running on `70df5bd9dd51e19cd3d0f868a6e05cecadb3b8ba`, the product's direct
+child differing only in its isolated workflow. The new focus test and existing
+Slider semantics file are explicitly selected on Windows. No run was cancelled;
+Linux completed successfully with **1,855 tests**, canonical format (160 files/
+0 changed) and clean analysis, confirmed in the completed job log. Windows
+portable UI verification passed; its native build and contract checks remain
+in progress. Overall results remain pending.
+
+An independent diagnostic baseline exports `3a0bba29`/product `8105f73c` with
+passive Dart focus/key and local AppKit event logging only, build marker
+`m04-focus-trace@8105f73c`. It uses the pinned stock engine and the unchanged
+runtime. It is waiting at startup on a new Keychain prompt; the user has been
+asked to clear it. This diagnostic build is not canonical acceptance evidence.
+Its local monitor returns the original event and reads only allowlisted key
+codes, own-app event types/window flags and responder types; Dart logs normalized
+focus ancestry, handler entry, pointer and overlay states without media labels or
+typed text. Logging can perturb timing; missing native monitor lines cannot prove
+no OS delivery, and handler entry does not itself prove successful routing.
+
+The original native cleanup cause is not inferred solely from the Dart result.
+Latest native automated role/delivery proof is attributed to `8105f73c`, while
+final `ffcaae63` native checks, diagnostic correlation and cleanup remain pending.
+DVR remains On for these ongoing tests. M-04 and overall accessibility acceptance
+remain open, including spoken/physical checks, engine recovery/divergence and
+historical node 866. Keep the single existing checklist below.
+
 ## One final human checklist
 
-Run these once on the latest product candidate `8105f73c`; record failures with generic descriptions.
+Run these once on the latest product candidate `ffcaae63`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
