@@ -469,6 +469,71 @@ void main() {
     }
   }
 
+  for (final useEscape in [false, true]) {
+    testWidgets(
+      'Guide ${useEscape ? "Escape" : "Close"} opens the menu on the first '
+      'action after sleep expiry',
+      (tester) async {
+        final nativePlayer = FixturePlayer()
+          ..emit(
+            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+          );
+        final fixture = UiFixture(
+          player: nativePlayer,
+          scenario: LineupScenario(stage: SetupStage.ready),
+        );
+        await tester.pumpWidget(fixture.build());
+        await tester.pumpAndSettle();
+        await _routeShortcut(tester, 4);
+        final player = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        player.setSleepTimer(const Duration(seconds: 5));
+        await _routeShortcut(tester, 0);
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+        expect(nativePlayer.stops, 1);
+        expect(player.status.message, 'Playback stopped by timer');
+        expect(find.byType(PlayerSurface), findsNothing);
+        final loads = List<Uri>.of(nativePlayer.loads);
+
+        if (useEscape) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        } else {
+          await tester.tap(find.byTooltip('Close Guide'));
+        }
+        await tester.pumpAndSettle();
+
+        final menu = find.byKey(const Key('immersive-app-menu'));
+        expect(menu, findsOneWidget);
+        _expectDestination('Guide');
+        expect(find.byType(PlayerView), findsNothing);
+        expect(nativePlayer.loads, orderedEquals(loads));
+        expect(
+          tester
+              .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
+              .onPressed,
+          isNull,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<Card>()
+              ?.key,
+          const Key('immersive-app-menu'),
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        _expectDestination('Channels');
+        expect(menu, findsNothing);
+        expect(nativePlayer.loads, orderedEquals(loads));
+      },
+    );
+  }
+
   for (final (index, name) in [(0, 'Guide'), (1, 'Channels'), (4, 'Player')]) {
     testWidgets('Settings keeps $name origin through Diagnostics and menu', (
       tester,

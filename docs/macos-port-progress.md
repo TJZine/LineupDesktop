@@ -1874,3 +1874,21 @@ checks); canonical format, analysis and all 1,819 local tests passed. Fresh
 `pro_round3_adversarial` reviewed all five changed Dart files before integration
 and found no material issues. Native runtime and Windows CI remain separately
 attributed; private evidence is under `/tmp/lineup-audit/pro-round3/`.
+
+
+## 2026-10-18 — Pro round three: close Guide after sleep expiry
+
+Guide retained an origin flag after successful sleep expiry removed the Player
+surface. Its first Close/Escape attempted Player, which routing correctly rejected,
+so the action was swallowed. The obsolete flag is removed. Closing uses current
+playback availability: return to a usable Player surface, otherwise open the
+existing menu immediately through its established focus path. This defect predates
+the audit fixes and does not invalidate the Settings return correction.
+
+Two regressions fail before the fix and pass after it: Player → Guide → successful
+timer expiry → one Close or Escape opens the menu, disables unavailable Player,
+starts no new load and supports Tab/Enter navigation to Channels. All 48 navigation
+checks passed; combined affected checks, canonical format, analysis and the full
+1,819-test suite passed. The same fresh adversarial review approved this unit before
+integration with no material findings. Native runtime and Windows results are
+recorded separately; raw evidence stays private under `/tmp/lineup-audit/pro-round3/`.

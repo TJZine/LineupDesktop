@@ -68,7 +68,6 @@ class _LineupShellState extends State<LineupShell> {
   static const _appMenuChannel = MethodChannel('lineup/app_menu');
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
-  bool _guideOpenedFromPlayer = false;
   Object? _lastPlayerFacts;
   late SetupStage _lastStage = widget.controller.stage;
   @override
@@ -201,7 +200,6 @@ class _LineupShellState extends State<LineupShell> {
         }
       }
       if (destination == ShellDestination.guide) {
-        _guideOpenedFromPlayer = _destination == ShellDestination.player;
         _player.showFullGuide();
       } else if (_player.overlay == PlayerOverlay.fullGuide) {
         _player.closeOverlay();
@@ -304,9 +302,7 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _closeGuide(bool hasPlaybackSurface) {
-    final returnToPlayer = hasPlaybackSurface || _guideOpenedFromPlayer;
-    _guideOpenedFromPlayer = false;
-    returnToPlayer
+    hasPlaybackSurface
         ? unawaited(_select(ShellDestination.player))
         : _openAppMenuFromCurrentFocus();
   }
