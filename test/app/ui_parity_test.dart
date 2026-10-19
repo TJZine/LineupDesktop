@@ -294,37 +294,42 @@ void main() {
       await tester.enterText(search, 'News');
       await tester.pumpAndSettle();
 
-      for (final throughMenu in [false, true]) {
-        final button = find.byTooltip('Clear search');
-        final invoker = _controlFocus(tester, button);
-        invoker.requestFocus();
-        await tester.pump();
-        expect(invoker.hasPrimaryFocus, isTrue);
-        if (throughMenu) {
-          await tester.sendKeyEvent(LogicalKeyboardKey.f2);
-          await tester.pumpAndSettle();
-          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
-          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-          await tester.pumpAndSettle();
-          expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
-          expect(_controlFocus(tester, button), same(invoker));
-          expect(invoker.context?.mounted, isTrue);
-          expect(invoker.hasPrimaryFocus, isTrue);
-        }
-
-        await tester.sendKeyEvent(key);
+      for (final query in ['News', 'zzaxverification']) {
+        tester.testTextInput.enterText(query);
         await tester.pumpAndSettle();
-        expect(guide.searchQuery, isEmpty);
-        expect(button, findsNothing);
         expect(searchFocus.hasPrimaryFocus, isTrue);
-        // Use the live input connection without asking the test harness to
-        // focus the field again: clearing must leave search ready to edit.
-        tester.testTextInput.enterText('News');
-        await tester.pumpAndSettle();
-        expect(guide.searchQuery, 'news');
-        expect(guide.windowStart, liveStart);
-        expect(find.byType(GuideView), findsOneWidget);
-        expect(fixture.player.loads, isEmpty);
+        expect(guide.channels.isEmpty, query == 'zzaxverification');
+        for (final throughMenu in [false, true]) {
+          final button = find.byTooltip('Clear search');
+          final invoker = _controlFocus(tester, button);
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+          expect(invoker.hasPrimaryFocus, isTrue);
+          if (throughMenu) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.f2);
+            await tester.pumpAndSettle();
+            expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+            await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+            await tester.pumpAndSettle();
+            expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+            expect(_controlFocus(tester, button), same(invoker));
+            expect(invoker.context?.mounted, isTrue);
+            expect(invoker.hasPrimaryFocus, isTrue);
+          }
+
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+          expect(guide.searchQuery, isEmpty);
+          expect(button, findsNothing);
+          expect(searchFocus.hasPrimaryFocus, isTrue);
+          // Use the live connection: clearing must leave search ready to edit.
+          tester.testTextInput.enterText(query);
+          await tester.pumpAndSettle();
+          expect(guide.searchQuery, query.toLowerCase());
+          expect(guide.windowStart, liveStart);
+          expect(find.byType(GuideView), findsOneWidget);
+          expect(fixture.player.loads, isEmpty);
+        }
       }
       await tester.pumpWidget(const SizedBox.shrink());
     });

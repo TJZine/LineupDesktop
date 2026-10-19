@@ -1892,3 +1892,15 @@ checks passed; combined affected checks, canonical format, analysis and the full
 1,819-test suite passed. The same fresh adversarial review approved this unit before
 integration with no material findings. Native runtime and Windows results are
 recorded separately; raw evidence stays private under `/tmp/lineup-audit/pro-round3/`.
+
+
+## 2026-10-18 — Guide Clear: retain actual Tab traversal coverage
+
+The retained full-shell Clear regression now reaches the exact live button using
+Tab from the search field instead of requesting focus directly. It covers matching
+and no-match queries, Return and keypad Enter directly and after F2 → Escape,
+exact invoker restoration, useful live input and absence of playback requests.
+All 18 parity tests and the full 1,819-test suite passed; the fresh combined source
+review approved this test strengthening. This is portable focus evidence only.
+The observed native keyboard inconsistency and AX failure remain open pending
+synchronized event/focus and first-delta tracing; no engine change is included.
