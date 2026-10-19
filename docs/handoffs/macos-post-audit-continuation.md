@@ -1,5 +1,37 @@
 # Continue the macOS post-audit fixes — 2026-10-19
 
+## Acceptance session — VoiceOver output unavailable to current tools
+
+The user asked the controller to handle the proposed VoiceOver check. No human
+listening/navigation result was supplied. The unchanged `ffcaae63` Release
+matched all 106 hashes and is running as PID 14195, channel 1, DVR **On**, playback
+**paused**, untimed Now Playing open. No new Keychain prompt appeared.
+
+The controller enabled VoiceOver through the observed System Settings switch
+(initially Off), inspected/dismissed welcome/tutorial UI and confirmed the caption
+panel preference was already On. The CUA interface did not expose the running
+VoiceOver agent/caption window; attaching timed out. No audio-capture tool is
+available. Attempted VoiceOver key commands did not yield observable VoiceOver
+output; the app log instead records two exact Player seeks. Do not claim actual
+VoiceOver traversal, captions, speech or usefulness acceptance from that attempt.
+
+With VoiceOver enabled and Now Playing visible, passive native inspection still
+exposed Slider under `AXGroup`; the captured application log has zero AX/Flutter
+errors so far. An earlier no-Slider snapshot was taken with OSD hidden and is not
+a tree-loss finding. VoiceOver was restored **Off**, the already-On caption
+preference was unchanged, and all VoiceOver/Utility/tutorial helpers started for
+the attempt have exited. The preexisting System Settings window was preserved.
+Lineup remains ready for the outstanding listening/physical checks; all human
+results remain pending. At session end restore DVR Off and quit normally.
+
+Raw identity/log/state/snapshots stay under
+`/tmp/lineup-audit/m04-human-acceptance/`. Keep results in the report's existing
+single checklist. Exact first-fade timing is an engineering evidence task; engine
+retained-error/event recovery, rejected-batch divergence and historical node 866
+also remain engineering findings. No engine patch or acceptance waiver is
+implied by this session. Recheck actual state before resuming; the controller
+owns the live app and no competing UI automation should run during user testing.
+
 ## Native follow-up completed — bounded application repair, M-04 still open
 
 Latest product is **`ffcaae6377bcdf16080ea742b40ff9960a580ed8`**,

@@ -925,6 +925,27 @@ the matching diagnostic does not retrospectively identify every cleanup event.
 Run these once on the latest product candidate `ffcaae63`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
+Acceptance session started 2026-10-19 on the unchanged verified Release. The
+user asked the controller to handle VoiceOver; no human result was supplied.
+The controller enabled VoiceOver via System Settings, left the already-enabled
+caption preference unchanged, and dismissed the welcome/tutorial. CUA could not
+attach to the VoiceOver agent/caption window, and no audio-capture tool is
+available. Attempted VoiceOver commands produced no observable screen-reader
+output; native logs instead record two exact Player seeks. Actual VoiceOver
+traversal/speech/usefulness is **unverified**, not passed or failed. With VoiceOver
+On and Now Playing visible, native Slider/AXGroup remained present and the app
+log had zero AX/Flutter errors. VoiceOver was restored Off and all created
+VoiceOver/Utility/tutorial helpers exited; the existing System Settings window
+was preserved. Lineup remains paused in untimed Now Playing with DVR On for
+continued checks. **No human checkbox is marked passed.**
+
+Raw identity/state/log/snapshots are local under
+`/tmp/lineup-audit/m04-human-acceptance/`. Physical focus/pointer/timed-hide
+transitions still need acceptance; exact first-fade timing, engine recovery/
+divergence and historical node 866 remain engineering work. Results stay in this
+single checklist with partial coverage stated explicitly. Restore audit settings
+when the session ends.
+
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.
 - [ ] Physical left- and right-⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys, including focus after Now Playing collapse and menu/window resizing, and physical pointer collapse/hover followed by timed OSD hide; verify dirty/modal guards and native fullscreen synchronization.
