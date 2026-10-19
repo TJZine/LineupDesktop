@@ -732,3 +732,29 @@ all eight selected native/reference CTests. Verification
 `6e7112e20583e65afb81023dd8e9bbf14793354a` is product `8105f73c`'s direct child
 with only its isolated workflow changed. Exact head/relationship/completed logs
 were checked; no active run was cancelled. This is not physical Windows AX proof.
+
+## Third Opus follow-up: no additional semantics defect established
+
+The final returned review accepts the bounded interactivity mitigation, with no
+new defect. The controller corroborated 29 supplied scratch probes on product
+`8105f73c` via a `871c7a3c` archive: 11 ported probes and 18 environment/combined
+cases, all reporting no replay error. Environment State identity and combined
+exception reports were also checked explicitly. These remain forced-semantics,
+fake-time observations, not native notification or lifecycle acceptance.
+
+The provisional root-focus diagnosis was not reproduced. In pinned Flutter,
+`_markDetached` can clear primary focus; `applyFocusChangesIfNeeded` falls back to
+rootScope only if current and pending replacement focus are both absent after
+autofocus processing. The application's menu close requests the live invoker or
+route focus, so detachment alone does not establish that native cleanup focus
+escaped these handlers. Opus's exact shell Now Playing fixture lacked a current
+program; simpler successful Player/shell focus cases do not settle the captured
+synthetic no-ops.
+
+Native Settings (MainMenu.xib → AppDelegate.openSettings → method channel → shell)
+bypasses Flutter focus dispatch, but still has shell/navigation guards. Comparing
+Command-comma with Escape can distinguish paths; it cannot alone prove exact
+Flutter focus, same-key delivery or a binary application-versus-automation cause.
+Capture input/focus at recurrence before prescribing a fix. Existing native role,
+notification/spoken/recovery and node 866 limits remain open. The closing report
+owns detailed adjudication; the single final human checklist is unchanged.

@@ -207,6 +207,25 @@ explicitly selected on Windows. The completed head, parent relationship, exact
 diff and raw logs were checked. Live runs were checked before dispatch; none was
 cancelled. These checks do not establish physical Windows AX/media/presentation.
 
+## Returned third review — adjudicated
+
+Opus reviewed this packet at `871c7a3c` and accepted bounded product `8105f73c`
+without establishing another defect. The controller corroborated its 11 ported
+and 18 environment/combined scratch probes: 29 completed, with reported replay
+errors null, all nine environment State identities retained and all nine combined
+exception reports null. These are exploratory Dart/fake-time observations; they
+do not add native acceptance or change the retained/full-suite counts above.
+
+Its focus appendix did not reproduce the exact real-shell Now Playing sequence
+because that fixture lacked a current program. Root-scope fallback is a possible
+mechanism only when no replacement focus is pending, not an established cause.
+Command-comma uses the native application-menu path, but comparing it with Escape
+alone does not conclusively classify focus versus delivery. Capture the actual
+focus and same-key event path if the observation recurs. Do not implement a
+speculative focus workaround. The [closing report](macos-post-audit-fix-report.md#third-opus-follow-up--no-new-application-defect)
+records dispositions, guards, probe provenance and unchanged native/human limits.
+The questions below remain evidence questions, not newly accepted defects.
+
 ## Remaining open findings and focused questions
 
 1. **Mitigation completeness and proof quality.** Does the key track exactly the

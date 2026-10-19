@@ -690,6 +690,59 @@ the unclassified cleanup input/focus observation, retained-error recovery,
 rejected-batch divergence and node 866 remain open. The single human checklist
 below is retained.
 
+## Third Opus follow-up — no new application defect
+
+The returned review inspected `871c7a3c`, documentation-only over product
+`8105f73c`, with all four source hashes matching the packet. Its final verdict
+accepts the bounded mitigation and keeps M-04/overall accessibility acceptance
+open. The controller checked its claims against current source and scratch
+artifacts before making this documentation-only update. No new application fix,
+engine patch or permanent regression was warranted.
+
+### Corroborating evidence and limits
+
+The controller exported `871c7a3c` into a disposable copy and reran the supplied
+ported and sweep sources with pinned Flutter 3.47.7, forced Dart semantics and
+fake time: **29 scratch probes completed** (11 ported, nine environment and nine
+combined-flip probes). Their printed results were explicitly parsed: all reported
+replay errors were null, all nine environment cases retained Slider State, and
+all nine combined-flip cases reported no exception. Runner success alone was not
+used as proof, since these sources principally print exploratory observations.
+
+The environment inputs cover text scale, accessibility flags, dispatcher
+brightness/locale, pixel ratio and simulated lifecycle. This does not establish
+effective German localization, a full dark-theme comparison or native lifecycle
+acceptance. Combined cases cover menu-open/close flips, retirement, first entry,
+hover, coalesced flips, resize, Now Playing and disabled DVR insertion/removal.
+These are additional scratch observations, not 29 new retained tests or a new
+full-suite count. The unchanged 22 focused/1,852 full local results and final
+native/CI evidence above remain attributed to their original runs.
+
+Opus also reported its own 22-test rerun and focus experiments. It could not
+replay the exact real-shell Now Playing sequence because its shell fixture had
+no current program. Its successful plain-Player and simpler real-shell focus
+checks do not reproduce or resolve the native cleanup observation. The controller
+inspected the focus appendix/source but did not rerun that appendix or launch a
+new native process for this adjudication. Local scratch sources are under
+`/tmp/lineup-audit/opus-m04-round3/`; controller outputs, parsed facts and hashes
+are under `/tmp/lineup-audit/m04-opus-round3-adjudication/`.
+
+### Adjudication of recommendations
+
+| Claim/recommendation | Disposition and evidence |
+| --- | --- |
+| No new defect in the interactivity fix | Accept within the reviewed scope. Observed: the key matches `onChanged`, Slider max remains positive, unchanged product hashes, and the corroborating scratch results. This is not exhaustive runtime acceptance. |
+| Root-scope focus explains the cleanup keys | Needs validation. Observed pinned source clears detached primary focus and falls back to `rootScope` only if neither current nor pending replacement focus exists after autofocus processing. That is a plausible mechanism, not a captured cause; Opus's final experiments did not trigger it. Its intermediate claim to have explained the bug is not accepted. |
+| Command-comma versus Escape conclusively classifies the issue | Accept with modification as a discriminator, not a binary diagnosis. Observed: MainMenu.xib → AppDelegate.openSettings → `lineup/app_menu` → shell Settings bypasses Flutter focus dispatch, while retaining mounted/setup/modal/navigation guards. One chord working establishes that path at that moment; it does not prove Escape delivery or the exact Flutter focus. Both failing does not by itself prove no events were delivered. Capture actual key delivery and focus alongside the native key-window/application state when the observation recurs. |
+| Native group role, notification delivery and spoken acceptance | Accept as remaining evidence gaps. A role dump can establish role, an observer can establish healthy notification delivery, and spoken checks establish announcement/order. None substitutes for the others or proves recovery after rejection. No such new native evidence was obtained in this review. |
+| More exact native entry/menu timing or forced production flip | No additional product change justified. Stock controls and Dart cases support the bounded mitigation. The native cases remain unverified where already recorded; no standing requirement is marked passed or silently waived. |
+| Promote combined scratch flips to retained regressions | Defer. No new defect or additional discriminating before-fix failure was demonstrated. Existing interactivity regressions remain intact; scratch observations are retained locally. |
+| Engine and historical claims | Accept with the existing calibration: preflight and completion failures differ; a successful prepass can mutate separately; retained-error claims apply to the surviving bridge/tree instance. Full recovery remains unverified and node 866 remains unattributed. |
+
+The highest-value remaining input observation is a capture at the actual failure,
+not a speculative focus workaround. Existing native role/delivery/spoken gaps and
+the one final human checklist remain open. No new user checklist was created.
+
 ## One final human checklist
 
 Run these once on the latest product candidate `8105f73c`; record failures with generic descriptions.

@@ -2199,3 +2199,21 @@ differing only in the isolated workflow. The updated Slider regression is
 selected on Windows; completed head/parent/diff/logs were inspected and no active
 run was cancelled. Native/spoken/notification/recovery acceptance and historical
 node 866 remain open; CI is not physical Windows AX/playback acceptance.
+
+### Third Opus review adjudication
+
+The returned review of `871c7a3c` accepts bounded product `8105f73c` with no new
+defect. Controller corroboration in a disposable archive ran 29 supplied scratch
+probes (11 ported, nine environment, nine combined flips), explicitly checking
+printed replay-error, State-identity and exception fields. All were clean. These
+forced-semantics/fake-time probes are not new retained tests, native evidence or
+a new full-suite count; existing 22/1,852 local and CI/native runs retain their
+identities. No application, engine or permanent-test changes were made.
+
+The exact shell Now Playing focus sequence remains unreproduced. Root-scope
+fallback requires no current/pending replacement focus; detachment alone does
+not establish the cause. A native Command-comma/Escape comparison distinguishes
+paths but cannot alone prove focus failure or absent delivery. Detailed
+adjudication and local probe provenance are in the closing report. Native group,
+notification/spoken, input/focus, recovery and node 866 findings stay open, with
+the existing single human checklist and standing acceptance requirements intact.

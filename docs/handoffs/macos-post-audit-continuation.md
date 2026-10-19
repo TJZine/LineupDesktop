@@ -1,5 +1,24 @@
 # Continue the macOS post-audit fixes — 2026-10-19
 
+## Latest Opus review — no product change
+
+The third Opus report accepts bounded product `8105f73c` and establishes no new
+defect. The controller checked current source and independently reran 29 supplied
+scratch probes (11 ported, nine environment, nine combined flips) on an isolated
+`871c7a3c` copy: all reported replay errors were null, the environment cases
+retained State, and the combined cases reported no exception. This is forced-
+semantics/fake-time evidence, not new native acceptance or a new full-suite count.
+Original 22/1,852 local and completed CI/native evidence remain unchanged.
+
+The exact shell Now Playing focus sequence was not reproduced by Opus's fixture;
+its final verdict correctly leaves the cleanup observation unexplained. Pinned
+focus fallback to rootScope is conditional on no replacement focus being pending.
+The proposed native Command-comma/Escape comparison helps distinguish paths but
+does not alone prove focus failure or absent key delivery. The closing report's
+third-follow-up section records dispositions and evidence limits. No speculative
+focus fix or additional permanent tests were added. M-04 remains open, including
+native role, notification/spoken acceptance, input/focus, recovery and node 866.
+
 ## Interactivity follow-up — current product
 
 The second Opus report was adjudicated against pinned source and fresh controls.
