@@ -81,6 +81,132 @@ void main() {
     await h.close();
   }, semanticsEnabled: true);
 
+  for (final transition in [
+    'duration disappears',
+    'duration arrives',
+    'unsupported',
+  ]) {
+    testWidgets('visible Slider interactivity: $transition', (tester) async {
+      final initiallyEnabled = transition != 'duration arrives';
+      final h = await _Harness.mount(
+        tester,
+        binding,
+        visible: true,
+        initialDuration: initiallyEnabled
+            ? const Duration(hours: 1)
+            : Duration.zero,
+      );
+      final slider = find.byType(Slider);
+      expect(tester.widget<Slider>(slider).onChanged != null, initiallyEnabled);
+      final focused = initiallyEnabled ? await h.focusSlider() : null;
+      h.expectHealthy();
+
+      h.step(transition);
+      h.fixture.native.emit(
+        transition == 'unsupported'
+            ? const PlayerStatus(
+                state: PlayerState.unsupported,
+                message: 'Unsupported',
+              )
+            : h.fixture.native.status,
+        duration: transition == 'duration disappears'
+            ? Duration.zero
+            : const Duration(hours: 1),
+      );
+      await h.frames();
+      h.expectHealthy();
+      h.expectSlider();
+      expect(
+        tester.widget<Slider>(slider).onChanged != null,
+        !initiallyEnabled,
+      );
+
+      if (initiallyEnabled) {
+        expect(focused!.hasPrimaryFocus, isFalse);
+        final beforeDisabledInput = h.fixture.native.seeks.length;
+        await tester.tapAt(tester.getRect(slider).center);
+        await tester.pump();
+        expect(h.fixture.native.seeks.length, beforeDisabledInput);
+        h.step('restore interactivity');
+        h.fixture.native.emit(
+          const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+          duration: const Duration(hours: 1),
+        );
+        await h.frames();
+      }
+      expect(tester.widget<Slider>(slider).onChanged, isNotNull);
+      h.expectHealthy();
+      h.expectApprovedSliderGroupAndOrder();
+      await h.focusSlider();
+      final beforeArrow = h.fixture.native.seeks.length;
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(h.fixture.native.seeks.length, greaterThan(beforeArrow));
+      h.expectHealthy();
+      await h.close();
+    }, semanticsEnabled: true);
+  }
+
+  testWidgets(
+    'Slider state survives value and max changes without interactivity changes',
+    (tester) async {
+      final h = await _Harness.mount(tester, binding, visible: true);
+      final slider = find.byType(Slider);
+      final enabledState = tester.state(slider);
+      h.position(const Duration(minutes: 20));
+      await h.frames(3);
+      expect(tester.state(slider), same(enabledState));
+      h.fixture.native.emit(
+        h.fixture.native.status,
+        duration: const Duration(hours: 2),
+      );
+      await h.frames(3);
+      expect(tester.state(slider), same(enabledState));
+      h.expectSlider(value: '17%');
+      h.expectHealthy();
+
+      h.step('disable');
+      h.fixture.native.emit(h.fixture.native.status, duration: Duration.zero);
+      await h.frames(3);
+      h.expectHealthy();
+      final disabledState = tester.state(slider);
+      h.position(const Duration(minutes: 25));
+      await h.frames(3);
+      h.fixture.native.emit(h.fixture.native.status, duration: Duration.zero);
+      await h.frames(3);
+      expect(tester.widget<Slider>(slider).onChanged, isNull);
+      expect(tester.state(slider), same(disabledState));
+      h.expectHealthy();
+      await h.close();
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets('disabling a Slider cancels an active drag safely', (
+    tester,
+  ) async {
+    final h = await _Harness.mount(tester, binding, visible: true);
+    final rect = tester.getRect(find.byType(Slider));
+    final gesture = await tester.startGesture(
+      rect.centerLeft + const Offset(40, 0),
+    );
+    await gesture.moveBy(const Offset(200, 0));
+    await tester.pump();
+    expect(h.fixture.native.seeks, isNotEmpty);
+    h.step('disable during drag');
+    h.fixture.native.emit(h.fixture.native.status, duration: Duration.zero);
+    await h.frames(3);
+    h.expectHealthy();
+    expect(tester.widget<Slider>(find.byType(Slider)).onChanged, isNull);
+    final beforeDisabledDrag = h.fixture.native.seeks.length;
+    await gesture.moveBy(const Offset(200, 0));
+    await gesture.up();
+    await tester.pump();
+    expect(h.fixture.native.seeks.length, beforeDisabledDrag);
+    h.expectHealthy();
+    await h.close();
+  }, semanticsEnabled: true);
+
   final scenarios = <String, (bool, Future<void> Function(_Harness))>{
     'S1 fresh hidden entry': (
       false,
@@ -248,20 +374,7 @@ void main() {
       ),
       isTrue,
     );
-    FocusNode? sliderFocus;
-    for (var i = 0; i < 40; i++) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      final focus = FocusManager.instance.primaryFocus;
-      final context = focus?.context;
-      if (context != null &&
-          (context.widget is Slider ||
-              context.findAncestorWidgetOfExactType<Slider>() != null)) {
-        sliderFocus = focus;
-        break;
-      }
-    }
-    expect(sliderFocus, isNotNull, reason: 'Tab must reach Slider');
+    final sliderFocus = await h.focusSlider();
     final beforeArrow = h.fixture.native.seeks.length;
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
@@ -276,7 +389,7 @@ void main() {
     h.step('interaction menu open');
     h.menu.value = true;
     await h.frames(3);
-    expect(sliderFocus!.hasPrimaryFocus, isFalse);
+    expect(sliderFocus.hasPrimaryFocus, isFalse);
     expect(h.replay.traversal.where((node) => node.isSlider), isEmpty);
     final beforeMenuInput = h.fixture.native.seeks.length;
     await tester.tapAt(rect.center);
@@ -313,12 +426,16 @@ class _Harness {
     WidgetTester tester,
     SemanticsRecordingBinding binding, {
     required bool visible,
+    Duration initialDuration = const Duration(hours: 1),
   }) async {
     final h = _Harness(tester, binding);
     await tester.binding.setSurfaceSize(const Size(1280, 750));
     binding.onBatch = h.replay.apply;
     addTearDown(h.close);
     await h.fixture.player.tune('channel');
+    h.fixture.native.emit(h.fixture.native.status, duration: initialDuration);
+    // Deliver the initial snapshot before the first visible Slider mount.
+    await tester.pump();
     if (visible) {
       h.fixture.player.showOsd();
     } else {
@@ -400,6 +517,21 @@ class _Harness {
       expect(index, lessThan(traversal.indexOf(group)));
       previousIndex = index;
     }
+  }
+
+  Future<FocusNode> focusSlider() async {
+    for (var i = 0; i < 40; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final focus = FocusManager.instance.primaryFocus;
+      final context = focus?.context;
+      if (context != null &&
+          (context.widget is Slider ||
+              context.findAncestorWidgetOfExactType<Slider>() != null)) {
+        return focus!;
+      }
+    }
+    fail('Tab must reach Slider');
   }
 
   Future<void> frames([int count = 30]) async {

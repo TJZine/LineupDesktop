@@ -258,6 +258,51 @@ Raw logs, source, manifests and both bundles stay local under
 `/tmp/lineup-audit/m04-containment-implementation/`. This does not identify the
 exact historical production widget or historical node 866.
 
+## Visible Slider interactivity discriminator
+
+`slider_interactivity.dart` isolates the containment follow-up: changing a visible
+Slider's interactivity can replace its semantics group without resending the
+empty portal leaf. Copy it into a disposable stock project's `lib/main.dart`.
+Default uses the unkeyed local overlay from product `5c6349d4`; build with
+`--dart-define=REPRO_KEYED_OVERLAY=true` to remount that overlay only when the
+actual `onChanged` condition changes. `--dart-define=REPRO_INITIALLY_DISABLED=true`
+starts the opposite direction independently. There are no Lineup imports,
+custom semantics nodes, forced semantics or native-runner changes.
+
+On the same pinned SDK/framework/engine/host above, each comparison started a
+fresh Release process with healthy native AX and a visible Slider at 50%:
+
+| Variant | Action and observation through normal Quit |
+| --- | --- |
+| Default, initially enabled | Disable slider → first `Nodes left pending by the update: 12`; one AX error message. Quit immediately after rejection. |
+| Default, initially disabled | Enable slider → same first pending-node error; one AX error message. Quit immediately after rejection. |
+| Keyed, initially enabled | Disable → Change value exposes 60% → Enable → Change value exposes 70%. Zero AX/Flutter error messages. |
+| Keyed, initially disabled | Enable → Change value exposes 60%. Zero AX/Flutter error messages. |
+
+The otherwise stock apps were launched directly from their executables with
+shell stdout/stderr capture; no stderr-redirection runner patch was needed.
+These are bounded native controls of the transition, not production widget
+identity, notification delivery, spoken behavior or recovery acceptance. The
+actual product `5c6349d4` OSD Next-channel check logged zero errors with Slider
+before/after but did not capture an interactivity flip. It is not the failing
+native control. Do not claim every real tune necessarily exposes this transition.
+
+Source SHA-256:
+`2f5e497e6598d4e37dcc6c73ce9846e8d48da42575f1638cbb81ccf610f433cb`.
+App.framework SHA-256 values:
+
+| Variant | SHA-256 |
+| --- | --- |
+| Default | `af28ea92e4319737ec6b0759fe133163d2fdce26aa5b3b46a2280bd65beaeb8b` |
+| Default, initially disabled | `bd854bd184278341b81ded7449301fb94649e44cb815f64ed1f9a51fbe008628` |
+| Keyed | `addcfc2180d202d4e1855d1f178d28b6b678526b72e78d39f291bd92c7c62fc1` |
+| Keyed, initially disabled | `56cedbd99d0ccc9f624cfed4dae2d6ea8fae69f38132e5e72c9b5d9ca7dff5d3` |
+
+Raw logs, preserved bundles, build outputs and `stock-native-summary.json` remain
+local under `/tmp/lineup-audit/m04-interactivity-followup/`. Restart after any
+rejection. M-04, retained-error recovery, discarded-batch divergence and historical
+node 866 remain open.
+
 ## Synthetic Command+A control
 
 `keyboard.dart` is an independent MaterialApp → Scaffold → TextField probe with a

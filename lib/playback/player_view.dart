@@ -656,6 +656,8 @@ class _Osd extends StatelessWidget {
       (track) => track.type == PlayerTrackType.subtitle,
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
+    final sliderInteractive =
+        controller.duration > Duration.zero && !unsupported;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
     final expanded = !LineupLayout.isCompactWidth(size.width);
     final horizontal = size.width >= 1200 && size.height >= 640;
@@ -1032,6 +1034,9 @@ class _Osd extends StatelessWidget {
                 // Keep the Slider portal and its origin under the same fade,
                 // semantics exclusion and retirement ancestry.
                 Overlay.wrap(
+                  // An interactivity flip replaces Slider's semantics group;
+                  // remount its portal too so its new parent receives its data.
+                  key: ValueKey(sliderInteractive),
                   clipBehavior: Clip.none,
                   child: SliderTheme(
                     data: SliderTheme.of(context).copyWith(
@@ -1044,12 +1049,11 @@ class _Osd extends StatelessWidget {
                     child: Slider(
                       value: sliderPosition,
                       max: sliderMax,
-                      onChanged:
-                          controller.duration <= Duration.zero || unsupported
-                          ? null
-                          : (value) => controller.seekTo(
+                      onChanged: sliderInteractive
+                          ? (value) => controller.seekTo(
                               Duration(milliseconds: value.round()),
-                            ),
+                            )
+                          : null,
                     ),
                   ),
                 ),

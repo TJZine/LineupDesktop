@@ -2140,3 +2140,40 @@ differing only in the isolated narrowed workflow, with the new Slider regression
 explicitly selected on Windows. Live runs were checked and none cancelled.
 The closing report retains one final human checklist, including native group/order
 and spoken OSD/menu behavior; CI is not physical Windows AX/playback acceptance.
+
+## M-04 follow-up: visible Slider interactivity
+
+The second Opus report identified an additional containment regression on product
+`5c6349d4`: a visible Slider's enabled/disabled transition changes its semantics
+group without resending its empty portal leaf. The controller reproduced the
+outgoing missing-record condition against `7a496450` (same product), then stock
+native Release controls independently rejected both flip directions with
+`Nodes left pending`. The actual production Next-channel control logged zero
+errors but did not expose an observed interactivity flip; it is not the native
+failure reproduction.
+
+One `sliderInteractive` boolean now drives both the existing `onChanged` policy
+and the local Overlay's key. A flip remounts Slider and portal together; ordinary
+value/max changes and menu exclusion retain state. Approved visuals and the
+unlabeled enabled group/order remain intact. Five new tests start each transition
+healthy, cover both duration directions, unsupported/restoration, focus and
+disabled input, state retention, and active-drag cancellation. With identical
+test source the prior product passes 17/fails 5 on the intended missing record;
+the correction passes 22/22, and existing PlayerView tests pass 123/123. The five
+new cases on `459fd726` have no replay rejection: two pass and three fail only the
+later containment group assertion. Do not report five complete historical passes.
+
+Canonical format/analysis and the full 1,852-test local suite passed. Fresh
+read-only reviewer chat `01a155a7-84ee-7641-b56d-fceb695328e3` checked exact
+source/log identities and found no material defect before integration. Controller
+Release/CI identities and final native controls are recorded in the closing
+report when completed.
+
+Report calibration: replay rejects a missing reparented-child record earlier
+than native Release; it does not simulate partial mutation. `Nodes left pending`
+is a completion failure after node updates, but the pinned engine also has a
+"would be reparented" error in preflight. A failing removal prepass need not
+have mutated; a successful prepass can already have destroyed moved subtrees.
+Its early return can preserve pending updates. Retained-error/event delivery,
+batch loss/divergence, native/human acceptance and historical node 866 remain
+open. No engine patch or upstream publication is included.
