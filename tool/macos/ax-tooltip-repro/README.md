@@ -184,6 +184,50 @@ or remove visual animation globally merely to avoid the error. The investigation
 records a proposed Slider-lifetime experiment and its hidden-control/retirement
 risks; no application workaround for this new trigger is included.
 
+## Local Slider overlay containment comparison
+
+`slider_containment.dart` is a separate bounded experiment, preserving the
+original `slider_fade.dart` failing source. Copy it into a disposable stock
+project's `lib/main.dart`. The default uses the route's overlay; build again with
+`--dart-define=REPRO_LOCAL_OVERLAY=true` to put only SliderTheme/Slider under
+`Overlay.wrap(clipBehavior: Clip.none)`. Both variants have the same finite
+40-pixel Stack and separate visible 4-pixel progress line, matching the relevant
+Player structure. No Lineup imports, media, forced semantics or engine changes
+are required. This source is **not a product mitigation**.
+
+Restart before each fresh-mount control and establish healthy native AX before
+Show. On the same pinned framework/engine/host listed above, the controller's
+2026-10-19 Release comparison observed:
+
+| Variant / separate process | Observation |
+| --- | --- |
+| Default, Show hidden slider | First native AX error: node 13 is not in the tree/new root; one error message through Quit. |
+| Default, Show visible slider | Native Slider 50%; zero AX error messages through Quit. |
+| Local overlay, Show hidden slider | Slider absent while hidden; value update then Fade in exposes 60%. Exclude → value update → Restore exposes 70%. Rapid Fade out/in and removal complete; zero AX error messages through Quit. |
+| Local overlay, Show visible slider | Native Slider 50%; Fade out → value update removes Slider, Fade in → value update restores it at 70%; zero AX error messages through Quit. |
+
+These runs used stock framework/engine binaries and stock widget source. Their
+otherwise stock native runner added **stderr redirection only**, into its sandbox
+temporary directory, to capture bridge errors while CUA launched the app. It did
+not observe or alter semantics, input or native callbacks. These binaries are
+distinct from the earlier genuinely uninstrumented Slider controls. Runtime
+source SHA-256 was `501da191c41864a3fab625c18b88150bb0d1fb71dd622cb65e836b322da676d5`;
+the committed copy adds only explanatory comments. Local-overlay App.framework
+SHA-256 was `8298853078519f56b3a7c1009fe020f63d2b026894c8377dac22f37c49d5f5e6`;
+default was `f3ebc03021f2836ded91c696e1902225c46aba086481ada5f78947731fea0aa6`.
+Raw logs/source/bundles and result manifests are private under
+`/tmp/lineup-audit/pro-round4/`.
+
+Containment is promising for these sequences, **not accepted as a complete fix**.
+No outgoing-delta graph was captured in this comparison, and accessibility
+notification delivery was not directly observed. Keyboard/drag/focus preservation,
+matched geometry/text scaling, menu during entry, route replacement and integrated
+DVR insertion/removal remain unverified. The CUA screenshot was unusable for
+geometry and attempted Slider click/Right/Tab did not establish keyboard focus or
+adjustment; do not count them as passes. No Lineup Slider patch is included. See
+the [Opus handoff](../../../docs/handoffs/macos-m04-opus-review-handoff.md) for the
+remaining challenge and acceptance matrix.
+
 ## Synthetic Command+A control
 
 `keyboard.dart` is an independent MaterialApp → Scaffold → TextField probe with a

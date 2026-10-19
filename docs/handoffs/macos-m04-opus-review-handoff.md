@@ -19,6 +19,17 @@ not authority. Work read-only and return findings before implementing anything.
 - At this handoff's creation, **no Slider containment product patch is applied**.
   The controller is preparing an isolated comparison. Do not infer its outcome.
 
+**Later controller evidence, 2026-10-19:** the isolated comparison is now retained
+as `tool/macos/ax-tooltip-repro/slider_containment.dart`, with exact controls,
+hashes and limits in that directory's README. Default finite-height hidden mount
+rejects; its fresh visible control is healthy. Contained hidden/visible controls
+and bounded fade/exclusion/value-update sequences logged zero AX errors. This
+supports the hypothesis only for those observations. No outgoing graph, direct
+notification-delivery, keyboard/drag/focus/geometry or integrated transition
+acceptance is established; **no product mitigation is applied**. Challenge these
+new observations as well as the original hypothesis below. The application fixes
+outside M-04 are now committed through product `459fd726024a4cf5e40b69ec1cca29ecd2d1dd23`.
+
 Read `AGENTS.md`, `.agents/project.md`, then:
 
 1. `docs/handoffs/macos-post-audit-continuation.md`.

@@ -539,3 +539,52 @@ portal failure. A follow-up should pass a stable explicit Close invoker context
 and owned focus anchor, and test semantics activation after clearing primary focus
 to the root. No extra product change was integrated here. The closing report and
 fresh review prompt retain this open finding; raw captures remain private.
+
+## Fourth review adjudication and bounded containment comparison
+
+The newly supplied GPT Pro report was adjudicated against current application
+source, the pinned framework/engine source and the retained evidence before edits.
+Its two M-04 findings are accepted at the framework/common-desktop-bridge boundary:
+unreachable portal records can trigger AXTree rejection, and checking retained
+`error()` instead of the current `Unserialize` result can suppress later event
+delivery/clearing. Neither is fixed by this application round. Production Slider
+ownership remains strongly correlated rather than instance-identified; historical
+node 866 and older uncaptured failures remain unattributed. The excluded debugger
+Boolean probes and repeated-message limitations remain unchanged.
+
+The report's local-overlay suggestion was tested outside Lineup before choosing
+any product mitigation. The retained
+[`slider_containment.dart`](../../tool/macos/ax-tooltip-repro/slider_containment.dart)
+compares identical 40-pixel progress Stacks with the route overlay versus a local
+`Overlay.wrap(clipBehavior: Clip.none)` around only SliderTheme/Slider. The visible
+progress line stays outside that local overlay. No engine patch, forced semantics
+or Lineup/media dependency was used. Native runners redirect stderr only; this is
+explicitly distinct from the earlier unchanged-runner controls.
+
+After healthy native AX, the default hidden mount rejected new node 13; its fresh
+visible control exposed Slider 50% and logged zero errors. The local-overlay hidden
+and separate visible controls logged zero AX errors through bounded value changes,
+fade retirement/restoration, exclusion/restoration, rapid reversal and removal.
+Visible restoration exposed the updated 60%/70% values. Exact sequence coverage,
+binary/source hashes and controls are in the
+[reproduction README](../../tool/macos/ax-tooltip-repro/README.md#local-slider-overlay-containment-comparison).
+Raw evidence stays under `/tmp/lineup-audit/pro-round4/`.
+
+This is promising bounded native evidence, **not M-04 closure or an integrated
+mitigation**. No outgoing graph or direct notification delivery was captured in
+this comparison. Slider keyboard/drag/focus preservation and geometry were not
+established: the CUA screenshot was unusable, and attempted click/Right/Tab did
+not prove adjustment. Menu-during-entry, route replacement, DVR insertion/removal,
+text scaling and approved-layout equivalence remain to be checked. The
+[Opus 5.5 handoff](macos-m04-opus-review-handoff.md) requests a second independent
+assessment before a product direction is chosen. No Slider lifetime policy or
+containment patch is integrated into Lineup, and no upstream publication occurred.
+
+The separate application Guide gaps are corrected through product `459fd726`:
+Close supplies its owned invocation anchor, routing reads live availability, and
+an opening menu wins over Guide Back. Corrected original-source controls fail the
+intended menu assertions; combined affected tests pass 454 checks, with fresh
+independent review. Native Release one-action stopped-Guide Close/menu navigation
+and four rapid-menu Clear sequences also passed. These do not directly prove
+Flutter root focus in that binary or physical input. The closing report retains
+historical failed background activation and records the new candidate separately.

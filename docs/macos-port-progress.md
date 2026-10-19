@@ -2027,3 +2027,43 @@ opening variants fail original source and pass the correction; settled coverage
 remains. The 454-test affected run and fresh Guide review above cover the combined
 routing/anchor changes. Physical keyboard behavior and older uncaptured failures
 remain in the single final human checklist.
+
+## 2026-10-19 — M-04 containment comparison and second-opinion handoff
+
+The fourth Pro report's framework/bridge findings were accepted with their
+existing attribution and recovery limits. No engine patch or Lineup Slider
+mitigation was made. A separate finite-height stock-widget comparison retains
+the route-overlay failing control and tests local `Overlay.wrap` around only
+SliderTheme/Slider, preserving the visible progress line. Fresh hidden default
+mount rejects; fresh visible default mount is healthy. Contained hidden/visible
+mounts and the bounded fade/exclusion/value-update/restoration sequences logged
+zero errors. The native runner redirects stderr only; this comparison is distinct
+from the earlier unchanged-runner controls.
+
+The new source/README and investigation retain exact identities, sequences and
+limits. No outgoing graph or native notification-delivery proof was collected;
+keyboard/drag/focus/geometry and integrated menu/route/DVR transitions remain
+unverified. Fresh independent read-only chat `01a15289-3744-77d1-a477-b4032e9eb694`
+checked the source, native logs, hashes and chronology with no material findings.
+The user-requested Opus 5.5 handoff is in
+`docs/handoffs/macos-m04-opus-review-handoff.md`. M-04 and overall accessibility
+acceptance stay open; useful hover information and approved Player layout remain.
+
+## 2026-10-19 — Fourth-round local and canonical Release verification
+
+Product `459fd726024a4cf5e40b69ec1cca29ecd2d1dd23` includes three separately
+committed application fixes above, each with its regressions/progress entry and
+fresh independent review before integration. Canonical format/analysis, 454
+affected tests and all 1,830 local macOS tests passed. The canonical Release
+wrapper built that exact product; its AOT binary contains the expected full Git
+identity. The closing report records bundle/runtime identities and evidence limits.
+
+After the user cleared a new Keychain prompt, one live native Close in stopped
+Guide opened its usable menu, Tab/Return reached Channels, and four actual-Tab
+rapid F2/Escape Return/keypad Clear sequences passed for matching/no-match queries
+with useful search input retained. A normal direct tune and Mini Guide agreed on
+the watching channel. This did not induce a blocked store, directly establish
+Flutter root focus or guarantee no intervening OS frame. No complete product
+stderr trace or notification-recovery claim is made. Normal Quit ended the exact
+Release process; no test timer, altered DVR setting or test app remains running.
+Physical/spoken/window checks remain in the report's single final human checklist.
