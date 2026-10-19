@@ -13,50 +13,68 @@ Repository: https://github.com/TJZine/LineupDesktop
 
 Branch: `platform/macos`.
 
-Review range: `fa1760872ffc69dd61644cb09e0b0a64a130f5f4..d5e09e0a53810c836e166d528a9224b8cfab0002`.
+Review range: `fa1760872ffc69dd61644cb09e0b0a64a130f5f4..f2b76202625215bd0bcc14aefd1911db49663932`.
 Resolve the immutable candidate below rather than silently reviewing an older
-cached branch. Later commits containing only verification documentation may
-follow the product candidate; inspect those evidence updates too.
+cached branch. Later commits containing verification documentation and standalone
+reproductions follow the product candidate; inspect those evidence updates too.
+Reproduction commit: `68bdc662`; it changes no application or build inputs.
 
-Product candidate: **d5e09e0a53810c836e166d528a9224b8cfab0002**.
+Product candidate: **f2b76202625215bd0bcc14aefd1911db49663932**.
 
 Latest Windows verification (passed; inspect source identity and logs):
-https://github.com/TJZine/LineupDesktop/actions/runs/39183100595
+https://github.com/TJZine/LineupDesktop/actions/runs/39188166189
 
-Verification commit `5877120d6fe87ca46f102a602ce9451a936ce697` has the product
+Verification commit `86c589573f84bd505531731dc289627270bcb4b0` has the product
 candidate as parent and differs only in its narrowed CI workflow. This run passed
-1,814 Linux tests, 703 selected Windows Dart tests, the stock Windows build and
+1,817 Linux tests, 706 selected Windows Dart tests, the stock Windows build and
 eight selected native/reference CTests. No active run was cancelled. Prior
 `ac995ec5` results retain their original identity in the report. Local formatting,
-analysis and all 1,816 macOS Dart tests passed on the new combined source. These
+analysis and all 1,819 macOS Dart tests passed on the new combined source. These
 checks do not establish physical Windows playback or complete accessibility
 acceptance.
 
-Current Release evidence on `d5e09e0a` is mixed; do not read earlier zero-error
-passes as closure of this candidate:
+Current evidence on `f2b76202` remains bounded; accessibility sign-off stays open:
 
-- Guide Clear's native sibling name, real pointer hover, accessibility action and
-  live input focus passed. Initial Return/keypad/menu activation passed; later
-  repetitions left the query unchanged, with a visible Clear focus ring but a
-  native focused-element field reporting the text field. Command+A was also
-  inconsistent. Zero AX errors occurred during these Guide checks. A temporary
-  full-shell macOS/no-match probe passed 40 actual-Tab direct/menu Return/keypad
-  activations plus Command+A. Focus/event delivery in the real app is unresolved.
-- Settings → Playback → DVR On → Back to Guide → select current program then
-  produced `866 will not be in the tree and is not the new root` at app-log line 4.
-  The native tree degraded; 574 failure messages accumulated through normal Quit.
-  The exact originating delta/node was not captured. Do not attribute the trigger
-  to the new Guide topology, or exclusively to the engine, without evidence.
-- Visual transport checks survived the AX degradation: step + K ended Paused,
-  position 43:39 remained stable about 12 seconds; step + K + K ended Playing,
-  position 09:17 → 09:28. CUA call batches took 23/34 ms respectively, but these
-  timestamps do not prove exact Dart event phase. Phase-specific proof comes from
-  controlled regressions. Native transport AX labels were not verified in this run.
-- DVR was restored Off and normal Quit ended the process. No engine changes,
-  picture-quality retest or spoken VoiceOver acceptance occurred. Raw round-two
-  evidence stays in `/tmp/lineup-audit/pro-round2/`; the report records sanitized
-  identities, observations and limits. Investigate the unresolved results before
-  recommending accessibility sign-off.
+- Clean stock Release: twelve actual-Tab direct/menu Return/keypad Clear
+  activations passed. Synthetic Command+A then left the query unselected; zero
+  AX failures during this check, normal Quit. Exact stock/diagnostic binary
+  identities are in the closing report; do not conflate the builds.
+- Diagnostic V1 captured rapid F2 → Escape before menu focus transfer: Escape
+  reached Guide, the menu stayed/reopened, Return activated its Guide item, then
+  Clear focus was restored without a Clear callback. A staged settled-menu control
+  cleared correctly. Challenge this race independently; it does not explain every
+  earlier uncaptured keyboard failure.
+- Diagnostic V2 captured active native app/key window/search responder and
+  synthetic Command+A events with keyCode 0 and combined Command `0x100000`, but
+  no sided modifier bits. Pinned Flutter's responder does not create Dart Meta
+  state from these. A stock TextField reproduced collapsed selection at 16 and
+  appended replacement lengths 17/18. Challenge the source mechanism and boundary
+  classification; physical Command+A was not tested. A Lineup shortcut workaround
+  is not supported by this evidence.
+- The real 30-minute timer expired in the authenticated diagnostic Release at
+  03:01:40 UTC with Guide/Stopped, playback intent false and no pending tune.
+  macOS locked before the first Close action and DVR restoration; those steps
+  await user unlock. Do not claim that navigation acceptance passed.
+- The same V2 process later followed Settings → Playback → DVR On → Back Guide →
+  current-program tune. First error at line 791 named new node 378. Immediately
+  preceding outgoing batch 671 emits an empty full-window portal leaf, physically
+  `0 → 1 → 378`, child token 97 without a matching origin. Effective traversal
+  remains `0 → 1 → 2 → 3 → 12`; no missing reachable child/cycle/duplicate parent.
+- Stock Slider under FadeTransition held at alpha zero reproduces this topology
+  and unknown-node error after healthy AX. A fresh visible mount stays healthy.
+  Challenge whether the production correlation is sufficient: exact widget
+  instance ownership is source-supported, not directly named by the Release trace.
+  Do not retroactively attribute historical node 866 to the Slider.
+- Review the committed minimal sources and compact graph fixture. The report
+  proposes testing a Slider-lifetime mitigation for both entering/retiring origins;
+  no new workaround or engine patch was integrated. Challenge layout, hidden
+  controls, lifecycle and semantics risks, and propose a better coherent solution
+  if appropriate. `showValueIndicator: never` does not remove the portal;
+  alwaysIncludeSemantics exposes invisible controls and misses retiring exclusions.
+- Native Boolean debugger probes were unvalidated due to optimized-frame ambiguity
+  and excluded from conclusions. Repeated bridge messages remain message counts,
+  not independent rejection counts or recovery evidence. The old retained-error
+  source finding remains separate. Raw traces are local and unavailable via GitHub.
 
 The user wants you to challenge correctness, design, ownership and evidence,
 including whether there is a better coherent solution. Do not accept earlier
@@ -67,7 +85,7 @@ Start with:
 - `docs/handoffs/macos-app-audit-report.md` and `macos-app-audit-plan.md`.
 - `docs/handoffs/macos-post-audit-fix-report.md`.
 - `docs/handoffs/macos-ax-update-investigation.md`.
-- `tool/macos/ax-tooltip-repro/{README.md,main.dart,static_origins.dart,button_origins.dart,first-rejection.json}`.
+- `tool/macos/ax-tooltip-repro/{README.md,main.dart,static_origins.dart,button_origins.dart,slider_fade.dart,keyboard.dart,first-rejection.json,slider-first-rejection.json}`.
 - The latest entries in `docs/macos-port-progress.md` and the Windows CI run
   linked there. Check what was actually tested and the source identity.
 
@@ -103,6 +121,21 @@ The fix round includes:
     effective traversal before/during hover, no unintended tune and preserved
     editable-field navigation. Both changes received a fresh combined adversarial
     review before integration; do not treat that approval as authority.
+
+11. Third Pro correction `f69ef69d`: current and next metadata share the represented
+    program while selection persistence is blocked. Validate unresolved target
+    preview isolation, paused resolved P after the wall clock enters Q, and next Q
+    rather than R, before/after save release. No playback/schedule rewrite.
+12. Third Pro correction `e7d7f098`: after sleep removes Player while Guide is
+    open, one Close/Escape opens the usable menu immediately. Validate current
+    surface authority, no extra tune and usable keyboard focus. This removes an
+    obsolete origin flag; it is separate from Settings return routing.
+13. `f2b76202` strengthens the retained Clear regression to use actual Tab for
+    matching/no-match queries and direct/menu Return/keypad activation. Review
+    the test's fidelity without equating it with physical keyboard acceptance.
+
+The three latest commits received a fresh combined adversarial source review
+before integration. Treat it as a recorded check, not authority for your verdict.
 
 For M-04, independently trace this distinction:
 

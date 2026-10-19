@@ -3,20 +3,18 @@
 Source: `platform/macos`; audited baseline `fa176087`, reviewed product candidate
 `1b2f64f4eaf584807f70e668a5502ab088a54537`. The audit plan/report were committed
 first as `3cf2cce7`. The latest product candidate is
-`d5e09e0a53810c836e166d528a9224b8cfab0002`. Results for the earlier seven-fix
+`f2b76202625215bd0bcc14aefd1911db49663932`. Results for the earlier seven-fix
 candidate and the `296ab905` transition mitigation retain their original source
 and binary identities below.
 No main merge, distribution release, signing changes or engine patch was made.
 
-Status: **the original seven fixes and eight Pro-review follow-up commits are
-implemented and independently reviewed. The two second-review corrections passed
-1,816 local tests and Windows CI. Release playback checks passed visually, and
-Guide Clear is exposed and actionable in native AX. Repeated native keyboard
-activation was inconsistent, and a later Guide-to-Player transition produced
-574 AX failure messages and degraded the native tree. Those two observations
-remain unresolved; general accessibility sign-off is not granted. Earlier runtime
-observations retain their original identities below, and the consolidated human
-checks remain outstanding.**
+Status: **the requested corrections are committed and independently reviewed.
+The latest round passed 1,819 local tests and Windows CI. The keyboard investigation
+isolated a rapid menu-focus interleaving and reproduced synthetic Command+A failure
+in a stock Flutter TextField. The first new production AX failure now has an
+outgoing graph capture, with an equivalent stock Slider/zero-opacity reproduction.
+M-04 and physical accessibility acceptance remain open; no engine fix is included.
+Earlier results retain their original source identities below.**
 
 ## Original results (historical candidate identities)
 
@@ -223,9 +221,106 @@ bundle entries, CI logs, native screenshots and AX message counts, and checked
 privacy and local links. It found no actionable documentation issues while
 retaining the unresolved runtime observations above.
 
+## Third Pro review corrections — candidate `f2b76202`
+
+| Commit | Root cause and correction | Regressions / independent review | Runtime limit |
+| --- | --- | --- | --- |
+| `f69ef69d` | During a pending step/save, current metadata represented resolved P while Up next used the requested channel's advancing wall clock, potentially showing R instead of Q. Both now share represented-program authority; an unresolved target still uses its own live preview. | A blocked-save, paused P → Q clock-boundary regression fails before the repair and passes after, before and after save release. Relevant preview/continuation/navigation coverage remains passing. Fresh `pro_round3_adversarial` approved all five changed Dart files before integration, with no material findings. | The exact blocked-persistence/clock sequence is controlled-boundary evidence; it was not induced in the authenticated app. |
+| `e7d7f098` | Guide retained an obsolete opened-from-Player flag after sleep removed the surface. One Close/Escape now uses current availability and opens the existing usable menu immediately when Player is unavailable. | Both Close and Escape fail before the repair; after expiry they open the menu, disable Player, start no tune and allow keyboard navigation to Channels. All 48 navigation tests passed. Same fresh independent review approved this fix. | The real 30-minute timer stopped playback while Guide remained open. First Close is waiting for desktop unlock; this run uses the diagnostic Release, not the clean stock binary. |
+| `f2b76202` | The retained Clear regression requested focus directly and did not establish traversal. It now uses actual Tab for matching/no-match queries and both Enter keys, directly and after F2 → Escape. | All 18 parity checks pass, including exact invoker restoration, useful live input and no tune. Same independent review approved the coverage change. | Twelve stock Release direct/menu Return/keypad activations passed; this is bounded evidence, not closure of every historical keyboard failure. |
+
+Canonical formatting and analysis passed; affected suites passed **481 tests**, and
+all **1,819 local macOS tests passed**. [Windows run 39188166189](https://github.com/TJZine/LineupDesktop/actions/runs/39188166189)
+passed **1,817 Linux tests**, **706 selected Windows Dart tests**, the stock Windows
+application build and all eight selected native/reference CTests named above.
+Verification commit `86c589573f84bd505531731dc289627270bcb4b0` is a direct child of
+`f2b76202`, differing only in its narrowed workflow. Live runs were checked before
+dispatch and no active run was cancelled. These are contract/build checks, not
+physical Windows acceptance.
+
+The clean stock Release candidate was built with the canonical wrapper and
+verified identity `0.1.0`, `1@f2b76202625215bd0bcc14aefd1911db49663932`.
+Its 106-entry bundle manifest SHA-256 is
+`ea8c97ebf139c3bbba022ca846bc97bccae9eed743be08705c1149fd7a977e17`;
+executable SHA-256
+`db2d9a16e0f5b2d11c0fd9510ed1bbd7969e8db941a036c98e936d93a2907067`.
+The pinned Flutter, engine, host and runtime BUILD-INFO match the earlier round.
+On this binary twelve actual-Tab Clear activations passed before synthetic
+Command+A left the query unselected. These checks had zero AX error messages;
+normal Quit ended the process. Raw evidence is private in
+`/tmp/lineup-audit/pro-round3/`.
+
+### Keyboard findings and limits
+
+A separate temporary diagnostic Release build from `f2b76202` added pass-through
+native event observations, existing FocusNode identity tracing and outgoing
+semantics tracing, without an engine patch. Its V2 source patch SHA-256 is
+`d4666d8c00c931c057543a2bee05b3a9a16d4b4aa5447e7177b92decba6c0a12`;
+bundle manifest SHA-256
+`1dc7ab0da42af4795dda31929afcd980ad2d7c4535ff42d8408082b02e5baafb`;
+executable SHA-256
+`12ce4509a24feda0cb6076795c3c0a3e555654947fe1c4d00fdd6054aa2a290f`.
+This diagnostic binary is distinct from the clean stock Release above. Tracing
+adds overhead and cannot turn a negative timing-sensitive probe into acceptance.
+
+The captured rapid Tab → F2 → Escape → Return sequence reached Escape before the
+menu acquired focus. Guide's Escape handler reopened/kept the menu; Return then
+activated its Guide item. Clear focus was restored afterward, and no Clear callback
+ran for that Return. A staged control observing the menu open/closed before Return
+cleared successfully. This establishes an input/menu-focus interleaving, not a
+settled Clear activation failure. Historical failures without event history remain
+unclassified. Whether to make Escape dismiss an opening menu before focus transfer
+is a separate interaction correction to consider; no speculative fix was added.
+
+For synthetic Command+A, native V2 recorded the active key window and
+FlutterTextInputPlugin responder. Injected flagsChanged used keyCode 0 (A), and A
+had combined Command `0x100000` without the sided Meta bits. The pinned macOS
+responder synchronizes sided modifier bits, so Dart received A with Meta false.
+A fresh stock MaterialApp → Scaffold → TextField reproduced this: selection stayed
+collapsed at 16, and replacement input appended to lengths 17/18. The problem
+therefore reproduces without Lineup. This is an observed synthetic-event/Flutter
+conversion compatibility condition, not proof of a physical Command+A defect.
+Recommend correcting the automation input representation or reporting that
+compatibility case; do not add a Lineup select-all workaround on this evidence.
+
+The authenticated diagnostic Release was left in Guide with a confirmed real
+30-minute timer. At `2026-10-19T03:01:40.104268Z`, the trace records Guide,
+`playerState=stopped`, `playbackIntent=false`, `menuOpen=false` and no pending tune.
+macOS locked before the next native UI capture; the first Close action and DVR
+restoration await user unlock. The diagnostic process remains running with DVR
+On; restore its original Off setting and quit normally after that final check.
+This establishes real timer expiry only, not the
+navigation acceptance step. The blocked-persistence metadata sequence above
+remains controlled-boundary evidence, not a claimed real-app reproduction.
+
+### AX findings and remaining acceptance
+
+The diagnostic V2 process had healthy AX through keyboard checks, then Settings →
+Playback → DVR On → Back Guide → current-program tune produced its first error
+at line 791, node 378. The immediately preceding outgoing batch 671 introduces a
+new full-window empty portal leaf, physically attached at `0 → 1 → 378`, with no
+matching origin; effective traversal remains `0 → 1 → 2 → 3 → 12`. This is a
+shared-process history, not a fresh-process AX-only run. A stock continuous Slider
+mounted under zero-opacity FadeTransition reproduces the same topology and native
+unknown-node error; mounting it visibly is healthy. The hidden/visible result also
+repeats in a separate uninstrumented stock app with an unchanged native runner. See the
+[investigation](macos-ax-update-investigation.md) for controls, portable evidence,
+source ownership and recommended follow-up. This narrows the newly captured
+production failure; it does not retroactively identify historical node 866.
+
+The native debugger's optimized-frame return probes were not validated and are
+excluded from conclusions. Repeated bridge messages remain message counts, not
+independent failures or proof of notification recovery. M-04 remains open; engine
+changes and upstream publication remain outside this round. Standalone sources
+and the sanitized graph fixture are separately committed as `68bdc662`, following
+fresh adversarial review; that commit changes no product/build inputs. A second
+fresh adversarial reviewer checked the complete latest source range, repros and
+final evidence, finding no actionable issues. It corroborated the raw timer-stop
+record while explicitly retaining the desktop-unlock/navigation limit.
+
 ## One final human checklist
 
-Run these once on the latest built candidate `d5e09e0a`; record failures with generic descriptions.
+Run these once on the latest product candidate `f2b76202`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.

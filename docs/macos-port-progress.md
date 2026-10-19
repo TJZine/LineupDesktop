@@ -1904,3 +1904,57 @@ All 18 parity tests and the full 1,819-test suite passed; the fresh combined sou
 review approved this test strengthening. This is portable focus evidence only.
 The observed native keyboard inconsistency and AX failure remain open pending
 synchronized event/focus and first-delta tracing; no engine change is included.
+
+
+## 2026-10-18 — Pro round three: CI, keyboard and first AX graph
+
+Reviewed fixes `f69ef69d` and `e7d7f098`, plus actual-Tab coverage `f2b76202`, were
+committed separately and pushed on `platform/macos`. Format/analysis and 1,819
+local tests passed. Windows [run 39188166189](https://github.com/TJZine/LineupDesktop/actions/runs/39188166189)
+passed 1,817 Linux tests, 706 selected Windows tests, stock application compilation
+and all eight selected native/reference CTests. Verification `86c589573f84bd505531731dc289627270bcb4b0`
+is the direct child of `f2b76202`, differing only in its isolated narrowed workflow;
+live runs were checked and no active run was cancelled. Fresh source review before
+integration found no material issues.
+
+Clean stock Release `f2b76202` passed twelve actual-Tab direct/menu Return/keypad
+Clear activations, then synthetic Command+A failed to select the query. This
+sequence had zero AX messages and ended in normal Quit. A separate diagnostic
+build captured rapid Escape before menu focus transfer, followed by Return going
+to the still-open/reopened menu instead of Clear; a settled control cleared.
+That explains one captured interleaving, not every historical failure. Native
+V2 Command+A events lacked sided Meta flags; pinned responder source explains
+Dart Meta=false. A stock TextField reproduced collapsed selection and appended
+replacement. No physical-keyboard or Lineup-owned select-all defect is inferred.
+
+The V2 diagnostic process later reproduced the recorded DVR/tune AX sequence
+with its history captured. First error node 378 follows outgoing batch 671, which
+adds a new full-window empty portal leaf without its origin. Effective traversal
+is complete and unchanged; physical attachment remains `0 → 1 → 378`. A stock
+continuous Slider mounted under zero-opacity FadeTransition reproduces the same
+missing-origin topology/native rejection. A fresh visible control is healthy.
+A genuinely uninstrumented stock runner independently reproduces hidden failure
+and visible success. The minimal sources and graph comparison were independently reviewed and committed
+as `68bdc662`; they carry no private media labels, queries or URLs and change no
+product/build inputs. Exact production widget ownership is
+strongly source-correlated with the entering DVR Slider, not directly named by
+the trace; historical node 866 remains unattributed.
+
+The investigation recommends an upstream package and a bounded Slider-lifetime
+experiment covering entering and retiring origins before a third product fix.
+No new workaround or engine patch was integrated. Unvalidated optimized-frame
+LLDB return probes are excluded; repeated error totals are message counts only.
+The authenticated diagnostic Release completed the real 30-minute timer: at
+03:01:40 UTC it records Guide/Stopped, playback intent false and no pending tune.
+The desktop locked before the first Close action and DVR restoration; these await
+user unlock, so no native navigation acceptance is claimed yet. The closing report distinguishes stock/diagnostic identities,
+remaining acceptance and the single final human checklist. Raw evidence remains
+private in `/tmp/lineup-audit/pro-round3/`.
+
+
+Fresh `round3_final_review` independently rechecked all five changed Dart files,
+the standalone artifacts and the final documentation/evidence; no actionable
+issues were found. It corroborated the exact raw real-timer stop record and kept
+the pending navigation boundary explicit. The diagnostic process is still running
+with DVR On until user unlock permits first Close, restoration Off and normal Quit.
+Application/build paths remain unchanged from product candidate `f2b76202`.

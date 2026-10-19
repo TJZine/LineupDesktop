@@ -1,8 +1,9 @@
 # macOS accessibility update investigation — M-04
 
-Status: **Flutter runtime interoperability defect reproduced standalone; bounded
-application transition mitigation implemented.** A small stock-widget sequence reproduces the same
-removed-node rejection as M-04. Its exact delta and rejecting owner are now known.
+Status: **Flutter runtime interoperability defects reproduced standalone; bounded
+application mitigations implemented, general M-04 acceptance still open.** Stock
+Tooltip and Slider sequences reproduce the unknown-node rejection. A new production
+first-error graph is captured; its topology matches the Slider/zero-opacity case.
 The first historical production delta was not captured, so this does not attribute
 every historical message to that sequence or close real-app acceptance.
 
@@ -396,3 +397,122 @@ caused the rejection without that trace. Visual playback verification continued,
 DVR was restored Off, and normal Quit ended the app. Exact build/manifest identities
 and the separate keyboard limit are in the closing report; private captures are
 under `/tmp/lineup-audit/pro-round2/`. Accessibility sign-off remains open.
+
+
+## Third review investigation: first production graph and Slider origin
+
+Product base `f2b76202625215bd0bcc14aefd1911db49663932` was copied to an isolated
+worktree for temporary diagnostic Release builds. The final V2 patch and binary
+identities are recorded in the [closing report](macos-post-audit-fix-report.md).
+The diagnostic binding forwards all original SemanticsUpdateBuilder arguments;
+it captures final outgoing traversal/hit-test children and a bounded physical
+inventory including every portal origin/child. It does not force semantics.
+Native event observations are pass-through. No engine or production source patch
+was made for this investigation.
+
+V2 began with healthy native AX and keyboard/query-reset checks. Settings →
+Playback → DVR On → Back to Guide → current-program tune produced the first native
+error at raw line 791: `378 will not be in the tree and is not the new root`.
+This is one shared process with earlier keyboard history, not a fresh AX-only run.
+Immediately preceding Dart batch 671 updates nodes 1, 378 and 12. Retained replay
+has no reachable missing child, cycle, duplicate parent or reparenting:
+
+| Observation | Captured state |
+| --- | --- |
+| Effective root graph before/after | `0 → 1 → 2 → 3 → 12` |
+| New updated node | 378, empty full-window leaf, no label/value/hint/tooltip/action |
+| Physical ancestry | `0 → 1 → 378` |
+| Portal marker | child token 97; no matching parent in the complete portal inventory |
+| Prior occurrence | Neither 378 nor token 97 appeared earlier |
+| Route/phase | Guide/idle → Player/loading, overlay none → Player/playing, OSD |
+
+This is a newly emitted unreachable portal, rather than a retained tooltip text
+mutation. The graph proves topology, not the owning widget instance. The strong
+source correlation is the DVR Slider built by the entering OSD fade:
+
+- `player_view.dart` puts newly entering overlays under FadeTransition, initially
+  alpha zero; its DVR-enabled OSD contains an ordinary continuous Slider.
+- Pinned `material/slider.dart:681–683` eagerly shows the value-indicator portal;
+  lines 1009–1015 build it even without hover/drag. The continuous Slider's default
+  discrete-only indicator can be an empty child (1057–1074).
+- `rendering/proxy_box.dart:1083–1086` omits zero-alpha fade-child semantics.
+  OverlayPortal's physically separate child remains capable of emitting a record
+  after its origin has been elided. The common desktop bridge forwards that
+  unreachable record to the stricter AXTree validator.
+
+The new stock [Slider reduction](../../tool/macos/ax-tooltip-repro/slider_fade.dart)
+starts with healthy native buttons and no Slider. Mounting a continuous Slider
+inside FadeTransition held at zero produces a new full-window empty portal leaf
+(node 9, child token 1, no origin) and the first unknown-node native error. A fresh
+visible mount exposes the native Slider at 50% with zero errors; fading that
+already-mounted control to zero also had zero errors in that bounded comparison.
+A separate genuinely uninstrumented stock project with an unchanged native runner
+also rejected the hidden mount after healthy AX; its fresh visible mount exposed
+the Slider at 50% and logged zero errors through normal Quit. The uninstrumented
+failing process logged two messages through Quit, not two established failures.
+This matches the new production topology without media, a player, tooltips or
+application semantics. It strongly supports the Slider mechanism for this new
+failure, but does not identify historical node 866 or every M-04 occurrence.
+
+A compact [first-error graph fixture](../../tool/macos/ax-tooltip-repro/slider-first-rejection.json)
+keeps the new production graph and standalone comparison without private labels,
+queries, media identities or URLs. Traced and uninstrumented stock controls retain
+separate identities in the source instructions. Raw logs, full deltas and AX
+snapshots remain private under `/tmp/lineup-audit/pro-round3/`.
+
+### Recommended follow-up, not an implemented third fix
+
+Add this stock sequence and failure graph to the existing upstream-ready package;
+no upstream message has been sent. The root interoperability issue is still the
+framework emitting an unreachable portal record and the common desktop bridge
+rejecting it rather than applying Flutter's reachability contract. The separate
+retained-error/notification issue also remains open.
+
+For a bounded Lineup mitigation, first test coupling the Slider's mounted lifetime
+to its semantics origin's availability, preserving the approved geometry and
+animation through a noninteractive placeholder where needed. Cover both first
+entering alpha zero and retiring menu/overlay exclusions before choosing a patch.
+`showValueIndicator: never` alone does not remove the eagerly shown portal.
+`alwaysIncludeSemantics` on the entering fade is only a diagnostic alternative:
+it exposes invisible controls and does not solve retiring ExcludeSemantics paths.
+Neither a global semantics override nor suppressing error logs is recommended.
+No new Slider workaround was integrated in this round; it needs a tested policy
+for hidden controls and its own regressions, Release check and independent review.
+
+Optional LLDB probes were attempted against matching stock symbols, but optimized
+inline frames made the function/return identity ambiguous. Their Boolean results
+are explicitly untrusted and unused. This investigation establishes the first
+logged error and preceding emitted graph, not a debugger-verified assignment of
+every native Unserialize result. The retained-error source diagnosis remains
+valid; successful recovery/event delivery was not established at runtime.
+
+## Keyboard investigation alongside AX
+
+On clean stock `f2b76202`, twelve actual-Tab direct/menu Return/keypad Clear
+activations passed; synthetic Command+A then left the query unselected. Zero AX
+messages occurred in that sequence. Diagnostic V1 subsequently captured a rapid
+F2/Escape interleaving: Escape reached Guide before the menu acquired focus, the
+menu stayed/reopened, and Return activated its Guide item. Clear regained focus
+afterward but its callback did not run for that Return. A staged open-menu →
+Escape → observed-close → Return control cleared successfully. This explains
+that captured sequence only; older uncaptured failures remain unresolved.
+
+Native V2 confirmed synthetic Command+A arrives while the app/key window/search
+responder are active, but flagsChanged uses A's keyCode 0 and only combined
+Command flag `0x100000`. The sided bits `0x8`/`0x10` are absent. Pinned
+`FlutterEmbedderKeyResponder.mm:201–207,531–562,741–776` synchronizes the sided
+modifier mask and cannot create Meta state from those events; Dart A therefore
+has Meta false. A separate stock MaterialApp → Scaffold → TextField reproduces
+selection remaining collapsed at 16 and replacement appending to 17/18. The
+[stock keyboard probe](../../tool/macos/ax-tooltip-repro/keyboard.dart) preserves
+only length/selection and allowlisted key-state logging; the temporary native
+observer was used solely for the private event correlation.
+
+Recommend fixing the synthetic input representation or reporting that compatibility
+case at the automation/embedder boundary, with both native flags and Dart state.
+A physical Command flagsChanged event normally includes sided flags and keyCode 55/54;
+no physical input was captured, so this does not establish a physical macOS or
+Lineup select-all defect. Do not add an app shortcut workaround from this result.
+The separate rapid menu-focus race is a possible interaction follow-up; whether
+Escape must dismiss the opening menu before its focus transfer needs a defined
+regression and correction, rather than attributing every Clear failure to it.
