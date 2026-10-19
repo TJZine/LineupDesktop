@@ -70,9 +70,10 @@ not a Flutter engine repair. Native accessibility must be active for both runs.
 
 There is also a static-exclusion case. In the disposable copy, initialize
 `_excluded` to `true`, rebuild the default variant, establish native AX, then
-select Show tooltip. This also rejects an unreachable overlay node. The Lineup
-transition guards deliberately preserve existing visual tooltips inside permanent
-content exclusions; they do not repair that separate path. Permanently setting
+select Show tooltip. This also rejects an unreachable overlay node. The `296ab905` Lineup
+transition guards alone preserve existing visual tooltips inside permanent
+content exclusions; the later static-origin correction below addresses that
+separate path. Permanently setting
 TooltipVisibility to false there would remove the hover feature.
 
 ## Static-origin repair comparison

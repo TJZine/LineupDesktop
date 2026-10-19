@@ -1724,3 +1724,44 @@ adversarial read-only review `studio_clear_topology_review` approved the two-fil
 source/test correction with no actionable findings before integration. It retained
 the required native named-button/AX activation check; widget evidence alone is
 not treated as that acceptance.
+
+
+## 2026-10-18 — Final Pro follow-up acceptance
+
+All six follow-up correction commits were independently reviewed before integration:
+Studio naming `3fed8fd7`, Guide focus `4fdac1ab`, Mini Guide presentation identity
+`22073990`, static tooltip origins `352a74aa`, Guide Now origin `d56a391b`, and
+Studio native-leaf topology `ac995ec5`. Full canonical formatting/analysis and
+1,807 local Dart tests passed on the final product source. The Studio suite passed
+79/79. Mini Guide failed/pending target proof remains controlled-boundary evidence;
+no real network/media failure was induced.
+
+The clean `d56a391b` Release pass verified the known Guide/cast/audio/subtitle
+hover/menu/focus sequences with zero AX failures through Quit. Actual cast-role
+data was unavailable and native track-selection confirmation was not established.
+The clean `ac995ec5` Release pass verified the new named Studio button and native
+accessibility activation clearing its query, discarded the unsaved test draft,
+and quit with zero AX failures. Its real Clear-hover attempt was blocked before
+input by CUA `noWindowsAvailable`; the opened-tooltip regression passed. The prior
+tooltip pass remains attributed to `d56a391b`, whose relevant sources are unchanged.
+Both exact binary/manifest/define identities are in the closing report and private
+`/tmp/lineup-audit/` evidence folders. No picture-quality or spoken VoiceOver
+acceptance is claimed.
+
+The `d56a391b` Windows verification run 39178150109 passed 1,805 Linux tests,
+694 selected Windows Dart tests, stock-engine application compilation and all
+eight native/reference CTests. The final Studio-only Windows
+[run 39179621557](https://github.com/TJZine/LineupDesktop/actions/runs/39179621557)
+passed both jobs: 1,805 Linux tests, 694 selected Windows Dart tests, the stock
+Windows application build and all eight selected native/reference CTests. Its
+verification commit `0cb331f6be11c02f877e9ebfffc39a16ce9bef74` has product `ac995ec5`
+as direct parent and differs only in its isolated narrowed workflow. Live runs
+were checked before dispatch; none was cancelled. Independent final evidence
+review checked the identities/manifests, source equivalence, test/CI logs, native
+observations, privacy and links; no findings remained.
+
+The closing report retains one consolidated human-only checklist and the updated
+fresh GPT Pro review prompt covers the complete immutable range. Underlying
+Flutter update/recovery defects remain upstream proposals, without an engine
+patch or publication. Bounded native passes do not establish general accessibility
+sign-off or physical Windows acceptance.

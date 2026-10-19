@@ -318,3 +318,41 @@ bridge or establish every historical failure's cause. Native equivalent-Lineup
 acceptance is recorded separately in the closing report. Private controls and
 probe logs remain under `/tmp/lineup-audit/m04-static-origins/` and
 `/tmp/lineup-audit/m04-review-round/`.
+
+
+## Final bounded application verification and separate Studio topology
+
+Clean Release candidate `d56a391b545d5d06fd967312023516ea5da25d06` completed a fresh
+native AX pass with zero update-failure messages: Now and Return-to-live hover,
+exact Later invoker restoration/Enter activation through menus with/without a
+visible tooltip, cast-name hover/menu exclusion/restoration, audio title hover/row
+action, subtitle title and Off hover, then normal Quit. Cast-role data was not
+available in the inspected programs, so its proof remains widget/stock-native.
+Native track selection confirmation and spoken output were not established.
+The first historical audit delta remains uncaptured. These passes cover the known
+application triggers and do not repair Flutter's update/recovery implementation.
+Exact build/runtime manifests and private captures are identified in the closing
+report; they are not copied into shared evidence.
+
+That run also exposed a separate M-03 integration defect: Studio's clear-search
+suffix was visibly actionable but missing from native AX despite its Dart label.
+Flutter TextField places `suffixIcon` beneath its own semantics node, which
+absorbs RenderEditable's text-field flag. The macOS delegate maps that node to
+FlutterTextPlatformNode / an NSTextField, whose native representation does not
+forward these Flutter descendant buttons. A suffix boundary or another label
+cannot move the action out of the native leaf. This is a Dart topology correction,
+not another AXTree update rejection.
+
+Candidate `ac995ec58c92ef491098f8a5afcc1da60cd65ad0` places the clear action as a
+semantics sibling in the same trailing position, retaining the InputDecorator
+suffix reservation, density-adjusted interactive width and search focus.
+The root-traversal regression rejects any text-field ancestor before/during
+hover; the old structure fails. Native Release now exposes the named button and
+its accessibility activation clears the query. The test draft was discarded,
+normal Quit completed and the entire log contains zero AX update failures.
+The native Clear-hover attempt was blocked by CUA `noWindowsAvailable` before
+input; opened-tooltip reachability has widget evidence. Earlier cast/track/focus
+runtime results retain their `d56a391b` attribution, with unchanged relevant
+product sources. No engine source, accessibility setting or upstream issue was
+changed. Raw final captures stay under `/tmp/lineup-audit/m04-final-origin-round/`
+and `/tmp/lineup-audit/m04-studio-final-round/`.
