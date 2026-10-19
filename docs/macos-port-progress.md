@@ -2011,3 +2011,19 @@ valid comparison. Combined affected coverage passed 454 tests. Fresh read-only
 review chat `01a15281-6b19-7962-9314-b4d5ad33bb41` found no material issues,
 including the later visual-fixture callback migration. This is Flutter semantics
 and controlled state evidence; native AX acceptance remains separately recorded.
+
+## 2026-10-19 — Pro round four: dismiss an opening menu before Guide Back
+
+The shell's Guide Close/Back decision now honors an existing menu before route
+selection, including the interval before menu autofocus transfers. This repairs
+the captured rapid F2/Escape interleaving under the existing top-overlay Back
+contract; it is not a new product direction. The original menu invoker is retained.
+
+Actual-Tab regressions now distinguish direct, settled-menu and opening-menu
+paths for Return/keypad Enter with matching/no-match queries. Opening-menu checks
+send F2 and Escape without an intervening frame, then assert menu absence, exact
+surviving Clear focus, one clear, useful live search input and no tune. Both new
+opening variants fail original source and pass the correction; settled coverage
+remains. The 454-test affected run and fresh Guide review above cover the combined
+routing/anchor changes. Physical keyboard behavior and older uncaptured failures
+remain in the single final human checklist.

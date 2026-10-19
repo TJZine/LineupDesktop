@@ -294,7 +294,10 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _closeGuide(BuildContext invokerContext, FocusNode invokerFocus) {
-    if (_hasPlaybackSurface) {
+    // A menu can already be opening while focus still belongs to Guide.
+    if (_appMenu != null) {
+      _closeAppMenu();
+    } else if (_hasPlaybackSurface) {
       unawaited(_select(ShellDestination.player));
     } else {
       _openAppMenu(invokerContext, invokerFocus);
