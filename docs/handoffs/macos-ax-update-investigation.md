@@ -588,3 +588,84 @@ independent review. Native Release one-action stopped-Guide Close/menu navigatio
 and four rapid-menu Clear sequences also passed. These do not directly prove
 Flutter root focus in that binary or physical input. The closing report retains
 historical failed background activation and records the new candidate separately.
+
+## Opus follow-up: retirement, structural change and containment
+
+The user supplied the independent Opus implementation handoff after the fourth
+round. Its findings were adjudicated against the pinned source and local probe
+artifacts before implementation. Gate A was then resolved explicitly by the user:
+accept the unlabeled Slider group and its order after the OSD controls. No group
+label was invented. The Player's approved visual geometry remains unchanged.
+
+The retirement refinement is accepted. AnimatedSwitcher moves its previous child
+under ExcludeFocus → ExcludeSemantics → TooltipVisibility without a matching
+stable wrapper; the retiring OSD subtree is remounted under exclusion. This is
+distinct from hiding an already-mounted Slider by fading or excluding a stable
+ancestor. The existing retirement wrapper is preserved in this unit. A separate
+[stock retirement control](../../tool/macos/ax-tooltip-repro/slider_retirement.dart)
+starts with a visible Slider and healthy native AX, then rejects retirement with
+unknown node 13 by default. The local-overlay comparison retires/restores the
+Slider, reverses mid-fade and exposes updated native values without logged AX
+errors. The default's two messages do not establish two independent rejections.
+The [README](../../tool/macos/ax-tooltip-repro/README.md#slider-retirement-remount-discriminator)
+records exact source/binary identities and the logging-only runner difference.
+
+The excluded-leaf resize refinement is also accepted at the outgoing-update
+layer: value changes need not dirty the empty portal leaf, whereas a resize while
+the menu excludes the origin does. The retained regression therefore includes
+that resize and the shell-equivalent real ModalBarrier/focus/exclusion structure.
+The structural recorder forwards every argument in the pinned semantics API;
+its replay includes bridge reparenting and parent-first ordering, destruction,
+pending-child initialization and unreachable-record validation. Two opposing seed
+orders are samples of native unordered-map ordering, not an exhaustive proof.
+There is no event/cache/native/VoiceOver emulation or recovery claim.
+
+The approved mitigation wraps only SliderTheme/Slider in a local
+`Overlay.wrap(clipBehavior: Clip.none)` inside the existing 40-pixel progress
+Stack. The separate 4-pixel visible indicator, progress semantics, styling,
+callbacks and AnimatedSwitcher remain intact. The explicit group/order regression
+pins actual control identities and effective emitted traversal, not allocated IDs.
+New transition and interaction tests cover entry, retirement, reversal, menu
+during entry, resize while excluded, route replacement, other OSD destinations,
+keyboard/drag/hit testing, menu state survival and hidden noninteraction.
+
+The rejected-batch refinement is retained with a narrower source claim than the
+supplied handoff's general atomicity wording. The unknown-node error identified
+here occurs during `ComputePendingChanges`, before the main structural mutation;
+the bridge nevertheless clears that main batch, losing its valid updates too.
+Its reparent prepass is a separate prior operation. Other `Unserialize` failures
+can occur after `UpdateNode` begins mutating, including pending-child completion
+failure. Therefore **not every rejected update is atomic**. There is no established
+automatic full resynchronization after a discarded update, and fixing retained
+`error()` checks alone would not establish recovery. No engine correction or
+upstream publication is included. Historical node 866 remains unattributed.
+
+Exact reviewed product, portable checks, fresh native Release sequences, CI
+identities and remaining acceptance are recorded in the closing report. M-04 and
+overall accessibility acceptance remain open; spoken group/order behavior stays
+in the existing single final human checklist.
+
+The integrated mitigation is product `5c6349d4cf43244da9989fb72f298ac2acb614b0`.
+Its exact canonical Release ran in four fresh processes after healthy native AX:
+entry, dismissal/restoration, menu exclusion with actual window resize, and rapid
+OSD-show/menu opening. All four logs contain zero AXTree/Flutter error messages
+through normal Quit. The resize changed the real outer window from 800×632 to
+1728×1084 and back while the menu remained open; Slider returned afterward.
+CUA native traversal places it after the OSD controls. This is bounded native
+evidence, not a direct observer of bridge return values or notifications.
+
+The rapid native sequence cannot establish the precise entry interleaving:
+observation/click completed at 965/989 ms after show, compared with the ordinary
+350 ms fade. The native bare group's role was not independently extracted:
+Inspector could bind the process, but CUA supplied unusable transformed-thumbnail
+pointer geometry. Exact first-frame interleaving remains controlled Dart proof;
+native group/order and spoken behavior stay open. These are evidence limits, not
+newly claimed native failures. The starting channel, original window size and
+DVR Off were restored, and all test apps/Inspector are closed.
+
+Final focused tests pass 17/17; 198 affected tests and all 1,847 local tests pass
+with the diagnostic assertion-order reuse described in the report. Fresh review
+`01a15549-f33f-79e0-a782-03c26f736941` reconciled the baseline evidence before
+integration. Windows/Linux verification `865c5c3a71981fe17f9312fdf02ee2eb4c464d20`
+passed 1,845 Linux tests, 734 selected Windows tests, stock compilation and all
+eight selected native/reference CTests. This is not physical Windows AX acceptance.

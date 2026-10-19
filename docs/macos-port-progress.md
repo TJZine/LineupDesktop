@@ -2093,8 +2093,8 @@ new group/order assertion present, the final original-source run passes four
 controls and fails thirteen expected cases: eleven unknown-node paths, one
 pending-child menu-restoration path and the old group/order contract. Earlier
 pre-approval assertions passed the original stable-visible case. The corrected
-structure passes all 17 focused tests, including the approved group/order, pointer/keyboard seeking,
-menu barrier exclusion, state survival and hidden noninteraction. Another 198
+structure passes all 17 focused tests, including the approved group/order,
+pointer/keyboard seeking, menu barrier exclusion, state survival and hidden noninteraction. Another 198
 existing affected tests pass; canonical format and analysis are clean. The model
 forwards the full pinned semantics API and samples two opposing bridge seed
 orders; it is not an engine emulator or native notification/VoiceOver proof.
@@ -2112,7 +2112,31 @@ assertion reorder was checked with the final 17-test run. Fresh read-only review
 chat `01a15549-f33f-79e0-a782-03c26f736941` found no remaining material issues;
 its baseline-evidence finding was corrected and independently rechecked before
 integration. Exact canonical Release and Windows verification results are
-recorded in the closing report when completed. M-04 and overall
-accessibility acceptance remain open pending native/human checks. The retained
+recorded in the closing report. M-04 and overall accessibility acceptance remain
+open pending the remaining native/human checks. The retained
 error/event-delivery defect, rejected-batch divergence and historical node 866
 remain separate; this application mitigation includes no engine patch.
+
+### Containment Release and CI verification
+
+The canonical Release built product `5c6349d4cf43244da9989fb72f298ac2acb614b0`.
+Its exact AOT, bundle and runtime identities are recorded in the closing report.
+After the user cleared its current Keychain prompt, four fresh logged processes
+completed DVR-on entry, OSD dismissal/restoration, menu exclusion with an actual
+window zoom/size restoration, and a rapid OSD-show/menu sequence. All four logs
+had zero AXTree/Flutter error messages and no native shutdown timeout. The last
+sequence's observation/click latency exceeded the 350 ms fade, so exact native
+menu-during-entry timing is unverified. Native CUA traversal places Slider after
+controls; the bare group's role was not independently extracted in Inspector.
+These limits, notification/spoken acceptance and historical findings stay open.
+DVR Off, starting channel and original window size were restored; all test apps
+and the controller-opened Inspector are closed. No engine patch was made.
+
+[CI run 39300402918](https://github.com/TJZine/LineupDesktop/actions/runs/39300402918)
+passed 1,845 Linux tests, 734 selected Windows Dart tests, stock Windows compilation
+and all eight selected native/reference CTests. Verification
+`865c5c3a71981fe17f9312fdf02ee2eb4c464d20` is the exact product's direct child,
+differing only in the isolated narrowed workflow, with the new Slider regression
+explicitly selected on Windows. Live runs were checked and none cancelled.
+The closing report retains one final human checklist, including native group/order
+and spoken OSD/menu behavior; CI is not physical Windows AX/playback acceptance.

@@ -3,13 +3,15 @@
 Source: `platform/macos`; audited baseline `fa176087`, reviewed product candidate
 `1b2f64f4eaf584807f70e668a5502ab088a54537`. The audit plan/report were committed
 first as `3cf2cce7`. The latest product candidate is
-`459fd726024a4cf5e40b69ec1cca29ecd2d1dd23`. Results for the earlier seven-fix
+`5c6349d4cf43244da9989fb72f298ac2acb614b0`. Results for the earlier seven-fix
 candidate and the `296ab905` transition mitigation retain their original source
 and binary identities below.
 No main merge, distribution release, signing changes or engine patch was made.
 
 Status: **the application corrections are committed and independently reviewed.
-The latest round passed 1,830 local tests and Windows CI.
+Slider containment passed 1,847 local tests and Windows CI. Four fresh logged
+native Release sequences completed without AXTree error messages, with exact
+entry/menu timing and native group-role extraction still unverified.
 The keyboard investigation
 isolated a rapid menu-focus interleaving and reproduced synthetic Command+A failure
 in a stock Flutter TextField. The first new production AX failure now has an
@@ -432,14 +434,134 @@ chat `01a15289-3744-77d1-a477-b4032e9eb694` before commit `c6d18864`; source,
 native logs, hashes and chronology matched, with no material findings. That
 review did not establish the unverified acceptance conditions above.
 
+## M-04 containment implementation after Opus review
+
+Product **`5c6349d4cf43244da9989fb72f298ac2acb614b0`** implements the mitigation.
+The supplied Opus handoff was adjudicated against current source and the retained
+scratch evidence. The user explicitly approved Gate A: keep the Slider in an
+unlabeled group after the OSD controls. The implementation wraps only the existing
+SliderTheme/Slider in `Overlay.wrap(clipBehavior: Clip.none)`. The progress container,
+visible indicator, progress semantics, theme, callbacks and AnimatedSwitcher
+retirement wrapper are unchanged. No lifetime gating, broad semantics override,
+tooltip policy change or engine patch is included.
+
+The new recorder forwards every argument of the pinned outgoing semantics API.
+Its structural replay models the common bridge prepass and parent-first ordering,
+recursive destruction, pending-child initialization and unknown-node checks. It
+samples two opposing sorted seed orders and flags unsupported disagreements; it
+does not exhaust native unordered-map permutations or model native roles, caches,
+events, notification delivery or recovery. The harness uses real PlayerView and
+the shell-equivalent ModalBarrier/focus/exclusion structure, with forced Dart
+semantics and fake time. These limits are not native AX acceptance.
+
+The final original-source control passes **4** tests and fails **13** as expected:
+eleven first unknown-node transition failures, one pending-child menu-restoration
+failure and one failure of the newly approved group/order contract. Required entry,
+retirement, resize-while-excluded and menu-during-entry controls expose the first
+unknown-node error. Earlier baseline artifacts masked the resize error behind a
+missing-Slider assertion; the diagnostic assertion was moved earlier and distinct
+final before/after logs retained. The corrected structure passes **17 focused
+tests**, including the approved emitted group/order, hit testing, keyboard/drag
+seeking, menu isolation/state survival and hidden noninteraction. **198 existing
+affected tests** also pass, with canonical format/analysis clean.
+
+The full local suite passed **1,847 tests** on the same product and approved
+structure assertions. After the diagnostic-only assertion reorder, the final
+17-test file and its analysis/format checks passed again; the full suite was not
+repeated for that assertion-order correction. Raw logs, exact source hashes and
+`final-diagnostic-evidence.json` remain local under
+`/tmp/lineup-audit/m04-containment-implementation/`.
+
+The independent native retirement discriminator also starts from healthy native
+AX with a visible Slider. Default retirement produces a new unknown-node error;
+the contained fresh process retires/restores, updates native values and reverses
+mid-fade with zero AX error messages through Quit. Native runners redirect stderr
+only; source and binary hashes are in the
+[README](../../tool/macos/ax-tooltip-repro/README.md#slider-retirement-remount-discriminator).
+This supports that bounded stock-widget mechanism without identifying historical
+production node 866 or establishing native notifications/spoken behavior.
+
+The investigation retains the rejected-batch divergence refinement narrowly:
+this unknown-node failure occurs in preflight, but other AXTree failures can occur
+after mutation. The separate retained-error/event-delivery defect remains open;
+correcting one trigger does not establish recovery after an earlier rejection.
+M-04 and overall accessibility acceptance remain open.
+
+Fresh independent read-only review chat
+`01a15549-f33f-79e0-a782-03c26f736941` challenged the recorder/model, exact negative
+controls, other OSD destinations, interaction/paint/focus and common Windows
+bridge implications. It found no remaining material issues after the S5 evidence
+correction, and verified the final source/log identities before integration.
+The full suite passed on the same product and approved structure assertions;
+the final targeted rerun covers the diagnostic-only assertion reorder.
+
+The canonical Release wrapper built `5c6349d4`, version/build `0.1.0` / `1`, with
+full Dart identity `1@5c6349d4cf43244da9989fb72f298ac2acb614b0` present in AOT.
+The 106-entry bundle manifest SHA-256 is
+`681337fe95702d9113cead06a24e554494a020061c35b8be8d666e955dbf01c8`;
+executable SHA-256
+`43fe0b049a0da44b6c1bd2efd35266d18c5e32ade093d07d4b88d8f4175f9496`;
+App.framework SHA-256
+`c2b65189429b5b9924ffb48cc65a09b781fb0fea4e3ae3d8fd7bb7c88f0835b0`.
+Pinned Flutter/framework/engine, arm64 macOS 27.0.1 (26A434) and runtime BUILD-INFO
+SHA-256 `b6b0f67b9d7c3e74e1089db05621c65d1aec850a3326e22f9172515ed2018899`
+are unchanged. The user cleared the current Keychain prompt; later fresh
+processes of the same binary started without another prompt.
+
+[Windows/Linux run 39300402918](https://github.com/TJZine/LineupDesktop/actions/runs/39300402918)
+passed **1,845 Linux tests**, **734 selected Windows Dart tests**, the stock
+Windows application build and all eight selected native/reference CTests:
+`track_list_encoder`, `native_playback_state`, `player_core_contract`,
+`encodable_value_conversion`, `display_dynamic_range`, `display_guardian`,
+`native_player_contract` and `authenticated_reference`.
+Verification `865c5c3a71981fe17f9312fdf02ee2eb4c464d20` is a direct
+child of product `5c6349d4`, differing only in its isolated narrowed workflow.
+The new Slider semantics regression is explicitly included in Windows selection.
+Live runs were checked first, and no active run was cancelled. Completed logs and
+the source identity were inspected. These are portable/build and controlled
+native/reference checks, not physical Windows AX or playback acceptance.
+
+### Fresh native Release checks — `5c6349d4`
+
+Each process began in Guide with healthy native AX before its trigger, without a
+forced Dart semantics handle. The unchanged runner's existing presentation log
+flag was enabled for window facts; stdout/stderr were captured privately.
+
+| Fresh process | Observation through normal Quit |
+| --- | --- |
+| Entry | Actual DVR On in Settings → Guide → tune exposes native Slider; visible OSD traversal places it after the controls. Zero AXTree error messages. |
+| Retirement | Tune → visible OSD/Slider → Escape removes the OSD and native Slider → Return restores both. Zero AXTree error messages. |
+| Menu and resize | Visible OSD → live Lineup menu excludes Player → native window zoom resizes the actual outer window from 800×632 to 1728×1084 while the menu remains open → Escape/Return restores Slider. Original window size restored. Zero AXTree error messages. |
+| Rapid show/menu | After a real tune/dismissal, Return shows OSD and the freshly observed live menu control opens its usable menu. Zero AXTree error messages. Observation finished at 965 ms and click completed at 989 ms after show; the ordinary fade is 350 ms, so **this does not establish menu opening during entry**. |
+
+The resize sequence proves an actual window resize while the menu excludes
+Player, not a live pointer-drag resize or continuous OSD lifetime during the menu;
+the auto-hide timer could run. Exact S5/S6 frame/lifetime interleavings remain
+controlled outgoing-update evidence. CUA's native traversal confirms Slider after
+the controls but does not independently expose the bare group's AXRole.
+Accessibility Inspector bound to the exact process, but no target element was
+selected: the CUA screenshot was an unusable transformed thumbnail for pointer
+geometry. Therefore native group-role extraction and spoken group/order behavior
+remain acceptance steps; no additional label was invented.
+
+All four logs contain zero Flutter `[ERROR:]` messages and no native shutdown
+timeout message. This is bounded log/tree/action evidence, not direct observation
+of every `Unserialize` result or notification delivery/recovery. The starting
+channel, original window size and DVR Off were restored; no timer, debugger,
+Inspector or test app remains running. Raw logs, per-process result manifests,
+exact bundle identity and `native-summary.json` stay private under
+`/tmp/lineup-audit/m04-containment-implementation/`. The single final human
+checklist remains below. M-04, retained-error recovery, rejected-batch divergence
+and historical node 866 remain open.
+
 ## One final human checklist
 
-Run these once on the latest product candidate `459fd726`; record failures with generic descriptions.
+Run these once on the latest product candidate `5c6349d4`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.
 - [ ] Physical left- and right-⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys; verify dirty/modal guards and native fullscreen synchronization.
-- [ ] Spoken VoiceOver names, enabled/disabled states, order and focus through Channels, Now Playing, Guide toolbar, DVR transport and Studio rundown, including exact invoker restoration, canonical labels without duplicate speech (cast name/role and Now), track selected/pending state and subtitle Off; note any loss of the native accessibility tree separately as M-04.
+- [ ] Spoken VoiceOver names, enabled/disabled states, order and focus through Channels, Now Playing, Guide toolbar, DVR transport and Studio rundown, including exact invoker restoration, canonical labels without duplicate speech (cast name/role and Now), track selected/pending state and subtitle Off; inspect the native OSD Slider group role/order, verify it follows the controls and its group announcement is useful, including OSD/menu transitions. Note any loss of the native accessibility tree separately as M-04.
 - [ ] Listen/watch for audio drift during sustained playback and a natural rollover.
 - [ ] Real live resize/minimum size, minimize/restore, Spaces/Stage Manager round trip, and sleep/wake during playback; verify video alignment, state, audio and responsive controls afterward.

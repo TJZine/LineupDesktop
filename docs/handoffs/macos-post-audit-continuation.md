@@ -1,5 +1,40 @@
 # Continue the macOS post-audit fixes — 2026-10-19
 
+## Slider containment update — current implementation
+
+The user supplied the Opus implementation handoff and explicitly approved Gate A:
+the unlabeled Slider group after the OSD controls. Reviewed fix
+**`5c6349d4cf43244da9989fb72f298ac2acb614b0`** wraps only SliderTheme/Slider in
+`Overlay.wrap(clipBehavior: Clip.none)`, preserving approved visuals and the
+existing retirement wrapper. The handoff is retained unchanged in
+`docs/handoffs/macos-m04-containment-implementation-handoff.md`; its pending Gate A
+wording is historical. The progress record and closing report own the decision
+and implemented state.
+
+All 1,847 local tests passed; the final diagnostic assertion-order correction
+was checked by the final 17-test file rerun. Another 198 existing affected tests,
+format/analysis, and fresh independent adversarial review passed. Original-source
+controls establish eleven unknown-node paths, one pending-child path and the
+approved structural departure; see the distinct final logs in
+`/tmp/lineup-audit/m04-containment-implementation/`.
+
+The canonical Release is built with the exact fix identity. Four fresh logged
+native processes completed with zero AXTree errors for bounded entry, retirement,
+menu/actual-window-resize and rapid-show/menu sequences. Exact native first-frame
+menu timing and bare group-role extraction remain unverified; see the closing
+report for the precise observations and limits. The user cleared the current
+Keychain prompt. DVR Off, starting channel and window size were restored, and no
+test app/Inspector remains running. Recheck processes if continuing later.
+
+[CI run 39300402918](https://github.com/TJZine/LineupDesktop/actions/runs/39300402918)
+passed 1,845 Linux tests, 734 selected Windows tests, stock Windows compilation and
+all eight selected native/reference CTests. Verification
+`865c5c3a71981fe17f9312fdf02ee2eb4c464d20` is the
+product's direct child and changes only the isolated workflow, selecting the new
+regression on Windows. No live run was cancelled. M-04 and overall accessibility
+acceptance remain open, including native/human limits, retained-error recovery,
+rejected-batch divergence and historical node 866.
+
 ## Fourth-round update — supersedes the historical starting state below
 
 The supplied GPT Pro report has now been adjudicated against current source and
