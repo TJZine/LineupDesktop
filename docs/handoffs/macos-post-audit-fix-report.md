@@ -3,13 +3,14 @@
 Source: `platform/macos`; audited baseline `fa176087`, reviewed product candidate
 `1b2f64f4eaf584807f70e668a5502ab088a54537`. The audit plan/report were committed
 first as `3cf2cce7`. The latest product candidate is
-`f2b76202625215bd0bcc14aefd1911db49663932`. Results for the earlier seven-fix
+`459fd726024a4cf5e40b69ec1cca29ecd2d1dd23`. Results for the earlier seven-fix
 candidate and the `296ab905` transition mitigation retain their original source
 and binary identities below.
 No main merge, distribution release, signing changes or engine patch was made.
 
-Status: **the requested corrections are committed and independently reviewed.
-The latest round passed 1,819 local tests and Windows CI. The keyboard investigation
+Status: **the application corrections are committed and independently reviewed.
+The latest round passed 1,830 local tests and Windows CI.
+The keyboard investigation
 isolated a rapid menu-focus interleaving and reproduced synthetic Command+A failure
 in a stock Flutter TextField. The first new production AX failure now has an
 outgoing graph capture, with an equivalent stock Slider/zero-opacity reproduction.
@@ -335,14 +336,110 @@ It corroborated the timer-stop record and the post-unlock foreground/menu result
 and confirmed that the documented root-focus anchor gap predates this correction.
 That application gap remains open alongside the runtime verification limits.
 
+## Fourth Pro report: adjudication and application corrections
+
+The newly supplied report was read and adjudicated against current source and
+retained evidence before edits. Its five findings are accepted with these bounds:
+
+| Finding | Decision and owner |
+| --- | --- |
+| P1 excluded Slider portal | Established stock framework/common-desktop-bridge failure. Production correlation remains strong, without exact widget-instance identity. M-04 stays open. |
+| P1 retained AXTree error and notification recovery | Pinned source confirms both ignored `Unserialize` results and early-return event/clearing paths. Native notification recovery remains unverified; engine correction is outside scope. |
+| P2 ready direct tune / blocked selection save | Application defect confirmed: production saves before publishing, while the older blocking helper publishes first. Fixed using the existing requested identity model and a real-store gate. |
+| P2 rapid Escape / opening menu | Application defect under the existing top-overlay Back contract, not an unresolved design choice. Fixed in the shell's existing Guide decision. |
+| P2 context-null Close / stale availability | Application-owned invocation/timing defects, distinct from AX rejection and the removed origin flag. Fixed with an explicit Close anchor and live availability. |
+
+No new defect was established in the retained observed-pause correction,
+pending-intent toggle, step serialization, existing represented-program successor,
+Clear topology, persistent focus or feature-preserving tooltip repairs. Synthetic
+Command+A remains a compatibility condition between the captured event shape and
+the pinned embedder; no application select-all workaround was added. Duplicate
+spoken tooltip information remains a human speech question, not a demonstrated
+duplicate announcement. Earlier positive failures and original binary identities
+are preserved above.
+
+| Commit | Correction and regression evidence | Independent review |
+| --- | --- | --- |
+| `1a3cf7d3` | Direct tuning uses its requested identity before persistence, preserving step precedence/error/orphan behavior. Tune identity/overlay are coherent before display-hold retirement notifies. Actual store-gated tests retain committed A while current/next/Mini Guide present ready B, then check success, paused P/next Q, supersession and failed-save Retry. Four new regressions fail original source for stale identity/overlay. | Fresh `01a15281-65ac-7a00-a046-dbb6477ecc2d`: no material findings. |
+| `ca07e41c` | Close supplies its own mounted context/persistent node; keyboard retains its actual surviving invoker with a Guide fallback. The shell reads current availability. Corrected root-focus CURRENT-node semantics tap and Close/Escape before rebuild all fail original source at the missing-menu assertions, then pass. | Fresh `01a15281-6b19-7962-9314-b4d5ad33bb41`: no material findings, including actual visual-fixture callback migration. |
+| `459fd726` | Existing/opening menu dismissal wins before Guide route selection. Real-Tab tests distinguish direct, settled and no-frame opening-menu timing for both Enter keys and matching/no-match queries, exact restoration, one clear, useful input and no tune. Both new opening variants fail original source, then pass; settled coverage remains. | Same fresh Guide review covers the coherent routing change before integration. |
+
+The first root/live test attempt failed harness setup (root request descended to
+remembered focus; a tooltip finder was cast as IconButton; semantics cleanup ran
+too late). Those failures are excluded from product evidence. Corrected controls
+use `requestScopeFocus`, the actual button, and in-test handle disposal. Corrected
+affected suites passed **454 tests**; canonical formatting, analysis and all
+**1,830 local macOS tests** passed. Logs stay private under
+`/tmp/lineup-audit/pro-round4/`.
+
+[Windows/Linux run 39201999751](https://github.com/TJZine/LineupDesktop/actions/runs/39201999751)
+passed **1,828 Linux tests**, **717 selected Windows Dart tests**, the stock Windows
+application build and all eight selected native/reference CTests:
+`track_list_encoder`, `native_playback_state`, `player_core_contract`,
+`encodable_value_conversion`, `display_dynamic_range`, `display_guardian`,
+`native_player_contract` and `authenticated_reference`.
+Verification `3ba32122ffad843c037e58c87ab2340e9f7e2e94` is the direct
+child of product `459fd726024a4cf5e40b69ec1cca29ecd2d1dd23`, differing only in its
+narrowed verification workflow. Live runs were checked first; no run was cancelled.
+The completed logs and source identity were inspected. These are portable/build
+and controlled native/reference results, not physical Windows acceptance.
+
+### Canonical Release observations — `459fd726`
+
+Built with `dart tool/macos/build_app.dart build --release`, pinned Flutter 3.47.7 /
+Dart 3.13.5, unchanged framework/engine and arm64 macOS 27.0.1 (26A434).
+Bundle version/build is `0.1.0` / `1`; its AOT binary contains canonical Dart identity
+`1@459fd726024a4cf5e40b69ec1cca29ecd2d1dd23`. The 106-entry bundle manifest SHA-256
+is `cdb224d18a06897dcf1f1341461d0ead53b5ae7856adc3ed62410e10025861fe`, executable
+SHA-256 `db8348d9c21acf0d2a8ef14d8f3b1d067251d293803cc0d52ac340b0e47306c7`.
+Runtime BUILD-INFO SHA-256 remains
+`b6b0f67b9d7c3e74e1089db05621c65d1aec850a3326e22f9172515ed2018899`.
+
+The user cleared the current Keychain prompt; startup then completed. One live
+native AX Close in stopped Guide opened the usable menu with Player unavailable;
+Tab/Return reached Channels. Four actual-Tab rapid F2/Escape/Clear sequences
+passed: Return and keypad Enter, matching and no-match synthetic queries. Search
+cleared and retained a usable live input connection. A normal direct tune then
+opened Player and Mini Guide represented the same channel as watching. No blocked
+store was induced in the real application. Normal Quit ended the exact Release
+process; no test timer or altered DVR setting was left behind.
+
+These are bounded native observations. They do not establish the exact Flutter
+root-focus condition or absence of an intervening OS frame; controlled widget
+regressions establish those cases. No new product outgoing trace or complete
+stderr capture was taken, so this sequence carries no zero-AX-error or native
+notification-recovery claim. Physical keyboard and spoken/window acceptance remain
+in the single checklist below. The old failed background Close remains recorded.
+
+### M-04 experiment and second opinion
+
+No Lineup Slider patch was chosen. The isolated finite-height comparison in
+[`slider_containment.dart`](../../tool/macos/ax-tooltip-repro/slider_containment.dart)
+reproduces default hidden-mount AX rejection after a healthy baseline, with a
+healthy fresh visible control. Local `Overlay.wrap` controls logged zero errors
+for the bounded hidden/visible, fade, exclusion/value-update/restoration, rapid
+reversal and removal sequences recorded in the
+[README](../../tool/macos/ax-tooltip-repro/README.md#local-slider-overlay-containment-comparison).
+It uses stock widgets/framework/engine with native stderr redirection only.
+This is distinct from earlier uninstrumented controls, and not complete mitigation
+evidence: outgoing graph, direct notifications, keyboard/drag/focus/geometry,
+menu/route/DVR transitions and integrated acceptance remain unverified.
+The [Opus 5.5 handoff](macos-m04-opus-review-handoff.md) retains the hypothesis,
+controls, uncertainty and requested independent challenge. M-04 and overall
+accessibility acceptance remain open; no engine change or upstream publication.
+The retained experiment/evidence was independently reviewed in fresh read-only
+chat `01a15289-3744-77d1-a477-b4032e9eb694` before commit `c6d18864`; source,
+native logs, hashes and chronology matched, with no material findings. That
+review did not establish the unverified acceptance conditions above.
+
 ## One final human checklist
 
-Run these once on the latest product candidate `f2b76202`; record failures with generic descriptions.
+Run these once on the latest product candidate `459fd726`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.
-- [ ] Physical ⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys; verify dirty/modal guards and native fullscreen synchronization.
-- [ ] Spoken VoiceOver names, enabled/disabled states, order and focus through Channels, Now Playing, Guide toolbar, DVR transport and Studio rundown, including exact invoker restoration, canonical labels without duplicate speech and track selected/pending state; note any loss of the native accessibility tree separately as M-04.
+- [ ] Physical left- and right-⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys; verify dirty/modal guards and native fullscreen synchronization.
+- [ ] Spoken VoiceOver names, enabled/disabled states, order and focus through Channels, Now Playing, Guide toolbar, DVR transport and Studio rundown, including exact invoker restoration, canonical labels without duplicate speech (cast name/role and Now), track selected/pending state and subtitle Off; note any loss of the native accessibility tree separately as M-04.
 - [ ] Listen/watch for audio drift during sustained playback and a natural rollover.
 - [ ] Real live resize/minimum size, minimize/restore, Spaces/Stage Manager round trip, and sleep/wake during playback; verify video alignment, state, audio and responsive controls afterward.

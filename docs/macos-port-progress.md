@@ -2067,3 +2067,12 @@ Flutter root focus or guarantee no intervening OS frame. No complete product
 stderr trace or notification-recovery claim is made. Normal Quit ended the exact
 Release process; no test timer, altered DVR setting or test app remains running.
 Physical/spoken/window checks remain in the report's single final human checklist.
+
+[Windows/Linux run 39201999751](https://github.com/TJZine/LineupDesktop/actions/runs/39201999751)
+completed successfully: 1,828 Linux tests, 717 selected Windows Dart tests, stock
+Windows compilation and all eight selected native/reference CTests passed.
+Verification `3ba32122ffad843c037e58c87ab2340e9f7e2e94` is a direct child of product
+`459fd726`, differing only in the isolated narrowed workflow. Live runs were checked
+before dispatch and no run was cancelled. Logs and exact identities are retained
+privately; the closing report names the executed tests and physical limits.
+Later reproduction/documentation inputs do not change the application candidate.

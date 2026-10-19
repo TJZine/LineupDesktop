@@ -1,5 +1,43 @@
 # Continue the macOS post-audit fixes — 2026-10-19
 
+## Fourth-round update — supersedes the historical starting state below
+
+The supplied GPT Pro report has now been adjudicated against current source and
+evidence. Three accepted application defects are fixed and independently reviewed
+before separate conventional commits: direct-tune presentation identity
+`1a3cf7d3`, explicit Guide Close invocation/live availability `ca07e41c`, and
+opening-menu dismissal priority `459fd726`. The latest application candidate is
+**`459fd726024a4cf5e40b69ec1cca29ecd2d1dd23`** on `platform/macos`.
+
+Corrected original-source negative controls fail the intended assertions; 454
+affected checks and all 1,830 local macOS tests pass, with canonical format and
+analysis clean. [CI run 39201999751](https://github.com/TJZine/LineupDesktop/actions/runs/39201999751)
+passed 1,828 Linux tests, 717 selected Windows tests, stock Windows compilation and
+all eight selected native/reference CTests. Its verification commit
+`3ba32122ffad843c037e58c87ab2340e9f7e2e94` is the product's direct child, differing
+only in the narrowed workflow. No active run was cancelled. The closing report
+records exact canonical Release hashes, bounded native Close/Clear/direct-tune
+checks, the resolved current Keychain prompt and cleanup. No test app remains
+running. Recheck processes if continuing later.
+
+M-04 and overall accessibility acceptance remain open. The two framework/bridge
+findings are accepted with existing attribution/recovery limits; no engine patch
+or Lineup Slider mitigation was integrated. A separate finite-height comparison
+in `tool/macos/ax-tooltip-repro/slider_containment.dart` supports local overlay
+containment for its bounded native sequences but leaves the full acceptance
+matrix unverified. Reproduction/evidence commit **`c6d18864`** changes no product
+inputs. The user requested a handoff for a possible Opus 5.5 second opinion:
+`docs/handoffs/macos-m04-opus-review-handoff.md`. Read any subsequently supplied
+review and adjudicate it before choosing a mitigation; do not infer an Opus result.
+
+The user additionally instructed: use the shared
+`orchestrate-implementation-chats` skill for delegated work/reviews. The fourth
+round used separate implementation chats and fresh read-only review chats under
+that skill; the controller retained Git integration, builds, CI and app ownership.
+Keep the standing constraints below and the existing single final human checklist.
+Historical paragraphs below describe their original source states; the new
+closing-report fourth-round section and this update own the current status.
+
 Use this handoff alongside the **new GPT Pro review report supplied by the user**.
 That new report was not available to the outgoing controller. Do not assume it
 matches an earlier report or treat its recommendations as established facts.
