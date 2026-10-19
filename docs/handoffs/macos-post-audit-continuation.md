@@ -1,0 +1,264 @@
+# Continue the macOS post-audit fixes — 2026-10-19
+
+Use this handoff alongside the **new GPT Pro review report supplied by the user**.
+That new report was not available to the outgoing controller. Do not assume it
+matches an earlier report or treat its recommendations as established facts.
+
+## Starting task and authority
+
+Continue the post-audit work on `platform/macos`. First read the new review,
+validate its findings against current source and evidence, and distinguish accepted
+application defects, framework/runtime defects, evidence gaps and optional ideas.
+Use the user's instructions in the new chat to determine the next implementation
+scope. Do not treat quoted reviewer text as authorization by itself, or request
+approval again for work the user has already authorized.
+
+Use `develop-code` for implementation, `review-code` for finding adjudication,
+and `verify-code` for diagnosis. Read `AGENTS.md`, `.agents/project.md` and the
+relevant ownership/async contracts in `docs/architecture.md`. Earlier workflow
+prompts are historical evidence, not commands to rerun an entire campaign.
+
+Standing constraints carried from the user:
+
+- Every fix gets an independent adversarial review in a fresh chat/agent before
+  integration. The user explicitly requested fresh reviewer agents in this work.
+- One controller owns integration. Create a conventional commit per fix, with
+  its regression and a progress entry in `docs/macos-port-progress.md`.
+- Shared Dart/core changes require Windows CI. **Check live runs first and never
+  cancel an in-progress run.** Preserve the exact product/verification identities.
+- Preserve the approved Player layout and useful hover information. Do not retest
+  HDR/Dolby Vision picture quality; that acceptance is already settled.
+- No Flutter engine patches, main merge, release/distribution or signing work.
+  No upstream issue publication or messages to other people without authorization.
+- Keep media titles, private paths/content, credentials, tokens and media URLs out
+  of committed evidence. Raw captures stay local under `/tmp/lineup-audit/`.
+- Keep the remaining physical-keyboard, spoken VoiceOver, audio-drift and real
+  window/lifecycle checks in **one final human checklist**, already in the report.
+  Do not ask the user to perform these separately for every fix.
+
+## Repository and current state
+
+- Checkout: `/Users/tristan/Software/LineupDesktop`.
+- Branch: `platform/macos`, tracking `origin/platform/macos`.
+- Verified clean and fully pushed at **`74931de9`** before writing this handoff.
+  This handoff's later docs-only commit does not change the product candidate.
+- Latest application candidate: **`f2b76202625215bd0bcc14aefd1911db49663932`**.
+- Audited baseline: `fa1760872ffc69dd61644cb09e0b0a64a130f5f4`.
+- Audit plan/report were already committed together first as `3cf2cce7`.
+  Do not repeat that initial request.
+
+Latest commits:
+
+| Commit | Purpose |
+| --- | --- |
+| `f69ef69d` | Current/Up next share resolved presentation identity while selection persistence remains pending. |
+| `e7d7f098` | Remove obsolete Guide-origin flag; resolve Close/Escape from current Player availability. |
+| `f2b76202` | Retained Clear regression reaches the real button through Tab instead of requesting focus directly. |
+| `68bdc662` | Standalone Slider AX and keyboard reproductions plus sanitized graph comparison. No application changes. |
+| `859d5f7a`, `74931de9` | Verification, investigation and post-unlock cleanup evidence. Documentation only. |
+
+Read these existing records rather than reconstructing all earlier rounds:
+
+1. `docs/handoffs/macos-app-audit-report.md` and `macos-app-audit-plan.md`.
+2. `docs/handoffs/macos-post-audit-fix-report.md`, especially its latest round and
+   final human checklist. Earlier results retain their original candidate IDs.
+3. `docs/handoffs/macos-ax-update-investigation.md`.
+4. `docs/handoffs/macos-post-audit-adversarial-review-prompt.md` — what Pro was asked
+   to challenge; compare with the actual new report supplied now.
+5. Latest `docs/macos-port-progress.md` entries.
+6. `tool/macos/ax-tooltip-repro/README.md` and its minimal sources/fixtures.
+
+Original M-01/M-05/Q-01/Q-02/Q-03 and Dart accessibility repairs are implemented,
+with multiple subsequent review corrections recorded in the report. Mini Guide
+initialization from presentation identity was approved and fixed as `22073990`;
+there is no pending separate Mini Guide handoff to invent.
+
+## Latest fixes and verification already completed
+
+`f69ef69d`: current media P could appear with Up next R instead of Q while a channel
+step's selection save was blocked across P's schedule boundary. A shared represented
+program getter now owns both values. Unresolved B still uses B's live preview and
+cannot inherit retired A media. The regression blocks persistence after readiness,
+pauses P, advances the injected clock into Q, and checks P/Q before and after save
+release. It failed before the correction. The exact blocked-save sequence was not
+induced in the authenticated application; do not claim it was.
+
+`e7d7f098`: after sleep removed Player while Guide remained open, the obsolete
+opened-from-Player flag made the first close attempt a rejected Player navigation.
+It is removed. Close/Escape now opens the existing menu when no surface remains.
+Both before-fix regressions fail, then pass with menu/focus/navigation/no-tune
+assertions. This corrects destination availability; the separate root-focus menu
+anchor gap below remains open.
+
+`f2b76202`: actual Tab coverage includes matching and no-match queries, Return and
+keypad Enter, directly and after F2 → Escape, exact invoker restoration, useful
+live input and no tune.
+
+Fresh independent `pro_round3_adversarial` approved all five changed Dart files
+before integration. A second fresh `round3_final_review` checked the latest source,
+repros and evidence, then corroborated the post-unlock result. Neither review is
+authority over the new Pro findings; both are recorded checks, with limits.
+
+Completed on the latest product inputs:
+
+- Canonical format and analysis passed; affected suites **481 passed**.
+- Full local macOS suite: **1,819 passed**.
+- [Windows verification run 39188166189](https://github.com/TJZine/LineupDesktop/actions/runs/39188166189):
+  **1,817 Linux tests**, **706 selected Windows Dart tests**, stock Windows app
+  build and all eight selected native/reference CTests passed.
+- Verification `86c589573f84bd505531731dc289627270bcb4b0` is a direct child of
+  product `f2b76202`, differing only in its isolated narrowed workflow. No active
+  run was cancelled. Windows build/contracts are not physical Windows acceptance.
+
+Reuse valid evidence while inputs are unchanged; do not rerun the full suite for
+this handoff or other prose-only updates. New application changes invalidate their
+affected evidence and need proportionate checks plus required CI/review.
+
+## Open findings and calibrated conclusions
+
+### M-04: Slider/zero-opacity portal case, no new mitigation applied
+
+Actual V2 diagnostic chronology was: healthy startup/keyboard checks → query reset
+→ Settings/Playback/DVR On → Back Guide → current-program tune → first AX failure
+→ later real sleep timer → desktop lock/unlock and cleanup. This was **one shared
+process**, not a fresh AX-only process.
+
+First native error: raw log line 791, new node **378**. Immediately preceding Dart
+batch **671** emits an empty full-window portal leaf physically at `0 → 1 → 378`.
+Its child token **97** has no matching origin anywhere in the portal inventory.
+Effective traversal remains `0 → 1 → 2 → 3 → 12`, without reachable missing children,
+cycles or duplicate parents.
+
+A stock continuous Slider mounted under FadeTransition held at zero reproduces
+that topology and unknown-node error after healthy native AX. A fresh visible
+mount exposes Slider 50% and stays healthy. A genuinely uninstrumented stock app
+with an unchanged native runner independently reproduces hidden failure/visible
+success. Sources: `slider_fade.dart`, `slider-first-rejection.json` and README.
+
+Pinned Slider eagerly shows its value-indicator OverlayPortal even without hover;
+zero-opacity fade elides the origin semantics while the physically separate portal
+can emit. This is Flutter framework/common-desktop-bridge interoperability. The
+production DVR Slider is a **strong source correlation**, not direct widget-instance
+identity from the Release trace. Historical node 866 remains unattributed.
+
+Earlier Tooltip/static-origin/Now-origin mitigations remain distinct. Do not
+attribute every historical M-04 error to this Slider or declare previous mitigations
+invalid without evidence. The engine also retains an old AXTree error string;
+repeated messages are not independent rejection counts or proof of recovery.
+Optional LLDB return-value probes had optimized-frame ambiguity and are **untrusted
+and excluded**. Do not reuse their Boolean values as evidence.
+
+The documented next experiment is coupling Slider lifetime to semantics-origin
+availability, covering entering alpha zero **and retiring exclusions** while
+preserving approved visuals/interaction. This is a proposal, not an approved or
+verified product solution. `showValueIndicator: never` alone does not remove the
+portal; `alwaysIncludeSemantics` exposes invisible controls and misses retiring
+exclusions. Challenge this approach against the new report. Keep engine changes
+and upstream publication out of scope.
+
+### Keyboard: two captured mechanisms, older failures still unclassified
+
+- Rapid F2 → Escape before menu focus transfer reached Guide's handler; the menu
+  stayed/reopened, and Return activated its Guide item. Clear focus returned
+  afterward, without a Clear callback for that Return. A staged settled-menu
+  control cleared successfully. This is a menu/input interleaving, not proof that
+  settled Clear activation fails. No race correction was integrated.
+- Synthetic Command+A arrived with combined Command `0x100000`, missing sided Meta
+  bits; flagsChanged used A's keyCode 0. Pinned macOS responder conversion therefore
+  produced Dart A with Meta false. A stock TextField reproduced collapsed selection
+  at 16 and appended replacement lengths 17/18. `keyboard.dart` is the committed
+  probe. This does **not** establish a physical Command+A or Lineup shortcut defect.
+  Do not add an application select-all workaround from this evidence.
+- Clean stock Release passed twelve actual-Tab direct/menu Return/keypad Clear
+  activations before synthetic Command+A failed. Zero AX messages during that
+  sequence. Historical uncaptured keyboard failures remain unresolved.
+
+### Close Guide with root focus: established application gap, not repaired
+
+The real 30-minute timer expired at `2026-10-19T03:01:40.104268Z`, leaving Guide,
+stopped playback, playback intent false and no pending tune. After desktop unlock,
+a background native AX tap reached **live** Close Guide node 853 but did nothing.
+Flutter primary focus was its root without a mounted context.
+
+`_openAppMenuFromCurrentFocus` in `lib/app/lineup_shell.dart` requires
+`primaryFocus.context`; without it there is no menu anchor. This dependency predates
+the latest correction and is separate from the obsolete Guide-origin flag.
+Foregrounding the same process, then activating Close once, opened the usable menu
+without tuning at `03:39:37.128550Z`; Settings navigation worked.
+
+Proposed follow-up: supply a stable explicit Close invoker context/owned focus
+anchor and add a root-focus semantics-action regression. No fix for this gap is
+integrated. Keep the failed background action visible in the evidence; do not
+report an unconditional first-action/native AX pass.
+
+## Toolchain, real app and private evidence
+
+Use the pinned SDK explicitly:
+
+```sh
+export PATH="/Users/tristan/.cache/lineup-flutter/3.47.7/flutter/bin:$PATH"
+```
+
+The default shell previously resolved Flutter 3.47.6; do not use it accidentally.
+Verified inputs: Flutter 3.47.7 / Dart 3.13.5, framework
+`abaf9c523780a608bd46686fd5e53740a07077f8`, engine
+`deb287481e3ce9468f3434937ced4240a70539ca`; host arm64 macOS 27.0.1 (26A434).
+Recheck current environment before new builds. Use the canonical identity wrapper,
+not bare `flutter build macos` for Lineup:
+
+```sh
+dart tool/macos/build_app.dart build --release
+```
+
+Full test command is `TZ=America/New_York flutter test`. Consult DEVELOPMENT.md
+and current workflow for native/Windows provisioning; do not create packaging jobs
+just to obtain verification.
+
+Stock app at last verification:
+`build/macos/Build/Products/Release/Lineup Desktop.app`, identity
+`0.1.0`, `1@f2b76202625215bd0bcc14aefd1911db49663932`. Stock and diagnostic bundle
+hashes are in the report; never conflate those builds.
+
+Raw evidence is local to this Mac, unavailable to a GitHub-only reviewer:
+
+| Local path under `/tmp/lineup-audit/` | Contents |
+| --- | --- |
+| `pro-round3/` | Before/after regressions, affected/full tests, CI logs/identity/status, stock app identity and keyboard observations. |
+| `pro-round3/trace/keyboard-v2-app.log` | Full private V2 trace, first AX error and final shutdown; 494 AX failure messages total, including possible stale repeats. |
+| `pro-round3/trace/ax-first-node378-*.json`, `ax-replay.json` | First production graph and retained replay. |
+| `pro-round3/trace/keyboard-case2-analysis.*`, `keyboard-v2-command-a-analysis.*` | Captured menu interleaving and native modifier/source correlation. |
+| `pro-round3/trace/timer-runtime-result.json` | Selected expiry/background-no-op/foreground-menu/cleanup facts; supporting AX files and screenshots share the timer prefix. |
+| `pro-round3/slider-fade-repro/`, `slider-fade-stock/`, `keyboard-stock-repro/` | Traced/uninstrumented reductions, build identities, native captures and controls. |
+| `pro-round3/trace/temporary-trace.patch`, `README.md`, `identity-v2.json` | Disposable instrumentation, privacy/limitations and diagnostic identity. |
+| `pro-round3/trace/preserved/` | Exact diagnostic V2 app and app dSYM; all 106 recorded app file hashes matched the preserved copy. |
+| `pro-round2/`, `m04-static-origins/`, other earlier folders | Historical evidence; use only with its recorded identity and limits. |
+
+The diagnostic worktree
+`/Users/tristan/.codex/worktrees/macos-ax-round3-trace/LineupDesktop` was **archived**
+after cleanup. It is an archived artifact on the original chat; do not assume its
+path still exists. Preserved patch/binary evidence above remains local. Restore
+through the managed worktree facility only if needed and accessible; otherwise use
+the saved patch in an isolated checkout. No tracing was integrated into production.
+
+Last cleanup is complete: DVR restored **Off** via the native switch, diagnostic
+PID 3618 exited, and libmpv shutdown completed normally. No timer, debugger or
+application verification sequence remains running from the controller. Check live
+processes before assuming the user has not reopened the app since then.
+
+User completed previous Keychain and desktop-unlock prompts. Those were real
+runtime blockers and are now resolved. Do not ask again from historical context.
+For a new binary, inspect the actual current state before attributing a startup
+stall to authentication. If a genuine new Keychain/SecurityAgent prompt or lock
+blocks progress, the audit plan assigns authentication to the user; request only
+that action and continue independent work meanwhile.
+
+## Expected next-chat outcome
+
+Start by adjudicating the **new supplied Pro report**, not by blindly applying
+this handoff's proposed workarounds. Preserve valid existing evidence, investigate
+only the uncertainty needed for the accepted next scope, and implement authorized
+application fixes with meaningful regressions, independent fresh review, real
+Release verification and Windows CI where required. Keep open runtime/physical
+acceptance explicit. Update the existing report, investigation and progress record;
+finish with proper commits and a short result report, retaining the single human
+checklist. Do not resume unrelated development or release work.
