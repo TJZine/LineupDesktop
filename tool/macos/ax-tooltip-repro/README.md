@@ -140,3 +140,67 @@ the unreachable record to Chromium's stricter `ui::AXTree` validator.
 
 See the linked investigation for source ownership, controls, exact verification
 results, production-evidence limits and the proposed upstream report boundary.
+
+
+## Slider entering at zero opacity
+
+Copy `slider_fade.dart` into a fresh disposable stock project's `lib/main.dart`
+and use the pinned analysis/Release commands above. The committed source contains
+only stock Material widgets and an ordinary animation controller: no tracing,
+native observer, forced semantics, Lineup imports or engine modification.
+
+Start a fresh process and activate native AX. Confirm the five buttons are
+accessible before selecting **Show hidden slider**. That mounts a continuous
+Slider under FadeTransition held at zero. The first native error names a new
+unreachable full-window empty leaf. Restart before the control: **Show visible
+slider** exposes a native Slider at 50% and produced zero AX errors through Quit.
+The earlier traced visible-mount → Fade out control also had zero errors after
+settling. Do not treat later messages after a failure as independent rejections.
+
+Both a traced prototype and a genuinely uninstrumented stock runner reproduced
+the hidden-mount failure after healthy native AX. The uninstrumented failing log
+contained two messages through Quit; its separate fresh visible control had zero.
+The traced prototype supplies the graph, not the committed uninstrumented source.
+Private logs/AX snapshots/manifests stay in `/tmp/lineup-audit/pro-round3/`.
+The same Flutter/framework/engine/host identities above apply:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Committed uninstrumented `slider_fade.dart` | `2925064e9b23769c83d4ee0d3818db09867963dd2af7b1214ba3c2d815b4ad07` |
+| Uninstrumented App.framework binary | `963ea5ba748f688cf113baed05e23bd11b9e424f86dc0902174b6188f3252156` |
+| Traced prototype App.framework binary | `a467acd63b8b271dace824fe278f4708b697f0573c24d2f02563aee42d0aa0af` |
+| Shared stock FlutterMacOS engine binary | `4c12bce183913ecdb95335257cce0cd0bfd27b37a7ff4d42f7a51203e2382445` |
+
+[slider-first-rejection.json](slider-first-rejection.json) compares the captured
+production graph (new node 378/portal token 97) with the traced stock graph (new
+node 9/token 1). Both add a physically attached portal leaf whose effective origin
+is missing. These are sanitized graph observations, not a native replay payload.
+The production widget identity is a strong source correlation with the entering
+DVR Slider; the Release trace does not directly name that widget instance.
+
+This is another stock framework/desktop-bridge interoperability case. It does
+not establish every historical M-04 cause. Do not apply alwaysIncludeSemantics
+or remove visual animation globally merely to avoid the error. The investigation
+records a proposed Slider-lifetime experiment and its hidden-control/retirement
+risks; no application workaround for this new trigger is included.
+
+## Synthetic Command+A control
+
+`keyboard.dart` is an independent MaterialApp → Scaffold → TextField probe with a
+synthetic 16-character seed. Copy it into the stock project's `lib/main.dart`.
+Its pass-through HardwareKeyboard handler logs only lengths, selection, focus,
+modifier state and allowlisted diagnostic key IDs; it does not log typed text.
+
+Focus the field, request synthetic Command+A through the same automation surface,
+then type two synthetic replacement characters. In the observed stock probe,
+selection stayed collapsed at 16 and input appended to lengths 17/18; Dart's A
+had Meta false. A temporary native pass-through observer separately recorded
+combined-only Command flags, missing sided bits and keyCode 0 for flagsChanged.
+That observer is not needed in this source to observe selection/Dart state, but
+its native correlation is not supplied by this committed probe alone.
+
+This reproduces outside Lineup and supports a synthetic-event/embedder conversion
+compatibility diagnosis. Physical Command+A was not captured; it remains a human
+check. No Lineup shortcut or engine workaround is proposed. See the investigation
+for the pinned responder's sided-modifier mechanism and the distinct rapid menu
+focus race; do not classify all historical Clear failures from this one control.

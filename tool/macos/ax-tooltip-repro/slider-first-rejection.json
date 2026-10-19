@@ -1,0 +1,294 @@
+{
+  "qualification": "Captured first native error and preceding outgoing graphs. No trusted native Unserialize Boolean is used. IDs/tokens and window dimensions vary. Sanitized graph comparison, not native engine replay input.",
+  "production": {
+    "baselineReachableIds": [
+      0,
+      1,
+      2,
+      3,
+      12
+    ],
+    "sequence": 671,
+    "utc": "2026-10-19T02:27:57.834502Z",
+    "phase": {
+      "route": "player",
+      "stage": "ready",
+      "menuOpen": false,
+      "selectionPending": false,
+      "tuning": false,
+      "playbackIntent": true,
+      "playerState": "playing",
+      "overlay": "osd",
+      "overlayGeneration": 6,
+      "fullscreen": false
+    },
+    "firstLoggedError": {
+      "rawLine": 791,
+      "message": "Failed to update ui::AXTree, error: 378 will not be in the tree and is not the new root"
+    },
+    "updatedIds": [
+      1,
+      378,
+      12
+    ],
+    "unreachableNewNode": {
+      "id": 378,
+      "children": [],
+      "hitChildren": [],
+      "traversalParent": -1,
+      "role": "none",
+      "rect": [
+        0.0,
+        0.0,
+        1000.0,
+        750.0
+      ],
+      "labelCategory": null,
+      "labelLength": 0,
+      "valueLength": 0,
+      "hintLength": 0,
+      "tooltipLength": 0,
+      "tooltipCategory": null,
+      "actions": 0
+    },
+    "physicalNode": {
+      "view": 0,
+      "id": 378,
+      "reasons": [
+        "portal",
+        "emitted"
+      ],
+      "parent": 1,
+      "attached": true,
+      "physicalChildren": [],
+      "merged": false,
+      "mergeDescendants": false,
+      "portalParent": 0,
+      "portalChild": 97,
+      "dataPortalParent": 0,
+      "dataPortalChild": 97,
+      "labelCategory": null,
+      "labelLength": 0
+    },
+    "physicalParentChildren": [
+      2,
+      378
+    ],
+    "emittedPhysicalParentTraversalChildren": [
+      2
+    ],
+    "emittedPhysicalParentHitChildren": [
+      2
+    ],
+    "matchingOriginIds": [],
+    "retainedReachableAfter": [
+      0,
+      1,
+      2,
+      3,
+      12
+    ],
+    "rootTraversalGraphBefore": {
+      "0": [
+        1
+      ],
+      "1": [
+        2
+      ],
+      "2": [
+        3
+      ],
+      "3": [
+        12
+      ],
+      "12": []
+    },
+    "rootTraversalGraphAfter": {
+      "0": [
+        1
+      ],
+      "1": [
+        2
+      ],
+      "2": [
+        3
+      ],
+      "3": [
+        12
+      ],
+      "12": []
+    },
+    "physicalAncestry": [
+      0,
+      1,
+      378
+    ]
+  },
+  "standaloneHidden": {
+    "baselineReachableIds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "sequence": 5,
+    "utc": "2026-10-19T02:35:06.663104Z",
+    "phase": {
+      "sliderMounted": true,
+      "opacity": 0.0
+    },
+    "firstLoggedError": {
+      "rawLine": 8,
+      "message": "Failed to update ui::AXTree, error: 9 will not be in the tree and is not the new root"
+    },
+    "updatedIds": [
+      1,
+      9,
+      8,
+      7,
+      6,
+      5,
+      4
+    ],
+    "unreachableNewNode": {
+      "id": 9,
+      "children": [],
+      "hitChildren": [],
+      "traversalParent": -1,
+      "role": "none",
+      "rect": [
+        0.0,
+        0.0,
+        800.0,
+        600.0
+      ],
+      "labelCategory": null,
+      "labelLength": 0,
+      "valueLength": 0,
+      "hintLength": 0,
+      "tooltipLength": 0,
+      "tooltipCategory": null,
+      "actions": 0
+    },
+    "physicalNode": {
+      "view": 0,
+      "id": 9,
+      "reasons": [
+        "portal",
+        "emitted"
+      ],
+      "parent": 1,
+      "attached": true,
+      "physicalChildren": [],
+      "merged": false,
+      "mergeDescendants": false,
+      "portalParent": 0,
+      "portalChild": 1,
+      "dataPortalParent": 0,
+      "dataPortalChild": 1,
+      "labelCategory": null,
+      "labelLength": 0
+    },
+    "physicalParentChildren": [
+      2,
+      9
+    ],
+    "emittedPhysicalParentTraversalChildren": [
+      2
+    ],
+    "emittedPhysicalParentHitChildren": [
+      2
+    ],
+    "matchingOriginIds": [],
+    "retainedReachableAfter": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "rootTraversalGraphBefore": {
+      "0": [
+        1
+      ],
+      "1": [
+        2
+      ],
+      "2": [
+        3
+      ],
+      "3": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "4": [],
+      "5": [],
+      "6": [],
+      "7": [],
+      "8": []
+    },
+    "rootTraversalGraphAfter": {
+      "0": [
+        1
+      ],
+      "1": [
+        2
+      ],
+      "2": [
+        3
+      ],
+      "3": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "4": [],
+      "5": [],
+      "6": [],
+      "7": [],
+      "8": []
+    },
+    "physicalAncestry": [
+      0,
+      1,
+      9
+    ]
+  },
+  "sharedMechanism": {
+    "newEmptyFullWindowPortalLeaf": true,
+    "physicalAncestry": "root0 -> Overlay node1 -> new leaf",
+    "originMarkerMissing": true,
+    "parentOutgoingTraversalAndHitChildrenOmitLeaf": true,
+    "updatedLeafUnreachableFromRoot": true,
+    "nativeFirstErrorNamesThatLeaf": true
+  },
+  "standaloneVisibleControl": {
+    "axErrorMessages": 0,
+    "nativeSliderExposed": true,
+    "limit": "Recorded visible-origin native AX control; no spoken VoiceOver claim",
+    "controllerReportedVisibleFadeOutSettled": "Zero AX errors after settled visible-mount then fade-out; controller observation, not inferred from hidden run."
+  },
+  "sourceCategory": "Stock continuous Slider value-indicator OverlayPortal beneath zero-opacity FadeTransition",
+  "untracedRuntime": {
+    "source": "slider_fade.dart",
+    "runner": "Fresh flutter create stock macOS runner, unchanged",
+    "hiddenMount": "Healthy native baseline then first unknown-node error names node 9; two log messages through Quit",
+    "visibleMount": "Fresh healthy native baseline then native Slider 50%, zero AX errors through Quit",
+    "limit": "Graph trace is a separate earlier instrumented build; Boolean native results unused; no spoken VoiceOver claim"
+  },
+  "productionWidgetIdentity": "Strong source correlation with entering OSD DVR Slider; trace does not contain direct widget identity."
+}
