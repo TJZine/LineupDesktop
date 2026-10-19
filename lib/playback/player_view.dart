@@ -1029,23 +1029,28 @@ class _Osd extends StatelessWidget {
                 ),
               ),
               if (dvrControlsEnabled)
-                SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 4,
-                    activeTrackColor: Colors.transparent,
-                    inactiveTrackColor: Colors.transparent,
-                    thumbShape: SliderComponentShape.noThumb,
-                    overlayShape: SliderComponentShape.noOverlay,
-                  ),
-                  child: Slider(
-                    value: sliderPosition,
-                    max: sliderMax,
-                    onChanged:
-                        controller.duration <= Duration.zero || unsupported
-                        ? null
-                        : (value) => controller.seekTo(
-                            Duration(milliseconds: value.round()),
-                          ),
+                // Keep the Slider portal and its origin under the same fade,
+                // semantics exclusion and retirement ancestry.
+                Overlay.wrap(
+                  clipBehavior: Clip.none,
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 4,
+                      activeTrackColor: Colors.transparent,
+                      inactiveTrackColor: Colors.transparent,
+                      thumbShape: SliderComponentShape.noThumb,
+                      overlayShape: SliderComponentShape.noOverlay,
+                    ),
+                    child: Slider(
+                      value: sliderPosition,
+                      max: sliderMax,
+                      onChanged:
+                          controller.duration <= Duration.zero || unsupported
+                          ? null
+                          : (value) => controller.seekTo(
+                              Duration(milliseconds: value.round()),
+                            ),
+                    ),
                   ),
                 ),
             ],

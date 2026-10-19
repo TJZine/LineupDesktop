@@ -2076,3 +2076,43 @@ Verification `3ba32122ffad843c037e58c87ab2340e9f7e2e94` is a direct child of pro
 before dispatch and no run was cancelled. Logs and exact identities are retained
 privately; the closing report names the executed tests and physical limits.
 Later reproduction/documentation inputs do not change the application candidate.
+
+## 2026-10-19 — M-04 Slider containment and approved accessibility structure
+
+The Opus implementation handoff was adjudicated against current source and
+retained evidence. The user explicitly accepted Gate A: the Slider's unlabeled
+group and traversal order after the OSD controls. Product containment wraps only
+the existing SliderTheme/Slider in `Overlay.wrap(clipBehavior: Clip.none)`. The
+40-pixel progress container, separate 4-pixel indicator, progress semantics,
+theme, callbacks and AnimatedSwitcher retirement behavior are unchanged.
+
+Outgoing-update regressions on the original product reproduce unknown non-root
+records during entry, retirement/remount, rapid reversal, menu-during-entry,
+resize while excluded and other OSD retirement destinations. With the approved
+new group/order assertion present, the final original-source run passes four
+controls and fails thirteen expected cases: eleven unknown-node paths, one
+pending-child menu-restoration path and the old group/order contract. Earlier
+pre-approval assertions passed the original stable-visible case. The corrected
+structure passes all 17 focused tests, including the approved group/order, pointer/keyboard seeking,
+menu barrier exclusion, state survival and hidden noninteraction. Another 198
+existing affected tests pass; canonical format and analysis are clean. The model
+forwards the full pinned semantics API and samples two opposing bridge seed
+orders; it is not an engine emulator or native notification/VoiceOver proof.
+
+A separate stock-widget retirement control starts with healthy native AX and a
+visible Slider, then reproduces a new unknown-node error on retirement under
+the production-style previous-child exclusion wrapper. Its contained control
+retires/restores, updates the native value and reverses mid-fade without logged
+AX errors. Two default error messages are not two independent rejections. Exact
+source/binary identities and limits are retained in the reproduction README;
+raw evidence stays under `/tmp/lineup-audit/m04-containment-implementation/`.
+
+All 1,847 local tests pass on the same product inputs. The final diagnostic-only
+assertion reorder was checked with the final 17-test run. Fresh read-only review
+chat `01a15549-f33f-79e0-a782-03c26f736941` found no remaining material issues;
+its baseline-evidence finding was corrected and independently rechecked before
+integration. Exact canonical Release and Windows verification results are
+recorded in the closing report when completed. M-04 and overall
+accessibility acceptance remain open pending native/human checks. The retained
+error/event-delivery defect, rejected-batch divergence and historical node 866
+remain separate; this application mitigation includes no engine patch.

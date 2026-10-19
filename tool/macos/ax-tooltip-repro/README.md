@@ -228,6 +228,36 @@ adjustment; do not count them as passes. No Lineup Slider patch is included. See
 the [Opus handoff](../../../docs/handoffs/macos-m04-opus-review-handoff.md) for the
 remaining challenge and acceptance matrix.
 
+## Slider retirement remount discriminator
+
+`slider_retirement.dart` isolates the separate retirement path identified by the
+Opus review. Copy it into a fresh disposable stock project's `lib/main.dart`.
+The Slider is initially visible inside AnimatedSwitcher. Its layout builder uses
+the same ExcludeFocus → ExcludeSemantics → TooltipVisibility previous-child
+wrapper as Player. Retiring changes the element ancestry and remounts Slider
+under exclusion; this differs from fading or excluding an existing stable Slider.
+No Lineup imports, tracing or forced semantics are present.
+
+Establish healthy native AX with Slider 50% before **Retire visible slider**.
+Default Release rejected retirement with new unknown node 13; its log contained
+two error messages through Quit, not two established independent rejections.
+Restart and build with `--dart-define=REPRO_LOCAL_OVERLAY=true`. The contained
+control removed Slider on retirement, restored it at 60% after a value change,
+then survived rapid retirement/restoration and exposed the next value at 70%.
+It logged zero AX errors through Quit. This is bounded native evidence for this
+stock-widget sequence, not complete Lineup/notification/spoken acceptance.
+
+The same pinned framework/engine/host identities above apply. Both comparison
+runners add stderr redirection only, into their sandbox temporary directories;
+framework/engine and semantics/input handling are unchanged. Source SHA-256 is
+`8218538993c7c6de3aa93d590fba72d6e89594cb53162f5b2c8ea7227ef0e602`.
+Default App.framework SHA-256 is
+`1577093053c768e8a6b67d86f875014c4ab4f331842e4f87332e7960f9b1aa26`;
+contained is `d1b79beac884c4ae3685f1049f02c6959bc61794ff220ddc27290eee08899c7c`.
+Raw logs, source, manifests and both bundles stay local under
+`/tmp/lineup-audit/m04-containment-implementation/`. This does not identify the
+exact historical production widget or historical node 866.
+
 ## Synthetic Command+A control
 
 `keyboard.dart` is an independent MaterialApp → Scaffold → TextField probe with a
