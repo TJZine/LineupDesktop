@@ -1241,36 +1241,61 @@ class _GuideControls extends StatelessWidget {
       height: controlHeight,
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: searchController,
-        builder: (context, value, child) => Focus(
-          onKeyEvent: onSearchKey,
-          child: TextField(
-            key: const Key('guide-channel-search'),
-            style: searchStyle,
-            textAlignVertical: TextAlignVertical.center,
-            controller: searchController,
-            focusNode: searchFocus,
-            decoration: InputDecoration(
-              hintText: 'Search channels',
-              hintStyle: searchStyle.copyWith(color: roles.mutedText),
-              isDense: true,
-              constraints: BoxConstraints.tightFor(height: controlHeight),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: searchVerticalPadding,
-              ),
-              suffixIcon: value.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear search',
-                      focusNode: clearSearchFocus,
-                      onPressed: searchController.clear,
-                      icon: Icon(
-                        Icons.close,
-                        size: 17,
-                        semanticLabel: 'Clear search',
-                      ),
+        builder: (context, value, child) => TextFieldTapRegion(
+          child: Stack(
+            children: [
+              Focus(
+                onKeyEvent: onSearchKey,
+                child: TextField(
+                  key: const Key('guide-channel-search'),
+                  style: searchStyle,
+                  textAlignVertical: TextAlignVertical.center,
+                  controller: searchController,
+                  focusNode: searchFocus,
+                  decoration: InputDecoration(
+                    hintText: 'Search channels',
+                    hintStyle: searchStyle.copyWith(color: roles.mutedText),
+                    isDense: true,
+                    constraints: BoxConstraints.tightFor(height: controlHeight),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: searchVerticalPadding,
                     ),
-            ),
+                    // Reserve the suffix slot while keeping its action outside
+                    // the native text field's leaf semantics and key handler.
+                    suffixIcon: value.text.isEmpty
+                        ? null
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+              if (value.text.isNotEmpty)
+                PositionedDirectional(
+                  end: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: Theme.of(context).visualDensity
+                      .effectiveConstraints(
+                        const BoxConstraints(
+                          minWidth: kMinInteractiveDimension,
+                        ),
+                      )
+                      .minWidth,
+                  child: IconButton(
+                    tooltip: 'Clear search',
+                    focusNode: clearSearchFocus,
+                    onPressed: () {
+                      searchController.clear();
+                      searchFocus.requestFocus();
+                    },
+                    icon: Icon(
+                      Icons.close,
+                      size: 17,
+                      semanticLabel: 'Clear search',
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

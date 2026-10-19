@@ -75,6 +75,39 @@ void main() {
     }
     final later = tester.getSemantics(find.byTooltip('Later by 30 minutes'));
     expect(later.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    final search = find.byKey(const Key('guide-channel-search'));
+    await tester.enterText(search, 'Channel');
+    await tester.pumpAndSettle();
+    final clear = find.byTooltip('Clear search');
+    void expectExposedClearButton() {
+      final buttons = tester.semantics.simulatedAccessibilityTraversal().where(
+        (node) =>
+            node.label == 'Clear search' &&
+            node.getSemanticsData().flagsCollection.isButton &&
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+      );
+      expect(buttons, hasLength(1));
+      for (
+        var ancestor = buttons.single.parent;
+        ancestor != null;
+        ancestor = ancestor.parent
+      ) {
+        expect(
+          ancestor.getSemanticsData().flagsCollection.isTextField,
+          isFalse,
+          reason: 'macOS exposes native text fields as leaves',
+        );
+      }
+    }
+
+    expectExposedClearButton();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(clear));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear search'), findsOneWidget);
+    expectExposedClearButton();
+    await mouse.removePointer();
     await tester.pumpWidget(const SizedBox.shrink());
   }, semanticsEnabled: true);
   test('full-bleed layout and row snapping use the whole viewport', () {
@@ -3695,6 +3728,7 @@ void main() {
     await tester.tap(find.byTooltip('Clear search'));
     await tester.pump();
     expect(find.byTooltip('Clear search'), findsNothing);
+    expect(tester.widget<TextField>(search).focusNode!.hasPrimaryFocus, isTrue);
 
     guide.setSearchQuery('CHANNEL 1');
     await tester.pump();

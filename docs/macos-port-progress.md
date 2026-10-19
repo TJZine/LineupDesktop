@@ -1788,3 +1788,22 @@ seven changed Dart files for both round-two fixes before integration and reporte
 no material findings (diff SHA-256 `04894278b54133347b5fd59517ff9d2edc38cf0431c55afdfa55bca828583d7e`).
 Release/native and Windows acceptance are recorded separately for the combined
 candidate; no physical Windows or native keyboard timing proof is inferred here.
+
+
+## 2026-10-18 — Pro round two: Guide Clear exposure and activation
+
+Guide Clear retained the same native text-field-leaf ancestry previously corrected
+in Studio, and its field-only Enter handler also enclosed the suffix button.
+The named Clear action is now a true semantics sibling outside that key scope,
+retaining its persistent focus node, trailing suffix reservation, density-aware
+width and common TextFieldTapRegion. Clearing deliberately restores search focus.
+The editable field retains its own Enter/Escape navigation behavior.
+
+Before-fix regressions establish text-field ancestry and Enter/NumpadEnter leaving
+the query unchanged. After the repair, effective traversal before/during an opened
+tooltip, direct activation, F2 → Escape invoker restoration, useful live-input focus
+and absence of playback requests pass. The Guide/parity suites passed 81 tests;
+the full combined 1,816-test suite, analysis and canonical formatting passed.
+The fresh combined adversarial review noted above approved this fix with no
+material findings before integration. Native name/action/hover and Windows checks
+remain separately attributed; the approved Player layout and engine are unchanged.

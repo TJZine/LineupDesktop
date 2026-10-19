@@ -229,7 +229,6 @@ void main() {
     'Earlier by 30 minutes',
     'Now',
     'Close Guide',
-    'Clear search',
     'Remove library filter',
   ]) {
     testWidgets('Guide $control restores its live keyboard invoker', (
@@ -242,8 +241,6 @@ void main() {
       final liveStart = guide.windowStart;
       if (control == 'Earlier by 30 minutes' || control == 'Now') {
         guide.moveWindow(1);
-      } else if (control == 'Clear search') {
-        guide.setSearchQuery('News');
       } else if (control == 'Remove library filter') {
         guide.setLibraryFilter('movies');
       }
@@ -255,12 +252,7 @@ void main() {
       invoker.requestFocus();
       await tester.pump();
       expect(invoker.hasPrimaryFocus, isTrue);
-      // Escape belongs to the search field; F2 opens the menu from its suffix.
-      await tester.sendKeyEvent(
-        control == 'Clear search'
-            ? LogicalKeyboardKey.f2
-            : LogicalKeyboardKey.escape,
-      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -269,11 +261,7 @@ void main() {
       expect(_controlFocus(tester, button), same(invoker));
       expect(invoker.context?.mounted, isTrue);
       expect(invoker.hasPrimaryFocus, isTrue);
-      await tester.sendKeyEvent(
-        control == 'Clear search'
-            ? LogicalKeyboardKey.space
-            : LogicalKeyboardKey.enter,
-      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       switch (control) {
         case 'Earlier by 30 minutes':
@@ -281,12 +269,63 @@ void main() {
           expect(guide.windowStart, liveStart);
         case 'Close Guide':
           expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
-        case 'Clear search':
-          expect(guide.searchQuery, isEmpty);
         case 'Remove library filter':
           expect(guide.libraryFilterId, isNull);
       }
       expect(fixture.player.loads, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  for (final key in [
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.numpadEnter,
+  ]) {
+    testWidgets('Guide Clear search activates with ${key.keyLabel}', (
+      tester,
+    ) async {
+      final fixture = _guideFocusFixture();
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      final guide = tester.widget<GuideView>(find.byType(GuideView)).controller;
+      final search = find.byKey(const Key('guide-channel-search'));
+      final searchFocus = tester.widget<TextField>(search).focusNode!;
+      final liveStart = guide.windowStart;
+      await tester.enterText(search, 'News');
+      await tester.pumpAndSettle();
+
+      for (final throughMenu in [false, true]) {
+        final button = find.byTooltip('Clear search');
+        final invoker = _controlFocus(tester, button);
+        invoker.requestFocus();
+        await tester.pump();
+        expect(invoker.hasPrimaryFocus, isTrue);
+        if (throughMenu) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.f2);
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+          expect(_controlFocus(tester, button), same(invoker));
+          expect(invoker.context?.mounted, isTrue);
+          expect(invoker.hasPrimaryFocus, isTrue);
+        }
+
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+        expect(guide.searchQuery, isEmpty);
+        expect(button, findsNothing);
+        expect(searchFocus.hasPrimaryFocus, isTrue);
+        // Use the live input connection without asking the test harness to
+        // focus the field again: clearing must leave search ready to edit.
+        tester.testTextInput.enterText('News');
+        await tester.pumpAndSettle();
+        expect(guide.searchQuery, 'news');
+        expect(guide.windowStart, liveStart);
+        expect(find.byType(GuideView), findsOneWidget);
+        expect(fixture.player.loads, isEmpty);
+      }
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
