@@ -1855,3 +1855,22 @@ Final independent evidence review corroborated source/bundle identity, CI logs,
 visual playback observations and AX counts, with no actionable documentation
 findings. It explicitly retained both unresolved native observations and checked
 privacy/local links. The final verification update is documentation-only.
+
+
+## 2026-10-18 — Pro round three: pending-step successor metadata
+
+A step retained its requested target while native readiness or selection persistence
+was pending. Current metadata used the resolved program P, but Up next used the
+requested channel's wall clock and could advance to R after P → Q. Both getters
+now share the represented-program authority. Before resolution, the requested
+channel still uses its own live preview and cannot inherit the retired channel's
+media. Playback, scheduling and persistence behavior are unchanged.
+
+The regression blocks selection persistence after readiness, pauses, advances the
+injected clock through P's boundary, and checks P/Q both before and after releasing
+the save. It fails before the repair with actual R instead of Q. Existing preview
+identity, continuation, Player and navigation tests remain passing (481 affected
+checks); canonical format, analysis and all 1,819 local tests passed. Fresh
+`pro_round3_adversarial` reviewed all five changed Dart files before integration
+and found no material issues. Native runtime and Windows CI remain separately
+attributed; private evidence is under `/tmp/lineup-audit/pro-round3/`.

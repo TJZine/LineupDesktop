@@ -284,22 +284,25 @@ class PlayerCoordinator extends ChangeNotifier {
   PlayerState get presentedState =>
       displayHoldActive ? PlayerState.loading : status.state;
 
-  GuideProgram? get currentProgram {
+  GuideProgram? get _representedProgram {
     final target = _requestedPresentationChannelId;
     if (target != null) {
-      return _resolvingProgram ?? guide.currentProgram(target);
+      // An unresolved preview must not inherit the retired channel's media.
+      final resolving = _resolvingProgram;
+      return resolving?.channelId == target ? resolving : null;
     }
-    final id = lineup.currentChannelId;
-    return _resolvingProgram ??
-        _active?.program ??
+    return _resolvingProgram ?? _active?.program;
+  }
+
+  GuideProgram? get currentProgram {
+    final id = _requestedPresentationChannelId ?? lineup.currentChannelId;
+    return _representedProgram ??
         (id == null ? null : guide.currentProgram(id));
   }
 
   GuideProgram? get nextProgram {
-    final target = _requestedPresentationChannelId;
-    if (target != null) return guide.nextProgram(target);
-    final id = lineup.currentChannelId;
-    final represented = _resolvingProgram ?? _active?.program;
+    final id = _requestedPresentationChannelId ?? lineup.currentChannelId;
+    final represented = _representedProgram;
     if (represented != null) {
       return guide.currentProgram(
         represented.channelId,

@@ -1154,6 +1154,34 @@ void main() {
     },
   );
 
+  testWidgets(
+    'pending channel step keeps resolved Up next while persistence crosses a boundary',
+    (tester) async {
+      final lineup = _BlockingLineup();
+      final fixture = _ContinuationFixture(lineupController: lineup);
+      addTearDown(fixture.close);
+      final step = fixture.coordinator.nextChannel();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(lineup.persistenceStarted.isCompleted, isTrue);
+      expect(fixture.coordinator.tuning, isTrue);
+      await fixture.coordinator.pause();
+      final loaded = fixture.coordinator.currentProgram!;
+      final successor = fixture.coordinator.nextProgram!;
+      fixture.now = loaded.scheduled.end.add(const Duration(seconds: 10));
+
+      expect(fixture.guide.currentProgram('channel-b')!.id, successor.id);
+      expect(fixture.coordinator.currentProgram!.id, loaded.id);
+      expect(fixture.coordinator.nextProgram!.id, successor.id);
+      lineup.releasePersistence.complete();
+      await tester.pump();
+      await step;
+      expect(fixture.coordinator.tuning, isFalse);
+      expect(fixture.coordinator.currentProgram!.id, loaded.id);
+      expect(fixture.coordinator.nextProgram!.id, successor.id);
+      fixture.coordinator.dispose();
+    },
+  );
+
   test(
     'early media completion immediately loads the future successor',
     () async {
@@ -7879,10 +7907,13 @@ class _ContinuationFixture {
     List<LineupPlaybackPart>? parts,
     _EventPlayer? player,
     bool recoverAuthorization = false,
-  }) : lineup = _TestLineup(
-         playbackParts: parts,
-         recoverAuthorization: recoverAuthorization,
-       ),
+    _TestLineup? lineupController,
+  }) : lineup =
+           lineupController ??
+           _TestLineup(
+             playbackParts: parts,
+             recoverAuthorization: recoverAuthorization,
+           ),
        player = player ?? _EventPlayer() {
     lineup.replaceChannels([
       for (final channel in lineup.channels)
