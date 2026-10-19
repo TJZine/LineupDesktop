@@ -1,171 +1,290 @@
-# M-04: independent Opus 5.5 investigation
+# M-04: Opus 5.5 review after Slider containment
 
-Review M-04 independently in `TJZine/LineupDesktop`. Challenge the diagnosis and
-the proposed application mitigation; earlier reviewers' agreement is evidence,
-not authority. Work read-only and return findings before implementing anything.
+Updated 2026-10-19. Review the integrated containment and remaining M-04 findings
+independently. Challenge the source reasoning and evidence, including the earlier
+Opus recommendations; reviewer agreement is not authority. Return findings before
+implementing anything. **M-04 and overall accessibility acceptance remain open.**
 
-## Source and scope
+This packet supersedes its pre-containment version. The supplied
+[implementation handoff](macos-m04-containment-implementation-handoff.md) remains
+unchanged as historical input; its pending Gate A and atomicity wording are
+superseded by the approval and calibrated conclusions below.
+
+## Source, authority and reading order
 
 - Repository: <https://github.com/TJZine/LineupDesktop>, branch `platform/macos`.
-- Immutable application candidate reviewed by GPT Pro:
-  `f2b76202625215bd0bcc14aefd1911db49663932`.
-- Standalone reproductions: `68bdc6626c16780108cd7fa3051be1bb6284fb84`.
-- Evidence through `74931de95fa6f03977bdf0ba6ea05b5adba46021`; continuation
-  handoff at `c439d9ba`. These later inputs do not alter that application candidate.
-- The controller is now fixing three separately adjudicated application defects:
-  direct-tune presentation identity during persistence, rapid Escape before menu
-  focus transfer, and root-focus/live-availability Guide Close routing. They are
-  outside this M-04 assignment. Resolve any newer source identity explicitly.
-- At this handoff's creation, **no Slider containment product patch is applied**.
-  The controller is preparing an isolated comparison. Do not infer its outcome.
+- Integrated product: **`5c6349d4cf43244da9989fb72f298ac2acb614b0`**,
+  `fix(player): contain Slider portal within OSD semantics`.
+- Evidence closeout: **`392399c13b8cf2171c685f522a6251280b50c494`**, documentation
+  only on top of that product. The controller verified a clean, pushed checkout
+  there before updating this packet. Resolve later HEAD/dirty work explicitly;
+  do not relabel old runs as observations of new product inputs.
+- Before-fix product: `459fd726024a4cf5e40b69ec1cca29ecd2d1dd23`; scratch baseline
+  `a51ea124c0f2b9051723a4eb4163cd882f1c74ee` adds documentation only.
+- The user explicitly approved **the unlabeled Slider group after OSD controls**.
+  Gate A is resolved. Do not request the same approval again or invent a label.
+- This assignment is read-only investigation/review. It does not authorize an
+  engine patch, application change, new product direction, publication or messages.
+  Use the user's `orchestrate-implementation-chats` skill if delegation is needed;
+  the controller retains integration, builds, CI and native-app ownership.
 
-**Later controller evidence, 2026-10-19:** the isolated comparison is now retained
-as `tool/macos/ax-tooltip-repro/slider_containment.dart`, with exact controls,
-hashes and limits in that directory's README. Default finite-height hidden mount
-rejects; its fresh visible control is healthy. Contained hidden/visible controls
-and bounded fade/exclusion/value-update sequences logged zero AX errors. This
-supports the hypothesis only for those observations. No outgoing graph, direct
-notification-delivery, keyboard/drag/focus/geometry or integrated transition
-acceptance is established; **no product mitigation is applied**. Challenge these
-new observations as well as the original hypothesis below. The application fixes
-outside M-04 are now committed through product `459fd726024a4cf5e40b69ec1cca29ecd2d1dd23`.
+Read `AGENTS.md` and `.agents/project.md`, then:
 
-Read `AGENTS.md`, `.agents/project.md`, then:
-
-1. `docs/handoffs/macos-post-audit-continuation.md`.
-2. `docs/handoffs/macos-ax-update-investigation.md`, particularly the static
-   origins/recovery section and third-review Slider investigation.
-3. `docs/handoffs/macos-post-audit-fix-report.md`, especially third-round evidence
-   and the single final human checklist.
-4. `tool/macos/ax-tooltip-repro/README.md` and `main.dart`, `static_origins.dart`,
-   `button_origins.dart`, `slider_fade.dart`, `first-rejection.json`, and
-   `slider-first-rejection.json`.
-5. `lib/playback/player_view.dart` (entering/retiring OSD and progress Slider),
-   `lib/app/lineup_shell.dart` (menu exclusion/tooltip visibility).
-
-The new GPT Pro report is supplied separately by the user. On the controller's
-Mac it is available as the attached `Pasted text.txt`; a remote reviewer must ask
-for that attachment rather than assume access. Its principal M-04 recommendation
-is summarized below so this packet is independently usable.
-
-## Established observations and limits to challenge
+1. [Closing report](macos-post-audit-fix-report.md#m-04-containment-implementation-after-opus-review),
+   including fresh Release evidence and the **single final human checklist**.
+2. [Investigation](macos-ax-update-investigation.md), especially static origins,
+   retained-error recovery, production node 378 and the final Opus follow-up.
+3. [Continuation handoff](macos-post-audit-continuation.md), current update first;
+   lower sections preserve historical source states.
+4. `lib/playback/player_view.dart`: AnimatedSwitcher previous-child wrappers and
+   `progressLine` / `Overlay.wrap`; `lib/app/lineup_shell.dart`: menu barrier,
+   focus, tooltip visibility and Player semantics exclusion.
+5. `test/playback/player_slider_semantics_update_test.dart` and
+   `test/support/semantics_update_recorder.dart`.
+6. [Reproduction README](../../tool/macos/ax-tooltip-repro/README.md),
+   `slider_fade.dart`, `slider_containment.dart`, `slider_retirement.dart`,
+   `first-rejection.json` and `slider-first-rejection.json` in that directory.
+   Earlier comparison paragraphs retain their original scope; later product
+   evidence is in this packet and the closing report.
 
 Pinned tools: Flutter **3.47.7**, Dart **3.13.5**, framework
 `abaf9c523780a608bd46686fd5e53740a07077f8`, engine
 `deb287481e3ce9468f3434937ced4240a70539ca`. Observed host: arm64 macOS
-**27.0.1 (26A434)**. Inspect that exact source, not today's Flutter main.
+**27.0.1 (26A434)**. Inspect these sources, not today's Flutter main. Local SDK:
+`/Users/tristan/.cache/lineup-flutter/3.47.7/flutter`; default shell Flutter
+previously resolved 3.47.6.
 
-1. With native AX active and healthy, stock Tooltip → exclude its origin →
-   change its message emits an attached but traversal-unreachable text record.
-   The common desktop bridge forwards it to AXTree, which rejects it. The
-   committed fixture describes four accepted batches and the first rejection.
-   Physical children and effective traversal children are different graphs.
-2. Existing application repairs coordinate tooltip retirement with exclusions,
-   keep static tooltip origins reachable while excluding only redundant visual
-   leaves, and isolate Guide Now's outer origin from semantics absorption. They
-   preserve useful hover information and canonical actionable labels. Retain
-   them unless a specific counterexample establishes a defect.
-3. In diagnostic V2, after earlier healthy keyboard work, DVR On → Guide → tune
-   produced first error node 378 after batch 671. A new empty full-window portal
-   leaf is physically at `0 → 1 → 378`, child token 97, with no matching origin.
-   Effective traversal stays `0 → 1 → 2 → 3 → 12`, complete and acyclic. This was
-   one shared process, not a fresh AX-only trial.
-4. A stock continuous Slider freshly mounted under zero-alpha FadeTransition
-   reproduces that topology and native rejection after healthy AX. A fresh
-   visible mount exposes Slider 50% without errors. A genuinely uninstrumented
-   stock runner independently reproduces hidden failure/visible success.
-   The production DVR Slider is strongly source-correlated, **not directly bound
-   to a named widget instance by the Release trace**. Historical node 866 is
-   unattributed; do not assign all M-04 failures to Slider.
-5. Separately, the pinned common bridge ignores both `Unserialize` return values
-   and checks retained `AXTree::error()` instead. Success does not clear that
-   string. Later valid tree mutation can therefore skip event delivery and
-   `ClearEvents()`; a reparenting prepass can also stop early. This is established
-   source control flow, **not native recovery/notification acceptance**.
+## What changed, and why
 
-Useful pinned framework/engine locations:
+Pinned Slider eagerly creates/shows its value-indicator OverlayPortal even for
+the continuous, visually indicator-free case. Previously its portal could remain
+physically attached to the route overlay while fade/exclusion removed the origin
+from effective semantics traversal. A dirty/new empty portal leaf could reach the
+common desktop bridge as an unknown, unreachable non-root node and be rejected.
 
-- `packages/flutter/lib/src/material/slider.dart`: eager value-indicator
-  OverlayPortal controller and portal construction (including empty indicators).
-- `packages/flutter/lib/src/widgets/overlay.dart`: OverlayPortal semantics,
-  `Overlay.wrap`, its owned entry and bounded layout.
-- `packages/flutter/lib/src/rendering/proxy_box.dart`: fade's rounded-alpha
-  semantics omission at effective alpha zero.
-- `packages/flutter/lib/src/semantics/semantics.dart`: physical attachment,
-  traversal-parent grafting, origin absorption and dirty update serialization.
-- `engine/src/flutter/shell/platform/common/accessibility_bridge.cc`: both
-  `Unserialize` paths, error handling, events and clearing.
-- `engine/src/flutter/third_party/accessibility/ax/ax_tree.cc`:
-  `AXTree::Unserialize`, retained error and unreachable-node validation.
+The fix wraps **only the existing SliderTheme/Slider** in
+`Overlay.wrap(clipBehavior: Clip.none)` inside the existing finite-height 40-pixel
+progress Stack. Portal and origin now share local fade/exclusion/retirement
+ancestry. The separate 4-pixel visible indicator, progress Semantics, theme,
+callbacks and approved Player geometry remain unchanged. No lifetime state
+machine, broad semantics override, tooltip-policy change or engine patch was added.
 
-Raw captures are private and local under `/tmp/lineup-audit/pro-round3/`.
-GitHub reviewers cannot access them. Use the sanitized fixtures as fixtures;
-do not invent raw native return values, traces or widget identity. Optimized-frame
-LLDB Boolean probes were ambiguous and are **excluded/untrusted**. Repeated
-error messages can repeat a retained error; they are not independent failures.
-Quiet logs or populated snapshots do not prove notification recovery.
+Containment changes emitted accessibility structure/order: an unlabeled group
+contains Slider and its empty local portal leaf, after the OSD controls. The old
+structure placed Slider earlier and used a full-window portal leaf. The user
+accepted this departure; exact native group role and spoken behavior still need
+acceptance. A widget assertion does not prove an AXGroup announcement or native
+focus behavior.
 
-## Question for the second set of eyes
+The earlier Opus retirement finding was accepted: AnimatedSwitcher's previous
+children gain `ExcludeFocus → ExcludeSemantics → TooltipVisibility`, changing
+element ancestry and remounting the retiring OSD/Slider under exclusion. This is
+a separate hidden-mount trigger from fading an already-mounted Slider. The
+retirement wrapper itself was preserved.
 
-GPT Pro proposes testing **`Overlay.wrap(clipBehavior: Clip.none, child:
-SliderTheme(... Slider ...))` around only the existing Slider**, inside the
-approved finite-height 40-pixel progress Stack. The visible 4-pixel progress
-indicator remains outside that local overlay; Player layout stays intact.
+The menu refinement was also accepted: exclusion and a Slider value update need
+not dirty the empty portal leaf. **Resize while excluded** is discriminating.
+The retained harness includes the real ModalBarrier type and shell-equivalent
+focus/exclusion wrappers, correcting the earlier scratch probe's omission.
 
-The hypothesis is that Slider's portal and origin then share fade/exclusion
-ancestry, so both leave physical/semantics scope together. Slider stays mounted,
-preserving focus, state, callbacks and gestures without a separate lifetime state
-machine. This is an **unverified hypothesis**, not an approved product fix.
+## Verification established so far
 
-Please assess:
+### Outgoing updates and interaction — controlled Dart evidence
 
-- Does this contain the portal under **all relevant** entering, retiring, menu
-  exclusion and restoration paths? Check actual overlay selection and semantics
-  grafting rather than raw descendant DFS.
-- Does the small overlay alter paint order, indicator geometry, clipping,
-  composited positioning, pointer hit testing, focus, text scaling or overlap?
-  Does the continuous/no-value-indicator case differ from an active indicator?
-- What is the smallest coherent mitigation preserving approved behavior? If
-  containment fails, would lifetime gating be justified, and what state/gesture
-  obligations must it carry? Its alpha rule must match Flutter's rounded alpha.
-- Are any conclusions about the underlying framework or retained-error recovery
-  overstated? Identify exactly which additional observation would settle them.
+The recorder intercepts and forwards every argument of the pinned
+`SemanticsUpdateBuilder` API. Structural replay covers bridge reparent prepass,
+parent-first ordering, recursive destruction, pending-child initialization and
+unknown-node validation. Opposing sorted seed orders flag unsupported disagreement;
+they do not exhaust C++ unordered-map iteration. There is no event/native-role/
+cache/notification/recovery model. Replay stops at the first rejection.
 
-`showValueIndicator: never` and disabled interaction do not remove the eager
-portal. `alwaysIncludeSemantics` exposes invisible controls and misses other
-exclusions. `TooltipVisibility` should remain tooltip policy rather than become
-a generic control-lifetime signal. A blanket native rule dropping unknown IDs
-can discard legitimate new nodes; any upstream bridge design needs batch-level
-creation/reparenting/pruning/restoration and notification tests.
+The real PlayerView harness uses forced Dart semantics, fake time and fake
+native/media boundaries. The final same-test-source comparison is:
 
-## Required experiment evidence before a mitigation can be accepted
+| Evidence | Result and scope |
+| --- | --- |
+| Before-fix source | **4 pass / 13 expected failures**: eleven first unknown-node transition failures, one pending-child menu-restoration failure, one failure of the approved new group/order contract. |
+| Contained source | **17/17 pass**: replay controls, stable visible/value update, hidden entry, retirement/midfade restoration, rapid reversal, menu/resize, menu during entry, retirement with position/resize, route replacement during entry, five other OSD destinations, and interaction/menu isolation. |
+| Interaction | Tab reaches Slider; Right and drag seek; hit testing reaches Slider; menu removes focus/semantics and blocks seeking; Slider state survives menu exclusion; hidden pointer input does not seek. Widget evidence only. |
+| Existing affected suites | **198 pass**, canonical format and analysis clean. |
+| Full local suite | **1,847 pass** on the same product and approved group assertions. A later diagnostic-only assertion reorder was checked by rerunning the final 17-test file plus its format/analysis; the full suite was not repeated for that reorder. |
 
-Compare default and contained variants on the pinned stock framework, restarting
-after any native rejection. Establish healthy native AX **before** each trigger;
-a forced Dart semantics handle does not establish native bridge activation.
+The original resize baseline initially failed a missing-Slider assertion before
+reporting the replay error. Fresh review required moving the health assertion
+earlier; final before/after logs are distinct. The earlier **5/-12** pre-Gate-A
+baseline is not the final comparison.
 
-- Separate fresh hidden and visible mounts; visible → hidden → restore;
-  exclusion/restoration; rapid fade reversal.
-- Menu opening during entry, route replacement, DVR-driven insertion/removal.
-- Keyboard adjustment, active drag, focus survival, hidden-control noninteraction.
-- Effective root traversal **and outgoing updates**, then bounded native AX
-  activation and notification checks. State exactly which layer was observed.
-- Matched real-Flutter geometry/visual and hit-test checks at relevant sizes/text
-  scaling before any material UI departure. Preserve approved visuals.
+The earlier Opus scratch comparison reported identical settled-frame RGBA and
+geometry at five size/text-scale configurations, pointer/keyboard checks and
+1,830 existing tests passing. These remain **scratch Dart/rendering evidence**,
+not a newly repeated integrated visual or native-input acceptance campaign.
 
-Any product mitigation needs regression evidence, a fresh independent adversarial
-review before integration, a conventional fix commit with a progress entry, real
-Release verification and Windows CI for shared Dart changes. Never cancel a live
-CI run. Existing Windows build/CTest evidence is not physical Windows AX proof.
+Fresh read-only review chat `01a15549-f33f-79e0-a782-03c26f736941` challenged the
+replay, negative controls, OSD destinations, interaction/paint/focus and shared
+Windows bridge implications. It found no remaining material issues after the
+evidence correction and checked final source/log identities before integration.
+Independently reassess that conclusion.
 
-No engine patches, upstream publication/messages, main merge, release/signing or
-distribution. Do not retest accepted HDR/Dolby Vision picture quality. Keep private
-media labels, paths, URLs, credentials and raw diagnostics out of shared evidence.
-Keep physical keyboard, spoken VoiceOver, audio drift and window/lifecycle checks
-in the existing **single final human checklist**. M-04 and overall accessibility
-acceptance remain open.
+### Stock native discriminator and integrated Release
 
-Return prioritized actionable findings with source identity, location, trigger,
-mechanism and evidence; separate established defects, evidence gaps and optional
-ideas. Explain the best coherent direction and its tradeoffs. Clearly identify
-what you executed versus source-derived reasoning and unavailable acceptance.
+`slider_retirement.dart` starts with healthy native AX and visible Slider 50%.
+Default retirement produces first unknown node 13; two messages through Quit
+are **not two established independent rejections**. A fresh contained process
+retires/restores at 60%, reverses midfade and exposes 70%, with zero AX errors.
+Its otherwise stock runner redirects stderr only; it does not change semantics
+or input. Source/binary hashes are in the repro README.
+
+The canonical product Release was built via `dart tool/macos/build_app.dart build
+--release`, with AOT identity **`1@5c6349d4cf43244da9989fb72f298ac2acb614b0`**.
+Four **fresh processes**, each starting with healthy native AX in Guide and no
+forced Dart semantics handle, completed normally:
+
+| Sequence | Native observation and limit |
+| --- | --- |
+| DVR On → Guide → tune | Native Slider appears; CUA traversal places it after OSD controls. |
+| Visible OSD → Escape → Return | OSD/Slider disappear, then return. |
+| Live menu → actual window zoom → restore | Menu excludes Player while outer window changes 800×632 → 1728×1084; Slider returns afterward and size is restored. OSD auto-hide could run during the menu, so continuous Slider lifetime is unproven. |
+| Dismiss → Return/show → freshly observed menu control | Menu works, but observation finished at **965 ms** and click at **989 ms** after show versus the **350 ms** fade. This **does not prove native menu opening during entry**. |
+
+All four logs contain zero AXTree/Flutter error messages and no native shutdown
+timeout. Quiet logs/populated trees do **not** directly observe every `Unserialize`
+result or establish notification/recovery/spoken acceptance. Inspector bound to
+the exact process, but unusable CUA thumbnail geometry prevented target-element
+selection; the bare group's native AXRole was not extracted.
+
+The user cleared the new Keychain prompt. Starting channel, DVR Off and window
+size were restored; all verification apps/Inspector were closed. Recheck current
+processes before further native work.
+
+### Windows/Linux CI
+
+[Run 39300402918](https://github.com/TJZine/LineupDesktop/actions/runs/39300402918)
+passed **1,845 Linux tests**, **734 selected Windows Dart tests**, stock Windows
+application compilation and all eight selected native/reference CTests:
+`track_list_encoder`, `native_playback_state`, `player_core_contract`,
+`encodable_value_conversion`, `display_dynamic_range`, `display_guardian`,
+`native_player_contract`, `authenticated_reference`.
+
+Verification `865c5c3a71981fe17f9312fdf02ee2eb4c464d20` is the product's
+direct child and differs only in `.github/workflows/ci.yml`; the new Slider suite
+is explicitly selected on Windows. Live runs were checked and none cancelled.
+This does not establish physical Windows AX, playback or presentation behavior.
+
+## Remaining findings and questions for Opus
+
+1. **Containment completeness.** Is there a concrete path where the local portal
+   can still outlive/out-traverse its origin? Trace actual Overlay selection,
+   traversal grafting, entry/retirement, exclusion/restoration, route changes and
+   DVR changes. Assess active gestures, indicator positioning/clipping, focus,
+   text scaling and paint order. Separate missing proof from a defect.
+2. **Regression fidelity.** Does the recorder forward the pinned API faithfully?
+   Does structural replay falsely accept/reject relative to the bridge/AXTree,
+   especially ordering, reparenting, pending nodes and destruction? Are negative
+   controls discriminating? Two seed samples and fake time are not native proof.
+3. **Native evidence gaps.** Precise first-frame menu entry, continuous excluded-
+   Slider lifetime during native resize, bare group role, VoiceOver order/
+   announcement and notification delivery remain unverified. What smallest
+   faithful observation settles each material gap? Native traversal and user
+   approval do not settle spoken usefulness.
+4. **Retained-error/event-delivery defect — source-established, still open.**
+   The pinned common bridge ignores both `Unserialize` return values and checks
+   retained `AXTree::error()` instead; success does not clear that string. Later
+   valid mutations can skip event delivery and `ClearEvents()`, and a reparent
+   prepass can stop early. Check exact flow and distinguish source consequences
+   from unobserved native recovery. Correcting this check alone would not restore
+   valid updates lost from a rejected batch.
+5. **Discarded-batch divergence — calibrated, still open.** This unknown non-root
+   failure occurs in `ComputePendingChanges` before the main update mutates
+   structure; the bridge discards that main batch, including valid updates.
+   Its reparent prepass is a separate earlier update. **Not every AXTree rejection
+   is atomic**: other failures can occur after `UpdateNode` starts mutation or
+   during pending-child completion. No automatic complete resynchronization has
+   been established. Challenge stronger atomicity/recovery claims.
+6. **Historical attribution.** Production V2 first error node 378 followed batch
+   671: empty full-window portal leaf physically at `0 → 1 → 378`, token 97 with
+   no origin, while effective traversal stayed complete/acyclic. Stock Slider
+   controls strongly correlate that topology with DVR Slider, but the Release
+   trace did not name its widget instance. That was one shared process after
+   earlier keyboard work. **Historical node 866 remains unattributed.** Do not
+   assign every M-04 failure to Slider or invalidate earlier Tooltip/static/Now
+   origin repairs without a concrete counterexample.
+
+Useful pinned source: framework `material/slider.dart`, `widgets/overlay.dart`,
+`rendering/proxy_box.dart`, `semantics/semantics.dart`; engine
+`shell/platform/common/accessibility_bridge.cc` (`CommitUpdates`,
+`CreateRemoveReparentedNodesUpdate`, `GetSubTreeList`, event handling) and
+`third_party/accessibility/ax/ax_tree.cc` (`Unserialize`, `ComputePendingChanges`,
+`UpdateNode`, retained error). Compare physical and effective traversal graphs.
+Optimized-frame LLDB Boolean probes from earlier work were ambiguous and are
+**excluded/untrusted**. Repeated retained errors are not independent failures.
+
+## Evidence access and reproducibility
+
+Committed source/fixtures/report and CI are available to repository reviewers.
+Raw captures are private and local; remote reviewers must state they were
+unavailable and must not invent execution. Main local directory:
+`/tmp/lineup-audit/m04-containment-implementation/`.
+
+| Local artifact | Purpose |
+| --- | --- |
+| `final-diagnostic-evidence.json`, `final-source-sha256.txt` | Final identities and 4/-13 versus 17/0 results. The JSON's `head` is the scratch baseline, not the later product commit. |
+| `original-focused-final.log`, `contained-focused-final.log` | Distinct final negative/positive runs; earlier similarly named logs are historical. |
+| `existing-affected.log`, `full-tests.log`, format/analysis logs | Portable checks, with the assertion-order reuse limit above. |
+| `native-*.log`, per-process result JSONs, `native-summary.json` | Four bounded integrated runs; logs can contain private media information. |
+| `release-identity.json`, `release-build.log` | Exact canonical Release provenance. |
+| `retirement-*-result.json`, logs and preserved `.app` bundles | Fresh stock retirement default/contained comparison. |
+| `ci-identity.json`, `ci-final.json`, `ci.log` | CI product relationship and completed results. |
+
+Older local sources: `/tmp/lineup-audit/opus-m04/` (Opus scratch rendering/model),
+`/tmp/lineup-audit/pro-round4/` (initial native containment comparison), and
+`/tmp/lineup-audit/pro-round3/` (production trace/stock Slider controls).
+These paths may expire and are unavailable to GitHub-only reviewers.
+
+Current source SHA-256:
+
+| File | SHA-256 |
+| --- | --- |
+| `lib/playback/player_view.dart` | `5bc67c073a1f7c23639c5612db459a451ef802e8084ada6f98c164595203433a` |
+| `test/playback/player_slider_semantics_update_test.dart` | `6fc40b67d13fd0f07398a6d99fd438ea80283da68c07c50077be538c7f077a03` |
+| `test/support/semantics_update_recorder.dart` | `d1b5b5608f6d324965ae09c46aa2f56b9d28d3913c90bd3161b02c6aa4eaf27f` |
+
+Canonical Release executable SHA-256:
+`43fe0b049a0da44b6c1bd2efd35266d18c5e32ade093d07d4b88d8f4175f9496`;
+App.framework `c2b65189429b5b9924ffb48cc65a09b781fb0fea4e3ae3d8fd7bb7c88f0835b0`;
+106-entry bundle-manifest SHA-256
+`681337fe95702d9113cead06a24e554494a020061c35b8be8d666e955dbf01c8`.
+Runtime BUILD-INFO and further identities are in the closing report.
+
+If executing locally, use the pinned SDK and record exact inputs:
+
+```sh
+export PATH="/Users/tristan/.cache/lineup-flutter/3.47.7/flutter/bin:$PATH"
+TZ=America/New_York flutter test test/playback/player_slider_semantics_update_test.dart
+```
+
+Reuse valid full-suite/CI evidence for unchanged inputs; this documentation
+update does not require another product run. Coordinate exclusive native-app
+and build resources with the controller.
+
+## Constraints and requested return
+
+Preserve the approved Player layout, useful hover information and accepted
+unlabeled group/order decision. No engine patches, upstream publication, messages
+to people, main merge, signing, distribution or release work. Do not retest
+accepted HDR/Dolby Vision picture quality. Keep private labels/content, media
+paths, URLs, credentials and raw diagnostics out of shared evidence.
+
+Keep physical keyboard, spoken VoiceOver, audio drift and window/lifecycle
+acceptance in the existing **single final human checklist** in the closing
+report; do not create another user checklist or mark those checks complete.
+Any later authorized fix needs a meaningful regression, fresh independent
+adversarial review before integration, a conventional commit/progress entry,
+appropriate native Release evidence and Windows CI for shared Dart/core changes.
+Check live CI first and never cancel an in-progress run.
+
+Return prioritized actionable findings with exact source identity/location,
+trigger, mechanism, consequence and evidence. Separate established defects,
+evidence gaps and optional ideas. State what you executed, what is source-derived
+and what was unavailable. Give an explicit verdict on **accepting the bounded
+application mitigation** separately from **closing M-04/accessibility acceptance**,
+and recommend the smallest justified next step for each remaining material issue.
