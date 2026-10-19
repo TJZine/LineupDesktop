@@ -90,6 +90,20 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (!mounted) return;
     _syncVisibleClockTimer();
     final nextOverlay = widget.controller.overlay;
+    if (_renderedOverlay == PlayerOverlay.osd &&
+        nextOverlay == PlayerOverlay.none &&
+        _appActive &&
+        _rootFocus.hasFocus &&
+        _rootFocus.canRequestFocus &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        FocusManager.instance.primaryFocus?.context
+                ?.findAncestorWidgetOfExactType<_Osd>()
+                ?.controller ==
+            widget.controller) {
+      // Menu exclusion can erase the route's remembered Player focus. Hand off
+      // before the focused OSD control retires, or keys stop at the route scope.
+      _rootFocus.requestFocus();
+    }
     final bottomPanelChanged =
         _renderedOverlay != nextOverlay &&
         (_renderedOverlay == PlayerOverlay.osd ||

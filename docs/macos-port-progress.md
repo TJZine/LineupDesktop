@@ -2217,3 +2217,45 @@ paths but cannot alone prove focus failure or absent delivery. Detailed
 adjudication and local probe provenance are in the closing report. Native group,
 notification/spoken, input/focus, recovery and node 866 findings stay open, with
 the existing single human checklist and standing acceptance requirements intact.
+
+## M-04 native role/delivery and Player retirement focus
+
+Passive native inspection of exact product `8105f73c` now establishes Slider's
+direct parent as `AXGroup`, with successfully read empty String title,
+description and value, and exposed child `AXSlider`. Explicit successful
+AXObserver registrations on the discovered Slider received actual
+`AXValueChanged` callbacks, matched by CFEqual identity. This closes the bounded
+group-role and healthy notification-delivery gaps, not spoken announcement or
+post-rejection recovery. The PID-scoped helper changes no UI attributes or
+events and required no new permission grant; private source/log/hash evidence
+stays under `/tmp/lineup-audit/m04-native-closeout/`.
+
+The real-shell focus investigation supplies the current program missing from
+earlier probes. Keyboard menu dismissal restores its invoker after menu exclusion
+has cleared remembered Player focus. Pointer Close collapse, or Escape collapse
+followed by video hover, allows OSD hide; retirement removes the focused control
+and leaves the modal-route focus scope above both Player and shell key handlers.
+Delivered Enter/Escape/F2 then do nothing. The same 20-case scratch results hold
+on `459fd726`, `5c6349d4` and `8105f73c`, so this defect predates the Slider fixes.
+An Escape collapse without pointer activity deliberately keeps keyboard focus
+and suspends auto-hide; it is not the failing hidden-state precondition.
+
+The focused application correction transfers to the existing Player root before
+actual OSD → none retirement, only when the outgoing control belongs to this
+Player, its root still owns/requestable focus, the route is current and the app
+is active. It adds no focus wrapper, global reset, visual or semantics change.
+The final same-source retained regression passes three/fails two before the fix
+for delivered-key behavior, then passes five/five. It uses the real shell and
+schedule, independently tests Enter/Escape/F2, and protects menu, modal and
+background ownership. Existing affected suites pass 196 tests, including all 22
+Slider semantics cases; an adjacent Slider-disable case needs no broader repair.
+
+All 1,857 local tests pass; canonical format reports 160 files/0 changes and
+analysis is clean. Fresh read-only reviewer chat
+`01a155dc-e8de-7520-9c70-e19f6be5a9bf` checked final source, same-test negative
+controls, guard/lifecycle behavior and exact log identities before integration,
+with no material findings. Final canonical Release/CI and diagnostic native
+input/focus correlation are recorded in the closing report when completed.
+The original native cleanup cause is not inferred solely from the Dart result.
+The existing single human checklist, retained-error/batch recovery and node 866
+remain open; no engine patch or upstream publication is included.
