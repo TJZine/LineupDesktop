@@ -293,18 +293,12 @@ class _LineupShellState extends State<LineupShell> {
     });
   }
 
-  void _openAppMenuFromCurrentFocus() {
-    final focus = FocusManager.instance.primaryFocus;
-    final focusContext = focus?.context;
-    if (focus != null && focusContext != null) {
-      _openAppMenu(focusContext, focus);
+  void _closeGuide(BuildContext invokerContext, FocusNode invokerFocus) {
+    if (_hasPlaybackSurface) {
+      unawaited(_select(ShellDestination.player));
+    } else {
+      _openAppMenu(invokerContext, invokerFocus);
     }
-  }
-
-  void _closeGuide(bool hasPlaybackSurface) {
-    hasPlaybackSurface
-        ? unawaited(_select(ShellDestination.player))
-        : _openAppMenuFromCurrentFocus();
   }
 
   Future<void> _tuneFromGuide(String channelId) async {
@@ -740,7 +734,7 @@ class _LineupShellState extends State<LineupShell> {
       controller: _guide,
       watchingChannelId: _player.watchingChannelId,
       focusNode: _guideFocus,
-      onClose: () => _closeGuide(hasPlaybackSurface),
+      onClose: _closeGuide,
       onOpenMenu: _openAppMenu,
       pictureInPicture: guideHasPicture
           ? PlayerSurface(controller: _player, showErrors: true)

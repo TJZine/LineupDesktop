@@ -293,7 +293,7 @@ class GuideView extends StatefulWidget {
   });
 
   final GuideController controller;
-  final VoidCallback onClose;
+  final LineupMenuCallback onClose;
   final Future<void> Function(String channelId) onTune;
   final LineupMenuCallback? onOpenMenu;
   final Widget? pictureInPicture;
@@ -610,7 +610,15 @@ class _GuideViewState extends State<GuideView>
         key == LogicalKeyboardKey.goBack ||
         (key == LogicalKeyboardKey.keyG && !commandModified) ||
         key == LogicalKeyboardKey.f2) {
-      widget.onClose();
+      final primary = FocusManager.instance.primaryFocus;
+      final invoker =
+          primary != null &&
+              primary.parent != null &&
+              primary.context?.mounted == true &&
+              primary.canRequestFocus
+          ? primary
+          : node;
+      widget.onClose(invoker.context ?? context, invoker);
       return KeyEventResult.handled;
     }
     if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
@@ -1003,7 +1011,7 @@ class _Toolbar extends StatelessWidget {
   final GuideController controller;
   final String? watchingChannelId;
   final bool compact;
-  final VoidCallback onClose;
+  final LineupMenuCallback onClose;
   final LineupMenuCallback? onOpenMenu;
   final FocusNode menuFocus;
   final FocusNode closeFocus;
@@ -1058,15 +1066,17 @@ class _Toolbar extends StatelessWidget {
               style: supportingStyle.copyWith(color: roles.mutedText),
             ),
           SizedBox(width: 8),
-          IconButton(
-            tooltip: 'Close Guide',
-            focusNode: closeFocus,
-            onPressed: onClose,
-            constraints: enlargedControls
-                ? BoxConstraints(minWidth: 48, minHeight: 48)
-                : null,
-            iconSize: 24,
-            icon: const Icon(Icons.close, semanticLabel: 'Close Guide'),
+          Builder(
+            builder: (invokerContext) => IconButton(
+              tooltip: 'Close Guide',
+              focusNode: closeFocus,
+              onPressed: () => onClose(invokerContext, closeFocus),
+              constraints: enlargedControls
+                  ? BoxConstraints(minWidth: 48, minHeight: 48)
+                  : null,
+              iconSize: 24,
+              icon: const Icon(Icons.close, semanticLabel: 'Close Guide'),
+            ),
           ),
         ],
       ),

@@ -58,7 +58,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -170,7 +170,7 @@ void main() {
             home: GuideView(
               controller: guide,
               pictureInPicture: const SizedBox.expand(),
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -271,7 +271,7 @@ void main() {
             ),
             home: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -369,7 +369,7 @@ void main() {
               home: GuideView(
                 controller: guide,
                 pictureInPicture: NativeVideoSurface(player: player),
-                onClose: () {},
+                onClose: (_, _) {},
                 onTune: (_) async {},
               ),
             ),
@@ -493,7 +493,7 @@ void main() {
               home: GuideView(
                 controller: guide,
                 pictureInPicture: const ColoredBox(color: Colors.black),
-                onClose: () {},
+                onClose: (_, _) {},
                 onTune: (_) async {},
               ),
             ),
@@ -631,7 +631,7 @@ void main() {
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -731,7 +731,7 @@ void main() {
             home: GuideView(
               controller: guide,
               pictureInPicture: const ColoredBox(color: Colors.black),
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -818,7 +818,7 @@ void main() {
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -896,7 +896,7 @@ void main() {
             home: GuideView(
               controller: guide,
               pictureInPicture: const ColoredBox(color: Colors.black),
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -1020,7 +1020,7 @@ void main() {
             builder: LineupCanvas.builder,
             home: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -1081,7 +1081,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
             onSetUpChannels: () => setups++,
           ),
@@ -1135,7 +1135,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
           watchingChannelId: 'channel-0',
         ),
@@ -1202,7 +1202,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
             showIdleArtwork: true,
             pictureInPicture: const Text('Choose a channel to watch'),
@@ -1345,7 +1345,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -1381,7 +1381,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -1425,7 +1425,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -1470,7 +1470,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -1560,7 +1560,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -1647,7 +1647,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -1709,7 +1709,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -1798,7 +1798,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -1866,7 +1866,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           watchingChannelId: lineup.currentChannelId,
           onTune: (_) async => tunes++,
         ),
@@ -1998,7 +1998,7 @@ void main() {
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
             onOpenPlayer: () {},
-            onClose: () => closes++,
+            onClose: (_, _) => closes++,
             onTune: (_) async => tunes++,
           ),
         ),
@@ -2084,7 +2084,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () => closes++,
+          onClose: (_, _) => closes++,
           onTune: (_) async {},
         ),
       ),
@@ -2166,7 +2166,7 @@ void main() {
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2284,7 +2284,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (id) async => tuned.add(id),
           ),
         ),
@@ -2377,7 +2377,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2454,7 +2454,7 @@ void main() {
           home: GuideView(
             controller: guide,
             pictureInPicture: const SizedBox.expand(),
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -2514,7 +2514,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2578,7 +2578,7 @@ void main() {
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2650,7 +2650,7 @@ void main() {
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -2703,7 +2703,7 @@ void main() {
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2752,7 +2752,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2792,7 +2792,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (id) async => tunes.add(id),
         ),
       ),
@@ -2853,7 +2853,7 @@ void main() {
             home: Scaffold(
               body: GuideView(
                 controller: guide,
-                onClose: () {},
+                onClose: (_, _) {},
                 onTune: (_) async {},
               ),
             ),
@@ -2917,7 +2917,7 @@ void main() {
             builder: LineupCanvas.builder,
             home: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -3007,7 +3007,7 @@ void main() {
                 builder: (_, visible, _) => visible
                     ? GuideView(
                         controller: guide,
-                        onClose: () {},
+                        onClose: (_, _) {},
                         onTune: (_) async {},
                       )
                     : const Center(child: Text('Other route')),
@@ -3063,7 +3063,7 @@ void main() {
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       );
@@ -3160,7 +3160,7 @@ void main() {
             builder: LineupCanvas.builder,
             home: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -3324,7 +3324,7 @@ void main() {
             child: GuideView(
               controller: guide,
               focusNode: grid,
-              onClose: () => closes++,
+              onClose: (_, _) => closes++,
               onTune: (_) async => tunes++,
               onOpenMenu: (_, _) => menus++,
             ),
@@ -3511,7 +3511,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -3607,7 +3607,7 @@ void main() {
             },
             child: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -3694,7 +3694,7 @@ void main() {
           },
           child: GuideView(
             controller: guide,
-            onClose: () => closes++,
+            onClose: (_, _) => closes++,
             onTune: (_) async => tunes++,
           ),
         ),
@@ -3789,7 +3789,7 @@ void main() {
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -3847,7 +3847,7 @@ void main() {
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -3907,7 +3907,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -3971,7 +3971,7 @@ void main() {
             home: GuideView(
               controller: guide,
               pictureInPicture: const ColoredBox(color: Colors.black),
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -4005,7 +4005,7 @@ void main() {
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -4026,7 +4026,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -4060,7 +4060,7 @@ void main() {
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -4092,7 +4092,11 @@ void main() {
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
       builder: LineupCanvas.builder,
-      home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
+      home: GuideView(
+        controller: guide,
+        onClose: (_, _) {},
+        onTune: (_) async {},
+      ),
     );
 
     tester.view
@@ -4152,7 +4156,11 @@ void main() {
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
       builder: LineupCanvas.builder,
-      home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
+      home: GuideView(
+        controller: guide,
+        onClose: (_, _) {},
+        onTune: (_) async {},
+      ),
     );
     void expectFocusedRowVisible() {
       final list = tester.widget<ListView>(
@@ -4232,7 +4240,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),

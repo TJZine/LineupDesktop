@@ -1991,3 +1991,23 @@ tests. Fresh read-only review chat `01a15281-65ac-7a00-a046-dbb6477ecc2d`
 found no material issues before integration. Full-suite, Windows CI and real
 Release results are recorded separately in the closing report; this controlled
 store sequence is not an authenticated-app runtime reproduction.
+
+## 2026-10-19 — Pro round four: Guide Close invocation and live routing
+
+Guide Close now supplies its actual mounted button context and persistent focus
+node, so a semantics action does not depend on Flutter primary focus having a
+widget context. Keyboard Back preserves the surviving keyboard invoker with a
+mounted Guide fallback. The shell reads playback availability at invocation,
+removing the captured-build timing gap. Existing callback consumers, including
+the optional visual fixture, are migrated to the explicit invocation contract.
+
+Corrected regressions fail original source at missing-menu assertions for a
+current-node semantics tap with context-null root focus and for both Close and
+Escape after playback disappears before rebuild. They pass with the fixes, along
+with the retained real-timer-fixture Close/Escape and usable menu/no-tune checks.
+The first attempted controls failed harness preconditions and are excluded;
+root setup, semantics-handle cleanup and button lookup were repaired before the
+valid comparison. Combined affected coverage passed 454 tests. Fresh read-only
+review chat `01a15281-6b19-7962-9314-b4d5ad33bb41` found no material issues,
+including the later visual-fixture callback migration. This is Flutter semantics
+and controlled state evidence; native AX acceptance remains separately recorded.
