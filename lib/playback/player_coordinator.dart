@@ -253,10 +253,11 @@ class PlayerCoordinator extends ChangeNotifier {
   PlayerTrackType? get pendingTrackType => _trackConfirmation.type;
   int? get pendingTrackId => _trackConfirmation.id;
   String? get trackSelectionError => _trackConfirmation.error;
-  // A failed tune keeps the committed selection intact. Its slate must show
-  // the requested channel that Retry will load, rather than that old selection.
+  // Tuning and failed tunes retain the committed selection until persistence
+  // succeeds. Present the requested channel throughout both phases.
   String? get _requestedPresentationChannelId =>
-      _channelStepTargetId ?? (_error != null ? _retryChannelId : null);
+      _channelStepTargetId ??
+      (_tuning || _error != null ? _retryChannelId : null);
 
   Channel? get currentChannel {
     final index =
@@ -724,13 +725,18 @@ class PlayerCoordinator extends ChangeNotifier {
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
     _tuning = true;
-    final nativeStop = _beginNativeStop();
     _canRetry = false;
     _error = null;
     _retryChannelId = channelId;
     if (endedProgram == null) {
       _cancelOverlayTimer();
       _presentOverlay(PlayerOverlay.osd);
+    }
+    // Retiring a display hold can synchronously notify listeners. Publish a
+    // coherent new tune identity and presentation before starting that stop.
+    final nativeStop = _beginNativeStop();
+    if (_disposed || generation != _tuneGeneration) {
+      return Future.value(false);
     }
     notifyListeners();
     if (_disposed || generation != _tuneGeneration) {

@@ -1972,3 +1972,22 @@ The independent post-unlock evidence review corroborated the live-node backgroun
 no-op, foreground menu result, DVR Off and shutdown log. It confirmed the anchor
 dependency predates these fixes; that application issue remains open, with no
 additional documentation or evidence defects found.
+
+## 2026-10-19 — Pro round four: direct-tune presentation identity
+
+Adjudication confirmed that an ordinary direct tune could become native-ready on
+B while selection persistence still left committed A. The existing step/error
+presentation identity now also covers direct tuning. New tune identity and OSD
+state are established before display-hold retirement can synchronously notify;
+an obsolete outer tune cannot dispatch after listener supersession/disposal.
+Step precedence, unresolved previews and orphan/removal behavior are retained.
+
+The regression gates the actual store under production `setCurrentChannel`,
+before selection publication. It checks B current/next/Mini Guide while A remains
+committed, paused P/next Q across the clock boundary, supersession and failed-save
+Retry. All four new tests fail on original production source at the expected stale
+identity/overlay observations. The corrected combined affected suite passed 454
+tests. Fresh read-only review chat `01a15281-65ac-7a00-a046-dbb6477ecc2d`
+found no material issues before integration. Full-suite, Windows CI and real
+Release results are recorded separately in the closing report; this controlled
+store sequence is not an authenticated-app runtime reproduction.

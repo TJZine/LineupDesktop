@@ -14,6 +14,7 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
@@ -1178,6 +1179,146 @@ void main() {
       expect(fixture.coordinator.tuning, isFalse);
       expect(fixture.coordinator.currentProgram!.id, loaded.id);
       expect(fixture.coordinator.nextProgram!.id, successor.id);
+      fixture.coordinator.dispose();
+    },
+  );
+
+  for (final outcome in ['success', 'superseded', 'failure']) {
+    testWidgets(
+      'direct tune presents its target before selection publication: $outcome',
+      (tester) async {
+        final store = _GatedSelectionStore(failSave: outcome == 'failure');
+        final lineup = _TestLineup(
+          count: 3,
+          store: store,
+          useRealCurrentChannelMutation: true,
+        );
+        final fixture = _ContinuationFixture(lineupController: lineup);
+        addTearDown(fixture.close);
+        expect(await fixture.coordinator.tune('channel-0'), isTrue);
+        store.blockSave = true;
+
+        final tune = fixture.coordinator.tune('channel-b');
+        await tester.pump();
+        expect(store.persistenceStarted.isCompleted, isTrue);
+        // This is the real controller mutation: native B is ready, but the
+        // selection stays A until the store finishes and publication follows.
+        expect(fixture.player.loads, hasLength(2));
+        fixture.player.emitStatus(
+          PlayerState.playing,
+          generation: fixture.player.loadGenerations.last,
+        );
+        await tester.pump();
+        expect(fixture.coordinator.status.state, PlayerState.playing);
+        expect(lineup.currentChannelId, 'channel-0');
+        expect(fixture.coordinator.tuning, isTrue);
+        expect(fixture.coordinator.currentChannel?.id, 'channel-b');
+        final loaded = fixture.coordinator.currentProgram!;
+        final successor = fixture.coordinator.nextProgram!;
+        expect(loaded.channelId, 'channel-b');
+        expect(successor.channelId, 'channel-b');
+        fixture.coordinator.showMiniGuide();
+        expect(fixture.coordinator.miniGuideChannelId, 'channel-b');
+
+        Future<bool>? winner;
+        if (outcome == 'superseded') {
+          winner = fixture.coordinator.tune('channel-2');
+          // C has not entered the serialized native queue. Its preview must
+          // not inherit the still-resolving B program or committed A selection.
+          expect(fixture.coordinator.currentChannel?.id, 'channel-2');
+          expect(
+            fixture.coordinator.currentProgram?.channelId,
+            isNot('channel-b'),
+          );
+          expect(
+            fixture.coordinator.nextProgram?.channelId,
+            isNot('channel-b'),
+          );
+          fixture.coordinator.showMiniGuide();
+          expect(fixture.coordinator.miniGuideChannelId, 'channel-2');
+        } else if (outcome == 'success') {
+          await fixture.coordinator.pause();
+          fixture.now = loaded.scheduled.end.add(const Duration(seconds: 10));
+          expect(fixture.guide.currentProgram('channel-b')!.id, successor.id);
+          expect(fixture.coordinator.currentProgram!.id, loaded.id);
+          expect(fixture.coordinator.nextProgram!.id, successor.id);
+        }
+
+        store.releasePersistence.complete();
+        await tester.pump();
+        expect(await tune, outcome == 'success');
+        if (winner != null) expect(await winner, isTrue);
+        expect(fixture.coordinator.tuning, isFalse);
+        final target = outcome == 'superseded' ? 'channel-2' : 'channel-b';
+        expect(
+          lineup.currentChannelId,
+          outcome == 'failure' ? 'channel-0' : target,
+        );
+        expect(fixture.coordinator.currentChannel?.id, target);
+        expect(fixture.coordinator.currentProgram?.channelId, target);
+        expect(fixture.coordinator.nextProgram?.channelId, target);
+        fixture.coordinator.showMiniGuide();
+        expect(fixture.coordinator.miniGuideChannelId, target);
+        if (outcome == 'success') {
+          expect(fixture.coordinator.currentProgram!.id, loaded.id);
+          expect(fixture.coordinator.nextProgram!.id, successor.id);
+        } else if (outcome == 'failure') {
+          expect(fixture.coordinator.canRetry, isTrue);
+          expect(fixture.coordinator.error, isNotNull);
+          store.failSave = false;
+          await fixture.coordinator.retry();
+          expect(fixture.coordinator.error, isNull);
+          expect(lineup.currentChannelId, 'channel-b');
+        }
+        fixture.coordinator.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'direct tune publishes coherent identity when retiring a display hold',
+    (tester) async {
+      final player = _DisplayPlayer();
+      final fixture = _ContinuationFixture(player: player);
+      addTearDown(fixture.close);
+      await fixture.coordinator.toggleFullscreen();
+      expect(await fixture.coordinator.tune('channel-0'), isTrue);
+      expect(fixture.coordinator.displayHoldActive, isTrue);
+      await fixture.guide.ensureCurrentProgram('channel-b');
+      fixture.coordinator.showFullGuide();
+      final observations =
+          <(String?, String?, String?, bool, bool, String?, PlayerOverlay)>[];
+      void observe() {
+        observations.add((
+          fixture.coordinator.currentChannel?.id,
+          fixture.coordinator.currentProgram?.channelId,
+          fixture.coordinator.nextProgram?.channelId,
+          fixture.coordinator.tuning,
+          fixture.coordinator.canRetry,
+          fixture.coordinator.error,
+          fixture.coordinator.overlay,
+        ));
+      }
+
+      fixture.coordinator.addListener(observe);
+
+      final tune = fixture.coordinator.tune('channel-b');
+      // cancelLoad retires the old hold synchronously, before native stop/load
+      // futures settle. Even that first listener sees the complete new request.
+      expect(observations, isNotEmpty);
+      expect(observations.first, (
+        'channel-b',
+        'channel-b',
+        'channel-b',
+        true,
+        false,
+        null,
+        PlayerOverlay.osd,
+      ));
+      fixture.coordinator.removeListener(observe);
+      await tester.pump();
+      expect(await tune, isTrue);
+      expect(fixture.coordinator.currentChannel?.id, 'channel-b');
       fixture.coordinator.dispose();
     },
   );
@@ -8007,6 +8148,7 @@ List<LineupPlaybackPart> _parts({Duration? first, Duration? second}) => [
 class _TestLineup extends LineupController {
   _TestLineup({
     LineupScenario? scenario,
+    MemoryAppStore? store,
     int count = 2,
     this.failSecondPlaybackRequest = false,
     this.recoverAuthorization = false,
@@ -8019,7 +8161,7 @@ class _TestLineup extends LineupController {
     this.useRealCurrentChannelMutation = false,
     this.playbackParts,
   }) : super(
-         store: MemoryAppStore(clientId: 'test'),
+         store: store ?? MemoryAppStore(clientId: 'test'),
          credentials: MemoryCredentialStore(),
          plex: PlexClient(
            clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
@@ -8181,6 +8323,26 @@ class _FailingPersistenceLineup extends _TestLineup {
       Error.throwWithStackTrace(failure, StackTrace.current);
     }
     await super.setCurrentChannel(id);
+  }
+}
+
+/// Gates the actual controller's save, before it publishes a new selection.
+class _GatedSelectionStore extends MemoryAppStore {
+  _GatedSelectionStore({required this.failSave});
+
+  bool blockSave = false;
+  bool failSave;
+  final persistenceStarted = Completer<void>();
+  final releasePersistence = Completer<void>();
+
+  @override
+  Future<void> save(PersistedState value) async {
+    if (blockSave) {
+      if (!persistenceStarted.isCompleted) persistenceStarted.complete();
+      await releasePersistence.future;
+      if (failSave) throw const FileSystemException('Synthetic save failure.');
+    }
+    await super.save(value);
   }
 }
 
