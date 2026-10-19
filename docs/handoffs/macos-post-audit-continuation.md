@@ -29,24 +29,33 @@ review `01a155dc-e8de-7520-9c70-e19f6be5a9bf` pass. The exact canonical Release 
 built; final native verification is pending.
 
 [CI run 39321046092](https://github.com/TJZine/LineupDesktop/actions/runs/39321046092)
-is running on verification `70df5bd9dd51e19cd3d0f868a6e05cecadb3b8ba`, the exact
-product's direct child with only the isolated workflow changed. Both the new
-focus file and Slider semantics file are selected on Windows; no active run was
-cancelled. Linux completed successfully with 1,855 tests, canonical format and
-analysis clean. Windows portable UI verification passed; its native build and
-contract checks remain in progress. Overall completion has not yet been claimed.
+completed successfully: 1,855 Linux tests, 744 selected Windows tests, stock
+Windows compilation and all eight selected native/reference CTests. Verification
+`70df5bd9dd51e19cd3d0f868a6e05cecadb3b8ba` is the exact product's direct child
+with only the isolated workflow changed. Both focus and Slider semantics files
+are selected on Windows; completed head/parent/diff/logs were checked. No active
+run was cancelled.
 
 The passive diagnostic baseline (export `3a0bba29`, product `8105f73c` plus logging
-only) is running as PID 93228 and waiting on its new Keychain prompt. The user has
-been asked to clear it. Its source path is recorded in
-`/tmp/lineup-audit/m04-native-closeout/diagnostic-path.txt`; patch/identity/logs are
-in that directory. It is not the canonical product. Native and Dart allowlisted
-key/focus traces are intended to establish the failing event path without
-inferring delivery from a UI no-op. No tracing or engine change is integrated.
-DVR remains On for the ongoing tests; final channel/DVR/window/app cleanup is
-pending. Recheck actual processes and user reply before resuming native actions.
-Keep the one existing final human checklist; M-04 is not closed by these partial
-results. The closing report records the native evidence and remaining limits.
+only) completed after the user cleared its Keychain prompt. Native menu/zoom/
+Escape restoration followed by AX Close collapses Now Playing to OSD without
+resetting keyboard mode; timed hide stays suspended. A subsequent Escape retires
+OSD. Enter/Escape/F2 then visibly do nothing: AppKit receives keyDown codes
+36/53/120, Flutter HardwareKeyboard receives all three, but focus is the route
+scope above Player/shell and neither application key handler runs. Command-comma
+still visibly opens Settings. This is a matching native focus failure under
+passive instrumentation, not proof of every earlier cleanup event or a physical
+pointer/timer run. Two CUA coordinate attempts failed; they establish no pointer
+delivery. The diagnostic quit normally with zero AXTree errors. Trace source,
+identities and `native-diagnostic-summary.json` remain local under
+`/tmp/lineup-audit/m04-native-closeout/`; no logging or engine change is integrated.
+
+Exact fixed Release `ffcaae63` matched all 106 recorded bundle hashes before
+launch. It is now PID 315 at startup on a new Keychain prompt; the user has been
+asked to clear this distinct binary's prompt. Final fixed-Release native checks
+and channel/DVR/window/app cleanup remain pending; DVR is still On. Recheck
+actual processes and user reply before resuming. Keep the one existing human
+checklist; M-04 is not closed by these partial results.
 
 ## Latest Opus review — no product change
 

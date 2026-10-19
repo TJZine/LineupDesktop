@@ -2259,3 +2259,24 @@ input/focus correlation are recorded in the closing report when completed.
 The original native cleanup cause is not inferred solely from the Dart result.
 The existing single human checklist, retained-error/batch recovery and node 866
 remain open; no engine patch or upstream publication is included.
+
+The exact focus product `ffcaae63` now passes completed
+[CI run 39321046092](https://github.com/TJZine/LineupDesktop/actions/runs/39321046092):
+1,855 Linux tests, 744 selected Windows tests, stock Windows compilation and all
+eight selected native/reference CTests. Verification `70df5bd9` is its direct
+child, differing only in the isolated workflow, explicitly selecting the new
+focus file and existing Slider semantics file on Windows. Completed head, parent,
+diff and logs were checked; no active run was cancelled.
+
+A disposable logging-only native baseline now reproduces a matching focus gap:
+menu Escape restores the OSD invoker; AX Close collapses Now Playing without
+pointer/keyboard-mode change; a subsequent Escape retires OSD. AppKit and Flutter
+receive Enter/Escape/F2, but primary focus has moved to the route FocusScope
+above both application key handlers, so neither handler runs and the UI stays
+unchanged. Command-comma still visibly opens Settings. This is native causal
+evidence under passive instrumentation, not physical pointer/timer acceptance or
+proof of every historical cleanup event. The diagnostic quits normally with zero
+AXTree errors. Exact fixed Release matched all 106 bundle hashes before launch;
+its new Keychain prompt and final native comparison/cleanup are pending. The
+closing report and continuation handoff hold the current checkpoint and the same
+single human checklist.

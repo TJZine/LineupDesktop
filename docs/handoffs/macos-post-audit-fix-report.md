@@ -823,31 +823,56 @@ Pinned engine and runtime BUILD-INFO hashes remain unchanged. No final native
 candidate acceptance has been claimed at this interim point.
 
 [CI run 39321046092](https://github.com/TJZine/LineupDesktop/actions/runs/39321046092)
-is running on `70df5bd9dd51e19cd3d0f868a6e05cecadb3b8ba`, the product's direct
-child differing only in its isolated workflow. The new focus test and existing
-Slider semantics file are explicitly selected on Windows. No run was cancelled;
-Linux completed successfully with **1,855 tests**, canonical format (160 files/
-0 changed) and clean analysis, confirmed in the completed job log. Windows
-portable UI verification passed; its native build and contract checks remain
-in progress. Overall results remain pending.
+completed successfully with **1,855 Linux tests**, **744 selected Windows tests**,
+stock Windows compilation and all **eight** selected native/reference CTests.
+Completed head is `70df5bd9dd51e19cd3d0f868a6e05cecadb3b8ba`, the product's direct
+child differing only in its isolated workflow. Both focus and Slider semantics
+files are explicitly selected on Windows; parent/diff/head/completed logs were
+checked. Canonical format (160 files/0 changed) and analysis pass. No run was
+cancelled. Raw logs/status and `ci-summary.json` remain in the local evidence root.
 
-An independent diagnostic baseline exports `3a0bba29`/product `8105f73c` with
-passive Dart focus/key and local AppKit event logging only, build marker
-`m04-focus-trace@8105f73c`. It uses the pinned stock engine and the unchanged
-runtime. It is waiting at startup on a new Keychain prompt; the user has been
-asked to clear it. This diagnostic build is not canonical acceptance evidence.
-Its local monitor returns the original event and reads only allowlisted key
-codes, own-app event types/window flags and responder types; Dart logs normalized
-focus ancestry, handler entry, pointer and overlay states without media labels or
-typed text. Logging can perturb timing; missing native monitor lines cannot prove
-no OS delivery, and handler entry does not itself prove successful routing.
+### Native input/focus attribution
 
-The original native cleanup cause is not inferred solely from the Dart result.
-Latest native automated role/delivery proof is attributed to `8105f73c`, while
-final `ffcaae63` native checks, diagnostic correlation and cleanup remain pending.
-DVR remains On for these ongoing tests. M-04 and overall accessibility acceptance
-remain open, including spoken/physical checks, engine recovery/divergence and
-historical node 866. Keep the single existing checklist below.
+A diagnostic baseline exports `3a0bba29`/product `8105f73c` with passive Dart
+focus/key and local AppKit event logging only, marker `m04-focus-trace@8105f73c`.
+It uses the pinned stock engine and unchanged runtime. After the user cleared its
+Keychain prompt, actual Now Playing → Lineup menu → window zoom → Escape menu
+dismissal → zoom restore returned focus to the Player's OSD invoker. AX Close
+collapsed Now Playing to OSD without a Dart pointer event or keyboard-mode reset;
+timed hide stayed suspended. After showing/collapsing Now Playing again, Escape
+retired OSD immediately. Enter/Escape/F2 then visibly did nothing.
+
+The trace establishes AppKit local keyDown codes **36/53/120** and Dart
+HardwareKeyboard keyDowns **Enter/Escape/F2**, while primary focus is the route
+FocusScope (not rootScope), outside Player, above both application key handlers.
+Neither Player nor shell key handler receives those failed keys. Command-comma
+then visibly opens Settings through the available native menu shortcut. A later
+Dart Comma event has `meta=false`; do not infer that this specific event opened
+Settings. This is a matching native retirement/focus failure under passive
+instrumentation, consistent with the Dart cause, not proof of every historical
+cleanup event. The exact canonical fixed-Release comparison is still pending.
+
+The local monitor returns the original event; it reads allowlisted key codes,
+own-app event types/window flags and responder types. Dart logs normalized focus
+ancestry, handler entry, pointer and overlay states without media labels or typed
+text. Logging can perturb timing. Missing monitor lines cannot prove no OS
+delivery; handler entry alone does not establish routing. Two CUA coordinate
+attempts failed with `windowNotFoundAtPosition`; these establish no physical
+pointer/timed-hide reproduction. The diagnostic quit normally, with all native
+shutdown markers and zero AXTree errors. Raw log hash is
+`bfd9947757e9ff41197a252e18c2cc706d422869382bd7433a09a5c7a7b09011`;
+normalized trace hash is
+`57c4111eb7f353d7609e5610e1104551c2e89be89f3050926f401c5908ab48c0`.
+Source/patch/identity and `native-diagnostic-summary.json` stay under the local
+native-closeout root. No tracing or engine change is integrated.
+
+The exact `ffcaae63` Release matched all 106 bundle hashes before launch. It is
+now waiting at startup on its distinct new Keychain prompt (PID 315); the user
+has been asked to clear it. Latest native role/delivery proof is still attributed
+to `8105f73c`; final fixed-Release checks and cleanup remain pending. DVR remains
+On for ongoing tests. M-04 and overall accessibility acceptance remain open,
+including spoken/physical checks, engine recovery/divergence and historical node
+866. Keep the single existing checklist below.
 
 ## One final human checklist
 
