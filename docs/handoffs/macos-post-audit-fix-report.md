@@ -3,17 +3,20 @@
 Source: `platform/macos`; audited baseline `fa176087`, reviewed product candidate
 `1b2f64f4eaf584807f70e668a5502ab088a54537`. The audit plan/report were committed
 first as `3cf2cce7`. The latest product candidate is
-`ac995ec58c92ef491098f8a5afcc1da60cd65ad0`. Results for the earlier seven-fix
+`d5e09e0a53810c836e166d528a9224b8cfab0002`. Results for the earlier seven-fix
 candidate and the `296ab905` transition mitigation retain their original source
 and binary identities below.
 No main merge, distribution release, signing changes or engine patch was made.
 
-Status: **the original seven fixes and six Pro-review follow-up commits are
-implemented and independently reviewed. The known tooltip triggers passed bounded
-Release checks with zero AX failures; the additional Studio topology correction
-passed native named-button activation. General accessibility sign-off remains
-open for the human checks and the underlying Flutter AX update/recovery defects.
-The latest Studio candidate and prior tooltip candidate both passed Windows CI.**
+Status: **the original seven fixes and eight Pro-review follow-up commits are
+implemented and independently reviewed. The two second-review corrections passed
+1,816 local tests and Windows CI. Release playback checks passed visually, and
+Guide Clear is exposed and actionable in native AX. Repeated native keyboard
+activation was inconsistent, and a later Guide-to-Player transition produced
+574 AX failure messages and degraded the native tree. Those two observations
+remain unresolved; general accessibility sign-off is not granted. Earlier runtime
+observations retain their original identities below, and the consolidated human
+checks remain outstanding.**
 
 ## Original results (historical candidate identities)
 
@@ -78,7 +81,7 @@ No active run was cancelled. The [GPT Pro review prompt](macos-post-audit-advers
 requests an independent review of the full fix round and the remaining cast/track
 tooltip design question.
 
-## Pro review corrections — latest candidate `ac995ec5`
+## First Pro review corrections — candidate `ac995ec5`
 
 The user-approved follow-up contains six independently reviewed correction commits:
 
@@ -128,7 +131,7 @@ notification defects remain upstream candidates; no engine patch or issue was
 published. See the [investigation](macos-ax-update-investigation.md) and updated
 [fresh Pro review prompt](macos-post-audit-adversarial-review-prompt.md).
 
-## Latest Studio-only acceptance — `ac995ec5`
+## Studio-only acceptance — `ac995ec5`
 
 The clean canonical Release build uses `0.1.0` and
 `1@ac995ec58c92ef491098f8a5afcc1da60cd65ad0`. Generated defines were verified.
@@ -152,12 +155,81 @@ is a direct child of `ac995ec5`, differing only in its narrowed workflow.
 No active run was cancelled. The final evidence review verified identities,
 source equivalence, logs, native observations, privacy and links; no findings remained.
 
+## Second Pro review corrections — candidate `d5e09e0a`
+
+The second Pro review identified three defects addressed by two localized commits:
+
+| Commit | Cause and correction | Regressions and independent review | Release / Windows verification |
+| --- | --- | --- | --- |
+| `1bacc5b5` | Before a deferred tune has a native load, observed stopped/retired-playing state cannot determine the pending toggle. That phase now uses pause intent and avoids unscoped native commands. Ready playback continues to use observed state. Button icon, tooltip and action name reuse the same decision as K. | Four before-fix failures cover completed/pending stop × one/two toggles. Added supersession from paused playback, ready-state authority during blocked persistence, sleep expiry, and K/button/icon/name agreement. Both playback suites: 432 passed. Fresh `pro_round2_adversarial` approved the complete seven-file round-two diff before either commit, with no material findings. | Windows CI passed. Release step + one K ended Paused with a stable position; step + two K ended Playing with advancing position. Exact Dart input phase and native AX names were not established in this run. |
+| `d5e09e0a` | Guide Clear was hidden inside a native text-field leaf, and the enclosing field handler consumed Enter/NumpadEnter. A sibling action outside that scope preserves suffix space, density geometry, persistent focus and the TapRegion; clearing restores search focus. | Before-fix ancestry and keyboard regressions fail. Effective traversal before/during tooltip display, direct and F2 → Escape activation with both Enter keys, live input focus and no-tune assertions pass. Guide/parity: 81 passed; editable field navigation preserved. Same fresh combined review: no material findings. | Windows CI passed. Native name, real pointer hover, accessibility clearing and useful input focus passed. Initial Return/keypad/menu activation passed, then repeated key attempts became inconsistent; native keyboard acceptance remains open. |
+
+Canonical formatting (152 files, zero changes), analysis and all **1,816 macOS
+Dart tests passed**. The reviewed source diff SHA-256 is
+`04894278b54133347b5fd59517ff9d2edc38cf0431c55afdfa55bca828583d7e`.
+The clean Release build uses `0.1.0` and
+`1@d5e09e0a53810c836e166d528a9224b8cfab0002`; generated defines were verified.
+Toolchain, host and runtime BUILD-INFO identities match those recorded above.
+Bundle manifest SHA-256:
+`bda92d186246bc3a900cb93f006071f0d9c141fd7b20ead558d6417be556ece2`;
+executable SHA-256:
+`00f078611a400d1f44ccf0d03a6deab7dd415ffd0e1cc32f3a42712a641b56f4`.
+Private logs/manifests and regression evidence stay in `/tmp/lineup-audit/pro-round2/`.
+
+[Windows run 39183100595](https://github.com/TJZine/LineupDesktop/actions/runs/39183100595)
+passed **1,814 Linux Dart tests**, **703 selected Windows Dart tests**, the
+stock-engine Windows build and all eight selected native/reference CTests named
+above. Verification `5877120d6fe87ca46f102a602ce9451a936ce697` is a direct child of
+`d5e09e0a`, differing only in its isolated narrowed CI workflow. Live runs were
+checked before dispatch; no active run was cancelled. These checks establish
+portable behavior/contracts and compilation, not physical Windows acceptance.
+
+On that clean Release binary, Guide Clear appeared as a separate named native
+button. Actual pointer hover exposed its tooltip, accessibility activation cleared
+the query, and immediate typing reused the live search input. Initial Return,
+F2 → Escape → Return and keypad Enter activations cleared the query. Later repeated
+keypad/menu and ordinary Return attempts left it unchanged, despite a visible
+Clear focus ring; the native focused-element field reported the text field.
+Command+A also failed to select the query during those later attempts. All these
+Guide checks had zero AX failure messages. A temporary macOS full-shell probe with
+the same no-match query passed 40 actual-Tab direct/menu Return/keypad activations
+and Command+A after every retype. The discrepancy does not establish a new Dart
+bug or a clean native pass: actual focus/event delivery remains unresolved.
+
+The later sequence Settings → Playback → enable DVR → Back to Guide → select a
+current program produced the first AX failure at the tune boundary (log line 4:
+`866 will not be in the tree and is not the new root`). The native tree then
+collapsed to the application/window skeleton. There were **574 failure messages**
+through normal Quit; these are messages, not independent rejected updates, because
+Flutter can retain an earlier error. The exact originating node/delta was not
+captured, so this run cannot attribute a new Dart trigger or prove that earlier
+mitigations caused it. See the updated [investigation](macos-ax-update-investigation.md).
+M-04 remains open; no engine changes were made.
+
+Visual Release checks continued after AX degradation. A Page Down + K call pair
+completed in 23 ms and the final target showed Paused with a Play icon, remaining
+at 43:39 across observations about 12 seconds apart. After resuming, Page Down +
+K + K completed in 34 ms and the final target showed Playing with a Pause icon;
+its position advanced 09:17 → 09:28. CUA completion times do not prove when Dart
+handled each event or isolate the pre-load phase; the deterministic regressions
+establish that phase-specific contract. No native AX-label acceptance is inferred
+from these screenshots. DVR was restored to its original Off setting and normal
+Quit ended the recorded process. No media quality or spoken VoiceOver test ran.
+Private runtime summaries, boundary snapshots, screenshots and logs remain under
+`/tmp/lineup-audit/pro-round2/`.
+
+The independent final evidence review corroborated the committed diff, all 112
+bundle entries, CI logs, native screenshots and AX message counts, and checked
+privacy and local links. It found no actionable documentation issues while
+retaining the unresolved runtime observations above.
+
 ## One final human checklist
 
-Run these once on the latest built candidate `ac995ec5`; record failures with generic descriptions.
+Run these once on the latest built candidate `d5e09e0a`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
-- [ ] Physical K pauses/resumes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
+- [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
+- [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.
 - [ ] Physical ⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys; verify dirty/modal guards and native fullscreen synchronization.
 - [ ] Spoken VoiceOver names, enabled/disabled states, order and focus through Channels, Now Playing, Guide toolbar, DVR transport and Studio rundown, including exact invoker restoration, canonical labels without duplicate speech and track selected/pending state; note any loss of the native accessibility tree separately as M-04.
 - [ ] Listen/watch for audio drift during sustained playback and a natural rollover.

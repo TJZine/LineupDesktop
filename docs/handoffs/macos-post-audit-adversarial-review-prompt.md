@@ -13,23 +13,50 @@ Repository: https://github.com/TJZine/LineupDesktop
 
 Branch: `platform/macos`.
 
-Review range: `fa1760872ffc69dd61644cb09e0b0a64a130f5f4..ac995ec58c92ef491098f8a5afcc1da60cd65ad0`.
+Review range: `fa1760872ffc69dd61644cb09e0b0a64a130f5f4..d5e09e0a53810c836e166d528a9224b8cfab0002`.
 Resolve the immutable candidate below rather than silently reviewing an older
 cached branch. Later commits containing only verification documentation may
 follow the product candidate; inspect those evidence updates too.
 
-Product candidate: **ac995ec58c92ef491098f8a5afcc1da60cd65ad0**.
+Product candidate: **d5e09e0a53810c836e166d528a9224b8cfab0002**.
 
-Latest Windows verification passed:
-https://github.com/TJZine/LineupDesktop/actions/runs/39179621557
+Latest Windows verification (passed; inspect source identity and logs):
+https://github.com/TJZine/LineupDesktop/actions/runs/39183100595
 
-Verification commit `0cb331f6be11c02f877e9ebfffc39a16ce9bef74` has the product
-candidate as parent and differs only in its narrowed CI workflow. Both jobs passed:
-1,805 Linux tests, 694 selected Windows Dart tests, the stock Windows application
-build and eight selected native/reference CTests. The prior `d56a391b` run
-39178150109 also passed; its runtime evidence retains that earlier identity.
-Local formatting, analysis and all 1,807 macOS Dart tests passed. These checks do
-not establish physical Windows playback or complete accessibility acceptance.
+Verification commit `5877120d6fe87ca46f102a602ce9451a936ce697` has the product
+candidate as parent and differs only in its narrowed CI workflow. This run passed
+1,814 Linux tests, 703 selected Windows Dart tests, the stock Windows build and
+eight selected native/reference CTests. No active run was cancelled. Prior
+`ac995ec5` results retain their original identity in the report. Local formatting,
+analysis and all 1,816 macOS Dart tests passed on the new combined source. These
+checks do not establish physical Windows playback or complete accessibility
+acceptance.
+
+Current Release evidence on `d5e09e0a` is mixed; do not read earlier zero-error
+passes as closure of this candidate:
+
+- Guide Clear's native sibling name, real pointer hover, accessibility action and
+  live input focus passed. Initial Return/keypad/menu activation passed; later
+  repetitions left the query unchanged, with a visible Clear focus ring but a
+  native focused-element field reporting the text field. Command+A was also
+  inconsistent. Zero AX errors occurred during these Guide checks. A temporary
+  full-shell macOS/no-match probe passed 40 actual-Tab direct/menu Return/keypad
+  activations plus Command+A. Focus/event delivery in the real app is unresolved.
+- Settings → Playback → DVR On → Back to Guide → select current program then
+  produced `866 will not be in the tree and is not the new root` at app-log line 4.
+  The native tree degraded; 574 failure messages accumulated through normal Quit.
+  The exact originating delta/node was not captured. Do not attribute the trigger
+  to the new Guide topology, or exclusively to the engine, without evidence.
+- Visual transport checks survived the AX degradation: step + K ended Paused,
+  position 43:39 remained stable about 12 seconds; step + K + K ended Playing,
+  position 09:17 → 09:28. CUA call batches took 23/34 ms respectively, but these
+  timestamps do not prove exact Dart event phase. Phase-specific proof comes from
+  controlled regressions. Native transport AX labels were not verified in this run.
+- DVR was restored Off and normal Quit ended the process. No engine changes,
+  picture-quality retest or spoken VoiceOver acceptance occurred. Raw round-two
+  evidence stays in `/tmp/lineup-audit/pro-round2/`; the report records sanitized
+  identities, observations and limits. Investigate the unresolved results before
+  recommending accessibility sign-off.
 
 The user wants you to challenge correctness, design, ownership and evidence,
 including whether there is a better coherent solution. Do not accept earlier
@@ -60,9 +87,22 @@ The fix round includes:
    and the subsequent feature-preserving static-origin repair.
 8. Pro follow-up: persistent Guide invoker focus, Studio clear-search explicit
    naming, and user-approved Mini Guide initialization from presentation identity.
-   Review the six correction commits `3fed8fd7`, `4fdac1ab`, `22073990`, `352a74aa`,
-   `d56a391b`, `ac995ec5`. Challenge the diagnoses and verification boundaries
-   described below; earlier review conclusions are not authority.
+   Review the six first-review correction commits `3fed8fd7`, `4fdac1ab`,
+   `22073990`, `352a74aa`, `d56a391b`, `ac995ec5`, plus the two second-review
+   corrections below. Challenge the diagnoses and verification boundaries; earlier review conclusions are not authority.
+
+9. Second Pro review correction `1bacc5b5`: toggle pending intent while a tune
+   awaits its first native load, without unscoped native commands. Observed state
+   remains authoritative once ready, including while selection is saving. Button
+   icon/tooltip/accessibility name share K's decision. Challenge phase boundaries,
+   readiness/currentness, supersession, repeated input, sleep expiry and tests.
+10. Second Pro review correction `d5e09e0a`: Guide Clear is now a semantics sibling
+    outside the field-only Enter/Escape scope, retaining persistent invoker focus,
+    suffix reservation, density-aware hit area and TextFieldTapRegion. Validate
+    Enter/NumpadEnter directly and after menu restoration, useful search focus,
+    effective traversal before/during hover, no unintended tune and preserved
+    editable-field navigation. Both changes received a fresh combined adversarial
+    review before integration; do not treat that approval as authority.
 
 For M-04, independently trace this distinction:
 

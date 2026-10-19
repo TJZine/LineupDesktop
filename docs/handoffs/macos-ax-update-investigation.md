@@ -356,3 +356,43 @@ runtime results retain their `d56a391b` attribution, with unchanged relevant
 product sources. No engine source, accessibility setting or upstream issue was
 changed. Raw final captures stay under `/tmp/lineup-audit/m04-final-origin-round/`
 and `/tmp/lineup-audit/m04-studio-final-round/`.
+
+
+## Second-review candidate: residual native failure remains open
+
+Clean Release `d5e09e0a53810c836e166d528a9224b8cfab0002` initially had a healthy
+native tree. Guide Clear's sibling name, actual pointer hover and accessibility
+clearing passed with zero AX error messages. Initial direct/menu Return and
+keypad activation cleared the query, but later repetitions and Command+A became
+inconsistent. A visible Clear focus ring disagreed with the native focused-element
+field (text field). Forty repeated actual-Tab activations and Command+A passed in
+a temporary full-shell macOS/no-match widget probe. Neither the native snapshot
+nor that widget result resolves actual native focus/event delivery. This remains
+an open keyboard acceptance observation, not a proven Dart regression.
+
+The later route Settings → Playback → DVR On → Back to Guide → select current
+program produced the first failure at the tune boundary. The unchanged engine
+logged at app-log line 4:
+
+```text
+Failed to update ui::AXTree, error: 866 will not be in the tree and is not the new root
+```
+
+The native tree degraded to the application/window skeleton; the log accumulated
+574 failure messages through normal Quit. Message totals do not identify distinct
+failed updates, given the retained-error behavior described above. The exact first
+originating node/delta was not instrumented in this clean Release run. Its error
+class matches the existing investigation, but the precise application trigger and
+whether another Dart-side mitigation is appropriate remain unestablished. Earlier
+bounded zero-error passes retain their earlier candidate identities and do not
+close this positive observation.
+
+No engine patch is proposed from this new evidence alone. A next investigation
+should capture the first semantics delta and portal/origin identities for this
+exact route, reduce that topology in the existing standalone harness, and compare
+healthy fresh-process controls before choosing a Dart workaround or extending the
+upstream report. Do not infer that repeated key attempts or the new Clear sibling
+caused the rejection without that trace. Visual playback verification continued,
+DVR was restored Off, and normal Quit ended the app. Exact build/manifest identities
+and the separate keyboard limit are in the closing report; private captures are
+under `/tmp/lineup-audit/pro-round2/`. Accessibility sign-off remains open.

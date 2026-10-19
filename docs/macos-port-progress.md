@@ -1807,3 +1807,51 @@ the full combined 1,816-test suite, analysis and canonical formatting passed.
 The fresh combined adversarial review noted above approved this fix with no
 material findings before integration. Native name/action/hover and Windows checks
 remain separately attributed; the approved Player layout and engine are unchanged.
+
+
+## 2026-10-18 — Pro round two: combined verification and remaining native limits
+
+Both reviewed fixes were committed separately and pushed: `1bacc5b5` (pre-load
+playback intent) and `d5e09e0a` (Guide Clear topology/key scope). Fresh adversarial
+agent `pro_round2_adversarial` approved the complete seven-file source diff before
+integration, then independently confirmed its committed identity. Canonical format,
+analysis and all 1,816 local tests passed. Windows [run 39183100595](https://github.com/TJZine/LineupDesktop/actions/runs/39183100595)
+passed 1,814 Linux tests, 703 selected Windows tests, stock Windows compilation
+and all eight selected native/reference CTests. Its verification commit
+`5877120d6fe87ca46f102a602ce9451a936ce697` has product `d5e09e0a` as its direct
+parent and differs only in its isolated narrowed workflow; no active run was cancelled.
+
+Clean Release `d5e09e0a53810c836e166d528a9224b8cfab0002` used verified version/build
+defines. Manifest SHA-256 `bda92d186246bc3a900cb93f006071f0d9c141fd7b20ead558d6417be556ece2`
+and executable SHA-256 `00f078611a400d1f44ccf0d03a6deab7dd415ffd0e1cc32f3a42712a641b56f4`
+identify the actual binary. Guide Clear's native name, real pointer hover,
+accessibility action and immediate live input passed. Initial Return/keypad/menu
+activation passed, then repetitions became inconsistent despite a Clear focus
+ring; native focus reported the field. Forty actual-Tab macOS/no-match widget
+activations plus Command+A passed in an independent temporary probe. Actual
+native focus/event delivery remains unresolved, so no complete keyboard pass is
+claimed.
+
+All Guide checks initially had zero AX errors. Settings → Playback → enable DVR
+→ Back to Guide → current-program tune then produced the first rejection at
+app-log line 4 (`866 will not be in the tree and is not the new root`), degraded
+the native tree and accumulated 574 failure messages through normal Quit. The
+originating delta/node was not captured; neither a new Dart cause nor complete
+engine-only attribution is established. M-04 remains open, with the exact route
+and a proposed trace/reduction step in the investigation. Earlier zero-error
+native passes remain attributed to their earlier candidates.
+
+Visual Release playback checks showed step + K ending Paused with a Play icon and
+43:39 stable across observations about 12 seconds apart; step + two K ended Playing
+with a Pause icon and 09:17 → 09:28 progression. CUA batches completed in 23/34 ms;
+these timestamps do not prove Dart's event phase. Controlled regressions establish
+the pre-load contract; native transport AX labels were unavailable after bridge
+degradation. DVR was restored Off and normal Quit ended the process. Raw evidence
+is private under `/tmp/lineup-audit/pro-round2/`; the report/prompt record identities
+and limits and retain one consolidated human checklist. No engine, approved
+Player layout, HDR/Dolby Vision quality, release/signing or main-merge work occurred.
+
+Final independent evidence review corroborated source/bundle identity, CI logs,
+visual playback observations and AX counts, with no actionable documentation
+findings. It explicitly retained both unresolved native observations and checked
+privacy/local links. The final verification update is documentation-only.
