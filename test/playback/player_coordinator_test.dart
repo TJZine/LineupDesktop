@@ -4606,6 +4606,163 @@ void main() {
     },
   );
 
+  for (final stopped in [false, true]) {
+    for (final toggles in [1, 2]) {
+      testWidgets(
+        'deferred channel step honors $toggles toggles with stop completed=$stopped',
+        (tester) async {
+          final lineup = _TestLineup(count: 4);
+          final guide = GuideController(
+            lineup: lineup,
+            loadSchedule: (channel) async => _schedule(channel),
+          );
+          final player = _BlockingStopEventPlayer();
+          final coordinator = PlayerCoordinator(
+            player: player,
+            lineup: lineup,
+            guide: guide,
+          );
+          addTearDown(player.close);
+          addTearDown(lineup.dispose);
+          addTearDown(guide.dispose);
+          addTearDown(coordinator.dispose);
+          await coordinator.tune('channel-0');
+          final step = coordinator.nextChannel();
+          if (stopped) {
+            player.releaseStop.complete();
+            await tester.pump();
+            // Match the transport's cleared generation after stop completion.
+            player.emitStatus(PlayerState.stopped);
+          }
+          expect(coordinator.tuning, isTrue);
+          expect(player.loads, hasLength(1));
+          for (var index = 0; index < toggles; index++) {
+            await coordinator.togglePlayback();
+          }
+          if (!stopped) player.releaseStop.complete();
+          await tester.pump(const Duration(milliseconds: 250));
+          await step;
+          expect(player.loadStartPaused, [false, toggles.isOdd]);
+          // No current load existed for an unscoped native control to address.
+          expect(player.plays, 0);
+          expect(player.pauseCalls, 0);
+          coordinator.dispose();
+        },
+      );
+    }
+  }
+
+  testWidgets('superseding a deferred step owns its new pause intent', (
+    tester,
+  ) async {
+    final lineup = _TestLineup(count: 4);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer(sync: true);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-0');
+    await coordinator.pause();
+    player.emitStatus(
+      PlayerState.paused,
+      generation: player.loadGenerations.last,
+    );
+    final first = coordinator.nextChannel();
+    await coordinator.togglePlayback();
+    final second = coordinator.nextChannel();
+    await first;
+    await coordinator.togglePlayback();
+    expect(player.pauseCalls, 1);
+    expect(player.plays, 0);
+    await tester.pump(const Duration(milliseconds: 250));
+    await second;
+    expect(player.loads, hasLength(2));
+    expect(player.loadStartPaused.last, isTrue);
+    expect(lineup.currentChannelId, 'channel-2');
+    coordinator.dispose();
+  });
+
+  testWidgets('observed pause wins while a ready tune waits for persistence', (
+    tester,
+  ) async {
+    final lineup = _BlockingLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer(sync: true);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    final tune = coordinator.tune('channel-b');
+    await tester.pump();
+    expect(lineup.persistenceStarted.isCompleted, isTrue);
+    expect(coordinator.tuning, isTrue);
+    player.emitStatus(
+      PlayerState.paused,
+      generation: player.loadGenerations.last,
+    );
+    await coordinator.togglePlayback();
+    expect(player.plays, 1);
+    expect(player.pauseCalls, 0);
+    lineup.releasePersistence.complete();
+    await tester.pump();
+    expect(await tune, isTrue);
+    coordinator.dispose();
+  });
+
+  testWidgets('sleep expiry cancels a deferred play intent before dispatch', (
+    tester,
+  ) async {
+    var now = DateTime.now();
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _Player();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+      clock: () => now,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-0');
+    coordinator.setSleepTimer(const Duration(minutes: 1));
+    final step = coordinator.nextChannel();
+    await tester.pump();
+    await coordinator.pause();
+    now = now.add(const Duration(minutes: 1));
+    await coordinator.play();
+    await tester.pump(const Duration(milliseconds: 250));
+    await step;
+    expect(player.loads, hasLength(1));
+    expect(player.plays, 0);
+    expect(player.pauseCalls, 0);
+    expect(coordinator.tuning, isFalse);
+    expect(coordinator.sleepRemaining, isNull);
+    expect(coordinator.status.state, PlayerState.stopped);
+    coordinator.dispose();
+  });
+
   testWidgets(
     '30 rapid channel steps publish every target and load only the final one',
     (tester) async {

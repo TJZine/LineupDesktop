@@ -1765,3 +1765,26 @@ fresh GPT Pro review prompt covers the complete immutable range. Underlying
 Flutter update/recovery defects remain upstream proposals, without an engine
 patch or publication. Bounded native passes do not establish general accessibility
 sign-off or physical Windows acceptance.
+
+
+## 2026-10-18 — Pro round two: playback controls before tune dispatch
+
+A channel step retires its load before the 250 ms quiet interval ends. The prior
+toggle used observed stopped/retired-playing state when no replacement load existed,
+so K could leave pending intent playing or two toggles could both request Pause.
+The coordinator now recognizes this pre-load tune phase and uses its pause intent;
+a ready load still uses observed state, even during selection persistence. The
+transport icon, tooltip and accessible name reuse the coordinator's toggle decision.
+Pre-load controls publish intent without sending unscoped native commands; load
+readiness ordering, currentness and sleep-expiry checks remain in place.
+
+Four stop-completion × toggle-count regressions fail on the old implementation,
+including wrong replacement pause flags and unscoped controls. New coverage also
+checks a paused source/new superseding step, observed pause during blocked selection
+persistence, sleep expiry and the K/button/icon/name contract. Both playback suites
+passed 432 tests. Full combined formatting, analysis and 1,816 local Dart tests
+passed. Fresh read-only adversarial agent `pro_round2_adversarial` reviewed all
+seven changed Dart files for both round-two fixes before integration and reported
+no material findings (diff SHA-256 `04894278b54133347b5fd59517ff9d2edc38cf0431c55afdfa55bca828583d7e`).
+Release/native and Windows acceptance are recorded separately for the combined
+candidate; no physical Windows or native keyboard timing proof is inferred here.

@@ -680,11 +680,7 @@ class _Osd extends StatelessWidget {
       ),
       IconButton(
         style: actionStyle,
-        tooltip:
-            (controller.displayHoldActive ||
-                controller.status.state == PlayerState.playing)
-            ? 'Pause'
-            : 'Play',
+        tooltip: controller.playbackToggleWillPause ? 'Pause' : 'Play',
         onPressed: unsupported
             ? null
             : () {
@@ -694,15 +690,8 @@ class _Osd extends StatelessWidget {
         padding: null,
         iconSize: 36,
         icon: Icon(
-          (controller.displayHoldActive ||
-                  controller.status.state == PlayerState.playing)
-              ? Icons.pause
-              : Icons.play_arrow,
-          semanticLabel:
-              (controller.displayHoldActive ||
-                  controller.status.state == PlayerState.playing)
-              ? 'Pause'
-              : 'Play',
+          controller.playbackToggleWillPause ? Icons.pause : Icons.play_arrow,
+          semanticLabel: controller.playbackToggleWillPause ? 'Pause' : 'Play',
         ),
       ),
       IconButton(

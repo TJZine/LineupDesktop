@@ -41,6 +41,76 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  testWidgets('deferred tune transport name and icon agree with K', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      channelCount: 3,
+      dvrControlsEnabled: true,
+    );
+    addTearDown(fixture.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => LineupCanvas.builder(
+          context,
+          MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+        ),
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await fixture.player.tune('channel');
+    final step = fixture.player.nextChannel();
+    fixture.native._events.add(
+      PlayerEvent(
+        status: const PlayerStatus(
+          state: PlayerState.stopped,
+          message: 'Stopped',
+        ),
+        position: Duration.zero,
+        duration: Duration.zero,
+        telemetry: const PlayerTelemetry(),
+        tracks: const [],
+      ),
+    );
+    await tester.pump();
+    fixture.player.showOsd();
+    await tester.pump();
+    void expectToggle(String name, IconData icon) {
+      final button = find.byTooltip(name);
+      expect(button, findsOneWidget);
+      final semantics = tester.getSemantics(button);
+      expect(semantics.label, name);
+      expect(semantics.getSemanticsData().flagsCollection.isButton, isTrue);
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(of: button, matching: find.byType(Icon)),
+            )
+            .icon,
+        icon,
+      );
+    }
+
+    expectToggle('Pause', Icons.pause);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pump();
+    expectToggle('Play', Icons.play_arrow);
+    expect(fixture.native.transportCommands, 0);
+    // The visible button reverses K's pending intent without a native command.
+    await tester.tap(find.byTooltip('Play'));
+    await tester.pump();
+    expectToggle('Pause', Icons.pause);
+    expect(fixture.native.transportCommands, 0);
+    await tester.pump(const Duration(milliseconds: 250));
+    await step;
+    fixture.player.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, semanticsEnabled: true);
+
   for (final tooltipsVisible in [true, false]) {
     testWidgets(
       'retiring OSD removes tooltips and preserves inherited visibility $tooltipsVisible',

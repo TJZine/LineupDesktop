@@ -132,6 +132,7 @@ class PlayerCoordinator extends ChangeNotifier {
   int _nativeLoadGeneration = 0;
   _PlaybackLoad? _activeLoad;
   int? get _activeLoadGeneration => _activeLoad?.generation;
+  bool get _awaitingTuneLoad => _tuning && _activeLoad == null;
   int get _activePartIndex => _activeLoad?.partIndex ?? 0;
   final Map<int, Duration> _partDurations = {};
   int? _advancingGeneration;
@@ -157,6 +158,14 @@ class PlayerCoordinator extends ChangeNotifier {
   Map<int, Channel> _channelByNumber = const {};
 
   PlayerStatus get status => _status;
+
+  /// The action offered by the transport button and keyboard playback toggle.
+  /// Before a load exists (or while it is pending/held), controls toggle intent;
+  /// a ready load uses observed playback even while selection is being saved.
+  bool get playbackToggleWillPause =>
+      displayHoldActive || _awaitingTuneLoad || _activeLoad?.pending == true
+      ? !_userPaused
+      : _status.state == PlayerState.playing;
   Duration get position => _position;
   Duration get duration => _duration;
   PlayerTelemetry get telemetry => _telemetry;
@@ -1372,10 +1381,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> togglePlayback() {
-    final playing = displayHoldActive || _activeLoad?.pending == true
-        ? !_userPaused
-        : _status.state == PlayerState.playing;
-    return playing ? pause() : play();
+    return playbackToggleWillPause ? pause() : play();
   }
 
   Future<void> play() => _setPlaybackPaused(false);
@@ -1632,6 +1638,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final controlGeneration = ++_controlGeneration;
     final tuneGeneration = _tuneGeneration;
     final load = _activeLoad;
+    final awaitingTuneLoad = _awaitingTuneLoad;
     _userPaused = paused;
     if (paused) {
       _displayMatching.userPause();
@@ -1645,11 +1652,16 @@ class PlayerCoordinator extends ChangeNotifier {
         identical(load, _activeLoad);
     try {
       if (!paused && await _expireSleepIfNeeded()) return;
-      // Load applies its captured pause flag on the native worker. A control
-      // must follow it, and only the latest intent may survive this wait.
-      if (load != null) await load.readiness;
       if (!current()) return;
-      await (paused ? player.pause() : player.play());
+      // A deferred tune consumes the intent when its load starts. There is no
+      // current native load for an unscoped play/pause command to control yet.
+      if (!awaitingTuneLoad) {
+        // Load applies its captured pause flag on the native worker. A control
+        // must follow it, and only the latest intent may survive this wait.
+        if (load != null) await load.readiness;
+        if (!current()) return;
+        await (paused ? player.pause() : player.play());
+      }
     } catch (error) {
       if (current() &&
           _ownsPlaybackControl(controlGeneration, tuneGeneration)) {
