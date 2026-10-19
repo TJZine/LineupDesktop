@@ -713,3 +713,22 @@ captured production transition. Historical node 866 remains unattributed. Native
 group/spoken/delivery and exact timing/lifetime gaps retain their evidence limits;
 the closing report owns any new bounded production observations. M-04 and overall
 accessibility acceptance remain open, with the existing single human checklist.
+
+Final product `8105f73c` canonical Release verification completed after the user
+cleared its new Keychain prompt. Two fresh healthy-native-AX processes completed
+entry/actual Next-channel and untimed Now Playing menu exclusion/window zoom/
+restoration with zero AX/Flutter errors through normal Quit. Window facts prove
+800×632 → 1728×1084 → 800×632. The untimed mode removes the earlier OSD timer
+confound, but no production interactivity flip or hidden widget identity was
+directly observed, and exact timed-OSD entry/lifetime cases remain bounded by the
+earlier limitations. Cleanup synthetic keys after collapse did not expose
+controls; native Player click restored usable OSD/menu with no AX error. This
+remains an unclassified input/focus observation, not attributed AXTree loss.
+DVR Off, starting channel and size were restored and all test apps closed.
+
+[CI run 39312611152](https://github.com/TJZine/LineupDesktop/actions/runs/39312611152)
+passed 1,850 Linux tests, 739 selected Windows tests, the stock Windows build and
+all eight selected native/reference CTests. Verification
+`6e7112e20583e65afb81023dd8e9bbf14793354a` is product `8105f73c`'s direct child
+with only its isolated workflow changed. Exact head/relationship/completed logs
+were checked; no active run was cancelled. This is not physical Windows AX proof.

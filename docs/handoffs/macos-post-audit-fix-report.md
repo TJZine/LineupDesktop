@@ -9,8 +9,9 @@ and binary identities below.
 No main merge, distribution release, signing changes or engine patch was made.
 
 Status: **the application corrections are committed and independently reviewed.
-The Slider interactivity follow-up passed 1,852 local tests; its exact Release/CI
-status is recorded in the latest section below. Fresh stock native controls
+The Slider interactivity follow-up passed 1,852 local tests and Windows/Linux CI;
+two fresh final-product Release processes completed with zero AX/Flutter errors.
+Its exact evidence and limits are recorded below. Fresh stock native controls
 reject both unkeyed interactivity flips and pass the keyed comparison. Four
 earlier product `5c6349d4` Release sequences completed without AXTree errors;
 their exact entry/menu timing and native group-role limits remain unverified.
@@ -641,24 +642,53 @@ newline). Runtime BUILD-INFO SHA-256 remains
 `b6b0f67b9d7c3e74e1089db05621c65d1aec850a3326e22f9172515ed2018899`;
 pinned framework/engine, arm64 and macOS 27.0.1 (26A434) are unchanged.
 
-At this interim record, the exact Release is waiting at startup with a new
-SecurityAgent process; the user has been asked to handle its current Keychain
-prompt. Native follow-up and cleanup remain pending, not passed.
+The user cleared this binary's new Keychain prompt. Two fresh processes began
+with healthy native AX in Guide, without a forced Dart semantics handle:
+
+| Final product process | Observation through normal Quit |
+| --- | --- |
+| Entry and Next channel | DVR On in Settings → Guide → tune exposes native Slider → actual OSD Next channel → native Slider after tuning. Zero AX/Flutter errors; no enabled/disabled flip was directly observed. |
+| Untimed Now Playing/menu/resize | Tune the starting channel → I opens Now Playing (its Close collapse control and Slider are present) → live menu excludes Slider → native window zoom changes 800×632 to 1728×1084 while menu remains open → Escape restores Slider and Now Playing Close → zoom restores 800×632. Zero AX/Flutter errors. |
+
+`showNowPlaying()` uses `timed: false`; this avoids the earlier timed-OSD auto-hide
+confound for this bounded resize check. It does not directly inspect hidden
+widget identity or establish the exact timed-OSD lifetime/first-entry interleaving,
+native group role, notifications or spoken behavior.
+
+During cleanup after collapsing Now Playing, synthetic Escape/Return/F2 did not
+expose controls. Native AX then showed the video-only Player without overlay
+controls; a native Player-container click restored OSD, and live menu/Settings
+actions worked. This is an unclassified input/focus observation, not established
+AXTree loss or a regression attributable to the interactivity fix. No AX/Flutter
+error or exception was logged. `resolvePlayerKey` maps these keys to Guide/OSD
+actions, so the synthetic no-ops remain unexplained; the sparse tree only
+describes the absent overlay controls. Physical focus/input acceptance remains in the
+existing checklist. DVR Off, starting channel and original window size were
+restored; both processes ended normally, with no native shutdown timeout, and no
+verification app/Inspector/SecurityAgent remained running at final inspection.
 
 [CI run 39312611152](https://github.com/TJZine/LineupDesktop/actions/runs/39312611152)
-is running on verification `6e7112e20583e65afb81023dd8e9bbf14793354a`, the
-product's direct child differing only in the isolated workflow. The updated
-Slider suite is explicitly selected on Windows. Live runs were checked before
-dispatch; no active run was cancelled. Completion is not yet claimed here.
+passed **1,850 Linux tests**, **739 selected Windows Dart tests**, the stock
+Windows build and all eight selected native/reference CTests:
+`track_list_encoder`, `native_playback_state`, `player_core_contract`,
+`encodable_value_conversion`, `display_dynamic_range`, `display_guardian`,
+`native_player_contract`, `authenticated_reference`. Verification
+`6e7112e20583e65afb81023dd8e9bbf14793354a` is the exact product's direct child
+differing only in the isolated workflow. The updated Slider suite is explicitly
+selected on Windows. The successful head, parent relationship, workflow-only
+diff and completed logs were inspected. Live runs were checked before dispatch;
+no active run was cancelled. CI does not establish physical Windows AX/playback.
 
 Raw follow-up artifacts stay private under
 `/tmp/lineup-audit/m04-interactivity-followup/`: worker before/after logs and
 source hashes, full tests/format/analysis, `stock-native-summary.json`, preserved
-stock bundles, production baseline log/result, `release-identity.json`, bundle
-manifest, build log and CI identity/status. M-04, overall accessibility acceptance,
-native group/spoken/delivery gaps, exact native entry/menu and excluded-Slider
-lifetime limits, retained-error recovery, rejected-batch divergence and node 866
-remain open. The single human checklist below is retained.
+stock bundles, production baseline log/result, two final production logs and
+`native-final-summary.json`, `release-identity.json`, bundle manifest, build log,
+CI identity, full logs and final checks. M-04, overall accessibility acceptance,
+native group/spoken/delivery gaps, exact timed-OSD entry/menu/lifetime limits,
+the unclassified cleanup input/focus observation, retained-error recovery,
+rejected-batch divergence and node 866 remain open. The single human checklist
+below is retained.
 
 ## One final human checklist
 
@@ -667,7 +697,7 @@ HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.
-- [ ] Physical left- and right-⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys; verify dirty/modal guards and native fullscreen synchronization.
+- [ ] Physical left- and right-⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys, including focus after Now Playing collapse and menu/window resizing; verify dirty/modal guards and native fullscreen synchronization.
 - [ ] Spoken VoiceOver names, enabled/disabled states, order and focus through Channels, Now Playing, Guide toolbar, DVR transport and Studio rundown, including exact invoker restoration, canonical labels without duplicate speech (cast name/role and Now), track selected/pending state and subtitle Off; inspect the native OSD Slider group role/order, verify it follows the controls and its group announcement is useful, including OSD/menu transitions. Note any loss of the native accessibility tree separately as M-04.
 - [ ] Listen/watch for audio drift during sustained playback and a natural rollover.
 - [ ] Real live resize/minimum size, minimize/restore, Spaces/Stage Manager round trip, and sleep/wake during playback; verify video alignment, state, audio and responsive controls afterward.

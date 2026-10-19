@@ -2167,7 +2167,7 @@ Canonical format/analysis and the full 1,852-test local suite passed. Fresh
 read-only reviewer chat `01a155a7-84ee-7641-b56d-fceb695328e3` checked exact
 source/log identities and found no material defect before integration. Controller
 Release/CI identities and final native controls are recorded in the closing
-report when completed.
+report.
 
 Report calibration: replay rejects a missing reparented-child record earlier
 than native Release; it does not simulate partial mutation. `Nodes left pending`
@@ -2177,3 +2177,25 @@ have mutated; a successful prepass can already have destroyed moved subtrees.
 Its early return can preserve pending updates. Retained-error/event delivery,
 batch loss/divergence, native/human acceptance and historical node 866 remain
 open. No engine patch or upstream publication is included.
+
+### Interactivity Release and CI closeout
+
+The canonical Release is exact product `8105f73c9b5891e880d9fa292f0b26d679238a41`.
+After its Keychain prompt was cleared, two fresh native processes completed
+entry/OSD Next-channel and untimed Now Playing/menu/actual window zoom/restoration
+with zero AX/Flutter errors and no shutdown timeout. No production interactivity
+flip was directly observed. The untimed mode removes the old auto-hide confound;
+hidden widget identity and exact timed-OSD entry/lifetime remain unproven. Cleanup
+synthetic keys after collapse did not expose controls until native Player click;
+this unclassified input/focus observation is retained in the existing physical
+checklist, not classified as AXTree loss. DVR Off, starting channel and window
+size were restored, and no verification app remains running.
+
+[CI run 39312611152](https://github.com/TJZine/LineupDesktop/actions/runs/39312611152)
+passed 1,850 Linux tests, 739 selected Windows tests, the stock Windows build and
+all eight selected native/reference CTests. Verification
+`6e7112e20583e65afb81023dd8e9bbf14793354a` is the exact product's direct child,
+differing only in the isolated workflow. The updated Slider regression is
+selected on Windows; completed head/parent/diff/logs were inspected and no active
+run was cancelled. Native/spoken/notification/recovery acceptance and historical
+node 866 remain open; CI is not physical Windows AX/playback acceptance.

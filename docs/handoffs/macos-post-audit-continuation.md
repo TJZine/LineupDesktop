@@ -19,12 +19,22 @@ usable value updates with zero AX errors. The production baseline Next-channel
 run had zero errors without an observed flip and is not a native reproduction.
 
 Release/CI closeout for this exact product is recorded in the closing report.
-At this checkpoint the canonical Release is built but native follow-up is waiting
-on its new Keychain prompt (process 58864); the user was asked to clear it.
+The user cleared the exact canonical Release's new Keychain prompt. Two fresh
+native processes completed healthy entry/Next-channel and untimed Now Playing
+menu/window-resize/restoration with zero AX/Flutter errors through normal Quit.
+No production interactivity flip was directly observed. Now Playing's untimed
+mode removes the old auto-hide confound, but does not directly prove hidden
+widget identity or the precise timed-OSD entry/lifetime cases. Cleanup synthetic
+keys after collapsing Now Playing did not expose controls; a native Player click
+restored usable OSD/menu. This is an unclassified input/focus observation with no
+AX error, retained in the existing final human checklist. DVR Off, starting
+channel and window size were restored; no verification app remains running.
 [CI run 39312611152](https://github.com/TJZine/LineupDesktop/actions/runs/39312611152)
-is still running on verification `6e7112e20583e65afb81023dd8e9bbf14793354a`, a
-direct child differing only in the isolated workflow. Recheck actual state before
-resuming; no final production check, cleanup or CI success is claimed yet.
+passed 1,850 Linux tests, 739 selected Windows tests, the stock Windows build and
+all eight selected native/reference CTests. Verification
+`6e7112e20583e65afb81023dd8e9bbf14793354a` is a direct child differing only in
+the isolated workflow; completed head/parent/diff/logs were checked, and no active
+run was cancelled. Recheck current processes if continuing later.
 Raw follow-up evidence is local under
 `/tmp/lineup-audit/m04-interactivity-followup/`. Reuse older native evidence only
 with its original identity. M-04 and overall accessibility acceptance remain

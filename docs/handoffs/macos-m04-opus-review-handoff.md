@@ -12,6 +12,15 @@ integration. Both stock unkeyed native flip directions reject; both keyed
 comparisons retain usable native values with zero AX errors. A production
 Next-channel action alone did not capture the flip and did not reject.
 
+The exact follow-up canonical Release then completed two fresh native processes
+for entry/Next-channel and untimed Now Playing menu/window-resize/restoration,
+with zero AX/Flutter errors through normal Quit. The untimed mode removes the
+old auto-hide confound; no production interactivity flip or hidden widget
+identity was directly observed. CI run `39312611152` passed 1,850 Linux tests,
+739 selected Windows tests, the stock Windows build and all eight selected
+native/reference CTests. The closing report records exact provenance, cleanup
+and an unclassified synthetic input/focus observation after Now Playing collapse.
+
 The [closing report](macos-post-audit-fix-report.md#m-04-follow-up-visible-slider-interactivity)
 owns current product Release/CI evidence and remaining acceptance. Its correction
 of the returned report's broad post-mutation/reparent claims is material: some
