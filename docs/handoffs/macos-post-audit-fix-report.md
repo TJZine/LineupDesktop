@@ -3,15 +3,17 @@
 Source: `platform/macos`; audited baseline `fa176087`, reviewed product candidate
 `1b2f64f4eaf584807f70e668a5502ab088a54537`. The audit plan/report were committed
 first as `3cf2cce7`. The latest product candidate is
-`5c6349d4cf43244da9989fb72f298ac2acb614b0`. Results for the earlier seven-fix
+`8105f73c9b5891e880d9fa292f0b26d679238a41`. Results for the earlier seven-fix
 candidate and the `296ab905` transition mitigation retain their original source
 and binary identities below.
 No main merge, distribution release, signing changes or engine patch was made.
 
 Status: **the application corrections are committed and independently reviewed.
-Slider containment passed 1,847 local tests and Windows CI. Four fresh logged
-native Release sequences completed without AXTree error messages, with exact
-entry/menu timing and native group-role extraction still unverified.
+The Slider interactivity follow-up passed 1,852 local tests; its exact Release/CI
+status is recorded in the latest section below. Fresh stock native controls
+reject both unkeyed interactivity flips and pass the keyed comparison. Four
+earlier product `5c6349d4` Release sequences completed without AXTree errors;
+their exact entry/menu timing and native group-role limits remain unverified.
 The keyboard investigation
 isolated a rapid menu-focus interleaving and reproduced synthetic Command+A failure
 in a stock Flutter TextField. The first new production AX failure now has an
@@ -554,9 +556,113 @@ exact bundle identity and `native-summary.json` stay private under
 checklist remains below. M-04, retained-error recovery, rejected-batch divergence
 and historical node 866 remain open.
 
+## M-04 follow-up: visible Slider interactivity
+
+The second Opus report exposed a containment regression on `5c6349d4`: changing
+a visible Slider between enabled and disabled replaces its unlabeled semantics
+group but does not resend its empty grafted portal leaf. The controller
+independently reproduced the missing-record batch in pinned Dart tests. The
+bridge's removal prepass can destroy the old leaf, then its main Release update
+references that leaf without initializing it. This is distinct from the earlier
+unreachable-node error during preflight.
+
+Reviewed product **`8105f73c9b5891e880d9fa292f0b26d679238a41`** derives one
+`sliderInteractive` boolean for both `onChanged` and `ValueKey` on the local
+Overlay. A flip remounts Slider/portal together. Same-interactivity value/max
+updates and menu exclusion retain state; the 40-pixel container, separate visible
+indicator, callbacks, retirement wrapper and approved unlabeled enabled group
+after the controls remain intact. No new label, lifetime state machine or engine
+patch was added.
+
+Five new tests independently start healthy and cover duration disappearing,
+duration arriving, unsupported/restoration, focus loss/disabled noninteraction,
+reenabled Tab/Right seeking, same-interactivity state retention and active-drag
+cancellation. Identical test source passes **17/fails 5** on `5c6349d4`/`7a496450`,
+with every new case first rejecting the intended absent reparented-child record;
+the fix passes **22/22**. Existing PlayerView tests pass **123/123**. The final
+local suite passes **1,852 tests**, canonical format reports **159 files/0 changed**,
+and analysis is clean. On historical `459fd726`, the five added cases have no
+replay rejection: two pass, while three later fail only the newer approved group
+assertion. Do not report five complete historical passes or reuse the old 4/-13
+baseline as a run of this revised harness.
+
+Fresh independent read-only reviewer `01a155a7-84ee-7641-b56d-fceb695328e3`
+checked source, before/after logs, focus/gesture consequences, stock discriminator
+and exact artifact hashes before integration. No material issue remained. Its
+review did not execute native actions or establish full accessibility acceptance.
+
+The report's broad statement that all "reparented" failures occur after mutation
+is rejected: the pinned engine's `ComputePendingChangesToNode` can reject with
+"not marked for destruction, would be reparented" before `UpdateNode`. Completion
+failures such as `Nodes left pending` occur after node updates. A removal prepass
+may itself fail preflight without destroying anything; a successful removal can
+already have destroyed moved subtrees. The retained error can make the bridge
+return even after a successful prepass, before consuming/clearing pending updates.
+There is no established full resynchronization or notification recovery for the
+surviving bridge/tree instance. Replay's absent-record guard rejects earlier
+than native Release and does not simulate partial mutation.
+
+### Controlled stock native comparison
+
+The committed `slider_interactivity.dart` uses stock widgets and the same local
+progress-overlay structure, without Lineup imports, forced semantics, tracing or
+native-runner modifications. All four Release processes began with healthy
+native AX and Slider 50%; stdout/stderr were captured by the launching shell.
+
+| Fresh process | Observation through normal Quit |
+| --- | --- |
+| Unkeyed, initially enabled | Disable → first `Nodes left pending by the update: 12`; one AX error message. Quit after rejection. |
+| Unkeyed, initially disabled | Enable → same first pending-node error; one AX error message. Quit after rejection. |
+| Keyed, initially enabled | Disable → value 60% → Enable → value 70%. Zero AX/Flutter error messages. |
+| Keyed, initially disabled | Enable → value 60%. Zero AX/Flutter error messages. |
+
+Exact source/binary hashes and controls are in the
+[repro README](../../tool/macos/ax-tooltip-repro/README.md#visible-slider-interactivity-discriminator).
+All four share the pinned stock engine and the same nonfatal sandbox-extension
+launch warning; neither error-free controls nor populated native values establish
+notification delivery/recovery or spoken behavior.
+
+The actual `5c6349d4` production baseline also ran healthy DVR Slider → the OSD's
+Next channel → visible Slider, with zero AX errors through cleanup and Quit.
+No enabled/disabled flip was observed. This does not reproduce the report's
+predicted production failure or refute the controlled transition. Source shows
+the condition can change, but every channel change need not expose it.
+
+### Exact follow-up Release and CI
+
+Canonical Release built product `8105f73c`, version/build `0.1.0` / `1`, with AOT
+identity `1@8105f73c9b5891e880d9fa292f0b26d679238a41`. Executable SHA-256:
+`b8a5f25b95b650d8714119b66efc38e0d4980f6476c1ee34b6b8b0a873b8ea6d`;
+App.framework `fd606f666077872ed44aaf350c77a3fcfca1e8927f891cd0e72f13634902acf8`.
+The 106-entry bundle manifest SHA-256 is
+`14da8ccdc19c274c11d38d351ebf38e41ba6415b71b76d9aee842bf56a65fbb6`
+(compact JSON mapping relative paths to hashes, sorted keys, UTF-8, no trailing
+newline). Runtime BUILD-INFO SHA-256 remains
+`b6b0f67b9d7c3e74e1089db05621c65d1aec850a3326e22f9172515ed2018899`;
+pinned framework/engine, arm64 and macOS 27.0.1 (26A434) are unchanged.
+
+At this interim record, the exact Release is waiting at startup with a new
+SecurityAgent process; the user has been asked to handle its current Keychain
+prompt. Native follow-up and cleanup remain pending, not passed.
+
+[CI run 39312611152](https://github.com/TJZine/LineupDesktop/actions/runs/39312611152)
+is running on verification `6e7112e20583e65afb81023dd8e9bbf14793354a`, the
+product's direct child differing only in the isolated workflow. The updated
+Slider suite is explicitly selected on Windows. Live runs were checked before
+dispatch; no active run was cancelled. Completion is not yet claimed here.
+
+Raw follow-up artifacts stay private under
+`/tmp/lineup-audit/m04-interactivity-followup/`: worker before/after logs and
+source hashes, full tests/format/analysis, `stock-native-summary.json`, preserved
+stock bundles, production baseline log/result, `release-identity.json`, bundle
+manifest, build log and CI identity/status. M-04, overall accessibility acceptance,
+native group/spoken/delivery gaps, exact native entry/menu and excluded-Slider
+lifetime limits, retained-error recovery, rejected-batch divergence and node 866
+remain open. The single human checklist below is retained.
+
 ## One final human checklist
 
-Run these once on the latest product candidate `5c6349d4`; record failures with generic descriptions.
+Run these once on the latest product candidate `8105f73c`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.

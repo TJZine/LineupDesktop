@@ -1,5 +1,38 @@
 # Continue the macOS post-audit fixes — 2026-10-19
 
+## Interactivity follow-up — current product
+
+The second Opus report was adjudicated against pinned source and fresh controls.
+Reviewed fix **`8105f73c9b5891e880d9fa292f0b26d679238a41`** keys the Slider's
+local overlay on the same boolean that controls `onChanged`. This remounts its
+portal on enabled/disabled flips, preventing the old group from destroying an
+un-resent grafted leaf. Ordinary value/max/menu updates retain state; the approved
+visuals and unlabeled enabled group/order remain intact.
+
+Five new tests start each transition independently healthy. Identical test source
+passes 17/fails 5 on `5c6349d4`, then passes 22/22 with the fix. Existing PlayerView
+tests pass 123/123; all 1,852 local tests and canonical format/analysis pass. Fresh
+read-only review `01a155a7-84ee-7641-b56d-fceb695328e3` checked the implementation
+and evidence before integration. Stock native controls independently reject both
+unkeyed flip directions with `Nodes left pending`; both keyed controls retain
+usable value updates with zero AX errors. The production baseline Next-channel
+run had zero errors without an observed flip and is not a native reproduction.
+
+Release/CI closeout for this exact product is recorded in the closing report.
+At this checkpoint the canonical Release is built but native follow-up is waiting
+on its new Keychain prompt (process 58864); the user was asked to clear it.
+[CI run 39312611152](https://github.com/TJZine/LineupDesktop/actions/runs/39312611152)
+is still running on verification `6e7112e20583e65afb81023dd8e9bbf14793354a`, a
+direct child differing only in the isolated workflow. Recheck actual state before
+resuming; no final production check, cleanup or CI success is claimed yet.
+Raw follow-up evidence is local under
+`/tmp/lineup-audit/m04-interactivity-followup/`. Reuse older native evidence only
+with its original identity. M-04 and overall accessibility acceptance remain
+open, including native/human gaps, notification/recovery, batch divergence and
+node 866. Not all reparenting errors occur after mutation; a removal prepass can
+fail before destruction. The completed prepass and completion-failure paths must
+be distinguished. No engine patch or upstream publication was made.
+
 ## Slider containment update — current implementation
 
 The user supplied the Opus implementation handoff and explicitly approved Gate A:

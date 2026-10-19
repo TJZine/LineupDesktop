@@ -1,5 +1,27 @@
 # M-04: Opus 5.5 review after Slider containment
 
+## Follow-up after this packet's review
+
+The returned second Opus report exposed a visible Slider interactivity regression.
+It was adjudicated and fixed as **`8105f73c9b5891e880d9fa292f0b26d679238a41`**:
+one actual interactivity boolean also keys the local Overlay, remounting the
+portal when its semantics group changes. Five new regression cases first fail
+the prior product's missing-record condition, then pass; the focused file is now
+22/22 and the full local suite is 1,852. Fresh independent review preceded
+integration. Both stock unkeyed native flip directions reject; both keyed
+comparisons retain usable native values with zero AX errors. A production
+Next-channel action alone did not capture the flip and did not reject.
+
+The [closing report](macos-post-audit-fix-report.md#m-04-follow-up-visible-slider-interactivity)
+owns current product Release/CI evidence and remaining acceptance. Its correction
+of the returned report's broad post-mutation/reparent claims is material: some
+reparenting errors are in preflight, and a failing prepass need not have mutated.
+M-04 remains open. The earlier packet below retains its original product,
+source/log hashes and evidence scope; those are historical identities, not new
+observations of `8105f73c`.
+
+## Earlier review packet — product `5c6349d4`
+
 Updated 2026-10-19. Review the integrated containment and remaining M-04 findings
 independently. Challenge the source reasoning and evidence, including the earlier
 Opus recommendations; reviewer agreement is not authority. Return findings before

@@ -669,3 +669,47 @@ with the diagnostic assertion-order reuse described in the report. Fresh review
 integration. Windows/Linux verification `865c5c3a71981fe17f9312fdf02ee2eb4c464d20`
 passed 1,845 Linux tests, 734 selected Windows tests, stock compilation and all
 eight selected native/reference CTests. This is not physical Windows AX acceptance.
+
+## Second Opus follow-up: changing Slider interactivity
+
+The returned second review exposed a new containment regression on `5c6349d4`:
+changing a visible Slider between enabled and disabled replaces its unlabeled
+semantics group, resending Slider but not its empty grafted portal leaf. The
+pinned bridge only asserts that a reparented child has a pending record. In
+Release it can remove/destroy that leaf in the successful removal prepass, then
+reference it without initialization in the main update. This is distinct from
+the earlier unreachable-node preflight failure.
+
+The controller reproduced the outgoing missing-record condition independently,
+then stock native Release controls reproduced `Nodes left pending` in separate
+healthy processes for both enable and disable. The retained replay diagnoses
+the absent record earlier than native Release; it does not model its partial
+mutation. Both keyed stock controls exposed usable subsequent values with zero
+AX errors. The [repro README](../../tool/macos/ax-tooltip-repro/README.md#visible-slider-interactivity-discriminator)
+records exact variants, hashes and limits. The unchanged stock runner was shell-
+launched with stdout/stderr capture, with no forced Dart semantics or engine patch.
+
+Product **`8105f73c9b5891e880d9fa292f0b26d679238a41`** keys only the local
+Overlay on the same condition that controls actual Slider interactivity. A flip
+remounts Slider and portal together. Same-interactivity value/max/menu updates
+retain state. Five new tests independently start healthy before each flip;
+all fail on the prior product for the intended first missing-record condition,
+then pass with the fix. The focused file passes 22/22 and the full local suite
+1,852, with clean canonical format/analysis and fresh independent review.
+
+The report's general statement that all "reparented" failures happen after
+mutation is rejected: pinned `ComputePendingChangesToNode` can reject with
+"not marked for destruction, would be reparented" before `UpdateNode`. Completion
+failures such as `Nodes left pending` occur after node updates. A failing removal
+prepass need not have destroyed anything; a successful prepass can already have
+destroyed moved subtrees, and a retained error can then make the bridge return
+before consuming/clearing pending updates. No complete resynchronization or
+notification recovery has been established for the surviving bridge/tree instance.
+
+The actual baseline product Next-channel action completed with zero AX errors
+and native Slider before/after, but no enabled/disabled flip was observed. The
+report's predicted production failure is therefore plausible from source, not a
+captured production transition. Historical node 866 remains unattributed. Native
+group/spoken/delivery and exact timing/lifetime gaps retain their evidence limits;
+the closing report owns any new bounded production observations. M-04 and overall
+accessibility acceptance remain open, with the existing single human checklist.
