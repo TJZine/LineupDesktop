@@ -226,7 +226,7 @@ retaining the unresolved runtime observations above.
 | Commit | Root cause and correction | Regressions / independent review | Runtime limit |
 | --- | --- | --- | --- |
 | `f69ef69d` | During a pending step/save, current metadata represented resolved P while Up next used the requested channel's advancing wall clock, potentially showing R instead of Q. Both now share represented-program authority; an unresolved target still uses its own live preview. | A blocked-save, paused P → Q clock-boundary regression fails before the repair and passes after, before and after save release. Relevant preview/continuation/navigation coverage remains passing. Fresh `pro_round3_adversarial` approved all five changed Dart files before integration, with no material findings. | The exact blocked-persistence/clock sequence is controlled-boundary evidence; it was not induced in the authenticated app. |
-| `e7d7f098` | Guide retained an obsolete opened-from-Player flag after sleep removed the surface. One Close/Escape now uses current availability and opens the existing usable menu immediately when Player is unavailable. | Both Close and Escape fail before the repair; after expiry they open the menu, disable Player, start no tune and allow keyboard navigation to Channels. All 48 navigation tests passed. Same fresh independent review approved this fix. | The real 30-minute timer stopped playback while Guide remained open. First Close is waiting for desktop unlock; this run uses the diagnostic Release, not the clean stock binary. |
+| `e7d7f098` | Guide retained an obsolete opened-from-Player flag after sleep removed the surface. One Close/Escape now uses current availability and opens the existing usable menu immediately when Player is unavailable. | Both Close and Escape fail before the repair; after expiry they open the menu, disable Player, start no tune and allow keyboard navigation to Channels. All 48 navigation tests passed. Same fresh independent review approved this fix. | Real expiry and the first foreground Close opened a usable menu without tuning. A background AX activation with root focus did nothing; see the separate focus gap below. This uses the diagnostic Release, not the clean stock binary. |
 | `f2b76202` | The retained Clear regression requested focus directly and did not establish traversal. It now uses actual Tab for matching/no-match queries and both Enter keys, directly and after F2 → Escape. | All 18 parity checks pass, including exact invoker restoration, useful live input and no tune. Same independent review approved the coverage change. | Twelve stock Release direct/menu Return/keypad activations passed; this is bounded evidence, not closure of every historical keyboard failure. |
 
 Canonical formatting and analysis passed; affected suites passed **481 tests**, and
@@ -286,11 +286,26 @@ compatibility case; do not add a Lineup select-all workaround on this evidence.
 The authenticated diagnostic Release was left in Guide with a confirmed real
 30-minute timer. At `2026-10-19T03:01:40.104268Z`, the trace records Guide,
 `playerState=stopped`, `playbackIntent=false`, `menuOpen=false` and no pending tune.
-macOS locked before the next native UI capture; the first Close action and DVR
-restoration await user unlock. The diagnostic process remains running with DVR
-On; restore its original Off setting and quit normally after that final check.
-This establishes real timer expiry only, not the
-navigation acceptance step. The blocked-persistence metadata sequence above
+macOS locked before the next native UI capture. After user unlock, the first
+background accessibility activation of Close Guide delivered a tap to live node
+853 but left the menu closed. Flutter primary focus was its root, with no mounted
+widget context; `_openAppMenuFromCurrentFocus` therefore had no invoker context.
+
+After foregrounding the same process, one Close Guide activation opened the menu
+at `03:39:37.128550Z`, with playback still stopped and no tune pending. Native AX
+exposed Channels and Settings plus Player's unavailable hint; Settings navigation
+worked. Thus the foreground sleep-expiry destination correction passes this real
+check, but background/root-focus AX activation is a separate remaining Dart focus
+gap. It predates this round's correction: the existing no-playback Guide-close path
+also depended on current primary focus. Recommend an explicit stable Close Guide
+invoker context/focus anchor, with a root-focus semantics-action regression, in a
+follow-up rather than treating this as another bridge rejection.
+
+DVR's native switch was restored to Off. Normal Quit ended PID 3618, and the log
+records completed libmpv shutdown. The final log has 494 AX failure messages,
+including possible retained-error repeats; later populated snapshots do not prove
+notification recovery. Exact captures and selected facts remain private in
+`trace/timer-runtime-result.json`. The blocked-persistence metadata sequence above
 remains controlled-boundary evidence, not a claimed real-app reproduction.
 
 ### AX findings and remaining acceptance
@@ -315,8 +330,10 @@ changes and upstream publication remain outside this round. Standalone sources
 and the sanitized graph fixture are separately committed as `68bdc662`, following
 fresh adversarial review; that commit changes no product/build inputs. A second
 fresh adversarial reviewer checked the complete latest source range, repros and
-final evidence, finding no actionable issues. It corroborated the raw timer-stop
-record while explicitly retaining the desktop-unlock/navigation limit.
+final evidence, finding no additional issues in the reviewed fixes or evidence.
+It corroborated the timer-stop record and the post-unlock foreground/menu result,
+and confirmed that the documented root-focus anchor gap predates this correction.
+That application gap remains open alongside the runtime verification limits.
 
 ## One final human checklist
 

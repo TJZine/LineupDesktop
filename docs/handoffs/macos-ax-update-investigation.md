@@ -516,3 +516,26 @@ Lineup select-all defect. Do not add an app shortcut workaround from this result
 The separate rapid menu-focus race is a possible interaction follow-up; whether
 Escape must dismiss the opening menu before its focus transfer needs a defined
 regression and correction, rather than attributing every Clear failure to it.
+
+
+### Post-unlock Close Guide: separate application focus gap
+
+The real 30-minute timer stopped the diagnostic Release in Guide. After desktop
+unlock, a background AX tap reached live Close Guide node 853, but Flutter primary
+focus was its root without a mounted widget context. The existing
+`_openAppMenuFromCurrentFocus` returns without an anchor in that state, leaving
+the menu closed. The outgoing record confirms node 853 is the current close action;
+this is not inferred from a stale native node number or a new bridge error.
+
+Foregrounding the same process and activating Close once opened the usable menu
+with stopped playback/no pending tune. Settings navigation worked, DVR was restored
+Off, and normal Quit completed libmpv shutdown. The final diagnostic log contains
+494 failure messages; populated later snapshots do not prove notification recovery.
+This is bounded diagnostic Release evidence, distinct from the stock Release.
+
+The root-focus no-op is an application-owned pre-existing menu-anchor dependency,
+separate from the sleep-origin flag removed by `e7d7f098` and from Flutter's AX
+portal failure. A follow-up should pass a stable explicit Close invoker context
+and owned focus anchor, and test semantics activation after clearing primary focus
+to the root. No extra product change was integrated here. The closing report and
+fresh review prompt retain this open finding; raw captures remain private.

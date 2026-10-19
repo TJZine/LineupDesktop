@@ -53,8 +53,12 @@ Current evidence on `f2b76202` remains bounded; accessibility sign-off stays ope
   is not supported by this evidence.
 - The real 30-minute timer expired in the authenticated diagnostic Release at
   03:01:40 UTC with Guide/Stopped, playback intent false and no pending tune.
-  macOS locked before the first Close action and DVR restoration; those steps
-  await user unlock. Do not claim that navigation acceptance passed.
+  After unlock, background AX Close delivered a live-node tap with root Flutter
+  focus and did nothing: the existing menu path has no current invoker context.
+  Foregrounding the same process then activating Close once opened the usable
+  menu without tuning. DVR Off and normal Quit were confirmed. Challenge the
+  separate pre-existing root-focus menu-anchor gap; no repair for it is included.
+  Do not describe this as an unconditional first-action/native AX pass.
 - The same V2 process later followed Settings → Playback → DVR On → Back Guide →
   current-program tune. First error at line 791 named new node 378. Immediately
   preceding outgoing batch 671 emits an empty full-window portal leaf, physically

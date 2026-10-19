@@ -1934,10 +1934,9 @@ is complete and unchanged; physical attachment remains `0 → 1 → 378`. A stoc
 continuous Slider mounted under zero-opacity FadeTransition reproduces the same
 missing-origin topology/native rejection. A fresh visible control is healthy.
 A genuinely uninstrumented stock runner independently reproduces hidden failure
-and visible success. The minimal sources and graph comparison were independently reviewed and committed
-as `68bdc662`; they carry no private media labels, queries or URLs and change no
-product/build inputs. Exact production widget ownership is
-strongly source-correlated with the entering DVR Slider, not directly named by
+and visible success. The minimal sources and graph comparison were independently
+reviewed and committed as `68bdc662`; they carry no private media labels, queries or URLs and change no
+product/build inputs. Exact production widget ownership is strongly source-correlated with the entering DVR Slider, not directly named by
 the trace; historical node 866 remains unattributed.
 
 The investigation recommends an upstream package and a bounded Slider-lifetime
@@ -1946,8 +1945,12 @@ No new workaround or engine patch was integrated. Unvalidated optimized-frame
 LLDB return probes are excluded; repeated error totals are message counts only.
 The authenticated diagnostic Release completed the real 30-minute timer: at
 03:01:40 UTC it records Guide/Stopped, playback intent false and no pending tune.
-The desktop locked before the first Close action and DVR restoration; these await
-user unlock, so no native navigation acceptance is claimed yet. The closing report distinguishes stock/diagnostic identities,
+After user unlock, background AX Close with Flutter root focus did nothing because
+the existing menu path lacked an invoker context. Foregrounding the same process
+and activating Close once opened the usable menu without tuning. DVR Off and
+normal Quit were confirmed. This passes the foreground destination correction,
+while retaining the separate pre-existing root-focus menu-anchor gap as open.
+The closing report distinguishes stock/diagnostic identities,
 remaining acceptance and the single final human checklist. Raw evidence remains
 private in `/tmp/lineup-audit/pro-round3/`.
 
@@ -1955,6 +1958,17 @@ private in `/tmp/lineup-audit/pro-round3/`.
 Fresh `round3_final_review` independently rechecked all five changed Dart files,
 the standalone artifacts and the final documentation/evidence; no actionable
 issues were found. It corroborated the exact raw real-timer stop record and kept
-the pending navigation boundary explicit. The diagnostic process is still running
-with DVR On until user unlock permits first Close, restoration Off and normal Quit.
+the pending navigation boundary explicit. The post-unlock check and cleanup are
+recorded above: the final diagnostic log
+contains 494 AX failure messages, including possible stale repeats. Later populated
+native snapshots do not establish notification recovery.
 Application/build paths remain unchanged from product candidate `f2b76202`.
+
+The stopped diagnostic worktree was archived after preserving its source patch,
+configuration, exact app and app dSYM privately; all 106 recorded app file hashes
+matched the preserved copy. No product instrumentation was integrated.
+
+The independent post-unlock evidence review corroborated the live-node background
+no-op, foreground menu result, DVR Off and shutdown log. It confirmed the anchor
+dependency predates these fixes; that application issue remains open, with no
+additional documentation or evidence defects found.
