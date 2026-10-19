@@ -1696,3 +1696,31 @@ structure. All 80 combined shell/Guide tests passed. Full analysis and canonical
 formatting passed, and the full 1,807-test suite passed. Fresh adversarial review
 `now_origin_review` found no material issues before integration. Final combined
 Release/Windows verification follows separately. No engine change was made.
+
+
+## 2026-10-18 — Studio clear action outside native text-field semantics
+
+The final `d56a391b` native pass found that Studio's newly named clear-search icon
+was still absent from macOS AX: `TextField.suffixIcon` remained inside the native
+text-field leaf. A visible pointer action cleared the query, but this did not
+establish accessible activation. Source tracing identified the Flutter TextField /
+RenderEditable semantics and macOS NSTextField representation; another label or
+boundary inside that leaf would not move the action out of it.
+
+The clear button now occupies the same trailing position as a semantics sibling,
+with InputDecorator's empty suffix preserving its space and a density-adjusted
+interactive width preserving its hit area. Field, editable, button and icon rects
+matched the prior structure at the tested Canvas scale. TextFieldTapRegion and an
+owned/disposed search focus node retain input focus after pointer or keyboard clear.
+The existing Studio regression now checks root traversal with no text-field
+ancestor, opened-tooltip reachability, clear behavior and pointer/Tab+Enter focus.
+It fails on the old suffix structure and passes after the correction. Final local,
+independent review, Windows and native Release results are recorded below after
+completion. No engine changes or Player layout changes are involved.
+
+The full existing Studio suite passed 79/79; canonical formatter checked 152 files
+with no changes, full analysis passed, and `git diff --check` passed. Fresh
+adversarial read-only review `studio_clear_topology_review` approved the two-file
+source/test correction with no actionable findings before integration. It retained
+the required native named-button/AX activation check; widget evidence alone is
+not treated as that acceptance.

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -72,6 +73,43 @@ void main() {
     expect(clearNode.label, 'Clear channel program search');
     expect(clearNode.getSemanticsData().flagsCollection.isButton, isTrue);
     expect(clearNode.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    final rundownSearch = find.byKey(const Key('studio-rundown-search'));
+    final rundownEditable = find.descendant(
+      of: rundownSearch,
+      matching: find.byType(EditableText),
+    );
+    final searchFocus = tester.widget<EditableText>(rundownEditable).focusNode;
+    void expectExposedClearButton() {
+      final traversedClearNode = tester.semantics
+          .simulatedAccessibilityTraversal()
+          .singleWhere(
+            (node) =>
+                node.label == 'Clear channel program search' &&
+                node.getSemanticsData().flagsCollection.isButton,
+          );
+      for (
+        var ancestor = traversedClearNode.parent;
+        ancestor != null;
+        ancestor = ancestor.parent
+      ) {
+        expect(
+          ancestor.getSemanticsData().flagsCollection.isTextField,
+          isFalse,
+          reason:
+              'macOS exposes native text fields as leaves, hiding descendants',
+        );
+      }
+    }
+
+    expectExposedClearButton();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(clearSearch));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear channel program search'), findsOneWidget);
+    expectExposedClearButton();
+    await mouse.removePointer();
+    expect(searchFocus.hasPrimaryFocus, isTrue);
     await tester.tap(clearSearch);
     await tester.pumpAndSettle();
     expect(
@@ -81,11 +119,26 @@ void main() {
           .text,
       isEmpty,
     );
+    expect(searchFocus.hasPrimaryFocus, isTrue);
     expect(
       find.byTooltip('Move First later in channel Manual'),
       findsOneWidget,
     );
     expect(clearSearch, findsNothing);
+    await tester.enterText(rundownSearch, 'Second');
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    final clearIcon = find.descendant(
+      of: clearSearch,
+      matching: find.byType(Icon),
+    );
+    expect(Focus.of(tester.element(clearIcon)).hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(rundownSearch).controller!.text, isEmpty);
+    expect(clearSearch, findsNothing);
+    expect(searchFocus.hasPrimaryFocus, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
   }, semanticsEnabled: true);
   testWidgets(
