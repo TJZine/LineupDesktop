@@ -786,3 +786,37 @@ M-04/global accessibility acceptance remain open for those checks, retained-erro
 event recovery, rejected-batch divergence and historical node 866. The matching
 focus failure does not identify every historical cleanup event, and healthy
 notifications do not repair the engine findings above.
+
+
+## Caption follow-up: keyboard focus is not the VoiceOver cursor
+
+On the unchanged `ffcaae63` Release, full-display Screenshot UI captures expose
+real caption text (“application Close, button”). The same caption remains after
+Flutter's gold focus moves, and through native Cocoa control attempts. A later
+restart confirms the actual VoiceOver process and unchanged caption/tracking
+preferences, with speech unmuted. CUA Control-Option-Right can reach Player as a
+seek. These observations do not establish successful VoiceOver navigation,
+Slider/group announcement or a Lineup-specific defect.
+
+Read-only reviewer `01a155a7-84ee-7641-b56d-fceb695328e3` traced the pinned
+framework/engine, rather than current main. Material InkWell's Focus and
+`widgets/focus_scope.dart` semantics publish keyboard `focused`; common
+`accessibility_bridge.cc:575` copies that to `AXTreeData.focus_id`.
+`ax_event_generator.cc` generates `FOCUS_CHANGED`, but macOS
+`AccessibilityBridgeMac.mm:286` skips that generated event. Separately,
+`flutter_platform_node_delegate.cc:73` implements `GetFocus()` using
+`GetLastFocusedId()`, the accessibility-focus identity set through accessibility
+focus actions, rather than the tree's keyboard focus ID. Native AX focused-state
+queries consult this path. The distinct platform-node mapping of a `kFocus`
+event to `NSAccessibilityFocusedUIElementChanged` does not by itself show that
+the skipped bridge event reaches it.
+
+This source mechanism makes moving Dart keyboard focus insufficient evidence
+for native focus notifications or VoiceOver cursor movement. It is not a runtime
+attribution of the exact stale caption, a proof of no native notification or a
+newly accepted engine bug. Native Cocoa control results and failed command
+interception remain relevant alternative explanations. An app focus override or
+engine patch is not justified by this observation alone. Actual screen-reader
+command delivery and subsequent caption changes remain the distinguishing
+runtime evidence. All raw screenshots stay private; the single human checklist
+and retained-error/rejected-batch/historical-node findings remain open.

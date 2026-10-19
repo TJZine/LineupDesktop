@@ -6,6 +6,12 @@ anything. **The requested native role/delivery checks and matching input/focus
 investigation are complete; M-04 and overall accessibility acceptance remain
 open for the specific findings below.**
 
+The latest continuation/report also record readable full-display VoiceOver
+captions and successful automated coordinate-pointer/timed-hide key routes.
+The captured Close caption does not advance reliably through navigation/native
+control attempts, so Slider announcements remain unverified. Preserve that
+limit and the single human checklist; no global-input helper is authorized yet.
+
 ## Source, assignment and settled constraints
 
 - Repository: <https://github.com/TJZine/LineupDesktop>, branch `platform/macos`;

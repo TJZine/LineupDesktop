@@ -2304,3 +2304,34 @@ checked all five canonical evidence hashes, rehashed all 106 bundle files and
 checked the actual CUA helper/action arguments. It accepted closure of bounded
 native role, healthy-delivery and tested key-route gaps with no material finding;
 no further bounded review work is pending. Overall M-04 remains open as above.
+
+
+## 2026-10-19 — Caption screenshots and automated pointer/timer follow-up
+
+The user's full-display screenshot approach succeeds through macOS Screenshot
+UI: actual VoiceOver caption text includes “application Close, button”. This
+supersedes the earlier caption-unavailable tool limitation. Later captions stay
+on Close despite changed Flutter focus and native Cocoa control attempts, even
+with confirmed live VoiceOver, unmuted speech and existing caption/tracking
+preferences. CUA VoiceOver-arrow chords also reach Player as seeks. No Slider
+announcement, genuine VoiceOver traversal or new Lineup defect is inferred.
+A separate read-only source review explains why Dart keyboard, native AX and
+VoiceOver focus cannot be equated; no engine patch is authorized or added.
+
+The exact unchanged `ffcaae63` canonical Release now passes coordinate-pointer
+Close → timed OSD retirement → Enter exposing OSD, with independent coordinate
+Close/timer resets before Escape and F2 each open Guide. The first path follows
+pointer menu, native zoom, Escape menu dismissal and zoom restoration. Fresh AX
+states establish all three hidden preconditions; the 5.148/5.842/6.868-second
+samples do not measure exact timer latency. All 106 bundle hashes still match.
+These are automated pointer-event/timer observations, not physical hardware
+acceptance, a direct fixed FocusManager trace or first-fade timing proof.
+
+Raw images/logs/transcribed observations remain under `/tmp/lineup-audit/`.
+The report's existing single checklist retains all human checks and the engine
+recovery/divergence/node-866 findings. Lineup remains intentionally paused with
+DVR On, channel 1, 800×632 and untimed Now Playing for follow-up; preserve the
+user's already-On VoiceOver state. Owned Utility/temporary Finder windows are
+closed and existing System Settings is preserved. A guarded global
+VoiceOver-input helper is prepared and independently reviewed; no event mode
+has run and user authorization for that method remains absent.

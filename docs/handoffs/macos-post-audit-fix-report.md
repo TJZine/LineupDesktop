@@ -925,26 +925,48 @@ the matching diagnostic does not retrospectively identify every cleanup event.
 Run these once on the latest product candidate `ffcaae63`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
-Acceptance session started 2026-10-19 on the unchanged verified Release. The
-user asked the controller to handle VoiceOver; no human result was supplied.
-The controller enabled VoiceOver via System Settings, left the already-enabled
-caption preference unchanged, and dismissed the welcome/tutorial. CUA could not
-attach to the VoiceOver agent/caption window, and no audio-capture tool is
-available. Attempted VoiceOver commands produced no observable screen-reader
-output; native logs instead record two exact Player seeks. Actual VoiceOver
-traversal/speech/usefulness is **unverified**, not passed or failed. With VoiceOver
-On and Now Playing visible, native Slider/AXGroup remained present and the app
-log had zero AX/Flutter errors. VoiceOver was restored Off and all created
-VoiceOver/Utility/tutorial helpers exited; the existing System Settings window
-was preserved. Lineup remains paused in untimed Now Playing with DVR On for
-continued checks. **No human checkbox is marked passed.**
+Acceptance session started 2026-10-19 on the unchanged verified Release. No
+human listening/navigation result was supplied. The first CUA attachment attempt
+could not expose the caption window and was cleaned up with VoiceOver Off.
+The user's subsequent full-display screenshot proposal **does expose captions**:
+actual text includes **“application Close, button”**. Full-screen images and
+lossless reading crops are private, with hashes in
+`/tmp/lineup-audit/m04-caption-verification/capture-manifest.jsonl`.
 
-Raw identity/state/log/snapshots are local under
-`/tmp/lineup-audit/m04-human-acceptance/`. Physical focus/pointer/timed-hide
-transitions still need acceptance; exact first-fade timing, engine recovery/
-divergence and historical node 866 remain engineering work. Results stay in this
-single checklist with partial coverage stated explicitly. Restore audit settings
-when the session ends.
+The caption then remained on Close while Tab visibly moved Flutter focus and
+while native Cocoa controls were exercised. Restarting through the actual
+VoiceOver welcome confirmed a live VoiceOver process; speech mute was Off and
+existing focus tracking/caption preferences were On. Native control captions
+still did not advance. CUA VoiceOver-arrow attempts also caused Player seeks.
+This is not a valid Slider announcement/order/usefulness result or an accepted
+Lineup-only defect. Screenshot reading is feasible; actual screen-reader command
+delivery remains unestablished. The investigation records the pinned engine's
+separate keyboard/accessibility focus paths without claiming a new engine defect.
+
+Additional automated native coverage on product `ffcaae63`, same process 14195:
+a real CUA coordinate click on visible Close exposes OSD; no-input timer
+retirement removes the OSD and Slider; Enter reopens OSD. Two separate coordinate
+Close/timer resets establish Escape and F2 opening Guide. The first Close follows
+pointer menu/native zoom/Escape menu dismissal/zoom restore. Hidden-state samples
+occurred 5.148, 5.842 and 6.868 seconds after their Close actions; exact expiry
+latency was not measured. This adds automated pointer-event/timer coverage to the
+earlier AX-action sequence; physical hardware acceptance remains pending.
+`pointer-timer-observations.json` is a controller transcription of timestamped
+CUA states, not an independent engine trace. All 106 canonical bundle hashes
+still match; the app log has zero AXTree/Flutter error lines at the checkpoint.
+
+Current session remains paused in untimed Now Playing, channel 1, DVR On and
+800×632, ready for a potential input-method follow-up. VoiceOver was already On
+at this attempt's start and remains On; caption preferences are unchanged.
+Owned Utility/temporary Finder windows are closed; preexisting System Settings
+is preserved. The user dismissed two controller-caused launch-error dialogs.
+The independently reviewed local CGEvent proposal is not authorized or executed.
+Restore DVR Off
+and quit normally at session end, preserving the user's VoiceOver state.
+
+**No human checkbox is marked passed.** Exact first-fade timing, engine retained-
+error/event recovery, rejected-batch divergence and historical node 866 remain
+engineering work. Keep results and partial coverage in this single checklist.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.
