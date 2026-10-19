@@ -2335,3 +2335,36 @@ user's already-On VoiceOver state. Owned Utility/temporary Finder windows are
 closed and existing System Settings is preserved. A guarded global
 VoiceOver-input helper is prepared and independently reviewed; no event mode
 has run and user authorization for that method remains absent.
+
+
+## 2026-10-19 — Authorized CGEvent VoiceOver trial and final cleanup
+
+The user explicitly approved the guarded CGEvent helper. A first attempt's held-
+Control observation followed intervening CUA capture activity; later independent
+reads found it clear without an attributable release. The dedicated
+`release-owned-control` operation never ran and cause remains unclassified.
+The temporary helper was corrected
+and independently reviewed, including aggregate flags plus each posted modifier/
+arrow's key state. No product/engine change or new security permission occurred.
+
+One final next, stop-interacting, interact and previous operation pass declared
+release checks, with inert inspection plus independent fixed-key/flag reads before
+CUA and another inspection after capture. All tested keys are released and
+aggregate modifier flags are clear; one sample's device-side bits `0x21` have
+unestablished significance. Four
+post-command caption crops are identical on “application Close, button”, including
+a controller-observed native AppKit-menu control. This neither proves actual
+VoiceOver handling nor establishes a new Lineup defect. Actual Slider/group
+announcement/order/interaction and broader human checks remain unverified.
+Fresh read-only reviewer `01a155a7-84ee-7641-b56d-fceb695328e3` checked final
+source, command provenance, logs/inspections, original/crop hashes and proof limits.
+
+Cleanup completed: DVR Off observed; canonical process 14195 quits normally exit 0
+with all native shutdown markers and zero AXTree/Flutter errors. All 106 bundle
+hashes still match. Owned Finder window and helpers are closed; no app,
+SecurityAgent, Screenshot or Utility remains. The user's already-On VoiceOver
+and preexisting System Settings window remain, caption preference unchanged.
+Final tested-key/aggregate-flag checks pass. The closing report/continuation/
+Opus packet retain exact identities and the one unchecked human checklist;
+first-fade/recovery/divergence/node 866 remain open. Raw evidence stays private
+under `/tmp/lineup-audit/m04-caption-verification/`.

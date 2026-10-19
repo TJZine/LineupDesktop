@@ -8,9 +8,14 @@ open for the specific findings below.**
 
 The latest continuation/report also record readable full-display VoiceOver
 captions and successful automated coordinate-pointer/timed-hide key routes.
-The captured Close caption does not advance reliably through navigation/native
-control attempts, so Slider announcements remain unverified. Preserve that
-limit and the single human checklist; no global-input helper is authorized yet.
+The human authorized the guarded CGEvent trial. Four final commands pass declared
+aggregate/per-key release checks, but captured captions remain identical on Close,
+including a native AppKit-menu control. Genuine VoiceOver handling/Slider
+announcements remain unverified; no new product defect is established. The first
+ambiguous held-Control sample followed intervening capture, later cleared without
+an attributable release, and the recovery operation never ran. Cleanup is complete
+with DVR Off, normal exit 0, unchanged bundle and the user's VoiceOver On preserved.
+Keep the report's single human checklist and all remaining engine findings open.
 
 ## Source, assignment and settled constraints
 

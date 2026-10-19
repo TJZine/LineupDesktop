@@ -925,48 +925,73 @@ the matching diagnostic does not retrospectively identify every cleanup event.
 Run these once on the latest product candidate `ffcaae63`; record failures with generic descriptions.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
-Acceptance session started 2026-10-19 on the unchanged verified Release. No
-human listening/navigation result was supplied. The first CUA attachment attempt
-could not expose the caption window and was cleaned up with VoiceOver Off.
-The user's subsequent full-display screenshot proposal **does expose captions**:
-actual text includes **“application Close, button”**. Full-screen images and
-lossless reading crops are private, with hashes in
-`/tmp/lineup-audit/m04-caption-verification/capture-manifest.jsonl`.
+Acceptance session started 2026-10-19 on unchanged canonical product `ffcaae63`.
+No human listening/navigation result was supplied. The user's full-display
+Screenshot UI approach exposes actual VoiceOver captions, superseding the first
+attachment attempt's tool limitation. Text includes **“application Close, button”**.
+Raw full-screen images, lossless reading crops and hashes stay private under
+`/tmp/lineup-audit/m04-caption-verification/`; the moved panel's baseline crop was
+corrected from full-frame inspection rather than counted as missing output.
 
-The caption then remained on Close while Tab visibly moved Flutter focus and
-while native Cocoa controls were exercised. Restarting through the actual
-VoiceOver welcome confirmed a live VoiceOver process; speech mute was Off and
-existing focus tracking/caption preferences were On. Native control captions
-still did not advance. CUA VoiceOver-arrow attempts also caused Player seeks.
-This is not a valid Slider announcement/order/usefulness result or an accepted
-Lineup-only defect. Screenshot reading is feasible; actual screen-reader command
-delivery remains unestablished. The investigation records the pinned engine's
-separate keyboard/accessibility focus paths without claiming a new engine defect.
+The user explicitly authorized the guarded CGEvent helper. An initial next
+attempt logged down/up intentions, exit 0 and no Player seek; a subsequent read
+**after intervening CUA Screenshot activity** found Control 59 held. Later worker
+and controller passive reads independently found it clear without an attributable
+release. This does not isolate the cause. Exact `release-owned-control` recovery
+was never executed. The helper was corrected locally and independently reviewed;
+no product or engine source changed. Final tested helper identities:
 
-Additional automated native coverage on product `ffcaae63`, same process 14195:
-a real CUA coordinate click on visible Close exposes OSD; no-input timer
-retirement removes the OSD and Slider; Enter reopens OSD. Two separate coordinate
-Close/timer resets establish Escape and F2 opening Guide. The first Close follows
-pointer menu/native zoom/Escape menu dismissal/zoom restore. Hidden-state samples
-occurred 5.148, 5.842 and 6.868 seconds after their Close actions; exact expiry
-latency was not measured. This adds automated pointer-event/timer coverage to the
-earlier AX-action sequence; physical hardware acceptance remains pending.
-`pointer-timer-observations.json` is a controller transcription of timestamped
-CUA states, not an independent engine trace. All 106 canonical bundle hashes
-still match; the app log has zero AXTree/Flutter error lines at the checkpoint.
+| Local helper artifact | SHA-256 |
+| --- | --- |
+| `guarded-voiceover-input.swift` | `f9028e04ebbd9e86aa8c0a0d0d5239cea634edeb681aae9517170e5e829769c3` |
+| `guarded-voiceover-input` | `8a089907f03b1c76164daa504ddc801232f0c601b62b115b677bb51731f29b5c` |
 
-Current session remains paused in untimed Now Playing, channel 1, DVR On and
-800×632, ready for a potential input-method follow-up. VoiceOver was already On
-at this attempt's start and remains On; caption preferences are unchanged.
-Owned Utility/temporary Finder windows are closed; preexisting System Settings
-is preserved. The user dismissed two controller-caused launch-error dialogs.
-The independently reviewed local CGEvent proposal is not authorized or executed.
-Restore DVR Off
-and quit normally at session end, preserving the user's VoiceOver state.
+Final bounded trial: one each **next, stop-interacting, interact, previous**.
+All recorded permission/exact-foreground guards and declared release checks pass.
+Each command is followed by inert inspection and an independent fixed-key/flag
+read **before any CUA action**, then another inspection after capture. All tested
+per-key states are up and aggregate modifier flags clear. One independent sample
+retains device-side bits `0x21`; its significance is unknown. Do not shorten these
+observations to all flags zero, guaranteed release across every representation
+or confirmed VoiceOver delivery. CGEvent posting has no delivery acknowledgement.
 
-**No human checkbox is marked passed.** Exact first-fade timing, engine retained-
-error/event recovery, rejected-batch divergence and historical node 866 remain
-engineering work. Keep results and partial coverage in this single checklist.
+All four post-command caption crops are byte-identical, hash
+`920aec6b61570ca2989d084de03c523bab7ee4511338623e6284d2415fdd73f7`, and read
+**“application Close, button”**. The previous trial includes a controller-observed
+native AppKit application menu open before/after the command and before capture.
+This is the captured text at those instants, not proof of no transient speech or
+cursor movement. Actual command interception, Slider/group announcement, order,
+entry/exit, useful interaction and broader spoken checks remain **unverified**.
+The native control supplied no positive caption result, so this is not an
+accepted Flutter-only or Lineup-only defect. Fresh System Settings inspection
+still shows VoiceOver On. Reviewer `01a155a7-84ee-7641-b56d-fceb695328e3`
+independently checked final source, actual command provenance, all four logs/
+inspections, original/crop hashes and these proof limits, with no further material
+finding. `cg-final-observations.json` retains the bounded result.
+
+Additional automated native coverage, same canonical process 14195: visible
+coordinate Close → OSD → no-input timer retirement → Enter reopens OSD. Two
+separate Now Playing/coordinate-Close/timer resets establish Escape and F2
+opening Guide. The first Close follows pointer menu/native zoom/Escape menu
+dismissal/zoom restore. Hidden states were sampled 5.148, 5.842 and 6.868 seconds
+after Close, not exact timer expiry measurements. This adds automated pointer
+and timer coverage to the earlier AX-action path; physical hardware acceptance
+remains pending. `pointer-timer-observations.json` is a controller transcription
+of timestamped CUA states, not an independent engine trace.
+
+Cleanup completed: DVR Off was observed in Settings; normal Quit exited 0 with
+all native shutdown markers and zero AXTree/Flutter error lines. All 106 bundle
+hashes match. The owned Finder window is closed, no verification app/Screenshot/
+Utility/SecurityAgent remains, and final independent checks show tested keys up
+and aggregate modifiers clear. Preserve the user's already-On VoiceOver state,
+unchanged caption preference and preexisting System Settings window. Raw log
+`native-human-session.log` SHA-256 is
+`7f7519a62ba89aac81e04d5c946d3b28803d5d464dbbf3cb18bfa694e26aa41f`;
+`cg-cleanup-summary.json` records the final state.
+
+**No human checkbox is marked passed.** Exact first-fade timing, retained-error/
+event recovery, rejected-batch divergence and historical node 866 remain open
+engineering findings. Keep all results and partial coverage in this one checklist.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.

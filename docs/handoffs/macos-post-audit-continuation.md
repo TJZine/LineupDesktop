@@ -1,49 +1,62 @@
 # Continue the macOS post-audit fixes — 2026-10-19
 
-## Latest acceptance session — captions readable, traversal still unverified
+## Latest acceptance session — CGEvent trial complete, VoiceOver checks open
 
-The user's screenshot proposal worked: full-display captures through the native
-macOS Screenshot UI expose the actual VoiceOver caption panel. One caption reads
-**“application Close, button”**. This supersedes the earlier claim that caption
-output was unavailable. Window-only captures sometimes showed Stage Manager
-thumbnails or an inactive surface; those are not reliable caption observations.
-Raw full-screen images and lossless reading crops remain private under
-`/tmp/lineup-audit/m04-caption-verification/`, with a hashed capture manifest.
+The user's full-display screenshot proposal works through macOS Screenshot UI.
+Actual caption text reads **“application Close, button”**. This supersedes the
+earlier caption-unavailable limitation. Raw images/lossless reading crops and
+hashed manifests remain private under `/tmp/lineup-audit/m04-caption-verification/`.
+The caption panel moved between captures; the baseline crop was corrected after
+full-frame inspection rather than treating a blank fixed crop as missing output.
 
-The caption stayed on Close after ordinary Tab changed Flutter's visible focus,
-and after native VoiceOver Utility/System Settings control attempts. A later
-restart confirmed the actual VoiceOver process, unmuted speech and existing
-caption/focus-tracking preferences; the caption still did not advance through
-those controls. CUA Control-Option-Right also reached Player as seeks. No actual
-VoiceOver traversal, Slider/group announcement, order or usefulness pass/fail is
-established. The native-control comparison does not establish a Lineup-only bug.
-Pinned-source investigation distinguishes Dart keyboard focus, semantics focus,
-native accessibility focus and the VoiceOver cursor; see the investigation's
-caption follow-up. Do not add an app or engine workaround from stale captions.
+The human explicitly authorized the guarded CGEvent helper. Its first `next`
+trial recorded down/up intentions and no Player seek; a passive read after an
+intervening CUA capture attempt found Control 59 held. Later independent worker
+and controller reads found it clear without an attributable release. Cause is
+not isolated between helper/capture/other intervening state; the exact recovery
+operation **never ran**. No new product defect is inferred.
 
-The same unchanged canonical `ffcaae63` Release (PID 14195) now also passes a
-**CUA coordinate-pointer/timed-hide** path: visible Close → OSD → no-input timer
+The temporary helper was corrected and independently reviewed, including both
+aggregate modifier flags and individual fixed-key checks before/after commands.
+The final reviewed source/binary identities and precise limits are in the report.
+One trial each of **next, stop-interacting, interact and previous** passed its
+recorded guards and declared release checks. Inert inspection and independent
+per-key/flag reads occurred immediately after each command, **before any CUA**;
+after-capture checks also passed. One independent sample retained device-side
+bits `0x21` while aggregate modifier flags were clear and tested keys were up;
+its significance is unestablished. Do not describe this as all flags zero or a
+delivery acknowledgement.
+
+All four post-command caption crops are byte-identical and still read Close,
+including the trial with Lineup's native AppKit application menu observed open.
+This establishes the captured panel text at those instants, not absence of all
+transient speech/cursor movement. Actual VoiceOver command handling, Slider/group
+announcement, order, useful interaction and broader accessibility acceptance
+remain **unverified**. Native controls likewise supplied no positive caption
+control; do not attribute the result to Flutter alone or add an app/engine fix.
+Reviewer `01a155a7-84ee-7641-b56d-fceb695328e3` independently checked command
+provenance, logs/inspections, original/crop hashes and the conclusion's limits.
+No further bounded runtime work was requested by that review.
+
+The same unchanged canonical `ffcaae63` Release also passes the earlier CUA
+coordinate-pointer/timed-hide path: visible Close → OSD → no-input timer
 retirement → Enter exposes OSD. Separate Now Playing/coordinate-Close/timer resets
-then confirm Escape and F2 each open Guide. The first path follows pointer menu,
-native window zoom, Escape menu dismissal and zoom restoration. The three hidden
-states were observed 5.148, 5.842 and 6.868 seconds after Close; these are bounded
-samples, not exact expiry latency. All 106 bundle hashes match the earlier
-manifest. This adds real automated pointer-event/timer coverage, not physical
-human input, direct fixed FocusManager tracing or first-fade timing evidence.
+confirm Escape and F2 each open Guide. The first path follows pointer menu/native
+zoom/Escape dismissal/zoom restoration. Hidden states were sampled 5.148, 5.842
+and 6.868 seconds after Close; these are not exact expiry latency measurements.
+This is automated pointer-event/timer coverage, not physical human input, a direct
+fixed FocusManager trace or first-fade timing proof.
 
-Current checkpoint: channel 1, DVR **On**, playback **paused**, 800×632 window,
-untimed Now Playing ready. VoiceOver was already **On** at this screenshot
-attempt's start and remains On; its caption preference was unchanged. Owned
-Utility and temporary Finder windows were closed; the preexisting System Settings
-window was preserved. The user dismissed the two controller-caused launch-error
-dialogs. No new authentication or security permission is pending. Restore DVR
-Off and quit normally when the session ends; preserve the user's VoiceOver state.
-
-A local guarded CGEvent helper is prepared and independently reviewed as a
-possible next input method. No event-producing mode has run and explicit user authorization
-for that method is absent. Existing permissions may be inspected without prompts;
-do not synthesize global input until that authorization exists. Keep the one
-human checklist and all engine recovery/divergence/node-866 findings open.
+**Cleanup is complete.** DVR Off was observed in Lineup Settings; the app quit
+normally, exit 0, with all native shutdown markers and zero AXTree/Flutter errors.
+All 106 canonical bundle hashes still match. The owned temporary Finder window is
+closed; no app, Screenshot, Utility or SecurityAgent helper remains. The user's
+already-On VoiceOver state and preexisting System Settings window are preserved;
+its switch was freshly confirmed On, and the caption preference was unchanged.
+Final independent checks show tested keys up and aggregate modifiers clear.
+Recheck live state before another run. Keep the report's **one human checklist**
+and first-fade/recovery/divergence/node-866 findings open; no engine patch, new
+permission, upstream publication or product change is included.
 
 ## Native follow-up completed — bounded application repair, M-04 still open
 

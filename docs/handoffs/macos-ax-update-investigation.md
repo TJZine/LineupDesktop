@@ -820,3 +820,26 @@ engine patch is not justified by this observation alone. Actual screen-reader
 command delivery and subsequent caption changes remain the distinguishing
 runtime evidence. All raw screenshots stay private; the single human checklist
 and retained-error/rejected-batch/historical-node findings remain open.
+
+
+### Authorized global-input trial — bounded inconclusive result
+
+The human authorized a guarded CGEvent trial on the unchanged canonical Release.
+The first attempt's later held-Control sample followed intervening CUA Screenshot
+activity; independent later samples found it clear without an attributable
+release. This does not identify a native input cause. The temporary helper's
+construction and per-key guards were corrected and independently reviewed, with
+no app/engine edit. Exact Control recovery was never executed.
+
+One final next, stop-interacting, interact and previous command each pass declared
+aggregate-modifier/per-key checks immediately before CUA activity and after
+capture. One raw sample retains device-side bits `0x21` despite clear aggregate
+flags and released individual keys; significance is unestablished. All four
+captured caption crops are
+identical on Close, including the controller-observed native AppKit-menu control.
+These are sampled caption pixels and state checks, not CGEvent delivery receipts
+or proof of no transient speech/cursor movement. Genuine VoiceOver handling and
+Slider/group announcements remain unverified; no new Lineup-only defect follows.
+The report owns exact helper/evidence identities and clean normal shutdown.
+Keep the existing single checklist and engine recovery/divergence/node-866
+findings open. Do not add a speculative focus or engine workaround.
