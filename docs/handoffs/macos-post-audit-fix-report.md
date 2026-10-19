@@ -9,18 +9,16 @@ and binary identities below.
 No main merge, distribution release, signing changes or engine patch was made.
 
 Status: **the application corrections are committed and independently reviewed.
-The Slider interactivity follow-up passed 1,852 local tests and Windows/Linux CI;
-two fresh final-product Release processes completed with zero AX/Flutter errors.
-Its exact evidence and limits are recorded below. Fresh stock native controls
-reject both unkeyed interactivity flips and pass the keyed comparison. Four
-earlier product `5c6349d4` Release sequences completed without AXTree errors;
-their exact entry/menu timing and native group-role limits remain unverified.
-The keyboard investigation
-isolated a rapid menu-focus interleaving and reproduced synthetic Command+A failure
-in a stock Flutter TextField. The first new production AX failure now has an
-outgoing graph capture, with an equivalent stock Slider/zero-opacity reproduction.
-M-04 and physical accessibility acceptance remain open; no engine fix is included.
-Earlier results retain their original source identities below.**
+Latest product `ffcaae63` passes all 1,857 local tests and completed Windows/Linux
+CI. Its exact canonical Release passes the native retirement/key comparison,
+exposes the accepted unlabeled `AXGroup`, receives real Slider value-change
+callbacks and quits normally with zero AX/Flutter errors. Audit settings are
+restored and no verification process remains. The matching baseline native
+failure is now attributed to focus leaving both application key-handler paths.
+M-04 and overall accessibility acceptance remain open for the existing human
+checklist, retained-error/notification recovery, rejected-batch divergence and
+historical node 866. No engine fix is included. Earlier results retain their
+original source and binary identities below.**
 
 ## Original results (historical candidate identities)
 
@@ -743,7 +741,7 @@ The highest-value remaining input observation is a capture at the actual failure
 not a speculative focus workaround. Existing native role/delivery/spoken gaps and
 the one final human checklist remain open. No new user checklist was created.
 
-## Native role/delivery and Player focus closeout — in progress
+## Native role/delivery and Player focus closeout
 
 The user's explicit native follow-up ran on the exact unmodified `8105f73c`
 Release after all 106 bundle hashes matched its recorded identity. The passive,
@@ -810,7 +808,7 @@ negative controls and ownership/lifecycle guards before integration, finding no
 material issue. Private source/log identities are in
 `focus-investigation/implementation/summary.json` under the native-closeout root.
 
-### Pending runtime verification
+### Final canonical Release and CI verification
 
 The exact `ffcaae63` canonical Release is built, AOT identity
 `1@ffcaae6377bcdf16080ea742b40ff9960a580ed8`, version/build `0.1.0` / `1`.
@@ -819,8 +817,9 @@ Executable SHA-256 is
 App.framework `2d32192b440a7de131f06b655db6320cdf57e0b02a80799696d96861f9b6c0ed`;
 106-entry compact sorted JSON bundle-manifest SHA-256
 `9da64b5b3f99c1e5c53c7a84bd81db7c1dbce1658618139e5da10d95d5d0527a`.
-Pinned engine and runtime BUILD-INFO hashes remain unchanged. No final native
-candidate acceptance has been claimed at this interim point.
+Pinned engine and runtime BUILD-INFO hashes remain unchanged. All 106 bundle
+hashes matched both before launch and after normal Quit; no diagnostic logging
+is present in this canonical candidate.
 
 [CI run 39321046092](https://github.com/TJZine/LineupDesktop/actions/runs/39321046092)
 completed successfully with **1,855 Linux tests**, **744 selected Windows tests**,
@@ -850,7 +849,7 @@ then visibly opens Settings through the available native menu shortcut. A later
 Dart Comma event has `meta=false`; do not infer that this specific event opened
 Settings. This is a matching native retirement/focus failure under passive
 instrumentation, consistent with the Dart cause, not proof of every historical
-cleanup event. The exact canonical fixed-Release comparison is still pending.
+cleanup event. The separate exact canonical fixed-Release comparison follows below.
 
 The local monitor returns the original event; it reads allowlisted key codes,
 own-app event types/window flags and responder types. Dart logs normalized focus
@@ -866,13 +865,60 @@ normalized trace hash is
 Source/patch/identity and `native-diagnostic-summary.json` stay under the local
 native-closeout root. No tracing or engine change is integrated.
 
-The exact `ffcaae63` Release matched all 106 bundle hashes before launch. It is
-now waiting at startup on its distinct new Keychain prompt (PID 315); the user
-has been asked to clear it. Latest native role/delivery proof is still attributed
-to `8105f73c`; final fixed-Release checks and cleanup remain pending. DVR remains
-On for ongoing tests. M-04 and overall accessibility acceptance remain open,
-including spoken/physical checks, engine recovery/divergence and historical node
-866. Keep the single existing checklist below.
+### Fixed canonical native comparison and closeout
+
+The user cleared the exact fixed Release's distinct Keychain prompt. One fresh,
+uninstrumented canonical process (PID 315) independently reset to Guide/current
+program and replayed the observed native baseline sequence before each key:
+Now Playing → AX Lineup menu → actual window zoom → Escape menu dismissal →
+zoom restore → AX Close → I → AX Close → Escape retirement. Fresh full AX state
+confirmed the hidden Player precondition each time. **Enter exposed OSD;
+independent Escape and F2 each opened Guide.** These are successful observed
+native routes, not a direct fixed-Release FocusManager trace. The same ownership/
+route guard applicability is source-supported, not directly logged at runtime.
+AX Close is an accessibility action, not physical pointer/timer-hide evidence.
+
+Native Slider's parent is again an enabled **`AXGroup`**, with successful empty
+String title/description/value reads and exposed child list `[AXSlider]`. The
+passive observer received two real known-Slider **`AXValueChanged`** callbacks,
+tag 1 at **95%** and tag 6 at **97%**, each following a successful same-tag value
+subscription. Values were sampled during callback handling. These two receipts
+close the bounded healthy delivery check on the exact fixed product; they are
+not every-update coverage, spoken output or notification recovery after a
+rejection. The earlier three receipts remain attributed to `8105f73c`.
+
+The canonical process quit normally (exit 0) with all native shutdown markers,
+zero AX/Flutter error messages and no observed exception; the observer completed
+normally (exit 0). DVR **Off**, selected channel **1** and main window
+**800×632** were restored. Final process inspection found no verification app,
+SecurityAgent or observer. No unresolved authentication prompt remains. Raw
+`native-fixed-summary.json` records identities, limits and hashed evidence:
+
+| Local evidence file | SHA-256 |
+| --- | --- |
+| `native-fixed-cua-observations.json` | `5e4ba9e105cf5ae991831339da9ab9618a62af69945a14ac435175ab3eda1177` |
+| `native-fixed-slider-role.jsonl` | `18ee96039644bf8706b7cf453d56b4d96240c30ae3bef91480a4f7d34b71e927` |
+| `native-fixed-notifications.jsonl` | `d6db6cb4a1d2811360de830ccdb94cb75f258fa2a191ebdb255f99f3ccadf05b` |
+| `native-fixed-cleanup-window.json` | `176feb64accbbc6c10e8a2c465245a07f68a526e0f6a026dab5311726c9b5c00` |
+| `native-fixed-release.log` | `071f49c764b2b33cb5ca8429e66ceff05c6cff1282865a9659209712c8479672` |
+
+CUA observations are an explicit controller transcription of sanitized outputs,
+not an independent engine event trace. Source/evidence reviewer
+`01a155dc-e8de-7520-9c70-e19f6be5a9bf` accepted the source fix and independently
+checked native-baseline causality, CI and all five final canonical evidence
+hashes with no material findings. It independently rehashed the entire final
+106-file bundle against the recorded manifest and checked the actual parent CUA
+helper/action arguments, including independent key-path resets. No further
+bounded review work is pending.
+
+**Disposition:** native group-role and healthy notification delivery are verified;
+a matching native input/focus failure is explained and repaired for the observed
+sequence. No speculative focus reset or engine change was added. The physical
+pointer/timed-hide variants and spoken usefulness/order stay in the single
+existing human checklist. M-04 and overall accessibility acceptance remain open
+for that checklist, retained-error/event recovery, rejected-batch divergence and
+historical node 866. Healthy callbacks do not close post-rejection recovery, and
+the matching diagnostic does not retrospectively identify every cleanup event.
 
 ## One final human checklist
 
@@ -881,7 +927,7 @@ HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.
-- [ ] Physical left- and right-⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys, including focus after Now Playing collapse and menu/window resizing; verify dirty/modal guards and native fullscreen synchronization.
-- [ ] Spoken VoiceOver names, enabled/disabled states, order and focus through Channels, Now Playing, Guide toolbar, DVR transport and Studio rundown, including exact invoker restoration, canonical labels without duplicate speech (cast name/role and Now), track selected/pending state and subtitle Off; inspect the native OSD Slider group role/order, verify it follows the controls and its group announcement is useful, including OSD/menu transitions. Note any loss of the native accessibility tree separately as M-04.
+- [ ] Physical left- and right-⌘ combinations, including ⌘, from relevant screens, expected Guide/Player commands, ⌃⌘F, and ignored modified Player keys, including focus after Now Playing collapse and menu/window resizing, and physical pointer collapse/hover followed by timed OSD hide; verify dirty/modal guards and native fullscreen synchronization.
+- [ ] Spoken VoiceOver names, enabled/disabled states, order and focus through Channels, Now Playing, Guide toolbar, DVR transport and Studio rundown, including exact invoker restoration, canonical labels without duplicate speech (cast name/role and Now), track selected/pending state and subtitle Off; verify the approved unlabeled native OSD Slider AXGroup follows the controls and its group announcement is useful, including OSD/menu transitions. Note any loss of the native accessibility tree separately as M-04.
 - [ ] Listen/watch for audio drift during sustained playback and a natural rollover.
 - [ ] Real live resize/minimum size, minimize/restore, Spaces/Stage Manager round trip, and sleep/wake during playback; verify video alignment, state, audio and responsive controls afterward.

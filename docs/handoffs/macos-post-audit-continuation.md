@@ -1,61 +1,63 @@
 # Continue the macOS post-audit fixes — 2026-10-19
 
-## Native closeout and focus repair — in progress
+## Native follow-up completed — bounded application repair, M-04 still open
 
-The user explicitly requested native Slider role/notification checks and further
-input/focus investigation. Exact unmodified `8105f73c` was inspected in a fresh
-process: Slider's direct native parent is an unlabeled `AXGroup` (successful empty
-String title/description/value reads), exposing only Slider. Two successfully
-registered AXObserver streams in that same process received three real
-known-Slider value callbacks (22%, 31%, 33%, sampled when callbacks were handled).
-This establishes bounded native role and healthy delivery, not spoken behavior
-or recovery after rejection. The process quit normally with zero AX errors.
+Latest product is **`ffcaae6377bcdf16080ea742b40ff9960a580ed8`**,
+`fix(player): retain focus when OSD controls retire`. Later changes are evidence/
+handoff documentation only. The user cleared both genuine Keychain prompts;
+there is no outstanding prompt or native session. The controller restored DVR
+Off, selected channel 1 and the 800×632 main window, then quit normally. No
+verification app, SecurityAgent or AXObserver helper remained running at final
+inspection. Recheck current processes before any future run.
 
-A real-shell fixture with a current program now reproduces a preexisting focus
-gap: Escape menu dismissal clears remembered Player focus and restores only its
-invoker; pointer Close collapse, or Escape collapse plus hover, lets that focused
-OSD control retire. Focus then lands on the modal-route scope above both key
-handlers, and delivered Enter/Escape/F2 do nothing. Identical scratch results on
-`459fd726`, `5c6349d4` and `8105f73c` establish that this predates the Slider fixes.
-It is not the earlier rootScope hypothesis. Exact original native causality is
-still distinguished from this faithful Dart reproduction.
+The exact canonical Release matched all 106 recorded bundle hashes before and
+after its run. It exposes `AXSlider` directly beneath an unlabeled `AXGroup`,
+with successful empty String title/description/value reads and only Slider in
+its native child list. Successfully registered Slider observers received two
+real `AXValueChanged` callbacks (95%, 97%, sampled during callback handling).
+Earlier exact `8105f73c` inspection received three callbacks in one process.
+The bounded native group-role and healthy notification-delivery gaps are closed;
+spoken usefulness/order and post-rejection recovery remain unproved.
 
-Reviewed fix **`ffcaae6377bcdf16080ea742b40ff9960a580ed8`** hands focus to the
-existing Player root before its focused OSD retires, with owner/route/menu/modal/
-background guards. Five retained tests first pass three/fail two on the intended
-key behavior, then all pass; affected suites pass 196 and the full local suite
-1,857. Canonical format (160 files/0 changed), analysis and fresh independent
-review `01a155dc-e8de-7520-9c70-e19f6be5a9bf` pass. The exact canonical Release is
-built; final native verification is pending.
+The input observation now has a matching native explanation. A real-shell probe
+with a current program shows a preexisting focus gap on `459fd726`, `5c6349d4`
+and `8105f73c`: keyboard menu dismissal restores its OSD invoker after clearing
+remembered Player focus; retirement then strands focus on the route FocusScope
+above both application key handlers. It is not rootScope. A disposable logging-
+only native baseline independently reproduced this after menu/zoom/Escape
+restoration, AX Close collapse and Escape retirement. AppKit and Flutter receive
+Enter/Escape/F2, but neither Player nor shell key handler runs. Command-comma
+still visibly opens Settings. Do not infer every historical event from this run.
+
+The reviewed fix transfers focus to the existing Player root before its focused
+OSD retires, guarded by ownership, current route, active app and requestable root.
+Identical retained tests pass 3/fail 2 before it and 5/5 after; affected suites
+pass 196 and the full local suite 1,857. Canonical format (160 files/0 changed),
+analysis and fresh independent source review pass. The uninstrumented canonical
+Release then independently resets/replays the same native sequence before each
+key: **Enter exposes OSD; Escape and F2 each open Guide**. All hidden-Player
+preconditions were observed using fresh full AX state. One canonical process
+completed with zero AX/Flutter errors through normal Quit. No physical-pointer,
+timer-hide or direct fixed-Release FocusManager trace is claimed.
 
 [CI run 39321046092](https://github.com/TJZine/LineupDesktop/actions/runs/39321046092)
 completed successfully: 1,855 Linux tests, 744 selected Windows tests, stock
 Windows compilation and all eight selected native/reference CTests. Verification
 `70df5bd9dd51e19cd3d0f868a6e05cecadb3b8ba` is the exact product's direct child
-with only the isolated workflow changed. Both focus and Slider semantics files
-are selected on Windows; completed head/parent/diff/logs were checked. No active
-run was cancelled.
+with only its isolated workflow changed; focus and Slider suites are explicitly
+selected on Windows. Completed head/parent/diff/logs were checked. No live run was
+cancelled. Reviewer `01a155dc-e8de-7520-9c70-e19f6be5a9bf` independently accepted
+the source correction, native-baseline/CI attribution and final canonical native
+evidence, with no material findings or further review work pending.
 
-The passive diagnostic baseline (export `3a0bba29`, product `8105f73c` plus logging
-only) completed after the user cleared its Keychain prompt. Native menu/zoom/
-Escape restoration followed by AX Close collapses Now Playing to OSD without
-resetting keyboard mode; timed hide stays suspended. A subsequent Escape retires
-OSD. Enter/Escape/F2 then visibly do nothing: AppKit receives keyDown codes
-36/53/120, Flutter HardwareKeyboard receives all three, but focus is the route
-scope above Player/shell and neither application key handler runs. Command-comma
-still visibly opens Settings. This is a matching native focus failure under
-passive instrumentation, not proof of every earlier cleanup event or a physical
-pointer/timer run. Two CUA coordinate attempts failed; they establish no pointer
-delivery. The diagnostic quit normally with zero AXTree errors. Trace source,
-identities and `native-diagnostic-summary.json` remain local under
-`/tmp/lineup-audit/m04-native-closeout/`; no logging or engine change is integrated.
-
-Exact fixed Release `ffcaae63` matched all 106 recorded bundle hashes before
-launch. It is now PID 315 at startup on a new Keychain prompt; the user has been
-asked to clear this distinct binary's prompt. Final fixed-Release native checks
-and channel/DVR/window/app cleanup remain pending; DVR is still On. Recheck
-actual processes and user reply before resuming. Keep the one existing human
-checklist; M-04 is not closed by these partial results.
+Raw identities, traces and summaries remain local under
+`/tmp/lineup-audit/m04-native-closeout/`. The [closing report](macos-post-audit-fix-report.md#native-roledelivery-and-player-focus-closeout)
+owns precise source/binary identities and limits. The [updated Opus packet](macos-m04-opus-review-handoff.md)
+points to current source and remaining questions. Preserve the **one existing
+human checklist** in the report. M-04 and overall accessibility acceptance remain
+open for those physical/spoken checks, retained-error/event recovery, rejected-
+batch divergence and historical node 866. No engine patch, upstream publication,
+main merge, signing or distribution change is included.
 
 ## Latest Opus review — no product change
 

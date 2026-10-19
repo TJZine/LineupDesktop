@@ -2280,3 +2280,27 @@ AXTree errors. Exact fixed Release matched all 106 bundle hashes before launch;
 its new Keychain prompt and final native comparison/cleanup are pending. The
 closing report and continuation handoff hold the current checkpoint and the same
 single human checklist.
+
+Final canonical `ffcaae63` native execution is complete. All 106 bundle hashes
+matched before and after execution. Its Slider has an unlabeled enabled native
+`AXGroup` parent (successful empty String title/description/value; only Slider
+child), and real successfully registered Slider value callbacks arrive at 95%
+and 97%. The same native menu/zoom/Escape restoration/collapse/retirement
+sequence is independently reset before each key: Enter exposes OSD; Escape and
+F2 each open Guide. This repairs the matching diagnostic failure without engine
+instrumentation in the canonical candidate. The process and passive observer
+quit normally, exit 0, with zero AX/Flutter errors; DVR Off, channel 1 and the
+800×632 main window are restored, and no app/SecurityAgent/observer remains.
+
+The closing report, continuation, investigation and Opus handoff now distinguish
+completed native role/healthy-delivery/input attribution from the existing human
+checklist and unresolved retained-error/event recovery, batch divergence and
+node 866. M-04/global accessibility acceptance stay open for those precise limits;
+physical pointer/timer/spoken behavior is not inferred from AX actions or healthy
+callbacks. No engine patch, main merge or upstream/distribution change is made.
+
+Final read-only reviewer `01a155dc-e8de-7520-9c70-e19f6be5a9bf` independently
+checked all five canonical evidence hashes, rehashed all 106 bundle files and
+checked the actual CUA helper/action arguments. It accepted closure of bounded
+native role, healthy-delivery and tested key-route gaps with no material finding;
+no further bounded review work is pending. Overall M-04 remains open as above.

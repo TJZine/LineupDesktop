@@ -758,3 +758,31 @@ Flutter focus, same-key delivery or a binary application-versus-automation cause
 Capture input/focus at recurrence before prescribing a fix. Existing native role,
 notification/spoken/recovery and node 866 limits remain open. The closing report
 owns detailed adjudication; the single final human checklist is unchanged.
+
+## Final native role/delivery and application focus follow-up
+
+Exact product `ffcaae63` now verifies the native Slider parent as an unlabeled,
+enabled `AXGroup`, with successful empty String title/description/value reads and
+only `AXSlider` exposed as its child. Successful Slider AXObserver registrations
+receive actual `AXValueChanged` callbacks at 95% and 97%. This closes bounded
+native role/healthy-delivery gaps; it does not establish spoken output or
+notification recovery after a rejected batch on a surviving tree.
+
+A separate preexisting application focus defect is now reproduced by both a
+real-shell/current-program Dart fixture and a disposable logging-only native
+`8105f73c` baseline. OSD retirement can strand focus on the route FocusScope above
+Player/shell key handlers. AppKit and Flutter receive Enter/Escape/F2 while
+neither application handler runs. Reviewed application fix `ffcaae63` transfers
+focus to the existing Player root before its focused OSD retires, with owner/
+route/active-app/requestability guards. The exact uninstrumented canonical
+Release independently replays the matching native sequence before each key:
+Enter shows OSD; Escape and F2 each open Guide. All 1,857 local tests, completed
+Windows/Linux CI and bounded native execution pass; no engine patch is included.
+
+The [closing report](macos-post-audit-fix-report.md#native-roledelivery-and-player-focus-closeout)
+owns identities, negative controls, raw-evidence hashes, native limits and normal
+cleanup. Physical/spoken checks stay in its existing single human checklist.
+M-04/global accessibility acceptance remain open for those checks, retained-error/
+event recovery, rejected-batch divergence and historical node 866. The matching
+focus failure does not identify every historical cleanup event, and healthy
+notifications do not repair the engine findings above.
