@@ -1,2 +1,3 @@
-tool/flutter_engine/*.patch text eol=lf
+# Unified patches encode blank context lines with a required space prefix.
+tool/flutter_engine/*.patch text eol=lf whitespace=-blank-at-eol
 third_party/libmpv/licenses/* text eol=lf

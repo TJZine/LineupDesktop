@@ -1,4 +1,79 @@
-# Lineup Windows Flutter engine patch
+# Lineup Flutter engine patches
+
+The Windows composition patch remains the runnable Windows player's required
+baseline. The separate opt-in desktop accessibility candidate reconciles
+retained Flutter semantics with AXTree and stages rejected commits without
+replacing surviving native accessible objects. Stock SDK builds do not contain
+that repair. macOS is still a development platform; engine tests and bundle
+verification do not establish spoken or physical acceptance.
+
+## Desktop accessibility candidate
+
+`0002-desktop-accessibility.patch` applies to the exact framework revision in
+`tool/flutter_version.json` and engine revision in Windows build metadata.
+`desktop-accessibility.json` records baseline blobs, patched source hashes and
+ordered patch hashes. Windows selects DirectComposition followed by accessibility;
+macOS selects accessibility and the separate optional Apple-linker build patch.
+`0003-macos-apple-linker.patch` adds a default-off host-linker option because the
+pinned LLVM linker cannot parse the inspected Xcode 27 SDK's TAPI architecture.
+It leaves the default and iOS linker commands unchanged.
+
+Provision an isolated pinned Flutter checkout with the metadata-pinned
+depot_tools and `gclient sync --no-history`. Use the pinned
+`engine/scripts/standard.gclient`; the verifier permits only boolean dependency
+download/use_rbe overrides, with no source pin or custom dependency overrides.
+macOS requires full Xcode and its Metal Toolchain (`xcodebuild -downloadComponent
+MetalToolchain`; check `xcrun -sdk macosx metal --version`). Keep the stock SDK and
+its binary cache separate. Canonical patches, pins and manifest must match their
+committed Lineup inputs.
+
+From the Lineup repository, with the placeholders replaced by absolute paths:
+
+```sh
+python3 tool/flutter_engine/desktop_accessibility.py apply \
+  --flutter-root /path/to/isolated/flutter --platform macos
+python3 tool/flutter_engine/desktop_accessibility.py build \
+  --flutter-root /path/to/isolated/flutter --platform macos \
+  --architecture arm64 --mode release --apple-linker --jobs 2 \
+  --ninja /path/to/actual/ninja --gclient /path/to/pinned/depot_tools/gclient
+dart tool/macos/build_app.dart build --release \
+  --accessibility-engine-root=/path/to/isolated/flutter \
+  --accessibility-engine=lineup_ax_release_arm64
+```
+
+The engine build requires a fresh `out/lineup_ax_<mode>_<architecture>` directory,
+selects the app's framework and required host tools explicitly, and binds the
+evaluated Git dependency graph, clean dependency checkouts, compiler/linker/Metal
+tools, GN/Ninja configuration and consumed artifacts to its provenance. Annotated
+Git tag pins are resolved to commits before comparison. Supply an actual Ninja
+executable; context-dependent script shims are rejected. Separate native test
+targets are `common_cpp_unittests`, `flutter_desktop_darwin_unittests` on macOS,
+and `flutter_windows_unittests` on Windows. Run the relevant bridge/delegate tests
+in both required runtime modes; configuring tests does not execute them.
+
+The macOS wrapper verifies the selected engine before a clean, committed-source
+build. Its verified flow accepts one explicit mode and inline Dart defines, uses
+the default `lib/main.dart` entrypoint, and rejects informational/nonbuilding
+options. A successful build produces a receipt binding its recipe and the entire
+bundle, including compiled Dart and assets. Post-build verification compares
+engine executable contents after removing signatures from disposable copies
+only. Local receipts describe the wrapper's execution; they are not hostile-local
+attestation. Sidecars beside the app contain private build details and stay out
+of Git. An actual loaded-engine observation is still required after launch.
+
+Windows engine checks use `--platform windows --architecture x64` and omit
+`--apple-linker`. The existing Windows launcher/release/package checks retain
+their DirectComposition-only source contract and reject an additional AX patch;
+this candidate tooling does not claim repaired Windows app/package integration.
+Windows engine execution and affected runtime acceptance require a Windows host.
+
+To refresh metadata after a reviewed patch changes, run `finalize --flutter-root
+/path/to/pinned/flutter`, inspect the derived hashes, and commit canonical inputs
+before verification. `finalize` reads pinned Git blobs and does not modify the SDK.
+Rollback selects the preserved previous application/engine pair explicitly;
+never overwrite stock caches or relabel an older native observation.
+
+## Windows DirectComposition baseline
 
 Lineup requires Flutter's ANGLE surface to use a premultiplied-alpha
 DirectComposition swapchain so native mpv video can remain beneath Flutter in

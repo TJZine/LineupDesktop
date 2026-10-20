@@ -1,0 +1,84 @@
+{
+  "patches": [
+    {
+      "files": {
+        "engine/src/flutter/shell/platform/common/accessibility_bridge.cc": {
+          "baselineBlob": "d2524d35c1d34a9616401a1352be53686775fab1",
+          "patchedSha256": "7f6c7868274708a949d469dbcab85ddbd9e89d2b348c753e3b55aec394ded94d"
+        },
+        "engine/src/flutter/shell/platform/common/accessibility_bridge.h": {
+          "baselineBlob": "334eb26aef7efc698fadde889a72312545e437e6",
+          "patchedSha256": "99d54888c011afe07851dfd6037815adfba0e730ba2186e4eaac742685990256"
+        },
+        "engine/src/flutter/shell/platform/common/accessibility_bridge_unittests.cc": {
+          "baselineBlob": "4a1e1143a47e5c29a88137172748b2102e4bd24a",
+          "patchedSha256": "68cb6397d801b7e6f9aeb81b54148d0da1a8adc5bbb54770d6281ee4337ff8f3"
+        },
+        "engine/src/flutter/shell/platform/common/flutter_platform_node_delegate.cc": {
+          "baselineBlob": "9e4e8a4a2b1114626e40552432a19fb6c321e5b8",
+          "patchedSha256": "37d10fe069b98b9e3502a4c71870ef8bbe135a96d6ef364f5f33f51e57b60b5b"
+        },
+        "engine/src/flutter/shell/platform/common/flutter_platform_node_delegate.h": {
+          "baselineBlob": "9c90d5a953fd3cd13ebe4f438e0cdddb77920e40",
+          "patchedSha256": "de5148e5a923d82af8d41fc6673575869ac8bb9dc70f55459f64378b201683b7"
+        },
+        "engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.h": {
+          "baselineBlob": "62014f670ddf1cfca5fe65cc5a36683628d2b0dc",
+          "patchedSha256": "53b4172cc3ec7094adc8c39de649bec66546f4aa656ce06d9019e1f7ef570a4d"
+        },
+        "engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.mm": {
+          "baselineBlob": "5a6c0235d0931667619cc1f31b343d6bb20a0fee",
+          "patchedSha256": "1af44700fe1a379299d528714e1a2e96a3fbcd9927af280a3d3fbdb16de33fe3"
+        },
+        "engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMacTest.mm": {
+          "baselineBlob": "9509c03ccb40a7934c677da9266d6ad5472dec4c",
+          "patchedSha256": "b891cace35a8b23d1804ca53e368b3221940c2a5b3ab0b931a9c1d2c727e4b38"
+        },
+        "engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterTextInputSemanticsObject.mm": {
+          "baselineBlob": "7a5653b0955a3eb9488fabbe7a030af51d7fe544",
+          "patchedSha256": "fcd831ea71774195d04b69092c3a772965da6f3f4eeb4883ae8ad822bfe02803"
+        },
+        "engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterViewController.mm": {
+          "baselineBlob": "09ea8f37c219e0feab0b5c8f1553f5e5871225a1",
+          "patchedSha256": "c09a09a0ec270893868182d080ebe0f8a752890bcb43f37a31594694b7664ccc"
+        },
+        "engine/src/flutter/shell/platform/windows/accessibility_bridge_windows_unittests.cc": {
+          "baselineBlob": "3f7ff3d21a3ba5cb3666f6682be287ee085e0d2f",
+          "patchedSha256": "2a4ac69607386a63341fdfc1015c14be8bac3384418a577a6aaff4160f8f82ea"
+        },
+        "engine/src/flutter/shell/platform/windows/flutter_platform_node_delegate_windows.cc": {
+          "baselineBlob": "a548d70c10d1fe3a9b68c3c3674dd567397f3501",
+          "patchedSha256": "d50d0a17920855983cb1f52f9992e6dedb33f3fc337e2c1be4ba2af696063fc7"
+        },
+        "engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc": {
+          "baselineBlob": "d9f797ca257ba90eb3319eb37a19babe9f5895ea",
+          "patchedSha256": "7ccb02af94e064803a646162fce4978923b50b2a3feeac3bef42ae0efa4f6aa0"
+        },
+        "engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc": {
+          "baselineBlob": "23e127cbc3dfa588aca5cf42bbbf89cac56000a0",
+          "patchedSha256": "697e77c59e3c087c7e2299b826bbfaeb10253282859ee0a29b7ba45363527e8f"
+        }
+      },
+      "path": "tool/flutter_engine/0002-desktop-accessibility.patch",
+      "platforms": [
+        "macos",
+        "windows"
+      ],
+      "sha256": "2c843a56499dbdebcbbabd6f178b17bc84d13d0192b1e039318caf13cf18f89a"
+    },
+    {
+      "files": {
+        "engine/src/build/toolchain/mac/BUILD.gn": {
+          "baselineBlob": "a3dfd6f2db999b37462a30a89cb70aaa8db20c8f",
+          "patchedSha256": "f66bd2e0d346e31ff463dfdc69435e4c095c237a751fc51164667c2c142e4757"
+        }
+      },
+      "path": "tool/flutter_engine/0003-macos-apple-linker.patch",
+      "platforms": [
+        "macos"
+      ],
+      "sha256": "de9e69ff64b52d389d58ed73874da174b4e3e8d5f2a8489c006e0a4d1405b313"
+    }
+  ],
+  "schemaVersion": 1
+}

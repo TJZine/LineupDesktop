@@ -451,6 +451,21 @@ commit only: record the dirty source state separately, and do not claim an exact
 committed candidate until rebuilding from the committed tree. This identity is
 not a release/package provenance or signing assertion.
 
+### Opt-in desktop accessibility engine
+
+The M-04 accessibility repair is an explicitly selected local engine candidate.
+Ordinary stock builds above do not include it. Follow the [engine patch and
+provenance instructions](../tool/flutter_engine/README.md#desktop-accessibility-candidate)
+for isolated provisioning, exact source/dependency verification, a fresh engine
+build and the macOS wrapper's verified selection options. The verified flow
+requires clean committed application inputs and checks compiled Dart/assets as
+well as the embedded engine. It does not establish an actually loaded engine,
+native notification recovery, spoken usefulness or physical input acceptance.
+The [existing M-04 report](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist)
+remains the single human acceptance checklist. Windows engine compatibility and
+application/package acceptance are separate gates; the existing Windows
+DirectComposition-only launch/release owners do not accept this AX candidate.
+
 ### Native unit tests
 
 `macos/RunnerTests` holds unhosted XCTests for Foundation/`Value`
