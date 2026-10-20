@@ -412,7 +412,9 @@ def build(repository, root, target, architecture, mode, ninja, apple_linker=Fals
     if apple_linker:
         require(target == 'macos' and any(p['path'] == MAC_BUILD_PATCH for p in before['patches']),
                 'Apple linker requires the reviewed macOS build patch.')
-        gn += ['--gn-args', 'mac_use_apple_linker=true']
+        # Pinned LLVM bitcode is incompatible with this Xcode linker's LTO
+        # codegen. Keep normal optimization while avoiding that plugin boundary.
+        gn += ['--no-lto', '--gn-args', 'mac_use_apple_linker=true']
     started = time.time_ns()
     run(gn, cwd=source, capture=False)
     config = configuration(output, target, architecture, mode)

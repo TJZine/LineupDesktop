@@ -269,6 +269,19 @@ FlutterEnginePatchSha256 = 'REPLACE'
                 ax.build(self.repository, self.root, 'macos', 'arm64', 'debug', 'ninja')
         self.assertFalse((self.root / 'engine/src/out/lineup_ax_debug_arm64' / ax.PROVENANCE).exists())
 
+    def test_only_explicit_apple_linker_disables_lto_and_keeps_optimization(self):
+        for target, apple_linker in [('macos', True), ('macos', False), ('windows', False)]:
+            with self.subTest(target=target, apple_linker=apple_linker), \
+                 mock.patch.object(ax, 'host_matches'), \
+                 mock.patch.object(ax, 'verified_sources', return_value={'patches': [{'path': ax.MAC_BUILD_PATCH}]}), \
+                 mock.patch.object(ax, 'run', side_effect=ax.VerificationError('fixture stops before GN execution')) as command:
+                with self.assertRaisesRegex(ax.VerificationError, 'fixture stops'):
+                    ax.build(self.repository, self.root, target, 'arm64', 'release', 'ninja', apple_linker=apple_linker)
+            arguments = command.call_args.args[0]
+            self.assertEqual('--no-lto' in arguments, apple_linker)
+            self.assertEqual('mac_use_apple_linker=true' in arguments, apple_linker)
+            self.assertNotIn('--unoptimized', arguments)
+
     def test_cli_rejects_bad_inputs_before_any_build(self):
         result = subprocess.run([sys.executable, ax.__file__, 'verify', '--repository', str(self.repository),
                                  '--flutter-root', str(self.root), '--output-name', '../escape'], capture_output=True, text=True)

@@ -17,6 +17,9 @@ macOS selects accessibility and the separate optional Apple-linker build patch.
 `0003-macos-apple-linker.patch` adds a default-off host-linker option because the
 pinned LLVM linker cannot parse the inspected Xcode 27 SDK's TAPI architecture.
 It leaves the default and iOS linker commands unchanged.
+Selecting `--apple-linker` also disables LTO: the inspected Apple linker cannot
+consume the pinned LLVM compiler's bitcode. Ordinary compiler optimization is
+retained; no performance comparison is claimed. GN arguments record this choice.
 
 Provision an isolated pinned Flutter checkout with the metadata-pinned
 depot_tools and `gclient sync --no-history`. Use the pinned
