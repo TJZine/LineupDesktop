@@ -27,8 +27,13 @@ depot_tools and `gclient sync --no-history`. Use the pinned
 download/use_rbe overrides, with no source pin or custom dependency overrides.
 macOS requires full Xcode and its Metal Toolchain (`xcodebuild -downloadComponent
 MetalToolchain`; check `xcrun -sdk macosx metal --version`). Keep the stock SDK and
-its binary cache separate. Canonical patches, pins and manifest must match their
-committed Lineup inputs.
+its binary cache separate. Before resolving an app's dependencies in a fresh
+isolated SDK, run `/path/to/isolated/flutter/bin/flutter precache --macos` without
+local-engine flags. Flutter's SDK package resolver requires cached `sky_engine`
+and `flutter_gpu` even when a local engine is selected later. This prepares only
+the isolated SDK cache; the wrapper still requires and verifies the explicit
+patched engine output. The patch changes no public `dart:ui` API. Canonical
+patches, pins and manifest must match their committed Lineup inputs.
 
 From the Lineup repository, with the placeholders replaced by absolute paths:
 

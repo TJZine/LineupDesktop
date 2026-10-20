@@ -1,6 +1,6 @@
 # Continue the macOS post-audit fixes — 2026-10-20
 
-## 2026-10-20 — Engine recovery implemented; app verification in progress
+## 2026-10-20 — Engine recovery and canonical Release build verified
 
 The adopted [recovery assignment](macos-m04-recovery-implementation-handoff.md)
 is executing under controller `01a15836-5fa7-7e53-9f92-0afa5eb7c12c` (local).
@@ -27,18 +27,26 @@ for the exact recovery boundary.
 The fresh arm64 Release engine builds and passes artifact/source verification;
 its executable SHA-256 is
 `6a2a93f01e014168d4ea2728fc6fda587d992fde413441129d8d8fb3633a53d0`.
-The first app build compiles successfully but its final executable-equality gate
-rejects the re-signed embedded engine. Read-only comparison finds identical
-non-signature section contents and a signing-envelope size difference. A focused
-build-tool correction passes 20 tests; the canonical rebuild is pending.
-**No verified canonical app or loaded-engine result is claimed yet**. Private evidence is under
-`/tmp/lineup-audit/m04-engine-recovery/`.
+The first app build compiled but failed its signed-executable equality gate;
+its exact failed artifacts/logs are preserved. The reviewed normalization fix
+and 20 native/portable build-tool tests are committed in **`0208982e`**. A fresh
+canonical app build at that exact commit now passes the full wrapper, receipt
+and bundle-verification gates. All 112 bundle entries and the preserved APFS
+copy match their receipt. Compiled Dart SHA-256 is
+`4990868c15423a3e3fce66b9c6bf68eea46d1472dead12d08a2a74b139dabf11`;
+bundled engine SHA-256 is
+`6261f09e8b641cbc45e873a4ddb303dcb60220c0f66c80eb0b0ec890ec95b938`.
+The built and re-signed engine match after deterministic signature normalization.
+**Actually loaded engine and native acceptance remain unobserved.** Private
+receipts and the verified pair are in `/tmp/lineup-audit/m04-engine-recovery/canonical/`.
 
 Remaining native work is the new engine's Player focus paths, measured first-fade
 menu entry, a natural mounted-presenter Slider interactivity flip where feasible,
 and bounded historical-node-866 replay. A separately identified, logging-only
-three-file diagnostic patch has passed focused review and analysis; it has not
-been built or run. The Mac currently requires manual unlock. Windows engine
+three-file diagnostic patch has passed focused review and analysis; the first fresh-clone build exposed a missing isolated-SDK package-cache
+prerequisite. After the documented isolated-SDK precache, the diagnostic builds
+successfully with its reviewed three source hashes and the same verified engine
+contents. It has not been launched; no diagnostic runtime pass is claimed. The Mac currently requires manual unlock. Windows engine
 execution and the [single existing human checklist](macos-post-audit-fix-report.md#one-final-human-checklist)
 remain open. No human box is inferred passed, and no push, remote CI dispatch,
 main merge, distribution signing or upstream publication occurred.

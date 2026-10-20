@@ -12,8 +12,8 @@ Slider group/order and existing application mitigations remain unchanged.
 | Native delegate/text lifetime and bridge controls | Focused macOS suite 12/12 in each mode |
 | Actual native notification after rejection | Disposable run4 observes Slider 60 then 80 after three accumulated real failures in the same bridge; recorded native button dispatch also succeeds |
 | Reproducible engine build | Fresh arm64 Release build and source/toolchain/artifact verification pass; stock cache untouched |
-| Verified canonical app / actually loaded repaired engine | First app compiles but final signed-executable comparison rejects; normalization fix passes focused checks; canonical rebuild pending |
-| First-fade menu, natural production Slider flip, new-engine Player focus paths | Reviewed logging-only diagnostic prepared; native session pending manual unlock |
+| Verified canonical app / actually loaded repaired engine | Fresh `0208982e` app passes wrapper, receipt and all 112 bundle entries; actual loaded engine remains unobserved |
+| First-fade menu, natural production Slider flip, new-engine Player focus paths | Reviewed logging-only diagnostic built separately; native session pending manual unlock |
 | Historical node 866 | Still unattributed; bounded replay remains pending, no retrospective attribution |
 | Windows repaired-engine execution / physical platform proof | Not run on this macOS host |
 | Human acceptance | All six existing checklist boxes below remain unchecked |
@@ -1021,7 +1021,14 @@ the matching diagnostic does not retrospectively identify every cleanup event.
 
 ## One final human checklist
 
-Run these once on the latest product candidate `ffcaae63`; record failures with generic descriptions.
+Run these on the explicitly selected verified app/engine pair from source
+`0208982e89f2ec9e46dd19d5670578db66d9e9e5`: preserved app
+`/tmp/lineup-audit/m04-engine-recovery/canonical/Lineup Desktop-0208982e-repaired-engine.app`,
+bundled engine SHA-256
+`6261f09e8b641cbc45e873a4ddb303dcb60220c0f66c80eb0b0ec890ec95b938`.
+Record actual human results with generic descriptions; no repaired-engine native
+or spoken pass is inferred from the build. The sessions below retain their older
+candidate identities.
 HDR/Dolby Vision picture quality is already accepted and is excluded.
 
 Acceptance session started 2026-10-19 on unchanged canonical product `ffcaae63`.
@@ -1088,9 +1095,11 @@ unchanged caption preference and preexisting System Settings window. Raw log
 `7f7519a62ba89aac81e04d5c946d3b28803d5d464dbbf3cb18bfa694e26aa41f`;
 `cg-cleanup-summary.json` records the final state.
 
-**No human checkbox is marked passed.** Exact first-fade timing, retained-error/
-event recovery, rejected-batch divergence and historical node 866 remain open
-engineering findings. Keep all results and partial coverage in this one checklist.
+**No human checkbox is marked passed.** The new controlled engine tests and
+native run4 now establish the bounded recovery result described at the top of
+this report. Canonical repaired-engine runtime, exact first-fade timing, a natural
+production Slider interactivity flip where feasible, and historical node 866
+remain open. Keep all human results and partial coverage in this one checklist.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.

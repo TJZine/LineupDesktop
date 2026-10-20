@@ -641,3 +641,38 @@ owner/presentation/parent-animation identity, first zero sample, actual menu
 state/build and DVR-present Slider predicates; it is never canonical app code.
 No runtime timing/production-flip pass exists yet. The Mac is locked and manual
 unlock was requested; no automated unlock, VoiceOver or modifier action was used.
+
+
+Reviewed signing normalization is committed in `0208982e89f2ec9e46dd19d5670578db66d9e9e5`.
+Its fresh canonical app build exits 0 and passes the wrapper's successful-build
+receipt and final bundled-engine gate. All 112 bundle entries independently match;
+compiled Dart SHA-256 is
+`4990868c15423a3e3fce66b9c6bf68eea46d1472dead12d08a2a74b139dabf11`,
+bundled engine SHA-256 is
+`6261f09e8b641cbc45e873a4ddb303dcb60220c0f66c80eb0b0ec890ec95b938`,
+and normalized executable SHA-256 is
+`c0b28df55df5f92667e170a1b2a87a693f0fec5c3cb259490fc076960346560c`.
+The exact app and both sidecars are preserved at `canonical/`; the APFS copy's
+112 entries also independently match. Actually loaded engine remains unobserved.
+
+The diagnostic fresh-clone build exits 69 during dependency resolution because
+the isolated SDK has no cached `sky_engine`. Existing main-checkout dependency
+configuration had masked that prerequisite. The pinned Flutter tool resolves
+SDK packages from its cache even with a local native engine; a documented
+`isolated/flutter/bin/flutter precache --macos` prepares those SDK packages
+without touching the user's stock SDK. The repair changes no public dart:ui API.
+The failed diagnostic log/result are preserved at `runtime-trace/attempt1/`.
+No diagnostic runtime or human acceptance is inferred.
+
+
+The isolated SDK precache exits 0; the subsequent fresh-clone diagnostic build
+now exits 0. A post-precache engine verification also passes unchanged. The exact
+three reviewed diagnostic source hashes still match. Preserved diagnostic app is
+`runtime-trace/Lineup Desktop-M04 Trace.app`; compiled Dart SHA-256 is
+`0a74b3cdb7d7efb56eea86414195c01b1657760cdf825a223488bb2e173294b6`.
+Its 112-entry bundle manifest and normalized engine comparison are recorded in
+`runtime-trace/app-identity.json`; it uses the same raw bundled engine SHA-256 as
+the canonical pair. Neither canonical nor diagnostic app has been launched in
+this campaign. Manual unlock, affected native paths and all human boxes remain
+pending. Subsequent documentation-only commits do not relabel the verified
+canonical source `0208982e` or either artifact pair.

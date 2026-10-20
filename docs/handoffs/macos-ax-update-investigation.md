@@ -69,8 +69,10 @@ The fresh Release engine is built and verified. Its first app compilation
 succeeds, but the bundle gate rejects executable equality after Xcode re-signing;
 a fixed ad-hoc sign/remove cycle on disposable copies corrects the residual
 signing allocation difference and passes 20 build-tool tests, including actual
-Mach-O signature-page and changed-code/malformed-input controls. The canonical
-app rebuild remains pending. Canonical loaded-engine,
+Mach-O signature-page and changed-code/malformed-input controls. A fresh canonical
+app at `0208982e89f2ec9e46dd19d5670578db66d9e9e5` now passes the successful
+build-receipt and entire-bundle gates; independent inspection matches all 112
+entries. Actual loaded-engine observation,
 first-fade, natural production interactivity flip, historical node 866 and the
 single human checklist remain open. No application workaround was removed and
 no new application defect has been established by this campaign.
