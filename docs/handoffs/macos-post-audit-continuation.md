@@ -37,17 +37,36 @@ copy match their receipt. Compiled Dart SHA-256 is
 bundled engine SHA-256 is
 `6261f09e8b641cbc45e873a4ddb303dcb60220c0f66c80eb0b0ec890ec95b938`.
 The built and re-signed engine match after deterministic signature normalization.
-**Actually loaded engine and native acceptance remain unobserved.** Private
-receipts and the verified pair are in `/tmp/lineup-audit/m04-engine-recovery/canonical/`.
+**The canonical runtime subsequently maps that exact bundled engine for PID
+18742.** Private receipts and the verified pair are in `/tmp/lineup-audit/m04-engine-recovery/canonical/`.
 
-Remaining native work is the new engine's Player focus paths, measured first-fade
-menu entry, a natural mounted-presenter Slider interactivity flip where feasible,
-and bounded historical-node-866 replay. A separately identified, logging-only
-three-file diagnostic patch has passed focused review and analysis; the first fresh-clone build exposed a missing isolated-SDK package-cache
-prerequisite. After the documented isolated-SDK precache, the diagnostic builds
-successfully with its reviewed three source hashes and the same verified engine
-contents. It has not been launched; no diagnostic runtime pass is claimed. The Mac currently requires manual unlock. Windows engine
-execution and the [single existing human checklist](macos-post-audit-fix-report.md#one-final-human-checklist)
+Canonical native checks pass the menu/native zoom/restore/Now Playing collapse
+sequence: fresh AX shows 8 then 89 with a **452 ms post-press CUA receipt gap**,
+then F2 opens Guide. Two independent resets verify Mini Guide Escape and F2.
+An actual pointer Close plus application switch is sampled: all three native
+activation indicators are false while a Slider remains visible before its later
+absence. Poll windows conservatively bound that visibility transition to
+**3.780–4.126 seconds after CUA Close completion**, not an exact timer timestamp.
+Actual reactivation is sampled before Enter; a fresh CUA tree then shows OSD and
+Slider. The later passive post-Enter file is already hidden again and is not
+claimed as corroborating the immediate visible state. Healthy native observation
+records **one** actual Slider value callback and eight successful subscriptions.
+
+Normal Quit completes all native shutdown markers; the process is gone and all
+112 bundle entries remain unchanged. Exit code was not captured. There are zero
+AXTree rejection/literal `[ERROR:flutter/]` lines, but **six resize-timeout
+warnings**. Exact stock-engine zoom controls already contain that warning class;
+no matched frequency/cause comparison exists and physical resize remains open.
+These are automated native observations, not physical or spoken acceptance.
+
+The separately reviewed diagnostic app uses the same engine and a logging-only
+three-file patch. Four bounded automatic first-fade attempts do not qualify:
+menu openings occur at 932/1,115 ms with opacity 1; the two pointer-only variants
+reveal controls without opening the menu. A human-assisted timed probe is pending.
+Natural production interactivity and bounded historical node-866 replay remain in
+progress. The human handled the diagnostic startup authentication prompt directly;
+the UI tool cannot access SecurityAgent. Windows execution and the
+[single existing human checklist](macos-post-audit-fix-report.md#one-final-human-checklist)
 remain open. No human box is inferred passed, and no push, remote CI dispatch,
 main merge, distribution signing or upstream publication occurred.
 

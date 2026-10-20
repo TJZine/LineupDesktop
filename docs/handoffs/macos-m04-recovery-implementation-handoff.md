@@ -676,3 +676,32 @@ the canonical pair. Neither canonical nor diagnostic app has been launched in
 this campaign. Manual unlock, affected native paths and all human boxes remain
 pending. Subsequent documentation-only commits do not relabel the verified
 canonical source `0208982e` or either artifact pair.
+
+
+Canonical app PID18742 actually maps its preserved engine; raw mapped-file hash
+matches `6261f09e...`. The affected native focus paths pass with controller CUA
+transcriptions: menu/zoom/restore/Now Playing collapse, 8 then89 with452ms
+post-press receipt gap, laterF2; independent Mini Guide Escape/F2 resets. Actual
+inactive attempt4 has all3 activation indicatorsfalse withSliderpresent in poll
+windows1.169–1.272s through3.780–3.890s afterCUAClosecompletion, thenabsent in
+4.013–4.126s; conservative visibility-transition bound is3.780–4.126s. Actual
+reactivation is sampled; Enter restoration is the freshCUA AX observation only,
+not the later passive snapshot which is already hidden. Earlier inactive attempts
+are explicitly excluded. One healthySlidercallback/eight successful registrations
+retain canonical identity and do not duplicate run4's controlled recovery claim.
+
+NormalQuit: processgone/all3 native shutdownmarkers/all112bundleentriesunchanged;
+exitcodeunavailable because no persistent wait owner captured it. App log has zero
+AXTree rejection/literal[ERROR:flutter/] lines but SIX Resize timedout warnings.
+Independent investigation traces the pinned ResizeSynchronizer deadline and exact
+stock-engine positive controls; warning class predates repair, without matched
+frequency/causality or exclusion of indirect platform-thread effects. No concrete
+new application defect is established; physicalresize remains open.
+
+The human handled diagnostic startup authentication directly after the UI tool
+refused SecurityAgent access. DiagnosticPID29700 is active with the reviewed
+source/engine. Four automatic first-fade probes do not qualify: real menu open
+932.291ms/1114.562ms after first-zero registration atopacity1/completed; one-click
+and double-click paths reveal controls but do not openmenu. Human-assisted timing
+probe requested; no pass inferred. Initial natural tune mounts an already-enabled
+Slider; no same-presenter flip yet. No VoiceOver/global modifier synthesis.

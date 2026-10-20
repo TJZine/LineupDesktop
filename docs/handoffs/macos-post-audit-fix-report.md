@@ -12,9 +12,10 @@ Slider group/order and existing application mitigations remain unchanged.
 | Native delegate/text lifetime and bridge controls | Focused macOS suite 12/12 in each mode |
 | Actual native notification after rejection | Disposable run4 observes Slider 60 then 80 after three accumulated real failures in the same bridge; recorded native button dispatch also succeeds |
 | Reproducible engine build | Fresh arm64 Release build and source/toolchain/artifact verification pass; stock cache untouched |
-| Verified canonical app / actually loaded repaired engine | Fresh `0208982e` app passes wrapper, receipt and all 112 bundle entries; actual loaded engine remains unobserved |
-| First-fade menu, natural production Slider flip, new-engine Player focus paths | Reviewed logging-only diagnostic built separately; native session pending manual unlock |
-| Historical node 866 | Still unattributed; bounded replay remains pending, no retrospective attribution |
+| Verified canonical app / actually loaded repaired engine | Fresh `0208982e` app passes full build/bundle gates; PID 18742 maps the exact engine; all 112 entries remain unchanged after native use |
+| New-engine Player focus paths | Menu/zoom/collapse digits 8→89/F2, independent Mini Guide Escape/F2 and sampled inactive-hide/resume/Enter pass within automated native limits |
+| First-fade menu / natural production Slider flip | Four automatic timing attempts do not qualify; human-assisted timing probe and remaining natural attempts pending |
+| Historical node 866 | Still unattributed; bounded diagnostic replay in progress, no retrospective attribution |
 | Windows repaired-engine execution / physical platform proof | Not run on this macOS host |
 | Human acceptance | All six existing checklist boxes below remain unchecked |
 
@@ -26,6 +27,17 @@ one valid update after three failures, not three separate recovery updates.
 See the [investigation](macos-ax-update-investigation.md) for exact identities and
 limits. Private evidence and the preserved old app/stock-engine rollback pair
 remain under `/tmp/lineup-audit/m04-engine-recovery/`.
+
+Canonical runtime proof is recorded under `canonical-runtime/`. The 452 ms digit
+gap is between CUA post-press receipts, not hardware/Dart event timestamps. The
+inactive visibility transition is conservatively bounded by polling windows to
+3.780–4.126 seconds after CUA Close completion. Enter restoration is the fresh
+CUA observation; the delayed passive file is already hidden. One healthy native
+value callback does not add post-rejection proof to this app session. Normal Quit
+finishes shutdown markers, but its exit code is unavailable. Six resize-timeout
+warnings remain visible; this warning class predates the repair in exact stock
+controls, without a matched performance/causality comparison. Physical resize and
+all other human items remain open.
 
 M-04 and overall accessibility acceptance remain **open**. No human result is
 inferred from automated tests. No publication, remote CI dispatch, main merge or

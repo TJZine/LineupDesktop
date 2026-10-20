@@ -72,9 +72,13 @@ signing allocation difference and passes 20 build-tool tests, including actual
 Mach-O signature-page and changed-code/malformed-input controls. A fresh canonical
 app at `0208982e89f2ec9e46dd19d5670578db66d9e9e5` now passes the successful
 build-receipt and entire-bundle gates; independent inspection matches all 112
-entries. Actual loaded-engine observation,
-first-fade, natural production interactivity flip, historical node 866 and the
-single human checklist remain open. No application workaround was removed and
+entries. The canonical runtime maps that exact bundled engine and passes the
+affected automated native focus paths; one healthy Slider AXValueChanged callback
+is observed separately from run4. Four automatic first-fade attempts fail the
+timing/menu criterion; a human-assisted trace is pending. Natural production
+interactivity, historical node 866 and the single human checklist remain open.
+Six canonical resize-timeout warnings have a demonstrated stock-engine precedent,
+not a matched equivalence result; physical resize and causal attribution stay open. No application workaround was removed and
 no new application defect has been established by this campaign.
 
 Status: **Flutter runtime interoperability defects reproduced standalone; bounded
