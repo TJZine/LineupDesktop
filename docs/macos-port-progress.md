@@ -2393,8 +2393,28 @@ The controller full suite passes all 1,862 tests; canonical formatting checks
 160 files with zero changes and analysis finds no issues. Fresh independent reviewer
 `01a1580e-2494-7a30-b409-0714d8eed008` reviewed the exact stable source and
 found no actionable correctness/design issue. The exact new canonical Release
-comparison and shared-Dart Windows CI remain required before completion. Raw
+and shared-Dart Windows CI subsequently pass as recorded below. Raw
 evidence stays under `/tmp/lineup-audit/m04-focus-followup/`. The existing one
 human checklist, exact first-fade timing, retained-error/event recovery, rejected-
 batch divergence and historical node 866 remain open. No further VoiceOver
 synthesis, engine patch, main merge or distribution work is included.
+
+Final `829547b4` canonical comparison passes: 8/9 at 573 ms shows 89 and later
+F2 opens Guide, against the old matching 535-ms failure. Independent actual-Up
+Mini Guide resets pass Escape and F2. Coordinate Close, genuine app deactivation
+and hidden OSD are observed before return; Enter restores controls. Ordinary Tab,
+modal/error/programmatic scenarios retain Dart-only proof. No direct fixed Dart
+focus trace or physical/spoken claim is made. The current native snapshot retains
+the accepted unlabeled enabled Slider group; earlier notification delivery keeps
+its original identity and does not establish rejection recovery.
+
+Windows/Linux run `39383128215` succeeds on direct product child `ed42ccd7`,
+whose only difference is the verification workflow: Linux 1,860 full tests,
+Windows 749 selected tests, stock app build and 8 native/reference CTests. All
+106 Release bundle hashes match before/after; canonical identity is exact
+`1@829547b48859ab9654190c2b9d785b1e1446fdc9`. DVR Off/channel 1/800×632 are
+restored, normal quit exits 0 with all shutdown markers and zero AX/Flutter
+errors; owned Finder is closed and no verification process remains. VoiceOver
+remains Off as found at this session's start, preexisting System Settings
+preserved. The report/continuation/Opus packet retain the one human checklist and
+all remaining findings. No engine/main/distribution/upstream change is included.

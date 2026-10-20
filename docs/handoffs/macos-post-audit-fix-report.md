@@ -1,5 +1,72 @@
 # macOS post-audit fix round — 2026-10-18
 
+## 2026-10-20 — Remaining focus repair verified; M-04 acceptance stays open
+
+Latest product is **`829547b48859ab9654190c2b9d785b1e1446fdc9`**,
+`fix(player): recover focus after overlay retirement and resume`. Later evidence
+commits change documentation only. Earlier “latest product” references below
+retain their historical identities. The repair transfers owned OSD/NowPlaying
+focus before retirement, coalesces recovery from empty/ancestor-scope focus,
+and schedules guarded recovery on resume. It preserves current route, active
+state, menus, dialogs and surviving controls; Player appearance and the accepted
+unlabeled enabled Slider group/order are unchanged.
+
+The identical final regression source produces **3 passes/7 behavioral failures**
+on `17c81c72`, then **10/10** on the fix. Affected suites pass **198**, including
+all **22** unchanged Slider semantics tests. Full local tests pass **1,862**,
+canonical formatting checks **160 files/0 changed**, and analysis is clean.
+Fresh independent reviewer `01a1580e-2494-7a30-b409-0714d8eed008` checked the
+exact source, pinned focus lifecycle/autofocus and evidence with no actionable
+finding before integration. The Mini Guide baseline loop stops on Escape's
+failure; only the passing candidate executes both Escape and F2 iterations.
+
+The exact canonical Release now passes the matching native comparison:
+
+| Native observation | Old `ffcaae63` | Fixed `829547b4` |
+| --- | --- | --- |
+| Menu/native zoom/Escape restoration → Escape collapse → 8, fresh AX/screenshot, 9 | Remains 8 at 535 ms | Shows 89 at 573 ms |
+| F2 after number-buffer retirement | Does not open Guide | Opens Guide |
+| Actual Up → Mini Guide after independent menu/zoom/collapse reset | Not replayed in this baseline session | Escape closes; separate reset/F2 opens Guide |
+| Coordinate Close → timed OSD hide while genuinely inactive → return/Enter | Dart regression establishes old failure | Inactive/hidden snapshots; Enter exposes OSD |
+
+For the last row, Finder opened the existing System Settings within 2,151 ms of
+pointer collapse. Passive reads confirm native active/frontmost/AX-frontmost all
+false and no Slider; fresh AX confirms controls hidden before return. They are
+all true after return. AX Raise and CUA Command-Tab preparation attempts left
+Lineup active and are excluded from this lifecycle result. Ordinary-Tab resume,
+modal return, synthetic playback error and programmatic close have retained Dart
+regressions; they are not claimed as new native scenario passes. Native 89 exists
+and naturally tunes; the fixture's 89 is unavailable. No direct fixed-candidate
+FocusManager/HardwareKeyboard trace or physical/spoken acceptance is inferred.
+
+Windows/Linux [CI run 39383128215](https://github.com/TJZine/LineupDesktop/actions/runs/39383128215)
+completed successfully: Linux **1,860** full tests, Windows **749** selected tests,
+stock Windows build and **8** explicitly selected native/reference CTests. Its
+verification commit `ed42ccd780aec2fbc4ebfbcfe731869d060a7be8` is a direct child
+of product `829547b4`, differing **only** in `.github/workflows/ci.yml`. No live
+run was canceled. This is compilation/controlled-contract evidence, not physical
+Windows media/input/HDR or package acceptance.
+
+All **106** canonical bundle files match before/after execution, including exact
+Dart identity `1@829547b48859ab9654190c2b9d785b1e1446fdc9`. The unchanged engine
+and native runtime retain their previous hashes. The current native snapshot
+also retains the accepted unlabeled enabled Slider AXGroup. Earlier healthy
+notification callbacks retain their original product identity; no fresh callback
+run or post-rejection recovery is claimed. DVR Off/channel 1/800×632 are restored;
+normal quit exits **0**, all shutdown markers appear and there are **zero**
+AXTree/Flutter errors. Owned Finder is closed; no app/SecurityAgent/observer
+remains. The user's current VoiceOver setting was **Off** at this session's
+start and remains Off; preexisting System Settings is preserved.
+
+Raw manifests, logs, private AX/screenshots and controller transcriptions remain
+under `/tmp/lineup-audit/m04-focus-followup/`. Preserve the **one existing human
+checklist**, exact first-fade timing, retained-error/event recovery, rejected-batch
+divergence and historical node 866. No human checkbox is marked passed. There is
+no new VoiceOver synthesis, engine patch, main merge, signing/distribution or
+upstream publication. M-04 and overall accessibility acceptance remain **open**.
+
+## Earlier campaign results and identities
+
 Source: `platform/macos`; audited baseline `fa176087`, reviewed product candidate
 `1b2f64f4eaf584807f70e668a5502ab088a54537`. The audit plan/report were committed
 first as `3cf2cce7`. The latest product candidate is
