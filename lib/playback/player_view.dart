@@ -50,6 +50,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   var _sleepAnchor = LayerLink();
   Timer? _visibleClockTimer;
   var _appActive = true;
+  var _focusRecoveryScheduled = false;
   var _keyboardInput = false;
   final _internalRootFocus = FocusNode(debugLabel: 'Player root');
   FocusNode get _rootFocus => widget.focusNode ?? _internalRootFocus;
@@ -62,12 +63,14 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
+    FocusManager.instance.addListener(_scheduleFocusRecovery);
     _syncVisibleClockTimer();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
+    FocusManager.instance.removeListener(_scheduleFocusRecovery);
     WidgetsBinding.instance.removeObserver(this);
     _visibleClockTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
@@ -83,25 +86,64 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (_appActive == active) return;
     setState(() => _appActive = active);
     _syncVisibleClockTimer();
-    if (active) unawaited(widget.controller.checkSleepDeadline());
+    if (active) {
+      unawaited(widget.controller.checkSleepDeadline());
+      _scheduleFocusRecovery();
+    }
+  }
+
+  bool get _canOwnFocus =>
+      mounted &&
+      _appActive &&
+      widget.controller.overlay != PlayerOverlay.fullGuide &&
+      _rootFocus.parent != null &&
+      _rootFocus.canRequestFocus &&
+      ModalRoute.of(context)?.isCurrent == true;
+
+  bool get _focusStrandedAbovePlayer {
+    final primary = FocusManager.instance.primaryFocus;
+    return primary == null ||
+        (primary is FocusScopeNode && _rootFocus.ancestors.contains(primary));
+  }
+
+  void _scheduleFocusRecovery() {
+    if (!mounted ||
+        !_appActive ||
+        _focusRecoveryScheduled ||
+        !_focusStrandedAbovePlayer) {
+      return;
+    }
+    _focusRecoveryScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusRecoveryScheduled = false;
+      // Modal/menu focus and pending autofocus must settle first. Reclaim only
+      // empty focus or an ancestor scope, never a control or another route.
+      if (_canOwnFocus && _focusStrandedAbovePlayer) {
+        _rootFocus.requestFocus();
+      }
+    });
+    // Focus loss and resume need not otherwise schedule a frame.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _changed() {
     if (!mounted) return;
     _syncVisibleClockTimer();
     final nextOverlay = widget.controller.overlay;
-    if (_renderedOverlay == PlayerOverlay.osd &&
-        nextOverlay == PlayerOverlay.none &&
-        _appActive &&
+    final retiringBottomPanel =
+        (_renderedOverlay == PlayerOverlay.osd ||
+            _renderedOverlay == PlayerOverlay.nowPlaying) &&
+        nextOverlay != PlayerOverlay.osd &&
+        nextOverlay != PlayerOverlay.nowPlaying;
+    if (retiringBottomPanel &&
+        _canOwnFocus &&
         _rootFocus.hasFocus &&
-        _rootFocus.canRequestFocus &&
-        ModalRoute.of(context)?.isCurrent == true &&
         FocusManager.instance.primaryFocus?.context
                 ?.findAncestorWidgetOfExactType<_Osd>()
                 ?.controller ==
             widget.controller) {
-      // Menu exclusion can erase the route's remembered Player focus. Hand off
-      // before the focused OSD control retires, or keys stop at the route scope.
+      // Keep ownership across retirement before another key can arrive. Reactive
+      // scope recovery alone can run too late for a following channel digit.
       _rootFocus.requestFocus();
     }
     final bottomPanelChanged =

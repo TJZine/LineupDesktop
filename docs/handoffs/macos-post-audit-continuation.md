@@ -1,4 +1,45 @@
-# Continue the macOS post-audit fixes — 2026-10-19
+# Continue the macOS post-audit fixes — 2026-10-20
+
+## 2026-10-20 — Remaining focus recovery implementation in progress
+
+The human explicitly authorized implementation, regressions, fresh independent
+review, native verification and Windows CI in current controller
+`01a1527d-78d0-71b3-9012-cd6f482f6261`, turn
+`01a157c1-adb9-7cf0-a0a8-29ceed163454`, user item
+`01a157c1-adf6-7502-a8bf-ab8177c15b16`. The invoked orchestration skill
+authorizes scoped child chats and verified callbacks to this controller.
+
+Starting source: clean `17c81c72`, product `ffcaae63`. Worker
+`01a155a4-b198-7d50-8b96-0afd91c2df71` owns only Player view and its existing
+focus regression file; controller owns docs/Git/integration/builds/CI/native UI.
+Fresh reviewer chat `01a1580e-2494-7a30-b409-0714d8eed008` completed the
+independent review of the stable patch with no actionable finding (high reasoning,
+host-default model). Worker writes are complete;
+the same final regressions fail 7 cases before and pass all 10 after. The
+controller full suite passes 1,862 tests; format/analyze are clean. Integration
+and exact Release/native/Windows verification follow. Regressions
+fail on current source first and preserve menu/modal/background focus ownership.
+Cover digit retention, actual-key Mini Guide, dialog return, inactive/resume,
+playback-error supported keys and relevant programmatic retirement.
+
+Controller adjudication at
+`/tmp/lineup-audit/opus-m04-round4-adjudication/adjudication.json` confirms the
+gaps, while the supplied listener candidate also includes proactive handoff and
+resume recovery. Do not copy a supposed standalone listener from its combined
+results. The controller now also reproduces the matching two-digit failure on
+the unchanged canonical native Release: DVR On/paused, Now Playing, menu/zoom/
+Escape restoration, then Escape collapse and keys 8/9 (535 ms apart) leave 8;
+F2 subsequently does not open Guide. Passive snapshots confirm active/frontmost.
+This is visible native evidence, not a direct key-delivery/FocusManager trace.
+The baseline quit normally with zero AX errors; DVR Off/channel 1/800×632 were
+restored and VoiceOver was already Off and remains Off. Fixed native/Windows
+verification is still pending. Raw new evidence belongs under `/tmp/lineup-audit/m04-focus-followup/`.
+
+Preserve approved visuals and unlabeled enabled Slider group/order, existing
+human checklist, first-fade timing, retained-error/event recovery, rejected-batch
+divergence and historical node 866. No new VoiceOver synthesis, engine patch,
+main merge, distribution/signing or upstream publication. Native authentication
+prompts remain assigned to the human; inspect current state before asking.
 
 ## Latest acceptance session — CGEvent trial complete, VoiceOver checks open
 

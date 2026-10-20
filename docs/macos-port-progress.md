@@ -2368,3 +2368,33 @@ Final tested-key/aggregate-flag checks pass. The closing report/continuation/
 Opus packet retain exact identities and the one unchecked human checklist;
 first-fade/recovery/divergence/node 866 remain open. Raw evidence stays private
 under `/tmp/lineup-audit/m04-caption-verification/`.
+
+
+## 2026-10-20 — Complete Player focus recovery after control retirement
+
+The accepted follow-up scope covers focus gaps beyond the earlier timed OSD
+repair. The worker's identical final regressions produce 3 passes and 7 expected
+behavioral failures on `17c81c72`, then 10 passes on the candidate; 198 affected
+Player/navigation/Slider/key tests pass. The Player now transfers owned bottom-
+panel focus before retirement, coalesces guarded recovery from an empty or
+ancestor scope, and schedules that recovery on resume. Menus, modal routes,
+surviving controls, background state and full Guide retain their ownership.
+No Player appearance or accepted Slider containment/order changes.
+
+The controller independently reproduces the matching digit failure on the old
+canonical `ffcaae63` Release: after Now Playing/menu/zoom/Escape restoration,
+8 then 9 at a 535 ms interval leaves 8, and subsequent F2 does not open Guide.
+Passive snapshots confirm active/frontmost state. This is visible native
+behavior, not direct HardwareKeyboard delivery or a Dart focus trace. Cleanup
+restores DVR Off, channel 1 and 800×632; normal exit has zero AX errors. The
+user's current VoiceOver setting is Off and remains Off.
+
+The controller full suite passes all 1,862 tests; canonical formatting checks
+160 files with zero changes and analysis finds no issues. Fresh independent reviewer
+`01a1580e-2494-7a30-b409-0714d8eed008` reviewed the exact stable source and
+found no actionable correctness/design issue. The exact new canonical Release
+comparison and shared-Dart Windows CI remain required before completion. Raw
+evidence stays under `/tmp/lineup-audit/m04-focus-followup/`. The existing one
+human checklist, exact first-fade timing, retained-error/event recovery, rejected-
+batch divergence and historical node 866 remain open. No further VoiceOver
+synthesis, engine patch, main merge or distribution work is included.
