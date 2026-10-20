@@ -75,7 +75,7 @@ build-receipt and entire-bundle gates; independent inspection matches all 112
 entries. The canonical runtime maps that exact bundled engine and passes the
 affected automated native focus paths; one healthy Slider AXValueChanged callback
 is observed separately from run4. Four automatic first-fade attempts fail the
-timing/menu criterion; a human-assisted trace is pending. Natural production
+timing/menu criterion; the supervised manual probe ended without a new qualifying pair. Natural production
 interactivity, historical node 866 and the single human checklist remain open.
 Six canonical resize-timeout warnings have a demonstrated stock-engine precedent,
 not a matched equivalence result; physical resize and causal attribution stay open. No application workaround was removed and

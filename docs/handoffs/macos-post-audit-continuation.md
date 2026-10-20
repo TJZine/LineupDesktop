@@ -62,9 +62,11 @@ These are automated native observations, not physical or spoken acceptance.
 The separately reviewed diagnostic app uses the same engine and a logging-only
 three-file patch. Four bounded automatic first-fade attempts do not qualify:
 menu openings occur at 932/1,115 ms with opacity 1; the two pointer-only variants
-reveal controls without opening the menu. A human-assisted timed probe is pending.
-Natural production interactivity and bounded historical node-866 replay remain in
-progress. The human handled the diagnostic startup authentication prompt directly;
+reveal controls without opening the menu. The supervised manual probe ended at its 20-minute bound without a new menu
+pair; timing remains unachieved.
+Natural production interactivity and bounded historical node-866 replay need
+manual unlock. The second diagnostic is stopped; temporary DVR remains On until
+the unlocked cleanup restores its original Off. The human handled the diagnostic startup authentication prompt directly;
 the UI tool cannot access SecurityAgent. Windows execution and the
 [single existing human checklist](macos-post-audit-fix-report.md#one-final-human-checklist)
 remain open. No human box is inferred passed, and no push, remote CI dispatch,

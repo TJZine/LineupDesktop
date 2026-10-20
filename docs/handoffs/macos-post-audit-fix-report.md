@@ -14,7 +14,7 @@ Slider group/order and existing application mitigations remain unchanged.
 | Reproducible engine build | Fresh arm64 Release build and source/toolchain/artifact verification pass; stock cache untouched |
 | Verified canonical app / actually loaded repaired engine | Fresh `0208982e` app passes full build/bundle gates; PID 18742 maps the exact engine; all 112 entries remain unchanged after native use |
 | New-engine Player focus paths | Menu/zoom/collapse digits 8→89/F2, independent Mini Guide Escape/F2 and sampled inactive-hide/resume/Enter pass within automated native limits |
-| First-fade menu / natural production Slider flip | Four automatic timing attempts do not qualify; human-assisted timing probe and remaining natural attempts pending |
+| First-fade menu / natural production Slider flip | Four automatic timing attempts do not qualify; manual timing probe ended without qualifying evidence; remaining natural attempts need manual unlock |
 | Historical node 866 | Still unattributed; bounded diagnostic replay in progress, no retrospective attribution |
 | Windows repaired-engine execution / physical platform proof | Not run on this macOS host |
 | Human acceptance | All six existing checklist boxes below remain unchecked |

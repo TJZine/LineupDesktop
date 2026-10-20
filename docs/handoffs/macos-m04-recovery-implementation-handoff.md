@@ -705,3 +705,16 @@ source/engine. Four automatic first-fade probes do not qualify: real menu open
 and double-click paths reveal controls but do not openmenu. Human-assisted timing
 probe requested; no pass inferred. Initial natural tune mounts an already-enabled
 Slider; no same-presenter flip yet. No VoiceOver/global modifier synthesis.
+
+
+The supervised diagnostic run reaches its 1200-second limit and exits-15; no new
+menu pair appeared during the human-assisted probe. Its audit is recorded at
+`runtime-trace/human-probe-audit.json`; neither of the two actual openings meets
+age/opacity/status criteria. This is a bounded unsuccessful timing attempt, not
+a product failure or human acceptance pass. A second same-artifact diagnostic
+session starts and reaches Guide without another authentication prompt, but the
+UI tool then reports a locked Mac/failed automatic unlock. Controller stops only
+that owned process. The remaining natural tune/Slider-use and historical-route
+checks, plus restoring temporary DVR On to its original Off, require a short
+manual unlock. No verification app/observer is intentionally left running while
+waiting. The earlier manual timing request has ended and need not be repeated.
