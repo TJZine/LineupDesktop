@@ -610,3 +610,34 @@ source/binary/receipt hashes, raw synthetic snapshots and observer logs are in
 `native-harness/run4/`; canonical engine test source was restored after diagnostic
 compilation. No VoiceOver/global modifiers/user settings were changed. Canonical
 Lineup runtime, physical/spoken acceptance and Windows remain separate gates.
+
+
+Final Release engine build succeeded on the reviewed sources with explicit Apple
+linker and `enable_lto=false`. Source/dependency/toolchain/artifact verification
+passes; independent streaming audit matched 1,387 artifacts, 15 patched sources
+and 1,065 Ninja graph files. Engine SHA-256 is
+`6a2a93f01e014168d4ea2728fc6fda587d992fde413441129d8d8fb3633a53d0`;
+provenance SHA-256 is
+`5609d81f75ab863bbca8b03566fabadec7406806ca8d4af8f3b239c44e65b7c0`.
+Release common tests pass 240/240 (all ten Recovery tests); Mac focused tests pass
+12/12. Debug's 242 versus Release's 240 reflects three Debug project-switch tests
+versus one Release-specific switch test. Final app suite passes 1,869; analysis
+clean; canonical format 160/0. No Windows execution is inferred.
+
+The first canonical app compiles (82.9 MB) but final bundle verification rejects
+the engine executable comparison. Exact failed pair and receipt are preserved at
+`canonical-attempt1/`. After standard signature removal, the two executables have
+identical length and differ at one byte: retained `__LINKEDIT.vmsize` allocation.
+A fixed ad-hoc sign/remove cycle on disposable copies normalizes it while hashing
+all remaining bytes; originals remain unchanged. Native page-size-changing,
+changed-code and malformed-metadata controls pass in the 20-test Python suite.
+Independent focused review and a clean-source canonical rebuild follow; no
+verified app or loaded-engine result is claimed from the first compilation.
+
+The separate three-file runtime diagnostic patch is frozen at SHA-256
+`4a899d05813235d0050223f0472feb737af88f333b2dc142ed2e0e7ab3025320`
+and passed analysis and independent focused review. It records stable current
+owner/presentation/parent-animation identity, first zero sample, actual menu
+state/build and DVR-present Slider predicates; it is never canonical app code.
+No runtime timing/production-flip pass exists yet. The Mac is locked and manual
+unlock was requested; no automated unlock, VoiceOver or modifier action was used.

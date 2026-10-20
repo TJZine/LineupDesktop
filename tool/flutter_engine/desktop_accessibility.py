@@ -473,8 +473,10 @@ def verify(repository, root, name, target, architecture, mode):
 
 
 def executable_hash(binary):
-    # Xcode can re-sign the embedded framework. Remove signatures from disposable
-    # copies only, and compare the resulting executable bytes, never just UUIDs.
+    # Removing a signature leaves __LINKEDIT's VM allocation sized for the old
+    # signature. Different signing layouts can change that size. A fixed ad-hoc
+    # sign/remove cycle lets codesign normalize that allocation on disposable
+    # copies; compare every resulting byte, never just sections or UUIDs.
     with tempfile.TemporaryDirectory(prefix='lineup-ax-signature-') as temporary:
         copy = Path(temporary) / binary.name
         shutil.copy2(binary, copy)
@@ -483,6 +485,9 @@ def executable_hash(binary):
             run(['codesign', '--remove-signature', copy])
         else:
             require(b'not signed at all' in display.stderr, 'Cannot inspect engine code signature.')
+        run(['codesign', '--force', '--sign', '-', '--identifier',
+             'lineup.engine-comparison', '--pagesize', '16384', '--timestamp=none', copy])
+        run(['codesign', '--remove-signature', copy])
         return file_hash(copy)
 
 

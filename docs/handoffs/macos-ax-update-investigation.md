@@ -1,5 +1,80 @@
 # macOS accessibility update investigation — M-04
 
+## 2026-10-20 — Owned semantics and staged native commit repair
+
+The adopted [implementation assignment](macos-m04-recovery-implementation-handoff.md)
+adds an opt-in engine patch; older “no engine patch” statements below describe
+historical application-mitigation sessions. The canonical patch is
+`tool/flutter_engine/0002-desktop-accessibility.patch`, SHA-256
+`2c843a56499dbdebcbbabd6f178b17bc84d13d0192b1e039318caf13cf18f89a`,
+on pinned framework `abaf9c523780a608bd46686fd5e53740a07077f8` / engine
+`deb287481e3ce9468f3434937ced4240a70539ca`.
+
+The bridge retains owned node flags/data and custom-action definitions, merges
+pending records into a candidate model, validates the root's reachable component,
+and discards orphan records without losing valid reachable changes supplied in
+the same batch. It reconstructs moved subtrees from retained descendants rather
+than assuming Flutter resends them. Missing children, cycles, duplicate parents
+and missing referenced actions reject deterministically.
+
+Each commit seeds a private AXTree from the last published state, applies the
+removal prepass and complete candidate update there, and checks each actual
+`Unserialize` result. A failed tree is discarded; pending failed/stale events do
+not escape. The last published semantics/actions/tree stay authoritative and a
+later valid update can recover within that bridge. This deliberately copies and
+walks the retained tree on normal commits; no latency or throughput improvement
+is claimed. An in-place repair would need to reconstruct partially mutated state
+and delegate/event ownership after AXTree documents failure as fatal.
+
+Successful publication rebinds surviving delegates while preserving native object
+identity and stable delegate/tree-data references. Removed delegates detach;
+macOS text-field wrappers also detach on removal and bridge destruction. Event
+generators release their tree before destruction, including every failure path.
+The existing root wins; the platform's parentless node-0 convention supplies an
+initial root hint while generic unique nonzero roots remain supported. Arbitrary
+custom nonzero-root forests containing parentless orphan 0 remain ambiguous
+without root metadata; the patch does not claim to solve that protocol ambiguity.
+
+Before/after evidence uses seven identical final API-compatible regressions:
+pinned baseline fails all seven independently (two SIGABRT, two SIGSEGV, three
+assertion failures); candidate common tests pass **242 Debug / 240 Release**, with
+all ten new recovery cases present in both. Release's count differs only in
+project-switch tests. Focused macOS native tests pass **12/12** in both modes.
+Windows callback/root handling was reviewed, but the Windows target was not
+built or executed on this macOS host.
+
+Private native harness **run4** establishes OS notification recovery after three
+accumulated real rejects: seed failure before mutation, main failure after a
+successful removal prepass, and main completion failure after staged mutation.
+The same bridge and published Slider remain at value 60 during rejection with
+empty pending events. A trusted PID-scoped external AXObserver has a successful
+AXValueChanged subscription before its healthy 60 callback, then observes actual
+value 80 after the later valid update while the native object remains alive.
+External confirmation precedes teardown and the test exits 0. A CUA button action
+also reaches the fixture's recorded native dispatch. This is one recovery update
+after all three failures, not one independent recovery after each. The Dart
+engine is stopped in that fixture, so it does not prove playback/seek delivery;
+focus/custom actions and spoken acceptance remain separate.
+
+Run4 fixture SHA-256 is
+`9dc328f5552806d9a49943f90b268c92a576840b1a8f12e6ea5e4ef4fd56194d`;
+diagnostic executable SHA-256 is
+`f9f9603e72058c4f94bdea4fd3cdc7248e560f7e10e5c9c552ee98e03cdfeb1d`.
+Earlier attempts lack a valid role, registration, or post-notification value read
+and are not counted as this pass. Canonical engine test source was restored after
+building the diagnostic. Raw logs/receipts stay in
+`/tmp/lineup-audit/m04-engine-recovery/native-harness/run4/`.
+
+The fresh Release engine is built and verified. Its first app compilation
+succeeds, but the bundle gate rejects executable equality after Xcode re-signing;
+a fixed ad-hoc sign/remove cycle on disposable copies corrects the residual
+signing allocation difference and passes 20 build-tool tests, including actual
+Mach-O signature-page and changed-code/malformed-input controls. The canonical
+app rebuild remains pending. Canonical loaded-engine,
+first-fade, natural production interactivity flip, historical node 866 and the
+single human checklist remain open. No application workaround was removed and
+no new application defect has been established by this campaign.
+
 Status: **Flutter runtime interoperability defects reproduced standalone; bounded
 application mitigations implemented, general M-04 acceptance still open.** Stock
 Tooltip and Slider sequences reproduce the unknown-node rejection. A new production

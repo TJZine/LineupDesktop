@@ -59,8 +59,9 @@ build. Its verified flow accepts one explicit mode and inline Dart defines, uses
 the default `lib/main.dart` entrypoint, and rejects informational/nonbuilding
 options. A successful build produces a receipt binding its recipe and the entire
 bundle, including compiled Dart and assets. Post-build verification compares
-engine executable contents after removing signatures from disposable copies
-only. Local receipts describe the wrapper's execution; they are not hostile-local
+engine executable contents after a fixed ad-hoc sign/remove cycle normalizes
+signature allocation on disposable copies only; original artifacts stay intact.
+Local receipts describe the wrapper's execution; they are not hostile-local
 attestation. Sidecars beside the app contain private build details and stay out
 of Git. An actual loaded-engine observation is still required after launch.
 

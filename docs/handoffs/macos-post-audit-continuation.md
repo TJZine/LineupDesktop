@@ -1,5 +1,48 @@
 # Continue the macOS post-audit fixes — 2026-10-20
 
+## 2026-10-20 — Engine recovery implemented; app verification in progress
+
+The adopted [recovery assignment](macos-m04-recovery-implementation-handoff.md)
+is executing under controller `01a15836-5fa7-7e53-9f92-0afa5eb7c12c` (local).
+Local integration commits are `831c28fc` and `76b5d513`; Player Dart source remains
+the approved `829547b4` product, including its Slider group/order and focus guards.
+The new opt-in engine is separate from the untouched stock SDK cache.
+
+The common bridge now retains owned reachable semantics and stages each native
+commit before publication. Identical final regressions fail **7/7** on the pinned
+baseline; the candidate passes **242/242 Debug** and **240/240 Release** common
+tests, including all ten recovery tests. The count difference is three Debug
+project-switch tests versus one Release-specific switch test. Both modes pass
+**12/12** focused macOS bridge/delegate tests. App tests pass **1,869**, analysis is
+clean, formatting checks **160 files/0 changes**, and build-tool tests pass **20**, including native signature-layout controls.
+
+A disposable native test app additionally demonstrates one later valid value
+update after three accumulated real AXTree rejections in the same bridge: a
+passive external observer receives actual Slider values **60**, then **80** after
+rejection; a CUA native button action reaches the fixture's recorded dispatch.
+This does not establish Dart playback/seek, native focus/custom-action acceptance,
+or spoken VoiceOver usefulness. See the [investigation](macos-ax-update-investigation.md)
+for the exact recovery boundary.
+
+The fresh arm64 Release engine builds and passes artifact/source verification;
+its executable SHA-256 is
+`6a2a93f01e014168d4ea2728fc6fda587d992fde413441129d8d8fb3633a53d0`.
+The first app build compiles successfully but its final executable-equality gate
+rejects the re-signed embedded engine. Read-only comparison finds identical
+non-signature section contents and a signing-envelope size difference. A focused
+build-tool correction passes 20 tests; the canonical rebuild is pending.
+**No verified canonical app or loaded-engine result is claimed yet**. Private evidence is under
+`/tmp/lineup-audit/m04-engine-recovery/`.
+
+Remaining native work is the new engine's Player focus paths, measured first-fade
+menu entry, a natural mounted-presenter Slider interactivity flip where feasible,
+and bounded historical-node-866 replay. A separately identified, logging-only
+three-file diagnostic patch has passed focused review and analysis; it has not
+been built or run. The Mac currently requires manual unlock. Windows engine
+execution and the [single existing human checklist](macos-post-audit-fix-report.md#one-final-human-checklist)
+remain open. No human box is inferred passed, and no push, remote CI dispatch,
+main merge, distribution signing or upstream publication occurred.
+
 ## 2026-10-20 — Remaining focus repair verified; M-04 acceptance stays open
 
 Latest product is **`829547b48859ab9654190c2b9d785b1e1446fdc9`**,

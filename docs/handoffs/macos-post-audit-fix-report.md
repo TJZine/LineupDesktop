@@ -1,5 +1,37 @@
 # macOS post-audit fix round — 2026-10-18
 
+## 2026-10-20 — Desktop engine recovery; acceptance remains open
+
+The [recovery execution record](macos-m04-recovery-implementation-handoff.md#execution-record--2026-10-20)
+now covers local engine integration commits `831c28fc` and `76b5d513`. Player UI,
+Slider group/order and existing application mitigations remain unchanged.
+
+| Obligation | Current disposition |
+| --- | --- |
+| Reachable retained data, omitted moved descendants, rejected commits and later bridge recovery | Repaired; seven identical baseline regressions fail, candidate common suite passes 242 Debug / 240 Release |
+| Native delegate/text lifetime and bridge controls | Focused macOS suite 12/12 in each mode |
+| Actual native notification after rejection | Disposable run4 observes Slider 60 then 80 after three accumulated real failures in the same bridge; recorded native button dispatch also succeeds |
+| Reproducible engine build | Fresh arm64 Release build and source/toolchain/artifact verification pass; stock cache untouched |
+| Verified canonical app / actually loaded repaired engine | First app compiles but final signed-executable comparison rejects; normalization fix passes focused checks; canonical rebuild pending |
+| First-fade menu, natural production Slider flip, new-engine Player focus paths | Reviewed logging-only diagnostic prepared; native session pending manual unlock |
+| Historical node 866 | Still unattributed; bounded replay remains pending, no retrospective attribution |
+| Windows repaired-engine execution / physical platform proof | Not run on this macOS host |
+| Human acceptance | All six existing checklist boxes below remain unchecked |
+
+App checks pass **1,869 tests**, clean analysis and **160 files/0 format changes**;
+build-tool checks pass **20 Python tests**. New native fixture evidence is bounded:
+it records native action routing with a stopped Dart engine, not app playback,
+seek, focus/custom-action acceptance or spoken VoiceOver usefulness. It establishes
+one valid update after three failures, not three separate recovery updates.
+See the [investigation](macos-ax-update-investigation.md) for exact identities and
+limits. Private evidence and the preserved old app/stock-engine rollback pair
+remain under `/tmp/lineup-audit/m04-engine-recovery/`.
+
+M-04 and overall accessibility acceptance remain **open**. No human result is
+inferred from automated tests. No publication, remote CI dispatch, main merge or
+distribution signing is authorized or performed. Historical sessions below keep
+their original app/engine identities and are not relabelled as repaired-engine runs.
+
 ## 2026-10-20 — Remaining focus repair verified; M-04 acceptance stays open
 
 Latest product is **`829547b48859ab9654190c2b9d785b1e1446fdc9`**,

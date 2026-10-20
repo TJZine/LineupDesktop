@@ -412,6 +412,67 @@ FlutterEnginePatchSha256 = 'REPLACE'
 
 @unittest.skipUnless(sys.platform == 'darwin' and shutil.which('codesign') and shutil.which('clang'), 'native macOS signature fixture')
 class SignedExecutable(unittest.TestCase):
+    def test_signing_page_size_normalizes_vm_allocation_and_rejects_changed_or_malformed_code(self):
+        with tempfile.TemporaryDirectory(prefix='lineup ax signing pages ') as temporary:
+            root = Path(temporary)
+            source = root / 'fixture.c'
+            source.write_text('unsigned char blob[2097152] = {1};\n'
+                              'int main(int argc, char** argv) { return blob[(unsigned)argc % sizeof(blob)]; }\n')
+            binary = root / 'built'
+            subprocess.run(['clang', str(source), '-o', str(binary)], check=True, capture_output=True)
+            copies = []
+            removed_hashes = []
+            for page_size in ('4096', '16384'):
+                signed = root / ('signed-' + page_size)
+                shutil.copy2(binary, signed)
+                subprocess.run(['codesign', '--force', '--sign', '-', '--identifier', 'lineup.fixture',
+                                '--pagesize', page_size, '--timestamp=none', str(signed)], check=True, capture_output=True)
+                copies.append(signed)
+                removed = root / ('removed-' + page_size)
+                shutil.copy2(signed, removed)
+                subprocess.run(['codesign', '--remove-signature', str(removed)], check=True, capture_output=True)
+                removed_hashes.append(ax.file_hash(removed))
+            originals = [ax.file_hash(path) for path in copies]
+            # The old remove-signature-only comparison rejects identical code.
+            self.assertNotEqual(*removed_hashes)
+            self.assertEqual(ax.executable_hash(copies[0]), ax.executable_hash(copies[1]))
+            self.assertEqual(originals, [ax.file_hash(path) for path in copies])
+            data = bytearray(copies[0].read_bytes())
+            commands = struct.unpack_from('<I', data, 16)[0]
+            offset = 32
+            signature_offset = None
+            text_offset = None
+            for _ in range(commands):
+                command, size = struct.unpack_from('<II', data, offset)
+                if command == 0x1d:  # LC_CODE_SIGNATURE
+                    signature_offset = offset
+                if command == 0x19 and data[offset + 8:offset + 24].rstrip(b'\0') == b'__TEXT':
+                    section_count = struct.unpack_from('<I', data, offset + 64)[0]
+                    for section in range(section_count):
+                        section_offset = offset + 72 + section * 80
+                        if data[section_offset:section_offset + 16].rstrip(b'\0') == b'__text':
+                            text_offset = struct.unpack_from('<I', data, section_offset + 48)[0]
+                offset += size
+            self.assertIsNotNone(text_offset)
+            self.assertIsNotNone(signature_offset)
+            changed = root / 'changed-code'
+            changed_bytes = bytearray(data)
+            changed_bytes[text_offset] ^= 1
+            changed.write_bytes(changed_bytes)
+            self.assertNotEqual(ax.executable_hash(copies[0]), ax.executable_hash(changed))
+            malformed = {
+                'truncated': data[:40],
+                'invalid-command-size': bytearray(data),
+                'signature-outside-file': bytearray(data),
+            }
+            struct.pack_into('<I', malformed['invalid-command-size'], 36, 4)
+            struct.pack_into('<I', malformed['signature-outside-file'], signature_offset + 8, len(data) + 4096)
+            for name, contents in malformed.items():
+                path = root / name
+                path.write_bytes(contents)
+                with self.subTest(name=name), self.assertRaises(ax.VerificationError):
+                    ax.executable_hash(path)
+
     def test_signature_comparison_preserves_canonical_binaries_and_detects_other_code(self):
         with tempfile.TemporaryDirectory(prefix='lineup ax codesign ') as temporary:
             root = Path(temporary)
