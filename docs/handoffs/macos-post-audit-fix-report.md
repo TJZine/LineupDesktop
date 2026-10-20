@@ -3,7 +3,7 @@
 ## 2026-10-20 — Desktop engine recovery; acceptance remains open
 
 The [recovery execution record](macos-m04-recovery-implementation-handoff.md#execution-record--2026-10-20)
-now covers local engine integration commits `831c28fc` and `76b5d513`. Player UI,
+now covers local implementation commits `831c28fc`, `76b5d513` and `0208982e`. Player UI,
 Slider group/order and existing application mitigations remain unchanged.
 
 | Obligation | Current disposition |
@@ -14,8 +14,9 @@ Slider group/order and existing application mitigations remain unchanged.
 | Reproducible engine build | Fresh arm64 Release build and source/toolchain/artifact verification pass; stock cache untouched |
 | Verified canonical app / actually loaded repaired engine | Fresh `0208982e` app passes full build/bundle gates; PID 18742 maps the exact engine; all 112 entries remain unchanged after native use |
 | New-engine Player focus paths | Menu/zoom/collapse digits 8→89/F2, independent Mini Guide Escape/F2 and sampled inactive-hide/resume/Enter pass within automated native limits |
-| First-fade menu / natural production Slider flip | Four automatic timing attempts do not qualify; manual timing probe ended without qualifying evidence; remaining natural attempts need manual unlock |
-| Historical node 866 | Still unattributed; bounded diagnostic replay in progress, no retrospective attribution |
+| First-fade menu / natural production Slider flip | Four automatic timing attempts and the bounded manual probe do not qualify; three natural routes mount already-interactive Sliders, with no same-presenter flip observed |
+| Historical node 866 | Three current diagnostic route attempts complete without rejection; original occurrence remains unattributed |
+| Diagnostic native seek | Pointer seek 33%→50%, actual AXValueChanged callback and native exact-seek landing observed; distinct from post-rejection recovery and physical acceptance |
 | Windows repaired-engine execution / physical platform proof | Not run on this macOS host |
 | Human acceptance | All six existing checklist boxes below remain unchecked |
 
@@ -38,6 +39,32 @@ finishes shutdown markers, but its exit code is unavailable. Six resize-timeout
 warnings remain visible; this warning class predates the repair in exact stock
 controls, without a matched performance/causality comparison. Physical resize and
 all other human items remain open.
+
+The final diagnostic session uses base `76b5d513` plus logging-only patch
+`4a899d05813235d0050223f0472feb737af88f333b2dc142ed2e0e7ab3025320`,
+not the canonical app's compiled Dart. Eleven current OSD samples all have
+interactive Sliders; no qualifying same-presenter transition is observed. Three
+Settings → DVR On → Guide → tune routes do not reproduce historical node 866;
+missing original first-error/portal evidence still prevents attribution. The
+pointer seek's native target 1919.293 seconds lands at 1919.292 seconds with an
+actual native Slider callback. This is healthy diagnostic action evidence only.
+No fresh per-session loaded-engine map is claimed for this diagnostic PID.
+
+Normal diagnostic Quit exits **0**, with all shutdown markers, zero AXTree rejects
+and zero resize warnings. **One Flutter error** reports a backward presentation
+timestamp of **875 µs (0.875 ms)**; the engine clamps it before delivery to Dart.
+An older stock-engine diagnostic has the same warning class. That establishes
+precedent, not common cause, matched performance or exclusion of indirect repair/
+build/instrumentation effects. No concrete new application defect is established.
+The first diagnostic's timed exit -15 and the second's lock-related controller
+stop/exit -15 retain their unsuccessful identities.
+
+Final cleanup restores DVR **Off**, channel 1 and unchanged VoiceOver **Off**.
+No owned app/observer remains; only the guarded owned Finder window was closed.
+Preexisting Finder/System Settings remain, and all 112 entries of each preserved
+app bundle match. Independent review accepted this evidence with these limits.
+Private session3 log SHA-256:
+`ab9963a4c63ccabed3635ee59f1549b133c283d3861a43d6e54f0e219571fa78`.
 
 M-04 and overall accessibility acceptance remain **open**. No human result is
 inferred from automated tests. No publication, remote CI dispatch, main merge or
@@ -1109,9 +1136,11 @@ unchanged caption preference and preexisting System Settings window. Raw log
 
 **No human checkbox is marked passed.** The new controlled engine tests and
 native run4 now establish the bounded recovery result described at the top of
-this report. Canonical repaired-engine runtime, exact first-fade timing, a natural
-production Slider interactivity flip where feasible, and historical node 866
-remain open. Keep all human results and partial coverage in this one checklist.
+this report. Canonical repaired-engine automated native checks are recorded at
+the top; they do not establish physical or spoken acceptance. Exact first-fade
+timing, a natural same-presenter Slider interactivity flip and historical node
+866 attribution remain unachieved after the bounded attempts. All six human
+items remain open. Keep actual results and partial coverage in this one checklist.
 
 - [ ] Physical K pauses/resumes, including during rapid channel changes; J seeks backward; media play/pause/stop/seek keys work with DVR On and are ignored as specified with DVR Off.
 - [ ] Physical Guide search → Tab → Clear → Return/keypad Enter, including repeated F2 → Escape restoration and Command+A in the search field; record actual focus when activation fails.

@@ -75,11 +75,25 @@ build-receipt and entire-bundle gates; independent inspection matches all 112
 entries. The canonical runtime maps that exact bundled engine and passes the
 affected automated native focus paths; one healthy Slider AXValueChanged callback
 is observed separately from run4. Four automatic first-fade attempts fail the
-timing/menu criterion; the supervised manual probe ended without a new qualifying pair. Natural production
-interactivity, historical node 866 and the single human checklist remain open.
-Six canonical resize-timeout warnings have a demonstrated stock-engine precedent,
-not a matched equivalence result; physical resize and causal attribution stay open. No application workaround was removed and
-no new application defect has been established by this campaign.
+timing/menu criterion; the supervised manual probe ended without a new qualifying
+pair. Three later Settings → DVR On → Guide → tune diagnostic routes complete
+without AXTree rejection. All eleven OSD trace samples have already-interactive
+Sliders, so no same-presenter interactivity flip is observed. A pointer seek
+33%→50% yields an actual native AXValueChanged callback and exact seek landing;
+this is healthy diagnostic action evidence, separate from run4's recovery proof.
+No first-error delta exists for historical node 866, which remains unattributed.
+
+The final diagnostic exits 0 normally, with no AXTree rejection or resize warning,
+but one Flutter frame-time-clamping error (875 µs backward presentation timestamp).
+The pinned engine clamps the timestamp before Dart beginFrame. An older
+stock-engine diagnostic has the same warning class; neither unchanged source nor
+that precedent excludes indirect scheduling effects or establishes a common
+cause. Six canonical resize-timeout warnings also have stock-engine precedent,
+without matched frequency/cause evidence. No new concrete application defect is
+established, and no application workaround was removed. First-fade timing, natural
+interactivity transition, physical/spoken acceptance and Windows execution remain
+open. Final DVR is Off, channel 1/VoiceOver Off are restored, owned processes and
+Finder window are closed, and both 112-entry bundles are unchanged.
 
 Status: **Flutter runtime interoperability defects reproduced standalone; bounded
 application mitigations implemented, general M-04 acceptance still open.** Stock

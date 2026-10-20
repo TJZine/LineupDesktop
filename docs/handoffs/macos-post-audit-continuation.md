@@ -4,7 +4,8 @@
 
 The adopted [recovery assignment](macos-m04-recovery-implementation-handoff.md)
 is executing under controller `01a15836-5fa7-7e53-9f92-0afa5eb7c12c` (local).
-Local integration commits are `831c28fc` and `76b5d513`; Player Dart source remains
+Local implementation commits are `831c28fc`, `76b5d513` and `0208982e`;
+Player Dart source remains
 the approved `829547b4` product, including its Slider group/order and focus guards.
 The new opt-in engine is separate from the untouched stock SDK cache.
 
@@ -64,10 +65,28 @@ three-file patch. Four bounded automatic first-fade attempts do not qualify:
 menu openings occur at 932/1,115 ms with opacity 1; the two pointer-only variants
 reveal controls without opening the menu. The supervised manual probe ended at its 20-minute bound without a new menu
 pair; timing remains unachieved.
-Natural production interactivity and bounded historical node-866 replay need
-manual unlock. The second diagnostic is stopped; temporary DVR remains On until
-the unlocked cleanup restores its original Off. The human handled the diagnostic startup authentication prompt directly;
-the UI tool cannot access SecurityAgent. Windows execution and the
+After manual unlock, three Settings → DVR On → Guide → tune routes complete
+without an AXTree rejection. Every observed mounted Slider is already interactive;
+no same-presenter interactivity flip is observed. A later pointer seek changes
+native value 33%→50%, produces an actual AXValueChanged callback, and reaches the
+native exact-seek path. These diagnostic observations do not attribute historical
+node 866 or establish physical acceptance. The delayed passive route snapshots
+already lack the Slider; visible-state evidence is the fresh CUA transcription.
+
+The final diagnostic session exits **0** after normal Quit, with shutdown markers,
+zero AXTree rejections and zero resize warnings. It has **one actual Flutter
+error**: a backward presentation timestamp of **875 µs**, clamped before Dart
+beginFrame. An older stock-engine diagnostic contains the same warning class;
+its cause and any indirect scheduling effects remain unresolved. No new concrete
+application defect or repair-caused regression is established. This is distinct
+from the first diagnostic's 1,200-second bound/exit -15 and the second session's
+controller stop/exit -15 when the Mac locked.
+
+Cleanup is complete: DVR Off, channel 1 and VoiceOver Off; owned app/observers
+exited and the guarded owned Finder window closed. Preexisting Finder/System
+Settings remain. All 112 entries of each preserved app bundle still match.
+The human handled startup authentication directly; the tool never accessed
+SecurityAgent. Windows repaired-engine execution and the
 [single existing human checklist](macos-post-audit-fix-report.md#one-final-human-checklist)
 remain open. No human box is inferred passed, and no push, remote CI dispatch,
 main merge, distribution signing or upstream publication occurred.

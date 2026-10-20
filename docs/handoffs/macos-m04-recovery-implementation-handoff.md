@@ -718,3 +718,62 @@ that owned process. The remaining natural tune/Slider-use and historical-route
 checks, plus restoring temporary DVR On to its original Off, require a short
 manual unlock. No verification app/observer is intentionally left running while
 waiting. The earlier manual timing request has ended and need not be repeated.
+
+
+### Final engineering disposition — 2026-10-20
+
+After the user's manual unlock, diagnostic session3 (PID 44311) completes three
+Settings → DVR On → Guide → tune routes, restoring Off after each. No AXTree
+rejection occurs. All eleven OSD trace samples have already-interactive Sliders;
+there is no qualifying same-owner/presentation/element interactivity transition.
+Fresh CUA states supply visible Slider observations; delayed passive route1/2
+snapshots already lack it and are not cited as visible-state proof. Three
+nonreproductions do not attribute historical node 866, whose original first-error
+delta and portal/origin inventory remain unavailable.
+
+A pointer seek changes native Slider 33%→50%; a successfully registered external
+observer receives actual AXValueChanged tag2/value50%. The raw native exact-seek
+path targets 1919.293 seconds and observes 1919.292 seconds. This establishes
+healthy diagnostic action/notification delivery, not physical input acceptance,
+a natural interactivity flip or post-rejection recovery. Diagnostic base remains
+`76b5d513` plus patch `4a899d05…`; compiled Dart is `0a74b3cd…`, distinct from
+canonical source `0208982e` / compiled Dart `4990868c…`. Its bundled engine matches
+the preserved canonical engine, but no fresh per-session loaded-map proof is
+claimed for PID 44311.
+
+Session3's supervisor actually waits for normal Quit and records **exit 0**, no
+stop reason and all three native shutdown markers. Raw log SHA-256 is
+`ab9963a4c63ccabed3635ee59f1549b133c283d3861a43d6e54f0e219571fa78`.
+It has zero AXTree rejections/resize warnings and **one literal Flutter error**:
+`PlatformConfiguration::BeginFrame` receives a presentation timestamp 875 µs
+(0.875 ms) older than its retained time and clamps it before invoking Dart. This
+is not a measured frame-processing duration or proof of dropped frames. A prior
+stock-engine instrumented run contains the same warning class (417 µs), so the
+class predates this repair. Exact upstream source is unchanged and has an existing
+monotonic-time unit test (read, not newly run); build settings, platform-thread
+AX work or diagnostic logging may still affect scheduling indirectly. There is
+no matched causal/performance comparison or demonstrated new application defect;
+no speculative app workaround is added. The engine investigator and independent
+reviewer accepted this calibrated disposition.
+
+The first diagnostic remains an unsuccessful 1,200-second-bound attempt, exit -15,
+with no qualifying first-fade pair; the second remains controller-stopped on Mac
+lock, exit -15. Final success does not relabel them. Four automatic attempts plus
+the bounded manual probe did not achieve first-fade timing. No more UI/resource
+work is left running for these bounded engineering attempts.
+
+Final cleanup: DVR **Off**, channel 1 and unchanged VoiceOver **Off**; no owned
+app or observer process remains. The owned Finder window was closed only after
+its title guard; preexisting Finder/System Settings remain. All 112 entries of
+each preserved canonical and diagnostic app still match. Private evidence is
+`runtime-trace/session3/observations-and-cleanup.json` and `final-cleanup.json`.
+Human unlock/frontmost/authentication assistance is not an acceptance result;
+all six boxes in the existing single checklist remain unchecked. The controller
+has asked whether the user wants a physical/spoken session now or later.
+
+Feasible local implementation, reproducible arm64 Release integration, controlled
+recovery proof and bounded automated native verification are complete. M-04 stays
+**open** for the stated timing/interactivity/historical limits, Windows repaired-
+engine execution/integration and physical/spoken acceptance. Nothing was pushed,
+merged to main, remotely dispatched, distribution-signed or published. Subsequent
+documentation commits do not change either verified app identity.
