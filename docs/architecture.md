@@ -539,6 +539,20 @@ decision. Exercise existing serialized state and failure/recovery behavior in
 validation of malformed data and the original bytes on recovery; do not add a
 generic migration framework without a current need.
 
+Today's unversioned file is state format 1. `FileAppStore` reserves the top-level
+`formatVersion` discriminator: an integer greater than 1 raises
+`UnsupportedStateFormatException` before strict schema parsing, migration or
+corruption recovery. Startup refuses to open the application before credential
+restoration or state writes and explains that the build is too old and saved data
+is intact. The original state and existing backup stay byte-for-byte unchanged;
+malformed markers retain the normal malformed-data recovery path. Current writers
+continue emitting the exact unversioned format. Every future schema-changing
+writer must emit the newer discriminator so guarded older builds can refuse it.
+Pre-guard binaries cannot acquire this protection; preserve current state
+separately before changing builds and set an explicit compatibility floor before
+the first format-2 writer ships. Do not distribute the preserved pre-guard
+application/engine pairs as beta candidates.
+
 Before the first refinement-schema rewrite, the store retains the original bytes
 in a sibling backup. Backup or migration IO failures propagate without classifying
 valid legacy state as corrupt. Shuffled schedule input is canonicalized by media

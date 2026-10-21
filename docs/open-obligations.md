@@ -34,8 +34,15 @@ TV work and Windows physical/package acceptance are outside it; Windows engine-s
 integration (R-01) and CI-executable engine tests (V-02) are inside it. The macOS
 deployment target stays 12.0 and the promised floor is set from an older-macOS check
 (V-06). Signing and distribution (R-02) are excluded for now; the beta candidate is the
-verified ad-hoc-signed build using the repaired engine (B-01). Which V-05 cases gate the
-beta is not yet decided.
+verified ad-hoc-signed build using the repaired engine (B-01). On October 21 the
+maintainer selected the V-05 beta subset: local PMS Direct Play with the owner
+account and available Home profiles, saved-lineup restore, scan/retry/cancel,
+current catalog selection, authorized playback and graceful shutdown. Protected
+profile/server failures and 401/403 remain deterministic-test evidence. Remote/
+relay, alternate PMS shapes, large/partial catalogs, smart collections and live
+membership/portrait probes remain beta limitations. R-03 implementation must land
+before the candidate after design approval; V-07 remains deferred until the
+maintainer chooses the existing checklist or a limited candidate.
 
 ## Confirmed bugs and repair status
 
@@ -78,7 +85,19 @@ what should change.
 | I-05 | Artwork refresh reachability, aggregate playlist scale and original artwork-test failure | CAND-010/011 need a reachable live scenario/scale result. Package T's original loaded-logo failure remains unexplained; subsequent serialized passes do not prove its cause or flakiness. [October 10 handoff](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md), [code-quality evidence](reviews/code-quality-2026-10-15/EXECUTION.md). |
 | I-06 | L2 performance | Production initial-load start and correctness gates implemented/reviewed; final protected Plex measurement is **inconclusive**, not a speedup or regression. No benchmark redesign/retry is owed by the old task. Measure again only for a concrete performance decision. [Final L2 addendum](handoffs/macos-l2-controller-status-handoff.md#final-controller-addendum--october-18-2026). |
 | I-07 | Optional visual baselines / reported Guide lines | Six optional golden failures reproduced identically on original and final maintainability sources; output images match. Historical expectations need an explicitly scoped visual-baseline decision, not an unreviewed update. An unintended Guide line needs its exact reproduction; intended grid separators are not a bug. [Maintainability record](reviews/maintainability-remediation-2026-10-12/EXECUTION.md), [UX audit](ux-functionality-audit.md). |
-| I-08 | Older builds discard newer saved state | Source-established October 20: persisted parsing is strict (exact top-level and settings keys, closed enum/value domains) and `state.json` has no format version, so any change to accepted keys or values makes every older build quarantine the file and start empty. Existing tests prove the quarantine path; the cross-build case has not been run. Approved policy (October 20): an older build that finds a newer state format refuses to start and leaves `state.json` untouched; builds keep writing today's format until a schema change needs a new one. |
+| I-08 | Older builds discard newer saved state | Guard implemented October 21 by repository `worker_luna` (gpt-5.6-luna, xhigh), against integration base `dd2b0146`. Integer `formatVersion > 1` raises typed refusal before strict parsing/recovery; startup explains the too-old build without restoring credentials or writing state. Current unversioned writer is unchanged. Store/startup fixtures prove original state/backup preservation and malformed-marker recovery. Controller integration checks pass; independent repository reviewer (gpt-6.1-sol, high) found no material actionable defects. Candidate runtime remains unexecuted. [Forward-format rule](architecture.md#changing-asynchronous-and-persisted-state). Pre-guard binaries remain unprotected and must not be distributed as beta candidates. |
+
+I-08 execution evidence (October 21): the child reported 87 focused persistence/
+startup tests, canonical format (160 files unchanged), clean analysis and all
+1,872 tests passing with pinned Flutter 3.47.7 / Dart 3.13.5 and
+`TZ=America/New_York`. The controller independently reran the 87 focused tests on
+the integrated working tree successfully. Full-suite evidence remains attributed
+to the child's unchanged Dart inputs; it is deterministic application coverage,
+not final-candidate or physical acceptance. No user data was used. Controller canonical format (160 files unchanged), analysis and scoped whitespace
+checks also pass. Independent repository reviewer (gpt-6.1-sol, high) found no
+material actionable defects in the unchanged four-file diff. The bootstrap
+fixture uses prepared file loading and a fake native player; platform-media and
+packaged-runtime acceptance remain separate.
 
 ## Product plans and earlier campaigns
 

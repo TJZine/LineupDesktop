@@ -222,6 +222,15 @@ class PersistedState {
   }
 }
 
+class UnsupportedStateFormatException implements Exception {
+  const UnsupportedStateFormatException(this.formatVersion);
+
+  final int formatVersion;
+
+  @override
+  String toString() => 'Saved state uses unsupported format $formatVersion.';
+}
+
 Map<String, Object?> _stringKeyedMap(Object? value) =>
     Map<String, Object?>.from(value as Map);
 
@@ -315,6 +324,7 @@ class FileAppStore implements AppStore {
     late final PersistedState state;
     try {
       decoded = jsonDecode(utf8.decode(contents));
+      _rejectUnsupportedFormat(decoded);
       state = PersistedState.fromJson(decoded);
     } on FormatException {
       await _quarantineState();
@@ -325,6 +335,14 @@ class FileAppStore implements AppStore {
     }
     if (_hasNoncanonicalArtwork(decoded)) await save(state);
     return AppStoreLoadResult(state);
+  }
+
+  void _rejectUnsupportedFormat(Object? decoded) {
+    if (decoded is! Map) return;
+    final formatVersion = decoded['formatVersion'];
+    if (formatVersion is int && formatVersion > 1) {
+      throw UnsupportedStateFormatException(formatVersion);
+    }
   }
 
   Future<void> _quarantineState() async {
