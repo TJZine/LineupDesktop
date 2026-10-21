@@ -1,9 +1,12 @@
 # R-03: in-app Licenses design for approval
 
-October 21, 2026. **Design proposal complete; implementation not authorized by
-this document.** Human approval is required before product edits. The approved
-implementation must land before the beta candidate. R-03 delivery remains open;
-this proposal does not establish legal sufficiency or beta acceptance.
+October 21, 2026. **Design approved; implementation evidence appended below.**
+The maintainer approved “the proposed themed reader” in parent turn
+`01a15cdb-f7b6-71f0-a7dd-7a3254b98f2b`, user item
+`01a15cdb-f7e3-7af0-ad4d-18b85eda34b4`. The approved implementation must land
+before the beta candidate. R-03 delivery remains open until final-candidate and
+source-delivery comparison; this record does not establish legal sufficiency or
+beta acceptance. The proposal below is retained as the approved design input.
 
 ## Scope, source and decision
 
@@ -386,3 +389,142 @@ sending files remains outside current authorization. Source/patch/relinking
 content, implementation, real rendered/accessible behavior and exact candidate
 artifact comparison remain to be completed. R-03 must not be closed merely
 because this design document or the bundled raw resources exist.
+
+## Approved implementation outcome — October 21
+
+R-03 implementation child: `01a15cbb-c981-78f2-b79d-cdf711560da5`, worker /
+gpt-6.1-sol / medium. Implementation input HEAD:
+`c767d79df311c057738ff6ff885b71f0f58fe532`; original integration base remains
+`dd2b0146a1d7d8e2b38e949da0b8a19165f4abd6`. Human design approval was retrieved
+from the actual parent, as was original completion-callback authority. The later
+ad-hoc identity `-` authorization was also verified in parent turn
+`01a15ce5-40ef-72f0-b4e4-d9bcda656b26`; only the existing disposable embedding
+fixture used that signing permission here. App/engine/runtime candidate builds
+remain controller-owned. No Git staging, commits, pushes or branch switches were
+performed by this child.
+
+Implemented:
+
+- macOS Settings → Support → Open Licenses, with the approved themed full-page
+  index, component/file navigation and selectable full-document reader. Separate
+  source groups support independent loading/failure/retry. A Copy document text
+  action preserves exact raw newlines independently of paragraph selection.
+- Focus and index scroll restoration at each Back level; shell Esc/Backspace,
+  menu precedence and Settings commands retain shell ownership. Settings is kept
+  mounted while reading, preserving its category/scroll and earlier destination.
+  First-run macOS has a small Settings action in its existing top bar, opening
+  Support without requiring Plex linking. The new entry is macOS-only; this does
+  not advertise an incomplete Windows runtime-notice implementation.
+- `lib/licenses/` owns Dart presentation/data aggregation, including Flutter
+  registry package attribution and paragraph indentation, font OFLs, engine
+  notice and generated source/rebuilding material. `LicenseResources.swift`
+  owns bundle-relative, descriptor-based reads on a serial background queue;
+  IDs are issued by listing, never interpreted as caller-selected paths.
+  Bundle-directory/file symlinks, special files, invalid encoding, missing
+  resources and byte/count/depth bounds fail with a sanitized error.
+- The reader exposes every file in the actual runtime notice/patch trees and
+  build information. Small generated `assets/licenses/` texts contain the exact
+  principal/nested runtime source pins, complete recipe/helper texts, Mac engine
+  patch inputs and credits/replacement procedure. Sources and rebuilding is an
+  explicit list entry. No source trees or large archives were added to Git.
+- `source_materials.py` prepares the final companion locally without fetching,
+  building or signing. It checks runtime lock/patch identities, canonical engine
+  verification, build-receipt/app/ZIP correspondence and installed resource bytes;
+  then snapshots all runtime/submodule, Lineup and evaluated Flutter Git sources
+  with committed helper bytes, subject to an explicit capacity budget. It
+  publishes a new owned directory only after hash validation. The final real
+  candidate-dependent invocation remains a controller gate.
+
+Verification evidence (stock pinned Flutter 3.47.7): canonical format check
+passed; analyzer reported no issues; the full `TZ=America/New_York flutter test`
+suite passed **1,885 tests** after the product changes. Focused Licenses checks
+passed **13 tests**, including the later font-complete render-fixture refinement.
+Source-material tests passed **6 controlled fixtures**, covering archive/source
+pin tampering, runtime patch binding, source-asset freshness, candidate/receipt/
+ZIP correspondence, bounded assembly and no partial-output publication. Actual
+local source inspection validated **26** runtime source archives/Git snapshots.
+The prepared runtime's lock and patch bytes match the current recipe.
+
+The standalone Swift fixture compiled and passed its boundary cases plus exact
+text comparison for **53** actual prepared-runtime documents. The existing
+`mpv-runtime-embed-test.sh` integration fixture passed, including its intentional
+negative/recovery/signing controls. Xcode project `plutil -lint` passed.
+`git diff --check` and relevant local Markdown file links were checked.
+An initial canonical-format invocation found the older SDK on PATH; the check
+was rerun successfully with the pinned SDK first. Earlier compile/retry/render
+fixture issues were repaired before the passing results; none is left deferred.
+
+Real Flutter fixture PNGs were written outside Git at
+`/tmp/lineup-r03-renders/`: Support and index at 1280×720 and 1920×1080;
+reader at both sizes, 800×600, text scale 2 and 640×360/text scale 2; partial
+failure/loading at 1280×720. Pinned fonts were loaded and the rendered results
+were visually inspected. Native index/Flutter-package entries in these fixtures
+are explicitly synthetic; the long glslang notice uses the real prepared text.
+These are widget renders, not app automation or physical acceptance. No explicit
+minimum window constraint was found in the macOS window source; 800×600 is its
+initial size and 640×360 is a stress fixture, not an accepted OS minimum.
+
+Remaining proof: controller integration/review; clean selected-engine candidate
+build (including AppDelegate integration); installed-bundle/offline checks;
+physical keyboard/VoiceOver/actual minimum-window acceptance; real final
+companion assembly/manifest comparison against the selected candidate, runtime
+and durable engine; authorized source/build delivery. No final candidate or
+source companion was sent/published, and no old verified app/engine/runtime or
+stock cache was altered. No legal, Windows, signed-sandbox or beta acceptance is
+claimed. Keep R-03 open through those applicable delivery gates.
+
+
+## Focused independent-review corrections — October 21
+
+The controller accepted three P2 findings against the initial 41-file content
+manifest and reauthorized this child for focused corrections at the same input
+HEAD `c767d79df311c057738ff6ff885b71f0f58fe532`.
+
+1. Candidate validation now examines every ZIP entry before filtering file
+   artifacts: root, unnormalized path components, original name, duplicates,
+   declared type and directory payload are checked. Companion verification
+   walks every directory entry with non-following metadata before reading its
+   manifest, rejecting directory symlinks and FIFOs/special files as well as
+   file symlinks. Safe real empty directories remain valid. New negative cases
+   reproduce the original unrelated/traversal ZIP-directory and companion
+   directory-symlink/FIFO bypasses; restored positive controls pass. The existing
+   assembler was not observed creating these unsafe entries.
+2. Source preparation now requires the wrapper's completed
+   `.engine-provenance.json`, in addition to its earlier build receipt. It
+   validates the completed envelope's selected engine, recipe, receipt digest,
+   current artifact map, source/version/app identities and raw/embedded engine
+   hashes, and carries the completed-envelope digest in the companion manifest.
+   It retains the recorded normalized comparison instead of invoking signing
+   normalization again. Absent/stale/mismatched envelopes, modified raw engines,
+   and refreshed pre-comparison receipts paired with changed embedded engines
+   are rejected. A positive fixture intentionally uses different raw/signed
+   engine bytes, demonstrating that raw-byte equality is not assumed.
+3. Onboarding Support completion preserves Settings' prior return destination;
+   Guide is a fallback only when none exists. The previous stage is initialized
+   in `initState`, so first-run restoration's first notification is recognized.
+   Existing fixtures prove profile/server cancellation via F3 retains Player,
+   restoration retains an existing Player origin, and first-run restoration
+   falls back to Guide. Native playback calls, selected identities and saved
+   state remain unchanged in these controlled fixtures.
+
+Negative controls against the previous bundled helper fail all three delivery
+regression groups. Temporarily reinstating the unconditional Guide assignment
+fails all three Player-origin navigation cases while first-run fallback passes;
+the corrected source was restored before positive/full checks. The navigation
+restoration cases are controlled presentation transitions, not new physical or
+live account-restoration evidence. The corrected Python suite has 8 tests and
+focused Licenses suite has 17 tests. Previous Swift/native/embed and render
+observations retain their original attribution because those inputs were not
+changed or rerun. Final-candidate app/installed-channel/source-assembly and
+physical acceptance remain the controller's exact outstanding gates.
+
+
+Final correction checks passed: 17 focused Licenses tests, all 1,889 full-suite
+tests with `TZ=America/New_York`, canonical pinned format check (165 files, no
+changes), analyzer (no issues), 8 source-material tests, regenerated-asset
+freshness and `git diff --check`. One old-helper negative-control import created
+an incidental Python bytecode cache in the assets directory; freshness validation
+rejected it. That test-generated cache was removed and the bundled helper
+snapshot regenerated successfully. No required check remains failing. The
+updated owned-content manifest in the completion callback supersedes the prior
+41-file hash, with the same file set.

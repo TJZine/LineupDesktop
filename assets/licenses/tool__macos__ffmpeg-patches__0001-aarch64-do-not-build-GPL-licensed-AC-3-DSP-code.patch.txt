@@ -1,0 +1,36 @@
+Lineup Desktop: do not build the GPL-licensed aarch64 AC-3 DSP code.
+
+libavcodec/aarch64/ac3dsp_init_aarch64.c and ac3dsp_neon.S carry GPL-2.0+
+headers (in FFmpeg 9.0.2 and in FFmpeg master), unlike the rest of this LGPL
+build. The AC-3 DSP functions they accelerate fall back to the portable C
+versions in libavcodec/ac3dsp.c; AC-3/E-AC-3 decoding is unchanged.
+
+--- a/libavcodec/aarch64/Makefile
++++ b/libavcodec/aarch64/Makefile
+@@ -1,5 +1,4 @@
+ # subsystems
+-OBJS-$(CONFIG_AC3DSP)                   += aarch64/ac3dsp_init_aarch64.o
+ OBJS-$(CONFIG_FDCTDSP)                  += aarch64/fdctdsp_init_aarch64.o
+ OBJS-$(CONFIG_FMTCONVERT)               += aarch64/fmtconvert_init.o
+ OBJS-$(CONFIG_H264CHROMA)               += aarch64/h264chroma_init_aarch64.o
+@@ -43,7 +42,6 @@
+ # subsystems
+ NEON-OBJS-$(CONFIG_AAC_DECODER)         += aarch64/sbrdsp_neon.o
+ NEON-OBJS-$(CONFIG_AAC_ENCODER)         += aarch64/aacencdsp_neon.o
+-NEON-OBJS-$(CONFIG_AC3DSP)              += aarch64/ac3dsp_neon.o
+ NEON-OBJS-$(CONFIG_FDCTDSP)             += aarch64/fdctdsp_neon.o
+ NEON-OBJS-$(CONFIG_FMTCONVERT)          += aarch64/fmtconvert_neon.o
+ NEON-OBJS-$(CONFIG_H264CHROMA)          += aarch64/h264cmc_neon.o
+--- a/libavcodec/ac3dsp.c
++++ b/libavcodec/ac3dsp.c
+@@ -389,9 +389,7 @@
+     c->downmix               = NULL;
+     c->downmix_fixed         = NULL;
+ 
+-#if ARCH_AARCH64
+-    ff_ac3dsp_init_aarch64(c);
+-#elif ARCH_ARM
++#if ARCH_ARM
+     ff_ac3dsp_init_arm(c);
+ #elif ARCH_X86 && HAVE_X86ASM
+     ff_ac3dsp_init_x86(c);

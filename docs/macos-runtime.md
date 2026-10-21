@@ -448,9 +448,12 @@ document in the same commit.
   lock/patch identities and pre-signing library hashes. Those hashes are
   **not** the post-signing app/package hashes; signing changes dylib bytes.
   A later signed artifact requires its own package identity.
-- A user-accessible Licenses screen (§4.8), its design and presentation of the
-  bundled resources remain open. It must expose every text under `licenses/`,
-  including curated license files and each component's generated `NOTICES.txt`:
+- Settings → Support → Open Licenses provides the approved in-app offline
+  index, component/file lists and selectable reader. It consumes the installed
+  bundle's resource tree through a confined read-only native adapter, alongside
+  Flutter's generated license registry, explicit font OFLs and macOS engine
+  notices. Every text under `licenses/` is enumerated, including curated license
+  files and each component's generated `NOTICES.txt`:
   - mpv; FFmpeg with the IJG notice; libplacebo; glslang; fast_float;
   - MoltenVK, SPIRV-Cross, SPIRV-Tools, SPIRV-Headers, cereal, and
     Vulkan-Headers;
@@ -461,9 +464,12 @@ document in the same commit.
   - "This software is based in part on the work of the Independent JPEG
     Group" (FFmpeg's IJG files, in `ffmpeg/IJG-NOTICE.txt`).
   - The FreeType Project credit required by the FTL.
-- An LGPL notice for mpv, FFmpeg, libplacebo, and FriBidi. It links the exact
-  sources above, the mpv and FFmpeg patches, `tool/macos/build-mpv.sh`, and the
-  lock file, and states that users may replace those libraries and how.
+- Sources and rebuilding in the Licenses reader includes the
+  [credits and modified-copy rebuilding notice](licenses-and-rebuilding.md),
+  exact source inventory, build/helper/lock texts and macOS engine patch inputs.
+  The native tree supplies the selected runtime's build information and patches.
+  Final-candidate resource/source comparisons and matching companion assembly
+  remain required; the UI and raw resources do not close R-03 by themselves.
 - The patches are bundled as raw resources above; public source/patch release
   obligations remain separate:
   - `tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch`
@@ -471,6 +477,59 @@ document in the same commit.
   - `tool/macos/ffmpeg-patches/0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch`
 - Before public distribution, mirror the exact source archives and Git
   snapshots to a project-controlled release, as for Windows.
+
+### Offline source-companion preparation
+
+[Source-material tooling](../tool/macos/source_materials.py) uses local verified
+archives and Git snapshots; it never fetches, builds or signs. Its small committed
+`assets/licenses/` snapshot contains exact source pins (including resolved nested
+runtime dependencies), recipe/helper texts and the macOS engine patches. Regenerate
+it after changing an included input, with the pinned SDK and prepared runtime
+sources available:
+
+```sh
+python3 tool/macos/source_materials.py assets --flutter-sdk "$FLUTTER_ROOT"
+python3 tool/macos/source_materials.py assets --flutter-sdk "$FLUTTER_ROOT" --check
+python3 tool/macos/source_materials_test.py
+```
+
+The controller prepares the large source companion **after** the final clean-tree
+candidate and repaired-engine identity settle. `prepare` requires an explicit
+capacity budget and a new output directory. It re-verifies the selected engine,
+requires both the successful-build receipt and the completed
+`.engine-provenance.json` envelope from the wrapper's final embedded-engine
+comparison. It binds the selected engine, build-receipt digest, current app
+artifact map, app identity and actual raw/embedded engine hashes without repeating
+signing normalization. It validates every ZIP entry's path/root/type (including
+directories), compares its entire file/symlink set, modes and bytes to the app,
+and compares all installed runtime notice/patch bytes and build information to
+the selected runtime. The ZIP must contain only the app with its root name and preserve UNIX
+modes/symlinks (for example, use `zip -r -y` from its parent); receipts stay beside
+the unpacked app. Source archives, Lineup/Flutter baseline Git snapshots, evaluated
+Flutter Git dependencies, runtime Git/submodule snapshots, patches and helper
+closure are delivered together. Sources remain unmodified; patches are provided
+separately for rebuilding the selected source. DEPS retains build-tool/CIPD inputs;
+this is not an offline mirror of SDKs or proprietary build tools.
+
+```sh
+python3 tool/macos/source_materials.py prepare \
+  --runtime-root build/macos-runtime \
+  --flutter-root "$LINEUP_ENGINE_ROOT" --engine-output "$LINEUP_ENGINE_OUTPUT" \
+  --app "$LINEUP_CANDIDATE_APP" --candidate "$LINEUP_CANDIDATE_ZIP" \
+  --output "$LINEUP_SOURCE_OUTPUT" --max-gib 24
+python3 tool/macos/source_materials.py verify --output "$LINEUP_SOURCE_OUTPUT"
+```
+
+Choose the capacity budget deliberately; this example is not a measured space
+requirement. The output's `manifest.json` records hashes for the candidate, both
+build sidecars, runtime, engine and every source/recipe without exporting local
+paths. Verification checks every filesystem entry with non-following metadata;
+symlinks and special files are rejected, while real empty directories are allowed.
+The output is a companion directory of separately hashed source archives, not a single archive
+and not an automatically published release. Missing inputs, mismatches or an
+insufficient budget fail without publishing a partial output. Actual preparation
+against the final candidate and delivery remain controller-owned gates. This
+tooling does not replace independent legal review or authorize sending builds.
 
 ## Distribution notes (for the legal review)
 

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../guide/guide_controller.dart';
+import '../licenses/licenses_view.dart';
 import '../guide/guide_playback_placeholder.dart';
 import '../guide/guide_view.dart';
 import '../playback/native_player.dart';
@@ -62,6 +63,11 @@ class _LineupShellState extends State<LineupShell> {
     debugLabel: 'Lineup menu',
     traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
   );
+  final _licensesKey = GlobalKey<LicensesViewState>();
+  final _licensesMenuFocus = FocusNode(debugLabel: 'Licenses Lineup menu');
+  final _openLicensesFocus = FocusNode(debugLabel: 'Open Licenses');
+  bool _licensesOpen = false;
+  bool _onboardingSupport = false;
   bool _selectionPending = false;
   bool _keyboardInput = false;
   ({Rect anchor, FocusNode invokerFocus})? _appMenu;
@@ -69,10 +75,11 @@ class _LineupShellState extends State<LineupShell> {
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
   Object? _lastPlayerFacts;
-  late SetupStage _lastStage = widget.controller.stage;
+  late SetupStage _lastStage;
   @override
   void initState() {
     super.initState();
+    _lastStage = widget.controller.stage;
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
     _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
     _guide = GuideController(
@@ -125,6 +132,11 @@ class _LineupShellState extends State<LineupShell> {
     final returnedToApp =
         _lastStage != SetupStage.ready && stage == SetupStage.ready;
     _lastStage = stage;
+    if (returnedToApp && _onboardingSupport) {
+      _onboardingSupport = false;
+      _destination = ShellDestination.settings;
+      _settingsReturnDestination ??= ShellDestination.guide;
+    }
     if (stage == SetupStage.welcome) _onboardingFromAccount = false;
     if (_appMenu != null &&
         stage != SetupStage.ready &&
@@ -154,6 +166,8 @@ class _LineupShellState extends State<LineupShell> {
     _settingsMenuFocus.dispose();
     _diagnosticsMenuFocus.dispose();
     _appMenuScope.dispose();
+    _licensesMenuFocus.dispose();
+    _openLicensesFocus.dispose();
     super.dispose();
   }
 
@@ -166,6 +180,9 @@ class _LineupShellState extends State<LineupShell> {
     if (destination == ShellDestination.player && !_hasPlaybackSurface) {
       if (_appMenu != null) _closeAppMenu();
       return;
+    }
+    if (destination == ShellDestination.settings && _licensesOpen) {
+      _closeLicenses();
     }
     if (destination == _destination &&
         !(destination == ShellDestination.channels &&
@@ -205,6 +222,7 @@ class _LineupShellState extends State<LineupShell> {
         _player.closeOverlay();
       }
       setState(() {
+        _licensesOpen = false;
         _destination = destination;
         _player.setPlayerDestinationVisible(
           destination == ShellDestination.player,
@@ -278,6 +296,7 @@ class _LineupShellState extends State<LineupShell> {
       ShellDestination.diagnostics => _diagnosticsFocus,
       ShellDestination.player => _playerFocus,
     };
+    if (_licensesOpen) return;
     target.requestFocus();
   }
 
@@ -336,13 +355,54 @@ class _LineupShellState extends State<LineupShell> {
   /// Native application-menu commands (macOS Settings…, Command-comma).
   Future<void> _handleAppMenuCall(MethodCall call) async {
     if (call.method != 'openSettings') throw MissingPluginException();
-    if (!mounted || widget.controller.stage != SetupStage.ready) return;
+    if (!mounted) return;
     // A dialog route above the shell owns input, as it does for the chord.
     // The in-app Lineup menu is a widget in this tree, so it does not count;
     // _select closes it.
     if (ModalRoute.of(context)?.isCurrent != true) return;
-    await _select(ShellDestination.settings);
+    if (widget.controller.stage != SetupStage.ready) {
+      _showOnboardingSupport();
+    } else {
+      await _select(ShellDestination.settings);
+    }
   }
+
+  void _showOnboardingSupport() {
+    setState(() {
+      _licensesOpen = false;
+      _onboardingSupport = true;
+      _settingsCategory = SettingsCategory.support;
+    });
+  }
+
+  void _closeLicenses() {
+    setState(() {
+      _licensesOpen = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _openLicensesFocus.context != null) {
+        _openLicensesFocus.requestFocus();
+      }
+    });
+  }
+
+  Widget _settingsWithLicenses(Widget settings, {bool onboarding = false}) =>
+      Stack(
+        fit: StackFit.expand,
+        children: [
+          Offstage(
+            offstage: _licensesOpen,
+            child: ExcludeFocus(excluding: _licensesOpen, child: settings),
+          ),
+          if (_licensesOpen)
+            LicensesView(
+              key: _licensesKey,
+              onBack: _closeLicenses,
+              onOpenMenu: onboarding ? null : _openAppMenu,
+              menuFocusNode: onboarding ? null : _licensesMenuFocus,
+            ),
+        ],
+      );
 
   Future<void> _openAccount() async {
     _settingsCategory = SettingsCategory.account;
@@ -385,6 +445,18 @@ class _LineupShellState extends State<LineupShell> {
       return KeyEventResult.ignored;
     }
     final keyboard = HardwareKeyboard.instance;
+    final back =
+        event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.backspace ||
+        event.logicalKey == LogicalKeyboardKey.goBack;
+    if (_licensesOpen && _appMenu == null && back) {
+      _licensesKey.currentState?.back();
+      return KeyEventResult.handled;
+    }
+    if (_onboardingSupport && _appMenu == null && back) {
+      setState(() => _onboardingSupport = false);
+      return KeyEventResult.handled;
+    }
     if (_destination == ShellDestination.diagnostics &&
         _appMenu == null &&
         (event.logicalKey == LogicalKeyboardKey.escape ||
@@ -413,6 +485,11 @@ class _LineupShellState extends State<LineupShell> {
     }
     final destination = navigationShortcutDestination(event.logicalKey);
     if (destination == null) return KeyEventResult.ignored;
+    if (destination == ShellDestination.settings &&
+        widget.controller.stage != SetupStage.ready) {
+      _showOnboardingSupport();
+      return KeyEventResult.handled;
+    }
     unawaited(_select(destination));
     return KeyEventResult.handled;
   }
@@ -675,6 +752,25 @@ class _LineupShellState extends State<LineupShell> {
     _lastPlayerFacts = _shellPlayerFacts;
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {
+      if (_onboardingSupport) {
+        return _withGlobalKeys(
+          Scaffold(
+            body: _settingsWithLicenses(
+              SettingsView(
+                controller: controller,
+                category: SettingsCategory.support,
+                onCategoryChanged: (_) {},
+                supportOnly: true,
+                backLabel: '‹ Back to setup',
+                onBack: () => setState(() => _onboardingSupport = false),
+                openLicensesFocus: _openLicensesFocus,
+                onOpenLicenses: () => setState(() => _licensesOpen = true),
+              ),
+              onboarding: true,
+            ),
+          ),
+        );
+      }
       final onboardingMenuAvailable = _onboardingMenuAvailable;
       final onboarding = controller.restoringSavedLineup
           ? LineupRestoreView(controller: controller)
@@ -690,6 +786,9 @@ class _LineupShellState extends State<LineupShell> {
               onLogout: _logout,
               onRequestLogout: _requestLogout,
               accountOrigin: _onboardingFromAccount,
+              onOpenSettings: defaultTargetPlatform == TargetPlatform.macOS
+                  ? _showOnboardingSupport
+                  : null,
               onOpenMenu: onboardingMenuAvailable ? _openAppMenu : null,
               menuFocusNode: onboardingMenuAvailable
                   ? _settingsMenuFocus
@@ -779,6 +878,8 @@ class _LineupShellState extends State<LineupShell> {
       onSwitchServer: _openServerPickerFromAccount,
       onSignOut: _requestLogout,
       onOpenDiagnostics: () => unawaited(_select(ShellDestination.diagnostics)),
+      openLicensesFocus: _openLicensesFocus,
+      onOpenLicenses: () => setState(() => _licensesOpen = true),
     );
     final routeView = switch (_destination) {
       ShellDestination.guide => guideView,
@@ -796,7 +897,7 @@ class _LineupShellState extends State<LineupShell> {
         fit: StackFit.expand,
         children: [
           if (hasPlaybackSurface) PlayerSurface(controller: _player),
-          settingsView,
+          _settingsWithLicenses(settingsView),
         ],
       ),
       ShellDestination.diagnostics => DiagnosticsView(
@@ -929,6 +1030,9 @@ class SettingsView extends StatefulWidget {
     this.onSwitchServer,
     this.onSignOut,
     this.onOpenDiagnostics,
+    this.onOpenLicenses,
+    this.openLicensesFocus,
+    this.supportOnly = false,
     this.focusNode,
     this.menuFocusNode,
     this.onOpenMenu,
@@ -943,6 +1047,9 @@ class SettingsView extends StatefulWidget {
   final VoidCallback? onSwitchServer;
   final Future<void> Function()? onSignOut;
   final VoidCallback? onOpenDiagnostics;
+  final VoidCallback? onOpenLicenses;
+  final FocusNode? openLicensesFocus;
+  final bool supportOnly;
   final FocusNode? focusNode;
   final FocusNode? menuFocusNode;
   final LineupMenuCallback? onOpenMenu;
@@ -1151,7 +1258,10 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _categorySelector(BuildContext context, bool compact) {
     final controls = [
-      for (final category in SettingsCategory.values)
+      for (final category
+          in widget.supportOnly
+              ? [SettingsCategory.support]
+              : SettingsCategory.values)
         Padding(
           padding: EdgeInsets.only(right: 10, bottom: 10),
           child: LineupNavigationRow(
@@ -1476,6 +1586,18 @@ class _SettingsViewState extends State<SettingsView> {
                   child: const Text('Open Diagnostics'),
                 ),
               ),
+              if (defaultTargetPlatform == TargetPlatform.macOS)
+                _SettingsRow(
+                  label: const Text('Licenses'),
+                  helper: const Text(
+                    'Read third-party licenses, notices, and source information.',
+                  ),
+                  control: OutlinedButton(
+                    focusNode: widget.openLicensesFocus,
+                    onPressed: widget.onOpenLicenses,
+                    child: const Text('Open Licenses'),
+                  ),
+                ),
             ],
           },
         ),

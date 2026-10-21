@@ -75,8 +75,8 @@ and physical acceptance are different states.
 - [Direct Play stabilization status](open-obligations.md): current macOS private-beta
   scope, data-format protection, Windows engine integration and remaining acceptance
   gates. Implementation plans are local working documents, not shipped references.
-- [Licenses design proposal](handoffs/licenses-design-2026-10-21.md): in-app notices
-  presentation and exact source/rebuilding delivery gaps, awaiting design approval.
+- [Approved Licenses design](handoffs/licenses-design-2026-10-21.md): in-app notices
+  presentation, implemented reader/source tooling and remaining candidate delivery gates.
 - [Code-quality implementation plan](code-quality-implementation-plan.md):
   portable packages and documentation consolidation (G) integrated and reviewed;
   native restoration work (F) merged for Windows testing, with validation still

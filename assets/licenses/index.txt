@@ -1,0 +1,22 @@
+Credits and library replacement notice	rebuilding.txt
+Exact source inventory	source-inventory.txt
+tool/macos/build-mpv.sh	tool__macos__build-mpv.sh.txt
+tool/macos/mpv-runtime.lock	tool__macos__mpv-runtime.lock.txt
+tool/macos/collect-notices.py	tool__macos__collect-notices.py.txt
+tool/macos/runtime-smoke.c	tool__macos__runtime-smoke.c.txt
+tool/macos/runtime-smoke-layer.m	tool__macos__runtime-smoke-layer.m.txt
+tool/macos/source_materials.py	tool__macos__source_materials.py.txt
+tool/flutter_version.json	tool__flutter_version.json.txt
+tool/windows/build-metadata.psd1	tool__windows__build-metadata.psd1.txt
+tool/flutter_engine/desktop-accessibility.json	tool__flutter_engine__desktop-accessibility.json.txt
+tool/flutter_engine/desktop_accessibility.py	tool__flutter_engine__desktop_accessibility.py.txt
+tool/flutter_engine/README.md	tool__flutter_engine__README.md.txt
+tool/macos/build_app.dart	tool__macos__build_app.dart.txt
+docs/DEVELOPMENT.md	docs__DEVELOPMENT.md.txt
+LICENSE	LICENSE.txt
+tool/flutter_engine/0002-desktop-accessibility.patch	tool__flutter_engine__0002-desktop-accessibility.patch.txt
+tool/flutter_engine/0003-macos-apple-linker.patch	tool__flutter_engine__0003-macos-apple-linker.patch.txt
+docs/licenses-and-rebuilding.md	docs__licenses-and-rebuilding.md.txt
+tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch	tool__macos__mpv-patches__0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch.txt
+tool/macos/ffmpeg-patches/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch	tool__macos__ffmpeg-patches__0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch.txt
+tool/macos/ffmpeg-patches/0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch	tool__macos__ffmpeg-patches__0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch.txt

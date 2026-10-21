@@ -5,6 +5,8 @@ import FlutterMacOS
 class AppDelegate: FlutterAppDelegate {
   private var appMenuChannel: FlutterMethodChannel?
   private var platformChannel: FlutterMethodChannel?
+  private let licenseQueue = DispatchQueue(label: "lineup.licenses", qos: .userInitiated)
+  private lazy var licenseResources = LicenseResources(bundle: Bundle.main.bundleURL)
 
   override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     // Flutter first asks Dart through System.requestAppExit and can cancel.
@@ -42,11 +44,31 @@ class AppDelegate: FlutterAppDelegate {
     let messenger = controller.engine.binaryMessenger
     appMenuChannel = FlutterMethodChannel(name: "lineup/app_menu", binaryMessenger: messenger)
     let platform = FlutterMethodChannel(name: "lineup/platform", binaryMessenger: messenger)
-    platform.setMethodCallHandler { call, result in
+    platform.setMethodCallHandler { [self] call, result in
       switch call.method {
       case "openPlexLink":
         // Only this fixed URL is ever opened; Dart supplies none.
         result(NSWorkspace.shared.open(URL(string: "https://plex.tv/link")!))
+      case "listLicenseDocuments", "readLicenseDocument":
+        let resources = licenseResources
+        let method = call.method
+        let id = (call.arguments as? [String: Any])?["id"] as? String
+        licenseQueue.async {
+          do {
+            let value: Any
+            if method == "listLicenseDocuments" { value = try resources.list() }
+            else {
+              guard let id else { throw LicenseResources.Failure.unavailable }
+              value = try resources.read(id: id)
+            }
+            DispatchQueue.main.async { result(value) }
+          } catch {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "license_resources_unavailable",
+                message: "License resources could not be loaded.", details: nil))
+            }
+          }
+        }
       default:
         result(FlutterMethodNotImplemented)
       }

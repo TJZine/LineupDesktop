@@ -58,6 +58,7 @@ class UpstreamOnboardingView extends StatefulWidget {
     this.openBrowser = openPlexLink,
     this.accountOrigin = false,
     this.onOpenMenu,
+    this.onOpenSettings,
     this.menuFocusNode,
     super.key,
   });
@@ -68,6 +69,7 @@ class UpstreamOnboardingView extends StatefulWidget {
   final Future<void> Function() openBrowser;
   final bool accountOrigin;
   final LineupMenuCallback? onOpenMenu;
+  final VoidCallback? onOpenSettings;
   final FocusNode? menuFocusNode;
 
   @override
@@ -268,8 +270,17 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               child: SafeArea(
                 child: Column(
                   children: [
-                    if (refinedStage)
+                    if (refinedStage || widget.onOpenSettings != null)
                       LineupTopBar(
+                        trailing: widget.onOpenSettings == null
+                            ? null
+                            : Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: widget.onOpenSettings,
+                                  child: const Text('Settings'),
+                                ),
+                              ),
                         menuKey: const ValueKey('onboarding-app-menu'),
                         onOpenMenu: widget.onOpenMenu,
                         menuFocusNode: widget.menuFocusNode,
