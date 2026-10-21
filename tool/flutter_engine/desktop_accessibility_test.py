@@ -32,6 +32,8 @@ class EngineFixture(unittest.TestCase):
             ax.git(root, 'config', 'user.name', 'Tool fixture')
             ax.git(root, 'config', 'user.email', 'fixture@example.invalid')
         self.name = 'engine/src/flutter/shell/platform/common/bridge.cc'
+        self.fixture_name = 'engine/src/flutter/shell/platform/windows/testing/windows_test_context.h'
+        self.write(self.root, self.fixture_name, 'old fixture\n')
         self.manager = 'engine/src/flutter/shell/platform/windows/egl/manager.cc'
         self.write(self.root, self.name, 'old AX\n')
         self.write(self.root, self.manager, 'old DC\n')
@@ -59,6 +61,9 @@ FlutterEnginePatchSha256 = 'REPLACE'
         metadata = self.repository / 'tool/windows/build-metadata.psd1'
         metadata.write_text(metadata.read_text().replace('REPLACE', ax.digest(patch)), newline='\n')
         self.write(self.root, self.manager, 'old DC\n')
+        self.write(self.root, self.fixture_name, 'new fixture\n')
+        self.write(self.repository, ax.FIXTURE_PATCH, ax.git(self.root, 'diff', '--', self.fixture_name).decode())
+        self.write(self.root, self.fixture_name, 'old fixture\n')
         ax.finalize(self.repository, self.root)
         self.commit(self.repository)
         self.write(self.root, self.name, 'new AX\n')
@@ -86,6 +91,10 @@ FlutterEnginePatchSha256 = 'REPLACE'
             self.assertTrue(self.is_gn_command(['python', path]), path)
         self.assertFalse(self.is_gn_command(['ninja', '-C', 'output']))
         self.assertFalse(self.is_gn_command(['ninja']))
+
+    def windows_source(self):
+        self.write(self.root, self.manager, 'new DC\n')
+        self.write(self.root, self.fixture_name, 'new fixture\n')
 
     def identity(self, target='macos'):
         return ax.source_identity(self.repository, self.root, target)
@@ -171,7 +180,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / mac).read_text(), 'old Mac\n')
         self.identity('windows')
-        for name in (*ax.PIN_FILES, ax.MANIFEST, ax.AX_PATCH, 'tool/flutter_engine/0001-windows-direct-composition.patch'):
+        for name in (*ax.PIN_FILES, ax.MANIFEST, ax.AX_PATCH, ax.FIXTURE_PATCH, 'tool/flutter_engine/0001-windows-direct-composition.patch'):
             path = self.repository / name
             original = path.read_bytes()
             path.write_bytes(original + b'\n')
@@ -181,14 +190,14 @@ FlutterEnginePatchSha256 = 'REPLACE'
             self.identity('windows')
 
     def test_windows_pe_provenance_and_artifact_controls(self):
-        self.write(self.root, self.manager, 'new DC\n')
+        self.windows_source()
         for mode in ('debug', 'release'):
             output = self.provenance('windows', 'x64', mode)
             verify = lambda: self.verify(output, target='windows', architecture='x64', mode=mode)
             selected = verify()
             self.assertEqual(selected['outputName'], f'lineup_ax_{mode}_x64')
             self.assertEqual([p['path'] for p in selected['recipe']['patches']],
-                             ['tool/flutter_engine/0001-windows-direct-composition.patch', ax.AX_PATCH])
+                             ['tool/flutter_engine/0001-windows-direct-composition.patch', ax.AX_PATCH, ax.FIXTURE_PATCH])
             self.assertNotIn(ax.MAC_BUILD_PATCH, str(selected['recipe']))
             binary = output / 'flutter_windows.dll'
             original = binary.read_bytes()
@@ -229,7 +238,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         self.write(self.root, self.name, 'old AX\n')
         with self.assertRaisesRegex(ax.VerificationError, 'exactly'):
             self.identity('windows')
-        self.write(self.root, self.manager, 'new DC\n')
+        self.windows_source()
         with self.assertRaisesRegex(ax.VerificationError, 'exactly'):
             self.identity('windows')
         self.write(self.root, self.name, 'new AX\n')
@@ -244,7 +253,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
             self.identity('windows')
 
     def test_windows_build_failure_never_emits_receipt(self):
-        self.write(self.root, self.manager, 'new DC\n')
+        self.windows_source()
         def command(arguments, **kwargs):
             if self.is_gn_command(arguments):
                 self.windows_output()
@@ -323,7 +332,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         self.assertFalse((self.base / 'unexpected-shard-file').exists())
 
     def test_windows_full_suites_and_baseline_attribution_restore_source(self):
-        self.write(self.root, self.manager, 'new DC\n')
+        self.windows_source()
         output = self.provenance('windows', 'x64', 'debug')
         record_path = output / ax.PROVENANCE
         record = json.loads(record_path.read_text())
@@ -358,6 +367,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
             if baseline.exists():
                 shutil.rmtree(baseline)
             with mock.patch.object(ax, 'host_matches'), mock.patch.object(ax, 'run', side_effect=command), \
+                 mock.patch.object(ax, 'run_windows_diagnostics', return_value={'status': 'passed'}), \
                  mock.patch.object(ax, 'run_windows_suite', side_effect=suite), \
                  mock.patch.object(ax, 'toolchain_identity', return_value={}), \
                  mock.patch.object(ax, 'dependency_identity', return_value={'gclient': 'fixture'}):
@@ -372,14 +382,298 @@ FlutterEnginePatchSha256 = 'REPLACE'
             self.assertEqual((self.root / self.name).read_text(), 'new AX\n')
             self.verify(output, target='windows', architecture='x64')
 
+    def test_fixture_composes_over_ax_and_has_the_same_dc_only_patch(self):
+        # AX changes the first line; fixture repair changes a separated last
+        # line. One contextual patch must derive against both exact source sets.
+        baseline = 'old header\n' + 'stable fixture line\n' * 8 + 'old fixture\n'
+        self.write(self.root, self.fixture_name, baseline)
+        ax.git(self.root, 'add', self.fixture_name)
+        ax.git(self.root, 'commit', '--quiet', '-m', 'overlapping fixture baseline')
+        revision = ax.git(self.root, 'rev-parse', 'HEAD').decode().strip()
+        old_revision = json.loads((self.repository / ax.PIN_FILES[0]).read_text())['frameworkRevision']
+        for name in ax.PIN_FILES:
+            path = self.repository / name
+            path.write_text(path.read_text().replace(old_revision, revision), newline='\n')
+        self.write(self.root, self.fixture_name, baseline.replace('old header', 'AX header'))
+        self.write(self.repository, ax.AX_PATCH, ax.git(self.root, 'diff', '--', self.name, self.fixture_name).decode())
+        self.write(self.root, self.fixture_name, baseline.replace('old fixture', 'new fixture'))
+        self.write(self.repository, ax.FIXTURE_PATCH, ax.git(self.root, 'diff', '--', self.fixture_name).decode())
+        self.write(self.root, self.fixture_name, baseline)
+        ax.finalize(self.repository, self.root)
+        self.commit(self.repository)
+        fixture = json.loads((self.repository / ax.MANIFEST).read_text())['patches'][-1]
+        self.assertNotEqual(fixture['files'][self.fixture_name]['inputSha256'],
+                            fixture['dcOnlyFiles'][self.fixture_name]['inputSha256'])
+        self.write(self.root, self.manager, 'new DC\n')
+        self.write(self.root, self.fixture_name, baseline.replace('old header', 'AX header').replace('old fixture', 'new fixture'))
+        self.identity('windows')
+        for patch in (ax.FIXTURE_PATCH, ax.AX_PATCH):
+            ax.git(self.root, 'apply', '--reverse', self.repository / patch)
+        ax.git(self.root, 'apply', self.repository / ax.FIXTURE_PATCH)
+        ax.dc_fixture_sources(self.repository, self.root)
+        ax.git(self.root, 'apply', '--reverse', self.repository / ax.FIXTURE_PATCH)
+        ax.git(self.root, 'apply', self.repository / ax.AX_PATCH, self.repository / ax.FIXTURE_PATCH)
+        self.identity('windows')
+
+    def test_fixture_allowlist_order_and_missing_or_tampered_source(self):
+        self.windows_source()
+        self.identity('windows')
+        fixture = self.repository / ax.FIXTURE_PATCH
+        data = fixture.read_bytes()
+        fixture.write_bytes(data.replace(self.fixture_name.encode(), b'engine/src/flutter/production.cc'))
+        with self.assertRaisesRegex(ax.VerificationError, 'allowlist'):
+            ax.derive_fixture_patch(self.root, fixture, [])
+        fixture.write_bytes(data)
+        self.identity('windows')
+        manifest = self.repository / ax.MANIFEST
+        original = manifest.read_bytes()
+        metadata = json.loads(original)
+        metadata['patches'].reverse()
+        manifest.write_text(json.dumps(metadata), newline='\n')
+        self.commit(self.repository)
+        with self.assertRaisesRegex(ax.VerificationError, 'Require AX'):
+            self.identity('windows')
+        manifest.write_bytes(original)
+        self.commit(self.repository)
+        self.identity('windows')
+        for data in ('old fixture\n', 'new fixture plus tampering\n'):
+            self.write(self.root, self.fixture_name, data)
+            with self.assertRaises(ax.VerificationError):
+                self.identity('windows')
+            self.windows_source()
+            self.identity('windows')
+
+    def test_suite_abort_missing_and_malformed_xml_retain_blocked_execution(self):
+        for scenario in ('aborted', 'missing', 'malformed', 'process-error'):
+            destination = self.base / scenario
+            destination.mkdir()
+            def process(command, **kwargs):
+                if scenario == 'process-error':
+                    raise OSError('Fixture process could not start')
+                if scenario == 'malformed':
+                    self.write(destination, 'fixture.xml', '<incomplete')
+                return mock.Mock(returncode=139 if scenario == 'aborted' else 0)
+            with mock.patch.object(ax.subprocess, 'run', side_effect=process):
+                with self.assertRaises((ax.VerificationError, OSError)):
+                    ax.run_windows_suite(self.base, 'fixture', destination)
+            execution = json.loads((destination / 'fixture.execution.json').read_text())
+            self.assertEqual(execution['status'], 'blocked')
+            self.assertFalse(execution['completed'])
+            self.assertEqual(execution['exitCode'], None if scenario == 'process-error' else 139 if scenario == 'aborted' else 0)
+            self.assertEqual(execution['xmlStatus'], 'invalid' if scenario == 'malformed' else 'missing')
+            self.assertTrue((destination / 'fixture.log').is_file())
+        destination = self.base / 'restored'
+        destination.mkdir()
+        def good_process(command, **kwargs):
+            self.write(destination, 'fixture.xml', '<testsuites><testsuite><testcase classname="Bridge" name="Recovery"/></testsuite></testsuites>')
+            return mock.Mock(returncode=0)
+        with mock.patch.object(ax.subprocess, 'run', side_effect=good_process):
+            self.assertEqual(ax.run_windows_suite(self.base, 'fixture', destination), {'Bridge.Recovery': 'passed'})
+        execution = json.loads((destination / 'fixture.execution.json').read_text())
+        self.assertTrue(execution['completed'])
+
+    def test_suite_execution_binds_test_executable_and_aot_fixture(self):
+        executable = self.write(self.base, 'fixture.exe', 'fixture executable')
+        aot = self.write(self.base, 'gen/flutter/shell/platform/windows/assets/app_elf_snapshot.so', 'fixture AOT')
+        originals = {p: p.read_bytes() for p in (executable, aot)}
+        for changed in (executable, aot, None):
+            destination = self.base / ('good' if changed is None else changed.name + '-changed')
+            destination.mkdir()
+            def process(command, **kwargs):
+                self.write(destination, 'fixture.xml', '<testsuites><testsuite><testcase classname="Bridge" name="Recovery"/></testsuite></testsuites>')
+                if changed is not None:
+                    changed.write_bytes(b'changed after test started')
+                return mock.Mock(returncode=0)
+            with mock.patch.object(ax.subprocess, 'run', side_effect=process):
+                if changed is None:
+                    ax.run_windows_suite(self.base, 'fixture', destination)
+                else:
+                    with self.assertRaisesRegex(ax.VerificationError, 'artifacts changed'):
+                        ax.run_windows_suite(self.base, 'fixture', destination)
+            for path, data in originals.items():
+                path.write_bytes(data)
+            execution = json.loads((destination / 'fixture.execution.json').read_text())
+            self.assertEqual(execution['completed'], changed is None)
+            self.assertEqual(len(execution['artifacts']), 2)
+
+    def test_abnormal_status_with_valid_failure_xml_is_not_completed_or_attributed(self):
+        failure_xml = '<testsuites><testsuite><testcase classname="Upstream" name="Failure"><failure message="fixture failure"/></testcase></testsuite></testsuites>'
+        for code in (3221225477, -11, 2, 255, 1):
+            destination = self.base / f'exit-{code}'
+            destination.mkdir()
+            def process(command, **kwargs):
+                self.write(destination, 'fixture.xml', failure_xml)
+                return mock.Mock(returncode=code)
+            with mock.patch.object(ax.subprocess, 'run', side_effect=process):
+                if code == 1:
+                    self.assertEqual(ax.run_windows_suite(self.base, 'fixture', destination, {'Upstream.Failure'}),
+                                     {'Upstream.Failure': 'failed'})
+                else:
+                    with self.assertRaisesRegex(ax.VerificationError, 'unexpected exit status'):
+                        ax.run_windows_suite(self.base, 'fixture', destination, {'Upstream.Failure'})
+            execution = json.loads((destination / 'fixture.execution.json').read_text())
+            self.assertEqual(execution['exitCode'], code)
+            self.assertEqual(execution['xmlStatus'], 'parsed')
+            self.assertEqual(execution['completed'], code == 1)
+            self.assertEqual(execution['status'], 'completed' if code == 1 else 'blocked')
+            self.assertTrue(execution['xmlSha256'])
+            self.assertTrue(execution['logSha256'])
+
+    def test_aborted_full_suite_still_attempts_both_and_writes_blocked_summary(self):
+        self.windows_source()
+        output = self.provenance('windows', 'x64', 'debug')
+        path = output / ax.PROVENANCE
+        record = json.loads(path.read_text())
+        record['ninja'] = {'path': str(Path(sys.executable).resolve()), 'sha256': ax.file_hash(sys.executable)}
+        path.write_text(json.dumps(record), newline='\n')
+        actual_run = ax.run
+        def build_command(arguments, **kwargs):
+            return actual_run(arguments, **kwargs) if arguments[0] == 'git' else b''
+        actual_process = ax.subprocess.run
+        for code, valid_xml in ((139, False), (3221225477, True)):
+            calls = []
+            def process(command, **kwargs):
+                if not str(command[0]).endswith('_unittests.exe'):
+                    return actual_process(command, **kwargs)
+                calls.append(Path(command[0]).stem)
+                if valid_xml:
+                    xml_path = Path(next(arg.split('xml:', 1)[1] for arg in command if arg.startswith('--gtest_output=')))
+                    xml_path.write_text('<testsuites><testsuite><testcase classname="Upstream" name="Failure"><failure/></testcase></testsuite></testsuites>', newline='\n')
+                return mock.Mock(returncode=code)
+            results = self.base / f'blocked-full-run-{code}'
+            with mock.patch.object(ax, 'host_matches'), mock.patch.object(ax, 'run', side_effect=build_command), \
+                 mock.patch.object(ax, 'run_windows_diagnostics', return_value={'status': 'passed'}), \
+                 mock.patch.object(ax.subprocess, 'run', side_effect=process), \
+                 mock.patch.object(ax, 'toolchain_identity', return_value={}), \
+                 mock.patch.object(ax, 'dependency_identity', return_value={'gclient': 'fixture'}):
+                with self.assertRaisesRegex(ax.VerificationError, 'unexpected exit status' if valid_xml else 'XML'):
+                    ax.windows_tests(self.repository, self.root, 'debug', sys.executable, 2, results)
+            self.assertEqual(calls, list(ax.WINDOWS_RECOVERY))
+            summary = json.loads((results / 'summary.json').read_text())
+            self.assertEqual(summary['status'], 'blocked')
+            self.assertTrue(all(not record['completed'] and record['exitCode'] == code for record in summary['suites'].values()))
+
+    def test_diagnostics_exact_cases_bounds_and_release_red_restore_green(self):
+        import xml.etree.ElementTree as xml
+        self.windows_source()
+        for mode in ('debug', 'release'):
+            output = self.provenance('windows', 'x64', mode)
+            self.write(output, 'flutter_windows_unittests.exe', 'fixture executable')
+            fixture = output / ax.AOT_FIXTURE
+            if mode == 'release':
+                self.write(output, ax.AOT_FIXTURE, 'fixture AOT bytes')
+            selected = self.verify(output, target='windows', architecture='x64', mode=mode)
+            scenarios = ('good',) if mode == 'debug' else ('good', 'unrelated-failure', 'abnormal-exit', 'malformed', 'missing', 'timeout', 'process-error', 'skipped', 'wrong-case')
+            for scenario in scenarios:
+                events = []
+                children = []
+                real_process = ax.subprocess.run
+                real_popen = ax.subprocess.Popen
+                def popen(*args, **kwargs):
+                    child = real_popen(*args, **kwargs)
+                    children.append(child)
+                    return child
+                results = self.base / f'diagnostics-{mode}-{scenario}'
+                results.mkdir()
+                before = ax.windows_suite_artifacts(output, 'flutter_windows_unittests')
+                def process(command, **kwargs):
+                    destination = Path(kwargs['stdout'].name).parent
+                    label = destination.name
+                    names = set(next(arg.split('=', 1)[1] for arg in command if arg.startswith('--gtest_filter=')).split(':'))
+                    events.append(label)
+                    self.assertEqual(names, ax.WINDOWS_DIAGNOSTICS if label == 'representative' else {ax.HEADLESS_DIAGNOSTIC})
+                    self.assertIn('--timeout=30', command)
+                    self.assertEqual(kwargs['timeout'], 240 if label == 'representative' else 60)
+                    self.assertFalse(any(key.upper().startswith('GTEST_') for key in kwargs['env']))
+                    negative = label == 'missing-aot'
+                    if negative:
+                        self.assertFalse(fixture.exists())
+                        kwargs['stdout'].write(b'no such file\nUnable to start engine without AOT data.\nValue of: engine->Run() Actual: false Expected: true\n' if scenario != 'unrelated-failure' else b'engine->Run() failed for another reason\n')
+                    elif mode == 'release':
+                        self.assertEqual(fixture.read_bytes(), b'fixture AOT bytes')
+                        self.assertTrue(all(child.poll() is not None for child in children))
+                    document = xml.Element('testsuites')
+                    suite = xml.SubElement(document, 'testsuite')
+                    actual_names = {'Other.Case'} if negative and scenario == 'wrong-case' else names
+                    for name in sorted(actual_names):
+                        classname, test = name.rsplit('.', 1)
+                        case = xml.SubElement(suite, 'testcase', classname=classname, name=test)
+                        if negative:
+                            xml.SubElement(case, 'skipped' if scenario == 'skipped' else 'failure', message='engine->Run()')
+                    result_path = destination / 'flutter_windows_unittests.xml'
+                    if negative and scenario == 'malformed':
+                        result_path.write_text('<incomplete', newline='\n')
+                    elif not (negative and scenario == 'missing'):
+                        xml.ElementTree(document).write(result_path)
+                    if negative and scenario == 'process-error':
+                        raise OSError('Controlled diagnostic process-start failure')
+                    if negative and scenario == 'timeout':
+                        # Real disposable Python child: subprocess.run must kill
+                        # and wait before the fixture can be restored/reused.
+                        return real_process([sys.executable, '-c', 'import time; time.sleep(5)'],
+                                            cwd=output, env=kwargs['env'], stdout=kwargs['stdout'],
+                                            stderr=kwargs['stderr'], check=False, timeout=0.05)
+                    return mock.Mock(returncode=(3221225477 if scenario == 'abnormal-exit' else 1) if negative else 0)
+                with mock.patch.object(ax.subprocess, 'run', side_effect=process), \
+                     mock.patch.object(ax.subprocess, 'Popen', side_effect=popen), \
+                     mock.patch.object(ax, 'verify', return_value=selected):
+                    binding = ax.run_windows_diagnostics(self.repository, self.root, output, mode, selected, results)
+                summary = json.loads((results / 'diagnostics/summary.json').read_text())
+                self.assertEqual(binding['status'], 'passed' if scenario == 'good' else 'blocked')
+                self.assertEqual(binding['summarySha256'], ax.file_hash(results / 'diagnostics/summary.json'))
+                self.assertEqual(events, ['representative'] if mode == 'debug' else ['representative', 'missing-aot', 'restored-green'])
+                self.assertEqual(before, ax.windows_suite_artifacts(output, 'flutter_windows_unittests'))
+                self.assertFalse(fixture.with_name(fixture.name + '.lineup-control-held').exists())
+                if scenario == 'timeout':
+                    self.assertEqual(len(children), 1)
+                    self.assertIsNotNone(children[0].returncode)
+                if mode == 'release':
+                    self.assertTrue(summary['fixtureRestored'])
+                    record = json.loads((results / 'diagnostics/missing-aot/flutter_windows_unittests.execution.json').read_text())
+                    self.assertEqual(record['selection'], 'diagnostic')
+                    self.assertEqual(record['timedOut'], scenario == 'timeout')
+                    self.assertEqual(record['selectedTests'], [ax.HEADLESS_DIAGNOSTIC])
+
+    def test_failed_diagnostics_do_not_suppress_full_suites_or_become_exclusions(self):
+        self.windows_source()
+        output = self.provenance('windows', 'x64', 'debug')
+        path = output / ax.PROVENANCE
+        record = json.loads(path.read_text())
+        record['ninja'] = {'path': str(Path(sys.executable).resolve()), 'sha256': ax.file_hash(sys.executable)}
+        path.write_text(json.dumps(record), newline='\n')
+        actual_run = ax.run
+        calls = []
+        def command(arguments, **kwargs):
+            return actual_run(arguments, **kwargs) if arguments[0] == 'git' else b''
+        def diagnostic(repository, root, output, mode, selected, results):
+            self.write(results, 'diagnostics/summary.json', '{"status":"blocked"}')
+            return ax.diagnostic_binding(results)
+        def suite(output, name, destination, names=None):
+            self.assertIsNone(names)  # An unrelated failure must not enter baseline attribution.
+            calls.append(name)
+            return {**{case: 'passed' for case in ax.WINDOWS_RECOVERY[name]}, 'Other.Failure': 'failed'}
+        results = self.base / 'diagnostics-blocked-full-attempts'
+        with mock.patch.object(ax, 'host_matches'), mock.patch.object(ax, 'run', side_effect=command), \
+             mock.patch.object(ax, 'run_windows_diagnostics', side_effect=diagnostic), \
+             mock.patch.object(ax, 'run_windows_suite', side_effect=suite), \
+             mock.patch.object(ax, 'toolchain_identity', return_value={}), \
+             mock.patch.object(ax, 'dependency_identity', return_value={'gclient': 'fixture'}):
+            with self.assertRaisesRegex(ax.VerificationError, 'diagnostics blocked'):
+                ax.windows_tests(self.repository, self.root, 'debug', sys.executable, 2, results)
+        self.assertEqual(calls, list(ax.WINDOWS_RECOVERY))
+        summary = json.loads((results / 'summary.json').read_text())
+        self.assertEqual(summary['status'], 'blocked')
+        self.assertEqual(summary['diagnostics']['status'], 'blocked')
+        self.assertEqual(summary['diagnostics']['summarySha256'], ax.file_hash(results / 'diagnostics/summary.json'))
+
     def test_exact_source_and_windows_composition(self):
         identity = self.identity()
         self.assertEqual([p['path'] for p in identity['patches']], [ax.AX_PATCH])
         with self.assertRaisesRegex(ax.VerificationError, 'exactly'):
             self.identity('windows')
-        self.write(self.root, self.manager, 'new DC\n')
+        self.windows_source()
         windows = self.identity('windows')
-        self.assertEqual([p['path'] for p in windows['patches']], ['tool/flutter_engine/0001-windows-direct-composition.patch', ax.AX_PATCH])
+        self.assertEqual([p['path'] for p in windows['patches']], ['tool/flutter_engine/0001-windows-direct-composition.patch', ax.AX_PATCH, ax.FIXTURE_PATCH])
         with self.assertRaisesRegex(ax.VerificationError, 'exactly'):
             self.identity()
 

@@ -381,7 +381,7 @@ jobs:
           fi
 
           changed_files="$(git diff --name-only "$base" "$head")"
-          if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_version\.json|tool/flutter_engine/(apply\.ps1|desktop_accessibility(_test)?\.py|desktop-accessibility\.json|0002-desktop-accessibility\.patch)|tool/windows/(build-inputs|run|build-release|verify-build-inputs|verify-release-authorities)\.ps1|\.github/workflows/ci\.yml)$' <<<"$changed_files" ||
+          if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_version\.json|tool/flutter_engine/(apply\.ps1|desktop_accessibility(_test)?\.py|desktop-accessibility\.json|0002-desktop-accessibility\.patch|0004-windows-test-fixtures\.patch)|tool/windows/(build-inputs|run|build-release|verify-build-inputs|verify-release-authorities)\.ps1|\.github/workflows/ci\.yml)$' <<<"$changed_files" ||
              grep -Fxq "$ENGINE_PATCH_PATH" <<<"$changed_files"; then
             engine_required=true
           else
@@ -501,7 +501,7 @@ jobs:
           python "$env:GITHUB_WORKSPACE/tool/flutter_engine/desktop_accessibility.py" build `
             --flutter-root $flutterSource --platform windows --architecture x64 --mode $env:ENGINE_MODE `
             --ninja $ninja --gclient (Join-Path $depotTools 'gclient.bat') --jobs 2
-      - name: Run full engine suites and attribute unrelated failures
+      - name: Run representative controls, full suites and failure attribution
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -733,13 +733,15 @@ jobs:
               [IO.File]::WriteAllBytes($buildMarker, $markerBytes)
             }
           }
-          foreach ($probe in @('schema1', 'reordered-patches', 'missing-ax', 'manifest', 'provenance', 'dll')) {
+          foreach ($probe in @('schema1', 'reordered-patches', 'missing-ax', 'missing-fixture', 'fixture-hash', 'manifest', 'provenance', 'dll')) {
             try {
               $marker = Get-Content -Raw -LiteralPath $buildMarker | ConvertFrom-Json
               switch ($probe) {
                 'schema1' { $marker.schemaVersion = 1 }
-                'reordered-patches' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[1], $marker.combinedEngine.recipe.patches[0]) }
+                'reordered-patches' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[1], $marker.combinedEngine.recipe.patches[0], $marker.combinedEngine.recipe.patches[2]) }
                 'missing-ax' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[0]) }
+                'missing-fixture' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[0], $marker.combinedEngine.recipe.patches[1]) }
+                'fixture-hash' { $marker.combinedEngine.recipe.patches[2].sha256 = '0' * 64 }
                 'manifest' { $marker.combinedEngine.recipe.manifestSha256 = '0' * 64 }
                 'provenance' { $marker.combinedEngine.provenanceSha256 = '0' * 64 }
                 'dll' { $marker.combinedEngine.binarySha256 = '0' * 64 }

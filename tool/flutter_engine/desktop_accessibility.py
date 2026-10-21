@@ -24,6 +24,14 @@ import time
 
 MANIFEST = 'tool/flutter_engine/desktop-accessibility.json'
 AX_PATCH = 'tool/flutter_engine/0002-desktop-accessibility.patch'
+FIXTURE_PATCH = 'tool/flutter_engine/0004-windows-test-fixtures.patch'
+FIXTURE_FILES = {
+    'engine/src/flutter/shell/platform/windows/' + name for name in (
+        'testing/windows_test_context.h', 'testing/windows_test_context.cc',
+        'testing/windows_test_config_builder.cc', 'testing/test_keyboard.cc',
+        'accessibility_bridge_windows_unittests.cc', 'flutter_windows_view_unittests.cc',
+        'flutter_windows_engine_unittests.cc')
+}
 MAC_BUILD_PATCH = 'tool/flutter_engine/0003-macos-apple-linker.patch'
 PIN_FILES = ('tool/flutter_version.json', 'tool/windows/build-metadata.psd1')
 PROVENANCE = 'lineup-desktop-accessibility.json'
@@ -131,6 +139,32 @@ def derive_patch(root, patch):
                        'patchedSha256': source_hash(scratch / name)} for name in names}
 
 
+def derive_fixture_patch(root, patch, preceding):
+    """Derive the fixed fixture patch against a complete preceding patch set."""
+    names = patch_files(patch)
+    require(set(names) <= FIXTURE_FILES, 'Fixture patch escapes its native test allowlist.')
+    all_names = set(names)
+    for prior in preceding:
+        all_names.update(patch_files(prior))
+    with tempfile.TemporaryDirectory(prefix='lineup-fixture-compose-') as temporary:
+        scratch = Path(temporary)
+        git(scratch, 'init', '--quiet')
+        for name in sorted(all_names):
+            path = scratch / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(git(root, 'show', f'HEAD:{name}'))
+        git(scratch, 'add', '.')
+        for prior in preceding:
+            git(scratch, 'apply', '--check', prior.resolve())
+            git(scratch, 'apply', prior.resolve())
+        inputs = {name: source_hash(scratch / name) for name in names}
+        git(scratch, 'apply', '--check', patch.resolve())
+        git(scratch, 'apply', patch.resolve())
+        return {name: {'baselineBlob': git(root, 'rev-parse', f'HEAD:{name}').decode().strip(),
+                       'inputSha256': inputs[name], 'patchedSha256': source_hash(scratch / name)}
+                for name in names}
+
+
 def finalize(repository, root):
     framework, windows = pins(repository, exact=False)
     verify_checkout(root, framework, windows)
@@ -142,9 +176,13 @@ def finalize(repository, root):
                 'Accessibility patches must not replace the DirectComposition owner.')
         patches.append({'path': name, 'sha256': file_hash(patch), 'files': files,
                         'platforms': ['macos', 'windows'] if name == AX_PATCH else ['macos']})
-    result = {'schemaVersion': 1, 'patches': patches}
-    destination = repository / MANIFEST
-    destination.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
+    fixture = relative_file(repository, FIXTURE_PATCH)
+    direct = relative_file(repository, windows['FlutterEnginePatchPath'])
+    patches.append({'path': FIXTURE_PATCH, 'sha256': file_hash(fixture), 'platforms': ['windows'],
+                    'files': derive_fixture_patch(root, fixture, [direct, repository / AX_PATCH]),
+                    'dcOnlyFiles': derive_fixture_patch(root, fixture, [direct])})
+    result = {'schemaVersion': 2, 'patches': patches}
+    (repository / MANIFEST).write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
     return {'manifest': MANIFEST, 'patches': [p['path'] for p in patches], 'status': 'finalized; commit canonical inputs before verification'}
 
 
@@ -153,52 +191,70 @@ def source_identity(repository, root, target, require_applied=True):
     verify_checkout(root, framework, windows)
     manifest_path = committed(repository, MANIFEST)
     manifest = json.loads(manifest_path.read_text())
-    require(manifest.get('schemaVersion') == 1, 'Unsupported desktop accessibility manifest.')
+    require(manifest.get('schemaVersion') == 2, 'Require canonical fixture manifest schema 2; rebuild old candidates.')
     entries = manifest.get('patches', [])
-    require([e['path'] for e in entries] in ([AX_PATCH], [AX_PATCH, MAC_BUILD_PATCH]),
-            'Require AX patch followed by the optional macOS build patch.')
+    require([e['path'] for e in entries] in
+            ([AX_PATCH, FIXTURE_PATCH], [AX_PATCH, MAC_BUILD_PATCH, FIXTURE_PATCH]),
+            'Require AX, optional macOS build patch, then Windows fixture patch.')
+    direct = committed(repository, windows['FlutterEnginePatchPath'])
+    require(file_hash(direct).upper() == windows['FlutterEnginePatchSha256'].upper(),
+            'DirectComposition patch SHA-256 mismatch.')
+    direct_files = derive_patch(root, direct)
+    require(list(direct_files) == [windows['FlutterManagerPath']] and
+            direct_files[windows['FlutterManagerPath']]['baselineBlob'] == windows['FlutterManagerBlob'] and
+            direct_files[windows['FlutterManagerPath']]['patchedSha256'].upper() == windows['FlutterPatchedManagerSha256'].upper(),
+            'DirectComposition exact-source metadata mismatch.')
     expected, patches = {}, []
+    if target == 'windows':
+        expected.update(direct_files)
+        patches.append({'path': windows['FlutterEnginePatchPath'], 'sha256': file_hash(direct)})
     for entry in entries:
         name = entry['path']
-        require(entry['platforms'] == (['macos', 'windows'] if name == AX_PATCH else ['macos']),
-                'Incorrect patch platform selection.')
+        platforms = {AX_PATCH: ['macos', 'windows'], MAC_BUILD_PATCH: ['macos'], FIXTURE_PATCH: ['windows']}[name]
+        require(entry['platforms'] == platforms, 'Incorrect patch platform selection.')
         patch = committed(repository, name)
         require(file_hash(patch) == entry.get('sha256'), 'Accessibility patch SHA-256 mismatch.')
-        files = derive_patch(root, patch)
+        if name == FIXTURE_PATCH:
+            files = derive_fixture_patch(root, patch, [direct, repository / AX_PATCH])
+            require(derive_fixture_patch(root, patch, [direct]) == entry.get('dcOnlyFiles'),
+                    'DC-only fixture composition metadata mismatch.')
+        else:
+            files = derive_patch(root, patch)
         require(files == entry.get('files') and files, 'Accessibility baseline/patched file metadata mismatch.')
         require(windows['FlutterManagerPath'] not in files, 'Accessibility patch overlaps DirectComposition.')
-        if target not in entry['platforms']:
+        if target not in platforms:
             continue
-        require(not set(expected).intersection(files), 'Platform patches overlap.')
-        expected.update(files)
+        require(name == FIXTURE_PATCH or not set(expected).intersection(files), 'Platform patches overlap.')
+        # Only the fixed final fixture patch may compose over AX test sources.
+        expected.update({n: {k: value[k] for k in ('baselineBlob', 'patchedSha256')} for n, value in files.items()})
         patches.append({'path': name, 'sha256': file_hash(patch)})
-    if target == 'windows':
-        direct = committed(repository, windows['FlutterEnginePatchPath'])
-        require(file_hash(direct).upper() == windows['FlutterEnginePatchSha256'].upper(),
-                'DirectComposition patch SHA-256 mismatch.')
-        direct_files = derive_patch(root, direct)
-        require(list(direct_files) == [windows['FlutterManagerPath']] and
-                direct_files[windows['FlutterManagerPath']]['baselineBlob'] == windows['FlutterManagerBlob'] and
-                direct_files[windows['FlutterManagerPath']]['patchedSha256'].upper() == windows['FlutterPatchedManagerSha256'].upper(),
-                'DirectComposition exact-source metadata mismatch.')
-        require(not set(expected).intersection(direct_files), 'Platform patches overlap.')
-        expected.update(direct_files)
-        patches.insert(0, {'path': windows['FlutterEnginePatchPath'], 'sha256': file_hash(direct)})
     identity = {'frameworkRevision': framework['frameworkRevision'], 'engineVersion': windows['FlutterEngineRevision'],
                 'patches': patches, 'files': expected, 'manifestSha256': file_hash(manifest_path),
                 'pinSha256': {name: file_hash(repository / name) for name in PIN_FILES}}
-    if not require_applied:
-        return identity
+    if require_applied:
+        assert_source_files(root, expected)
+    return identity
+
+
+def assert_source_files(root, expected):
     actual = set(git(root, 'diff', '--name-only', '-z', 'HEAD').decode().rstrip('\0').split('\0')) - {''}
     require(actual == set(expected), 'Flutter checkout must contain exactly the selected repository-owned patches.')
     for name, record in expected.items():
         require(source_hash(relative_file(root, name)) == record['patchedSha256'],
                 f'Patched source SHA-256 mismatch: {name}')
-    # Untracked dependency repositories/output are normal. Untracked source code
-    # in Flutter itself is not: a new .cc could participate via a glob/build rule.
     untracked = git(root, 'ls-files', '--others', '--exclude-standard', '-z', '--', 'engine/src/flutter', 'engine/src/build').decode().split('\0')
     require(not any(untracked), 'Untracked Flutter engine source is not a verified candidate.')
-    return identity
+
+
+def dc_fixture_sources(repository, root):
+    # Validate every canonical authority before projecting the DC-only baseline.
+    source_identity(repository, root, 'windows', require_applied=False)
+    _, windows = pins(repository)
+    files = derive_patch(root, repository / windows['FlutterEnginePatchPath'])
+    fixture = json.loads((repository / MANIFEST).read_text())['patches'][-1]
+    files.update(fixture['dcOnlyFiles'])
+    assert_source_files(root, files)
+    return files
 
 
 def gclient_solutions(data):
@@ -653,14 +709,30 @@ def gtest_results(path):
     return cases
 
 
-def run_windows_suite(output, suite, destination, names=None):
+def windows_suite_artifacts(output, suite):
+    binary = output / (suite + '.exe')
+    fixtures = output / 'gen/flutter/shell/platform/windows/assets'
+    paths = ([binary] if binary.is_file() else [])
+    if fixtures.is_dir():
+        paths += [path for path in fixtures.rglob('*') if path.is_file()]
+    for path in paths:
+        require(path.resolve().is_relative_to(output.resolve()), 'Test artifact escapes output.')
+    return {path.relative_to(output).as_posix(): file_hash(path) for path in sorted(paths)}
+
+
+def run_windows_suite(output, suite, destination, names=None, *, purpose=None, timeout_seconds=None):
     xml_path = destination / (suite + '.xml')
+    purpose = purpose or ('full' if names is None else 'baseline')
+    require(purpose in ('full', 'baseline', 'diagnostic') and ((purpose == 'full') == (names is None)),
+            'Invalid test selection purpose.')
     if names is not None:
         require(names, 'An attribution run requires explicit failing cases.')
     selection = '*' if names is None else ':'.join(sorted(names))
     command = [str(output / (suite + '.exe')), '--gtest_output=xml:' + str(xml_path),
                '--gtest_filter=' + selection, '--gtest_repeat=1',
                '--gtest_fail_fast=0', '--gtest_list_tests=0']
+    if purpose == 'diagnostic':
+        command += ['--timeout=30']
     # A caller's filter, shard or repeat settings must not shrink a full suite
     # into a passing recovery-only sample. The pinned GoogleTest also reads the
     # two TESTBRIDGE defaults independently of GTEST_* flags. Sanitize only the
@@ -668,20 +740,191 @@ def run_windows_suite(output, suite, destination, names=None):
     environment = {key: value for key, value in os.environ.items()
                    if not key.upper().startswith('GTEST_') and key.upper() not in
                    ('TESTBRIDGE_TEST_ONLY', 'TESTBRIDGE_TEST_RUNNER_FAIL_FAST')}
-    with (destination / (suite + '.log')).open('wb') as log:
-        result = subprocess.run(command, cwd=output, env=environment,
-                                stdout=log, stderr=subprocess.STDOUT, check=False)
-    cases = gtest_results(xml_path)
-    failures = {name for name, state in cases.items() if state == 'failed'}
-    require(result.returncode == 0 or failures, 'Test process failed without an attributable test failure.')
-    require(result.returncode != 0 or not failures, 'Test exit status disagrees with result XML.')
-    if names is not None:
-        require(set(cases) == set(names) and all(cases[n] != 'skipped' for n in names),
-                'Baseline attribution did not execute every requested failing case.')
-    return cases
+    execution_path = destination / (suite + '.execution.json')
+    execution = {'status': 'running', 'selection': purpose,
+                 'selectedTests': sorted(names) if names is not None else '*',
+                 'timeoutSeconds': timeout_seconds, 'timedOut': False,
+                 'exitCode': None, 'xmlExists': False, 'xmlStatus': 'pending', 'completed': False,
+                 'artifacts': windows_suite_artifacts(output, suite)}
+    execution_path.write_text(json.dumps(execution, indent=2, sort_keys=True) + '\n')
+    try:
+        with (destination / (suite + '.log')).open('wb') as log:
+            options = {'timeout': timeout_seconds} if timeout_seconds is not None else {}
+            # subprocess.run kills and waits for its child before raising a
+            # TimeoutExpired, so fixture restoration cannot race this process.
+            result = subprocess.run(command, cwd=output, env=environment,
+                                    stdout=log, stderr=subprocess.STDOUT, check=False, **options)
+        execution['exitCode'] = result.returncode
+        execution['xmlExists'] = xml_path.is_file()
+        execution['xmlStatus'] = 'unparsed' if xml_path.is_file() else 'missing'
+        try:
+            cases = gtest_results(xml_path)
+        except VerificationError:
+            if xml_path.is_file():
+                execution['xmlStatus'] = 'invalid'
+            raise
+        execution['xmlStatus'] = 'parsed'
+        failures = {name for name, state in cases.items() if state == 'failed'}
+        require(result.returncode in (0, 1),
+                'Test process aborted or returned an unexpected exit status.')
+        require(result.returncode == 0 or failures, 'Test process failed without an attributable test failure.')
+        require(result.returncode != 0 or not failures, 'Test exit status disagrees with result XML.')
+        if names is not None:
+            require(set(cases) == set(names) and all(cases[n] != 'skipped' for n in names),
+                    'Filtered execution did not execute every requested case.')
+        require(execution['artifacts'] == windows_suite_artifacts(output, suite),
+                'Test executable or fixture artifacts changed during execution.')
+        execution.update(status='completed', completed=True,
+                         counts={state: sum(value == state for value in cases.values())
+                                 for state in ('passed', 'failed', 'skipped')})
+        return cases
+    except subprocess.TimeoutExpired as error:
+        execution.update(status='blocked', reasonCode='process-timeout', timedOut=True,
+                         xmlStatus='unparsed' if xml_path.is_file() else 'missing')
+        raise VerificationError('Diagnostic test process timed out.') from error
+    except (VerificationError, OSError):
+        execution['status'] = 'blocked'
+        execution['reasonCode'] = 'process-start-failed' if execution['exitCode'] is None else 'result-verification-failed'
+        if execution['xmlStatus'] == 'pending':
+            execution['xmlStatus'] = 'unparsed' if xml_path.is_file() else 'missing'
+        raise
+    finally:
+        execution['xmlExists'] = xml_path.is_file()
+        if xml_path.is_file():
+            execution['xmlSha256'] = file_hash(xml_path)
+        log_path = destination / (suite + '.log')
+        if log_path.is_file():
+            execution['logSha256'] = file_hash(log_path)
+        execution_path.write_text(json.dumps(execution, indent=2, sort_keys=True) + '\n')
+
+
+WINDOWS_DIAGNOSTICS = {
+    'AccessibilityBridgeWindows.RecoveryPreservesNativeIdentityAcrossMove',
+    'FlutterWindowsEngineTest.RecoverySemanticsCallbackSupportsFrameworkAndNonzeroRoots',
+    'FlutterWindowsEngineTest.RunHeadless',
+    'FlutterWindowsEngineTest.PlatformMessageRoundTrip',
+    'FlutterWindowsEngineTest.MergedUIThread',
+    'WindowsTest.LaunchCustomEntrypoint',
+}
+AOT_FIXTURE = 'gen/flutter/shell/platform/windows/assets/app_elf_snapshot.so'
+HEADLESS_DIAGNOSTIC = 'FlutterWindowsEngineTest.RunHeadless'
+
+
+def diagnostic_binding(results):
+    path = results / 'diagnostics/summary.json'
+    if not path.is_file():
+        return {'status': 'not-started'}
+    return {'status': json.loads(path.read_text())['status'], 'summarySha256': file_hash(path)}
+
+
+def run_windows_diagnostics(repository, root, output, mode, selected, results):
+    directory = results / 'diagnostics'
+    directory.mkdir()
+    suite = 'flutter_windows_unittests'
+    summary = {'mode': mode, 'status': 'running', 'stages': {}, 'fixtureRestored': None}
+    path = directory / 'summary.json'
+
+    def persist():
+        path.write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+
+    def stage(label, names, expected_failure=False, timeout=240):
+        destination = directory / label
+        destination.mkdir()
+        record = {'status': 'running', 'selectedTests': sorted(names),
+                  'expected': 'missing-aot-startup-failure' if expected_failure else 'pass'}
+        summary['stages'][label] = record
+        persist()
+        try:
+            cases = run_windows_suite(output, suite, destination, names,
+                                      purpose='diagnostic', timeout_seconds=timeout)
+            record['cases'] = cases
+            if expected_failure:
+                require(cases == {HEADLESS_DIAGNOSTIC: 'failed'}, 'Missing-AOT control did not fail the exact startup case.')
+                execution = json.loads((destination / (suite + '.execution.json')).read_text())
+                log = (destination / (suite + '.log')).read_bytes()
+                require(execution['exitCode'] == 1 and
+                        all(needle in log for needle in (b'no such file', b'Unable to start engine without AOT data.', b'engine->Run()')) and
+                        not any(needle in log for needle in (b'SEH exception', b'assumed to be hung')),
+                        'Missing-AOT control failed for an unexpected reason.')
+            else:
+                require(set(cases) == names and all(value == 'passed' for value in cases.values()),
+                        'Representative diagnostic cases missing, skipped or failed.')
+            record['status'] = 'passed'
+        except (VerificationError, OSError, ValueError, KeyError, TypeError):
+            record.update(status='blocked', reasonCode='diagnostic-verification-failed')
+        finally:
+            execution = destination / (suite + '.execution.json')
+            if execution.is_file():
+                record['executionSha256'] = file_hash(execution)
+            persist()
+
+    persist()
+    before = None
+    try:
+        before = windows_suite_artifacts(output, suite)
+        stage('representative', WINDOWS_DIAGNOSTICS)
+        if mode == 'release':
+            fixture = output / AOT_FIXTURE
+            held = fixture.with_name(fixture.name + '.lineup-control-held')
+            moved = False
+            summary['fixtureRestored'] = False
+            try:
+                require(fixture.is_file() and not fixture.is_symlink() and
+                        fixture.resolve().is_relative_to(output.resolve()) and not held.exists(),
+                        'Release AOT fixture is missing, unsafe or already held.')
+                summary['fixtureSha256'] = file_hash(fixture)
+                fixture.rename(held)
+                moved = True
+                stage('missing-aot', {HEADLESS_DIAGNOSTIC}, expected_failure=True, timeout=60)
+            finally:
+                if moved:
+                    require(not fixture.exists(), 'AOT fixture unexpectedly reappeared during the control.')
+                    held.rename(fixture)
+                summary['fixtureRestored'] = (fixture.is_file() and not held.exists() and
+                                              file_hash(fixture) == summary.get('fixtureSha256'))
+                persist()
+            require(summary['fixtureRestored'], 'Release AOT fixture restoration failed.')
+            stage('restored-green', {HEADLESS_DIAGNOSTIC}, timeout=60)
+    except (VerificationError, OSError, ValueError, KeyError, TypeError):
+        summary['stages']['fixture-control'] = {'status': 'blocked', 'reasonCode': 'fixture-control-failed'}
+    finally:
+        try:
+            require(before is not None and before == windows_suite_artifacts(output, suite),
+                    'Diagnostic test executable or fixture identity changed.')
+            require(selected == verify(repository, root, output.name, 'windows', 'x64', mode),
+                    'Canonical identity changed during diagnostics.')
+            summary['stages']['identity'] = {'status': 'passed'}
+        except (VerificationError, OSError, ValueError, KeyError, TypeError):
+            summary['stages']['identity'] = {'status': 'blocked', 'reasonCode': 'identity-verification-failed'}
+        expected_stages = {'representative', 'identity'} | ({'missing-aot', 'restored-green'} if mode == 'release' else set())
+        summary['status'] = ('passed' if set(summary['stages']) == expected_stages and
+                             all(record['status'] == 'passed' for record in summary['stages'].values()) else 'blocked')
+        persist()
+    return diagnostic_binding(results)
 
 
 def windows_tests(repository, root, mode, ninja, jobs, results):
+    fresh_results = not results.exists()
+    started = time.monotonic()
+    try:
+        return _windows_tests(repository, root, mode, ninja, jobs, results)
+    except (VerificationError, OSError, ValueError, KeyError, TypeError):
+        # Never overwrite an earlier run's evidence after a freshness rejection.
+        if fresh_results and results.is_dir():
+            executions = {}
+            for suite in WINDOWS_RECOVERY:
+                path = results / (suite + '.execution.json')
+                executions[suite] = (json.loads(path.read_text()) if path.is_file()
+                                     else {'status': 'not-started', 'completed': False})
+            summary = {'mode': mode, 'status': 'blocked', 'reasonCode': 'verification-failed',
+                       'durationSeconds': round(time.monotonic() - started, 1),
+                       'suites': executions, 'diagnostics': diagnostic_binding(results),
+                       'requiredRecoveryCases': {s: sorted(names) for s, names in WINDOWS_RECOVERY.items()}}
+            (results / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+        raise
+
+
+def _windows_tests(repository, root, mode, ninja, jobs, results):
     """Full suites first; only unrelated failures may use a same-mode DC baseline.
 
     The baseline is never a verified combined candidate and receives no provenance.
@@ -695,11 +938,16 @@ def windows_tests(repository, root, mode, ninja, jobs, results):
     output = root / 'engine/src/out' / name
     require(not results.exists(), 'Test result directory must be fresh.')
     results.mkdir(parents=True)
+    (results / 'summary.json').write_text(json.dumps({'mode': mode, 'status': 'running'}) + '\n')
     started = time.monotonic()
     ninja_path = resolve_ninja(ninja)
     record = json.loads((output / PROVENANCE).read_text())
     require(record['ninja']['path'] == ninja_path, 'Tests must use the candidate Ninja executable.')
     run([ninja_path, '-C', output, '-j', str(jobs), *WINDOWS_RECOVERY], capture=False)
+    try:
+        diagnostics = run_windows_diagnostics(repository, root, output, mode, selected, results)
+    except (VerificationError, OSError, ValueError, KeyError, TypeError):
+        diagnostics = {'status': 'blocked', 'reasonCode': 'diagnostic-setup-failed'}
     failures = {}
     recovery_errors = []
     all_cases = {}
@@ -714,22 +962,23 @@ def windows_tests(repository, root, mode, ninja, jobs, results):
         except (VerificationError, OSError) as error:
             suite_errors.append(f'{suite}: {error}')
     require(not suite_errors, '; '.join(suite_errors))
+    require(diagnostics['status'] == 'passed', 'Representative or missing-AOT diagnostics blocked acceptance.')
     require(not recovery_errors, 'Required recovery cases missing, skipped or failed: ' + ', '.join(recovery_errors))
     exclusions = {}
     if any(failures.values()):
         before = verified_sources(repository, root, 'windows', record['source']['dependencies']['gclient'])
         baseline = root / 'engine/src/out' / f'lineup_dc_baseline_{mode}_x64'
         require(not baseline.exists(), 'Baseline output must be fresh.')
-        ax_files = patch_files(committed(repository, AX_PATCH))
-        saved = {n: (root / n).read_bytes() for n in ax_files}
+        saved_files = set(patch_files(committed(repository, AX_PATCH))) | set(patch_files(committed(repository, FIXTURE_PATCH)))
+        saved = {n: (root / n).read_bytes() for n in saved_files}
         try:
+            git(root, 'apply', '--reverse', '--check', repository / FIXTURE_PATCH)
+            git(root, 'apply', '--reverse', repository / FIXTURE_PATCH)
             git(root, 'apply', '--reverse', '--check', repository / AX_PATCH)
             git(root, 'apply', '--reverse', repository / AX_PATCH)
-            direct_files = {n: value for n, value in before['files'].items() if n not in ax_files}
-            changed = set(git(root, 'diff', '--name-only', 'HEAD').decode().splitlines())
-            require(changed == set(direct_files), 'Baseline must contain only DirectComposition changes.')
-            for n, value in direct_files.items():
-                require(source_hash(root / n) == value['patchedSha256'], 'Baseline DirectComposition bytes changed.')
+            git(root, 'apply', '--check', repository / FIXTURE_PATCH)
+            git(root, 'apply', repository / FIXTURE_PATCH)
+            baseline_files = dc_fixture_sources(repository, root)
             gn = list(record['build']['gnCommand'])
             gn[gn.index('--target-dir') + 1] = baseline.name
             run(gn, cwd=root / 'engine/src', capture=False)
@@ -747,6 +996,7 @@ def windows_tests(repository, root, mode, ninja, jobs, results):
                 require(all(cases[n] == 'failed' for n in names),
                         'Combined engine regression: a failing case passes on the DC-only baseline.')
                 exclusions[suite] = sorted(names)
+            require(baseline_files == dc_fixture_sources(repository, root), 'Baseline fixture source changed during tests.')
             require(before['dependencies'] == dependency_identity(repository, root, before['dependencies']['gclient']),
                     'Baseline dependency graph changed.')
         finally:
@@ -758,7 +1008,7 @@ def windows_tests(repository, root, mode, ninja, jobs, results):
                'suites': {s: {state: sum(v == state for v in cases.values())
                               for state in ('passed', 'failed', 'skipped')} for s, cases in all_cases.items()},
                'requiredRecoveryCases': {s: sorted(names) for s, names in WINDOWS_RECOVERY.items()},
-               'dcBaselineExclusions': exclusions, 'binarySha256': selected['binarySha256'],
+               'diagnostics': diagnostics, 'dcBaselineExclusions': exclusions, 'binarySha256': selected['binarySha256'],
                'provenanceSha256': selected['provenanceSha256']}
     (results / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
     return summary

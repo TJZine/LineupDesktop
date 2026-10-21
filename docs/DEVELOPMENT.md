@@ -768,7 +768,7 @@ The release wrapper requires a clean committed Lineup checkout and verifies the
 selected `lineup_ax_release_x64` immediately before and after the application build.
 It compares the bundled engine DLL with that selection and writes schema-2
 `LINEUP-BUILD-PROVENANCE.json`, including source/framework/engine identities,
-canonical pin/manifest hashes, ordered DirectComposition/AX patch hashes, selected
+canonical pin/manifest hashes, ordered DirectComposition/AX/test-fixture patch hashes, selected
 output/mode/architecture, provenance and DLL digests, and the complete packaged
 application artifact map. A sanitized engine receipt in
 `data/lineup-engine-receipt.json` is also bound by that map. Local receipts record
@@ -806,17 +806,20 @@ sync, fresh unittest-enabled recipe build and 180-minute budget. Each runs full
 `common_cpp_unittests` and `flutter_windows_unittests`, requiring all ten common
 `AccessibilityBridgeTest.Recovery*` cases and the Windows native-identity and
 engine callback recovery cases to appear unskipped and pass. Other failures are
-rerun by exact name against a fresh same-mode DC-only baseline on the same runner;
+rerun by exact name against a fresh same-mode DC-only baseline with the identical
+fixture patch on the same runner;
 only failures reproduced there qualify as recorded environment exclusions. A
 baseline pass, missing result, skipped required case or incomplete attribution
 blocks the job. The recipe reverifies the combined candidate after test targets.
-Test XML/logs and a duration/count/exclusion summary are retained; inspect the
-first actual runs for observed durations and any platform-only skips.
+Available test XML/logs, per-suite exit/XML-completion records and a
+duration/count/exclusion summary are retained. Aborted or malformed/missing-XML
+runs retain a blocked summary and fail. Inspect the first actual runs for observed durations and any platform-only skips.
 
 The separate application/package job builds its own fresh verified Release
 output and exercises receipt/artifact/license/package rejection checks. Ordinary
 CI also runs the portable Python tooling fixtures and PowerShell process/policy
-fixtures. Configured jobs are implemented, unexecuted until actual hosted runs;
+fixtures. The canonical fixture migration requires fresh execution even where the
+earlier recipe passed Debug. The recorded earlier Release failure remains blocked;
 inspect which jobs ran before describing a green CI result. CI does not launch
 the application; runtime markers and native presentation still require physical
 Windows acceptance.

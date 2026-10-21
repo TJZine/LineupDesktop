@@ -158,8 +158,9 @@ function Assert-WindowsEngineReceipt {
   if ($Receipt.recipe.manifestSha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository 'tool/flutter_engine/desktop-accessibility.json')).Hash) {
     throw 'Combined engine receipt manifest mismatch.'
   }
-  $expected = @($metadata.FlutterEnginePatchPath, 'tool/flutter_engine/0002-desktop-accessibility.patch')
-  if (@($Receipt.recipe.patches).Count -ne $expected.Count) { throw 'Combined engine receipt requires both ordered patches.' }
+  $expected = @($metadata.FlutterEnginePatchPath, 'tool/flutter_engine/0002-desktop-accessibility.patch',
+    'tool/flutter_engine/0004-windows-test-fixtures.patch')
+  if (@($Receipt.recipe.patches).Count -ne $expected.Count) { throw 'Combined engine receipt requires all three ordered canonical patches. Rebuild the candidate.' }
   for ($index = 0; $index -lt $expected.Count; $index++) {
     $patch = $Receipt.recipe.patches[$index]
     if ($patch.path -cne $expected[$index] -or
@@ -167,8 +168,14 @@ function Assert-WindowsEngineReceipt {
       throw 'Combined engine receipt patch order/hash mismatch.'
     }
   }
-  if ($manifest.patches[0].path -cne $expected[1] -or
-    $manifest.patches[0].sha256 -ne $Receipt.recipe.patches[1].sha256) { throw 'Combined engine manifest authority mismatch.' }
+  $windowsPatches = @($manifest.patches | Where-Object { $_.platforms -contains 'windows' })
+  if ($manifest.schemaVersion -ne 2 -or $windowsPatches.Count -ne 2) { throw 'Combined engine manifest authority mismatch.' }
+  for ($index = 0; $index -lt 2; $index++) {
+    if ($windowsPatches[$index].path -cne $expected[$index + 1] -or
+      $windowsPatches[$index].sha256 -ne $Receipt.recipe.patches[$index + 1].sha256) {
+      throw 'Combined engine manifest authority mismatch.'
+    }
+  }
 }
 
 function Assert-NoTrackedSymlinks {

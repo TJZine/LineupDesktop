@@ -62,7 +62,8 @@ function Assert-WindowsReleaseAuthorities {
     foreach ($name in @('tool/flutter_version.json', 'tool/windows/build-metadata.psd1')) {
       $pins[$name] = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository $name)).Hash.ToLowerInvariant()
     }
-    $patches = @($metadata.FlutterEnginePatchPath, 'tool/flutter_engine/0002-desktop-accessibility.patch') | ForEach-Object {
+    $patches = @($metadata.FlutterEnginePatchPath, 'tool/flutter_engine/0002-desktop-accessibility.patch',
+      'tool/flutter_engine/0004-windows-test-fixtures.patch') | ForEach-Object {
       @{ path = $_; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository $_)).Hash.ToLowerInvariant() }
     }
     $validReceipt = @{
@@ -78,7 +79,7 @@ function Assert-WindowsReleaseAuthorities {
     foreach ($probe in @('order', 'missing', 'manifest', 'provenance', 'binary', 'mode', 'pin')) {
       $receipt = $validReceipt | ConvertFrom-Json
       switch ($probe) {
-        'order' { $receipt.recipe.patches = @($receipt.recipe.patches[1], $receipt.recipe.patches[0]) }
+        'order' { $receipt.recipe.patches = @($receipt.recipe.patches[1], $receipt.recipe.patches[0], $receipt.recipe.patches[2]) }
         'missing' { $receipt.recipe.patches = @($receipt.recipe.patches[0]) }
         'manifest' { $receipt.recipe.manifestSha256 = '0' * 64 }
         'provenance' { $receipt.provenanceSha256 = 'invalid' }
@@ -88,7 +89,7 @@ function Assert-WindowsReleaseAuthorities {
       }
       $expectedError = switch ($probe) {
         'order' { 'patch order/hash mismatch' }
-        'missing' { 'both ordered patches' }
+        'missing' { 'all three ordered canonical patches' }
         'manifest' { 'manifest mismatch' }
         'pin' { 'pin mismatch' }
         default { 'receipt identity' }
