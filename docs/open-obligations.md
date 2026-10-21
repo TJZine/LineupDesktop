@@ -67,10 +67,10 @@ the discriminating evidence in the investigation rows below.
 | V-01 | Initial OSD fade/menu continuity and natural Slider interactivity transition | Retained frame/widget regressions, stock keyed/unkeyed reductions, canonical native continuity and useful diagnostic seek. Four automatic first-fade attempts plus a bounded manual probe do not qualify; three natural routes mount already-interactive Sliders. | Actual menu opening within the initial 350-ms fade with recorded animation/timing; a same-presenter enabled/disabled transition where naturally feasible. Do not add a product control to force it or repeat an unbounded campaign. [Recovery assignment](handoffs/macos-m04-recovery-implementation-handoff.md#d-resolve-remaining-runtime-uncertainties). |
 | V-02 | Repaired Windows engine | Historical macOS common tests 242 Debug / 240 Release retain their attribution. October 21 fresh focused native tests pass all 12 recovery cases per mode on the durable macOS checkout; this is not Windows evidence. October 21 Windows per-mode full-suite/recovery/DC-baseline attribution jobs are implemented; [CI dispatch 39548870477](https://github.com/TJZine/LineupDesktop/actions/runs/39548870477) is running at `c767d79d`; Windows release policy passed, and Debug/Release engine jobs are active. No engine-suite pass observed yet. | Execute Debug and Release `common_cpp_unittests` and `flutter_windows_unittests` against both patches, require all 12 named recovery cases, attribute other failures against same-mode DC-only output, and verify intended app/package. No configured-job or portable-fixture result closes V-02. [Engine instructions](../tool/flutter_engine/README.md). |
 | V-03 | Windows native lifecycle, physical media and exact package | Later recorded CI run [39383128215](https://github.com/TJZine/LineupDesktop/actions/runs/39383128215) passed stock Windows build and eight explicit CTests: encoder, playback state, core, codec, display dynamic range, guardian, player contract and authenticated reference. Earlier L2 Windows auth/package gates also passed at their recorded identities. | `runner_lifecycle` is still outside current CI and lacks recorded execution here. Run it with its actual patched-engine prerequisites. Physical playback/parts/EOF, HDR/restoration, tracks, input, monitor/DPI and clean-system package remain distinct. Revalidate changed inputs; do not repeat all earlier tests solely because an old handoff says pending. [Development tiers](DEVELOPMENT.md#current-test-tiers-and-gaps), [physical/package procedure](windows-native-validation.md). |
-| V-04 | macOS real-app reliability beyond recorded scenarios | Historical actual Plex playback, tracks, timer expiry, recovery, natural rollovers and bounded native focus/seek/quit observations exist. The October 21 candidate at `ddefaa4e` is built and artifact-verified; no launch or playback observation has been made on it. Accepted H1 HDR/L1 seek evidence and L2 real-coordinator/auth cases retain their exact sources. | Sustained audio/rollover, true live resize/minimum size, minimize/restore, multi-display/Spaces/Stage Manager and sleep/wake coverage on the selected final candidate; exact remaining physical steps stay in the existing checklist. No new claim follows from automated AX actions. |
+| V-04 | macOS real-app reliability beyond recorded scenarios | Historical actual Plex playback, tracks, timer expiry, recovery, natural rollovers and bounded native focus/seek/quit observations exist. The October 21 candidate at `ddefaa4e` is built and artifact-verified. It was started with maintainer availability approved; the loaded Flutter engine was independently matched to the bundled SHA-256. UI/playback observation is blocked by Computer Use ScreenCaptureKit error -3811; no live-route pass is inferred. Accepted H1 HDR/L1 seek evidence and L2 real-coordinator/auth cases retain their exact sources. | Sustained audio/rollover, true live resize/minimum size, minimize/restore, multi-display/Spaces/Stage Manager and sleep/wake coverage on the selected final candidate; exact remaining physical steps stay in the existing checklist. No new claim follows from automated AX actions. |
 | V-05 | Real Plex scope, catalog and recovery edge cases | Pagination/parser/currentness tests; real macOS scan and selected local playback flows; authenticated synthetic reference matrices. | On candidate `ddefaa4e`, observe the approved local PMS owner/available Home profiles, saved-lineup restore, scan/retry/cancel, current catalog selection, authorized playback and shutdown. Protected-profile/server failures and 401/403 retain deterministic evidence. Remote/relay, alternate PMS shapes, large/partial catalogs, smart collections and live membership/portrait probes are documented beta limitations. Do not alter accounts/servers or credentials to manufacture a case. [October 10 Windows procedures](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md), [collection plan](osd-autohide-and-collection-membership-plan.md), [Player/Guide plan](player-guide-polish-plan.md). |
-| V-06 | macOS declared minimum version | App/runtime target macOS 12 arm64; actual recorded host is macOS 27. | Runtime, TLS/CA, Keychain, presentation and app launch on the older versions actually promised, or explicit agreement to narrow the support range. The maintainer allowed a VM route starting with macOS 12 and stepping up on failure; approval for VM installation and the image download is pending. No VM/image has been installed/downloaded. Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
-| V-07 | Existing physical/spoken acceptance | Automated semantics/native evidence is recorded separately. | User explicitly deferred the **one existing six-item checklist** on October 20. All boxes remain unchecked. Do not start synthetic VoiceOver/modifier work or infer passes from unlock/authentication assistance. [Checklist](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist). Windows Narrator/physical checks retain their separate platform scope. |
+| V-06 | macOS declared minimum version | App/runtime target macOS 12 arm64; actual recorded host is macOS 27. | Runtime, TLS/CA, Keychain, presentation and app launch on the older versions actually promised, or explicit agreement to narrow the support range. The maintainer allowed a VM route starting with macOS 12 and stepping up on failure; the maintainer approved installing UTM and downloading the macOS 12 image. Official UTM 5.0.8 is installed with matching release checksum and valid deep signature; Apple CDN macOS 12.6 (21G115) IPSW is downloaded and checksum-verified. The standalone compatibility helper was inconclusive because it lacks the virtualization entitlement; use UTM’s existing entitlement for the actual image check. Guest installation and runtime checks remain unexecuted. Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
+| V-07 | Existing physical/spoken acceptance | Automated semantics/native evidence is recorded separately. | User explicitly deferred the **one existing six-item checklist** on October 20, then confirmed readiness on October 21 and requested maximum autonomous work. Actual physical/listening results remain pending and all boxes remain unchecked. Do not start synthetic VoiceOver/modifier work or infer passes from unlock/authentication assistance. [Checklist](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist). Windows Narrator/physical checks retain their separate platform scope. |
 
 ## Investigations and unresolved observations
 
@@ -206,14 +206,43 @@ These artifacts are prepared locally; none has been sent or published.
 | Candidate ZIP | `2c8ee209c49d714d808f873c1d6a921882cbfc2c529f0764a70f1a8a5d4fcda3` |
 | Source-companion manifest | `a10d6416e46d63f4ffd31edebaf08c2dd01742cc1377eb53ab6e08f377e6baa3` |
 
-**Not accepted.** Loaded-engine observation, maintainer-present launch/quit,
-selected V-04/V-05 live routes, running Licenses navigation/playback continuity,
-V-06 and the V-07 checklist-versus-limited-candidate decision remain open. The
+**Not accepted.** The controller started the candidate after the maintainer
+confirmed availability. `lsof` identified the loaded Flutter image inside the
+durable candidate bundle; its SHA-256 matches the bundled engine value above.
+No running-app route has been observed: Computer Use failed to capture the display
+with ScreenCaptureKit error -3811 on two attempts. Candidate process/log evidence
+is private under the sibling `candidate-live/` job directory. No Keychain
+credential was entered and no shutdown result has been claimed.
+
+Selected V-04/V-05 live routes, running Licenses navigation/playback continuity,
+graceful quit, V-06 and actual V-07 human results remain open. The
 existing six-item human checklist owns physical/spoken acceptance; zero boxes
 are inferred from these results. Windows combined Debug/Release engine and
 package jobs remain active at `c767d79d`; their actual engine suites and package
 controls have not completed. No push is permitted while they run. Later
 prose-only commits do not change this candidate's source/artifact identity.
+
+V-06 preparation (controller, October 21): after the maintainer's explicit UTM/
+image approval, disk inspection showed 224 GiB free. UTM 5.0.8/build 128 was
+installed at `~/Applications/UTM.app` from the
+[official release](https://github.com/utmapp/UTM/releases/tag/v5.0.8), with DMG
+SHA-256 `7b2d7b2e2a02b3de1757ef19a8f36573e6d9cceae8c8cca0abcbcaa4a852019a`
+matching GitHub's release asset and deep strict app signature verification passing.
+The macOS 12.6/build 21G115 restore image was downloaded from Apple's CDN; size
+14,081,739,387 bytes and indexed SHA-1 match, locally recorded SHA-256
+`5113f8d3c77fd725ea6357ced5764bc57183d2d388492c58c46ff2729d0658e5`.
+Download/source metadata and detached inspection logs remain private under
+`~/.cache/lineup-stabilization/2026-10-21/v06-vm/`. The older image's third-party
+index marks it unsigned; successful download is not an installation/compatibility
+pass. The standalone read-only Apple Virtualization helper returned image-load
+error 10004; the API requires `com.apple.security.virtualization`, which the
+helper lacks. That result is inconclusive about the image or OS support. Use
+UTM’s existing signed entitlement for the next check; no helper/application
+entitlements were added or changed. UTM’s CLI exposes no guest-create command,
+and the current display-capture failure blocks the setup UI. Guest creation
+therefore remains unexecuted. No existing application/engine pair, stock SDK cache, host security
+setting, entitlement, or credential has been changed. No VM runtime support
+floor is established by this preparation.
 
 H's PowerShell pin assertion was source-only in its original code-quality campaign;
 later Windows policy/CI evidence exists. Do not perpetually label all PowerShell
