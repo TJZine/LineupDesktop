@@ -465,3 +465,9 @@ Controller rebuilt the existing portable native targets in a fresh output and
 all three CTests passed (encoder, playback state, player core contract). Independent
 read-only review is in progress. These fake-libmpv contracts establish default-off
 silence, bounded privacy and event behavior, not the live source-open cause.
+
+V-04 diagnostic integration: independent repository reviewer (gpt-6.1-sol, high)
+inspected the exact four returned file hashes and found no material actionable
+defect. Controller rebuilt from those sources and all three native CTests passed.
+The default-off bounded stderr probe is integrated for a separate diagnostic
+build; its categories remain hints and successful live playback is still pending.

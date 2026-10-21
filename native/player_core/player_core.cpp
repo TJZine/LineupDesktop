@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
 #include <exception>
 #include <iostream>
 #include <iomanip>
@@ -224,6 +225,111 @@ std::optional<ClassifiedFailure> ClassifyMpvFailure(
   return std::nullopt;
 }
 
+// This probe has no string-valued output interface. Raw mpv messages only
+// select finite enums; URI/header/path-bearing text can never reach the sink.
+enum class ProbeModule { core, curl, ffmpeg, demux, stream, audio_output, video_output, unknown };
+enum class ProbeCause {
+  accepted, opening, ready, end_error, end_error_unknown, end_stopped,
+  end_eof, end_other, playlist_redirect, stop_accepted,
+  dns, connect, tls, redirect_limit, range, container, http, timeout, unknown,
+};
+
+const char* ProbeName(ProbeModule module) {
+  switch (module) {
+    case ProbeModule::core: return "core";
+    case ProbeModule::curl: return "curl";
+    case ProbeModule::ffmpeg: return "ffmpeg";
+    case ProbeModule::demux: return "demux";
+    case ProbeModule::stream: return "stream";
+    case ProbeModule::audio_output: return "audio_output";
+    case ProbeModule::video_output: return "video_output";
+    case ProbeModule::unknown: return "unknown";
+  }
+  return "unknown";
+}
+
+const char* ProbeName(ProbeCause cause) {
+  switch (cause) {
+    case ProbeCause::accepted: return "accepted";
+    case ProbeCause::opening: return "opening";
+    case ProbeCause::ready: return "ready";
+    case ProbeCause::end_error: return "end_error";
+    case ProbeCause::end_error_unknown: return "end_error_unknown";
+    case ProbeCause::end_stopped: return "end_stopped";
+    case ProbeCause::end_eof: return "end_eof";
+    case ProbeCause::end_other: return "end_other";
+    case ProbeCause::playlist_redirect: return "playlist_redirect";
+    case ProbeCause::stop_accepted: return "stop_accepted";
+    case ProbeCause::dns: return "dns";
+    case ProbeCause::connect: return "connect";
+    case ProbeCause::tls: return "tls";
+    case ProbeCause::redirect_limit: return "redirect_limit";
+    case ProbeCause::range: return "range";
+    case ProbeCause::container: return "container";
+    case ProbeCause::http: return "http";
+    case ProbeCause::timeout: return "timeout";
+    case ProbeCause::unknown: return "unknown";
+  }
+  return "unknown";
+}
+
+ProbeModule ProbeModuleFor(std::string_view prefix) {
+  if (prefix == "curl" || prefix == "stream/curl") return ProbeModule::curl;
+  if (prefix == "ffmpeg" || prefix == "ffmpeg/demuxer" ||
+      prefix == "ffmpeg/video" || prefix == "ffmpeg/audio") return ProbeModule::ffmpeg;
+  if (prefix == "demux" || prefix == "demuxer") return ProbeModule::demux;
+  if (prefix == "stream") return ProbeModule::stream;
+  if (prefix == "ao/coreaudio" || prefix == "ao") return ProbeModule::audio_output;
+  if (prefix == "vo/gpu-next" || prefix == "vo") return ProbeModule::video_output;
+  return ProbeModule::unknown;
+}
+
+ProbeCause ProbeCauseFor(const std::string& text) {
+  const auto has = [&](const char* phrase) { return text.find(phrase) != std::string::npos; };
+  if (ParseHttpErrorStatus(text)) return ProbeCause::http;
+  if (has("could not resolve") || has("couldn't resolve") || has("failed to resolve") ||
+      has("name or service not known")) return ProbeCause::dns;
+  if (has("could not connect") || has("failed to connect") || has("connection refused") ||
+      has("network is unreachable")) return ProbeCause::connect;
+  if (has("tls error") || has("tls handshake") || has("certificate verification") ||
+      has("certificate verify") || has("ssl connect error") || has("ssl handshake")) return ProbeCause::tls;
+  if (has("too many redirects") || has("maximum redirects") ||
+      has("number of redirects hit") || has("redirect limit")) return ProbeCause::redirect_limit;
+  if (has("range request") || has("requested range") || has("range not satisfiable") ||
+      has("unexpected reply with offset")) return ProbeCause::range;
+  if (has("demuxer") || has("invalid data found") ||
+      has("failed to recognize file format")) return ProbeCause::container;
+  if (has("timed out") || has("timeout")) return ProbeCause::timeout;
+  return ProbeCause::unknown;
+}
+
+bool ProbeErrorInRange(int error) { return error >= -128 && error <= 0; }
+
+void WriteFirstOpenProbe(ProbeModule module, ProbeCause cause,
+                         std::optional<int> error = std::nullopt,
+                         std::optional<int64_t> http = std::nullopt) {
+  std::ostringstream line;
+  line << "[lineup-first-open] module=" << ProbeName(module) << " cause=" << ProbeName(cause);
+  if (error && ProbeErrorInRange(*error)) line << " mpv_error=" << *error;
+  if (http && *http >= 100 && *http <= 599) line << " http_status=" << *http;
+  line << '\n';
+  std::cerr << line.str();
+}
+
+bool FirstOpenProbeEnabled() {
+#ifdef _WIN32
+  char* value = nullptr;
+  size_t size = 0;
+  if (_dupenv_s(&value, &size, "LINEUP_FIRST_OPEN_DIAGNOSTICS") != 0) return false;
+  const bool enabled = value && std::strcmp(value, "1") == 0;
+  std::free(value);
+  return enabled;
+#else
+  const auto* value = std::getenv("LINEUP_FIRST_OPEN_DIAGNOSTICS");
+  return value && std::strcmp(value, "1") == 0;
+#endif
+}
+
 // Wipes a converted token argument when the call returns, on every path. The
 // platform codec's own decoded copy is outside the core's control.
 class TokenArgumentScrubber {
@@ -295,7 +401,8 @@ void PlayerCore::PlexHeader::Clear() noexcept {
 }
 
 PlayerCore::PlayerCore(MpvOperations mpv_operations, CoreHost& host)
-    : mpv_operations_(mpv_operations), host_(host) {}
+    : mpv_operations_(mpv_operations), host_(host),
+      first_open_diagnostics_(FirstOpenProbeEnabled()) {}
 
 PlayerCore::~PlayerCore() {
   Shutdown();
@@ -498,6 +605,7 @@ void PlayerCore::FinishDispose() {
     wakeup_posted_ = false;
   }
   playback_.Reset();
+  first_open_probe_ = {};
   ResetSeekObservation();
 }
 
@@ -702,6 +810,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
   std::visit([&](auto& payload) {
     using Payload = std::decay_t<decltype(payload)>;
     if constexpr (std::is_same_v<Payload, LoadCommand>) {
+      if (first_open_diagnostics_) first_open_probe_ = {};
       ResetSeekObservation();
       int paused = payload.start_paused ? 1 : 0;
       status =
@@ -772,11 +881,17 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
                 FailureStateEvent("correlation_error", std::nullopt,
                                   payload.load_id,
                                   "Playback correlation exceeded native limits"));
-          } else if (payload.start_seconds) {
-            seek_observation_ = SeekObservation{
-                payload.load_id, *payload.start_seconds, SeekMode::keyframes,
-                SeekObservationPhase::load_start,
-                std::chrono::steady_clock::now() + std::chrono::seconds(10)};
+          } else {
+            if (first_open_diagnostics_) {
+              first_open_probe_ = FirstOpenProbe{payload.load_id};
+              WriteFirstOpenProbe(ProbeModule::core, ProbeCause::accepted);
+            }
+            if (payload.start_seconds) {
+              seek_observation_ = SeekObservation{
+                  payload.load_id, *payload.start_seconds, SeekMode::keyframes,
+                  SeekObservationPhase::load_start,
+                  std::chrono::steady_clock::now() + std::chrono::seconds(10)};
+            }
           }
         }
       }
@@ -819,6 +934,13 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
         QueueStopResult(generation, payload.stop_id, false);
       } else {
         playback_.AcceptStop(payload.stop_id);
+        if (first_open_diagnostics_ && first_open_probe_.load_id &&
+            (first_open_probe_.load_id == playback_.active_load() ||
+             (first_open_probe_.ended && !playback_.active_load())) &&
+            !first_open_probe_.stop_reported) {
+          first_open_probe_.stop_reported = true;
+          WriteFirstOpenProbe(ProbeModule::core, ProbeCause::stop_accepted);
+        }
       }
       return;
     } else if constexpr (std::is_same_v<Payload, TrackCommand>) {
@@ -982,6 +1104,13 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       const auto* start = static_cast<mpv_event_start_file*>(event.data);
       const auto transition = playback_.StartFile(
           start ? std::optional<int64_t>(start->playlist_entry_id) : std::nullopt);
+      if (first_open_diagnostics_ && first_open_probe_.load_id &&
+          first_open_probe_.load_id == playback_.event_load() &&
+          first_open_probe_.load_id == playback_.active_load() &&
+          !first_open_probe_.opening && !first_open_probe_.ended) {
+        first_open_probe_.opening = true;
+        WriteFirstOpenProbe(ProbeModule::core, ProbeCause::opening);
+      }
       if (seek_observation_) {
         if (seek_observation_->phase == SeekObservationPhase::load_start) {
           if (playback_.event_load() == seek_observation_->load_id &&
@@ -1004,6 +1133,13 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       break;
     }
     case MPV_EVENT_FILE_LOADED: {
+      if (first_open_diagnostics_ && first_open_probe_.load_id &&
+          first_open_probe_.load_id == playback_.event_load() &&
+          first_open_probe_.load_id == playback_.active_load() &&
+          !first_open_probe_.ready && !first_open_probe_.ended) {
+        first_open_probe_.ready = true;
+        WriteFirstOpenProbe(ProbeModule::core, ProbeCause::ready);
+      }
       int observed_pause = -1;
       if (mpv_operations_.get_property(mpv_, "pause", MPV_FORMAT_FLAG,
                                        &observed_pause) < 0) {
@@ -1022,6 +1158,35 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       const auto* end = static_cast<mpv_event_end_file*>(event.data);
       const auto load_id = playback_.EndFile(
           end ? std::optional<int64_t>(end->playlist_entry_id) : std::nullopt);
+      if (first_open_diagnostics_ && end && first_open_probe_.load_id &&
+          first_open_probe_.load_id == load_id &&
+          load_id == playback_.active_load() &&
+          !first_open_probe_.ended) {
+        if (end->reason == MPV_END_FILE_REASON_REDIRECT) {
+          if (!first_open_probe_.redirect_reported) {
+            first_open_probe_.redirect_reported = true;
+            WriteFirstOpenProbe(ProbeModule::core, ProbeCause::playlist_redirect);
+          }
+        } else {
+          first_open_probe_.ended = true;
+          auto cause = ProbeCause::end_other;
+          if (end->reason == MPV_END_FILE_REASON_STOP) {
+            cause = ProbeCause::end_stopped;
+          } else if (end->reason == MPV_END_FILE_REASON_EOF) {
+            cause = ProbeCause::end_eof;
+          }
+          if (end->reason == MPV_END_FILE_REASON_ERROR) {
+            cause = ProbeErrorInRange(end->error)
+                        ? ProbeCause::end_error
+                        : ProbeCause::end_error_unknown;
+          }
+          const auto& failure = playback_.failure();
+          WriteFirstOpenProbe(
+              ProbeModule::core, cause, end->error,
+              failure && failure->load_id == *load_id ? failure->http_status
+                                                     : std::nullopt);
+        }
+      }
       if (seek_observation_ && seek_observation_->load_id == load_id) {
         seek_observation_.reset();
         seek_observation_ambiguous_ = true;
@@ -1068,6 +1233,17 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
         if (message->log_level != MPV_LOG_LEVEL_ERROR &&
             message->log_level != MPV_LOG_LEVEL_FATAL) {
           break;
+        }
+        if (first_open_diagnostics_ && first_open_probe_.load_id &&
+            first_open_probe_.load_id == playback_.event_load() &&
+            first_open_probe_.load_id == playback_.active_load() &&
+            !first_open_probe_.ended && !first_open_probe_.ready &&
+            !first_open_probe_.stop_reported && first_open_probe_.log_count < 4) {
+          ++first_open_probe_.log_count;
+          const auto prefix = AsciiLower(BoundedUtf8(message->prefix, kMaxMetadataStringBytes));
+          const auto text = AsciiLower(BoundedUtf8(message->text, kMaxMetadataStringBytes));
+          WriteFirstOpenProbe(ProbeModuleFor(prefix), ProbeCauseFor(text), std::nullopt,
+                              ParseHttpErrorStatus(text));
         }
         if (const auto detail = ClassifyMpvFailure(*message)) {
           playback_.RecordFailure(detail->code, detail->http_status);

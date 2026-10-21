@@ -509,6 +509,225 @@ void ParsedLoad(PlayerCore& core, int64_t load_id, std::optional<int64_t> playli
   fake->controlled_load.reset();
 }
 
+// Capture the actual core stderr boundary. Only this one explicit developer
+// variable is varied; no application state or real media/credentials are used.
+class FirstOpenEnvironment {
+ public:
+  explicit FirstOpenEnvironment(const char* value) {
+#ifdef _WIN32
+    char* previous = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&previous, &size, "LINEUP_FIRST_OPEN_DIAGNOSTICS") == 0 && previous) previous_ = previous;
+    std::free(previous);
+#else
+    if (const auto* previous = std::getenv("LINEUP_FIRST_OPEN_DIAGNOSTICS")) previous_ = previous;
+#endif
+    Set(value);
+  }
+  ~FirstOpenEnvironment() { Set(previous_ ? previous_->c_str() : nullptr); }
+ private:
+  static void Set(const char* value) {
+#ifdef _WIN32
+    _putenv_s("LINEUP_FIRST_OPEN_DIAGNOSTICS", value ? value : "");
+#else
+    if (value) setenv("LINEUP_FIRST_OPEN_DIAGNOSTICS", value, 1);
+    else unsetenv("LINEUP_FIRST_OPEN_DIAGNOSTICS");
+#endif
+  }
+  std::optional<std::string> previous_;
+};
+
+void ProbeMessage(PlayerCore& core, const char* module, const char* text,
+                  mpv_log_level level = MPV_LOG_LEVEL_ERROR) {
+  mpv_event_log_message data{module, "error", text, level};
+  mpv_event event{};
+  event.event_id = MPV_EVENT_LOG_MESSAGE;
+  event.data = &data;
+  PlayerCoreTestAccess::Event(core, event);
+}
+
+bool SafeProbeOutput(const std::string& output) {
+  const std::vector<std::string> modules = {
+      "core", "curl", "ffmpeg", "demux", "stream", "audio_output", "video_output", "unknown"};
+  const std::vector<std::string> causes = {
+      "accepted", "opening", "ready", "end_error", "end_error_unknown", "end_stopped",
+      "end_eof", "end_other", "playlist_redirect", "stop_accepted", "dns", "connect",
+      "tls", "redirect_limit", "range", "container", "http", "timeout", "unknown"};
+  std::istringstream lines(output);
+  std::string line;
+  while (std::getline(lines, line)) {
+    std::istringstream fields(line);
+    std::string tag, module, cause;
+    if (!(fields >> tag >> module >> cause) || tag != "[lineup-first-open]" ||
+        module.rfind("module=", 0) != 0 || cause.rfind("cause=", 0) != 0 ||
+        std::find(modules.begin(), modules.end(), module.substr(7)) == modules.end() ||
+        std::find(causes.begin(), causes.end(), cause.substr(6)) == causes.end()) return false;
+    bool saw_error = false, saw_http = false;
+    std::string field;
+    while (fields >> field) {
+      const auto equal = field.find('=');
+      if (equal == std::string::npos) return false;
+      std::istringstream number(field.substr(equal + 1));
+      int64_t value = 0;
+      char extra = 0;
+      if (!(number >> value) || (number >> extra)) return false;
+      const auto key = field.substr(0, equal);
+      if (key == "mpv_error" && !saw_error && !saw_http && value >= -128 && value <= 0) saw_error = true;
+      else if (key == "http_status" && !saw_http && value >= 100 && value <= 599) saw_http = true;
+      else return false;
+    }
+  }
+  return true;
+}
+
+void FirstOpenProbeContract() {
+  FakeMpv local;
+  auto* previous = fake;
+  fake = &local;
+  const auto exercise = [&](const char* enabled) {
+    FirstOpenEnvironment environment(enabled);
+    FakeHost host;
+    PlayerCore core(FakeOperations(), host);
+    OpenWorkerless(core);
+    std::ostringstream log;
+    auto* original = std::cerr.rdbuf(log.rdbuf());
+    ParsedLoad(core, 7001, 8001);
+    Start(core, 8001);
+    ProbeMessage(core, "stream/curl", "Could not resolve host: https://private.invalid/secret X-Plex-Token: SENTINEL");
+    End(core, 8001, MPV_ERROR_LOADING_FAILED);
+    Reply stop;
+    Call(core, "stop", stop, {{"stopId", Value(int64_t{1})}});
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+    Events events;
+    Drain(core, events);
+    std::cerr.rdbuf(original);
+    CloseWorkerless(core);
+    return std::make_pair(log.str(), events.received);
+  };
+  const auto off = exercise(nullptr);
+  const auto invalid = exercise("1-SENTINEL");
+  const auto on = exercise("1");
+  Check(off.first.empty() && invalid.first.empty(), "first-open probe is silent unless exact opt-in is enabled");
+  Check(on.first.find("module=curl cause=dns") != std::string::npos &&
+        on.first.find("cause=end_error mpv_error=-13") != std::string::npos &&
+        on.first.find("cause=stop_accepted") != std::string::npos &&
+        on.first.find("cause=stop_accepted") > on.first.find("cause=end_error"),
+        "first-open preserves original native failure before later stop");
+  Check(SafeProbeOutput(on.first), "probe output contains only contract enums and bounded integers");
+  Check(off.second == on.second && off.second == invalid.second,
+        "probe does not alter playback events/status/correlation");
+  Check(on.first.find("private") == std::string::npos && on.first.find("SENTINEL") == std::string::npos &&
+        on.first.find("X-Plex") == std::string::npos, "probe never forwards synthetic private log text");
+  {
+    FirstOpenEnvironment environment("1");
+    FakeHost host;
+    PlayerCore core(FakeOperations(), host);
+    OpenWorkerless(core);
+    std::ostringstream log;
+    auto* original = std::cerr.rdbuf(log.rdbuf());
+    const auto check = [&](bool condition, const char* obligation) {
+      if (!condition) std::cerr.rdbuf(original);
+      Check(condition, obligation);
+    };
+    struct Case { const char* module; const char* text; const char* expected; };
+    const Case cases[] = {
+      {"stream/curl", "Failed to connect to host", "module=curl cause=connect"},
+      {"curl", "TLS certificate verification failed", "module=curl cause=tls"},
+      {"stream/curl", "Number of redirects hit maximum amount", "module=curl cause=redirect_limit"},
+      {"stream/curl", "Server sent back unexpected reply with offset", "module=curl cause=range"},
+      {"ffmpeg/demuxer", "Invalid data found", "module=ffmpeg cause=container"},
+      {"stream/curl", "HTTP error: 403", "module=curl cause=http http_status=403"},
+      {"curl https://private.invalid/SENTINEL", "Unknown /private/SENTINEL X-Plex-Token: SENTINEL", "module=unknown cause=unknown"},
+      {"unknown", "HTTP error: 4030 SENTINEL", "module=unknown cause=unknown"},
+      {nullptr, nullptr, "module=unknown cause=unknown"},
+    };
+    int64_t id = 9000;
+    for (const auto& item : cases) {
+      log.str(""); log.clear();
+      ++id;
+      ParsedLoad(core, id, id + 1000);
+      Start(core, id + 1000);
+      ProbeMessage(core, item.module, item.text);
+      check(SafeProbeOutput(log.str()), "every category record obeys the strict privacy grammar");
+      check(log.str().find(item.expected) != std::string::npos, "known probe categories use finite allowlisted values");
+      check(log.str().find("SENTINEL") == std::string::npos && log.str().find("private") == std::string::npos,
+            "unknown/malicious module and text cannot leak");
+      if (std::strstr(item.expected, "http_status=403")) {
+        End(core, id + 1000, MPV_ERROR_LOADING_FAILED);
+        check(log.str().find("mpv_error=-13 http_status=403") != std::string::npos,
+              "terminal probe retains safely observed HTTP status and original mpv integer");
+      }
+    }
+    log.str(""); log.clear();
+    ParsedLoad(core, 10001, 11001);
+    Start(core, 11001);
+    for (int i = 0; i < 100; ++i) ProbeMessage(core, "curl", "Could not resolve hostname SENTINEL");
+    const auto bounded = log.str();
+    check(std::count(bounded.begin(), bounded.end(), '\n') == 6, "probe bounds per-load log spam to four error records plus lifecycle markers");
+    End(core, 11001, std::numeric_limits<int>::min());
+    End(core, 11001, MPV_ERROR_LOADING_FAILED);
+    check(log.str().find("cause=end_error_unknown") != std::string::npos &&
+          log.str().find("-2147483648") == std::string::npos,
+          "out-of-range END_FILE integers are omitted, not copied or clamped");
+    const auto ended = log.str();
+    ProbeMessage(core, "curl", "TLS error SENTINEL");
+    check(log.str() == ended, "post-terminal logs are suppressed");
+    ParsedLoad(core, 10002, 11002);
+    const auto accepted = log.str();
+    ProbeMessage(core, "curl", "TLS error SENTINEL");
+    End(core, 11001, MPV_ERROR_LOADING_FAILED);
+    check(log.str() == accepted, "late retired-load error and end do not pollute replacement probe");
+    Start(core, 11002);
+    ProbeMessage(core, "curl", "TLS error SENTINEL");
+    check(log.str().find("module=curl cause=tls") != std::string::npos, "new accepted load resets probe budget");
+    mpv_event loaded{}; loaded.event_id = MPV_EVENT_FILE_LOADED;
+    PlayerCoreTestAccess::Event(core, loaded);
+    const auto ready = log.str();
+    ProbeMessage(core, "curl", "Could not resolve host SENTINEL");
+    check(log.str() == ready && ready.find("cause=ready") != std::string::npos,
+          "first-open probe stops reading error categories after readiness");
+    ParsedLoad(core, 10003, 11003);
+    Start(core, 11003);
+    Reply stop;
+    Call(core, "stop", stop, {{"stopId", Value(int64_t{2})}});
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+    const auto stopped = log.str();
+    ProbeMessage(core, "curl", "TLS error SENTINEL");
+    check(log.str() == stopped, "accepted cancellation suppresses later opening log records");
+    End(core, 11003);
+    const auto final = log.str();
+    check(final.find("cause=end_stopped mpv_error=0") != std::string::npos && SafeProbeOutput(final),
+          "stop-driven end is distinguished from initial native error within the safe grammar");
+    log.str(""); log.clear();
+    ParsedLoad(core, 20001, 21001);
+    Start(core, 21001);
+    Start(core, 21001);
+    for (int i = 0; i < 10; ++i) ProbeMessage(core, "curl", "Could not resolve hostname SENTINEL");
+    mpv_event_end_file redirect{};
+    redirect.playlist_entry_id = 21001;
+    redirect.reason = MPV_END_FILE_REASON_REDIRECT;
+    mpv_event redirect_event{};
+    redirect_event.event_id = MPV_EVENT_END_FILE;
+    redirect_event.data = &redirect;
+    PlayerCoreTestAccess::Event(core, redirect_event);
+    PlayerCoreTestAccess::Event(core, redirect_event);
+    PlayerCoreTestAccess::Event(core, loaded);
+    PlayerCoreTestAccess::Event(core, loaded);
+    End(core, 21001, MPV_ERROR_LOADING_FAILED);
+    End(core, 21001, MPV_ERROR_LOADING_FAILED);
+    Reply cleanup, duplicate_cleanup;
+    Call(core, "stop", cleanup, {{"stopId", Value(int64_t{3})}});
+    Call(core, "stop", duplicate_cleanup, {{"stopId", Value(int64_t{4})}});
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+    const auto maximum = log.str();
+    check(SafeProbeOutput(maximum) && std::count(maximum.begin(), maximum.end(), '\n') == 10,
+          "all repeated lifecycle/log events remain within ten lines per accepted load");
+    std::cerr.rdbuf(original);
+    CloseWorkerless(core);
+  }
+  fake = previous;
+}
+
 void CorrelationAndPressure(PlayerCore& core) {
   Events events;
   OpenWorkerless(core);
@@ -1615,6 +1834,8 @@ void StaleWakeupAfterShutdown() {
 }  // namespace
 
 int main() {
+  FirstOpenEnvironment diagnostic_defaults(nullptr);
+  FirstOpenProbeContract();
   FakeMpv state;
   fake = &state;
   {

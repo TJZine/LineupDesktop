@@ -239,6 +239,19 @@ class PlayerCore {
   std::mutex event_mutex_;
   std::deque<QueuedEvent> events_;
   NativePlaybackState playback_;
+  // Enabled once at construction. All mutable probe state is worker-owned,
+  // beside playback correlation; no extra channel events or raw strings.
+  const bool first_open_diagnostics_;
+  struct FirstOpenProbe {
+    std::optional<int64_t> load_id;
+    uint8_t log_count = 0;
+    bool opening = false;
+    bool ready = false;
+    bool ended = false;
+    bool redirect_reported = false;
+    bool stop_reported = false;
+  };
+  FirstOpenProbe first_open_probe_;
   std::optional<SeekObservation> seek_observation_;
   bool seek_observation_ambiguous_ = false;
   Reply dispose_reply_;
