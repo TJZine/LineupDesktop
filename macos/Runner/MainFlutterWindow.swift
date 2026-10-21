@@ -2,8 +2,13 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
+  private var appChannels: AppChannels?
   private var nativePlayer: LineupNativePlayer?
   private lazy var lifecycle = LineupPlayerLifecycle(player: nativePlayer)
+
+  func openSettings() {
+    appChannels?.openSettings()
+  }
 
   func applicationShouldTerminate(
     after approval: NSApplication.TerminateReply, reply: @escaping (Bool) -> Void
@@ -23,6 +28,10 @@ class MainFlutterWindow: NSWindow {
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
+    // The engine exists now, before the container loads or Dart can request
+    // platform services. Registration must not depend on view-tree discovery
+    // in applicationDidFinishLaunching or a later native Settings action.
+    appChannels = AppChannels(messenger: flutterViewController.engine.binaryMessenger)
     // Both must be clear for the FlutterView to composite over the video.
     flutterViewController.backgroundColor = .clear
     isOpaque = false

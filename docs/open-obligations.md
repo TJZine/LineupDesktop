@@ -562,3 +562,60 @@ and reran successfully. Child default/invalid-opt-in, format and analysis checks
 retain their attribution. The diagnostic remains default-off and has not yet
 observed the live failure stage; it makes no root-cause correction or acceptance
 claim.
+
+R-01/V-02 resumed execution: canonical migration integrated as `bbb45768`;
+finite Licenses probe integrated as `4f2e2429`. Both are pushed to
+`origin/platform/macos`. [CI run 39572081886](https://github.com/TJZine/LineupDesktop/actions/runs/39572081886)
+is executing at exact source `4f2e2429`; no further push is permitted while its
+engine jobs run. Initial snapshot: Verify Dart and Windows release policy passed;
+combined Debug, Release and app/package jobs are running. This is execution in
+progress, not a Windows engine pass. Fresh Mac engine build is detached in the
+isolated fixture root, starting with 166.7 GiB free, using the approved canonical
+manifest and unchanged original Mac patch bytes. Old pairs are preserved.
+
+V-04 follow-up on repaired-engine diagnostic `efb02676`: while the controller
+performed independent VM checks, the native probe recorded natural EOF, stop,
+then a second accepted/opening/ready sequence. Guide identified the next
+scheduled program. Normal Quit then exited with code 0. These are attributed
+diagnostic observations, not audible or final-candidate acceptance.
+
+R-03 live cause discrimination: a separate clean-source stock-engine diagnostic
+at `4f2e2429` passed deep strict signature and source/hash checks; pinned stock
+pub-get ran after its build. The loaded stock engine matched the recorded
+diagnostic hash. Before any native Settings action, the in-app Licenses route
+failed with the single finite Dart category `missing_plugin` and no native
+resource failure record. In that same process, invoking macOS app-menu Settings
+and reopening Licenses made the native component/file lists and curl COPYING
+text load. Source discovery currently traverses the Flutter view tree once at
+launch, before container children are guaranteed ready, then retries from native
+Settings. The repository worker is repairing registration at the window's
+explicit Flutter-engine initialization point; no filesystem fallback or
+permission change is justified. Cold in-app first-open proof remains required.
+
+V-06 lower-target native compilation (repository worker, gpt-6.1-sol, medium):
+the official locked objective_c 9.6.2 archive matched its original lock SHA-256
+before extraction; all 204 published files match the installed cache. All eight
+required unchanged C/ObjC sources compiled and linked for arm64 macOS 12 with
+both unguarded-availability warning classes treated as errors, using existing
+clang/SDK. The real output declares minimum OS 12 and matches the original
+helper's 188 exported and 73 undefined symbol names plus dependency set. This
+is compilation/interface evidence only: no app binary was replaced, no signing
+or cache patch occurred, and guest runtime behavior is still required after a
+repository-owned hook correction.
+
+R-03/V-06 registration correction is ready for integration: repository worker
+(gpt-6.1-sol, medium) moved both app channels into a small window-owned owner
+created from the exact Flutter engine messenger before container loading.
+AppDelegate only forwards native Settings; discovery and late registration are
+removed. Controller inspected all four matching source hashes, passed project
+plist lint and arm64 macOS-12 Swift typechecking against pinned Flutter headers.
+Independent reviewer (gpt-6.1-sol, high) verified pinned engine handler lifetime,
+window ownership and unchanged menu/resource/quit behavior, with no material
+findings. Actual fixed cold in-app first-open and repeated native Settings/quit
+remain required on an identified build.
+
+R-03 source-material refresh `a6b6aef2` includes the canonical verifier's
+DirectComposition and Windows fixture authority inputs and refreshes readable
+recipe assets after R-01. Controller passed all eight existing Python source
+material tests plus exact generated-asset freshness. The full source companion
+still needs regeneration/binding for the final canonical candidate.

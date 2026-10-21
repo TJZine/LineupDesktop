@@ -46,6 +46,7 @@
 		5A1E0C00000000000D00F004 /* LineupPlayerLifecycle.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00F002 /* LineupPlayerLifecycle.mm */; };
 		5A1E0C00000000000D00F006 /* NativeShutdownTests.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00F005 /* NativeShutdownTests.mm */; };
 		5A1E0C00000000000D010002 /* LicenseResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D010001 /* LicenseResources.swift */; };
+		5A1E0C00000000000D011002 /* AppChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D011001 /* AppChannels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,6 +115,7 @@
 		5A1E0C00000000000D00F002 /* LineupPlayerLifecycle.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = LineupPlayerLifecycle.mm; sourceTree = "<group>"; };
 		5A1E0C00000000000D00F005 /* NativeShutdownTests.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NativeShutdownTests.mm; sourceTree = "<group>"; };
 		5A1E0C00000000000D010001 /* LicenseResources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseResources.swift; sourceTree = "<group>"; };
+		5A1E0C00000000000D011001 /* AppChannels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppChannels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -206,6 +208,7 @@
 			children = (
 				33CC10F02044A3C60003C045 /* AppDelegate.swift */,
 				5A1E0C00000000000D010001 /* LicenseResources.swift */,
+				5A1E0C00000000000D011001 /* AppChannels.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				5A1E0C00000000000D00D007 /* Runner-Bridging-Header.h */,
 				5A1E0C00000000000D00D01B /* NativePlayer */,
@@ -495,6 +498,7 @@
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				5A1E0C00000000000D010002 /* LicenseResources.swift in Sources */,
+				5A1E0C00000000000D011002 /* AppChannels.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
