@@ -68,3 +68,28 @@ receipt determines the actual selection. The Windows DirectComposition patch
 does not apply to macOS. Dependency tools and SDKs have their own availability
 and notices. Full source/patch delivery and this screen do not establish legal,
 App Store, patent, trademark or signed-distribution approval.
+
+Objective-C native asset
+
+Lineup uses the complete published objective_c 9.6.2 source under
+third_party/objective_c with a local build-hook correction, selected by the root
+path override. VENDOR.md, UPSTREAM.json and LOCAL.patch identify the exact
+baseline and local delta. Generated/native runtime sources and license bytes
+remain unchanged. Root hooks.user_defines.objective_c.macos_target_version=12
+is typed configuration; tool/macos/native_assets.py binds it to the Xcode target.
+Both compile and link use that target, with separate output directories per
+selected macOS target. No SDK or Pub cache patch is needed.
+
+Use tool/macos/build_app.dart for stock or repaired-engine builds. After Flutter
+succeeds it checks every bundled Mach-O slice and non-system library dependency,
+requires the declared objective_c asset and current local hook proof, and rejects
+newer minimum OS versions, wrong platforms, missing architecture coverage or
+changed inputs. The repaired-engine recipe retains this nativeAssets map; stock
+builds retain a local native-assets report. No binary metadata rewriting or
+postbuild replacement is part of this flow. The complete vendor tree and manifest
+are included in the exact Lineup Git source snapshot; readable recipe materials
+include the small vendor record, delta, hook, config and gate.
+
+A successful build/gate is not tested OS support. macOS 12.6 startup, application
+support directory restoration, notices and shutdown still need the actual new
+candidate in the guest. Existing signing and source-delivery requirements remain.

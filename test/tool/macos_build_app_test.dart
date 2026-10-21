@@ -146,6 +146,13 @@ void main() {
       final script = File('${repository.path}/tool/macos/build_app.dart');
       await script.parent.create(recursive: true);
       await source.copy(script.path);
+      await File('${repository.path}/tool/macos/native_assets.py')
+          .writeAsString('''import json,os,sys
+if os.environ.get('LINEUP_NATIVE_ASSET_FAIL') == sys.argv[1]:
+    sys.stderr.write('controlled native asset rejection')
+    sys.exit(1)
+print(json.dumps({'verifiedNativeAsset': sys.argv[1]}))
+''');
       await File('${repository.path}/pubspec.yaml')
           .writeAsString('version: 9.8.7+65\n');
       for (final arguments in [
@@ -197,11 +204,15 @@ void main(List<String> arguments) {
     Future<ProcessResult> run({
       int flutterExit = 0,
       List<String> options = const ['build', '--release'],
+      String? nativeFailure,
     }) {
       final environment = Map<String, String>.from(Platform.environment);
       final pathKey = environment.keys.firstWhere(
         (key) => key.toLowerCase() == 'path',
       );
+      if (nativeFailure != null) {
+        environment['LINEUP_NATIVE_ASSET_FAIL'] = nativeFailure;
+      }
       environment[pathKey] =
           '${repository.path}${Platform.isWindows ? ';' : ':'}'
           '${environment[pathKey]}';
@@ -262,6 +273,88 @@ print(json.dumps({'kind': 'verified-local-desktop-accessibility', 'engineSource'
       ]);
       expect(result.exitCode, 0, reason: '${result.stderr}');
     }
+
+    test(
+      'stock builds fail closed on native input or final-bundle rejection',
+      () async {
+        for (final action in ['inputs', 'verify']) {
+          final result = await run(nativeFailure: action);
+          expect(result.exitCode, 1);
+          expect(result.stderr, contains('controlled native asset rejection'));
+        }
+      },
+      skip: Platform.isWindows,
+    );
+
+    test('stock config-only follows the final flag and invalidates stale reports', () async {
+      final report = File(
+        '${repository.path}/build/macos/Build/Products/Release/Lineup Desktop.app.native-assets.json',
+      );
+      await report.parent.create(recursive: true);
+      expect((await run()).exitCode, 0);
+      final record =
+          jsonDecode(await report.readAsString()) as Map<String, dynamic>;
+      expect(record['nativeAssets'], {'verifiedNativeAsset': 'verify'});
+      expect(record['runtimeAcceptance'], 'not observed');
+      for (final flags in [
+        ['--config-only', '--no-config-only'],
+        ['--no-config-only'],
+        ['--no-config-only', '--config-only', '--no-config-only'],
+        ['--config-only', '--config-only', '--no-config-only'],
+      ]) {
+        await report.writeAsString('old report');
+        final rejected = await run(
+          nativeFailure: 'verify',
+          options: ['build', '--release', ...flags],
+        );
+        expect(rejected.exitCode, 1, reason: '$flags');
+        expect(await report.exists(), false, reason: '$flags');
+      }
+      for (final flags in [
+        ['--config-only'],
+        ['--config-only', '--config-only'],
+        ['--no-config-only', '--config-only'],
+        ['--config-only', '--no-config-only', '--config-only'],
+      ]) {
+        await report.writeAsString('previous actual build');
+        final informational = await run(
+          nativeFailure: 'inputs',
+          options: ['build', '--release', ...flags],
+        );
+        expect(informational.exitCode, 0, reason: '$flags');
+        expect(
+          await report.readAsString(),
+          'previous actual build',
+          reason: '$flags',
+        );
+      }
+    }, skip: Platform.isWindows);
+
+    test(
+      'repaired native asset rejection prevents successful app receipt',
+      () async {
+        await configureEngineFixture();
+        final result = await run(
+          nativeFailure: 'verify',
+          options: [
+            'build',
+            '--debug',
+            '--accessibility-engine-root=${repository.path}/engine',
+            '--accessibility-engine=lineup_ax_debug_arm64',
+          ],
+        );
+        expect(result.exitCode, 1);
+        final requests = jsonDecode(
+          File('${repository.path}/engine-requests.json').readAsStringSync(),
+        ) as List<dynamic>;
+        expect(requests.map((request) => (request as List).first), ['verify']);
+        expect(
+          File('${repository.path}/recipe-observed.json').existsSync(),
+          false,
+        );
+      },
+      skip: Platform.isWindows,
+    );
 
     test(
       'actual invocation uses repository metadata and forwards exit status',
@@ -370,6 +463,7 @@ print(json.dumps({'kind': 'verified-local-desktop-accessibility', 'engineSource'
         );
         expect(recipe['flutterExitCode'], 0);
         expect(recipe['mode'], 'debug');
+        expect(recipe['nativeAssets'], {'verifiedNativeAsset': 'verify'});
         expect(
           recipe['appCommit'],
           (invocation.last as String).split('@').last,

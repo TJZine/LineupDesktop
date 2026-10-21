@@ -1,0 +1,229 @@
+--- a/hook/build.dart
++++ b/hook/build.dart
+@@ -2,6 +2,7 @@
+ // for details. All rights reserved. Use of this source code is governed by a
+ // BSD-style license that can be found in the LICENSE file.
+ 
++import 'dart:convert';
+ import 'dart:io';
+ 
+ import 'package:code_assets/code_assets.dart';
+@@ -38,7 +39,14 @@
+     }
+ 
+     final packageName = input.packageName;
+-    final assetPath = input.outputDirectory.resolve(assetName);
++    final minVersion = minOSVersion(
++      codeConfig,
++      macosTargetVersion: input.userDefines['macos_target_version'],
++    );
++    final outputDirectory = os == OS.macOS
++        ? input.outputDirectory.resolve('macos-${minVersion.split('=').last}/')
++        : input.outputDirectory;
++    final assetPath = outputDirectory.resolve(assetName);
+     final srcDir = Directory.fromUri(input.packageRoot.resolve('src/'));
+     final target = toTargetTriple(codeConfig);
+ 
+@@ -63,7 +71,6 @@
+     }
+ 
+     final sysroot = sdkPath(codeConfig);
+-    final minVersion = minOSVersion(codeConfig);
+ 
+     final cFlags = <String>[
+       '-isysroot',
+@@ -75,7 +82,36 @@
+     final mFlags = [...cFlags, ...objCFlags];
+     final linkFlags = cFlags;
+ 
+-    final builder = await Builder.create(input, input.packageRoot.toFilePath());
++    final builder = await Builder.create(
++      input,
++      input.packageRoot.toFilePath(),
++      outputDirectory,
++    );
++
++    // Hash selected inputs before compiling, and require them to stay unchanged.
++    // The receipt retains these producing-time identities across hook cache hits.
++    final sources = <Uri>[
++      input.packageRoot.resolve('hook/build.dart'),
++      input.packageRoot.resolve('pubspec.yaml'),
++      ...[...cFiles, ...mFiles, ...hFiles].map(Uri.file),
++    ]..sort((a, b) => a.toString().compareTo(b.toString()));
++    final compiler = os == OS.macOS
++        ? await resolvedCompiler(builder._compiler)
++        : builder._compiler;
++    final workspacePubspec = os == OS.macOS
++        ? input.userDefines
++              .baseUri(['macos_target_version'])
++              ?.resolve('pubspec.yaml')
++        : null;
++    Future<Map<String, Object>> snapshot() => producingInputs(
++      sources,
++      input.packageRoot,
++      compiler,
++      sysroot,
++      input.json,
++      workspacePubspec,
++    );
++    final producing = os == OS.macOS ? await snapshot() : null;
+ 
+     final objectFiles = await Future.wait(<Future<String>>[
+       for (final src in cFiles) builder.buildObject(src, cFlags),
+@@ -83,6 +119,33 @@
+     ]);
+     await builder.linkLib(objectFiles, assetPath.toFilePath(), linkFlags);
+ 
++    if (os == OS.macOS) {
++      if (jsonEncode(producing) != jsonEncode(await snapshot())) {
++        throw StateError('objective_c inputs changed during compilation.');
++      }
++      if (workspacePubspec != null) output.dependencies.add(workspacePubspec);
++      output.dependencies.add(Uri.file(compiler));
++      output.dependencies.add(Uri.file('$sysroot/SDKSettings.json'));
++      await File.fromUri(
++        outputDirectory.resolve('lineup-objective-c-build.json'),
++      ).writeAsString(
++        jsonEncode({
++          'schemaVersion': 2,
++          'assetId': 'package:objective_c/objective_c.dylib',
++          'packageRoot': input.packageRoot.toFilePath(),
++          'architecture': codeConfig.targetArchitecture.toString(),
++          'compileFlags': cFlags,
++          'linkFlags': linkFlags,
++          'compiler': compiler,
++          'sdk': sysroot,
++          'producingInputs': producing,
++          'asset': assetPath.toFilePath(),
++          'rawAssetSha256': await sha256File(assetPath),
++        }),
++      );
++    }
++    output.dependencies.add(input.packageRoot.resolve('hook/build.dart'));
++    output.dependencies.add(input.packageRoot.resolve('pubspec.yaml'));
+     output.dependencies.addAll(cFiles.map(Uri.file));
+     output.dependencies.addAll(mFiles.map(Uri.file));
+     output.dependencies.addAll(hFiles.map(Uri.file));
+@@ -98,17 +161,64 @@
+   });
+ }
+ 
++Future<String> resolvedCompiler(String compiler) async {
++  if (compiler.startsWith('/')) return File(compiler).resolveSymbolicLinks();
++  final result = await Process.run('/usr/bin/which', [compiler]);
++  if (result.exitCode != 0) {
++    throw StateError('Cannot resolve compiler $compiler');
++  }
++  return File((result.stdout as String).trim()).resolveSymbolicLinks();
++}
++
++Future<String> sha256File(Uri file) async {
++  final result = await Process.run('/usr/bin/shasum', [
++    '-a',
++    '256',
++    '--',
++    file.toFilePath(),
++  ]);
++  final digest = (result.stdout as String).split(' ').first;
++  if (result.exitCode != 0 || !RegExp(r'^[a-f0-9]{64}$').hasMatch(digest)) {
++    throw StateError('Cannot hash build input ${file.toFilePath()}');
++  }
++  return digest;
++}
++
++Future<Map<String, Object>> producingInputs(
++  List<Uri> sources,
++  Uri packageRoot,
++  String compiler,
++  String sdk,
++  Map<String, Object?> configuration,
++  Uri? workspacePubspec,
++) async => {
++  'configuration': configuration,
++  if (workspacePubspec != null)
++    'workspacePubspecSha256': await sha256File(workspacePubspec),
++  'sources': {
++    for (final file in sources)
++      file.toFilePath().substring(packageRoot.toFilePath().length):
++          await sha256File(file),
++  },
++  'compilerSha256': await sha256File(Uri.file(compiler)),
++  'sdkSettingsSha256': await sha256File(Uri.file('$sdk/SDKSettings.json')),
++};
++
+ class Builder {
+   final String _compiler;
+   final String _rootDir;
+   final Uri _tempOutDir;
+   Builder._(this._compiler, this._rootDir, this._tempOutDir);
+ 
+-  static Future<Builder> create(BuildInput input, String rootDir) async {
++  static Future<Builder> create(
++    BuildInput input,
++    String rootDir,
++    Uri outputDirectory,
++  ) async {
+     return Builder._(
+       await _findCompiler(input.config.code),
+       rootDir,
+-      input.outputDirectory.resolve('obj/'),
++      outputDirectory.resolve('obj/'),
+     );
+   }
+ 
+@@ -194,13 +304,21 @@
+       .first;
+ }
+ 
+-String minOSVersion(CodeConfig codeConfig) {
++String minOSVersion(CodeConfig codeConfig, {Object? macosTargetVersion}) {
+   if (codeConfig.targetOS == OS.iOS) {
+     final targetVersion = codeConfig.iOS.targetVersion;
+     return '-mios-version-min=$targetVersion';
+   }
+   assert(codeConfig.targetOS == OS.macOS);
+-  final targetVersion = codeConfig.macOS.targetVersion;
++  if (macosTargetVersion != null &&
++      (macosTargetVersion is! int ||
++          macosTargetVersion < 10 ||
++          macosTargetVersion > 99)) {
++    throw const FormatException(
++      'macos_target_version must be an integer from 10 to 99.',
++    );
++  }
++  final targetVersion = macosTargetVersion ?? codeConfig.macOS.targetVersion;
+   return '-mmacos-version-min=$targetVersion';
+ }
+ 
+--- a/analysis_options.yaml
++++ b/analysis_options.yaml
+@@ -1,20 +1,15 @@
+-include: package:dart_flutter_team_lints/analysis_options.yaml
++include: ../../analysis_options.yaml
+ 
+ analyzer:
+   exclude:
+-    - build/**
+-    - android/**
+-    - ios/**
+-    - web/**
+-    - windows/**
+-    - macos/**
+-    - linux/**
+-    - example/flutter_app/**
+-    - example/path_provider_example/**
+-  language:
+-    strict-raw-types: true
++    - pubspec.yaml
++    - lib/**
++    - test/**
++    - example/**
++    - benchmark/**
++    - tool/**
+ 
+ linter:
+   rules:
+-    unawaited_futures: true
+-    discarded_futures: true
++    avoid_print: false
++    only_throw_errors: false

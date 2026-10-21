@@ -1,0 +1,34 @@
+name: flutter_app
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  objective_c:
+    path: ../..
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+dependency_overrides:
+  code_assets:
+    path: ../../../code_assets
+  hooks:
+    path: ../../../hooks
+  meta: ^1.19.0
+  native_toolchain_c:
+    path: ../../../native_toolchain_c
+  record_use:
+    path: ../../../record_use
+  objective_c:
+    path: ../..
+
+flutter:
+  uses-material-design: true

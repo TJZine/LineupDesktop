@@ -19,6 +19,15 @@ tool/flutter_engine/0002-desktop-accessibility.patch	tool__flutter_engine__0002-
 tool/flutter_engine/0003-macos-apple-linker.patch	tool__flutter_engine__0003-macos-apple-linker.patch.txt
 tool/flutter_engine/0004-windows-test-fixtures.patch	tool__flutter_engine__0004-windows-test-fixtures.patch.txt
 docs/licenses-and-rebuilding.md	docs__licenses-and-rebuilding.md.txt
+third_party/objective_c/VENDOR.md	third_party__objective_c__VENDOR.md.txt
+third_party/objective_c/LOCAL.patch	third_party__objective_c__LOCAL.patch.txt
+third_party/objective_c/hook/build.dart	third_party__objective_c__hook__build.dart.txt
+third_party/objective_c/analysis_options.yaml	third_party__objective_c__analysis_options.yaml.txt
+pubspec.yaml	pubspec.yaml.txt
+pubspec.lock	pubspec.lock.txt
+analysis_options.yaml	analysis_options.yaml.txt
+tool/format.dart	tool__format.dart.txt
+tool/macos/native_assets.py	tool__macos__native_assets.py.txt
 tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch	tool__macos__mpv-patches__0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch.txt
 tool/macos/ffmpeg-patches/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch	tool__macos__ffmpeg-patches__0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch.txt
 tool/macos/ffmpeg-patches/0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch	tool__macos__ffmpeg-patches__0002-aarch64-do-not-build-GPL-licensed-CRC-assembly.patch.txt

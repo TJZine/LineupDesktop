@@ -160,6 +160,26 @@ Future<Map<String, dynamic>> _engineTool(
   return resultMap;
 }
 
+Future<Map<String, dynamic>> _nativeAssets(
+  Directory repository,
+  String action, {
+  String? app,
+  String? inputs,
+}) async {
+  final result = await Process.run('python3', [
+    '${repository.path}/tool/macos/native_assets.py',
+    action,
+    '--repository',
+    repository.path,
+    if (app != null) ...['--app', app],
+    if (inputs != null) ...['--inputs', inputs],
+  ], workingDirectory: repository.path);
+  if (result.exitCode != 0) {
+    throw FormatException((result.stderr as String).trim());
+  }
+  return jsonDecode(result.stdout as String) as Map<String, dynamic>;
+}
+
 Future<void> main(List<String> arguments) async {
   try {
     final repository = File.fromUri(Platform.script).parent.parent.parent;
@@ -231,6 +251,39 @@ Future<void> main(List<String> arguments) async {
         'is not selected. App source may include local development edits.',
       );
     }
+    // Flutter's negatable flags use the last occurrence (package:args).
+    var configOnly = false;
+    for (final argument in options.flutterArguments.skip(1)) {
+      if (argument == '--') break;
+      if (argument == '--config-only') configOnly = true;
+      if (argument.split('=').first == '--no-config-only') configOnly = false;
+    }
+    final verifyNativeAssets =
+        options.flutterArguments.first == 'build' &&
+        !configOnly &&
+        !options.flutterArguments.any(
+          (value) => value == '--help' || value == '-h' || value == '--version',
+        );
+    if (verifyNativeAssets) {
+      final mode =
+          options.mode ??
+          (options.flutterArguments.contains('--debug')
+              ? 'debug'
+              : options.flutterArguments.contains('--profile')
+              ? 'profile'
+              : 'release');
+      final configuration = '${mode[0].toUpperCase()}${mode.substring(1)}';
+      appPath ??=
+          '${repository.path}/build/macos/Build/Products/'
+          '$configuration/Lineup Desktop.app';
+      if (selectedEngine == null) {
+        final report = File('$appPath.native-assets.json');
+        if (await report.exists()) await report.delete();
+      }
+    }
+    final nativeInputs = verifyNativeAssets
+        ? await _nativeAssets(repository, 'inputs')
+        : null;
     final flutter = await Process.start(
       selectedEngine == null
           ? (Platform.isWindows ? 'flutter.bat' : 'flutter')
@@ -241,6 +294,33 @@ Future<void> main(List<String> arguments) async {
       runInShell: Platform.isWindows,
     );
     exitCode = await flutter.exitCode;
+    Map<String, dynamic>? nativeVerification;
+    if (exitCode == 0 && nativeInputs != null) {
+      final temporary = await Directory.systemTemp.createTemp(
+        'lineup-native-inputs-',
+      );
+      try {
+        final inputs = File('${temporary.path}/inputs.json');
+        await inputs.writeAsString(jsonEncode(nativeInputs));
+        nativeVerification = await _nativeAssets(
+          repository,
+          'verify',
+          app: appPath,
+          inputs: inputs.path,
+        );
+      } finally {
+        await temporary.delete(recursive: true);
+      }
+      if (selectedEngine == null) {
+        await File('$appPath.native-assets.json').writeAsString(
+          jsonEncode({
+            'sourceCommit': (revision.stdout as String).trim(),
+            'nativeAssets': nativeVerification,
+            'runtimeAcceptance': 'not observed',
+          }),
+        );
+      }
+    }
     if (exitCode == 0 && selectedEngine != null) {
       final current = await Process.run('git', [
         '-C',
@@ -265,6 +345,7 @@ Future<void> main(List<String> arguments) async {
             'flutterExitCode': 0,
             'appCommit': (revision.stdout as String).trim(),
             'engine': selectedEngine,
+            'nativeAssets': nativeVerification,
             'entrypoint': 'lib/main.dart',
             'mode': options.mode,
             'flutterArguments': flutterArguments,

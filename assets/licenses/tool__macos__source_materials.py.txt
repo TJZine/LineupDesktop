@@ -36,6 +36,10 @@ HELPERS = [
     'tool/flutter_engine/0003-macos-apple-linker.patch',
     'tool/flutter_engine/0004-windows-test-fixtures.patch',
     'docs/licenses-and-rebuilding.md',
+    'third_party/objective_c/VENDOR.md', 'third_party/objective_c/LOCAL.patch',
+    'third_party/objective_c/hook/build.dart', 'third_party/objective_c/analysis_options.yaml',
+    'pubspec.yaml', 'pubspec.lock', 'analysis_options.yaml', 'tool/format.dart',
+    'tool/macos/native_assets.py',
 ]
 HELPERS += [str(p.relative_to(REPOSITORY)) for directory in ['mpv-patches', 'ffmpeg-patches']
             for p in sorted((REPOSITORY / 'tool/macos' / directory).glob('*.patch'))]

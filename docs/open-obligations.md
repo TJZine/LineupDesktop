@@ -567,11 +567,26 @@ R-01/V-02 resumed execution: canonical migration integrated as `bbb45768`;
 finite Licenses probe integrated as `4f2e2429`. Both are pushed to
 `origin/platform/macos`. [CI run 39572081886](https://github.com/TJZine/LineupDesktop/actions/runs/39572081886)
 is executing at exact source `4f2e2429`; no further push is permitted while its
-engine jobs run. Initial snapshot: Verify Dart and Windows release policy passed;
-combined Debug, Release and app/package jobs are running. This is execution in
-progress, not a Windows engine pass. Fresh Mac engine build is detached in the
-isolated fixture root, starting with 166.7 GiB free, using the approved canonical
-manifest and unchanged original Mac patch bytes. Old pairs are preserved.
+engine jobs run. Controller snapshot after the Mac build: Dart, Windows release
+policy, stock
+Windows player/native, macOS portable/native and shared-core jobs passed;
+Combined Debug completed: controller inspected all retained XML/log hashes and
+normal full-suite execution records. Common passed 242; Windows passed 396,
+with only existing `MockWindow.DISABLED_GetObjectUia` disabled. All twelve
+required recovery cases and six representative diagnostic cases passed, with
+no DC-baseline exclusions. Release and engine/app/package jobs are still
+running; their acceptance remains pending. The fresh canonical Mac Release engine
+completed in the isolated fixture root,
+starting with 166.7 GiB free, using the approved manifest and unchanged original
+Mac patch bytes. Controller independently reran canonical verification and
+matched the job identity exactly: binary SHA-256
+`561618376ec90a1746a764a9b78fc1c4338969cedf9dbeb2dc4a9c8f1886b213`,
+provenance SHA-256
+`88446f7136bbaffdd0c9dbaf826e79c872eb6a431081c928af259ae0b6d940b7`.
+Output is `lineup_ax_release_arm64` under
+`~/.cache/lineup-flutter-ax-fixtures/3.47.7`. This verifies the engine artifact;
+its app candidate is not yet built. Earlier focused Debug/Release recovery tests
+retain their old-root attribution. Old pairs and stock SDK caches are preserved.
 
 V-04 follow-up on repaired-engine diagnostic `efb02676`: while the controller
 performed independent VM checks, the native probe recorded natural EOF, stop,
@@ -586,11 +601,11 @@ diagnostic hash. Before any native Settings action, the in-app Licenses route
 failed with the single finite Dart category `missing_plugin` and no native
 resource failure record. In that same process, invoking macOS app-menu Settings
 and reopening Licenses made the native component/file lists and curl COPYING
-text load. Source discovery currently traverses the Flutter view tree once at
-launch, before container children are guaranteed ready, then retries from native
-Settings. The repository worker is repairing registration at the window's
-explicit Flutter-engine initialization point; no filesystem fallback or
-permission change is justified. Cold in-app first-open proof remains required.
+text load. At that diagnostic revision, source discovery traversed the Flutter
+view tree once at launch, before container children were guaranteed ready, then
+retried from native Settings. The repository worker repaired registration at the window's
+explicit Flutter-engine initialization point (integrated as `5e05ac0b`); no
+filesystem fallback or permission change is justified. Cold in-app first-open proof remains required.
 
 V-06 lower-target native compilation (repository worker, gpt-6.1-sol, medium):
 the official locked objective_c 9.6.2 archive matched its original lock SHA-256
@@ -603,7 +618,7 @@ is compilation/interface evidence only: no app binary was replaced, no signing
 or cache patch occurred, and guest runtime behavior is still required after a
 repository-owned hook correction.
 
-R-03/V-06 registration correction is ready for integration: repository worker
+R-03/V-06 registration correction integrated as `5e05ac0b`: repository worker
 (gpt-6.1-sol, medium) moved both app channels into a small window-owned owner
 created from the exact Flutter engine messenger before container loading.
 AppDelegate only forwards native Settings; discovery and late registration are
@@ -619,3 +634,28 @@ DirectComposition and Windows fixture authority inputs and refreshes readable
 recipe assets after R-01. Controller passed all eight existing Python source
 material tests plus exact generated-asset freshness. The full source companion
 still needs regeneration/binding for the final canonical candidate.
+
+V-06 native-asset correction (repository worker, gpt-6.1-sol, medium): full
+locked objective_c 9.6.2 is vendored; independent reviewer matched all 204
+upstream manifest hashes to the verified published archive. Only its owned hook
+and analysis settings change upstream files. The hook selects macOS 12 for
+compile/link; the build wrapper checks actual Mach-O deployment minima, native
+asset identity, contained dependencies and producing-hook evidence. Parent
+integration checks passed eight Python fixtures and 70 focused Dart tests.
+Independent reviewer (gpt-6.1-sol, high) found two P2 gaps: negated repeated
+config-only flags could bypass the gate, and cached outputs lacked producing-time
+toolchain-byte binding. Controller accepted both findings; the same worker corrected final flag
+precedence and schema-2 producing-time source/config/toolchain/artifact binding.
+Controller matched all 231 returned file hashes and exact write scope, reran
+eight native-asset fixtures, 16 wrapper tests, eight source-material fixtures
+and generated-asset freshness successfully. Independent focused rereview closed both findings and passed its retained
+mutation/restoration control. The controller combined full Dart suite passed all 1,894 tests before
+integration. No app build was started on the dirty tree. The integrated change
+will use the verified canonical engine for a clean identified build. This source work establishes no current-hook
+app build or Monterey runtime pass.
+
+V-06 staged source inspection retains the complete published vendor tree.
+The staged whitespace check reports only five known files: three byte-preserved
+upstream native/generated files and the two exact copies of LOCAL.patch whose
+blank context lines contain the required patch prefix. The check passes for all
+other staged files; upstream bytes and applyable patch context are preserved.
