@@ -126,7 +126,7 @@ class BundleTests(unittest.TestCase):
         workspace.write_text('fixture root configuration')
         inputs = {'toolchain': {'compilerSha256': n.sha(compiler), 'sdkSettingsSha256': n.sha(sdk / 'SDKSettings.json')},
                   'inputs': {'pubspec.yaml': n.sha(workspace), **{n.VENDOR + '/' + name: digest for name, digest in source_hashes.items()}}}
-        configuration = {'user_defines': {'workspace_pubspec': {'defines': {'macos_target_version': 12}, 'base_path': str(repository)}},
+        configuration = {'user_defines': {'workspace_pubspec': {'defines': {'macos_target_version': 12}, 'base_path': str(workspace)}},
                          'package_root': str(vendor), 'package_name': 'objective_c',
                          'config': {'extensions': {'code_assets': {'target_os': 'macos', 'target_architecture': 'arm64'}}}}
 
@@ -139,6 +139,18 @@ class BundleTests(unittest.TestCase):
         with patch.object(n, 'project_inputs', return_value=inputs):
             self.assertIn('arm64', n.verify(repository, self.app, inputs)['hookBuilds'])
             with self.assertRaisesRegex(ValueError, 'inputs changed'): n.verify(repository, self.app, {})
+            # A matching hash alone cannot substitute a different origin file.
+            other = repository / 'other.yaml'
+            other.write_bytes(workspace.read_bytes())
+            origin = configuration['user_defines']['workspace_pubspec']
+            for wrong in (repository, other):
+                origin['base_path'] = str(wrong)
+                receipt_path.write_text(json.dumps(receipt))
+                with self.assertRaisesRegex(ValueError, 'current hook proof'): n.verify(repository, self.app, inputs)
+            origin['base_path'] = str(workspace)
+            receipt_path.write_text(json.dumps(receipt))
+            self.assertIn('arm64', n.verify(repository, self.app, inputs)['hookBuilds'])
+
             for tool in (compiler, sdk / 'SDKSettings.json'):
                 original = tool.read_bytes()
                 tool.write_bytes(original + b' replaced at the same path')
@@ -254,7 +266,7 @@ class HookTests(unittest.TestCase):
                 data = {'assets': {}, 'config': {'build_asset_types': ['code_assets/code'], 'extensions': {'code_assets': code}, 'linking_enabled': True},
                         'out_dir_shared': str(root / 'shared') + '/', 'out_file': str(output), 'package_name': 'objective_c',
                         'package_root': str(package) + '/', 'user_defines': {} if define is None else {
-                            'workspace_pubspec': {'defines': {'macos_target_version': define}, 'base_path': str(root) + '/'}}}
+                            'workspace_pubspec': {'defines': {'macos_target_version': define}, 'base_path': str(root / 'pubspec.yaml')}}}
                 input_path = root / 'input.json'
                 input_path.write_text(json.dumps(data))
                 log = root / 'commands.jsonl'

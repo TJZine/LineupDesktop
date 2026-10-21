@@ -230,7 +230,9 @@ def verify(repository, app, before):
                 producing = receipt['producingInputs']
                 configuration = producing['configuration']
                 require(configuration['user_defines']['workspace_pubspec']['defines']['macos_target_version'] == 12, 'Hook input lost target override')
-                require(Path(configuration['user_defines']['workspace_pubspec']['base_path']).resolve() == repository.resolve() and
+                # Flutter passes UserDefines(workspacePubspec: Uri.file(pubspecPath)).
+                # This origin identifies the pubspec file, not its parent directory.
+                require(Path(configuration['user_defines']['workspace_pubspec']['base_path']).resolve() == (repository / 'pubspec.yaml').resolve() and
                         producing['workspacePubspecSha256'] == before['inputs']['pubspec.yaml'], 'Cached hook workspace configuration changed')
                 require(configuration['package_name'] == 'objective_c' and
                         Path(configuration['package_root']).resolve() == (repository / VENDOR).resolve(), 'Incorrect producing package')
