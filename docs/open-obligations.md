@@ -278,6 +278,12 @@ cases on missing AOT/VM fixtures, then aborted on the 300-second
 absent; no DC-only attribution result is available. Existing R-01 `worker`
 (gpt-6.1-sol, medium) owns a focused Python/CI investigation against integration
 base `23dd5856`, excluding frozen macOS recipe/pins/patches and product sources.
+It returned no source changes: pinned Windows tests hardcode dummy/omitted AOT
+properties and contain JIT mocks, while upstream runs this suite in Debug only.
+The failure cannot be corrected by an invocation/cwd/file-copy change alone.
+A read-only follow-up is preparing a concrete native fixture/provenance proposal;
+implementation awaits the resulting scope/identity decision. Debug/optimized-JIT
+substitution, skipping cases and waiving required recovery cases are not approved.
 The R-03 `worker` (same model/effort) separately owns read-only V-04 source-open
 diagnosis with isolated synthetic checks; it may not touch the live app/PMS,
 credentials, user data, Dart tools, repository files or Git. Controller retains
