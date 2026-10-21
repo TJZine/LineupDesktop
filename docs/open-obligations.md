@@ -69,7 +69,7 @@ the discriminating evidence in the investigation rows below.
 | V-03 | Windows native lifecycle, physical media and exact package | Later recorded CI run [39383128215](https://github.com/TJZine/LineupDesktop/actions/runs/39383128215) passed stock Windows build and eight explicit CTests: encoder, playback state, core, codec, display dynamic range, guardian, player contract and authenticated reference. Earlier L2 Windows auth/package gates also passed at their recorded identities. | `runner_lifecycle` is still outside current CI and lacks recorded execution here. Run it with its actual patched-engine prerequisites. Physical playback/parts/EOF, HDR/restoration, tracks, input, monitor/DPI and clean-system package remain distinct. Revalidate changed inputs; do not repeat all earlier tests solely because an old handoff says pending. [Development tiers](DEVELOPMENT.md#current-test-tiers-and-gaps), [physical/package procedure](windows-native-validation.md). |
 | V-04 | macOS real-app reliability beyond recorded scenarios | Current canonical app `8c98fb80` passed clean artifact verification and loaded-engine hash checks. After maintainer Keychain approval, owner local-PMS current playback reached native readiness and displayed video; Guide/Settings/native notices/source-reader navigation returned to continuing video. Native menu Settings, fullscreen exit, minimize and Window-menu restore were observed. This build reached natural EOF with mpv error 0, then a successor accepted/opening/ready session and visible video; normal native-menu Quit exited 0. Earlier `ddefaa4e` source-open failures remain attributed and their original cause unproven; they did not reproduce on this build. | Sustained listening/audio drift, true live resize/minimum size, multi-display/Spaces/Stage Manager and sleep/wake remain in the existing human checklist. Automated actions establish bounded observations, not physical acceptance. |
 | V-05 | Real Plex scope, catalog and recovery edge cases | Current app `8c98fb80`: saved owner lineup restored; an available unprotected Home profile connected to the same PMS and completed three selected library scans without applying a generated lineup. Maintainer locally unlocked owner restoration; the renewed owner connection labeled Direct local and current authorized playback displayed actual video. Initial Direct remote playback is separately attributed. | Unambiguous live scan cancel/retry evidence remains pending; fast scans and changing UI prevented isolated attribution. On October 21 the maintainer explicitly retained these live checks as pending; deterministic tests do not close this beta gate. Protected-profile/server failures and 401/403 retain deterministic evidence. Remote/relay, alternate PMS shapes, large/partial catalogs, smart collections and live membership/portrait probes remain beta limitations. No account/server configuration or credentials were changed by the controller. |
-| V-06 | macOS declared minimum version | Current `8c98fb80` app ran on macOS 12.6 (21G115), Apple M1 Pro (Virtual), 8 GB, using approved UTM and Apple restore image. Safari transfer matched compiled Dart, bundled engine and objective_c hashes; deep strict signature verification passed. After separate maintainer approval for this build's Finder Open exception, cold in-app Support loaded native component/file lists and curl COPYING before any native Settings. Normal menu Quit closed it and Finder relaunched onboarding. Earlier `ddefaa4e` native-load failure remains historical; current native loading succeeds. | After maintainer-local sign-in, an existing PMS connected and five selected library scans completed. A guest-local lineup and account restored after relaunch without another prompt, providing bounded same-build development Keychain continuity. Current-program activation crashed before playback: EXC_CRASH/SIGABRT in guest Metal/IOGPU during MoltenVK initialization for mpv. Native media TLS/CA and playback therefore remain unverified. Intermittent stippled/corrupted glyphs returned on current component/file/text screens after initially clear rendering; this VM-only presentation failure is inconclusive for physical hardware. No support-floor pass follows. The approved macOS 13.0 / 22A380 Apple CDN image passed exact size and both digests; its separate 4-core / 8 GiB / 64 GiB VM now reaches the desktop. Exact candidate integrity and cold native notices checks passed there, with initial windowed glyph corruption; authenticated media and support-floor checks remain pending. Either establish the promised older-OS support or obtain an explicit narrower support decision. Quarantine was preserved; no global security changes. Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
+| V-06 | macOS declared minimum version | Controller tested exact `8c98fb80` in approved macOS 12.6 (21G115) and 13.0 (22A380) Apple Virtualization VMs, each four cores / 8 GiB. Candidate hashes and deep strict signatures matched; quarantine was preserved and separately approved one-app Finder Open exceptions applied. Cold native notices, authenticated PMS access, five selected library scans, guest-local lineup creation, saved-account/lineup restoration and normal menu Quit were observed in both guests. | Default current-program activation aborts in guest Metal/IOGPU argument-encoder creation during MoltenVK initialization in both guests. Intermittent glyph corruption also remains; neither VM-only failure establishes physical-hardware failure. A process-only `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0` diagnostic reached actual changing video and native readiness in macOS 13, then normal Quit; macOS 12 still aborted later in libplacebo. This diagnostic does not establish unchanged default-candidate support. Native media TLS/CA was not separately established. The promised older-OS support floor remains unresolved: establish it on suitable hardware/default runtime or obtain an explicit narrower tested-support decision. Host default playback remains attributed to macOS 27.0.1 (26A434). Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
 | V-07 | Existing physical/spoken acceptance | Automated semantics/native evidence is recorded separately. On October 21 the maintainer explicitly chose **Leave V-07 unverified** for the later limited-candidate decision. | All six boxes remain unchecked; this disposition does not accept the beta or establish physical/listening behavior. Do not start synthetic VoiceOver/modifier work or infer passes from unlock/authentication assistance. [Checklist](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist). Windows Narrator/physical checks retain their separate platform scope. |
 
 ## Investigations and unresolved observations
@@ -823,3 +823,44 @@ Keychain continuity, playback and normal shutdown/relaunch remain unverified in
 this guest. Input capture was restored off before the local sign-in handoff.
 The maintainer explicitly retained live scan Cancel/Retry as pending; no change
 to V-05 proof scope or beta acceptance follows.
+
+V-06 macOS 13 authenticated follow-up (controller, unchanged `8c98fb80`):
+after the maintainer brought the console forward, Computer Use recovered without
+restarting UTM or the guest. Connecting the existing PMS succeeded. Five selected
+libraries scanned and setup advanced to Configure/Review with 81 generated
+channels; the controller saved this guest-local lineup and opened Guide. Navigation
+labeled the connection Direct remote / Very slow (634 ms), separately from the
+host's Direct local observation. No host lineup or Plex account/server setting
+changed. Scans completed between observations, so no isolated live Cancel/Retry
+pass follows.
+
+Double-clicking the current Guide program caused an unexpected quit before video.
+Bounded extraction from `Lineup Desktop-2026-10-21-162346.ips` showed
+EXC_CRASH/SIGABRT, `IOGPUMetalDevice newIndirectArgumentEncoderWithLayout`,
+`_MTLDevice newArgumentEncoderWithArguments:structType`, MoltenVK
+`MVKPhysicalDevice::initMetalFeatures` / `vkCreateInstance`, then libplacebo/mpv
+initialization. This matches the default macOS 12 guest failure boundary; it does
+not establish physical-hardware failure or a media authentication/network cause.
+The crash dialog was dismissed with Ignore; no report was sent. Normal relaunch
+restored Guide and the saved account without credential entry or another prompt;
+normal menu Quit closed the app. This is bounded same-build development Keychain
+and saved-lineup continuity, without a captured guest process exit code.
+
+A separate process-only LaunchServices diagnostic used
+`MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0` and the existing finite first-open probe,
+with stdout/stderr retained privately in the guest. It restored Guide, tuned the
+current program and displayed changing actual video across successive observations
+before the session ended at approximately 16:28. The sanitized probe recorded core accepted/opening,
+two FFmpeg unknown categories and core ready. No later crash/rejection was observed
+before normal menu Quit closed the app. No audio/listening, exact media TLS/CA,
+physical display, default-candidate support or beta acceptance claim follows.
+Unlike the macOS 12 diagnostic's later libplacebo abort, this macOS 13 diagnostic
+reached video; the default launch remains failed. The candidate, bundled runtime,
+entitlements and system/security settings were not changed, and the environment
+was confined to that diagnostic process. VM input capture was restored to off.
+
+V-06 still needs a support commitment: default playback has passed on the physical
+macOS 27.0.1 (26A434) host, while these two older VMs cannot establish an older
+floor. The controller has not narrowed the promise or changed the 12.0 deployment
+target. V-05 live Cancel/Retry remains pending by the maintainer's explicit
+choice; V-07 remains unverified. The local-only plans remain until actual closeout.

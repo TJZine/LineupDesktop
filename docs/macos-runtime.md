@@ -578,7 +578,13 @@ This is an engineering list of review items, not legal advice.
   covers the selected real runtime with synthetic loopback TLS/HTTP and token
   audit. This does not establish signed-sandbox, physical or real-Plex behavior.
 - **Sandbox and hardened runtime:** see the pending checks above.
-- **macOS 12–26:** all libraries target 12.0, but only macOS 27 was tested.
+- **Older macOS support:** all libraries target 12.0. Current candidate `8c98fb80`
+  passed default playback on macOS 27.0.1. Approved macOS 12.6 and 13.0 VMs passed
+  cold native notices, PMS scans and saved-session checks, but default playback
+  aborted in guest Metal/MoltenVK initialization and intermittent glyph corruption
+  remained. A process-only Metal-argument-buffer diagnostic reached video on 13.0;
+  it does not establish default support or physical-hardware failure. The tested
+  support commitment remains unresolved in [V-06](open-obligations.md).
 - **Hosted CI acceptance:** `.github/workflows/ci.yml` now provisions/builds
   the pinned runtime and requires portable/native, embed/signing and
   authenticated-reference checks. The separate core-contract job is also
