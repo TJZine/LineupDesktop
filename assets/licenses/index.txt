@@ -14,8 +14,10 @@ tool/flutter_engine/README.md	tool__flutter_engine__README.md.txt
 tool/macos/build_app.dart	tool__macos__build_app.dart.txt
 docs/DEVELOPMENT.md	docs__DEVELOPMENT.md.txt
 LICENSE	LICENSE.txt
+tool/flutter_engine/0001-windows-direct-composition.patch	tool__flutter_engine__0001-windows-direct-composition.patch.txt
 tool/flutter_engine/0002-desktop-accessibility.patch	tool__flutter_engine__0002-desktop-accessibility.patch.txt
 tool/flutter_engine/0003-macos-apple-linker.patch	tool__flutter_engine__0003-macos-apple-linker.patch.txt
+tool/flutter_engine/0004-windows-test-fixtures.patch	tool__flutter_engine__0004-windows-test-fixtures.patch.txt
 docs/licenses-and-rebuilding.md	docs__licenses-and-rebuilding.md.txt
 tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch	tool__macos__mpv-patches__0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch.txt
 tool/macos/ffmpeg-patches/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch	tool__macos__ffmpeg-patches__0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch.txt

@@ -31,8 +31,10 @@ HELPERS = [
     'tool/flutter_engine/desktop-accessibility.json',
     'tool/flutter_engine/desktop_accessibility.py', 'tool/flutter_engine/README.md',
     'tool/macos/build_app.dart', 'docs/DEVELOPMENT.md', 'LICENSE',
+    'tool/flutter_engine/0001-windows-direct-composition.patch',
     'tool/flutter_engine/0002-desktop-accessibility.patch',
     'tool/flutter_engine/0003-macos-apple-linker.patch',
+    'tool/flutter_engine/0004-windows-test-fixtures.patch',
     'docs/licenses-and-rebuilding.md',
 ]
 HELPERS += [str(p.relative_to(REPOSITORY)) for directory in ['mpv-patches', 'ffmpeg-patches']

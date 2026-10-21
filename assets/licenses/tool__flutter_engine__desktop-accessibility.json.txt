@@ -78,7 +78,88 @@
         "macos"
       ],
       "sha256": "de9e69ff64b52d389d58ed73874da174b4e3e8d5f2a8489c006e0a4d1405b313"
+    },
+    {
+      "dcOnlyFiles": {
+        "engine/src/flutter/shell/platform/windows/accessibility_bridge_windows_unittests.cc": {
+          "baselineBlob": "3f7ff3d21a3ba5cb3666f6682be287ee085e0d2f",
+          "inputSha256": "5129df2e1235752a85f159f49d0c9f8fa6b8b20265789717a1a98958a69907d5",
+          "patchedSha256": "65abe058c57d020752f4beb2ebd052b5be1e0952cecf642138e6c04baca86721"
+        },
+        "engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc": {
+          "baselineBlob": "23e127cbc3dfa588aca5cf42bbbf89cac56000a0",
+          "inputSha256": "85d7392ac4b05bd225532c866d37ea7e76d935da4c08ad810ebeaf4386dc91bf",
+          "patchedSha256": "a6a2eec00f3742328e03fbab85f90a23ab56d4e870be588a34fc8ff6b99d95d3"
+        },
+        "engine/src/flutter/shell/platform/windows/flutter_windows_view_unittests.cc": {
+          "baselineBlob": "b66b42052af61281c2bd275b3299fed9b4a5a8c5",
+          "inputSha256": "1178d6dc36f640bed0e9bd03199c2939b9ed1040ac0912841f47539e15e154c8",
+          "patchedSha256": "eda1b9bd607290cf52d0d683d57284b4596243873a54faef7c8fcab6d84445e6"
+        },
+        "engine/src/flutter/shell/platform/windows/testing/test_keyboard.cc": {
+          "baselineBlob": "4d2109a657108f5d6ec01c9727cfbbf18bdb66e3",
+          "inputSha256": "a3f486d57cc1214f7c7496e420dc71e0b4a912ba1d6bae42f64597c7610bbc14",
+          "patchedSha256": "9c849b8eebd4019acb5eae9ac16e30d9381211d715714c2183e14eab5ea9b7f5"
+        },
+        "engine/src/flutter/shell/platform/windows/testing/windows_test_config_builder.cc": {
+          "baselineBlob": "7c1f8d126b0c81e8f5b3da24f47cdf19aeba6100",
+          "inputSha256": "3963b61d01b865ba2a28aea09a7ed928202eb58bcc8e6d667c1c9e1cf77e92c4",
+          "patchedSha256": "96c744791fddd463f8369e7e902a8e9c82aef12556e59924968d53dbbc6448a6"
+        },
+        "engine/src/flutter/shell/platform/windows/testing/windows_test_context.cc": {
+          "baselineBlob": "30b62b59d7dbe94d8626f903f53801dd1f495d8f",
+          "inputSha256": "5be6839cfc69549f4f5d405a7e93a4a91966faf0977e175c2309931b80a3e338",
+          "patchedSha256": "453100e12f0a9d2fd1b89727692d1b309afafb563da9bcdd93b2d38655315aaa"
+        },
+        "engine/src/flutter/shell/platform/windows/testing/windows_test_context.h": {
+          "baselineBlob": "f6e37ba2b49c0494610e348bb36983c0b5793ab5",
+          "inputSha256": "c94d5d41dee2e4a1527fb26fcbfe399b731ac61c4845b881bd97b0e796d86068",
+          "patchedSha256": "8f1724a56b1be13e0892f26424dd18978de0826ecf53bfe04045c469d247c49f"
+        }
+      },
+      "files": {
+        "engine/src/flutter/shell/platform/windows/accessibility_bridge_windows_unittests.cc": {
+          "baselineBlob": "3f7ff3d21a3ba5cb3666f6682be287ee085e0d2f",
+          "inputSha256": "2a4ac69607386a63341fdfc1015c14be8bac3384418a577a6aaff4160f8f82ea",
+          "patchedSha256": "b604fcc6fc24cad347cbf485c693e1dfd6eecda54abff5644dfe7279ef38a8b9"
+        },
+        "engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc": {
+          "baselineBlob": "23e127cbc3dfa588aca5cf42bbbf89cac56000a0",
+          "inputSha256": "697e77c59e3c087c7e2299b826bbfaeb10253282859ee0a29b7ba45363527e8f",
+          "patchedSha256": "5d5bfabff472c07625c202c7c9d1e55977f90e644d4d4c12a5573b038307bbf5"
+        },
+        "engine/src/flutter/shell/platform/windows/flutter_windows_view_unittests.cc": {
+          "baselineBlob": "b66b42052af61281c2bd275b3299fed9b4a5a8c5",
+          "inputSha256": "1178d6dc36f640bed0e9bd03199c2939b9ed1040ac0912841f47539e15e154c8",
+          "patchedSha256": "eda1b9bd607290cf52d0d683d57284b4596243873a54faef7c8fcab6d84445e6"
+        },
+        "engine/src/flutter/shell/platform/windows/testing/test_keyboard.cc": {
+          "baselineBlob": "4d2109a657108f5d6ec01c9727cfbbf18bdb66e3",
+          "inputSha256": "a3f486d57cc1214f7c7496e420dc71e0b4a912ba1d6bae42f64597c7610bbc14",
+          "patchedSha256": "9c849b8eebd4019acb5eae9ac16e30d9381211d715714c2183e14eab5ea9b7f5"
+        },
+        "engine/src/flutter/shell/platform/windows/testing/windows_test_config_builder.cc": {
+          "baselineBlob": "7c1f8d126b0c81e8f5b3da24f47cdf19aeba6100",
+          "inputSha256": "3963b61d01b865ba2a28aea09a7ed928202eb58bcc8e6d667c1c9e1cf77e92c4",
+          "patchedSha256": "96c744791fddd463f8369e7e902a8e9c82aef12556e59924968d53dbbc6448a6"
+        },
+        "engine/src/flutter/shell/platform/windows/testing/windows_test_context.cc": {
+          "baselineBlob": "30b62b59d7dbe94d8626f903f53801dd1f495d8f",
+          "inputSha256": "5be6839cfc69549f4f5d405a7e93a4a91966faf0977e175c2309931b80a3e338",
+          "patchedSha256": "453100e12f0a9d2fd1b89727692d1b309afafb563da9bcdd93b2d38655315aaa"
+        },
+        "engine/src/flutter/shell/platform/windows/testing/windows_test_context.h": {
+          "baselineBlob": "f6e37ba2b49c0494610e348bb36983c0b5793ab5",
+          "inputSha256": "c94d5d41dee2e4a1527fb26fcbfe399b731ac61c4845b881bd97b0e796d86068",
+          "patchedSha256": "8f1724a56b1be13e0892f26424dd18978de0826ecf53bfe04045c469d247c49f"
+        }
+      },
+      "path": "tool/flutter_engine/0004-windows-test-fixtures.patch",
+      "platforms": [
+        "windows"
+      ],
+      "sha256": "762ad9116ac67d554e88dfe7f772fe6ca624372ca9377bddeda79a1e90c4b7da"
     }
   ],
-  "schemaVersion": 1
+  "schemaVersion": 2
 }
