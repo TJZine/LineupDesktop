@@ -1,9 +1,11 @@
 # macOS playback port plan
 
-Status: implementation in progress, 2026-10-17. See the
-[execution record](macos-port-progress.md) for integrated slices, evidence,
-open product decisions, and acceptance gates. Unresolved proposals below
-remain proposals.
+Status reconciled October 20, 2026: native macOS playback, shared core, H1/L1/L2,
+Mac interaction and development runtime integration are implemented. Release
+acceptance remains incomplete. [Open obligations](open-obligations.md) owns the
+single current unfinished-work list; the [execution record](macos-port-progress.md)
+and later handoffs own attributed evidence. This plan retains design decisions
+and historical proposals; unresolved proposals remain proposals.
 Base: `main` at `022b05aa`, whose tree is identical to `cleanup` at `b00478bc`.
 
 This plan builds on the existing authorities and proposes ways to resolve
@@ -18,9 +20,8 @@ them. It does not replace them:
 - [Architecture](architecture.md): ownership. Flutter owns interaction;
   native code owns media and platform mechanisms.
 
-Until the product decision in §3 is accepted, the project profile's statement
-still applies: macOS is a development surface with explicitly unsupported
-playback.
+The platform decision in §3 was accepted. macOS has a working development player;
+public support follows the stated release gates, not the original planning baseline.
 
 ## 1. Goal and scope
 
@@ -51,9 +52,12 @@ Out of scope:
   purchase UI goes through design approval in the monetization workstream;
 - iOS.
 
-## 2. Current state
+## 2. Original planning baseline
 
-The refactor already made the Dart seam platform-neutral:
+The following table describes original `main` at `022b05aa`, before the port.
+It is not current implementation status. Windows/macOS now select the implemented
+method-channel backend on the shared core; see [Architecture](architecture.md).
+The original baseline was:
 
 | Area | State on `main` |
 | --- | --- |
@@ -623,36 +627,35 @@ that is not acceptable, move future development private before Pro ships.
 
 ## 5. Work packages
 
-These are not strict sequential phases. The dependencies below are the only
-ordering constraints, and independent packages can run in parallel.
+These are not strict sequential phases. Independent packages can run in parallel.
+Current implementation/acceptance is reconciled below; use the current register
+for unfinished obligations and later records for exact observed source identities.
 
 | ID | Package | Depends on | Output |
 | --- | --- | --- | --- |
 | D0 | Product decisions P1, P3, P5–P7, M1–M3 | — | Platform/interaction target approved; purchases deferred until playback is finished; unresolved purchase/source decisions remain open |
 | L0 | Legal review: LGPL on the App Store, Plex terms and trademark, source visibility | M3 | Written go/no-go before the first paid submission |
 | S1 | Route C prototype: patched mpv embedded under Flutter, full HDR and Dolby Vision matrix (§4.3) | — (uses a local build) | **Done 2026-10-17**: results in §4.3; E1 decided for C |
-| S2 | Reproducible self-built runtime with the patch series (§4.4) | S1 patch drafted (done) | Build script, runtime identity, `macos-runtime.md` |
-| K1 | Extract the shared mpv core; Windows uses it with no behavior change | — (starts immediately) | `native/player_core/`, Windows tests green, a Windows acceptance item added to the batched pass |
-| K2 | Run the core contract tests on macOS (CMake + CTest, or an XCTest target) | K1 | Native tests in macOS CI |
+| S2 | Self-built pinned runtime with patch series (§4.4) | S1 | Implemented: build script, runtime identities, notices/resources and provenance. Cross-directory byte identity has documented limits; signed loading remains R1. |
+| K1 | Shared mpv core | — | Implemented in `native/player_core/`; later Windows/shared-core CI passes are recorded. Physical Windows acceptance remains separate. |
+| K2 | macOS core contract tests | K1 | Implemented and executed locally/hosted at recorded sources; later engine-specific gates remain separate. |
 | M1 | macOS adapter: channel, codec, core wiring, display report `unavailable` | K1, S2 | Playback with audio, track and stop correlation. **Implemented 2026-10-17**; the real-protocol harness passes initialize, load, replacement, seek, volume, track, stop, close, and quit |
-| M2 | macOS presentation and HDR (route chosen by S1) | S1, M1 | Video under Flutter with the Guide alpha and HDR output. **Implemented 2026-10-17**; layer HDR facts observed, visible-display layering, HDR/SDR switching, and fullscreen still to be observed |
-| M3 | Fullscreen protocol event and termination ordering (§4.6) | M1, D0 (P6) | Protocol doc updated; Windows and macOS both emit it |
-| U1 | Port Dart changes (§4.7) | D0 (P5), M3 for fullscreen | Factory switch, copy, capability-driven settings, ⌘ |
-| R1 | Runtime provisioning, App Store signing, `macos-runtime.md`, Licenses screen | S2, D0 (P3) | Reproducible signed build uploadable to App Store Connect |
-| C1 | CI: full portable suite on macOS, native core tests, runtime provisioning, a conditional signed-archive job | K2, R1 | Green macOS jobs |
-| B1 | Monetization design: entitlement model, channel-limit behavior, upsell UI for approval | D0 (M1, M2) | Approved design |
-| B2 | Entitlement implementation: Dart policy, StoreKit 2 bridge, restore, tests | B1 | Free and Pro tiers working in TestFlight |
-| A1 | macOS acceptance pass (§6), then TestFlight beta | M2, M3, U1, R1, B2 | Recorded acceptance results |
+| M2 | macOS presentation and HDR | S1, M1 | Implemented; H1 HDR publication/L1 and combined physical layering/HDR/fullscreen evidence accepted October 18. Preserve exact limits; do not repeat the original brightness loop. |
+| M3 | Fullscreen protocol event and termination ordering (§4.6) | M1, D0 (P6) | Implemented: both adapters emit fullscreen state; asynchronous Mac lifecycle and attributed native quit/fullscreen proof exist. |
+| U1 | Port Dart changes (§4.7) | D0 (P5), M3 | Implemented: factory, capability/copy, Mac commands and fullscreen reconciliation. Later audit/focus fixes are integrated. |
+| R1 | Runtime/distribution and Licenses | S2, D0 (P3) | Provisioning, embedding/ad-hoc signing and notice resources implemented. Team-signed archive/sandbox/TestFlight and user-accessible Licenses presentation remain incomplete. |
+| C1 | CI | K2, R1 for signed delivery | Portable/native/runtime/auth CI integrated with recorded hosted passes. Signed-delivery and latest opt-in engine candidate have separate unfinished gates. |
+| B1 | Monetization design | Product decision | Deferred until playback is finished; no approved purchase/limit/upsell design. |
+| B2 | Entitlement implementation | B1 | Not implemented; separately deferred feature scope. |
+| A1 | macOS acceptance and TestFlight | M2, M3, U1, R1, B2 for the planned monetized release | Partial attributed native/physical evidence; older-OS, signed distribution and deferred six-item human checklist remain. A playback-only beta scope needs its own decision; B2 remains deferred, not waived for a monetized release. |
 | AS | App Store submission | A1, L0 | Live listing |
 
-Suggested critical path:
-
-1. Run S1, K1, and D0 in parallel. S1 needs neither the shared core nor
-   the final runtime. S2 follows now that the S1 patch has settled.
-2. M1, then M2.
-3. M3 and U1, alongside B1 and B2.
-4. R1 and C1.
-5. A1, TestFlight, then AS.
+The original prototype/core/adapter implementation sequence has landed. Current
+remaining work is in the register, particularly repaired-engine delivery,
+platform reliability, older-OS compatibility, signed distribution and notices.
+Purchase/entitlement work remains a separate deferred decision. The original
+monetized submission still requires its planned business/design gates; a smaller
+private-beta scope would need explicit agreement.
 
 ## 6. Verification map
 

@@ -1,92 +1,164 @@
 # Open obligations and historical evidence
 
-Status: October 15, 2026 documentation consolidation, package G integrated and reviewed.
-Portable code packages are integrated and reviewed; **F is merged for Windows testing by explicit maintainer override,
-validation pending; portable final checks/build and eligible cleanup passed, and the code-quality plan is not fully
-complete**. This register routes unfinished work; it approves no implementation,
-new design, branch repair, or platform-support claim.
+Reconciled **October 20, 2026**, against `platform/macos` at
+`ac4c3a1724796314cc7a721bf54b0b2f0f94ff22`. This is the **single current
+unfinished-work register**. Detailed plans own behavior, decisions and test
+procedures; dated reviews remain attributed history. A later documentation commit
+does not change a tested app's identity. No new tests or runtime observations were
+performed for this reconciliation.
 
-A retained source remains the detailed contract. A historical observation applies
-only to its recorded source/build, operator and environment. Later portable passes
-do not convert it into current physical evidence. Review records under
-`docs/reviews/` are immutable attributed history; their old links are intentionally
-historical. Record exact candidate, Flutter/engine/libmpv and build hashes,
-MSVC/SDK/CMake versions, hardware/display/scaling, scenario and result when new
-platform work runs. Never include tokens, URLs or private media information.
+[The Opus 5.5 handoff](handoffs/opus-5-5-core-readiness-handoff.md) explains the
+current product, evidence and proposed order of work. It references this register
+instead of maintaining another backlog. Read current source and later execution
+records before reviving any old finding.
 
-## Delivery and tooling
+## Classification and priority
 
-| Obligation | Source § | Platform | Status | Evidence |
-| --- | --- | --- | --- | --- |
-| F restoration classifier, explicit journal ordinals and native deduplication: required native build and four CTest families before validation acceptance | [Code-quality plan](code-quality-implementation-plan.md) §§2.1.4, 7.F, 8.4 and Windows-testing override; [handoff](reviews/code-quality-2026-10-15/WINDOWS_HANDOFF.md) | Windows | Candidate `040e4a64bdc667bae9673d61a39a8d15261959c3` merged at `4f3b144a7989a0ba9f0096bf88bb265dd817bf7f` for testing; branch/worktree retained; no Windows compile/CTest executed | Build targets `display_dynamic_range_test`, `display_guardian_test`, `native_player_contract_test`, `runner_lifecycle_test`; CTest names `display_dynamic_range`, `display_guardian`, `native_player_contract`, `runner_lifecycle`. Test the combined pulled candidate, retain actual results and identities, then obtain parent review/acceptance. Source merge is not validation. |
-| Final stable integration gates, macOS build, G inspection/integration and accepted-task cleanup | Code-quality plan §§8.1–8.4; [closure](code-quality-implementation-plan.md#execution-closure-october-15-2026) | Portable/macOS | Completed for portable delivery: G integrated/reviewed; final checks/macOS build passed; eligible task cleanup completed | At `a620790e642d8c72fcdb2d76602a3a5f49bf16af`: pin 3.47.7, format 144 unchanged, analysis clean, 1,690 tests; combined and whole-branch review clear. [Combined review](reviews/code-quality-2026-10-15/IMPLEMENTATION_COMBINED_REVIEW.md), [final review](reviews/code-quality-2026-10-15/IMPLEMENTATION_FINAL_REVIEW.md). Parent final post-G checks at `476750d950744d6f22de99a170d4a6dfde4042d4` passed format144/analysis/full1,690 and macOS release build54.4MB; observed commands/artifact hashes are in the execution record. G itself ran documentation checks only. |
-| Select the canonical toolchain before repository checks | Code-quality plan §7.H; [Development portable commands](DEVELOPMENT.md#portable-commands) | All | H integrated; ongoing contributor prerequisite | Run `dart tool/check_toolchain.dart`; `tool/flutter_version.json` is canonical. Dart version alone cannot distinguish the wrong Flutter SDK. |
-| Execute H’s PowerShell pin-consistency assertion on a supported runtime | Code-quality plan §7.H; code-quality execution record | PowerShell 7.4+ | Local assertion execution unavailable in this campaign | The pin-consistency assertion is source-inspected only; no local PowerShell runtime or future CI pass is claimed. Package policy and real package execution retain their separate Development gates. |
-| Keep T's original artwork failure attributed, with its unresolved cause | Code-quality execution record, package T | Portable | Unexplained original failure; repeated serialized runs subsequently passed | Original `player_view_test.dart` “OSD uses official title artwork with a text fallback” expected one loaded logo and found zero at T’s main gate (1,587 pass/1 fail). No demonstrated cause, proven flakiness or fix; later serialized passes retain their source identities in the parent execution record. |
-| Repair repository default/branch history | Code-quality plan §§2.3, 7.G | Repository | Maintainer proposal only; not executed | Flutter default line, individually reviewed stale local branches and optional historical tags require maintainer action; no branch/tag/default changes by G. |
+- **Confirmed bug:** a demonstrated failing behavior with an established current
+  mechanism. A repair can be implemented while its rollout/acceptance stays open.
+- **Verification gap:** implementation exists, but the specific candidate, platform
+  or scenario has not been established. Absence of proof is not a fresh bug.
+- **Investigation:** an observation, hypothesis or unresolved policy needs evidence
+  before choosing a repair.
+- **Feature:** missing product capability requiring its own scope/decisions.
+- **Release engineering:** missing integration, packaging or distribution work.
 
-## Code-quality physical checklist
+Suggested priority is core correctness/recovery and candidate verification, then
+safe delivery/data protection, then deliberately selected features and TV spikes.
+These priorities are recommendations, not permission to publish, change approved
+UI, operate accounts/devices or launch every listed project.
 
-All rows below are **unobserved in this campaign**, independently of deterministic
-code acceptance. W4–W6 require F's Windows CTests first; the source is already
-merged for testing, not validated. Use [Windows native validation](windows-native-validation.md) for safety,
-provisioning and exact-artifact evidence.
+**Current release scope (maintainer, October 20, 2026):** the next deliverable is a
+macOS Direct Play private beta on Apple Silicon. Transcoding (F-01), the other F rows,
+TV work and Windows physical/package acceptance are outside it; Windows engine-script
+integration (R-01) and CI-executable engine tests (V-02) are inside it. The macOS
+deployment target stays 12.0 and the promised floor is set from an older-macOS check
+(V-06). Signing and distribution (R-02) are excluded for now; the beta candidate is the
+verified ad-hoc-signed build using the repaired engine (B-01). Which V-05 cases gate the
+beta is not yet decided.
 
-| Obligation | Source § | Platform | Status | Evidence |
-| --- | --- | --- | --- | --- |
-| W1 Tune, rapid surf, Stop during load, retry (C) | Code-quality plan §10 W1 | Physical Windows | Pending | Portable coordinator proof only; actual native playback/input unobserved. |
-| W2 Multipart boundary and nearby seek (C) | Code-quality plan §10 W2 | Physical Windows | Pending | No current application-path boundary observation. |
-| W3 401 during playback and tune while current channel saves (B/C) | Code-quality plan §10 W3 | Windows/live Plex | Pending | Controlled failures are not real authorization timing. |
-| W4 HDR hold, match, release on Stop and exit (C/F) | Code-quality plan §10 W4 | Windows/HDR display | Pending after F gates | No candidate-F CTests or physical HDR run. |
-| W5 External HDR toggle, main-process kill, restart/restoration (F) | Code-quality plan §10 W5 | Windows/HDR display | Pending after F gates | Guardian fixtures do not establish hardware or power-loss behavior. |
-| W6 Display target change during a session (F) | Code-quality plan §10 W6 | Windows/multiple displays | Pending after F gates | No hardware remapping observation. |
-| W7 Profile/server/logout with playback; leave and return (B) | Code-quality plan §10 W7 | Windows/live Plex | Pending | Portable scope/lifetime evidence retained. |
-| W8 Studio edit/save/conflict reload/undo; slow-worker Air Check (D) | Code-quality plan §10 W8 | Windows | Pending | Controller/widget and matched synthetic renders only. |
-| W9 Setup review mode, removal confirmation, stale apply (E) | Code-quality plan §10 W9 | Windows | Pending | Portable review/phase and render evidence only. |
-| W10 Start, play, Diagnostics; native-ready behavior unchanged (M) | Code-quality plan §10 W10 | Windows | Pending | Protocol conformance is portable, not a real engine run. |
-| W11 Player keyboard/remote across overlays, badges, shell navigation (U) | Code-quality plan §10 W11 | Windows | Pending | 44 matched synthetic images and four approved badge differences are not physical input proof. |
-| W12 Real-server full library scan, playlist catalog, collection membership (A/L) | Code-quality plan §10 W12 | Windows/live Plex | Pending | Parser/paging tests do not observe a real server. |
+## Confirmed bugs and repair status
+
+**No additional unrepaired macOS application-policy defect is established by the
+reconciled audit records.** That is a bounded statement about known findings,
+not a guarantee that the app has no bugs. The desktop engine defect below remains
+an open delivery/acceptance item; do not erase it merely because its local tests pass.
+
+| ID | Finding | Current status | What actually remains |
+| --- | --- | --- | --- |
+| B-01 | Desktop Flutter AX bridge rejects unreachable/moved updates and cannot safely recover from failed mutations | Repair implemented in `831c28fc`; macOS Debug/Release, controlled native rejection recovery and canonical app integration verified through source `0208982e`. Stock SDK/cache remain unchanged and the repaired engine is opt-in. | R-01 Windows integration, V-01/V-02 bounded runtime evidence and V-07 human acceptance. M-04 overall remains open. [Current report](handoffs/macos-post-audit-fix-report.md), [engine investigation](handoffs/macos-ax-update-investigation.md). |
+
+Do not promote the ancestor-junction risk, buffering/EOF hypotheses, timestamp
+warning or historical node 866 into confirmed current application defects without
+the discriminating evidence in the investigation rows below.
+
+## Verification gaps
+
+| ID | Obligation | Evidence already available | Exact unfinished gate |
+| --- | --- | --- | --- |
+| V-01 | Initial OSD fade/menu continuity and natural Slider interactivity transition | Retained frame/widget regressions, stock keyed/unkeyed reductions, canonical native continuity and useful diagnostic seek. Four automatic first-fade attempts plus a bounded manual probe do not qualify; three natural routes mount already-interactive Sliders. | Actual menu opening within the initial 350-ms fade with recorded animation/timing; a same-presenter enabled/disabled transition where naturally feasible. Do not add a product control to force it or repeat an unbounded campaign. [Recovery assignment](handoffs/macos-m04-recovery-implementation-handoff.md#d-resolve-remaining-runtime-uncertainties). |
+| V-02 | Repaired Windows engine | Common bridge and Windows root/callback source reviewed; macOS common tests 242 Debug / 240 Release and focused native tests 12 per mode. | After R-01, build/run `common_cpp_unittests` and `flutter_windows_unittests` against both required patches, then verify the intended app/package. Stock Windows CI cannot establish this engine. [Engine instructions](../tool/flutter_engine/README.md). |
+| V-03 | Windows native lifecycle, physical media and exact package | Later recorded CI run [39383128215](https://github.com/TJZine/LineupDesktop/actions/runs/39383128215) passed stock Windows build and eight explicit CTests: encoder, playback state, core, codec, display dynamic range, guardian, player contract and authenticated reference. Earlier L2 Windows auth/package gates also passed at their recorded identities. | `runner_lifecycle` is still outside current CI and lacks recorded execution here. Run it with its actual patched-engine prerequisites. Physical playback/parts/EOF, HDR/restoration, tracks, input, monitor/DPI and clean-system package remain distinct. Revalidate changed inputs; do not repeat all earlier tests solely because an old handoff says pending. [Development tiers](DEVELOPMENT.md#current-test-tiers-and-gaps), [physical/package procedure](windows-native-validation.md). |
+| V-04 | macOS real-app reliability beyond recorded scenarios | Actual Plex playback, tracks, timer expiry, recovery, natural rollovers and bounded native focus/seek/quit observations exist. Accepted H1 HDR/L1 seek evidence and L2 real-coordinator/auth cases retain their exact sources. | Sustained audio/rollover, true live resize/minimum size, minimize/restore, multi-display/Spaces/Stage Manager and sleep/wake coverage on the selected final candidate; exact remaining physical steps stay in the existing checklist. No new claim follows from automated AX actions. |
+| V-05 | Real Plex scope, catalog and recovery edge cases | Pagination/parser/currentness tests; real macOS scan and selected local playback flows; authenticated synthetic reference matrices. | Remote/relay and alternate PMS shapes/topologies; protected-profile/server failure, live 401/403, playlist item identity/edits, smart collections, incomplete catalogs, membership/portrait probes and agreed scan budget. Run only available authorized cases; unavailable fixtures stay explicit. [October 10 Windows procedures](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md), [collection plan](osd-autohide-and-collection-membership-plan.md), [Player/Guide plan](player-guide-polish-plan.md). |
+| V-06 | macOS declared minimum version | App/runtime target macOS 12 arm64; actual recorded host is macOS 27. | Runtime, TLS/CA, Keychain, presentation and app launch on the older versions actually promised, or explicit agreement to narrow the support range. Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
+| V-07 | Existing physical/spoken acceptance | Automated semantics/native evidence is recorded separately. | User explicitly deferred the **one existing six-item checklist** on October 20. All boxes remain unchecked. Do not start synthetic VoiceOver/modifier work or infer passes from unlock/authentication assistance. [Checklist](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist). Windows Narrator/physical checks retain their separate platform scope. |
+
+## Investigations and unresolved observations
+
+These are not an implementation queue until reproduction or a decision establishes
+what should change.
+
+| ID | Observation / question | Current disposition and next discriminant |
+| --- | --- | --- |
+| I-01 | Historical AX node 866 | Original first-error delta/portal-origin inventory unavailable. Three current Settings→DVR On→Guide→tune attempts do not reproduce. Historically unattributed; capture the first delta only if a fresh failure occurs. No retrospective attribution from a matching string or a healthy run. |
+| I-02 | Resize timeouts / backward frame timestamps | Canonical repaired-engine session has six resize warnings; final diagnostic has one 875 µs frame-time clamp. Exact stock-engine runs contain each warning class. Cause/indirect scheduling effects unresolved; no new demonstrated app defect or performance comparison. Investigate with matched traces if reproducible visible symptoms emerge. [Final report](handoffs/macos-post-audit-fix-report.md). |
+| I-03 | Windows ancestor-junction containment, October 10 F-008/P-007 | **Likely conditional tooling risk**, explicitly deferred; descendant rejection exists. Establish ancestor-build-junction effects using owned disposable paths and resolve intended physical containment before fixing. Not demonstrated arbitrary overwrite or provenance bypass. [P-007](reviews/comprehensive-review-2026-10-10/REMEDIATION.md#p-007--buildpackage-ancestor-containment-gated), [W-012](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md#w-012--ancestor-junction-evidence-and-link-policy-decision). |
+| I-04 | Buffer starvation versus user Pause; precommit EOF ordering | Historical buffering and CAND-009 are hypotheses, not confirmed new defects. Recent M-01 stale pause/readiness bug is fixed and is not proof of starvation behavior. Use actual native event ordering/cache starvation on an authorized fixture before changing coordinator policy. [W-004/W-005](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md#w-004--precommit-eof-ordering). |
+| I-05 | Artwork refresh reachability, aggregate playlist scale and original artwork-test failure | CAND-010/011 need a reachable live scenario/scale result. Package T's original loaded-logo failure remains unexplained; subsequent serialized passes do not prove its cause or flakiness. [October 10 handoff](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md), [code-quality evidence](reviews/code-quality-2026-10-15/EXECUTION.md). |
+| I-06 | L2 performance | Production initial-load start and correctness gates implemented/reviewed; final protected Plex measurement is **inconclusive**, not a speedup or regression. No benchmark redesign/retry is owed by the old task. Measure again only for a concrete performance decision. [Final L2 addendum](handoffs/macos-l2-controller-status-handoff.md#final-controller-addendum--october-18-2026). |
+| I-07 | Optional visual baselines / reported Guide lines | Six optional golden failures reproduced identically on original and final maintainability sources; output images match. Historical expectations need an explicitly scoped visual-baseline decision, not an unreviewed update. An unintended Guide line needs its exact reproduction; intended grid separators are not a bug. [Maintainability record](reviews/maintainability-remediation-2026-10-12/EXECUTION.md), [UX audit](ux-functionality-audit.md). |
+| I-08 | Older builds discard newer saved state | Source-established October 20: persisted parsing is strict (exact top-level and settings keys, closed enum/value domains) and `state.json` has no format version, so any change to accepted keys or values makes every older build quarantine the file and start empty. Existing tests prove the quarantine path; the cross-build case has not been run. Approved policy (October 20): an older build that finds a newer state format refuses to start and leaves `state.json` untouched; builds keep writing today's format until a schema change needs a new one. |
 
 ## Product plans and earlier campaigns
 
-Keep the detailed retained plans and every product/design decision record. These
-rows collect unfinished obligations without importing their historical dispatch
-instructions. A backlog item is not approval to implement it. Where later source
-addresses an earlier hypothesis, inspect that source and its evidence before
-calling the old item open or closed.
+These are **new or deferred capabilities**, not unfixed regressions. No feature
+below is automatically a prerequisite to a stable Direct Play desktop beta.
+Choose a release scope explicitly rather than calling every idea core-blocking.
 
-| Obligation | Source § | Platform | Status | Evidence |
-| --- | --- | --- | --- | --- |
-| Transcoding/Direct Stream P0b stream/subtitle selection and true-remote evidence; P1–P5 production packages and Settings approval | [Plex transcoding plan](plex-transcoding-implementation-plan.md) §§P0b–P5, P0 results/Open issues | Windows/live PMS; Dart | Production pending; bounded P1 foundation only under a separate assignment; P3 depends on P1/P2, session start remains P0b-dependent | Retain P0 identities and headless observations. Resolve per-request versus server preference writes, seek coordinate/restart policy, HDR profile direction, Direct Play OK/HLS 400 and remote-original 503 handling, Pass/concurrency/error/relay/multipart/subtitle/bitrate coverage and Remote default before P4. No integrated playback/support claim. |
-| Next-program continuation exact-app boundaries and cancellation | [Continuation plan](schedule-continuation-plan.md#physical-windows-acceptance) §Physical Windows acceptance | Windows/live Plex | Implemented; physical acceptance pending | Three direct-play boundaries and gaps; transcoded boundary when available, DVR pause >30s, Stop/Sleep near boundary, PiP/Guide and fullscreen SDR continuity. Transcoding remains a separate pending feature. |
-| OSD/cursor timing, keyboard hold, pause while loading, profile timeline, collection counts/tuning/Kometa and scan budget | [OSD/collection plan](osd-autohide-and-collection-membership-plan.md) §§B1 budget, Acceptance outside this checkout; archived collaborative handoff §§1–6 | Windows/live Plex | Six units implemented; live/physical acceptance pending | Measure launch and setup separately: warm-up plus five paired runs, median added time ≤ `max(20 s, 50% of item-only median)`, each added time ≤ twice allowance; concurrent-library contention separate. Exceedance requires report/product decision before changing launch policy. |
-| Live Plex tag, paging, smart-collection and portrait probes | OSD/collection plan §Acceptance; [Player/Guide plan](player-guide-polish-plan.md) §D5; archived collaborative handoff §7 | Live PMS/local and remote | Unverified hypotheses | Compare `/all` versus metadata tag lengths for 20 movies; 20 episode tag presence; collection children paging and smart `childCount`; portrait `thumb` classes for 20 movies/episodes on both endpoints and both servers. Counts/booleans only; never log source URLs, hosts or private names. |
-| Deferred collection/product decisions and traces | OSD/collection plan §Recorded and out of scope | Dart/live Plex/Windows | Deferred, not silently implemented by code-quality work | Live refresh; rename/fuzzy/cross-library rebinding; TV studio/network and actor channels; Recently Added size/tie order; partial-library effects; naming collisions; smart-playlist paging; loading flash and multipart EOF duration need observation first. Stable-order shuffle separately resolved deterministically October 8. |
-| Startup LIB-01/LIB-02, restoration/setup reentry and server switching | [Startup/reentry plan](setup-reentry-startup-plan.md) §§Decisions, Windows acceptance | Windows | Implemented per October 7 review; physical acceptance pending | Run full deterministic suite on Windows to establish the two `6977a0b8` quarantine-path fixture failures are fixed, then loading→Guide, regeneration/configure/review, scan/subset/server switching from all origins and no-libraries state, intact relaunch, then timing/collection campaign. |
-| Player/Guide polish, cast portraits, logo cap, approved Guide information composition | [Player/Guide plan](player-guide-polish-plan.md) §§User decisions, October 7 refinements, D5, Windows acceptance | Windows/local and remote Plex | Implemented per October 7 review; physical checks pending | Up from OSD, mouse/keyboard Sleep and focus, row snapping/full-bleed/PiP alignment, search/dropdown, long synopsis; real portrait path and label/output behavior. Preserve P6 104px cap and explicit supersessions. Colors/logo redesign require separate product agreement. |
-| Track labels P4, candidate visual approval and physical label-to-output/Narrator acceptance | [Track-label plan](audio-subtitle-track-label-implementation-plan.md) §§P4, Execution ledger; Player/Guide P3 supersession | Windows/AT/live Plex | P0–P3 accepted with bounded evidence; P4 pending | Exact clean candidate/patched engine, audible/subtitle cues independent of source metadata, embedded/external text/image subtitles where exposed, Off/failed/rapid switching, focus/DPI/fullscreen/composition and Narrator. Standalone mpv metadata does not prove Lineup exposure; unavailable media explicit. Update audit/guide/decision owner after acceptance. |
-| Fullscreen HDR physical final-app and portable-package campaign | [HDR implementation plan](fullscreen-hdr-implementation-plan.md) §Evidence / User's final full test; [HDR spec](fullscreen-hdr-spec.md) | Windows 10/11, HDR display/package | Units 1–5 integrated; current physical acceptance pending; F is merged for testing, validation pending | Entry, HDR↔SDR/no-change boundaries/holds, Windows initially HDR with SDR content, Stop/exit/error/retry, external toggle, guardian, second launch, Dolby Vision/HLG where available, UI/Guide/input, target change/TV power, diagnostics, borrowed Windows 11 and portable package. No automatic new acceptance from October 9 discovery. |
-| Earlier HDR discovery limitations | Archived HDR discovery §Discovery result and Completion criteria (recovery below) | Windows | October 9 Win10 feasibility only | Qualitative SDR/static HDR10 Sony A90K/RTX 5080 result; no meter/TV signal info, HDMI/eARC audio, HLG or Plex HTPC; SDR manual audio unobserved, DXGI metadata source-predicted only. Final rich Plex overlays, Windows 11 and release package remain untested by that run. |
-| Guide source freshness and actual membership-change policy | [Freshness investigation](guide-freshness-collection-investigation.md) §§A, B, Decision gates | Dart/live Plex/Windows | A resolved deterministically; B/live refresh deferred | Canonical media ID/duration shuffle preserves occurrences and frozen legacy cycle, with accepted one-time shift. Live permutation frequency/restart, rename/deletion/recreation/duplicates/incomplete inventory, running-across-Kometa behavior and actual-change timing/fallback policy require separate evidence/design. No fuzzy invisible rebinding. |
-| Authenticated reference containment and future per-load session policy | [Reference investigation](libmpv-authenticated-reference-investigation.md) §§positive controls, Per-load feasibility, Conclusion; [Architecture](architecture.md#implemented-now) | Native Windows/live PMS | Direct Play restrictions retained; session policy not implemented | Strong positive controls require progress AND no later rejection. Preserve pinned DLL/checker evidence and `access-references=no`/`autoload-files=no`; future session override requires gated authenticated-reference tests for completion/Stop/replacement restoration. Real DASH, selected subtitles, encrypted HLS, other PMS/topologies, physical media/input/HDR/packages remain outside headless proof. |
-| Remaining UX findings, command discoverability, dynamic whole-show authoring, fullscreen and source reproduction | [UX audit](ux-functionality-audit.md) §§1–7, September 14 disposition, September 19 Remaining acceptance | Flutter/Windows/live Plex | Mixed dated statuses; follow later dispositions and retained decision records | Reconcile collections/geometry/Guide paint with current fixes and exact physical evidence; series-source semantics and broad discoverability inventory/walkthrough remain product work. Live 401/403, `playlistItemID`, concurrent playlist edits and exact Windows app acceptance remain pending. Do not treat old source hypotheses as freshly confirmed defects. |
-| Feature-track decisions and pending research/planning inputs | [Feature findings](feature-validation-findings.md) §§1–4, candidate register and maintainer questions; [opportunity report](feature-opportunity-report.md); [research request](opus-feature-research-request.md) | Product/Dart | Retained, not implementation approval | Recall success/scope/shortcut; versioned scoped backup/restore with preview/snapshot; track preference ownership versus Plex/transcoding; mixed/series source plus rhythm decision; favorites and in-session refresh. Preserve peer/research evidence and open questions. |
-| Extended UI acceptance carried from desktop delivery/parity/scaling campaigns | Archived desktop implementation §§P8, acceptance matrix; execution §Acceptance still open; scaling §Closeout; UI parity §VPP-7 | Physical Windows | Portable campaigns complete; hardware claims pending | 720p/1080p/1440p/2160p, representative 100/150/200% display scale and enlarged text, live monitor/DPI transitions, Windows fonts/input/AT, real-video contrast/alpha/Guide aperture/OSD/Now Playing, ticker timing, confirmed tracks, timer suspend/wake, fullscreen/HDR and exact package. Synthetic images and macOS builds are not Windows acceptance. |
-| Earlier review obligations outside code-quality package scope | [October 7 remediation](reviews/comprehensive-review-2026-10-07/REMEDIATION.md); [October 10 handoff](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md); [workflow](reviews/workflow-remediation-2026-10-04/REPORT.md), [maintainability](reviews/maintainability-remediation-2026-10-12/EXECUTION.md) and [audit follow-up](reviews/audit-followup-2026-10-12/IMPLEMENTATION.md) | Windows/native/filesystem/PowerShell | Retained attributed limits; not closed by G | Buffering was a hypothesis, not physical proof; inspect current source. Ancestor-junction policy, native gates, platform credential/filesystem/runtime and physical rows retain their original dispositions and identities; no fresh acceptance inferred. |
+| ID | Capability | Current state / decision needed | Detailed owner |
+| --- | --- | --- | --- |
+| F-01 | Plex transcoding / Direct Stream and Home/Remote quality | Production pending. P0b selection/subtitle/master/remote evidence and Settings agreement remain; P1 foundation can be assigned independently within the plan's boundary. Original Direct Play remains supported behavior. | [Transcoding plan](plex-transcoding-implementation-plan.md), [project profile](../.agents/project.md#current-planning-and-verification-status) |
+| F-02 | Versioned lineup backup, snapshots and reviewed restore | No user-facing workflow; strict current state format/quarantine is not backup/restore. Decide same-server scope, replace/merge, settings inclusion, retention and approved UI; preserve secrets and schedule identity. | [Validated F1](feature-validation-findings.md#f1-lineup-backupexport-and-reviewed-restore--proceed-refined) |
+| F-03 | Dynamic whole-show sources and mixed-source Studio authoring | Source types remain Library/Playlist/Manual/Mixed; per-item series metadata is not a dynamic series source. Mixed resolution exists, editable mixed authoring does not. Decide whole-show/subset/overlap and rhythm/order semantics together. | [Validated F2](feature-validation-findings.md), [UX finding3](ux-functionality-audit.md#finding-3-a-whole-show-is-a-source-not-a-bulk-episode-selection) |
+| F-04 | Preferred audio/subtitle/accessibility tracks | Current per-load selection exists; persistent policy not implemented. Resolve Plex versus local preference authority and transcoding's persistent server-write conflict before UI/implementation. | [Validated F4](feature-validation-findings.md#f4-preferred-language-and-accessibility-tracks--investigate-first) |
+| F-05 | In-session catalog/collection refresh | Restart/Setup rescan exists; a general current-session refresh and actual membership-change timing/rebinding policy are deferred. No fuzzy cross-library/title rebinding. | [Freshness investigation](guide-freshness-collection-investigation.md), [feature validation](feature-validation-findings.md) |
+| F-06 | Last-successful-channel recall and favorites | Neighbor stepping exists; recall history/favorites do not. Decide scoped history, shortcut/remote entry and persistence separately; preserve current OSD approval. | [Feature validation](feature-validation-findings.md), [opportunities](feature-opportunity-report.md) |
+| F-07 | Broad command discoverability / first-use polish | Now Playing menu entry and named controls implemented; app-wide command inventory and pointer/remote-first walkthrough incomplete. Add controls only for demonstrated missing task paths with design agreement. | [UX finding6](ux-functionality-audit.md#finding-6-now-playing-addressed-broader-discoverability-remains-open) |
+| F-08 | Other retained product candidates | Media-version selection, audio passthrough Settings, weighted/time-of-day programming, TV studio/network/actor channels and Recently Added policy changes are separate decisions. Existing source/resolver behavior must not be silently replaced. | [Feature opportunities](feature-opportunity-report.md), [OSD/collection plan](osd-autohide-and-collection-membership-plan.md), [parity history](product-parity.md) |
+| F-09 | Android TV / Google TV and Android-based Fire TV | **No platform target, native adapter or acceptance exists in this checkout.** Define a bounded device/media/remote spike after shared core stabilization. Fire OS (Android) is the requested Fire TV scope; Vega is separate. | [Opus platform brief](handoffs/opus-5-5-core-readiness-handoff.md#tv-expansion-feasibility) |
+| F-10 | Apple TV | Feasibility only. No tvOS target/adapter; no assumption that the macOS runner or Flutter desktop patches port. Compare a maintained community embedder versus a native tvOS client with explicit shared-domain strategy. | [Opus platform brief](handoffs/opus-5-5-core-readiness-handoff.md#tv-expansion-feasibility) |
+| F-11 | Purchases, entitlement, free-tier limits and store business model | Explicitly deferred until playback is finished. Model/limit/upsell/source-visibility decisions are not approved by this handoff. Not a core correctness fix. | [Port decisions](macos-port-plan.md#3-decisions), [monetization](macos-port-plan.md#49-monetization-separate-workstream) |
+
+## Delivery and tooling
+
+| ID | Engineering obligation | Current state / next action |
+| --- | --- | --- |
+| R-01 | Repaired-engine integration across intended build flows | macOS opt-in wrapper/provenance/receipt flow verified; stock default intentionally unchanged. Windows run/release/package require the DirectComposition-only source identity and do not yet accept the added AX patch. Integrate a verified combined source/patch recipe without loosening provenance, then V-02/V-03. Decide the canonical developer/test recipe explicitly; never overwrite stock SDK cache. [Engine README](../tool/flutter_engine/README.md), [build instructions](DEVELOPMENT.md#macos-development-app). |
+| R-02 | macOS signed archive, sandbox and distribution | Development embedding/ad-hoc signing exists. Team-identity signing/provisioning, hardened-runtime/sandbox loading, data-protection Keychain continuity, browser link/network/CA behavior and TestFlight installation are not accepted. [Runtime signed-sandbox checks](macos-runtime.md#signed-sandbox-checks-still-pending-r1), [port distribution](macos-port-plan.md#48-app-store-distribution-sandbox-and-credentials). |
+| R-03 | Notices and source delivery | Generated per-file notices and app resources exist; no user-accessible Licenses UI was found in current `lib`. Finish that presentation and exact shipped source/patch/relinking materials. Independent legal/Plex/trademark/patent/App Store review remains a pre-submission gate; no legal conclusion is made here. [Runtime distribution notes](macos-runtime.md#distribution-notes-for-the-legal-review). |
+| R-04 | Runtime/toolchain upkeep and exact package provenance | Keep pins, dynamic libraries, CA handling and artifact receipts. libmpv/HarfBuzz cross-directory byte identity has documented limits, separate from validated consumed-artifact provenance; do not claim fully byte-reproducible runtime builds. Recheck hosted execution/current package only when required by changed inputs or release. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
+| R-05 | Repository defaults/history | Default branch and optional stale-branch/tag cleanup remain maintainer proposals, not app defects or authorized cleanup. The current local branch is ahead of its last fetched tracking ref; this reconciliation performs no fetch/push/PR/merge/tag changes. |
+
+H's PowerShell pin assertion was source-only in its original code-quality campaign;
+later Windows policy/CI evidence exists. Do not perpetually label all PowerShell
+work unexecuted, or infer a fresh run of every old assertion. Select the actual
+assertion needed for the current candidate. Maintainability M07/M09 and October 10
+P005 are implemented; their native/package limits route to V-03/R-01 rather than
+separate duplicate fix packages.
+
+## Code-quality physical checklist
+
+W1–W12 remain scenario references in the [code-quality plan](code-quality-implementation-plan.md#10-windows-physical-acceptance-checklist-batched),
+with V-03 tracking their unresolved exact-platform proof. W4–W6 depend on actual
+native restoration/lifecycle gates, not a new source merge. F was historically merged
+at `4f3b144a7989a0ba9f0096bf88bb265dd817bf7f`. That commit is **not** an
+ancestor of this branch, but all nine restoration/admission/guardian/recovery/
+handle source and test files match it byte for byte. The player/encoder later
+moved to the shared core; do not infer identical whole-native trees from that
+file comparison. Later CI exercised display dynamic range, guardian
+and player-contract tests; `runner_lifecycle` remains unobserved here. Old review
+statements that F is unmerged or that none of its suites ever ran are superseded.
+Do not create another physical checklist; retain the existing per-platform owners.
 
 ## macOS media backlog
 
-[The code-quality plan](code-quality-implementation-plan.md) §9 and
-[the protocol](native-player-protocol.md) remain live authorities. macOS is a
-development surface; native playback is not yet implemented. The proposed
-resolutions and work packages are in the [macOS port plan](macos-port-plan.md).
+Native macOS playback is **implemented**, not merely proposed. The shared C++
+core, Objective-C++ adapter, MoltenVK/CAMetalLayer presentation, native fullscreen,
+Mac shortcuts, runtime embedding/notices, authenticated-reference checker and CI
+recipes exist. H1 HDR publication and L1 join/user-seek behavior have attributed
+physical/target-runtime acceptance; L2 is implemented and its correctness gates
+are complete, with inconclusive performance measurement. See [port progress](macos-port-progress.md),
+[HDR/seek verification](handoffs/macos-hdr-and-seek-verification-report.md) and
+[final L2 addendum](handoffs/macos-l2-controller-status-handoff.md#final-controller-addendum--october-18-2026).
 
-| Obligation | Source § | Platform | Status | Evidence |
-| --- | --- | --- | --- | --- |
-| Choose media engine and presentation | Code-quality plan §§9.1–9.2; TRACES T5 | macOS | Decision/spike pending | One repo/Flutter app recommended. Compare libmpv render API with AVFoundation; underlay versus Texture requires an ownership/design decision, not an implicit port. |
-| Implement protocol and presentation semantics | Code-quality plan §9.3; native-player protocol | macOS | Not implemented | Exact Guide alpha on real video, logical top-left rect converted to AppKit coordinates, transformed bounds/DPR, duplicate/metrics/retry/zero-dispose behavior, rect survives load/Stop, hide when minimized, passive video with no input/focus/semantics, transition-complete fullscreen and token safety. |
-| Resolve fullscreen menu, command modifiers, copy and HDR capability | Code-quality plan §9.2 | macOS | Product/protocol decisions pending | Green button/menu bypass Dart; choose runner interception or event extension. Decide ⌘/Ctrl and Preferences, Windows HDR/Diagnostics/slate wording, EDR `unavailable` versus protocol extension. U currently preserves Ctrl. |
-| Distribution, sandbox and native CI | Code-quality plan §9.2; Development §macOS development app | macOS | Pending | Signing/hardened runtime/notarization/libmpv embedding, signed alpha and data-protection Keychain, sandbox browser launch and credentials, bundle-ID continuity, native target and full portable CI. Current development build is not native playback proof. |
+The first target remains Apple Silicon; macOS 12 is a declared deployment target,
+not an observed support matrix. This is a working development/pre-release player,
+**not an accepted signed public release**. Current unfinished work is V-01/V-04/
+V-06/V-07 and R-01–R-04, with features selected separately. Accepted HDR/Dolby Vision
+picture quality is not reopened for the same configuration. The six-item human
+checklist is deferred at the user's request, with no inferred passes.
+
+## Completed or superseded audit items
+
+| Earlier finding / package | Reconciled disposition and evidence |
+| --- | --- |
+| October 10 confirmed F001–F007 / P001–P006 | Implemented: accepted-profile/PIN recovery, Guide activation/search ownership, worker disposal readiness, temporal/persisted-duration validation, reference-harness natural completion and multipart seek coordinates. [Implementation](reviews/comprehensive-review-2026-10-10/IMPLEMENTATION.md). Windows runtime proof retains V-03; F008/P007 is I-03. |
+| October 12 audit follow-up seven findings and maintainability nine packages | Implemented/reviewed: track-label reuse, image lifetime, stale publication, build/formatter/SDK authority, setup projection and ownership/native lifetime repairs. [Follow-up](reviews/audit-followup-2026-10-12/IMPLEMENTATION.md), [maintainability](reviews/maintainability-remediation-2026-10-12/EXECUTION.md). Optional baseline issue is I-07; native delivery limits V-03/R-01. |
+| October 15 code-quality packages including F | Portable composition accepted; F merged for testing, later partial native CI evidence exists. No missing merge to repeat. Remaining exact gates V-03. [Final review](reviews/code-quality-2026-10-15/IMPLEMENTATION_FINAL_REVIEW.md), [Windows handoff](reviews/code-quality-2026-10-15/WINDOWS_HANDOFF.md). |
+| macOS audit M01/M02/M03/M05 and Q01/Q02/Q03 | Corrections implemented and independently reviewed: truthful observed pause, directory semantics, icon names, Settings return, build identity, accumulated step requests and current error identity. Native and regression scopes are in the [closing report](handoffs/macos-post-audit-fix-report.md). Spoken acceptance stays V-07. |
+| Subsequent Pro-review/focus/tooltip/Slider defects | Demonstrated application triggers corrected; Player group/order approved and preserved; focus recovery `829547b4` has before/after and native checks. Engine repair is B-01, not another unimplemented application workaround. [Current report](handoffs/macos-post-audit-fix-report.md). |
+| Old macOS unsupported/backend-not-implemented claims and pending H1/L1/L2 production proposals | Superseded by implemented source and later accepted evidence. No need to redo the media-engine/presentation choice or original HDR loop. |
 
 ## Archive recovery and preservation map
 

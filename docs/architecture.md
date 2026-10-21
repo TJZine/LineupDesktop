@@ -16,8 +16,8 @@ Flutter/Dart application
     +-- narrow native player boundary
               |
               +-- C++ / libmpv
-              +-- Windows native video presentation
-              +-- DirectComposition integration
+              +-- Windows presentation / DirectComposition
+              +-- macOS presentation / MoltenVK / CAMetalLayer
 ```
 
 ## Accepted ownership
@@ -31,9 +31,10 @@ cross-feature asynchronous state graph justifies one mature state-management
 dependency.
 
 C++ is reserved for behavior that materially needs native ownership: libmpv
-lifetime and commands, decoded-frame presentation, Windows platform objects,
-DirectComposition, and native media telemetry. Native handles, mpv internals,
-and token-bearing URLs do not enter ordinary Flutter UI state.
+lifetime and commands, decoded-frame presentation, platform objects,
+DirectComposition on Windows, MoltenVK/CAMetalLayer on macOS, and native
+telemetry. Native handles, mpv internals, and token-bearing URLs do not enter
+ordinary Flutter UI state.
 
 ## Platform-neutral native player protocol
 
@@ -199,8 +200,8 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
   a fixed diagnostic is logged and `_Exit(EXIT_FAILURE)` ends the process
   without destructors, a second blocking wait, or live-layer teardown. This
   is failed termination; the OS reclaims the resources. Synchronous `Shutdown()`
-  remains emergency/destructor cleanup only. Native fullscreen event/Dart
-  reconciliation remains separate port work.
+  remains emergency/destructor cleanup only. Native fullscreen events and Dart
+  reconciliation are implemented; the exact platform acceptance stays attributed.
 - **Display matching:** always reported unavailable (`unsupported_api`), as
   [the protocol](native-player-protocol.md#macos-backend) records.
 
@@ -231,6 +232,11 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
 - A Windows C++ libmpv owner, native child presentation, command/property/event
   channel, track projection, decoder/output and quality/HDR observations,
   fullscreen/resize/minimize handling, and clean recreation controls.
+- A macOS Objective-C++ adapter on that shared core, with host CAMetalLayer/
+  MoltenVK presentation, Mac menu/modifier integration, native fullscreen events,
+  asynchronous close/quit, self-built runtime embedding and generated notices.
+  Development/native evidence is recorded; signed release and older-OS acceptance
+  remain in [the current register](open-obligations.md).
 - A retained Flutter Guide with lazy fixed-extent rows, shared time geometry,
   distinct focus/selection/tuned/airing/hover treatment, bounded schedule and
   artwork caches, stale-result rejection, library filters, accessible
@@ -396,6 +402,10 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
   owner.
 - A pinned, repository-owned Flutter Windows DirectComposition patch with the
   adapted BSD notice and an exact runtime compatibility check.
+- An opt-in desktop accessibility engine repair with retained semantics, staged
+  AXTree publication and failed-update recovery. macOS source/build/artifact and
+  bounded native recovery are verified; stock SDKs remain untouched and combined
+  Windows engine/app integration is unfinished. [Recovery evidence](handoffs/macos-post-audit-fix-report.md).
 - Flutter format, analysis, tests, focused macOS golden verification and
   application builds, focused Windows widget tests, pinned LGPL libmpv
   application builds, conditional patched-engine builds, packaging rejection

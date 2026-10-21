@@ -523,8 +523,10 @@ This is an engineering list of review items, not legal advice.
 - **Hosted CI acceptance:** `.github/workflows/ci.yml` now provisions/builds
   the pinned runtime and requires portable/native, embed/signing and
   authenticated-reference checks. The separate core-contract job is also
-  integrated. Hosted execution has not been established by the local evidence
-  recorded here.
+  integrated. Later attributed hosted macOS native/runtime/auth passes are
+  recorded in [the final L2 handoff](handoffs/macos-l2-controller-status-handoff.md#final-controller-addendum--october-18-2026).
+  They do not establish a new hosted run for the October 20 opt-in repaired engine
+  or signed-distribution acceptance. See [current gaps](open-obligations.md).
 - **x86_64 / universal:** not built (plan P3); see "Architectures" for what is
   missing.
 - **Byte identity:** libharfbuzz and libmpv still differ between build

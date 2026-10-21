@@ -1,5 +1,13 @@
 # macOS port execution record
 
+Current status is reconciled in [Open obligations](open-obligations.md);
+[the Opus 5.5 handoff](handoffs/opus-5-5-core-readiness-handoff.md) summarizes
+macOS/shared-core readiness and TV feasibility. The final engine-recovery
+campaign is recorded in [its closing report](handoffs/macos-post-audit-fix-report.md)
+and [execution record](handoffs/macos-m04-recovery-implementation-handoff.md).
+Chronological pending statements below retain their original dates and are
+superseded by later evidence; they are not another current backlog.
+
 Controller takeover: 2026-10-17. Scope is the existing
 [port plan](macos-port-plan.md), implemented in bounded slices with an
 independent adversarial review before integration. This record distinguishes
