@@ -65,11 +65,11 @@ the discriminating evidence in the investigation rows below.
 | ID | Obligation | Evidence already available | Exact unfinished gate |
 | --- | --- | --- | --- |
 | V-01 | Initial OSD fade/menu continuity and natural Slider interactivity transition | Retained frame/widget regressions, stock keyed/unkeyed reductions, canonical native continuity and useful diagnostic seek. Four automatic first-fade attempts plus a bounded manual probe do not qualify; three natural routes mount already-interactive Sliders. | Actual menu opening within the initial 350-ms fade with recorded animation/timing; a same-presenter enabled/disabled transition where naturally feasible. Do not add a product control to force it or repeat an unbounded campaign. [Recovery assignment](handoffs/macos-m04-recovery-implementation-handoff.md#d-resolve-remaining-runtime-uncertainties). |
-| V-02 | Repaired Windows engine | Historical macOS common tests 242 Debug / 240 Release retain their attribution. October 21 fresh focused native tests pass all 12 recovery cases per mode on the durable macOS checkout; this is not Windows evidence. October 21 Windows per-mode full-suite/recovery/DC-baseline attribution jobs are implemented; [CI dispatch 39548870477](https://github.com/TJZine/LineupDesktop/actions/runs/39548870477) is running at `c767d79d`; Windows release policy and combined engine/app/package job passed. Actual Release common suite passed all 240 cases, including the ten bridge recovery cases; the Windows suite failed its native recovery case amid AOT-fixture errors, then aborted at a 300-second test timeout without XML or summary. Debug is still running. Required per-mode acceptance and baseline attribution have not passed. | Execute Debug and Release `common_cpp_unittests` and `flutter_windows_unittests` against both patches, require all 12 named recovery cases, attribute other failures against same-mode DC-only output, and verify intended app/package. No configured-job or portable-fixture result closes V-02. [Engine instructions](../tool/flutter_engine/README.md). |
+| V-02 | Repaired Windows engine | Historical macOS common tests 242 Debug / 240 Release retain their attribution. October 21 fresh focused native tests pass all 12 recovery cases per mode on the durable macOS checkout; this is not Windows evidence. October 21 Windows per-mode full-suite/recovery/DC-baseline attribution jobs are implemented; [CI dispatch 39548870477](https://github.com/TJZine/LineupDesktop/actions/runs/39548870477) is running at `c767d79d`; Windows release policy and combined engine/app/package job passed. Actual Release common suite passed all 240 cases, including the ten bridge recovery cases; the Windows suite failed its native recovery case amid AOT-fixture errors, then aborted at a 300-second test timeout without XML or summary. Debug completed: 242 common and 396 Windows passes, all twelve required recovery cases passing, no baseline exclusions and one visible existing disabled Windows test. The controller inspected actual XML and summary. Release acceptance remains blocked. | Execute Debug and Release `common_cpp_unittests` and `flutter_windows_unittests` against both patches, require all 12 named recovery cases, attribute other failures against same-mode DC-only output, and verify intended app/package. No configured-job or portable-fixture result closes V-02. [Engine instructions](../tool/flutter_engine/README.md). |
 | V-03 | Windows native lifecycle, physical media and exact package | Later recorded CI run [39383128215](https://github.com/TJZine/LineupDesktop/actions/runs/39383128215) passed stock Windows build and eight explicit CTests: encoder, playback state, core, codec, display dynamic range, guardian, player contract and authenticated reference. Earlier L2 Windows auth/package gates also passed at their recorded identities. | `runner_lifecycle` is still outside current CI and lacks recorded execution here. Run it with its actual patched-engine prerequisites. Physical playback/parts/EOF, HDR/restoration, tracks, input, monitor/DPI and clean-system package remain distinct. Revalidate changed inputs; do not repeat all earlier tests solely because an old handoff says pending. [Development tiers](DEVELOPMENT.md#current-test-tiers-and-gaps), [physical/package procedure](windows-native-validation.md). |
-| V-04 | macOS real-app reliability beyond recorded scenarios | Historical actual Plex playback, tracks, timer expiry, recovery, natural rollovers and bounded native focus/seek/quit observations exist. The October 21 candidate at `ddefaa4e` is built and artifact-verified. It was started with maintainer availability approved; the loaded Flutter engine was independently matched to the bundled SHA-256. After capture recovered, two current local selections failed immediately with native `source_open_error`; the first redacted report then records `player_unavailable`. Saved Guide and running Licenses routes were observed, but successful playback is unverified. A bounded read-only worker diagnosis is active. Later native capture failed with error -3812; no physical/live-playback pass is inferred. Accepted H1 HDR/L1 seek evidence and L2 real-coordinator/auth cases retain their exact sources. | Sustained audio/rollover, true live resize/minimum size, minimize/restore, multi-display/Spaces/Stage Manager and sleep/wake coverage on the selected final candidate; exact remaining physical steps stay in the existing checklist. No new claim follows from automated AX actions. |
+| V-04 | macOS real-app reliability beyond recorded scenarios | Historical actual Plex playback, tracks, timer expiry, recovery, natural rollovers and bounded native focus/seek/quit observations exist. The October 21 candidate at `ddefaa4e` is built and artifact-verified. It was started with maintainer availability approved; the loaded Flutter engine was independently matched to the bundled SHA-256. After capture recovered, two current local selections failed immediately with native `source_open_error`; the first redacted report then records `player_unavailable`. Saved Guide and running Licenses routes were observed, but successful playback is unverified. A completed read-only worker investigation passed 54 controlled runtime cases, matched all 18 loaded media libraries to the prepared runtime, and left the real cause unproven. An opt-in, privacy-preserving native probe is being implemented for the next discriminating observation. Later native capture failed with error -3812; no physical/live-playback pass is inferred. Accepted H1 HDR/L1 seek evidence and L2 real-coordinator/auth cases retain their exact sources. | Sustained audio/rollover, true live resize/minimum size, minimize/restore, multi-display/Spaces/Stage Manager and sleep/wake coverage on the selected final candidate; exact remaining physical steps stay in the existing checklist. No new claim follows from automated AX actions. |
 | V-05 | Real Plex scope, catalog and recovery edge cases | Pagination/parser/currentness tests; real macOS scan and selected local playback flows; authenticated synthetic reference matrices. | On candidate `ddefaa4e`, saved-lineup/current Guide restoration and completed launch library scans were observed; the redacted report identifies a verified Plex connection. Two available local current selections failed with `source_open_error`. Continue the approved owner/available Home profile, explicit scan/retry/cancel, catalog, successful authorized playback and shutdown routes once diagnosed. Protected-profile/server failures and 401/403 retain deterministic evidence. Remote/relay, alternate PMS shapes, large/partial catalogs, smart collections and live membership/portrait probes are documented beta limitations. Do not alter accounts/servers or credentials to manufacture a case. [October 10 Windows procedures](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md), [collection plan](osd-autohide-and-collection-membership-plan.md), [Player/Guide plan](player-guide-polish-plan.md). |
-| V-06 | macOS declared minimum version | App/runtime target macOS 12 arm64; actual recorded host is macOS 27. | Runtime, TLS/CA, Keychain, presentation and app launch on the older versions actually promised, or explicit agreement to narrow the support range. The maintainer allowed a VM route starting with macOS 12 and stepping up on failure; the maintainer approved installing UTM and downloading the macOS 12 image. Official UTM 5.0.8 is installed with matching release checksum and valid deep signature; Apple CDN macOS 12.6 (21G115) IPSW is downloaded and checksum-verified. The standalone compatibility helper was inconclusive because it lacks the virtualization entitlement; use UTM’s existing entitlement for the actual image check. Guest installation and runtime checks remain unexecuted. Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
+| V-06 | macOS declared minimum version | App/runtime target macOS 12 arm64; actual recorded host is macOS 27. | Runtime, TLS/CA, Keychain, presentation and app launch on the older versions actually promised, or explicit agreement to narrow the support range. The maintainer allowed a VM route starting with macOS 12 and stepping up on failure; the maintainer approved installing UTM and downloading the macOS 12 image. Official UTM 5.0.8 is installed with matching release checksum and valid deep signature; Apple CDN macOS 12.6 (21G115) IPSW is downloaded and checksum-verified. The standalone helper lacked the required virtualization entitlement, but UTM accepted the image, installed onto the new VM drive and booted to Monterey Setup Assistant. US locale selected; migration and Apple ID skipped. The maintainer must review the license agreement and create the local account; candidate/runtime checks remain unexecuted. Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
 | V-07 | Existing physical/spoken acceptance | Automated semantics/native evidence is recorded separately. | User explicitly deferred the **one existing six-item checklist** on October 20, then confirmed readiness on October 21 and requested maximum autonomous work. Actual physical/listening results remain pending and all boxes remain unchecked. Do not start synthetic VoiceOver/modifier work or infer passes from unlock/authentication assistance. [Checklist](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist). Windows Narrator/physical checks retain their separate platform scope. |
 
 ## Investigations and unresolved observations
@@ -124,7 +124,7 @@ Choose a release scope explicitly rather than calling every idea core-blocking.
 
 | ID | Engineering obligation | Current state / next action |
 | --- | --- | --- |
-| R-01 | Repaired-engine integration across intended build flows | October 21 source implementation by repository `worker` (gpt-6.1-sol, medium): canonical combined Python authority, fixed Windows outputs, checked consumers without Ninja refresh, schema-2 release/package receipts and separate mode CI jobs. Controller portable checks pass (26 passed, one Windows-only skip), YAML parses, frozen inputs are unchanged, and existing macOS verification succeeds with identical JSON before/after. Independent review found native Windows fixture path and inherited GoogleTest selection issues; the same worker fixed both, and controller source/fixture checks pass. Windows newline/shim fixture assumptions were corrected too. Hosted Windows release-policy and ordinary stock Windows app/native checks passed in CI run 39548870477 at `c767d79d`; combined engine/app/package execution passed at that exact source, including the configured rejection probes. Controller inspected the actual ZIP: all 18 recorded artifact hashes and embedded/build receipts agree. Release engine tests failed as recorded in V-02; Debug remains active. R-01 target-host acceptance and V-02 remain open. Stock caches unchanged. [Engine README](../tool/flutter_engine/README.md), [build instructions](DEVELOPMENT.md#macos-development-app). |
+| R-01 | Repaired-engine integration across intended build flows | October 21 source implementation by repository `worker` (gpt-6.1-sol, medium): canonical combined Python authority, fixed Windows outputs, checked consumers without Ninja refresh, schema-2 release/package receipts and separate mode CI jobs. Controller portable checks pass (26 passed, one Windows-only skip), YAML parses, frozen inputs are unchanged, and existing macOS verification succeeds with identical JSON before/after. Independent review found native Windows fixture path and inherited GoogleTest selection issues; the same worker fixed both, and controller source/fixture checks pass. Windows newline/shim fixture assumptions were corrected too. Hosted Windows release-policy and ordinary stock Windows app/native checks passed in CI run 39548870477 at `c767d79d`; combined engine/app/package execution passed at that exact source, including the configured rejection probes. Controller inspected the actual ZIP: all 18 recorded artifact hashes and embedded/build receipts agree. Release engine tests failed as recorded in V-02; Debug passed both full suites and all twelve recovery cases, with one visible disabled upstream test and no baseline exclusions. Release remains blocked; the [fixture design decision](handoffs/windows-release-fixture-design-2026-10-21.md) awaits the maintainer. R-01 target-host acceptance and V-02 remain open. Stock caches unchanged. [Engine README](../tool/flutter_engine/README.md), [build instructions](DEVELOPMENT.md#macos-development-app). |
 | R-02 | macOS signed archive, sandbox and distribution | Development embedding/ad-hoc signing exists. Team-identity signing/provisioning, hardened-runtime/sandbox loading, data-protection Keychain continuity, browser link/network/CA behavior and TestFlight installation are not accepted. [Runtime signed-sandbox checks](macos-runtime.md#signed-sandbox-checks-still-pending-r1), [port distribution](macos-port-plan.md#48-app-store-distribution-sandbox-and-credentials). |
 | R-03 | Notices and source delivery | October 21 design gate completed by repository `worker` (gpt-6.1-sol, medium): [themed in-app Licenses design](handoffs/licenses-design-2026-10-21.md), approved by the maintainer October 21. The same worker returned the 41-file reader/native-resource/source-tooling implementation against `c767d79d`, with exclusive Dart ownership released. Controller verified its content manifest, 13 focused Dart tests, six Python fixtures, all 53 actual prepared resource texts, generated-asset freshness, format/analysis and project lint; independent review established three P2 corrections (all ZIP/companion entry types, completed engine-verification sidecar binding, prior Player return destination). The same worker fixed all three; controller source/negative-control inspection, 17 focused Dart tests, eight Python tests, asset freshness, format and analysis pass. Child full suite passed 1,889 tests after the product fixes. Controller inspected real Flutter fixture renders (normal/large text/small window/partial failure); actual running-app/physical behavior remains unexecuted. Controller integrated the implementation as `ddefaa4e` before candidate build. The candidate-bound source companion was prepared and verified locally (109 source inputs, 129 delivered files), including exact app/ZIP/receipt/engine/runtime bindings. The native adapter also read all 53 documents from the completed candidate bundle with exact text. On the running candidate, the controller opened native component/file lists and offline text plus Sources and rebuilding inventory, then verified Esc restores the same scrolled index and Return reopens its prior invoker at index and Support levels. Actual playback continuity remains unverified because tuning failed; physical/spoken behavior remains separate. R-03 stays open for that final running-playback check and delivery disposition. No sending/publication authorized. Independent legal/Plex/trademark/patent/App Store review remains a pre-submission gate; no legal conclusion is made here. [Runtime distribution notes](macos-runtime.md#distribution-notes-for-the-legal-review). |
 | R-04 | Runtime/toolchain upkeep and exact package provenance | Keep pins, dynamic libraries, CA handling and artifact receipts. libmpv/HarfBuzz cross-directory byte identity has documented limits, separate from validated consumed-artifact provenance; do not claim fully byte-reproducible runtime builds. Recheck hosted execution/current package only when required by changed inputs or release. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
@@ -142,7 +142,7 @@ macOS engine verification before/after returned identical JSON, binary SHA-256
 provenance SHA-256
 `5609d81f75ab863bbca8b03566fabadec7406806ca8d4af8f3b239c44e65b7c0`.
 PowerShell remains unavailable locally. Hosted Windows release policy passed in
-CI run 39548870477 at `c767d79d`; the combined engine/app/package job subsequently passed, Release engine tests failed and Debug remains running. The existing Python
+CI run 39548870477 at `c767d79d`; the combined engine/app/package job subsequently passed, Release engine tests failed and Debug subsequently passed. No engine job is now active. The existing Python
 suite also ad-hoc signed disposable test binaries before the controller noticed
 the blanket signing restriction; no application/candidate was signed. The two
 native signing fixtures were not selected in the corrected rerun. The maintainer subsequently authorized ad-hoc identity `-` for new build outputs,
@@ -225,8 +225,8 @@ No credentials were entered. Candidate process/log evidence stays private in
 Selected V-04/V-05 live routes, running Licenses playback continuity, graceful
 quit, V-06 and actual V-07 human results remain open. The existing six-item human
 checklist owns physical/spoken acceptance; zero boxes are inferred. Windows
-packaging passed at `c767d79d`, Release engine tests failed and Debug is active;
-no push is permitted while it runs. Later prose-only commits do not change this
+packaging and Debug engine tests passed at `c767d79d`; Release engine tests
+failed. The workflow is complete, and no engine job remains active. Later prose-only commits do not change this
 candidate's source/artifact identity.
 
 V-06 preparation (controller, October 21): after the maintainer's explicit UTM/
@@ -246,14 +246,18 @@ error 10004; the API requires `com.apple.security.virtualization`, which the
 helper lacks. That result is inconclusive about the image or OS support. Use
 UTM’s existing signed entitlement for the next check; no helper/application
 entitlements were added or changed. UTM’s CLI exposes no guest-create command.
-The controller opened UTM, selected Apple virtualization/macOS 12+, and entered
-four cores/8192 MiB. The IPSW Browse button is omitted from its accessible tree;
-coordinate capture returned a tiny background thumbnail, then -3812 despite a
-fresh binding/session. The maintainer was asked to foreground UTM. No image has
-yet been selected in UTM, and guest creation remains unexecuted. No existing
-application/engine pair, stock SDK cache, host security setting, entitlement, or
-credential has been changed. No VM runtime support
-floor is established by this preparation.
+The controller opened UTM and created `Lineup V-06 macOS 12.6`, with four cores,
+8192 MiB memory, a new 64-GiB drive and no shared directory. After the maintainer
+foregrounded UTM, a fresh sheet-only screenshot supplied the correct coordinate
+mapping for Browse; the verified image was selected. UTM accepted it, installed
+onto the new empty drive and booted to Monterey Setup Assistant. The controller
+selected US locale and skipped data migration and optional Apple ID sign-in.
+The maintainer completed the license/account setup and reported the guest desktop
+ready; the controller observed Monterey's desktop in UTM. No agreement was
+accepted or credential entered by the controller. No existing application/engine pair, stock SDK cache,
+host security setting or entitlement was changed. The candidate has not yet been
+transferred or executed in the guest; no runtime support floor follows from this
+preparation.
 
 Windows package/result inspection (controller, October 21): actual hosted job
 119053306743 passed the combined-engine app build and package step, including
@@ -289,6 +293,52 @@ diagnosis with isolated synthetic checks; it may not touch the live app/PMS,
 credentials, user data, Dart tools, repository files or Git. Controller retains
 all integration and UI ownership. Any source/entitlement/strategy change outside
 those boundaries must return with evidence before implementation.
+
+
+Debug completion (controller inspected October 21): run 39548870477 is complete.
+Actual `common_cpp_unittests.xml` has 242 passes; Windows XML has 396 passes and
+one preexisting disabled case, `MockWindow.DISABLED_GetObjectUia`. All ten bridge
+and two Windows recovery cases were individually checked as run/completed with
+no failure/skip. Summary records no DC-only exclusions. Debug engine binary
+SHA-256 `d77d70b8509d62695af31e45275dd69d1f795f8d87435d1c7704fb25fe7f2c70`;
+provenance `cec9a6936804b23006cb701b26d7feb219d7b86804980d9dd01bda5d18cfd254`.
+Sanitized independent inspection is saved as `debug-inspection.json` beside the
+private downloaded artifacts. This does not substitute for failed Release.
+
+V-04 diagnosis completion: the repository worker (gpt-6.1-sol, medium) changed no
+files. The controller confirmed the returned report hash and all 54 synthetic
+case outcomes. All 18 candidate-loaded media dylibs equal the prepared runtime;
+BUILD-INFO is unchanged. Candidate sandbox/network-client entitlements are
+present; safe environment-name inspection found no relevant proxy/TLS/DYLD
+variables. A bounded retained-log search found no genuine sandbox denial, which
+is limited absence evidence. The synthetic harness supplies a private test CA,
+clean environment and null audio/video; it does not prove default trust, actual
+PMS part/range/redirect behavior or sandboxed physical playback. Source tracing
+also explains how subsequent cancellation can produce the generic
+`player_unavailable` after the initial native failure; that trace does not prove
+the source-open cause or authorize a playback-order change.
+
+A new controller-authorized worker unit implements a small disabled-by-default
+first-open developer probe: only allowlisted module/cause categories, bounded
+native END_FILE error integers and already-observed HTTP status, with per-load
+bounds and privacy controls. No URL/path/header/token/raw native text, public
+protocol/UI/Dart change, security relaxation or playback-policy repair is in
+scope. The controller will inspect/test the returned diff and owns any diagnostic
+app commit/build/launch under a new exact identity. It is not a beta acceptance or
+source-open fix. Results stay private under the existing stabilization cache.
+
+The separate [Windows Release fixture design](handoffs/windows-release-fixture-design-2026-10-21.md)
+records the reviewed source evidence and both migration choices. The controller
+recommends one canonical recipe plus fresh engine/candidate identities to avoid
+maintaining a second test-source authority; the worker's isolated-overlay option
+preserves the current Mac pair at the cost of that extra authority. This is a
+consequential change to the frozen-identity plan. The maintainer approved
+“canonical recipe and rebuild” on October 21. Before migration, the controller's
+macOS Release verification passed again with unchanged binary/provenance hashes
+(`8daffe99…`, `4226268a…`). The existing pair is preserved. Disk check reports
+184 GiB available; fresh provisioning must account for that bound without deleting
+existing data. Native fixture/recipe implementation and rebuilt acceptance remain
+pending.
 
 H's PowerShell pin assertion was source-only in its original code-quality campaign;
 later Windows policy/CI evidence exists. Do not perpetually label all PowerShell
