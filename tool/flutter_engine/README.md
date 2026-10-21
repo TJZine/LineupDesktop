@@ -70,11 +70,31 @@ Local receipts describe the wrapper's execution; they are not hostile-local
 attestation. Sidecars beside the app contain private build details and stay out
 of Git. An actual loaded-engine observation is still required after launch.
 
-Windows engine checks use `--platform windows --architecture x64` and omit
-`--apple-linker`. The existing Windows launcher/release/package checks retain
-their DirectComposition-only source contract and reject an additional AX patch;
-this candidate tooling does not claim repaired Windows app/package integration.
-Windows engine execution and affected runtime acceptance require a Windows host.
+Windows engine checks use `--platform windows --architecture x64`, omit
+`--apple-linker`, and select `lineup_ax_debug_x64` or `lineup_ax_release_x64`.
+The Windows apply wrapper delegates to Python's combined apply command. Launch
+and release verify the explicit candidate instead of refreshing it with Ninja;
+changed engine inputs require a fresh multi-hour recipe build. Release verifies
+before/after Flutter, compares the bundled DLL, and emits schema-2 receipts with
+canonical inputs, ordered patches, provenance/DLL digests and application hashes.
+Packaging rejects schema 1 and validates the sanitized receipt among hashed data
+artifacts without retaining private engine checkout paths or raw provenance.
+
+After building each mode, run the complete Windows suites and attribution gate:
+
+```powershell
+python tool/flutter_engine/desktop_accessibility.py windows-tests `
+  --flutter-root C:\path\to\flutter --platform windows --architecture x64 --mode debug `
+  --ninja C:\path\to\actual\ninja.exe --jobs 2 --results C:\private\fresh-debug-results
+```
+
+Repeat for Release with a fresh result directory. This builds/runs both full suites,
+checks all twelve named recovery cases, and attributes unrelated failures using
+same-mode DC-only baseline output. It restores combined source after attribution
+and reverifies the candidate; failures without completed attribution block CI.
+Results include XML/logs and a sanitized summary with observed duration and
+explicit baseline exclusions. These mechanisms and the separate CI mode jobs
+still need executed Windows proof; portable fixtures cannot establish it.
 
 To refresh metadata after a reviewed patch changes, run `finalize --flutter-root
 /path/to/pinned/flutter`, inspect the derived hashes, and commit canonical inputs
@@ -94,17 +114,16 @@ The owned patch targets only the framework and engine revisions recorded in
 only after the DirectComposition EGL surface succeeds. The native player refuses to
 initialize without the exact marker, preventing silent opaque fallback.
 
-[apply.ps1](apply.ps1) requires committed metadata and patch inputs, verifies the
-patch's SHA-256, rejects staged or unstaged tracked changes in the Flutter checkout,
-and verifies the framework revision, pinned engine artifact revision, and exact
-committed Windows EGL manager blob before a normal, contextual `git apply
---check`. Expected untracked gclient dependencies and build outputs are not
-treated as source modifications.
+[apply.ps1](apply.ps1) invokes the single Python combined apply authority with a
+checked process exit. That authority requires committed canonical pins, manifest
+and patches, derives exact patched source from pinned Git blobs, and atomically
+applies DirectComposition followed by AX. Windows excludes the Apple-linker patch.
+Untracked Flutter source is rejected while expected clean gclient dependencies
+and build outputs are verified through their separate identities.
 
 Use [Development's provisioning and build commands](../../docs/DEVELOPMENT.md#patched-engine-provisioning)
-for prerequisites, gclient setup, patch application, and local-engine selection.
-The release wrapper refreshes `host_release` and binds source/engine identities
-to the resulting artifacts. Do not copy artifacts over the stock SDK cache.
+for prerequisites, gclient setup, combined application and explicit engine selection.
+Do not copy artifacts over the stock SDK cache.
 
 See [CI evidence](../../docs/DEVELOPMENT.md#ci-evidence) for routine compile checks
 and the conditional patched-engine/package job. Runtime marker and

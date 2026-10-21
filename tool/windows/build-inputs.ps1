@@ -35,8 +35,8 @@ function Get-FlutterArguments {
     'run'
     '-d'
     'windows'
-    '--local-engine=host_debug'
-    '--local-engine-host=host_debug'
+    '--local-engine=lineup_ax_debug_x64'
+    '--local-engine-host=lineup_ax_debug_x64'
     "--local-engine-src-path=$EngineSource"
   )
   if ($BoundParameters.ContainsKey('MediaPath')) {
@@ -92,83 +92,83 @@ function Get-LineupPackageInput {
   }
 }
 
-function Get-PinnedCheckoutGitOutput {
+function Get-VerifiedWindowsEngine {
+  [CmdletBinding()]
   param(
     [Parameter(Mandatory)] [string] $Root,
-    [Parameter(Mandatory)] [string[]] $Arguments,
-    [switch] $SingleValue
+    [Parameter(Mandatory)] [ValidateSet('debug', 'release')] [string] $Mode
   )
-
+  $name = "lineup_ax_${Mode}_x64"
   $nativePreference = $PSNativeCommandUseErrorActionPreference
   $PSNativeCommandUseErrorActionPreference = $false
   try {
-    $output = @(& git -C $Root @Arguments)
-    $exitCode = $LASTEXITCODE
+    $output = @(& python (Join-Path (Get-LineupRepository) 'tool/flutter_engine/desktop_accessibility.py') `
+      verify --flutter-root $Root --platform windows --architecture x64 --mode $Mode --output-name $name)
+    $status = $LASTEXITCODE
   } finally {
     $PSNativeCommandUseErrorActionPreference = $nativePreference
   }
-  if ($exitCode -or ($SingleValue -and
-      ($output.Count -ne 1 -or [string]::IsNullOrWhiteSpace($output[0])))) {
-    throw "git $($Arguments -join ' ') failed in $Root."
+  if ($status) { throw "Combined Windows engine verification failed. Exit code $status. Build a fresh candidate." }
+  try { $selected = ($output -join "`n") | ConvertFrom-Json -ErrorAction Stop } catch {
+    throw 'Combined Windows engine verifier returned invalid JSON.'
   }
-  $output
+  $expectedBinary = [IO.Path]::GetFullPath((Join-Path $Root "engine/src/out/$name/flutter_windows.dll"))
+  if ($selected.kind -cne 'verified-local-desktop-accessibility' -or
+    $selected.platform -cne 'windows' -or $selected.architecture -cne 'x64' -or
+    $selected.mode -cne $Mode -or $selected.outputName -cne $name -or
+    $selected.binary -isnot [string] -or
+    [IO.Path]::GetFullPath($selected.binary) -ne $expectedBinary -or
+    [IO.Path]::GetFullPath($selected.flutterRoot) -ne [IO.Path]::GetFullPath($Root) -or
+    [IO.Path]::GetFullPath($selected.engineSource) -ne [IO.Path]::GetFullPath((Join-Path $Root 'engine/src')) -or
+    $selected.binarySha256 -cnotmatch '^[a-f0-9]{64}$' -or
+    $selected.provenanceSha256 -cnotmatch '^[a-f0-9]{64}$' -or -not $selected.recipe) {
+    throw 'Combined Windows engine verifier returned the wrong output or identity.'
+  }
+  $selected
 }
 
-function Get-NormalizedTextSha256 {
-  param([Parameter(Mandatory)] [string] $Path)
-
-  $text = [IO.File]::ReadAllText($Path).Replace("`r`n", "`n").Replace("`r", "`n")
-  $bytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
-  [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+function Get-WindowsEngineReceipt {
+  param([Parameter(Mandatory)] [psobject] $Selected)
+  # Export only portable identities, never local checkout/toolchain paths.
+  [ordered]@{
+    recipe = $Selected.recipe
+    outputName = $Selected.outputName
+    mode = $Selected.mode
+    architecture = $Selected.architecture
+    provenanceSha256 = $Selected.provenanceSha256
+    binarySha256 = $Selected.binarySha256
+  }
 }
 
-function Assert-PinnedFlutterCheckout {
-  param(
-    [Parameter(Mandatory)] [string] $Root,
-    [Parameter(Mandatory)] [System.Collections.IDictionary] $Metadata,
-    [Parameter(Mandatory)] [string] $PatchPath
-  )
-
-  $head = Get-PinnedCheckoutGitOutput -Root $Root `
-    -Arguments @('rev-parse', '--verify', 'HEAD') -SingleValue
-  if ($head -ne $Metadata.FlutterFrameworkRevision) {
-    throw 'Flutter checkout does not match the pinned framework revision.'
+function Assert-WindowsEngineReceipt {
+  param([Parameter(Mandatory)] [psobject] $Receipt)
+  $repository = Get-LineupRepository
+  $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
+  $manifest = Get-Content -Raw -LiteralPath (Join-Path $repository 'tool/flutter_engine/desktop-accessibility.json') | ConvertFrom-Json
+  if ($Receipt.outputName -cne 'lineup_ax_release_x64' -or $Receipt.mode -cne 'release' -or
+    $Receipt.architecture -cne 'x64' -or $Receipt.provenanceSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+    $Receipt.binarySha256 -cnotmatch '^[a-f0-9]{64}$' -or
+    $Receipt.recipe.frameworkRevision -cne $metadata.FlutterFrameworkRevision -or
+    $Receipt.recipe.engineVersion -cne $metadata.FlutterEngineRevision) { throw 'Invalid combined engine receipt identity.' }
+  foreach ($name in @('tool/flutter_version.json', 'tool/windows/build-metadata.psd1')) {
+    if ($Receipt.recipe.pinSha256.$name -ne (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository $name)).Hash) {
+      throw 'Combined engine receipt pin mismatch.'
+    }
   }
-  $engineVersion = Join-Path $Root 'bin/internal/engine.version'
-  if ((Get-Content -Raw -LiteralPath $engineVersion).Trim() -ne
-    $metadata.FlutterEngineRevision) {
-    throw 'Flutter checkout does not pin the required engine revision.'
+  if ($Receipt.recipe.manifestSha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository 'tool/flutter_engine/desktop-accessibility.json')).Hash) {
+    throw 'Combined engine receipt manifest mismatch.'
   }
-
-  $trackedChanges = @(Get-PinnedCheckoutGitOutput -Root $Root `
-    -Arguments @('status', '--porcelain', '--untracked-files=no'))
-  $changedPaths = @($trackedChanges | ForEach-Object {
-      if ($_.Length -lt 4) { throw "Unexpected git status entry: $_" }
-      $_.Substring(3).Trim('"').Replace('\', '/')
-    } | Sort-Object -Unique)
-  if ($changedPaths.Count -ne 1 -or
-    $changedPaths[0] -ne $metadata.FlutterManagerPath) {
-    throw 'Flutter checkout must contain only the repository-owned engine patch.'
+  $expected = @($metadata.FlutterEnginePatchPath, 'tool/flutter_engine/0002-desktop-accessibility.patch')
+  if (@($Receipt.recipe.patches).Count -ne $expected.Count) { throw 'Combined engine receipt requires both ordered patches.' }
+  for ($index = 0; $index -lt $expected.Count; $index++) {
+    $patch = $Receipt.recipe.patches[$index]
+    if ($patch.path -cne $expected[$index] -or
+      $patch.sha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository $expected[$index])).Hash) {
+      throw 'Combined engine receipt patch order/hash mismatch.'
+    }
   }
-
-  $managerPath = Join-Path $Root $metadata.FlutterManagerPath
-  if (-not (Test-Path -LiteralPath $managerPath -PathType Leaf) -or
-    (Get-NormalizedTextSha256 $managerPath) -ne
-    $metadata.FlutterPatchedManagerSha256) {
-    throw 'Patched Flutter manager source does not match the pinned result.'
-  }
-
-  $nativePreference = $PSNativeCommandUseErrorActionPreference
-  $PSNativeCommandUseErrorActionPreference = $false
-  try {
-    & git -C $Root apply --reverse --check $patchPath
-    $patchExitCode = $LASTEXITCODE
-  } finally {
-    $PSNativeCommandUseErrorActionPreference = $nativePreference
-  }
-  if ($patchExitCode) {
-    throw 'The exact repository-owned Flutter engine patch is not applied.'
-  }
+  if ($manifest.patches[0].path -cne $expected[1] -or
+    $manifest.patches[0].sha256 -ne $Receipt.recipe.patches[1].sha256) { throw 'Combined engine manifest authority mismatch.' }
 }
 
 function Assert-NoTrackedSymlinks {
@@ -324,8 +324,8 @@ function Get-LineupReleaseInput {
     Arguments = @(
       'build'
       'windows'
-      '--local-engine=host_release'
-      '--local-engine-host=host_release'
+      '--local-engine=lineup_ax_release_x64'
+      '--local-engine-host=lineup_ax_release_x64'
       "--local-engine-src-path=$engine"
       "--dart-define=LINEUP_VERSION=$($version.Name)"
       "--dart-define=LINEUP_BUILD=$($version.Build)@$($commit[0])"
@@ -354,7 +354,7 @@ function Get-LineupLaunchInput {
     MpvRoot = $mpv
     FlutterRoot = $flutterRoot
     Flutter = Join-Path -Path $flutterRoot -ChildPath 'bin/flutter.bat'
-    EngineOutput = Join-Path -Path $engine -ChildPath 'out/host_debug'
+    EngineOutput = Join-Path -Path $engine -ChildPath 'out/lineup_ax_debug_x64'
     Arguments = @(Get-FlutterArguments -EngineSource $engine `
       -BoundParameters $BoundParameters -MediaPath $MediaPath)
   }
@@ -388,10 +388,7 @@ function Invoke-NativeChecked {
 
 function Invoke-LineupLaunch {
   [CmdletBinding()]
-  param(
-    [Parameter(Mandatory)] [psobject] $Launch,
-    [Parameter(Mandatory)] [string] $Ninja
-  )
+  param([Parameter(Mandatory)] [psobject] $Launch)
 
   $previousMpv = Get-Item -LiteralPath 'Env:LINEUP_MPV_ROOT' -ErrorAction SilentlyContinue
   $hadMpv = $null -ne $previousMpv
@@ -403,16 +400,13 @@ function Invoke-LineupLaunch {
     $locationPushed = $true
     $env:LINEUP_MPV_ROOT = $Launch.MpvRoot
 
+    Get-VerifiedWindowsEngine -Root $Launch.FlutterRoot -Mode debug | Out-Null
     $cache = Join-Path -Path $Launch.FlutterRoot -ChildPath 'bin/cache/artifacts/engine/windows-x64'
     if (-not (Test-Path -LiteralPath $cache -PathType Container)) {
       Write-Host 'Pinned Flutter Windows artifacts are not cached; preparing them with the pinned flutter.bat.'
       Invoke-NativeChecked -FilePath $Launch.Flutter -Arguments @('precache', '--windows') `
         -FailureMessage 'Pinned Flutter SDK cache preparation failed.'
     }
-
-    Write-Host "Refreshing pinned host_debug engine output with $Ninja."
-    Invoke-NativeChecked -FilePath $Ninja -Arguments @('-C', $Launch.EngineOutput) `
-      -FailureMessage 'Pinned host_debug engine build failed.'
 
     $nativePreference = $PSNativeCommandUseErrorActionPreference
     $PSNativeCommandUseErrorActionPreference = $false

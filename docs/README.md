@@ -72,9 +72,11 @@ and physical acceptance are different states.
 
 ## Active plans and investigations
 
-- [Direct Play core stabilization plan](handoffs/core-stabilization-plan-2026-10-20.md):
-  macOS private-beta package sequence, bounded validation, combined Windows engine
-  integration, data-format refusal and explicit remaining acceptance decisions.
+- [Direct Play stabilization status](open-obligations.md): current macOS private-beta
+  scope, data-format protection, Windows engine integration and remaining acceptance
+  gates. Implementation plans are local working documents, not shipped references.
+- [Licenses design proposal](handoffs/licenses-design-2026-10-21.md): in-app notices
+  presentation and exact source/rebuilding delivery gaps, awaiting design approval.
 - [Code-quality implementation plan](code-quality-implementation-plan.md):
   portable packages and documentation consolidation (G) integrated and reviewed;
   native restoration work (F) merged for Windows testing, with validation still

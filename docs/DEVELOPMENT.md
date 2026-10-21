@@ -463,8 +463,9 @@ well as the embedded engine. It does not establish an actually loaded engine,
 native notification recovery, spoken usefulness or physical input acceptance.
 The [existing M-04 report](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist)
 remains the single human acceptance checklist. Windows engine compatibility and
-application/package acceptance are separate gates; the existing Windows
-DirectComposition-only launch/release owners do not accept this AX candidate.
+application/package acceptance are separate gates. Windows launch/release consumers
+now require the combined verified DirectComposition/AX recipe described below;
+implemented CI jobs do not establish executed Windows acceptance.
 
 ### Native unit tests
 
@@ -618,7 +619,7 @@ package machines also need a GPU driver or Vulkan Runtime providing
 When the pinned runtime changes, provision it into a fresh unique destination;
 do not reuse or overwrite an older prepared directory. Rebuild the Lineup
 application against the new runtime. When the pinned Flutter SDK or engine
-changes, reprovision its patched `host_debug` and `host_release` outputs
+changes, reprovision its patched `lineup_ax_debug_x64` and `lineup_ax_release_x64` outputs
 before launching or packaging; the older SDK outputs cannot be reused.
 
 ### Patched engine provisioning
@@ -655,11 +656,15 @@ Copy-Item .\engine\scripts\standard.gclient .\.gclient
 gclient sync --no-history
 C:\path\to\LineupDesktop\tool\flutter_engine\apply.ps1 -FlutterRoot (Get-Location)
 
-Set-Location engine\src
-python .\flutter\tools\gn --runtime-mode=debug
-ninja -C out\host_debug
-python .\flutter\tools\gn --runtime-mode=release
-ninja -C out\host_release
+Set-Location C:\path\to\LineupDesktop
+$ninja = (Get-Command ninja.exe -CommandType Application).Source
+foreach ($mode in @('debug', 'release')) {
+  python tool/flutter_engine/desktop_accessibility.py build `
+    --flutter-root C:\path\to\flutter --platform windows --architecture x64 --mode $mode `
+    --ninja $ninja --gclient C:\path\to\depot_tools\gclient.bat --jobs 2
+  if ($LASTEXITCODE) { throw "Fresh combined engine build failed: $mode" }
+}
+
 ```
 
 See the [engine patch contract](../tool/flutter_engine/README.md) for source
@@ -676,7 +681,7 @@ existing app normally before launching a different development candidate.
 Guardian mode dispatch occurs before instance enforcement and initializes no
 Flutter engine or window.
 
-After the one-time prerequisites and patched `host_debug` setup above, the
+After the one-time prerequisites and patched `lineup_ax_debug_x64` setup above, the
 small PowerShell launcher reuses those exact local-engine outputs. Configure
 the two machine-specific paths once as user environment values, and set them
 in the current session as well:
@@ -709,17 +714,19 @@ For the existing local-media entry point, pass an existing file explicitly:
 pwsh -File .\tool\windows\run.ps1 -MediaPath 'C:\path\to\sdr-sample.mp4'
 ```
 
-The launcher validates Windows, the required paths, the pinned Flutter
-framework/engine revisions, the repository patch and applied manager source,
-and the prepared libmpv inputs. It requires `engine\src\out\host_debug\build.ninja`
-and runs incremental Ninja before `flutter run`, so changed patched-engine
-source is not silently stale. It does not run GN, provision engine sources,
-apply the patch, or use an arbitrary `flutter` on `PATH`; missing provisioning
-is a setup error with a link back to the commands above. If the pinned
-Flutter checkout lacks its Windows SDK cache, the launcher runs that
-checkout's `bin\flutter.bat precache --windows` once; it never changes a
-different SDK cache. Uncommitted Lineup application edits are allowed for
-development, while the release wrapper below still requires a clean checkout.
+The launcher validates Windows, required paths and prepared libmpv inputs, then
+calls the Python recipe to verify the exact combined sources, evaluated dependency
+graph, toolchain, configuration, provenance and consumed engine/host artifacts in
+`engine\src\out\lineup_ax_debug_x64` before any Flutter invocation. It selects
+that explicit output with the isolated checkout's `bin\flutter.bat`. If the
+checkout lacks its stock Windows SDK cache, it prepares that cache with
+`precache --windows`; it never copies local engine binaries over stock artifacts.
+Uncommitted Lineup application edits remain allowed for development.
+
+There is no automatic Ninja refresh. Changed engine sources, canonical inputs,
+dependencies, toolchain, configuration or artifacts require a fresh multi-hour
+recipe build. Preserve the previous app/engine pair and provision a new output
+explicitly; the recipe rejects preexisting outputs instead of blessing them.
 
 Update the saved paths after moving or reprovisioning the Flutter engine or
 libmpv directory. The launcher restores the caller's current directory and
@@ -727,7 +734,7 @@ libmpv directory. The launcher restores the caller's current directory and
 
 ### Portable package
 
-After the one-time prerequisites, patched `host_release` setup, and a clean
+After the one-time prerequisites, patched `lineup_ax_release_x64` setup, and a clean
 Lineup checkout (no tracked changes or non-ignored untracked files), build and
 package the portable application:
 
@@ -757,14 +764,20 @@ not an installer or a public-release claim; launch, media, and hardware
 acceptance still require the physical-Windows procedure in
 [Windows Native Acceptance](windows-native-validation.md).
 
-The release wrapper validates the clean Lineup checkout, exact framework and
-engine revisions, and exact patched manager source, refreshes the configured
-`host_release` engine with Ninja, and selects that output for Flutter. After
-Flutter succeeds, it writes
-`LINEUP-BUILD-PROVENANCE.json` beside the executable with hashes for every
-build input copied into the portable package. `tool/windows/package.ps1`
-requires that marker, rechecks it against the clean current commit and pinned
-engine metadata, and rejects stale markers or modified build artifacts.
+The release wrapper requires a clean committed Lineup checkout and verifies the
+selected `lineup_ax_release_x64` immediately before and after the application build.
+It compares the bundled engine DLL with that selection and writes schema-2
+`LINEUP-BUILD-PROVENANCE.json`, including source/framework/engine identities,
+canonical pin/manifest hashes, ordered DirectComposition/AX patch hashes, selected
+output/mode/architecture, provenance and DLL digests, and the complete packaged
+application artifact map. A sanitized engine receipt in
+`data/lineup-engine-receipt.json` is also bound by that map. Local receipts record
+the wrapper's execution; they do not attest against hostile local modification.
+
+Packaging rechecks the clean current commit, canonical recipe, receipt and full
+artifact map without needing the engine checkout. Schema-1 receipts are rejected
+with a rebuild instruction. Preserve the complete previous application/engine/
+receipt pair for rollback; never relabel an older artifact as combined.
 
 ## CI evidence
 
@@ -780,12 +793,30 @@ pinned runtime with a CI-only Vulkan loader. The reference matrix uses temporary
 synthetic HTTPS fixtures and null audio/video outputs. The runner-lifecycle
 CTest remains a separate explicit check, outside CI.
 
-The expensive patched-engine/package job is conditional on engine and direct
-package-policy inputs selected by `release-inputs`. Ordinary `lib/` or
-`windows/` source edits alone do not select it. Manual workflow dispatch and an
-unavailable comparison baseline also select the full job. When selected, it
-verifies the pinned source/configuration/patch, builds `host_release`, invokes
-the release wrapper, and exercises artifact/provenance/license/package rejection
-checks. Inspect which jobs actually ran before describing a green CI result.
-CI does not launch the application; runtime markers and native presentation
-still require physical Windows acceptance.
+The expensive jobs are conditional on `release-inputs`. Canonical pins, verifier,
+manifest, Windows patches, affected source/process fixtures and consumer scripts,
+and workflow changes select `engine-required`; package-only changes select only
+the application/package job. Ordinary `lib/` or `windows/` product edits alone do
+not select them. Manual dispatch or an unavailable comparison base selects both.
+The current push filter does not automatically run `platform/macos`; use a PR or
+an explicitly authorized manual run for hosted proof.
+
+The engine-test matrix has separate Debug and Release jobs, each with its own
+sync, fresh unittest-enabled recipe build and 180-minute budget. Each runs full
+`common_cpp_unittests` and `flutter_windows_unittests`, requiring all ten common
+`AccessibilityBridgeTest.Recovery*` cases and the Windows native-identity and
+engine callback recovery cases to appear unskipped and pass. Other failures are
+rerun by exact name against a fresh same-mode DC-only baseline on the same runner;
+only failures reproduced there qualify as recorded environment exclusions. A
+baseline pass, missing result, skipped required case or incomplete attribution
+blocks the job. The recipe reverifies the combined candidate after test targets.
+Test XML/logs and a duration/count/exclusion summary are retained; inspect the
+first actual runs for observed durations and any platform-only skips.
+
+The separate application/package job builds its own fresh verified Release
+output and exercises receipt/artifact/license/package rejection checks. Ordinary
+CI also runs the portable Python tooling fixtures and PowerShell process/policy
+fixtures. Configured jobs are implemented, unexecuted until actual hosted runs;
+inspect which jobs ran before describing a green CI result. CI does not launch
+the application; runtime markers and native presentation still require physical
+Windows acceptance.

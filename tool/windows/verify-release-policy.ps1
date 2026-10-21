@@ -123,4 +123,11 @@ foreach ($entry in $licenseHashes.GetEnumerator()) {
     throw "Pinned runtime license does not match $($entry.Key)."
   }
 }
+$manifest = Get-Content -Raw -LiteralPath (Join-Path $repository 'tool/flutter_engine/desktop-accessibility.json') | ConvertFrom-Json
+$windowsPatches = @($manifest.patches | Where-Object { $_.platforms -contains 'windows' })
+if ($manifest.schemaVersion -ne 1 -or $windowsPatches.Count -ne 1 -or
+  $windowsPatches[0].path -cne 'tool/flutter_engine/0002-desktop-accessibility.patch' -or
+  $windowsPatches[0].sha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository $windowsPatches[0].path)).Hash) {
+  throw 'Windows AX manifest/patch authorities disagree.'
+}
 Write-Host 'Windows release policy inputs are internally consistent.'

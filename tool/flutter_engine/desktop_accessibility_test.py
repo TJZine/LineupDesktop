@@ -28,6 +28,7 @@ class EngineFixture(unittest.TestCase):
         for root in (self.repository, self.root):
             root.mkdir()
             ax.git(root, 'init', '--quiet')
+            ax.git(root, 'config', 'core.autocrlf', 'false')
             ax.git(root, 'config', 'user.name', 'Tool fixture')
             ax.git(root, 'config', 'user.email', 'fixture@example.invalid')
         self.name = 'engine/src/flutter/shell/platform/common/bridge.cc'
@@ -56,7 +57,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         patch = ax.git(self.root, 'diff', '--', self.manager)
         self.write(self.repository, 'tool/flutter_engine/0001-windows-direct-composition.patch', patch.decode())
         metadata = self.repository / 'tool/windows/build-metadata.psd1'
-        metadata.write_text(metadata.read_text().replace('REPLACE', ax.digest(patch)))
+        metadata.write_text(metadata.read_text().replace('REPLACE', ax.digest(patch)), newline='\n')
         self.write(self.root, self.manager, 'old DC\n')
         ax.finalize(self.repository, self.root)
         self.commit(self.repository)
@@ -66,7 +67,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
     def write(root, name, data):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(data)
+        path.write_text(data, newline='\n')
         return path
 
     @staticmethod
@@ -74,10 +75,24 @@ FlutterEnginePatchSha256 = 'REPLACE'
         ax.git(root, 'add', '.')
         ax.git(root, 'commit', '--quiet', '-m', 'fixture')
 
+    @staticmethod
+    def is_gn_command(arguments):
+        return (len(arguments) > 1 and
+                str(arguments[1]).replace('\\', '/').endswith('/tools/gn'))
+
+    def test_gn_fixture_recognizes_native_and_git_windows_path_spellings(self):
+        for path in ('/fixture/flutter/tools/gn', r'C:\fixture\flutter\tools\gn',
+                     'C:/fixture/flutter/tools/gn'):
+            self.assertTrue(self.is_gn_command(['python', path]), path)
+        self.assertFalse(self.is_gn_command(['ninja', '-C', 'output']))
+        self.assertFalse(self.is_gn_command(['ninja']))
+
     def identity(self, target='macos'):
         return ax.source_identity(self.repository, self.root, target)
 
-    def output(self):
+    def output(self, target='macos', architecture='arm64', mode='debug'):
+        if target == 'windows':
+            return self.windows_output(mode)
         output = self.root / 'engine/src/out/lineup_ax_debug_arm64'
         output.mkdir(parents=True)
         self.write(output, 'args.gn', 'target_os = "mac"\ntarget_cpu = "arm64"\nhost_cpu = "arm64"\nflutter_runtime_mode = "debug"\n')
@@ -92,17 +107,17 @@ FlutterEnginePatchSha256 = 'REPLACE'
             self.write(output, name, 'fixture host artifact\n')
         return output
 
-    def provenance(self):
-        output = self.output()
+    def provenance(self, target='macos', architecture='arm64', mode='debug'):
+        output = self.output(target, architecture, mode)
         ninja = self.write(self.base, 'ninja-fixture', 'fixture executable')
         record = {'schemaVersion': 1, 'kind': 'verified-local-desktop-accessibility',
                   'flutterRoot': str(self.root), 'outputName': output.name,
-                  'source': {**self.identity(), 'dependencies': {'gclient': 'fixture'}}, 'configuration': ax.configuration(output, 'macos', 'arm64', 'debug'),
-                  'toolchain': {}, 'ninja': {'path': str(ninja), 'sha256': ax.file_hash(ninja)},
+                  'source': {**self.identity(target), 'dependencies': {'gclient': 'fixture'}}, 'configuration': ax.configuration(output, target, architecture, mode),
+                  'toolchain': {}, **({'environment': ax.build_environment()} if target == 'windows' else {}), 'ninja': {'path': str(ninja), 'sha256': ax.file_hash(ninja)},
                   'build': {'freshOutput': True, 'startedNs': 1, 'finishedNs': 2},
-                  'artifacts': ax.artifact_hashes(output, 'macos'),
-                  'engineBinary': str(ax.engine_binary(output, 'macos').relative_to(output))}
-        (output / ax.PROVENANCE).write_text(json.dumps(record))
+                  'artifacts': ax.artifact_hashes(output, target),
+                  'engineBinary': str(ax.engine_binary(output, target).relative_to(output)).replace(os.sep, '/')}
+        (output / ax.PROVENANCE).write_text(json.dumps(record), newline='\n')
         return output
 
     def verify(self, output, **overrides):
@@ -110,6 +125,252 @@ FlutterEnginePatchSha256 = 'REPLACE'
         options.update(overrides)
         with mock.patch.object(ax, 'toolchain_identity', return_value={}), mock.patch.object(ax, 'dependency_identity', return_value={'gclient': 'fixture'}):
             return ax.verify(self.repository, self.root, output.name, **options)
+
+    def windows_output(self, mode='debug'):
+        output = self.root / f'engine/src/out/lineup_ax_{mode}_x64'
+        output.mkdir(parents=True)
+        self.write(output, 'args.gn', f'target_os = "win"\ntarget_cpu = "x64"\nhost_cpu = "x64"\nflutter_runtime_mode = "{mode}"\n')
+        self.write(output, 'build.ninja', '# configured fixture\n')
+        binary = self.write(output, 'flutter_windows.dll', '')
+        header = bytearray(64)
+        header[:2] = b'MZ'
+        struct.pack_into('<I', header, 60, 64)
+        binary.write_bytes(header + b'PE\0\0' + struct.pack('<H', 0x8664) + b'fixture')
+        for name in ('dart-sdk/bin/dart.exe', 'dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot',
+                     'flutter_patched_sdk/platform_strong.dill', 'flutter_patched_sdk/vm_outline_strong.dill',
+                     'gen/dart-pkg/sky_engine/lib/_embedder.yaml', 'gen/frontend_server_aot.dart.snapshot',
+                     'gen/const_finder.dart.snapshot', 'font-subset.exe', 'impellerc.exe', 'gen_snapshot.exe',
+                     'shader_lib/flutter/runtime_effect.glsl', 'icudtl.dat', 'flutter_windows.dll.lib',
+                     'flutter_windows.h', 'flutter_export.h', 'flutter_messenger.h',
+                     'flutter_plugin_registrar.h', 'flutter_texture_registrar.h',
+                     'cpp_client_wrapper/include/flutter/flutter_engine.h'):
+            self.write(output, name, 'Windows fixture artifact\n')
+        return output
+
+    def test_windows_combined_apply_cli_excludes_apple_patch_and_rejects_changed_inputs(self):
+        # Put the optional Mac patch in the manifest, but leave Windows source
+        # exactly DC+AX after the real CLI applies the combined patch set.
+        mac = 'engine/src/build/mac_fixture.gni'
+        self.write(self.root, mac, 'old Mac\n')
+        ax.git(self.root, 'add', mac)
+        ax.git(self.root, 'commit', '--quiet', '-m', 'Mac baseline')
+        revision = ax.git(self.root, 'rev-parse', 'HEAD').decode().strip()
+        pin = self.repository / 'tool/flutter_version.json'
+        old_revision = json.loads(pin.read_text())['frameworkRevision']
+        for name in ax.PIN_FILES:
+            path = self.repository / name
+            path.write_text(path.read_text().replace(old_revision, revision), newline='\n')
+        self.write(self.root, mac, 'new Mac\n')
+        self.write(self.repository, ax.MAC_BUILD_PATCH, ax.git(self.root, 'diff', '--', mac).decode())
+        self.write(self.root, mac, 'old Mac\n')
+        ax.finalize(self.repository, self.root)
+        self.commit(self.repository)
+        self.write(self.root, self.name, 'old AX\n')
+        result = subprocess.run([sys.executable, ax.__file__, 'apply', '--repository', str(self.repository),
+                                 '--flutter-root', str(self.root), '--platform', 'windows'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / mac).read_text(), 'old Mac\n')
+        self.identity('windows')
+        for name in (*ax.PIN_FILES, ax.MANIFEST, ax.AX_PATCH, 'tool/flutter_engine/0001-windows-direct-composition.patch'):
+            path = self.repository / name
+            original = path.read_bytes()
+            path.write_bytes(original + b'\n')
+            with self.assertRaisesRegex(ax.VerificationError, 'committed'):
+                self.identity('windows')
+            path.write_bytes(original)
+            self.identity('windows')
+
+    def test_windows_pe_provenance_and_artifact_controls(self):
+        self.write(self.root, self.manager, 'new DC\n')
+        for mode in ('debug', 'release'):
+            output = self.provenance('windows', 'x64', mode)
+            verify = lambda: self.verify(output, target='windows', architecture='x64', mode=mode)
+            selected = verify()
+            self.assertEqual(selected['outputName'], f'lineup_ax_{mode}_x64')
+            self.assertEqual([p['path'] for p in selected['recipe']['patches']],
+                             ['tool/flutter_engine/0001-windows-direct-composition.patch', ax.AX_PATCH])
+            self.assertNotIn(ax.MAC_BUILD_PATCH, str(selected['recipe']))
+            binary = output / 'flutter_windows.dll'
+            original = binary.read_bytes()
+            for contents, message in [(b'not a PE', 'Windows PE'),
+                                      (original[:68] + struct.pack('<H', 0xaa64), 'wrong architecture'),
+                                      (original + b'tamper', 'artifact hashes')]:
+                binary.write_bytes(contents)
+                with self.assertRaisesRegex(ax.VerificationError, message):
+                    verify()
+                binary.write_bytes(original)
+                verify()
+            for name in ('flutter_windows.h', 'cpp_client_wrapper/include/flutter/flutter_engine.h',
+                         'dart-sdk/bin/dart.exe', 'shader_lib/flutter/runtime_effect.glsl'):
+                artifact = output / name
+                data = artifact.read_bytes()
+                artifact.unlink()
+                with self.assertRaisesRegex(ax.VerificationError, 'artifact is missing'):
+                    verify()
+                artifact.write_bytes(data)
+                verify()
+            path = output / ax.PROVENANCE
+            data = path.read_bytes()
+            record = json.loads(data)
+            record['source']['dependencies']['changed'] = True
+            path.write_text(json.dumps(record), newline='\n')
+            with self.assertRaisesRegex(ax.VerificationError, 'source/patch provenance'):
+                verify()
+            path.write_bytes(data)
+            verify()
+            ninja = self.base / 'ninja-fixture'
+            ninja.write_text('changed executable', newline='\n')
+            with self.assertRaisesRegex(ax.VerificationError, 'Ninja executable changed'):
+                verify()
+            ninja.write_text('fixture executable', newline='\n')
+            verify()
+
+    def test_windows_stock_dc_only_ax_only_and_wrong_base_fail(self):
+        self.write(self.root, self.name, 'old AX\n')
+        with self.assertRaisesRegex(ax.VerificationError, 'exactly'):
+            self.identity('windows')
+        self.write(self.root, self.manager, 'new DC\n')
+        with self.assertRaisesRegex(ax.VerificationError, 'exactly'):
+            self.identity('windows')
+        self.write(self.root, self.name, 'new AX\n')
+        self.identity('windows')
+        ax.git(self.root, 'add', self.name)
+        with self.assertRaisesRegex(ax.VerificationError, 'staged'):
+            self.identity('windows')
+        ax.git(self.root, 'reset', '--quiet')
+        self.write(self.root, 'unexpected.txt', 'new tracked source')
+        self.commit(self.root)
+        with self.assertRaisesRegex(ax.VerificationError, 'framework revision'):
+            self.identity('windows')
+
+    def test_windows_build_failure_never_emits_receipt(self):
+        self.write(self.root, self.manager, 'new DC\n')
+        def command(arguments, **kwargs):
+            if self.is_gn_command(arguments):
+                self.windows_output()
+            else:
+                raise ax.VerificationError('deliberate Ninja process failure')
+            return b''
+        with mock.patch.object(ax, 'host_matches'), mock.patch.object(ax, 'run', side_effect=command), \
+             mock.patch.object(ax, 'verified_sources', return_value={}), \
+             mock.patch.object(ax, 'toolchain_identity', return_value={}), \
+             mock.patch.object(ax, 'resolve_ninja', return_value=sys.executable):
+            with self.assertRaisesRegex(ax.VerificationError, 'Ninja process failure'):
+                ax.build(self.repository, self.root, 'windows', 'x64', 'debug', sys.executable)
+        output = self.root / 'engine/src/out/lineup_ax_debug_x64'
+        self.assertFalse((output / ax.PROVENANCE).exists())
+        with mock.patch.object(ax, 'host_matches'), mock.patch.object(ax, 'dependency_identity', return_value={}):
+            with self.assertRaisesRegex(ax.VerificationError, 'absent output'):
+                ax.build(self.repository, self.root, 'windows', 'x64', 'debug', sys.executable)
+
+    def test_gtest_xml_requires_cases_and_exposes_skips_and_failures(self):
+        path = self.base / 'results.xml'
+        for data in ('<testsuites/>', '<broken'):
+            path.write_text(data, newline='\n')
+            with self.assertRaises(ax.VerificationError):
+                ax.gtest_results(path)
+        path.write_text('<testsuites><testsuite><testcase classname="Bridge" name="Pass"/>'
+                        '<testcase classname="Bridge" name="Fail"><failure/></testcase>'
+                        '<testcase classname="Bridge" name="Skip" result="suppressed"/>'
+                        '</testsuite></testsuites>', newline='\n')
+        self.assertEqual(ax.gtest_results(path), {'Bridge.Pass': 'passed', 'Bridge.Fail': 'failed', 'Bridge.Skip': 'skipped'})
+        with mock.patch.object(ax.subprocess, 'run', return_value=mock.Mock(returncode=1)):
+            # A filtered baseline must actually include every named failure.
+            with self.assertRaisesRegex(ax.VerificationError, 'every requested'):
+                ax.run_windows_suite(self.base, 'results', self.base, {'Bridge.Missing'})
+
+    def test_suite_process_ignores_inherited_selection_and_preserves_baseline_filter(self):
+        hostile = {
+            'GTEST_FILTER': '*Recovery*', 'gtest_filter': '*Recovery*',
+            'GTEST_TOTAL_SHARDS': '2', 'GTEST_SHARD_INDEX': '1',
+            'GTEST_SHARD_STATUS_FILE': str(self.base / 'unexpected-shard-file'),
+            'GTEST_REPEAT': '0', 'GTEST_FAIL_FAST': '1', 'GTEST_LIST_TESTS': '1',
+            'GTEST_BREAK_ON_FAILURE': '1', 'GTEST_THROW_ON_FAILURE': '1',
+            'TESTBRIDGE_TEST_ONLY': '*Recovery*', 'TESTBRIDGE_TEST_RUNNER_FAIL_FAST': '1',
+            'LINEUP_RUNTIME_FIXTURE': 'preserved',
+        }
+        calls = []
+        available = {'Bridge.Recovery', 'Bridge.Ordinary'}
+        def process(command, *, cwd, env, stdout, stderr, check):
+            calls.append(command)
+            self.assertEqual(cwd, self.base)
+            self.assertFalse(any(key.upper().startswith('GTEST_') for key in env))
+            self.assertNotIn('TESTBRIDGE_TEST_ONLY', env)
+            self.assertNotIn('TESTBRIDGE_TEST_RUNNER_FAIL_FAST', env)
+            self.assertEqual(env['LINEUP_RUNTIME_FIXTURE'], 'preserved')
+            self.assertEqual(env.get('PATH'), os.environ.get('PATH'))
+            self.assertIn('--gtest_repeat=1', command)
+            self.assertIn('--gtest_fail_fast=0', command)
+            self.assertIn('--gtest_list_tests=0', command)
+            self.assertFalse(check)
+            self.assertEqual(stderr, subprocess.STDOUT)
+            selection = next(arg.split('=', 1)[1] for arg in command if arg.startswith('--gtest_filter='))
+            selected = available if selection == '*' else set(selection.split(':'))
+            self.assertTrue(selected <= available)
+            result_path = Path(next(arg.split('xml:', 1)[1] for arg in command if arg.startswith('--gtest_output=')))
+            cases = ''.join(f'<testcase classname="Bridge" name="{name.split(".")[1]}"/>' for name in sorted(selected))
+            result_path.write_text('<testsuites><testsuite>' + cases + '</testsuite></testsuites>', newline='\n')
+            return mock.Mock(returncode=0)
+        with mock.patch.dict(os.environ, hostile), mock.patch.object(ax.subprocess, 'run', side_effect=process):
+            caller = dict(os.environ)
+            self.assertEqual(ax.run_windows_suite(self.base, 'fixture', self.base),
+                             {name: 'passed' for name in available})
+            self.assertEqual(ax.run_windows_suite(self.base, 'fixture', self.base, {'Bridge.Ordinary'}),
+                             {'Bridge.Ordinary': 'passed'})
+            self.assertEqual(dict(os.environ), caller)
+        self.assertIn('--gtest_filter=*', calls[0])
+        self.assertIn('--gtest_filter=Bridge.Ordinary', calls[1])
+        self.assertFalse((self.base / 'unexpected-shard-file').exists())
+
+    def test_windows_full_suites_and_baseline_attribution_restore_source(self):
+        self.write(self.root, self.manager, 'new DC\n')
+        output = self.provenance('windows', 'x64', 'debug')
+        record_path = output / ax.PROVENANCE
+        record = json.loads(record_path.read_text())
+        record['ninja'] = {'path': str(Path(sys.executable).resolve()), 'sha256': ax.file_hash(sys.executable)}
+        record['environment'] = ax.build_environment()
+        record['build']['gnCommand'] = ['python', 'flutter/tools/gn', '--target-dir', output.name]
+        record_path.write_text(json.dumps(record), newline='\n')
+        actual_run = ax.run
+        def command(arguments, **kwargs):
+            if arguments[0] == 'git':
+                return actual_run(arguments, **kwargs)
+            if '--target-dir' in arguments:
+                baseline = output.parent / arguments[arguments.index('--target-dir') + 1]
+                baseline.mkdir()
+                shutil.copy2(output / 'args.gn', baseline / 'args.gn')
+                shutil.copy2(output / 'build.ninja', baseline / 'build.ninja')
+            return b''
+        for scenario in ('excluded', 'regression', 'missing-recovery'):
+            calls = []
+            def suite(directory, name, destination, names=None):
+                calls.append((name, names))
+                if names is not None:
+                    self.assertEqual(names, {'Other.EnvironmentFailure'})
+                    return {'Other.EnvironmentFailure': 'failed' if scenario == 'excluded' else 'passed'}
+                result = {case: 'passed' for case in ax.WINDOWS_RECOVERY[name]}
+                if name == 'common_cpp_unittests':
+                    result['Other.EnvironmentFailure'] = 'failed'
+                    if scenario == 'missing-recovery':
+                        result.pop(next(iter(ax.WINDOWS_RECOVERY[name])))
+                return result
+            baseline = output.parent / 'lineup_dc_baseline_debug_x64'
+            if baseline.exists():
+                shutil.rmtree(baseline)
+            with mock.patch.object(ax, 'host_matches'), mock.patch.object(ax, 'run', side_effect=command), \
+                 mock.patch.object(ax, 'run_windows_suite', side_effect=suite), \
+                 mock.patch.object(ax, 'toolchain_identity', return_value={}), \
+                 mock.patch.object(ax, 'dependency_identity', return_value={'gclient': 'fixture'}):
+                action = lambda: ax.windows_tests(self.repository, self.root, 'debug', sys.executable, 2, self.base / scenario)
+                if scenario == 'excluded':
+                    summary = action()
+                    self.assertEqual(summary['dcBaselineExclusions'], {'common_cpp_unittests': ['Other.EnvironmentFailure']})
+                else:
+                    with self.assertRaisesRegex(ax.VerificationError, 'regression' if scenario == 'regression' else 'recovery cases'):
+                        action()
+            self.assertEqual([name for name, names in calls[:2]], list(ax.WINDOWS_RECOVERY))
+            self.assertEqual((self.root / self.name).read_text(), 'new AX\n')
+            self.verify(output, target='windows', architecture='x64')
 
     def test_exact_source_and_windows_composition(self):
         identity = self.identity()
@@ -140,14 +401,14 @@ FlutterEnginePatchSha256 = 'REPLACE'
     def test_uncommitted_and_tampered_canonical_inputs(self):
         patch = self.repository / ax.AX_PATCH
         original = patch.read_text()
-        patch.write_text(original + '\n')
+        patch.write_text(original + '\n', newline='\n')
         with self.assertRaisesRegex(ax.VerificationError, 'committed'):
             self.identity()
-        patch.write_text(original)
+        patch.write_text(original, newline='\n')
         manifest = self.repository / ax.MANIFEST
         metadata = json.loads(manifest.read_text())
         metadata['patches'][0]['files'][self.name]['patchedSha256'] = '0' * 64
-        manifest.write_text(json.dumps(metadata))
+        manifest.write_text(json.dumps(metadata), newline='\n')
         self.commit(self.repository)
         with self.assertRaisesRegex(ax.VerificationError, 'metadata mismatch'):
             self.identity()
@@ -176,7 +437,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         record = json.loads(record_path.read_text())
         record['build']['startedNs'] = binary.stat().st_mtime_ns + 1000000000
         record['build']['finishedNs'] = record['build']['startedNs'] + 1
-        record_path.write_text(json.dumps(record))
+        record_path.write_text(json.dumps(record), newline='\n')
         with self.assertRaisesRegex(ax.VerificationError, 'Stale engine artifact'):
             self.verify(output)
         record_path.unlink()
@@ -202,7 +463,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         manifest = self.repository / ax.MANIFEST
         record = json.loads(manifest.read_text())
         record['note'] = 'new reviewed manifest'
-        manifest.write_text(json.dumps(record))
+        manifest.write_text(json.dumps(record), newline='\n')
         self.commit(self.repository)
         with self.assertRaisesRegex(ax.VerificationError, 'Stale engine source'):
             self.verify(output)
@@ -222,7 +483,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
     def test_shader_header_missing_and_tampered_controls(self):
         output = self.provenance()
         header = output / 'shader_lib/flutter/runtime_effect.glsl'
-        header.write_text('tampered shader source')
+        header.write_text('tampered shader source', newline='\n')
         with self.assertRaisesRegex(ax.VerificationError, 'artifact hashes changed'):
             self.verify(output)
         header.unlink()
@@ -239,7 +500,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         commands = []
         def fake_command(arguments, cwd=None, capture=True):
             commands.append([str(a) for a in arguments])
-            if len(arguments) > 1 and str(arguments[1]).endswith('/tools/gn'):
+            if self.is_gn_command(arguments):
                 self.output()
             return b''
         with mock.patch.object(ax, 'host_matches'), mock.patch.object(ax, 'run', side_effect=fake_command), \
@@ -256,7 +517,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
 
     def test_build_owns_refresh_and_does_not_emit_provenance_on_failed_refresh(self):
         def fake_command(arguments, cwd=None, capture=True):
-            if len(arguments) > 1 and str(arguments[1]).endswith('/tools/gn'):
+            if self.is_gn_command(arguments):
                 self.output()
             else:
                 binary = ax.engine_binary(self.root / 'engine/src/out/lineup_ax_debug_arm64', 'macos')
@@ -336,7 +597,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
             receipt_path = app.parent / (app.name + ax.APP_RECEIPT_SUFFIX)
             receipt = json.loads(receipt_path.read_text())
             receipt['recipe']['appCommit'] = '0' * 40
-            receipt_path.write_text(json.dumps(receipt))
+            receipt_path.write_text(json.dumps(receipt), newline='\n')
             with self.assertRaisesRegex(ax.VerificationError, 'another source commit'):
                 ax.bundle(*arguments)
             for option in ('--help', '-h', '--version', '--version=true', '--verbose', '--config-only', '--enable-analytics', '--disable-analytics'):
@@ -371,15 +632,27 @@ FlutterEnginePatchSha256 = 'REPLACE'
         ax.git(depot, 'config', 'user.name', 'Tool fixture')
         ax.git(depot, 'config', 'user.email', 'fixture@example.invalid')
         launcher = self.write(depot, 'gclient', '#!' + sys.executable + '\nimport json,pathlib,sys\npathlib.Path(sys.argv[sys.argv.index("--output-json")+1]).write_text((pathlib.Path(__file__).parent/"graph.json").read_text())\n')
+        if os.name == 'nt':
+            generator = self.write(depot, 'generator.py', launcher.read_text().split('\n', 1)[1])
+            launcher.unlink()
+            launcher = self.write(depot, 'gclient.bat', '@echo off\n"' + sys.executable + '" "%~dp0generator.py" %*\n')
         launcher.chmod(0o755)
         graph = {'.': {'url': standard['url'], 'rev': None}, dependency_name: {'url': 'https://example.invalid/nested.git', 'rev': declared_object}}
         self.write(depot, 'graph.json', json.dumps(graph))
         self.commit(depot)
         metadata = self.repository / 'tool/windows/build-metadata.psd1'
         depot_revision = ax.git(depot, 'rev-parse', 'HEAD').decode().strip()
-        metadata.write_text(metadata.read_text().replace('}\n', f"DepotToolsRevision = '{depot_revision}'\n}}\n"))
+        metadata.write_text(metadata.read_text().replace('}\n', f"DepotToolsRevision = '{depot_revision}'\n}}\n"), newline='\n')
         self.commit(self.repository)
         identity = lambda: ax.dependency_identity(self.repository, self.root.resolve(), launcher)
+        original_git = ax.git
+        def alternate_spelling(directory, *arguments):
+            result = original_git(directory, *arguments)
+            if Path(directory) == depot and arguments == ('rev-parse', '--show-toplevel'):
+                return (depot.as_posix() + '/.\n').encode()
+            return result
+        with mock.patch.object(ax, 'git', side_effect=alternate_spelling):
+            self.assertEqual(identity()['gclient'], str(launcher.resolve()))
         self.assertNotEqual(declared_object, expected)
         self.assertEqual(identity()['gitDependencies'][dependency_name]['revision'], expected)
         self.assertEqual(identity()['gitDependencies'][dependency_name]['declaredRevision'], declared_object)
@@ -393,12 +666,22 @@ FlutterEnginePatchSha256 = 'REPLACE'
             identity()
         ax.git(nested, 'checkout', '--quiet', expected)
         identity()
-        config.write_text('solutions = ' + repr([{**standard, 'custom_deps': {dependency_name: None}}]))
+        config.write_text('solutions = ' + repr([{**standard, 'custom_deps': {dependency_name: None}}]), newline='\n')
         with self.assertRaisesRegex(ax.VerificationError, 'without source overrides'):
             identity()
 
+    @unittest.skipUnless(os.name == 'nt', 'physical Windows path normalization fixture')
+    def test_windows_git_root_slashes_preserve_physical_identity(self):
+        # Git returns forward slashes while native Windows Path spells backslashes.
+        depot = self.base.resolve()
+        forward = depot.as_posix()
+        self.assertIn('\\', str(depot))
+        self.assertEqual(Path(forward).resolve(), depot)
+        self.assertEqual(Path(forward + '/.').resolve(), depot)
+        self.assertNotEqual(Path(forward + '/other').resolve(), depot)
+
     def test_ninja_resolves_real_executable_and_rejects_context_dependent_shim(self):
-        shim = self.write(self.base, 'ninja-shim', '#!/bin/sh\nexec other-ninja "$@"\n')
+        shim = self.write(self.base, 'ninja-shim.cmd' if os.name == 'nt' else 'ninja-shim', '#!/bin/sh\nexec other-ninja "$@"\n')
         shim.chmod(0o755)
         with self.assertRaisesRegex(ax.VerificationError, 'script/shim'):
             ax.resolve_ninja(str(shim))

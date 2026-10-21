@@ -28,6 +28,8 @@ jobs:
           channel: stable
           cache: true
       - run: dart tool/check_toolchain.dart
+      - name: Run portable engine tooling fixtures (platform skips visible)
+        run: python3 tool/flutter_engine/desktop_accessibility_test.py
       - run: flutter pub get
       - run: dart tool/format.dart --check
       - run: flutter analyze
@@ -260,6 +262,8 @@ jobs:
           channel: stable
           cache: true
       - run: dart tool/check_toolchain.dart
+      - name: Run Windows engine tooling fixtures (native Mac skips visible)
+        run: python tool/flutter_engine/desktop_accessibility_test.py
       - name: Verify portable UI on Windows
         run: >-
           flutter test
@@ -377,7 +381,7 @@ jobs:
           fi
 
           changed_files="$(git diff --name-only "$base" "$head")"
-          if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_engine/apply\.ps1)$' <<<"$changed_files" ||
+          if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_version\.json|tool/flutter_engine/(apply\.ps1|desktop_accessibility(_test)?\.py|desktop-accessibility\.json|0002-desktop-accessibility\.patch)|tool/windows/(build-inputs|run|build-release|verify-build-inputs|verify-release-authorities)\.ps1|\.github/workflows/ci\.yml)$' <<<"$changed_files" ||
              grep -Fxq "$ENGINE_PATCH_PATH" <<<"$changed_files"; then
             engine_required=true
           else
@@ -391,6 +395,131 @@ jobs:
           fi
           echo "engine-required=$engine_required" >> "$GITHUB_OUTPUT"
           echo "package-required=$package_required" >> "$GITHUB_OUTPUT"
+
+  windows-engine-tests:
+    name: Combined Windows engine tests (${{ matrix.mode }})
+    needs: [release-inputs, windows-release-policy]
+    if: needs.release-inputs.outputs.engine-required == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [debug, release]
+    env:
+      ENGINE_MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate exact Flutter and engine sources and build the patched engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          function Invoke-DependencyDownload {
+            param(
+              [string] $Name,
+              [scriptblock] $Download,
+              [scriptblock] $BeforeRetry = {}
+            )
+
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              try {
+                & $Download
+                return
+              } catch [System.Management.Automation.NativeCommandExitException] {
+                if ($attempt -eq 3) { throw }
+                $delay = 5 * $attempt
+                Write-Warning "$Name failed (attempt $attempt/3); retrying in $delay seconds."
+                & $BeforeRetry
+                Start-Sleep -Seconds $delay
+              }
+            }
+          }
+
+          $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'tool/windows/build-metadata.psd1')
+          $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
+          $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
+          # Clone retries discard only their partial checkout in this job's temp directory.
+          Invoke-DependencyDownload -Name 'Flutter source clone' -Download {
+            git clone --filter=blob:none https://github.com/flutter/flutter.git $flutterSource
+          } -BeforeRetry {
+            if (Test-Path -LiteralPath $flutterSource) {
+              Remove-Item -LiteralPath $flutterSource -Recurse -Force
+            }
+          }
+          # A filtered clone may download missing blobs during checkout.
+          Invoke-DependencyDownload -Name 'Pinned Flutter checkout' -Download {
+            git -C $flutterSource checkout $metadata.FlutterFrameworkRevision
+          }
+          if ((git -C $flutterSource rev-parse HEAD).Trim() -ne $metadata.FlutterFrameworkRevision) {
+            throw 'Flutter did not resolve to the pinned framework revision.'
+          }
+          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne $metadata.FlutterStandardGclientBlob) {
+            throw 'Pinned Flutter standard.gclient blob does not match.'
+          }
+          Copy-Item -LiteralPath (Join-Path $flutterSource 'engine\scripts\standard.gclient') -Destination (Join-Path $flutterSource '.gclient')
+          Invoke-DependencyDownload -Name 'depot_tools clone' -Download {
+            git clone --depth 1 --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          } -BeforeRetry {
+            if (Test-Path -LiteralPath $depotTools) {
+              Remove-Item -LiteralPath $depotTools -Recurse -Force
+            }
+          }
+          Invoke-DependencyDownload -Name 'Pinned depot_tools fetch' -Download {
+            git -C $depotTools fetch --depth 1 origin $metadata.DepotToolsRevision
+          }
+          git -C $depotTools checkout --detach $metadata.DepotToolsRevision
+          if ((git -C $depotTools rev-parse HEAD).Trim() -ne $metadata.DepotToolsRevision) {
+            throw 'depot_tools did not resolve to the pinned revision.'
+          }
+          $env:PATH = "$depotTools;$env:PATH"
+          Invoke-DependencyDownload -Name 'depot_tools bootstrap' -Download {
+            & (Join-Path $depotTools 'bootstrap\win_tools.bat')
+          }
+          $env:DEPOT_TOOLS_UPDATE = '0'
+          $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $env:WINDOWSSDKDIR = "${env:ProgramFiles(x86)}\Windows Kits\10"
+          # Keep the pinned toolchain for subsequent verification and application build.
+          $depotTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          @(
+            "DEPOT_TOOLS_UPDATE=$env:DEPOT_TOOLS_UPDATE"
+            "DEPOT_TOOLS_WIN_TOOLCHAIN=$env:DEPOT_TOOLS_WIN_TOOLCHAIN"
+            "GYP_MSVS_OVERRIDE_PATH=$env:GYP_MSVS_OVERRIDE_PATH"
+            "WINDOWSSDKDIR=$env:WINDOWSSDKDIR"
+          ) | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Set-Location $flutterSource
+          # gclient resumes the existing partial dependency sync; do not retry the build.
+          Invoke-DependencyDownload -Name 'Flutter engine dependency sync' -Download {
+            gclient sync --no-history
+          }
+          & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
+          $ninja = (Get-Command ninja.exe -CommandType Application).Source
+          python "$env:GITHUB_WORKSPACE/tool/flutter_engine/desktop_accessibility.py" build `
+            --flutter-root $flutterSource --platform windows --architecture x64 --mode $env:ENGINE_MODE `
+            --ninja $ninja --gclient (Join-Path $depotTools 'gclient.bat') --jobs 2
+      - name: Run full engine suites and attribute unrelated failures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
+          $ninja = (Get-Command ninja.exe -CommandType Application).Source
+          $results = Join-Path $env:RUNNER_TEMP "lineup-engine-results-$env:ENGINE_MODE"
+          python ./tool/flutter_engine/desktop_accessibility.py windows-tests `
+            --flutter-root $flutterSource --platform windows --architecture x64 --mode $env:ENGINE_MODE `
+            --ninja $ninja --jobs 2 --results $results
+          Get-Content -Raw -LiteralPath (Join-Path $results 'summary.json') >> $env:GITHUB_STEP_SUMMARY
+      - name: Retain full-suite and same-mode baseline test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-engine-tests-${{ matrix.mode }}
+          path: ${{ runner.temp }}/lineup-engine-results-${{ matrix.mode }}
+          if-no-files-found: warn
 
   build-windows-engine:
     name: Build patched Flutter engine and package
@@ -481,7 +610,7 @@ jobs:
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           $env:WINDOWSSDKDIR = "${env:ProgramFiles(x86)}\Windows Kits\10"
-          # Keep the pinned engine toolchain for the later incremental release build.
+          # Keep the pinned toolchain for subsequent verification and application build.
           $depotTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           @(
             "DEPOT_TOOLS_UPDATE=$env:DEPOT_TOOLS_UPDATE"
@@ -495,18 +624,10 @@ jobs:
             gclient sync --no-history
           }
           & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
-          Set-Location (Join-Path $flutterSource 'engine\src')
-          python .\flutter\tools\gn `
-            --runtime-mode=release `
-            --no-enable-unittests `
-            --no-build-embedder-examples
-          . (Join-Path $env:GITHUB_WORKSPACE 'tool/windows/ninja-diagnostics.ps1')
-          Write-LineupNinjaDiagnostics -BuildDirectory 'out/host_release' -Stage 'workflow-before' -InspectCommand
-          try {
-            ninja -C out\host_release -d explain
-          } finally {
-            Write-LineupNinjaDiagnostics -BuildDirectory 'out/host_release' -Stage 'workflow-after'
-          }
+          $ninja = (Get-Command ninja.exe -CommandType Application).Source
+          python "$env:GITHUB_WORKSPACE/tool/flutter_engine/desktop_accessibility.py" build `
+            --flutter-root $flutterSource --platform windows --architecture x64 --mode release `
+            --ninja $ninja --gclient (Join-Path $depotTools 'gclient.bat') --jobs 2
       - name: Compile Lineup against the patched engine
         shell: pwsh
         run: |
@@ -601,10 +722,32 @@ jobs:
             try {
               $marker = Get-Content -Raw -LiteralPath $buildMarker | ConvertFrom-Json
               $marker.($probe.Property) = $probe.Value
-              $marker | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $buildMarker -Encoding ascii
+              $marker | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $buildMarker -Encoding ascii
               try {
                 & .\tool\windows\package.ps1 -Destination "build/package/$($probe.Name)"
                 throw "Packaging unexpectedly accepted $($probe.Name)."
+              } catch {
+                if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-provenance-mismatch') { throw }
+              }
+            } finally {
+              [IO.File]::WriteAllBytes($buildMarker, $markerBytes)
+            }
+          }
+          foreach ($probe in @('schema1', 'reordered-patches', 'missing-ax', 'manifest', 'provenance', 'dll')) {
+            try {
+              $marker = Get-Content -Raw -LiteralPath $buildMarker | ConvertFrom-Json
+              switch ($probe) {
+                'schema1' { $marker.schemaVersion = 1 }
+                'reordered-patches' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[1], $marker.combinedEngine.recipe.patches[0]) }
+                'missing-ax' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[0]) }
+                'manifest' { $marker.combinedEngine.recipe.manifestSha256 = '0' * 64 }
+                'provenance' { $marker.combinedEngine.provenanceSha256 = '0' * 64 }
+                'dll' { $marker.combinedEngine.binarySha256 = '0' * 64 }
+              }
+              $marker | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $buildMarker -Encoding ascii
+              try {
+                & .\tool\windows\package.ps1 -Destination "build/package/combined-$probe"
+                throw "Packaging accepted combined receipt probe $probe."
               } catch {
                 if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-provenance-mismatch') { throw }
               }

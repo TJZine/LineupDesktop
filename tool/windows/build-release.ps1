@@ -8,21 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 . (Join-Path $PSScriptRoot 'build-inputs.ps1')
-. (Join-Path $PSScriptRoot 'ninja-diagnostics.ps1')
 $repository = Get-LineupRepository
 $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
-$patchRelativePath = $metadata.FlutterEnginePatchPath
-if ($patchRelativePath -notmatch '^[A-Za-z0-9._/-]+$' -or
-  [IO.Path]::IsPathRooted($patchRelativePath) -or
-  ($patchRelativePath -split '/') -contains '..') {
-  throw 'FlutterEnginePatchPath must be a safe repository-relative path.'
-}
-$patchPath = [IO.Path]::GetFullPath((Join-Path $repository $metadata.FlutterEnginePatchPath))
-if ((Get-FileHash -Algorithm SHA256 -LiteralPath $patchPath).Hash.ToUpperInvariant() -ne
-  $metadata.FlutterEnginePatchSha256) {
-  throw 'Flutter engine patch does not match the pinned SHA-256.'
-}
-
 function Get-GitValue {
   param(
     [Parameter(Mandatory)] [string] $Repository,
@@ -72,75 +59,64 @@ $flutterRoot = $releaseInput.FlutterRoot
 if (-not (Test-Path -LiteralPath (Join-Path $flutterRoot 'bin/flutter.bat') -PathType Leaf)) {
   throw 'EngineSource must be the engine/src directory below the pinned Flutter checkout.'
 }
-Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
+$selected = Get-VerifiedWindowsEngine -Root $flutterRoot -Mode release
+$engineReceipt = Get-WindowsEngineReceipt $selected
 $flutter = $releaseInput.Flutter
-Set-Location $flutterRoot
-Invoke-NativeChecked -FilePath $flutter -Arguments @('precache', '--windows') `
-  -FailureMessage 'Pinned Flutter SDK cache preparation failed.'
-Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
-
-$engineOutput = Join-Path $EngineSource 'out/host_release'
-if (-not (Test-Path -LiteralPath (Join-Path $engineOutput 'build.ninja') -PathType Leaf)) {
-  throw 'Configure the pinned host_release engine before the application release build.'
-}
-Set-Location $EngineSource
-Write-LineupNinjaDiagnostics -BuildDirectory $engineOutput -Stage 'release-before' -InspectCommand
+$engineLibrary = $selected.binary
+$previousLocation = Get-Location
 try {
-  & {
-    $PSNativeCommandUseErrorActionPreference = $false
-    & ninja -C $engineOutput -d explain
-    if ($LASTEXITCODE) { throw 'Pinned host_release engine build failed.' }
+  Set-Location $flutterRoot
+  Invoke-NativeChecked -FilePath $flutter -Arguments @('precache', '--windows') `
+    -FailureMessage 'Pinned Flutter SDK cache preparation failed.'
+  Get-VerifiedWindowsEngine -Root $flutterRoot -Mode release | Out-Null
+
+  $BuildDirectory = [IO.Path]::GetFullPath(
+    (Join-Path $repository 'build/windows/x64/runner/Release')
+  )
+  $buildMarkerPath = Join-Path $BuildDirectory 'LINEUP-BUILD-PROVENANCE.json'
+  if (Test-Path -LiteralPath $buildMarkerPath -PathType Leaf) {
+    Remove-Item -LiteralPath $buildMarkerPath
   }
-} finally {
-  Write-LineupNinjaDiagnostics -BuildDirectory $engineOutput -Stage 'release-after'
-}
-Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
-$engineLibrary = Join-Path $engineOutput 'flutter_windows.dll'
-if (-not (Test-Path -LiteralPath $engineLibrary -PathType Leaf)) {
-  throw 'Pinned host_release engine did not produce flutter_windows.dll.'
-}
+  Set-Location $repository
+  Invoke-LineupReleaseBuild -Release $releaseInput
 
-$BuildDirectory = [IO.Path]::GetFullPath(
-  (Join-Path $repository 'build/windows/x64/runner/Release')
-)
-$buildMarkerPath = Join-Path $BuildDirectory 'LINEUP-BUILD-PROVENANCE.json'
-if (Test-Path -LiteralPath $buildMarkerPath -PathType Leaf) {
-  Remove-Item -LiteralPath $buildMarkerPath
-}
-Set-Location $repository
-Invoke-LineupReleaseBuild -Release $releaseInput
+  if ((Test-SourceDirty $repository) -or
+    (Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')) -ne $sourceCommit) {
+    throw 'Lineup source changed during the release build.'
+  }
+  $after = Get-WindowsEngineReceipt (Get-VerifiedWindowsEngine -Root $flutterRoot -Mode release)
+  if (($engineReceipt | ConvertTo-Json -Depth 10 -Compress) -cne ($after | ConvertTo-Json -Depth 10 -Compress)) {
+    throw 'Selected engine identity changed during the application build.'
+  }
 
-if ((Test-SourceDirty $repository) -or
-  (Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')) -ne $sourceCommit) {
-  throw 'Lineup source changed during the release build.'
-}
-Assert-PinnedFlutterCheckout -Root $flutterRoot -Metadata $metadata -PatchPath $patchPath
+  if (-not (Test-Path -LiteralPath $BuildDirectory -PathType Container)) {
+    throw 'Release build directory does not exist after the build.'
+  }
+  $builtEngine = Join-Path $BuildDirectory 'flutter_windows.dll'
+  if ((Get-FileHash -Algorithm SHA256 -LiteralPath $builtEngine).Hash -ne
+    (Get-FileHash -Algorithm SHA256 -LiteralPath $engineLibrary).Hash) {
+    throw 'Release build does not contain the selected combined Release Flutter engine.'
+  }
 
-if (-not (Test-Path -LiteralPath $BuildDirectory -PathType Container)) {
-  throw 'Release build directory does not exist after the build.'
-}
-$builtEngine = Join-Path $BuildDirectory 'flutter_windows.dll'
-if ((Get-FileHash -Algorithm SHA256 -LiteralPath $builtEngine).Hash -ne
-  (Get-FileHash -Algorithm SHA256 -LiteralPath $engineLibrary).Hash) {
-  throw 'Release build does not contain the selected host_release Flutter engine.'
-}
-
-$artifacts = @(Get-BuildInputs $BuildDirectory | ForEach-Object {
-    [ordered]@{
-      path = $_
-      sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $BuildDirectory $_)).Hash.ToUpperInvariant()
-    }
-  })
-$marker = [ordered]@{
-  schemaVersion = 1
-  sourceCommit = $sourceCommit
-  flutterFramework = $metadata.FlutterFrameworkRevision
-  flutterEngine = $metadata.FlutterEngineRevision
-  flutterEnginePatch = $metadata.FlutterEnginePatchPath
-  flutterEnginePatchSha256 = $metadata.FlutterEnginePatchSha256
-  flutterPatchedManagerSha256 = $metadata.FlutterPatchedManagerSha256
-  artifacts = $artifacts
-}
-$marker | ConvertTo-Json -Depth 4 |
-  Set-Content -LiteralPath $buildMarkerPath -Encoding ascii
-Write-Host "Created an artifact-bound release marker for $sourceCommit."
+  # Keep the sanitized engine receipt among the hashed/copied data artifacts so
+  # packaging can detect a marker-only change to an opaque provenance digest.
+  $engineReceipt | ConvertTo-Json -Depth 10 |
+    Set-Content -LiteralPath (Join-Path $BuildDirectory 'data/lineup-engine-receipt.json') -Encoding ascii
+  $artifacts = @(Get-BuildInputs $BuildDirectory | ForEach-Object {
+      [ordered]@{
+        path = $_
+        sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $BuildDirectory $_)).Hash.ToUpperInvariant()
+      }
+    })
+  $marker = [ordered]@{
+    schemaVersion = 2
+    sourceCommit = $sourceCommit
+    flutterFramework = $metadata.FlutterFrameworkRevision
+    flutterEngine = $metadata.FlutterEngineRevision
+    combinedEngine = $engineReceipt
+    artifacts = $artifacts
+  }
+  $marker | ConvertTo-Json -Depth 10 |
+    Set-Content -LiteralPath $buildMarkerPath -Encoding ascii
+  Write-Host "Created an artifact-bound release marker for $sourceCommit."
+} finally { Set-Location $previousLocation }

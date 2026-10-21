@@ -215,7 +215,7 @@ def dependency_identity(repository, root, gclient=None):
     require(executable.is_file(), 'Pinned depot_tools gclient is required for provisioned source verification.')
     executable = executable.resolve()
     depot = executable.parent
-    require(git(depot, 'rev-parse', '--show-toplevel').decode().strip() == str(depot),
+    require(Path(git(depot, 'rev-parse', '--show-toplevel').decode().strip()).resolve() == depot.resolve(),
             'gclient must belong to the pinned depot_tools Git root.')
     require(git(depot, 'rev-parse', 'HEAD').decode().strip() == windows['DepotToolsRevision'],
             'depot_tools revision does not match build metadata.')
@@ -320,6 +320,11 @@ def artifact_hashes(output, target):
     require(any((output / directory / name).is_file() for directory in snapshot_directories
                 for name in ('gen_snapshot', 'gen_snapshot.exe', 'gen_snapshot_arm64', 'gen_snapshot_x64')),
             'Required local engine snapshot tool is missing.')
+    if target == 'windows':
+        for name in ('icudtl.dat', 'flutter_windows.dll.lib', 'flutter_windows.h', 'flutter_export.h',
+                     'flutter_messenger.h', 'flutter_plugin_registrar.h', 'flutter_texture_registrar.h',
+                     'cpp_client_wrapper/include/flutter/flutter_engine.h'):
+            require((output / name).is_file(), f'Required Windows engine artifact is missing: {name}')
     # Bind all xcframework contents (headers/resources as well as the engine),
     # and the SDK/snapshot tools consumed by Flutter from this local output.
     roots = [output / 'FlutterMacOS.xcframework'] if target == 'macos' else [binary]
@@ -454,7 +459,9 @@ def verify(repository, root, name, target, architecture, mode):
     require(record.get('flutterRoot') == str(root) and record.get('outputName') == name, 'Engine provenance belongs to another checkout/output.')
     require(record.get('source') == verified_sources(repository, root, target,
             record.get('source', {}).get('dependencies', {}).get('gclient')), 'Stale engine source/patch provenance.')
-    build_environment()
+    environment = build_environment()
+    if target == 'windows':
+        require(record.get('environment') == environment, 'Windows engine build environment changed.')
     require(record.get('toolchain') == toolchain_identity(root, output, target, architecture), 'Engine toolchain provenance mismatch.')
     ninja_identity = record.get('ninja', {})
     require(ninja_identity.get('sha256') == file_hash(ninja_identity.get('path', '')), 'Ninja executable changed.')
@@ -467,9 +474,14 @@ def verify(repository, root, name, target, architecture, mode):
     require(record.get('engineBinary') == str(binary.relative_to(output)).replace(os.sep, '/'), 'Engine binary selection changed.')
     require(binary.stat().st_mtime_ns >= build_record['startedNs'], 'Stale engine artifact.')
     require(record.get('artifacts') == artifact_hashes(output, target), 'Engine artifact hashes changed.')
-    return {'kind': record['kind'], 'flutterRoot': str(root), 'engineSource': str(root / 'engine/src'),
+    result = {'kind': record['kind'], 'flutterRoot': str(root), 'engineSource': str(root / 'engine/src'),
             'outputName': name, 'platform': target, 'architecture': architecture, 'mode': mode,
             'binary': str(binary), 'binarySha256': file_hash(binary), 'provenanceSha256': file_hash(path)}
+    if target == 'windows':
+        require(name == f'lineup_ax_{mode}_{architecture}', 'Windows requires the canonical engine output.')
+        result['recipe'] = {key: record['source'][key] for key in
+                            ('frameworkRevision', 'engineVersion', 'patches', 'manifestSha256', 'pinSha256')}
+    return result
 
 
 def executable_hash(binary):
@@ -603,9 +615,158 @@ def bundle(repository, root, name, target, architecture, mode, app):
     return record
 
 
+WINDOWS_RECOVERY = {
+    'common_cpp_unittests': {'AccessibilityBridgeTest.' + name for name in (
+        'RecoveryNestedMovesAndDeletedAncestorsRetainData',
+        'RecoveryPrunesUnreachableDataAndRejectsMissingChildren',
+        'RecoveryTreeDataReferenceSurvivesCommitAndRejection',
+        'RecoveryIgnoresOrphanWithoutLosingReachableValue',
+        'RecoveryMoveRetainsOmittedDescendantsAndIdentity',
+        'RecoveryRejectsMalformedGraphThenAcceptsRepair',
+        'RecoveryFailureStagesDoNotPublishOrPoisonLaterEvents',
+        'RecoveryRootHintIsExplicitAndNonzeroRootsStillWork',
+        'RecoveryOwnsFlagsAndRetainsActionDefinitions',
+        'RecoveryDetachesHeldDelegateOnRemovalAndDestruction')},
+    'flutter_windows_unittests': {
+        'AccessibilityBridgeWindows.RecoveryPreservesNativeIdentityAcrossMove',
+        'FlutterWindowsEngineTest.RecoverySemanticsCallbackSupportsFrameworkAndNonzeroRoots'},
+}
+
+
+def gtest_results(path):
+    import xml.etree.ElementTree as xml
+    require(path.is_file(), 'Test process did not emit result XML.')
+    try:
+        root = xml.parse(path).getroot()
+    except xml.ParseError as error:
+        raise VerificationError('Invalid test result XML.') from error
+    cases = {}
+    for case in root.iter('testcase'):
+        name = case.get('classname', '') + '.' + case.get('name', '')
+        require(name not in cases, 'Duplicate test result identity.')
+        skipped = (case.find('skipped') is not None or case.get('status') == 'notrun'
+                   or case.get('result') in ('skipped', 'suppressed'))
+        cases[name] = ('skipped' if skipped else 'failed' if
+                       case.find('failure') is not None or case.find('error') is not None else 'passed')
+    require(cases, 'Test suite produced no cases.')
+    require(not list(root.iter('error')), 'Test suite emitted an infrastructure error.')
+    return cases
+
+
+def run_windows_suite(output, suite, destination, names=None):
+    xml_path = destination / (suite + '.xml')
+    if names is not None:
+        require(names, 'An attribution run requires explicit failing cases.')
+    selection = '*' if names is None else ':'.join(sorted(names))
+    command = [str(output / (suite + '.exe')), '--gtest_output=xml:' + str(xml_path),
+               '--gtest_filter=' + selection, '--gtest_repeat=1',
+               '--gtest_fail_fast=0', '--gtest_list_tests=0']
+    # A caller's filter, shard or repeat settings must not shrink a full suite
+    # into a passing recovery-only sample. The pinned GoogleTest also reads the
+    # two TESTBRIDGE defaults independently of GTEST_* flags. Sanitize only the
+    # child environment; leave the caller and required runtime paths intact.
+    environment = {key: value for key, value in os.environ.items()
+                   if not key.upper().startswith('GTEST_') and key.upper() not in
+                   ('TESTBRIDGE_TEST_ONLY', 'TESTBRIDGE_TEST_RUNNER_FAIL_FAST')}
+    with (destination / (suite + '.log')).open('wb') as log:
+        result = subprocess.run(command, cwd=output, env=environment,
+                                stdout=log, stderr=subprocess.STDOUT, check=False)
+    cases = gtest_results(xml_path)
+    failures = {name for name, state in cases.items() if state == 'failed'}
+    require(result.returncode == 0 or failures, 'Test process failed without an attributable test failure.')
+    require(result.returncode != 0 or not failures, 'Test exit status disagrees with result XML.')
+    if names is not None:
+        require(set(cases) == set(names) and all(cases[n] != 'skipped' for n in names),
+                'Baseline attribution did not execute every requested failing case.')
+    return cases
+
+
+def windows_tests(repository, root, mode, ninja, jobs, results):
+    """Full suites first; only unrelated failures may use a same-mode DC baseline.
+
+    The baseline is never a verified combined candidate and receives no provenance.
+    Source restoration is unconditional; a failed restoration/reverification blocks CI.
+    """
+    host_matches('windows', 'x64')
+    require(mode in ('debug', 'release'), 'Windows tests require Debug or Release.')
+    require(1 <= jobs <= 64, 'Ninja jobs must be between 1 and 64.')
+    name = f'lineup_ax_{mode}_x64'
+    selected = verify(repository, root, name, 'windows', 'x64', mode)
+    output = root / 'engine/src/out' / name
+    require(not results.exists(), 'Test result directory must be fresh.')
+    results.mkdir(parents=True)
+    started = time.monotonic()
+    ninja_path = resolve_ninja(ninja)
+    record = json.loads((output / PROVENANCE).read_text())
+    require(record['ninja']['path'] == ninja_path, 'Tests must use the candidate Ninja executable.')
+    run([ninja_path, '-C', output, '-j', str(jobs), *WINDOWS_RECOVERY], capture=False)
+    failures = {}
+    recovery_errors = []
+    all_cases = {}
+    # Do not stop after the first failing suite: preserve the full execution.
+    suite_errors = []
+    for suite, required in WINDOWS_RECOVERY.items():
+        try:
+            cases = run_windows_suite(output, suite, results)
+            all_cases[suite] = cases
+            recovery_errors += sorted(n for n in required if cases.get(n) != 'passed')
+            failures[suite] = {n for n, state in cases.items() if state == 'failed'} - required
+        except (VerificationError, OSError) as error:
+            suite_errors.append(f'{suite}: {error}')
+    require(not suite_errors, '; '.join(suite_errors))
+    require(not recovery_errors, 'Required recovery cases missing, skipped or failed: ' + ', '.join(recovery_errors))
+    exclusions = {}
+    if any(failures.values()):
+        before = verified_sources(repository, root, 'windows', record['source']['dependencies']['gclient'])
+        baseline = root / 'engine/src/out' / f'lineup_dc_baseline_{mode}_x64'
+        require(not baseline.exists(), 'Baseline output must be fresh.')
+        ax_files = patch_files(committed(repository, AX_PATCH))
+        saved = {n: (root / n).read_bytes() for n in ax_files}
+        try:
+            git(root, 'apply', '--reverse', '--check', repository / AX_PATCH)
+            git(root, 'apply', '--reverse', repository / AX_PATCH)
+            direct_files = {n: value for n, value in before['files'].items() if n not in ax_files}
+            changed = set(git(root, 'diff', '--name-only', 'HEAD').decode().splitlines())
+            require(changed == set(direct_files), 'Baseline must contain only DirectComposition changes.')
+            for n, value in direct_files.items():
+                require(source_hash(root / n) == value['patchedSha256'], 'Baseline DirectComposition bytes changed.')
+            gn = list(record['build']['gnCommand'])
+            gn[gn.index('--target-dir') + 1] = baseline.name
+            run(gn, cwd=root / 'engine/src', capture=False)
+            configuration(baseline, 'windows', 'x64', mode)
+            require(record['toolchain'] == toolchain_identity(root, baseline, 'windows', 'x64'),
+                    'Baseline toolchain must match the combined candidate.')
+            require(record['environment'] == build_environment(), 'Baseline build environment changed.')
+            run([ninja_path, '-C', baseline, '-j', str(jobs), *WINDOWS_RECOVERY], capture=False)
+            baseline_results = results / 'dc-baseline'
+            baseline_results.mkdir()
+            for suite, names in failures.items():
+                if not names:
+                    continue
+                cases = run_windows_suite(baseline, suite, baseline_results, names)
+                require(all(cases[n] == 'failed' for n in names),
+                        'Combined engine regression: a failing case passes on the DC-only baseline.')
+                exclusions[suite] = sorted(names)
+            require(before['dependencies'] == dependency_identity(repository, root, before['dependencies']['gclient']),
+                    'Baseline dependency graph changed.')
+        finally:
+            for n, data in saved.items():
+                (root / n).write_bytes(data)
+    require(selected == verify(repository, root, name, 'windows', 'x64', mode),
+            'Combined candidate identity changed during tests.')
+    summary = {'mode': mode, 'status': 'passed', 'durationSeconds': round(time.monotonic() - started, 1),
+               'suites': {s: {state: sum(v == state for v in cases.values())
+                              for state in ('passed', 'failed', 'skipped')} for s, cases in all_cases.items()},
+               'requiredRecoveryCases': {s: sorted(names) for s, names in WINDOWS_RECOVERY.items()},
+               'dcBaselineExclusions': exclusions, 'binarySha256': selected['binarySha256'],
+               'provenanceSha256': selected['provenanceSha256']}
+    (results / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    return summary
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['finalize', 'verify-source', 'apply', 'build', 'verify', 'record-app-build', 'bundle'])
+    parser.add_argument('action', choices=['finalize', 'verify-source', 'apply', 'build', 'verify', 'record-app-build', 'bundle', 'windows-tests'])
     parser.add_argument('--repository', type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument('--flutter-root', type=Path, required=True)
     parser.add_argument('--platform', choices=['macos', 'windows'], default='macos')
@@ -618,6 +779,7 @@ def main():
     parser.add_argument('--gclient', type=Path)
     parser.add_argument('--app', type=Path)
     parser.add_argument('--recipe-file', type=Path)
+    parser.add_argument('--results', type=Path)
     args = parser.parse_args()
     repository, root = args.repository.resolve(), args.flutter_root.resolve()
     if args.action == 'finalize':
@@ -634,6 +796,10 @@ def main():
         result = source_identity(repository, root, args.platform)
     elif args.action == 'verify-source':
         result = verified_sources(repository, root, args.platform, args.gclient)
+    elif args.action == 'windows-tests':
+        require(args.platform == 'windows' and args.architecture == 'x64', 'Windows tests require Windows x64.')
+        require(args.results, '--results is required.')
+        result = windows_tests(repository, root, args.mode, args.ninja, args.jobs, args.results.resolve())
     elif args.action == 'build':
         result = build(repository, root, args.platform, args.architecture, args.mode, args.ninja, args.apple_linker, args.jobs, args.gclient)
     else:

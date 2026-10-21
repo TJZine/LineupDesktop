@@ -32,7 +32,7 @@ a rebuilt archive under the existing provenance identity.
 
 | Component | Provenance | Package policy |
 | --- | --- | --- |
-| Flutter Windows engine | Flutter 3.47.7 framework `abaf9c523780a608bd46686fd5e53740a07077f8`, engine `deb287481e3ce9468f3434937ced4240a70539ca`, plus the repository-owned DirectComposition patch | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
+| Flutter Windows engine | Flutter 3.47.7 framework `abaf9c523780a608bd46686fd5e53740a07077f8`, engine `deb287481e3ce9468f3434937ced4240a70539ca`, plus the repository-owned DirectComposition and desktop AX patches | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
 | flutter_secure_storage_windows | Version 4.2.2 from the locked Dart dependency graph | BSD-3-Clause; its notice is generated into Flutter `NOTICES.Z`. |
 | Microsoft Visual C++ runtime | Retail x64 VC143 runtime matching the build toolset | Microsoft redistributable code. A portable package uses unmodified app-local retail DLLs from `VC/Redist`; never include debug/nonredistributable files. |
 | Khronos Vulkan loader | `vulkan-1.dll` supplied by the installed GPU driver or Vulkan Runtime | System prerequisite. The selected libmpv DLL imports the loader even though Lineup selects D3D11. The portable package records this requirement instead of copying a machine-specific display-driver file. |
@@ -40,9 +40,10 @@ a rebuilt archive under the existing provenance identity.
 
 `tool/windows/build-release.ps1` creates the packaging-eligible Windows build.
 It accepts only a clean Git source tree, validates the exact patched Flutter
-source, refreshes and selects the configured `host_release` engine, and writes
-an artifact-bound marker
-containing the source and engine identities plus hashes for every build input
+source and selects the freshly provisioned, verified `lineup_ax_release_x64`
+engine without an incremental refresh. It writes a schema-2 artifact-bound marker
+containing canonical pin/manifest hashes, ordered patch identities, engine
+provenance/DLL digests and hashes for every build input
 copied into the package. `tool/windows/package.ps1` requires that marker,
 rechecks it against the clean current commit and pinned metadata, and rejects
 stale identities or modified build artifacts before creating output.
