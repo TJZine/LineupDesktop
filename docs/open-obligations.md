@@ -5,7 +5,8 @@ Reconciled **October 20, 2026**, against `platform/macos` at
 unfinished-work register**. Detailed plans own behavior, decisions and test
 procedures; dated reviews remain attributed history. A later documentation commit
 does not change a tested app's identity. No new tests or runtime observations were
-performed for this reconciliation.
+performed for this reconciliation. October 21 execution updates below retain their
+actual source and artifact identities; the October 20 baseline is historical.
 
 [The Opus 5.5 handoff](handoffs/opus-5-5-core-readiness-handoff.md) explains the
 current product, evidence and proposed order of work. It references this register
@@ -53,7 +54,7 @@ an open delivery/acceptance item; do not erase it merely because its local tests
 
 | ID | Finding | Current status | What actually remains |
 | --- | --- | --- | --- |
-| B-01 | Desktop Flutter AX bridge rejects unreachable/moved updates and cannot safely recover from failed mutations | Repair implemented in `831c28fc`; macOS Debug/Release, controlled native rejection recovery and canonical app integration verified through source `0208982e`. Stock SDK/cache remain unchanged and the repaired engine is opt-in. | R-01 Windows integration, V-01/V-02 bounded runtime evidence and V-07 human acceptance. M-04 overall remains open. [Current report](handoffs/macos-post-audit-fix-report.md), [engine investigation](handoffs/macos-ax-update-investigation.md). |
+| B-01 | Desktop Flutter AX bridge rejects unreachable/moved updates and cannot safely recover from failed mutations | Repair implemented in `831c28fc`; historical canonical app integration verified through source `0208982e`. October 21 durable Release engine verification and fresh focused Debug/Release recovery tests pass (12 cases per mode); candidate built at `ddefaa4e`, with live acceptance pending. Stock SDK/cache remain unchanged and the repaired engine is opt-in. | R-01 Windows integration, V-01/V-02 bounded runtime evidence and V-07 human acceptance. M-04 overall remains open. [Current report](handoffs/macos-post-audit-fix-report.md), [engine investigation](handoffs/macos-ax-update-investigation.md). |
 
 Do not promote the ancestor-junction risk, buffering/EOF hypotheses, timestamp
 warning or historical node 866 into confirmed current application defects without
@@ -64,11 +65,11 @@ the discriminating evidence in the investigation rows below.
 | ID | Obligation | Evidence already available | Exact unfinished gate |
 | --- | --- | --- | --- |
 | V-01 | Initial OSD fade/menu continuity and natural Slider interactivity transition | Retained frame/widget regressions, stock keyed/unkeyed reductions, canonical native continuity and useful diagnostic seek. Four automatic first-fade attempts plus a bounded manual probe do not qualify; three natural routes mount already-interactive Sliders. | Actual menu opening within the initial 350-ms fade with recorded animation/timing; a same-presenter enabled/disabled transition where naturally feasible. Do not add a product control to force it or repeat an unbounded campaign. [Recovery assignment](handoffs/macos-m04-recovery-implementation-handoff.md#d-resolve-remaining-runtime-uncertainties). |
-| V-02 | Repaired Windows engine | Historical macOS common tests 242 Debug / 240 Release and focused native tests 12 per mode retain their attribution. October 21 Windows per-mode full-suite/recovery/DC-baseline attribution jobs are implemented; [CI dispatch 39548870477](https://github.com/TJZine/LineupDesktop/actions/runs/39548870477) is running at `c767d79d`; Windows release policy passed, and Debug/Release engine jobs are active. No engine-suite pass observed yet. | Execute Debug and Release `common_cpp_unittests` and `flutter_windows_unittests` against both patches, require all 12 named recovery cases, attribute other failures against same-mode DC-only output, and verify intended app/package. No configured-job or portable-fixture result closes V-02. [Engine instructions](../tool/flutter_engine/README.md). |
+| V-02 | Repaired Windows engine | Historical macOS common tests 242 Debug / 240 Release retain their attribution. October 21 fresh focused native tests pass all 12 recovery cases per mode on the durable macOS checkout; this is not Windows evidence. October 21 Windows per-mode full-suite/recovery/DC-baseline attribution jobs are implemented; [CI dispatch 39548870477](https://github.com/TJZine/LineupDesktop/actions/runs/39548870477) is running at `c767d79d`; Windows release policy passed, and Debug/Release engine jobs are active. No engine-suite pass observed yet. | Execute Debug and Release `common_cpp_unittests` and `flutter_windows_unittests` against both patches, require all 12 named recovery cases, attribute other failures against same-mode DC-only output, and verify intended app/package. No configured-job or portable-fixture result closes V-02. [Engine instructions](../tool/flutter_engine/README.md). |
 | V-03 | Windows native lifecycle, physical media and exact package | Later recorded CI run [39383128215](https://github.com/TJZine/LineupDesktop/actions/runs/39383128215) passed stock Windows build and eight explicit CTests: encoder, playback state, core, codec, display dynamic range, guardian, player contract and authenticated reference. Earlier L2 Windows auth/package gates also passed at their recorded identities. | `runner_lifecycle` is still outside current CI and lacks recorded execution here. Run it with its actual patched-engine prerequisites. Physical playback/parts/EOF, HDR/restoration, tracks, input, monitor/DPI and clean-system package remain distinct. Revalidate changed inputs; do not repeat all earlier tests solely because an old handoff says pending. [Development tiers](DEVELOPMENT.md#current-test-tiers-and-gaps), [physical/package procedure](windows-native-validation.md). |
-| V-04 | macOS real-app reliability beyond recorded scenarios | Actual Plex playback, tracks, timer expiry, recovery, natural rollovers and bounded native focus/seek/quit observations exist. Accepted H1 HDR/L1 seek evidence and L2 real-coordinator/auth cases retain their exact sources. | Sustained audio/rollover, true live resize/minimum size, minimize/restore, multi-display/Spaces/Stage Manager and sleep/wake coverage on the selected final candidate; exact remaining physical steps stay in the existing checklist. No new claim follows from automated AX actions. |
-| V-05 | Real Plex scope, catalog and recovery edge cases | Pagination/parser/currentness tests; real macOS scan and selected local playback flows; authenticated synthetic reference matrices. | Remote/relay and alternate PMS shapes/topologies; protected-profile/server failure, live 401/403, playlist item identity/edits, smart collections, incomplete catalogs, membership/portrait probes and agreed scan budget. Run only available authorized cases; unavailable fixtures stay explicit. [October 10 Windows procedures](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md), [collection plan](osd-autohide-and-collection-membership-plan.md), [Player/Guide plan](player-guide-polish-plan.md). |
-| V-06 | macOS declared minimum version | App/runtime target macOS 12 arm64; actual recorded host is macOS 27. | Runtime, TLS/CA, Keychain, presentation and app launch on the older versions actually promised, or explicit agreement to narrow the support range. Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
+| V-04 | macOS real-app reliability beyond recorded scenarios | Historical actual Plex playback, tracks, timer expiry, recovery, natural rollovers and bounded native focus/seek/quit observations exist. The October 21 candidate at `ddefaa4e` is built and artifact-verified; no launch or playback observation has been made on it. Accepted H1 HDR/L1 seek evidence and L2 real-coordinator/auth cases retain their exact sources. | Sustained audio/rollover, true live resize/minimum size, minimize/restore, multi-display/Spaces/Stage Manager and sleep/wake coverage on the selected final candidate; exact remaining physical steps stay in the existing checklist. No new claim follows from automated AX actions. |
+| V-05 | Real Plex scope, catalog and recovery edge cases | Pagination/parser/currentness tests; real macOS scan and selected local playback flows; authenticated synthetic reference matrices. | On candidate `ddefaa4e`, observe the approved local PMS owner/available Home profiles, saved-lineup restore, scan/retry/cancel, current catalog selection, authorized playback and shutdown. Protected-profile/server failures and 401/403 retain deterministic evidence. Remote/relay, alternate PMS shapes, large/partial catalogs, smart collections and live membership/portrait probes are documented beta limitations. Do not alter accounts/servers or credentials to manufacture a case. [October 10 Windows procedures](reviews/comprehensive-review-2026-10-10/WINDOWS_HANDOFF.md), [collection plan](osd-autohide-and-collection-membership-plan.md), [Player/Guide plan](player-guide-polish-plan.md). |
+| V-06 | macOS declared minimum version | App/runtime target macOS 12 arm64; actual recorded host is macOS 27. | Runtime, TLS/CA, Keychain, presentation and app launch on the older versions actually promised, or explicit agreement to narrow the support range. The maintainer allowed a VM route starting with macOS 12 and stepping up on failure; approval for VM installation and the image download is pending. No VM/image has been installed/downloaded. Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
 | V-07 | Existing physical/spoken acceptance | Automated semantics/native evidence is recorded separately. | User explicitly deferred the **one existing six-item checklist** on October 20. All boxes remain unchecked. Do not start synthetic VoiceOver/modifier work or infer passes from unlock/authentication assistance. [Checklist](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist). Windows Narrator/physical checks retain their separate platform scope. |
 
 ## Investigations and unresolved observations
@@ -125,7 +126,7 @@ Choose a release scope explicitly rather than calling every idea core-blocking.
 | --- | --- | --- |
 | R-01 | Repaired-engine integration across intended build flows | October 21 source implementation by repository `worker` (gpt-6.1-sol, medium): canonical combined Python authority, fixed Windows outputs, checked consumers without Ninja refresh, schema-2 release/package receipts and separate mode CI jobs. Controller portable checks pass (26 passed, one Windows-only skip), YAML parses, frozen inputs are unchanged, and existing macOS verification succeeds with identical JSON before/after. Independent review found native Windows fixture path and inherited GoogleTest selection issues; the same worker fixed both, and controller source/fixture checks pass. Windows newline/shim fixture assumptions were corrected too. Hosted Windows release-policy and ordinary stock Windows app/native checks passed in CI run 39548870477 at `c767d79d`; combined engine/app/package execution is in progress, with no pass yet. R-01 target-host acceptance and V-02 remain open. Stock caches unchanged. [Engine README](../tool/flutter_engine/README.md), [build instructions](DEVELOPMENT.md#macos-development-app). |
 | R-02 | macOS signed archive, sandbox and distribution | Development embedding/ad-hoc signing exists. Team-identity signing/provisioning, hardened-runtime/sandbox loading, data-protection Keychain continuity, browser link/network/CA behavior and TestFlight installation are not accepted. [Runtime signed-sandbox checks](macos-runtime.md#signed-sandbox-checks-still-pending-r1), [port distribution](macos-port-plan.md#48-app-store-distribution-sandbox-and-credentials). |
-| R-03 | Notices and source delivery | October 21 design gate completed by repository `worker` (gpt-6.1-sol, medium): [themed in-app Licenses design](handoffs/licenses-design-2026-10-21.md), approved by the maintainer October 21. The same worker returned the 41-file reader/native-resource/source-tooling implementation against `c767d79d`, with exclusive Dart ownership released. Controller verified its content manifest, 13 focused Dart tests, six Python fixtures, all 53 actual prepared resource texts, generated-asset freshness, format/analysis and project lint; independent review established three P2 corrections (all ZIP/companion entry types, completed engine-verification sidecar binding, prior Player return destination). The same worker fixed all three; controller source/negative-control inspection, 17 focused Dart tests, eight Python tests, asset freshness, format and analysis pass. Child full suite passed 1,889 tests after the product fixes. Controller inspected real Flutter fixture renders (normal/large text/small window/partial failure); actual installed-bundle/physical behavior remains unexecuted. Implementation is ready for controller integration before candidate; final installed-bundle/source-companion/physical gates remain open. Exact source inventory/archives, font/engine notices and replacement/rebuilding materials remain delivery work; bundled raw resources alone do not close R-03. No sending/publication authorized. Independent legal/Plex/trademark/patent/App Store review remains a pre-submission gate; no legal conclusion is made here. [Runtime distribution notes](macos-runtime.md#distribution-notes-for-the-legal-review). |
+| R-03 | Notices and source delivery | October 21 design gate completed by repository `worker` (gpt-6.1-sol, medium): [themed in-app Licenses design](handoffs/licenses-design-2026-10-21.md), approved by the maintainer October 21. The same worker returned the 41-file reader/native-resource/source-tooling implementation against `c767d79d`, with exclusive Dart ownership released. Controller verified its content manifest, 13 focused Dart tests, six Python fixtures, all 53 actual prepared resource texts, generated-asset freshness, format/analysis and project lint; independent review established three P2 corrections (all ZIP/companion entry types, completed engine-verification sidecar binding, prior Player return destination). The same worker fixed all three; controller source/negative-control inspection, 17 focused Dart tests, eight Python tests, asset freshness, format and analysis pass. Child full suite passed 1,889 tests after the product fixes. Controller inspected real Flutter fixture renders (normal/large text/small window/partial failure); actual running-app/physical behavior remains unexecuted. Controller integrated the implementation as `ddefaa4e` before candidate build. The candidate-bound source companion was prepared and verified locally (109 source inputs, 129 delivered files), including exact app/ZIP/receipt/engine/runtime bindings. The native adapter also read all 53 documents from the completed candidate bundle with exact text. Themed reader navigation and playback continuity on the actual running candidate remain unverified; bundled resources and offline checks alone do not close R-03. No sending/publication authorized. Independent legal/Plex/trademark/patent/App Store review remains a pre-submission gate; no legal conclusion is made here. [Runtime distribution notes](macos-runtime.md#distribution-notes-for-the-legal-review). |
 | R-04 | Runtime/toolchain upkeep and exact package provenance | Keep pins, dynamic libraries, CA handling and artifact receipts. libmpv/HarfBuzz cross-directory byte identity has documented limits, separate from validated consumed-artifact provenance; do not claim fully byte-reproducible runtime builds. Recheck hosted execution/current package only when required by changed inputs or release. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
 | R-05 | Repository defaults/history | Default branch and optional stale-branch/tag cleanup remain maintainer proposals, not app defects or authorized cleanup. The current local branch is ahead of its last fetched tracking ref; this reconciliation performs no fetch/push/PR/merge/tag changes. |
 
@@ -150,7 +151,7 @@ unchanged and no re-signing of preserved verified pairs. Disk space was cleared
 to 259 GiB; the controller started a fresh durable engine checkout/build at
 `~/.cache/lineup-flutter-ax/3.47.7`, using pinned Ninja 1.13.2 with two jobs and
 detached logs. No user data was deleted. No push may occur while the dispatched
-engine jobs are active; final candidate build/identities remain pending.
+engine jobs are active. The final candidate build and offline verification subsequently completed as recorded below.
 
 Durable engine outcome (October 21): the fresh Release output
 `lineup_ax_release_arm64` under `~/.cache/lineup-flutter-ax/3.47.7` built and
@@ -160,9 +161,59 @@ provenance SHA-256
 `4226268a0fa6d4b2bd41e38229d1ea49254191c7e4620561f85203521d7e606c`.
 Comparison with the preserved engine matched source/dependency/toolchain/Metal/
 Ninja identities. GN content-hash metadata and generated Swift-tool mtime fields
-differ, so native-test carry-forward was not claimed. Fresh focused Debug/Release
-bridge/delegate test builds/runs are detached and pending before candidate use.
+differ, so native-test carry-forward was not claimed. The controller instead built
+and ran fresh focused bridge/delegate tests: all 10 common bridge and two macOS
+delegate cases passed in both Debug and Release, none failed or skipped. The
+controller independently parsed all four XML files and confirmed those outcomes.
+Selected Release engine verification remained unchanged after the test runs.
 Existing app/engine pairs and stock caches remain untouched.
+
+### October 21 candidate artifact evidence
+
+Controller-owned durable provisioning, native recovery tests and candidate build
+completed successfully. I-08 (`f2ff07cd`) and approved R-03 (`ddefaa4e`) are included;
+R-01 tooling (`c767d79d`) precedes both the candidate and the active Windows CI
+run. Executors: I-08 `worker_luna` (gpt-5.6-luna, xhigh); R-01/R-03 `worker`
+(gpt-6.1-sol, medium); independent read-only review `reviewer` (gpt-6.1-sol, high).
+The controller owns the actual build and artifact checks. File scopes and
+implementation verification are attributed in the corresponding rows above.
+
+The candidate was built from clean committed source, copied with both receipt
+sidecars, and canonically verified before any subsequent commit. The pinned
+stock `flutter pub get` was run afterward. The controller independently repeated
+bundle verification, strict deep signature verification, source-companion
+verification and artifact hash comparisons. All passed. The standalone native
+resource adapter compiled from the candidate source and read all 53 bundled
+notice/patch/build documents exactly; this is an offline bundle-bound check,
+not a running UI or playback observation.
+
+Candidate directory: `~/.cache/lineup-candidates/direct-play-2026-10-21-ddefaa4e`.
+It contains `Lineup Desktop.app`, its build receipt and final engine-provenance
+sidecar, `Lineup-Desktop-direct-play-ddefaa4e.zip` and `source-companion/`.
+Private logs/results remain under
+`~/.cache/lineup-stabilization/2026-10-21/{durable-native-tests,beta-candidate-ddefaa4e}`.
+These artifacts are prepared locally; none has been sent or published.
+
+| Candidate identity | Value (SHA-256 unless stated) |
+| --- | --- |
+| Source commit | `ddefaa4eb36934d54a57f26c645c9d078b9731b5` |
+| Compiled Dart | `b2974c66b9dec2594bca6fe7cd51b9b4e43c46c8ce1a05d3bbf80ce249907b80` |
+| Selected raw engine | `8daffe9911b489adc26f021034a893c57c54ad84b946bbacfb422ce8c657b09a` |
+| Bundled engine | `30a29606b5fa7686512d4e3ecf98ea8c419763fde014d3652fd46996a8381219` |
+| Runtime BUILD-INFO | `b6b0f67b9d7c3e74e1089db05621c65d1aec850a3326e22f9172515ed2018899` |
+| App build receipt | `c02cd13a4bb061b312e00d56a483cabd49748496f599ff8fc65f0cc75e3e01fd` |
+| Final app engine-provenance | `92c9cb75ada89e200943937ba1560f4af2b15cfee395a30a2eae2c62604cfe8d` |
+| Candidate ZIP | `2c8ee209c49d714d808f873c1d6a921882cbfc2c529f0764a70f1a8a5d4fcda3` |
+| Source-companion manifest | `a10d6416e46d63f4ffd31edebaf08c2dd01742cc1377eb53ab6e08f377e6baa3` |
+
+**Not accepted.** Loaded-engine observation, maintainer-present launch/quit,
+selected V-04/V-05 live routes, running Licenses navigation/playback continuity,
+V-06 and the V-07 checklist-versus-limited-candidate decision remain open. The
+existing six-item human checklist owns physical/spoken acceptance; zero boxes
+are inferred from these results. Windows combined Debug/Release engine and
+package jobs remain active at `c767d79d`; their actual engine suites and package
+controls have not completed. No push is permitted while they run. Later
+prose-only commits do not change this candidate's source/artifact identity.
 
 H's PowerShell pin assertion was source-only in its original code-quality campaign;
 later Windows policy/CI evidence exists. Do not perpetually label all PowerShell
