@@ -864,3 +864,24 @@ macOS 27.0.1 (26A434) host, while these two older VMs cannot establish an older
 floor. The controller has not narrowed the promise or changed the 12.0 deployment
 target. V-05 live Cancel/Retry remains pending by the maintainer's explicit
 choice; V-07 remains unverified. The local-only plans remain until actual closeout.
+
+V-06 compatibility clarification (controller, October 21): the maintainer did
+not approve narrowing support to macOS 27. Reinspection of all 22 Mach-O images
+in the unchanged candidate found `LC_BUILD_VERSION minos 12.0`, including the
+app, compiled Dart, Flutter, objective_c and all bundled media libraries. Flutter
+3.47's official [support matrix](https://docs.flutter.dev/reference/supported-platforms)
+lists macOS 12 through 27, with macOS 15 CI-tested upstream. This gives a concrete
+compatibility basis for recent macOS on Apple Silicon; it does not substitute
+for this app's runtime proof. No inspected dependency imposes a macOS 27 floor.
+
+The exact pinned MoltenVK source (`db66022459ffb663aa2b50f6b018bc2e124f5edf`)
+queries Metal argument-buffer sizes during physical-device initialization when
+that feature is enabled; the guest crash reaches this query. Disabling it only
+for the macOS 13 diagnostic bypassed that crash and reached changing video. A
+virtual-GPU capability/driver interaction is therefore a supported hypothesis,
+not an established physical-Mac or entire-OS-version defect. The tested Ventura
+image was 13.0, not an observation of later Ventura updates. The prior binary
+choice between physical older hardware and latest-host-only beta support was
+too narrow: a newer macOS VM remains a useful next check, starting with macOS 14
+under the approved step-up sequence. Its image download/installation still needs
+maintainer approval; no new download or support-policy change is implied here.
