@@ -58,7 +58,6 @@ class AppDelegate: FlutterAppDelegate {
             let value: Any
             if method == "listLicenseDocuments" { value = try resources.list() }
             else {
-              guard let id else { throw LicenseResources.Failure.unavailable }
               value = try resources.read(id: id)
             }
             DispatchQueue.main.async { result(value) }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -29,12 +31,40 @@ class LicenseSource {
   final Future<List<LicenseItem>> Function() load;
 }
 
+enum _LicenseOperation { loadIndex, read }
+
 class LicensesRepository {
   LicensesRepository({AssetBundle? assets, MethodChannel? channel})
     : _assets = assets ?? rootBundle,
       _channel = channel ?? const MethodChannel('lineup/platform');
   final AssetBundle _assets;
   final MethodChannel _channel;
+  final bool _diagnosticsEnabled =
+      Platform.environment['LINEUP_LICENSE_DIAGNOSTICS'] == '1';
+
+  // Error values select fixed categories; raw codes/messages/details never
+  // enter stderr. One record per failed index/read attempt, success is silent.
+  void _reportFailure(_LicenseOperation operation, Object error) {
+    if (!_diagnosticsEnabled) return;
+    final category = switch (error) {
+      MissingPluginException() => 'missing_plugin',
+      PlatformException(code: 'license_resources_unavailable') =>
+        'native_unavailable',
+      PlatformException() => 'platform_other',
+      FormatException() =>
+        operation == _LicenseOperation.loadIndex
+            ? 'invalid_index'
+            : 'invalid_document',
+      _ => 'other',
+    };
+    try {
+      stderr.writeln(
+        '[lineup-license-dart] operation=${operation == _LicenseOperation.loadIndex ? 'index' : 'read'} category=$category',
+      );
+    } catch (_) {
+      // A diagnostic sink failure must not replace the original operation error.
+    }
+  }
 
   List<LicenseSource> get sources => [
     if (defaultTargetPlatform == TargetPlatform.macOS)
@@ -46,6 +76,15 @@ class LicensesRepository {
   ];
 
   Future<List<LicenseItem>> _native() async {
+    try {
+      return await _nativeIndex();
+    } catch (error) {
+      _reportFailure(_LicenseOperation.loadIndex, error);
+      rethrow;
+    }
+  }
+
+  Future<List<LicenseItem>> _nativeIndex() async {
     final entries = await _channel.invokeListMethod<Object?>(
       'listLicenseDocuments',
     );
@@ -83,16 +122,12 @@ class LicensesRepository {
           ? 'Runtime patches'
           : 'Runtime information';
       (groups[group] ??= []).add(
-        LicenseItem.document(id, parts.last, () async {
-          final text = await _channel.invokeMethod<String>(
-            'readLicenseDocument',
-            {'id': id},
-          );
-          if (text == null || text.isEmpty) {
-            throw const FormatException('Empty license');
-          }
-          return text;
-        }, subtitle: path),
+        LicenseItem.document(
+          id,
+          parts.last,
+          () => _nativeDocument(id),
+          subtitle: path,
+        ),
       );
     }
     if (!paths.contains('BUILD-INFO.txt') ||
@@ -109,6 +144,21 @@ class LicensesRepository {
           groups[name]!..sort((a, b) => a.subtitle.compareTo(b.subtitle)),
         ),
     ];
+  }
+
+  Future<String> _nativeDocument(String id) async {
+    try {
+      final text = await _channel.invokeMethod<String>('readLicenseDocument', {
+        'id': id,
+      });
+      if (text == null || text.isEmpty) {
+        throw const FormatException('Empty license');
+      }
+      return text;
+    } catch (error) {
+      _reportFailure(_LicenseOperation.read, error);
+      rethrow;
+    }
   }
 
   Future<List<LicenseItem>> _packages() async {

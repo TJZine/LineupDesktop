@@ -543,3 +543,22 @@ material issue in the six-case diagnostic and missing-AOT/restored-green wiring.
 PowerShell execution remains unavailable locally and actual Windows proof
 remains pending. The provisioned isolated Mac engine root is ready for the
 approved fresh build; the preserved engine and application pairs are intact.
+
+V-06 guest resource check after maintainer unlock: controller observed 53
+regular native resource files, zero symlinks and zero empty files in the
+Safari-downloaded app. Guest SHA-256 values for BUILD-INFO, NOTICES-SUMMARY and
+mpv LICENSE.LGPL match the verified host candidate. Terminal readability and
+these sampled hashes do not establish sandboxed application access or explain
+the native-notice failure. No guest security or permission setting changed.
+
+The finite Licenses probe is complete in six paths, implemented by repository
+worker (gpt-6.1-sol, medium) and independently reviewed (gpt-6.1-sol, high)
+without material findings. Controller matched all six handoff hashes, ran ten
+focused Dart repository/view tests with exact opt-in (passed), compiled and ran
+the native resource contracts plus exact text reads of all 53 preserved bundle
+documents (passed). Controller parenthesized three test-only Swift casts to
+avoid optional-argument compiler warnings, then recompiled without warnings
+and reran successfully. Child default/invalid-opt-in, format and analysis checks
+retain their attribution. The diagnostic remains default-off and has not yet
+observed the live failure stage; it makes no root-cause correction or acceptance
+claim.

@@ -68,3 +68,55 @@ preservation, stale-event suppression, the ten-line cap, and equal public events
 with the probe enabled and disabled. This is native contract evidence; the
 controller must separately build and identify the diagnostic app and observe
 the real failing load to diagnose the live failure.
+
+## License failure probe
+
+The macOS notice reader and Dart license repository also support the exact
+opt-in `LINEUP_LICENSE_DIAGNOSTICS=1`. They sample it at construction and stay
+silent for unset or other values. Set it when launching a separately identified
+diagnostic app through the executable as above; it is independent of
+`LINEUP_FIRST_OPEN_DIAGNOSTICS`. Successful license operations produce no records.
+
+Each failed native list/read attempt emits at most one line:
+
+```text
+[lineup-license-native] operation=list stage=root_open category=system errno=2
+```
+
+Operations are `list` or `read`. Stages are `root_open`, `bundle_child_open`,
+`tree_open`, `traversal_duplicate`, `traversal_open`, `traversal_read`,
+`entry_name`, `entry_stat`, `entry_directory_open`, `entry_kind`, `file_size`,
+`entry_count`, `file_path`, `file_duplicate`, `file_open`, `file_stat`, `file_read`,
+`file_encoding`, `tree_bounds`, `required_index`, `document_id`, or `depth_bounds`.
+Categories are `system`, `invalid`, `bounds`, `missing`, or `encoding`. A syscall
+failure can include its original errno only in the range 1 through 4095;
+otherwise the integer is omitted. Native errors carry enums from the responsible
+guard to the operation boundary, without retaining a path or raw error message.
+
+Each failed Dart native-index/document attempt emits at most one line:
+
+```text
+[lineup-license-dart] operation=index category=native_unavailable
+```
+
+Dart operations are `index` or `read`. Categories are `native_unavailable` (the
+fixed native resource error code), `missing_plugin`, `platform_other`,
+`invalid_index`, `invalid_document`, or `other`. Raw exception codes, messages,
+details and stack traces never enter this sink. A native failure reaching Dart
+can produce one native record followed by one Dart record. Retry starts a new
+attempt; there is no per-file logging.
+
+Both sinks accept only fixed enum/category names and the bounded errno, with no
+resource path, document ID, media/account identity or raw input. They preserve
+original errors, method-channel results and existing UI failure/retry behavior.
+They do not bypass resource validation, change filesystem permissions, add
+fallbacks, or fix an unobserved cause. Whole-process stderr still requires private
+handling because other components may emit unrelated output.
+
+The existing Swift resource tests capture the real stderr descriptor and verify
+exact opt-in, failure stages, successful silence and unchanged rejection/text
+behavior. Existing Dart license tests capture the stderr boundary and check
+fixed categories, unchanged exception kinds and successful silence. They are run
+with the environment unset, set to `1`, and set to an invalid value. These checks
+do not establish the failing stage in a running app; the controller must build
+and reproduce it with the opt-in enabled.

@@ -1,7 +1,26 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/licenses/licenses_repository.dart';
+
+class _CapturedStderr implements Stdout {
+  final lines = <String>[];
+  @override
+  void writeln([Object? object = '']) => lines.add('$object');
+  @override
+  Future<void> close() async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _LicenseIOOverrides extends IOOverrides {
+  _LicenseIOOverrides(this.output);
+  final _CapturedStderr output;
+  @override
+  Stdout get stderr => output;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -85,6 +104,123 @@ void main() {
       }
     },
   );
+
+  test('license probe is failure-only and rethrows the same error kinds', () async {
+    final output = _CapturedStderr();
+    addTearDown(output.close);
+    final enabled = Platform.environment['LINEUP_LICENSE_DIAGNOSTICS'] == '1';
+    await IOOverrides.runWithIOOverrides(() async {
+      final groups = await LicensesRepository().sources.first.load();
+      await groups.first.children!.first.read!();
+      expect(output.lines, isEmpty);
+      final cases = <(Exception, String, Matcher)>[
+        (
+          PlatformException(
+            code: 'license_resources_unavailable',
+            message: '/private/SENTINEL token=secret',
+            details: {'account': 'SENTINEL'},
+          ),
+          'native_unavailable',
+          isA<PlatformException>().having(
+            (e) => e.code,
+            'code',
+            'license_resources_unavailable',
+          ),
+        ),
+        (
+          MissingPluginException('SENTINEL'),
+          'missing_plugin',
+          isA<MissingPluginException>(),
+        ),
+        (
+          PlatformException(code: 'SENTINEL', message: 'secret'),
+          'platform_other',
+          isA<PlatformException>().having((e) => e.code, 'code', 'SENTINEL'),
+        ),
+      ];
+      for (final (error, category, matcher) in cases) {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async => throw error);
+        output.lines.clear();
+        await expectLater(
+          LicensesRepository().sources.first.load(),
+          throwsA(matcher),
+        );
+        expect(
+          output.lines,
+          enabled
+              ? ['[lineup-license-dart] operation=index category=$category']
+              : isEmpty,
+        );
+        output.lines.clear();
+        await expectLater(
+          groups.first.children!.first.read!(),
+          throwsA(matcher),
+        );
+        expect(
+          output.lines,
+          enabled
+              ? ['[lineup-license-dart] operation=read category=$category']
+              : isEmpty,
+        );
+      }
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async => 42);
+      output.lines.clear();
+      await expectLater(
+        LicensesRepository().sources.first.load(),
+        throwsA(isA<TypeError>()),
+      );
+      expect(
+        output.lines,
+        enabled
+            ? ['[lineup-license-dart] operation=index category=other']
+            : isEmpty,
+      );
+      output.lines.clear();
+      await expectLater(
+        groups.first.children!.first.read!(),
+        throwsA(isA<TypeError>()),
+      );
+      expect(
+        output.lines,
+        enabled
+            ? ['[lineup-license-dart] operation=read category=other']
+            : isEmpty,
+      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            channel,
+            (call) async => call.method == 'listLicenseDocuments'
+                ? [
+                    {'id': 'SENTINEL', 'path': '/private/SENTINEL', 'bytes': 1},
+                  ]
+                : '',
+          );
+      output.lines.clear();
+      await expectLater(
+        LicensesRepository().sources.first.load(),
+        throwsFormatException,
+      );
+      expect(
+        output.lines,
+        enabled
+            ? ['[lineup-license-dart] operation=index category=invalid_index']
+            : isEmpty,
+      );
+      output.lines.clear();
+      await expectLater(
+        groups.first.children!.first.read!(),
+        throwsFormatException,
+      );
+      expect(
+        output.lines,
+        enabled
+            ? ['[lineup-license-dart] operation=read category=invalid_document']
+            : isEmpty,
+      );
+    }, _LicenseIOOverrides(output));
+  });
 
   test(
     'all font, engine and source assets load without network or caches',
