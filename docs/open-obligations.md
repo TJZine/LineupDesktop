@@ -941,3 +941,19 @@ were preserved. Free disk space increased from approximately 78.7 to 151.4 GiB.
 The macOS 14 VM/image, verified host app/engine pairs, stock caches and unrelated
 user data were retained. This supersedes the earlier recoverable-retirement state;
 it does not change the interpretation of the older guests' graphics failures.
+
+
+V-06 macOS 14 cold-start follow-up (controller, unchanged `8c98fb80` candidate):
+after the maintainer's explicit approval for this guest, the controller applied
+the one-app Finder Open exception. The application reached signed-out setup.
+On that first process, in-app Settings → Support → Licenses loaded native runtime
+entries, the curl file list and readable `COPYING` text before any native Settings
+menu use. Four Esc actions returned to setup. Normal application-menu Quit closed
+the app; no process exit code was observed. Finder double-click relaunched it to
+setup without another Gatekeeper prompt. Initial setup/Support/reader text was
+clear, but some setup glyphs were visibly corrupted after relaunch, so the guest
+rendering concern remains open. No global security setting or quarantine attribute
+was changed. Input capture was released for maintainer-local Plex sign-in;
+authenticated PMS access, saved-session continuity, default playback and native
+media TLS/CA in macOS 14 remain unexecuted. These bounded launch/reader observations
+do not yet establish the V-06 support floor or beta acceptance.
