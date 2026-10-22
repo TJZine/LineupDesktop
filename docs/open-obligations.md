@@ -917,3 +917,27 @@ remained off. The earlier foreground blocker is resolved. Installation completio
 maintainer-local legal/account setup and exact-candidate runtime checks remain
 pending. The macOS 12/13 retirement is recoverable in Trash, not a permanent
 purge or a claim that physical Macs on those versions cannot run the app.
+
+
+V-06 macOS 14 installation and exact-candidate transfer (controller, October 21):
+the maintainer completed the guest's legal/account setup locally. The controller
+observed its desktop and `sw_vers` confirmed macOS 14.6.1 / 23G93. Safari received
+the unchanged `8c98fb80` candidate from a VM-host-only server restricted to the
+specific guest; the server recorded the complete 35,659,476-byte transfer and was
+stopped afterwards. Compiled Dart, bundled Flutter engine and `objective_c`
+SHA-256 identities matched the verified candidate, and `codesign --verify --deep
+--strict` returned zero. Safari quarantine remains present. Default first launch
+was blocked by Gatekeeper; a separate one-app Finder Open exception for this VM
+was requested. Native Licenses, authenticated PMS and playback checks in this
+guest remain unexecuted. This is artifact verification, not a macOS 14 runtime
+pass or a support-policy decision.
+
+Retired-VM permanent cleanup (controller, October 21): following the maintainer's
+explicit request, only the two retired macOS 12.6/13.0 VM bundles and their two
+restore images were permanently deleted from Trash. Their exact identities were
+checked before deletion, and all four paths were confirmed absent afterwards.
+The bounded private observations, copied VM configurations and repository evidence
+were preserved. Free disk space increased from approximately 78.7 to 151.4 GiB.
+The macOS 14 VM/image, verified host app/engine pairs, stock caches and unrelated
+user data were retained. This supersedes the earlier recoverable-retirement state;
+it does not change the interpretation of the older guests' graphics failures.
