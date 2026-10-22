@@ -1067,3 +1067,18 @@ availability from useful GPU rendering, but not prove older physical-Mac support
 An in-flight GPU screenshot cannot be forcibly interrupted by the unchanged mpv
 runtime; the existing shutdown watchdog remains unchanged. No further OS trial,
 production fallback or support narrowing follows from this preparation.
+
+October 22 guest execution of that diagnostic was **inconclusive**. After the
+maintainer approved its one-app first-open exception, the controller verified
+PID 2353 at the separate diagnostic path. It restored the signed-in saved Guide;
+one current-program activation cleared the spinner but stayed black. The probe
+emitted only `armed` then `timeout`, before any capture or option-read/set record.
+Zero software or GPU frame samples were obtained. Source inspection found that
+every probe transition requires an empty event queue after a 50 ms wait, which
+continuous playback events can starve; actual empty-queue/seek counts were not
+instrumented, so that live cause remains inferred. Synthetic checks had supplied
+idle boundaries and did not prove this scheduling condition. Do not repeat the
+diagnostic unchanged or count it as graphics evidence. Normal menu Quit completed
+native shutdown and process search returned no match (status 1); VM input capture
+was released. No further build or VM trial was started in this turn. V-06 remains
+open, with the original candidate and all engine/runtime identities preserved.
