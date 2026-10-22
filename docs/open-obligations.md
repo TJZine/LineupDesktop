@@ -957,3 +957,19 @@ was changed. Input capture was released for maintainer-local Plex sign-in;
 authenticated PMS access, saved-session continuity, default playback and native
 media TLS/CA in macOS 14 remain unexecuted. These bounded launch/reader observations
 do not yet establish the V-06 support floor or beta acceptance.
+
+
+V-06 renderer diagnosis (controller, October 21): the maintainer confirmed the
+macOS 14 signed-out glyph corruption and requested diagnosis before more sign-in
+work. Source inspection identifies Impeller/Metal as the candidate's default
+Flutter UI renderer: pinned `FlutterDartProject` returns enabled absent
+`FLTEnableImpeller`, and this candidate has no override. This pre-media UI failure
+is distinct evidence from the earlier MoltenVK playback initialization crashes;
+a shared graphics cause remains a hypothesis. A disposable diagnostic copy sets
+only `FLTEnableImpeller=false` and refreshes its outer ad-hoc signature. Compiled
+Dart, engine and `objective_c` hashes and signing entitlements remain unchanged;
+deep strict verification passed. The original candidate is preserved. The Skia
+comparison is prepared but unexecuted because Computer Use again receives only
+a background thumbnail; console foreground was requested. No OS support version
+is discarded or accepted on this evidence, and Plex sign-in is not a prerequisite
+for this renderer comparison.
