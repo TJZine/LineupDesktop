@@ -1027,3 +1027,26 @@ Quit. The missing guest Command Line Tools prompt from an attempted Python crash
 parser was cancelled; no tools were installed. VM input capture was released.
 V-06 remains open; neither the diagnostic fallback nor an OS support narrowing
 is approved. V-05 live Cancel/Retry remains pending and V-07 stays unverified.
+
+The source investigation by `worker` (`gpt-6.1-sol` / medium, child
+`01a161a7-e346-7cc0-834f-d344f9d54404`) traced the initialization exception to
+MoltenVK 1.4.2's argument-buffer size queries. Its advertised-capability branch
+calls Metal's argument encoder during physical-device initialization; disabling
+argument buffers bypasses that branch. Upstream [issue 2373](https://github.com/KhronosGroup/MoltenVK/issues/2373)
+corroborates a paravirtual-device failure in that API family, without proving
+the exact Lineup exception or a fix. VM failures do not establish failure on
+physical Macs running those OS versions.
+
+The controller then ran one bounded original-candidate Vulkan trace in macOS
+14 with process-only argument buffers disabled. The picture remained black
+after the spinner cleared. Entry/exit counts matched: swapchain creation 2/2,
+image acquisition 966/966, `vkQueueSubmit2` 2896/2896 and presentation 966/966.
+Legacy submit and acquire-next-image-2 counts were zero. Accepted/opening/ready
+each appeared once; four presentation-configuration records appeared, with no
+seek-landing record in this run. Normal Quit completed native shutdown and
+process search returned no match (status 1). Input capture was released.
+These are whole-run call counts, not a performance measurement. The trace
+establishes repeated returned Vulkan presentation calls, without return codes,
+GPU completion or pixel contents; visible playback remains unverified. The next
+bounded diagnostic separates software-frame availability, GPU readback and
+presentation/composition while preserving the canonical candidate.
