@@ -971,13 +971,24 @@ Dart, engine and `objective_c` hashes and signing entitlements remain unchanged;
 deep strict verification passed. The original candidate is preserved.
 After the maintainer approved the separate Skia diagnostic exception, the
 controller observed one Lineup process (PID 1863) and its captured startup log
-confirmed `Using the Skia rendering backend (Metal).` The LINEUP wordmark,
-Settings, setup heading, supporting text and sign-in button rendered clearly in
-a bounded full-guest capture. This is positive evidence for the Impeller versus
-Skia configuration distinction in this VM; it does not identify the exact glyph
-shader/atlas/driver defect. The fallback also changes Flutter's wide-gamut
-eligibility. Navigation, resizing and relaunch remain pending: full-screen capture
-works but mouse routing reports `noWindowsAvailable`, while windowed capture
-returns a background thumbnail. Console foreground was requested again. No
-playback result or production renderer change is implied, no OS support version
-is discarded or accepted, and Plex sign-in is not needed for this comparison.
+confirmed `Using the Skia rendering backend (Metal).` Setup, Settings/Support,
+the native license index, curl file list and top/lower `COPYING` text remained
+clear through navigation and scrolling. Four Esc actions returned to setup;
+resizing also left its text clear. Normal menu Quit closed the app and `pgrep`
+returned no match (status 1) before relaunch; no process exit code was observed.
+The relaunched process (PID 1974) again logged Skia and displayed clear setup.
+For the reverse comparison, the unchanged original candidate was launched from
+Finder. Its first launch, Support navigation and resize were clear, but another
+normal Quit/Finder relaunch reproduced corruption in the LINEUP wordmark,
+Settings and first heading glyphs. A final Skia control (PID 2007, renderer log
+confirmed) displayed clear setup again. The private evidence retains paired
+full-guest captures. An attempted Terminal launch of the original requested
+Downloads access; that unnecessary access was declined and the failed attempt
+was replaced by the successful Finder launch.
+This bounded comparison supports the Impeller versus Skia configuration
+distinction in this VM; it does not identify the exact glyph shader/atlas/driver
+defect or establish a sustained/performance pass. The fallback also changes
+Flutter's wide-gamut eligibility. No playback result or production renderer
+change is implied, no OS support version is discarded or accepted, and the
+original verified candidate remains unchanged. VM input capture was released;
+Plex sign-in and media checks remain pending for a separate diagnostic result.
