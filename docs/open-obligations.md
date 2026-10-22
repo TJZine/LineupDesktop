@@ -968,8 +968,16 @@ is distinct evidence from the earlier MoltenVK playback initialization crashes;
 a shared graphics cause remains a hypothesis. A disposable diagnostic copy sets
 only `FLTEnableImpeller=false` and refreshes its outer ad-hoc signature. Compiled
 Dart, engine and `objective_c` hashes and signing entitlements remain unchanged;
-deep strict verification passed. The original candidate is preserved. The Skia
-comparison is prepared but unexecuted because Computer Use again receives only
-a background thumbnail; console foreground was requested. No OS support version
-is discarded or accepted on this evidence, and Plex sign-in is not a prerequisite
-for this renderer comparison.
+deep strict verification passed. The original candidate is preserved.
+After the maintainer approved the separate Skia diagnostic exception, the
+controller observed one Lineup process (PID 1863) and its captured startup log
+confirmed `Using the Skia rendering backend (Metal).` The LINEUP wordmark,
+Settings, setup heading, supporting text and sign-in button rendered clearly in
+a bounded full-guest capture. This is positive evidence for the Impeller versus
+Skia configuration distinction in this VM; it does not identify the exact glyph
+shader/atlas/driver defect. The fallback also changes Flutter's wide-gamut
+eligibility. Navigation, resizing and relaunch remain pending: full-screen capture
+works but mouse routing reports `noWindowsAvailable`, while windowed capture
+returns a background thumbnail. Console foreground was requested again. No
+playback result or production renderer change is implied, no OS support version
+is discarded or accepted, and Plex sign-in is not needed for this comparison.
