@@ -1050,3 +1050,20 @@ establishes repeated returned Vulkan presentation calls, without return codes,
 GPU completion or pixel contents; visible playback remains unverified. The next
 bounded diagnostic separates software-frame availability, GPU readback and
 presentation/composition while preserving the canonical candidate.
+
+October 22: the same `worker` prepared the native readback diagnostic entirely
+in private source copies. Controller inspection found and corrected its option
+restoration reply event (`MPV_EVENT_SET_PROPERTY_REPLY`); the focused negative
+control failed before correction and passed afterward. Two synthetic ASan/UBSan
+executables (readback contracts and existing core plus wiring) and libmpv API-hook
+syntax passed. The controller then compiled three native objects and linked a
+separate diagnostic executable successfully, without an engine/runtime/Dart
+rebuild. Ad-hoc assembly verified exact canonical component bytes, effective
+entitlements and deep strict signatures; only the native executable differed
+(`091e8fcf2b04836c7f9ba9c4365b1e9b24cbe9eaf82f6ce1f37fe541b62810be`).
+The canonical pair remains preserved. Guest execution is **unexecuted**, awaiting
+maintainer-local unlock of macOS 14. The bounded readback can distinguish frame
+availability from useful GPU rendering, but not prove older physical-Mac support.
+An in-flight GPU screenshot cannot be forcibly interrupted by the unchanged mpv
+runtime; the existing shutdown watchdog remains unchanged. No further OS trial,
+production fallback or support narrowing follows from this preparation.
