@@ -885,3 +885,35 @@ choice between physical older hardware and latest-host-only beta support was
 too narrow: a newer macOS VM remains a useful next check, starting with macOS 14
 under the approved step-up sequence. Its image download/installation still needs
 maintainer approval; no new download or support-policy change is implied here.
+
+V-06 macOS 14 preparation and retired-VM cleanup (controller, October 21):
+the maintainer explicitly approved the macOS 14 image/VM and requested clearing
+the macOS 12/13 test VMs. The macOS 12 VM was stopped. A guest shutdown request
+for the locked macOS 13 VM did not stop it; UTM's VM-only power-off then stopped
+it. Both stopped bundles received same-volume recoverable APFS clones in Trash
+(relative paths/types/sizes and configuration bytes matched) before the originals
+were removed and unregistered through UTM's CLI. The two old IPSWs were moved
+to Trash. The small private evidence records and repository observations remain.
+Trash was not emptied, so this retirement does not claim reclaimed disk space.
+No verified host candidate/engine pair, stock cache or unrelated user data changed.
+
+The detached Apple CDN download for Sonoma 14.6.1 / 23G93 completed and matched
+14,790,601,661 bytes, SHA-256
+`e387251e63387150ba76cf784bdb97d2016e5d43c6f809c90a115eb067a097b8`
+and SHA-1 `eb53bb5843675c4ab86765353322841941926c90`, both supplied by Apple's
+CDN metadata. BuildManifest confirms the OS/build and VirtualMac2,1 support.
+Disk preflight was 112 GiB free before download. The Apple Virtualization wizard
+was configured for four cores / 8 GiB and reached the IPSW selection step.
+Computer Use then captured only a tiny background thumbnail despite a native
+Raise action; the maintainer was asked to foreground the wizard. Installation,
+legal/account setup and candidate runtime checks remain pending. Approval does
+not narrow the support promise or establish a macOS 14 pass.
+
+After the maintainer foregrounded UTM, the controller selected the verified
+14.6.1 image and created `Lineup V-06 macOS 14.6.1`: Apple Virtualization, four
+cores, 8 GiB RAM, a new 64 GiB disk and shared directory off. UTM accepted
+installation onto that empty disk and displayed Installation: 0%; input capture
+remained off. The earlier foreground blocker is resolved. Installation completion,
+maintainer-local legal/account setup and exact-candidate runtime checks remain
+pending. The macOS 12/13 retirement is recoverable in Trash, not a permanent
+purge or a claim that physical Macs on those versions cannot run the app.
