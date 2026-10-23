@@ -8,6 +8,7 @@ import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -24,8 +25,35 @@ internal class Media3Engine(
     private val subtitles: SubtitleView,
     private val sizeChanged: (VideoSize) -> Unit,
     private val keepScreenOn: (Boolean) -> Unit,
+    createPlayer: (Context) -> ExoPlayer = { ExoPlayer.Builder(it).build() },
 ) : PlayerEngine {
-    private val player = ExoPlayer.Builder(context).build().also { it.setVideoSurfaceView(video) }
+    // The default builder owns an exclusive playback thread. Media3 quits it only
+    // after releaseInternal finishes renderer/source teardown. Keep that public
+    // thread handle: release() returning (or isReleased) cannot prove completion.
+    private val player = createPlayer(context).also { it.setVideoSurfaceView(video) }
+    private val playbackThread = player.playbackLooper.thread
+    private var releasingPlayer = false
+    private var releaseTimedOut = false
+    private var releaseReturned = false
+
+    init {
+        player.addListener(
+            object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    val timeout = error.cause as? ExoTimeoutException
+                    if (
+                        releasingPlayer &&
+                            error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT &&
+                            timeout?.timeoutOperation ==
+                                ExoTimeoutException.TIMEOUT_OPERATION_RELEASE
+                    ) {
+                        releaseTimedOut = true
+                    }
+                }
+            }
+        )
+    }
+
     private val tracks = Media3Tracks()
     private val debug =
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -245,21 +273,39 @@ internal class Media3Engine(
         http = null
         val closingNetwork = client
         client = null
-        var decoderReleased = false
+        if (firstAttempt) {
+            releasingPlayer = true
+            try {
+                player.release()
+                releaseReturned = true
+            } catch (_: Exception) {
+                // Retain cleanup ownership. A failed release call is not proof of teardown.
+            } finally {
+                releasingPlayer = false
+            }
+        }
         try {
-            if (firstAttempt) player.clearMediaItems()
-            player.release()
-            decoderReleased = true
-        } catch (_: Exception) {
-            // The controller retains cleanup responsibility when this returns false.
-        } finally {
             subtitles.setCues(emptyList())
+        } finally {
             keepScreenOn(false)
         }
         // Closing an idle TLS connection can write close_notify. Never perform this
         // IO on the application looper or reply to stop/dispose before it completes.
-        val decoderSuccess = decoderReleased
+        // A release timeout fails this attempt even if teardown finishes meanwhile.
+        // A later retry observes the same thread; it never calls release() again.
+        val timedOutThisAttempt = firstAttempt && releaseTimedOut
+        val returned = releaseReturned
         cleanupExecutor.execute {
+            val decoderSuccess =
+                if (returned && !timedOutThisAttempt) {
+                    try {
+                        playbackThread.join(1000)
+                        !playbackThread.isAlive
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        false
+                    }
+                } else false
             val networkSuccess =
                 try {
                     closingNetwork?.dispatcher?.cancelAll()
