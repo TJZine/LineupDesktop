@@ -516,23 +516,30 @@ class LineupTab extends StatelessWidget {
         child: LineupCompactControls(
           child: TextButton(
             onPressed: onPressed,
-            child: Text.rich(
-              TextSpan(
-                children: [
+            child: Builder(
+              builder: (context) {
+                final roles = LineupTheme.of(context);
+                return Text.rich(
                   TextSpan(
-                    text: label,
-                    style: LineupTypography.control.copyWith(
-                      color: selected ? roles.primaryText : roles.secondaryText,
-                    ),
+                    children: [
+                      TextSpan(
+                        text: label,
+                        style: LineupTypography.control.copyWith(
+                          color: selected
+                              ? roles.primaryText
+                              : roles.secondaryText,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' · $count',
+                        style: LineupTypography.control.copyWith(
+                          color: roles.mutedText,
+                        ),
+                      ),
+                    ],
                   ),
-                  TextSpan(
-                    text: ' · $count',
-                    style: LineupTypography.control.copyWith(
-                      color: roles.mutedText,
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ),
