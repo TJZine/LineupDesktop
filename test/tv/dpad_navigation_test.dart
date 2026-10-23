@@ -350,6 +350,9 @@ void main() {
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
+    final libraryFooter = find.byKey(const ValueKey('setup-switch-server'));
+    final footerBounds = tester.getRect(libraryFooter);
+    expect(footerBounds.bottom, lessThanOrEqualTo(513));
     await _keys(tester, [_down]);
     _focusedIn(tester, find.widgetWithText(TextButton, 'Select all'));
     await _keys(tester, [_select]);
@@ -372,6 +375,7 @@ void main() {
     }
     await _keys(tester, [_down]);
     _focusedIn(tester, find.byKey(const ValueKey('setup-switch-server')));
+    expect(tester.getRect(libraryFooter), footerBounds);
     for (var i = 8; i >= 1; i--) {
       await _keys(tester, [_up]);
       _focusedIn(tester, find.byKey(ValueKey('library-row-library-$i')));
@@ -388,7 +392,10 @@ void main() {
         ];
         final review = SetupReview(
           base: existing
-              ? [_reviewChannel(1, name: 'Before', generated: true)]
+              ? [
+                  _reviewChannel(1, name: 'Before', generated: true),
+                  _reviewChannel(99, generated: true),
+                ]
               : const [],
           plan: (
             channels: channels,
@@ -405,9 +412,11 @@ void main() {
             truncated: false,
           ),
           mode: ChannelBuildMode.replace,
+          removeSourceIds: existing ? const {'review-99'} : const {},
           strategyBySource: const {},
         );
         var applyCalls = 0;
+        bool? consent;
         await tester.pumpWidget(
           MaterialApp(
             builder: LineupCanvas.builder,
@@ -433,7 +442,7 @@ void main() {
                     onBack: () {},
                     onModeChanged: (_) {},
                     onRemovalChanged: (_, _) {},
-                    onRemovalConfirmationChanged: (_) {},
+                    onRemovalConfirmationChanged: (value) => consent = value,
                     onApply: () => applyCalls++,
                     onViewLineup: () {},
                   ),
@@ -443,6 +452,21 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        final firstRow = find.byKey(const ValueKey('review-channel-review-1'));
+        final roster = find.byKey(
+          const ValueKey('channel-setup-review-roster'),
+        );
+        final footer = find.byKey(const ValueKey('back-to-configure'));
+        final footerBounds = tester.getRect(footer);
+        final firstBounds = tester.getRect(firstRow);
+        final rosterBounds = tester.getRect(roster);
+        expect(firstBounds.top, greaterThanOrEqualTo(rosterBounds.top));
+        expect(firstBounds.bottom, lessThanOrEqualTo(rosterBounds.bottom));
+        expect(footerBounds.bottom, lessThanOrEqualTo(540));
+        expect(
+          find.ancestor(of: roster, matching: find.byType(Scrollable)),
+          findsNothing,
+        );
         final search = find.byType(LineupTextFieldActivation);
         for (var step = 0; step < 12 && !_hasFocusIn(tester, search); step++) {
           await _keys(tester, [_down]);
@@ -474,8 +498,43 @@ void main() {
           expect(rect.top, greaterThanOrEqualTo(0));
           expect(rect.bottom, lessThanOrEqualTo(540));
         }
+        if (existing) {
+          await _keys(tester, [_down]);
+          _focusedIn(
+            tester,
+            find.byKey(const ValueKey('review-channel-review-99')),
+          );
+          await _keys(tester, [_down]);
+          _focusedIn(
+            tester,
+            find.byKey(const ValueKey('channel-setup-replace-confirmation')),
+          );
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.byKey(const ValueKey('apply-reviewed-lineup')),
+                )
+                .onPressed,
+            isNull,
+          );
+          await _keys(tester, [_select]);
+          expect(consent, isTrue);
+        }
         await _keys(tester, [_down]);
         _focusedIn(tester, find.byKey(const ValueKey('back-to-configure')));
+        expect(tester.getRect(footer), footerBounds);
+        if (existing) {
+          await _keys(tester, [_up]);
+          _focusedIn(
+            tester,
+            find.byKey(const ValueKey('channel-setup-replace-confirmation')),
+          );
+          await _keys(tester, [_up]);
+          _focusedIn(
+            tester,
+            find.byKey(const ValueKey('review-channel-review-99')),
+          );
+        }
         for (var i = channels.length; i >= 1; i--) {
           await _keys(tester, [_up]);
           _focusedIn(tester, find.byKey(ValueKey('review-channel-review-$i')));

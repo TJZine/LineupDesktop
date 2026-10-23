@@ -127,11 +127,12 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               const SizedBox(height: 8),
             ],
             _reviewOverview(),
-            if (_missingSources.isNotEmpty) ...[
+            if (_missingSources.isNotEmpty &&
+                !LineupTheme.of(context).androidTv) ...[
               const SizedBox(height: 16),
               _missingSourceReview(),
             ],
-            const SizedBox(height: 24),
+            SizedBox(height: LineupTheme.of(context).androidTv ? 4 : 24),
           ];
           final orderedIntro = [
             for (final child in intro)
@@ -140,6 +141,9 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                 child: child,
               ),
           ];
+          if (LineupTheme.of(context).androidTv) {
+            return _roster(leading: orderedIntro, includeRemoval: true);
+          }
           if (constraints.maxHeight < 650 ||
               MediaQuery.textScalerOf(context).scale(1) >= 1.5) {
             return Column(
@@ -335,7 +339,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                   widget.onModeChanged(selection.single),
             ),
       ),
-      const SizedBox(height: 8),
+      SizedBox(height: LineupTheme.of(context).androidTv ? 4 : 8),
       Text(
         widget.notice == 'Updating review…'
             ? widget.notice!
@@ -403,6 +407,46 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
           '${builderStrategyLabels[strategy]} ${generated.byStrategy[strategy]}',
       if (generated.other > 0) 'Other generated ${generated.other}',
     ];
+    if (roles.androidTv) {
+      return Column(
+        key: const ValueKey('tv-review-overview'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!_firstSetup) ...[_methodDecision(), const SizedBox(height: 4)],
+          Wrap(
+            spacing: 24,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                _firstSetup
+                    ? '$finalCount channels ready to create'
+                    : '${review.base.length} current → $finalCount final',
+                style: totalStyle.copyWith(fontSize: 24),
+              ),
+              if (!_firstSetup) filters,
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'By source: ${sourceCounts.join(' · ')}',
+            style: supportingStyle,
+          ),
+          if (review.mode == ChannelBuildMode.append &&
+              review.plan.existingSkipped > 0)
+            Text(
+              '${review.plan.existingSkipped} already in your lineup',
+              key: const ValueKey('existing-sources-skipped'),
+              style: supportingStyle,
+            ),
+          if (review.base.any((channel) => channel.builderKey == null))
+            Text(
+              '${review.base.where((channel) => channel.builderKey == null).length} custom channels will be kept.',
+              style: supportingStyle,
+            ),
+        ],
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(
         color: roles.primarySurface,
@@ -592,7 +636,10 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     );
   }
 
-  Widget _roster({List<Widget> leading = const []}) {
+  Widget _roster({
+    List<Widget> leading = const [],
+    bool includeRemoval = false,
+  }) {
     final review = widget.review;
     final roles = LineupTheme.of(context);
     final textStyle = Theme.of(context).textTheme.bodyMedium!
@@ -682,6 +729,23 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
             SliverList.builder(
               itemCount: entries.length,
               itemBuilder: (_, index) => _reviewRow(entries[index], index),
+            ),
+          if (includeRemoval && _missingSources.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: FocusTraversalOrder(
+                  order: NumericFocusOrder(review.entries.length + .5),
+                  child: _missingSourceReview(),
+                ),
+              ),
+            ),
+          if (includeRemoval && review.counts.removed > 0)
+            SliverToBoxAdapter(
+              child: FocusTraversalOrder(
+                order: NumericFocusOrder(review.entries.length + 1),
+                child: _removalNotice(review.counts.removed),
+              ),
             ),
         ],
       ),

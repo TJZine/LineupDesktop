@@ -41,13 +41,37 @@ class PlayerView extends StatefulWidget {
   State<PlayerView> createState() => _PlayerViewState();
 }
 
+enum _PlayerControl {
+  previous,
+  playback,
+  next,
+  subtitles,
+  audio,
+  sleep,
+  menu,
+  close,
+}
+
 class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   final _trackDisplays = PlayerTrackDisplayCache();
   late PlayerOverlay _renderedOverlay;
   late int _bottomPanelGeneration;
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
-  final _menuFocus = FocusNode(debugLabel: 'Player Lineup menu');
-  final _sleepFocus = FocusNode(debugLabel: 'Player sleep timer');
+  final _controls = {
+    for (final control in _PlayerControl.values)
+      control: FocusNode(
+        debugLabel: switch (control) {
+          _PlayerControl.menu => 'Player Lineup menu',
+          _PlayerControl.sleep => 'Player sleep timer',
+          _ => 'Player ${control.name}',
+        },
+      ),
+  };
+  FocusNode get _menuFocus => _controls[_PlayerControl.menu]!;
+  FocusNode get _sleepFocus => _controls[_PlayerControl.sleep]!;
+  _PlayerControl _lastAction = _PlayerControl.subtitles;
+  PlayerOverlay? _trackOrigin;
+  bool get _androidTv => LineupTheme.of(context).androidTv;
   var _sleepAnchor = LayerLink();
   Timer? _visibleClockTimer;
   var _appActive = true;
@@ -66,6 +90,20 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
     FocusManager.instance.addListener(_scheduleFocusRecovery);
     _syncVisibleClockTimer();
+    for (final entry in _controls.entries) {
+      entry.value.addListener(() {
+        if (entry.value.hasPrimaryFocus && entry.key != _PlayerControl.close) {
+          _lastAction = entry.key;
+        }
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _androidTv &&
+          widget.controller.overlay == PlayerOverlay.nowPlaying) {
+        _focusTvAction(first: true);
+      }
+    });
   }
 
   @override
@@ -76,8 +114,9 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     _visibleClockTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
     _internalRootFocus.dispose();
-    _menuFocus.dispose();
-    _sleepFocus.dispose();
+    for (final node in _controls.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -131,6 +170,30 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (!mounted) return;
     _syncVisibleClockTimer();
     final nextOverlay = widget.controller.overlay;
+    if (_androidTv) {
+      final enteringTracks =
+          nextOverlay == PlayerOverlay.audioTracks ||
+          nextOverlay == PlayerOverlay.subtitleTracks;
+      final leavingTracks =
+          _renderedOverlay == PlayerOverlay.audioTracks ||
+          _renderedOverlay == PlayerOverlay.subtitleTracks;
+      if (enteringTracks && !leavingTracks) _trackOrigin = _renderedOverlay;
+      if (leavingTracks &&
+          nextOverlay == PlayerOverlay.osd &&
+          _trackOrigin == PlayerOverlay.nowPlaying) {
+        _trackOrigin = null;
+        widget.controller.showNowPlaying();
+        return;
+      }
+      if ((_renderedOverlay != nextOverlay &&
+              nextOverlay == PlayerOverlay.nowPlaying) ||
+          ((_renderedOverlay == PlayerOverlay.nowPlaying || leavingTracks) &&
+              nextOverlay == PlayerOverlay.osd)) {
+        _focusTvAction(
+          first: nextOverlay == PlayerOverlay.nowPlaying && !leavingTracks,
+        );
+      }
+    }
     final retiringBottomPanel =
         (_renderedOverlay == PlayerOverlay.osd ||
             _renderedOverlay == PlayerOverlay.nowPlaying) &&
@@ -195,7 +258,8 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                     ?.findAncestorWidgetOfExactType<_Osd>()
                     ?.controller ==
                 widget.controller &&
-            _keyboardInput) {
+            _keyboardInput &&
+            !_androidTv) {
           widget.controller.overlayFocusChanged(nextOverlay, generation, true);
         }
       });
@@ -230,7 +294,13 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   bool _trackKeyboardInput(KeyEvent event) {
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
       _keyboardInput = true;
-      if (_rootFocus.hasFocus && !_rootFocus.hasPrimaryFocus) {
+      if (_androidTv &&
+          _rootFocus.hasFocus &&
+          widget.controller.overlay == PlayerOverlay.osd &&
+          !widget.controller.sleepPickerOpen) {
+        widget.controller.showOsd();
+      }
+      if (!_androidTv && _rootFocus.hasFocus && !_rootFocus.hasPrimaryFocus) {
         widget.controller.overlayFocusChanged(
           widget.controller.overlay,
           widget.controller.overlayPresentationGeneration,
@@ -254,6 +324,86 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       return KeyEventResult.ignored;
     }
     final controller = widget.controller;
+    if (_androidTv && !controller.sleepPickerOpen) {
+      final key = event.logicalKey;
+      final overlay = controller.overlay;
+      final slateFocused =
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<_StoppedSlate>() !=
+          null;
+      if (slateFocused &&
+          {
+            LogicalKeyboardKey.arrowLeft,
+            LogicalKeyboardKey.arrowRight,
+            LogicalKeyboardKey.arrowUp,
+            LogicalKeyboardKey.arrowDown,
+            LogicalKeyboardKey.select,
+            LogicalKeyboardKey.enter,
+            LogicalKeyboardKey.numpadEnter,
+          }.contains(key)) {
+        // These are ordinary focusable recovery buttons, not video shortcuts.
+        return KeyEventResult.ignored;
+      }
+      if (key == LogicalKeyboardKey.mediaRewind ||
+          key == LogicalKeyboardKey.mediaFastForward) {
+        if (controller.lineup.settings.dvrControlsEnabled &&
+            controller.status.state != PlayerState.unsupported) {
+          return _executeKey(
+            key == LogicalKeyboardKey.mediaRewind
+                ? PlayerAction.rewind
+                : PlayerAction.fastForward,
+          );
+        }
+        return KeyEventResult.handled;
+      }
+      if ((overlay == PlayerOverlay.none ||
+              (overlay == PlayerOverlay.osd && _rootFocus.hasPrimaryFocus)) &&
+          (key == LogicalKeyboardKey.select ||
+              key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter)) {
+        controller.showOsd();
+        _focusTvAction();
+        return KeyEventResult.handled;
+      }
+      if (overlay == PlayerOverlay.osd || overlay == PlayerOverlay.nowPlaying) {
+        final focused = _controls.entries
+            .where((entry) => entry.value.hasPrimaryFocus)
+            .firstOrNull
+            ?.key;
+        if (focused != null) {
+          // Let the focused button's ActivateIntent own Select, rather than
+          // the desktop Enter shortcut that collapses Now Playing.
+          if (key == LogicalKeyboardKey.select ||
+              key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter) {
+            return KeyEventResult.ignored;
+          }
+          if (key == LogicalKeyboardKey.arrowLeft ||
+              key == LogicalKeyboardKey.arrowRight) {
+            final actions = _availableTvActions;
+            if (actions.isEmpty) return KeyEventResult.handled;
+            final index = actions.indexOf(focused);
+            final next =
+                (index + (key == LogicalKeyboardKey.arrowLeft ? -1 : 1)).clamp(
+                  0,
+                  actions.length - 1,
+                );
+            _controls[actions[next]]!.requestFocus();
+            return KeyEventResult.handled;
+          }
+          if (overlay == PlayerOverlay.nowPlaying &&
+              (key == LogicalKeyboardKey.arrowUp ||
+                  key == LogicalKeyboardKey.arrowDown)) {
+            if (key == LogicalKeyboardKey.arrowUp) {
+              _controls[_PlayerControl.close]!.requestFocus();
+            } else {
+              _focusTvAction();
+            }
+            return KeyEventResult.handled;
+          }
+        }
+      }
+    }
     return _executeKey(
       resolvePlayerKey(
         event.logicalKey,
@@ -350,6 +500,33 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         (_keyboardInput ? _sleepFocus : _rootFocus).requestFocus();
       }
     });
+  }
+
+  List<_PlayerControl> get _availableTvActions => [
+    for (final entry in _controls.entries)
+      if (entry.key != _PlayerControl.close &&
+          entry.value.context != null &&
+          entry.value.canRequestFocus)
+        entry.key,
+  ];
+
+  void _focusTvAction({bool first = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_canOwnFocus) return;
+      final overlay = widget.controller.overlay;
+      if (overlay != PlayerOverlay.osd && overlay != PlayerOverlay.nowPlaying) {
+        return;
+      }
+      final actions = _availableTvActions;
+      if (actions.isEmpty) return;
+      final target = !first && actions.contains(_lastAction)
+          ? _lastAction
+          : actions.contains(_PlayerControl.subtitles)
+          ? _PlayerControl.subtitles
+          : actions.first;
+      _controls[target]!.requestFocus();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   @override
@@ -482,7 +659,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                           controller.overlayFocusChanged(
                             overlay,
                             presentationGeneration,
-                            focused && _keyboardInput,
+                            focused && _keyboardInput && !_androidTv,
                           );
                         },
                         child: switch (overlay) {
@@ -496,6 +673,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                             sleepFocus: _sleepFocus,
                             sleepAnchor: _sleepAnchor,
                             restoreSleepFocus: _restoreSleepFocus,
+                            controls: _controls,
                           ),
                           PlayerOverlay.miniGuide => _MiniGuide(
                             controller: controller,
@@ -664,6 +842,7 @@ class _Osd extends StatelessWidget {
     required this.sleepFocus,
     required this.sleepAnchor,
     required this.restoreSleepFocus,
+    required this.controls,
     this.openMenu,
     this.detailsExpanded = false,
   });
@@ -675,6 +854,7 @@ class _Osd extends StatelessWidget {
   final FocusNode sleepFocus;
   final LayerLink sleepAnchor;
   final VoidCallback restoreSleepFocus;
+  final Map<_PlayerControl, FocusNode> controls;
 
   @override
   Widget build(BuildContext context) {
@@ -736,6 +916,7 @@ class _Osd extends StatelessWidget {
     final actionStyle = _playerActionStyle(context);
     final transportActions = <Widget>[
       IconButton(
+        focusNode: controls[_PlayerControl.previous],
         style: actionStyle,
         tooltip: 'Previous channel',
         onPressed: unsupported
@@ -752,6 +933,7 @@ class _Osd extends StatelessWidget {
         ),
       ),
       IconButton(
+        focusNode: controls[_PlayerControl.playback],
         style: actionStyle,
         tooltip: controller.playbackToggleWillPause ? 'Pause' : 'Play',
         onPressed: unsupported
@@ -768,6 +950,7 @@ class _Osd extends StatelessWidget {
         ),
       ),
       IconButton(
+        focusNode: controls[_PlayerControl.next],
         style: actionStyle,
         tooltip: 'Next channel',
         onPressed: unsupported
@@ -822,6 +1005,7 @@ class _Osd extends StatelessWidget {
       _osdAction(
         context,
         key: const Key('player-osd-subtitles'),
+        focusNode: controls[_PlayerControl.subtitles],
         label: subtitlesLabel,
         tooltip: subtitlesDescription,
         semanticLabel: subtitlesDescription,
@@ -836,6 +1020,7 @@ class _Osd extends StatelessWidget {
       _osdAction(
         context,
         key: const Key('player-osd-audio'),
+        focusNode: controls[_PlayerControl.audio],
         label: audioLabel,
         tooltip: audioDescription,
         semanticLabel: audioDescription,
@@ -1180,6 +1365,7 @@ class _Osd extends StatelessWidget {
                         children: [
                           if (detailsExpanded) ...[
                             _NowPlaying(
+                              closeFocus: controls[_PlayerControl.close]!,
                               controller: controller,
                               maxHeight: math.max(
                                 80,
@@ -1363,7 +1549,12 @@ class _ChannelBug extends StatelessWidget {
 }
 
 class _NowPlaying extends StatelessWidget {
-  const _NowPlaying({required this.controller, required this.maxHeight});
+  const _NowPlaying({
+    required this.controller,
+    required this.maxHeight,
+    required this.closeFocus,
+  });
+  final FocusNode closeFocus;
 
   final PlayerCoordinator controller;
   final double maxHeight;
@@ -1443,6 +1634,7 @@ class _NowPlaying extends StatelessWidget {
                 ),
                 TextButton(
                   key: const Key('player-now-playing-collapse'),
+                  focusNode: closeFocus,
                   style: _playerActionStyle(context).copyWith(
                     padding: const WidgetStatePropertyAll(
                       EdgeInsets.only(left: 10, right: 14),
@@ -2803,6 +2995,11 @@ class _SleepTimerPicker extends StatelessWidget {
       ('1 hour', const Duration(hours: 1)),
       ('90 minutes', const Duration(minutes: 90)),
     ];
+    // A newly opened TV picker must take focus from its invoking action.
+    // Its selected preset can autofocus within this fresh scope; without it,
+    // the already-focused OSD scope keeps the arrow keys on the action row.
+    Widget pickerFocus(Widget child) =>
+        roles.androidTv ? FocusScope(autofocus: true, child: child) : child;
     return Positioned.fill(
       child: Align(
         alignment: Alignment.topLeft,
@@ -2816,80 +3013,82 @@ class _SleepTimerPicker extends StatelessWidget {
             key: const Key('sleep-timer-picker'),
             color: _overlayColor(context, controller),
             borderRadius: BorderRadius.circular(8),
-            child: FocusTraversalGroup(
-              child: Shortcuts(
-                shortcuts: <ShortcutActivator, Intent>{
-                  const SingleActivator(LogicalKeyboardKey.arrowUp):
-                      const DirectionalFocusIntent(TraversalDirection.up),
-                  const SingleActivator(LogicalKeyboardKey.arrowDown):
-                      const DirectionalFocusIntent(TraversalDirection.down),
-                  const SingleActivator(LogicalKeyboardKey.enter):
-                      const ActivateIntent(),
-                  const SingleActivator(LogicalKeyboardKey.numpadEnter):
-                      const ActivateIntent(),
-                  const SingleActivator(LogicalKeyboardKey.space):
-                      const ActivateIntent(),
-                  const SingleActivator(LogicalKeyboardKey.select):
-                      const ActivateIntent(),
-                  const SingleActivator(LogicalKeyboardKey.mediaPlayPause):
-                      const ActivateIntent(),
-                },
-                child: SizedBox(
-                  width: 354,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: maxHeight),
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Sleep timer',
-                                    style: theme.textTheme.titleLarge,
+            child: pickerFocus(
+              FocusTraversalGroup(
+                child: Shortcuts(
+                  shortcuts: <ShortcutActivator, Intent>{
+                    const SingleActivator(LogicalKeyboardKey.arrowUp):
+                        const DirectionalFocusIntent(TraversalDirection.up),
+                    const SingleActivator(LogicalKeyboardKey.arrowDown):
+                        const DirectionalFocusIntent(TraversalDirection.down),
+                    const SingleActivator(LogicalKeyboardKey.enter):
+                        const ActivateIntent(),
+                    const SingleActivator(LogicalKeyboardKey.numpadEnter):
+                        const ActivateIntent(),
+                    const SingleActivator(LogicalKeyboardKey.space):
+                        const ActivateIntent(),
+                    const SingleActivator(LogicalKeyboardKey.select):
+                        const ActivateIntent(),
+                    const SingleActivator(LogicalKeyboardKey.mediaPlayPause):
+                        const ActivateIntent(),
+                  },
+                  child: SizedBox(
+                    width: 354,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: maxHeight),
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Sleep timer',
+                                      style: theme.textTheme.titleLarge,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      controller.closeOverlay();
+                                      restoreFocus();
+                                    },
+                                    child: const _OverlayCloseLabel(),
+                                  ),
+                                ],
+                              ),
+                              if (remaining != null)
+                                Text(
+                                  'Sleep · ${(remaining.inSeconds / 60).ceil()}m',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: supportingText,
                                   ),
                                 ),
-                                TextButton(
-                                  onPressed: () {
-                                    controller.closeOverlay();
-                                    restoreFocus();
-                                  },
-                                  child: const _OverlayCloseLabel(),
-                                ),
-                              ],
-                            ),
-                            if (remaining != null)
-                              Text(
-                                'Sleep · ${(remaining.inSeconds / 60).ceil()}m',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: supportingText,
-                                ),
-                              ),
-                            for (final choice in choices)
-                              LineupRowSurface(
-                                selected: choice.$2 == selected,
-                                child: ListTile(
-                                  key: Key(
-                                    'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
+                              for (final choice in choices)
+                                LineupRowSurface(
+                                  selected: choice.$2 == selected,
+                                  child: ListTile(
+                                    key: Key(
+                                      'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
+                                    ),
+                                    minTileHeight: 44,
+                                    autofocus: choice.$2 == selected,
+                                    title: Text(choice.$1),
+                                    trailing: choice.$2 == selected
+                                        ? Icon(
+                                            Icons.check,
+                                            color: roles.progressFill,
+                                            size: 20,
+                                            semanticLabel: 'Selected preset',
+                                          )
+                                        : null,
+                                    onTap: () => _choose(choice.$2),
                                   ),
-                                  minTileHeight: 44,
-                                  autofocus: choice.$2 == selected,
-                                  title: Text(choice.$1),
-                                  trailing: choice.$2 == selected
-                                      ? Icon(
-                                          Icons.check,
-                                          color: roles.progressFill,
-                                          size: 20,
-                                          semanticLabel: 'Selected preset',
-                                        )
-                                      : null,
-                                  onTap: () => _choose(choice.$2),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -3479,7 +3678,7 @@ class _StoppedSlate extends StatelessWidget {
         ? "Couldn't start playback"
         : 'Playback stopped';
     final channel = controller.currentChannel;
-    return ColoredBox(
+    final slate = ColoredBox(
       color: roles.deepBackground,
       child: Center(
         child: SingleChildScrollView(
@@ -3520,10 +3719,12 @@ class _StoppedSlate extends StatelessWidget {
                       children: [
                         if (controller.canRetry)
                           FilledButton(
+                            autofocus: roles.androidTv,
                             onPressed: controller.retry,
                             child: const Text('Retry'),
                           ),
                         OutlinedButton(
+                          autofocus: roles.androidTv && !controller.canRetry,
                           onPressed: controller.showMiniGuide,
                           child: const Text('Browse channels'),
                         ),
@@ -3541,6 +3742,16 @@ class _StoppedSlate extends StatelessWidget {
         ),
       ),
     );
+    if (!roles.androidTv) return slate;
+    final active =
+        controller.overlay == PlayerOverlay.none ||
+        controller.overlay == PlayerOverlay.error;
+    // Enter once per active slate presentation, and let its default button
+    // autofocus within a fresh scope. Covered recovery controls must not take
+    // remote focus or expose accessibility actions behind another overlay.
+    return active
+        ? FocusScope(autofocus: true, child: slate)
+        : ExcludeFocus(child: ExcludeSemantics(child: slate));
   }
 }
 

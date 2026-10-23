@@ -20,9 +20,10 @@ class SetupStage extends StatelessWidget {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final singleScroll =
-        media.size.width < 900 ||
-        media.size.height < 720 ||
-        media.textScaler.scale(14) >= 24;
+        !LineupTheme.of(context).androidTv &&
+        (media.size.width < 900 ||
+            media.size.height < 720 ||
+            media.textScaler.scale(14) >= 24);
     if (singleScroll) {
       return Column(
         children: [
