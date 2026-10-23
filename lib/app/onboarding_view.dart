@@ -504,6 +504,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   Widget _linkingContent(BuildContext context, double contentWidth) {
     final controller = widget.controller;
     final pin = controller.activePin;
+    final androidTv = LineupTheme.of(context).androidTv;
     final usable = _usableLink && controller.error == null;
     final expired =
         controller.pinExpired && !controller.secureCancellationRequired;
@@ -606,12 +607,13 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                   ),
                 ),
               ),
-              LineupCompactControls(
-                child: OutlinedButton(
-                  onPressed: usable ? _copyCode : null,
-                  child: const Text('Copy code'),
+              if (!androidTv)
+                LineupCompactControls(
+                  child: OutlinedButton(
+                    onPressed: usable ? _copyCode : null,
+                    child: const Text('Copy code'),
+                  ),
                 ),
-              ),
             ],
           )
         : message == null
@@ -625,13 +627,17 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             ),
           );
     final action = usable
-        ? FilledButton.icon(
-            focusNode: defaultTargetPlatform == TargetPlatform.android
-                ? _linkActionFocus
+        ? Semantics(
+            label: androidTv
+                ? 'Open plex.tv/link in a browser on this TV, if available.'
                 : null,
-            onPressed: _openingBrowser ? null : _openBrowser,
-            icon: const Icon(Icons.open_in_browser),
-            label: const Text('Open browser'),
+            button: true,
+            child: FilledButton.icon(
+              focusNode: androidTv ? _linkActionFocus : null,
+              onPressed: _openingBrowser ? null : _openBrowser,
+              icon: const Icon(Icons.open_in_browser),
+              label: Text(androidTv ? 'Open on this TV' : 'Open browser'),
+            ),
           )
         : FilledButton(
             focusNode: _linkActionFocus,
@@ -1311,6 +1317,7 @@ class _ProfileCardState extends State<_ProfileCard> {
           enabled: widget.onPressed != null,
           child: LineupRowSurface(
             selected: widget.active,
+            scaleOnFocus: true,
             child: TextButton(
               focusNode: _focusNode,
               autofocus: widget.autofocus,

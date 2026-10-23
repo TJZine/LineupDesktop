@@ -862,24 +862,25 @@ class _Osd extends StatelessWidget {
             icon: const Icon(Icons.menu, semanticLabel: 'Lineup menu'),
           ),
         ),
-      IconButton(
-        style: actionStyle,
-        tooltip: controller.fullscreen ? 'Exit full screen' : 'Full screen',
-        onPressed: unsupported
-            ? null
-            : () {
-                controller.closeSleepPicker();
-                unawaited(controller.toggleFullscreen());
-              },
-        padding: null,
-        iconSize: 20,
-        icon: Icon(
-          controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-          semanticLabel: controller.fullscreen
-              ? 'Exit full screen'
-              : 'Full screen',
+      if (!roles.androidTv)
+        IconButton(
+          style: actionStyle,
+          tooltip: controller.fullscreen ? 'Exit full screen' : 'Full screen',
+          onPressed: unsupported
+              ? null
+              : () {
+                  controller.closeSleepPicker();
+                  unawaited(controller.toggleFullscreen());
+                },
+          padding: null,
+          iconSize: 20,
+          icon: Icon(
+            controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+            semanticLabel: controller.fullscreen
+                ? 'Exit full screen'
+                : 'Full screen',
+          ),
         ),
-      ),
     ];
     final title = program?.scheduled.item.title ?? 'Nothing playing';
     final logoPath = program == null
@@ -2871,6 +2872,7 @@ class _TracksState extends State<_Tracks> {
         .where((track) => track.type == widget.type)
         .toList();
     final roles = LineupTheme.of(context);
+    final fillFocus = roles.focusTreatment == LineupFocusTreatment.fill;
     final selectedTrack = tracks.where((track) => track.selected).firstOrNull;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -3045,6 +3047,114 @@ class _TracksState extends State<_Tracks> {
                                                 );
                                               }
 
+                                              final titleWidget = fillFocus
+                                                  ? Builder(
+                                                      builder: (context) {
+                                                        final rowRoles =
+                                                            LineupTheme.of(
+                                                              context,
+                                                            );
+                                                        return Text(
+                                                          title,
+                                                          maxLines: 3,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          softWrap: true,
+                                                          style: textTheme
+                                                              .bodyLarge
+                                                              ?.copyWith(
+                                                                color: rowRoles
+                                                                    .primaryText,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500,
+                                                              ),
+                                                        );
+                                                      },
+                                                    )
+                                                  : Text(
+                                                      title,
+                                                      maxLines: 3,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      softWrap: true,
+                                                      style: textTheme.bodyLarge
+                                                          ?.copyWith(
+                                                            color: roles
+                                                                .primaryText,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
+                                                    );
+                                              final Widget? subtitleWidget =
+                                                  metadata.isEmpty
+                                                  ? null
+                                                  : fillFocus
+                                                  ? Builder(
+                                                      builder: (context) {
+                                                        final rowRoles =
+                                                            LineupTheme.of(
+                                                              context,
+                                                            );
+                                                        final rowSupportingText =
+                                                            Color.lerp(
+                                                              rowRoles
+                                                                  .secondaryText,
+                                                              rowRoles
+                                                                  .primaryText,
+                                                              0.65,
+                                                            )!;
+                                                        return Text(
+                                                          metadataText,
+                                                          maxLines: 3,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          softWrap: true,
+                                                          style: textTheme
+                                                              .bodyMedium
+                                                              ?.copyWith(
+                                                                color:
+                                                                    rowSupportingText,
+                                                              ),
+                                                        );
+                                                      },
+                                                    )
+                                                  : Text(
+                                                      metadataText,
+                                                      maxLines: 3,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      softWrap: true,
+                                                      style: textTheme
+                                                          .bodyMedium
+                                                          ?.copyWith(
+                                                            color:
+                                                                supportingText,
+                                                          ),
+                                                    );
+                                              final Widget trailingWidget =
+                                                  fillFocus
+                                                  ? Builder(
+                                                      builder: (context) {
+                                                        final rowRoles =
+                                                            LineupTheme.of(
+                                                              context,
+                                                            );
+                                                        return _trackTrailing(
+                                                          pending: pending,
+                                                          selected: selected,
+                                                          progressFill: rowRoles
+                                                              .progressFill,
+                                                        );
+                                                      },
+                                                    )
+                                                  : _trackTrailing(
+                                                      pending: pending,
+                                                      selected: selected,
+                                                      progressFill:
+                                                          roles.progressFill,
+                                                    );
+
                                               return Focus(
                                                 canRequestFocus: false,
                                                 skipTraversal: true,
@@ -3100,64 +3210,11 @@ class _TracksState extends State<_Tracks> {
                                                                 horizontal: 12,
                                                                 vertical: 8,
                                                               ),
-                                                          title: Text(
-                                                            title,
-                                                            maxLines: 3,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            softWrap: true,
-                                                            style: textTheme
-                                                                .bodyLarge
-                                                                ?.copyWith(
-                                                                  color: roles
-                                                                      .primaryText,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w500,
-                                                                ),
-                                                          ),
+                                                          title: titleWidget,
                                                           subtitle:
-                                                              metadata.isEmpty
-                                                              ? null
-                                                              : Text(
-                                                                  metadataText,
-                                                                  maxLines: 3,
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
-                                                                  softWrap:
-                                                                      true,
-                                                                  style: textTheme
-                                                                      .bodyMedium
-                                                                      ?.copyWith(
-                                                                        color:
-                                                                            supportingText,
-                                                                      ),
-                                                                ),
-                                                          trailing: SizedBox(
-                                                            width: 30,
-                                                            child: Center(
-                                                              child: pending
-                                                                  ? SizedBox.square(
-                                                                      dimension:
-                                                                          18,
-                                                                      child: CircularProgressIndicator(
-                                                                        strokeWidth:
-                                                                            2,
-                                                                      ),
-                                                                    )
-                                                                  : selected
-                                                                  ? Icon(
-                                                                      Icons
-                                                                          .check,
-                                                                      color: roles
-                                                                          .progressFill,
-                                                                      size: 24,
-                                                                    )
-                                                                  : const SizedBox.shrink(),
-                                                            ),
-                                                          ),
+                                                              subtitleWidget,
+                                                          trailing:
+                                                              trailingWidget,
                                                           onTap: selectTrack,
                                                         ),
                                                       ),
@@ -3210,6 +3267,24 @@ class _TracksState extends State<_Tracks> {
     );
   }
 }
+
+Widget _trackTrailing({
+  required bool pending,
+  required bool selected,
+  required Color progressFill,
+}) => SizedBox(
+  width: 30,
+  child: Center(
+    child: pending
+        ? SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : selected
+        ? Icon(Icons.check, color: progressFill, size: 24)
+        : const SizedBox.shrink(),
+  ),
+);
 
 class _ChannelNumber extends StatelessWidget {
   const _ChannelNumber({required this.controller});
@@ -3547,6 +3622,9 @@ ButtonStyle _playerActionStyle(BuildContext context) {
     foregroundColor: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.disabled)
           ? roles.secondaryText.withValues(alpha: .45)
+          : roles.focusTreatment == LineupFocusTreatment.fill &&
+                states.contains(WidgetState.focused)
+          ? roles.onFocus
           : roles.secondaryText,
     ),
     minimumSize: const WidgetStatePropertyAll(Size(44, 44)),

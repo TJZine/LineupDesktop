@@ -376,44 +376,62 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
     final roles = LineupTheme.of(context);
     final radius = roles.panelRadius;
     final focusRadius = radius == 0 ? 0.0 : radius + 3;
+    final focused = LineupFocusScope.visible(context, _focused);
+    final focusFill =
+        focused && roles.focusTreatment == LineupFocusTreatment.fill;
+    final focusRing =
+        focused && roles.focusTreatment == LineupFocusTreatment.ring;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return MergeSemantics(
       child: Semantics(
         button: true,
         selected: widget.selected,
         enabled: widget.onPressed != null,
-        child: AnimatedContainer(
-          duration: MediaQuery.disableAnimationsOf(context)
+        child: AnimatedScale(
+          scale: focusFill && !reduceMotion ? 1.06 : 1,
+          duration: reduceMotion
               ? Duration.zero
-              : LineupTheme.fast,
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(focusRadius),
-            border: Border.all(
-              color: LineupFocusScope.visible(context, _focused)
-                  ? roles.focusBorder
-                  : Colors.transparent,
-              width: LineupFocusScope.visible(context, _focused)
-                  ? roles.focusBorderWidth
-                  : 1,
-            ),
-          ),
-          child: Card(
-            margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(radius),
-              side: BorderSide(
-                color: widget.selected
-                    ? roles.progressFill
-                    : roles.subtleBorder,
-                width: 1,
+              : const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: LineupFocusFrame(
+            focused: focusFill,
+            child: AnimatedContainer(
+              duration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(focusRadius),
+                border: Border.all(
+                  color: focusRing ? roles.focusBorder : Colors.transparent,
+                  width: focusRing ? roles.focusBorderWidth : 1,
+                ),
               ),
-            ),
-            child: InkWell(
-              autofocus: widget.autofocus,
-              borderRadius: BorderRadius.circular(radius),
-              onFocusChange: (focused) => setState(() => _focused = focused),
-              onTap: widget.onPressed,
-              child: widget.child,
+              child: Card(
+                margin: EdgeInsets.zero,
+                color: focusFill ? roles.focusedSurface : null,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(radius),
+                  side: BorderSide(
+                    color: widget.selected
+                        ? roles.progressFill
+                        : roles.subtleBorder,
+                    width: 1,
+                  ),
+                ),
+                child: LineupFocusInk(
+                  focused: focusFill,
+                  child: InkWell(
+                    autofocus: widget.autofocus,
+                    borderRadius: BorderRadius.circular(radius),
+                    onFocusChange: (focused) =>
+                        setState(() => _focused = focused),
+                    onTap: widget.onPressed,
+                    child: Builder(builder: (context) => widget.child),
+                  ),
+                ),
+              ),
             ),
           ),
         ),

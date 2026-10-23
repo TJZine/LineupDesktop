@@ -209,6 +209,35 @@ void main() {
     },
     semanticsEnabled: true,
   );
+
+  testWidgets('Android TV omits the ineffective fullscreen action', (
+    tester,
+  ) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+    try {
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Full screen'), findsNothing);
+      expect(find.byTooltip('Exit full screen'), findsNothing);
+    } finally {
+      fixture.dispose();
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
   testWidgets(
     'presentation getters distinguish watching from selected and held state',
     (tester) async {

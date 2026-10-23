@@ -329,6 +329,7 @@ void main() {
     LineupController controller, {
     Future<void> Function()? browser,
     bool accountOrigin = false,
+    bool androidTv = false,
     double textScale = 1,
   }) async {
     await tester.pumpWidget(
@@ -336,11 +337,15 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(textScaler: TextScaler.linear(textScale)),
-          child: LineupCanvas.builder(context, child),
+          child: LineupCanvas(
+            reduceMotion: controller.settings.reduceMotion,
+            child: child!,
+          ),
         ),
         theme: LineupTheme.forName(
           LineupThemeName.emberSteel,
           largeFocusIndicators: false,
+          androidTv: androidTv,
         ),
         home: UpstreamOnboardingView(
           controller: controller,
@@ -395,6 +400,70 @@ void main() {
     );
   }, semanticsEnabled: true);
 
+  testWidgets('Android TV profile focus uses shared fill ink and scale', (
+    tester,
+  ) async {
+    const active = PlexHomeUser(
+      id: 'active',
+      name: 'Active viewer',
+      protected: false,
+    );
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: [active],
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await show(tester, controller, androidTv: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 160));
+
+    expect(
+      tester
+          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
+          .any((scale) => scale.scale == 1.06),
+      isTrue,
+    );
+    expect(
+      LineupTheme.of(tester.element(find.text('Active viewer').last))
+          .primaryText,
+      const Color(0xFF090806),
+    );
+  });
+
+  testWidgets('Android TV profile focus does not scale under Reduce Motion', (
+    tester,
+  ) async {
+    const active = PlexHomeUser(
+      id: 'active',
+      name: 'Active viewer',
+      protected: false,
+    );
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        settings: LineupSettings(reduceMotion: true),
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: [active],
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await show(tester, controller, androidTv: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 160));
+
+    expect(
+      tester
+          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
+          .every((scale) => scale.scale == 1.0),
+      isTrue,
+    );
+  });
+
   testWidgets('profile card clamp accepts a sub-pixel width constraint', (
     tester,
   ) async {
@@ -443,58 +512,62 @@ void main() {
     );
   });
 
-  testWidgets('Android transfers remote focus from welcome to PIN actions', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1920, 1080);
-    tester.view.devicePixelRatio = 2;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = LineupController(
-      store: MemoryAppStore(),
-      credentials: MemoryCredentialStore(),
-      plex: _PinPollingPlex(
-        PlexPin(
-          id: 71,
-          code: 'REMOTE',
-          expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+  testWidgets(
+    'Android transfers remote focus from welcome to PIN actions',
+    (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = LineupController(
+        store: MemoryAppStore(),
+        credentials: MemoryCredentialStore(),
+        plex: _PinPollingPlex(
+          PlexPin(
+            id: 71,
+            code: 'REMOTE',
+            expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+          ),
         ),
-      ),
-    );
-    addTearDown(controller.dispose);
-    var browserCalls = 0;
-    await show(
-      tester,
-      controller,
-      browser: () async {
-        browserCalls++;
-        throw StateError('No browser on this synthetic TV.');
-      },
-    );
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(controller.stage, SetupStage.linking);
-    expect(find.text('REMOTE'), findsOneWidget);
-    final browser = find.widgetWithText(FilledButton, 'Open browser');
-    expect(tester.widget<FilledButton>(browser).focusNode!.hasFocus, isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await tester.pump();
-    expect(browserCalls, 1);
-    expect(find.textContaining('Couldn’t open your browser'), findsOneWidget);
-    expect(find.text('REMOTE'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pump();
-    final focused = FocusManager.instance.primaryFocus!.context!;
-    expect(
-      find.ancestor(
-        of: find.byWidget(focused.widget),
-        matching: find.widgetWithText(OutlinedButton, 'Copy code'),
-      ),
-      findsOneWidget,
-    );
-    await controller.cancelLinking();
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+      );
+      addTearDown(controller.dispose);
+      var browserCalls = 0;
+      await show(
+        tester,
+        controller,
+        browser: () async {
+          browserCalls++;
+          throw StateError('No browser on this synthetic TV.');
+        },
+        androidTv: true,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(controller.stage, SetupStage.linking);
+      expect(find.text('REMOTE'), findsOneWidget);
+      final browser = find.widgetWithText(FilledButton, 'Open on this TV');
+      expect(tester.widget<FilledButton>(browser).focusNode!.hasFocus, isTrue);
+      expect(find.text('Copy code'), findsNothing);
+      expect(
+        find.bySemanticsLabel(
+          'Open plex.tv/link in a browser on this TV, if available.',
+        ),
+        findsOneWidget,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pump();
+      expect(browserCalls, 1);
+      expect(find.textContaining('Couldn’t open your browser'), findsOneWidget);
+      expect(find.text('REMOTE'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(find.text('Copy code'), findsNothing);
+      await controller.cancelLinking();
+    },
+    semanticsEnabled: true,
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
 
   testWidgets('explicit browser failure retains complete code and QR', (
     tester,

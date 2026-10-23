@@ -19,6 +19,7 @@ class UiFixture {
     LineupScenario? scenario,
     FixturePlayer? player,
     this.guideClock,
+    this.androidTv = false,
   }) : assert(controller == null || scenario == null),
        controller = controller ?? FixtureController(scenario: scenario),
        player = player ?? FixturePlayer();
@@ -26,11 +27,13 @@ class UiFixture {
   final FixtureController controller;
   final FixturePlayer player;
   final DateTime Function()? guideClock;
+  final bool androidTv;
 
   Widget build() => LineupBootstrap(
     player: player,
     controller: controller,
     guideClock: guideClock,
+    androidTv: androidTv,
   );
 }
 

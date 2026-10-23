@@ -724,9 +724,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
           listenable: focus,
           builder: (context, child) {
             final roles = LineupTheme.of(context);
+            final focused = LineupFocusScope.visible(context, focus.hasFocus);
+            final focusFill =
+                focused && roles.focusTreatment == LineupFocusTreatment.fill;
+            final focusRing =
+                focused && roles.focusTreatment == LineupFocusTreatment.ring;
             return Container(
               decoration: BoxDecoration(
-                color: focus.hasFocus ? roles.selectedSurface : null,
+                color: focusFill
+                    ? roles.focusedSurface
+                    : focus.hasFocus
+                    ? roles.selectedSurface
+                    : null,
                 border: Border(
                   left: BorderSide(
                     color: focus.hasFocus
@@ -737,17 +746,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                 ),
                 borderRadius: BorderRadius.zero,
               ),
-              foregroundDecoration: BoxDecoration(
-                border: Border.all(
-                  color: LineupFocusScope.visible(context, focus.hasFocus)
-                      ? roles.focusBorder
-                      : Colors.transparent,
-                  width: LineupFocusScope.visible(context, focus.hasFocus)
-                      ? roles.focusBorderWidth
-                      : 1,
-                ),
+              foregroundDecoration: focusRing
+                  ? BoxDecoration(
+                      border: Border.all(
+                        color: roles.focusBorder,
+                        width: roles.focusBorderWidth,
+                      ),
+                    )
+                  : null,
+              child: LineupFocusFrame(
+                focused: focusFill,
+                child: LineupFocusInk(focused: focusFill, child: child),
               ),
-              child: child,
             );
           },
           child: repeatedTitle
