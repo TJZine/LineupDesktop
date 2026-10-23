@@ -15,10 +15,13 @@ const _back = LogicalKeyboardKey.goBack;
 
 Future<void> _keys(WidgetTester tester, List<LogicalKeyboardKey> keys) async {
   for (final key in keys) {
-    await tester.sendKeyEvent(
-      key,
-      physicalKey: key == _back ? PhysicalKeyboardKey.escape : null,
-    );
+    if (key == _back) {
+      // Models the normalized native boundary; actual key/callback ownership
+      // is verified by the Android input probe, not by widget simulation.
+      await tester.binding.handlePopRoute();
+    } else {
+      await tester.sendKeyEvent(key);
+    }
     await tester.pumpAndSettle();
   }
 }
@@ -132,7 +135,7 @@ void main() {
   );
 
   _tvTest(
-    'current protected profile PIN Back owns both native paths without backgrounding',
+    'current protected profile PIN consumes normalized Back without backgrounding',
     (tester) async {
       final fixture = UiFixture(
         controller: _RejectedPinController(current: true),
@@ -141,15 +144,7 @@ void main() {
       await tester.pumpAndSettle();
       await _keys(tester, [_select]);
       _focusedVisible(tester, find.widgetWithText(OutlinedButton, '1'));
-      await tester.sendKeyDownEvent(
-        _back,
-        physicalKey: PhysicalKeyboardKey.escape,
-      );
       await tester.binding.handlePopRoute();
-      await tester.sendKeyUpEvent(
-        _back,
-        physicalKey: PhysicalKeyboardKey.escape,
-      );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
       expect(fixture.controller.stage, SetupStage.profiles);
