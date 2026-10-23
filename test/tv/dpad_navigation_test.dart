@@ -74,7 +74,10 @@ void main() {
   _tvTest(
     'protected PIN remote walk reaches every bottom key, error, Cancel and Back',
     (tester) async {
-      final fixture = UiFixture(controller: _RejectedPinController());
+      final fixture = UiFixture(
+        controller: _RejectedPinController(),
+        androidTv: true,
+      );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       await _keys(tester, [_select]);
@@ -139,6 +142,7 @@ void main() {
     (tester) async {
       final fixture = UiFixture(
         controller: _RejectedPinController(current: true),
+        androidTv: true,
       );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
