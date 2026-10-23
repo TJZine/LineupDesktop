@@ -37,6 +37,7 @@ class DiagnosticsView extends StatefulWidget {
 
 class _DiagnosticsViewState extends State<DiagnosticsView> {
   final _scroll = ScrollController();
+  final _technicalExpansion = ExpansibleController();
   List<DiagnosticEntry> _visibleEvents = const [];
   bool _copying = false;
   String? _copyFeedback;
@@ -68,8 +69,38 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
   @override
   void dispose() {
     widget.controller.diagnostics.removeListener(_eventsChanged);
+    _technicalExpansion.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  KeyEventResult _readTechnicalDetails(FocusNode _, KeyEvent event) {
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        !_technicalExpansion.isExpanded ||
+        !_scroll.hasClients ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isShiftPressed) {
+      return KeyEventResult.ignored;
+    }
+    final amount = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowDown => 48.0,
+      LogicalKeyboardKey.arrowUp => -48.0,
+      _ => null,
+    };
+    if (amount == null) return KeyEventResult.ignored;
+    final position = _scroll.position;
+    final target = (position.pixels + amount).clamp(
+      0.0,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return KeyEventResult.ignored;
+    // The expanded toggle remains the reading owner. Moving its viewport also
+    // builds lazy controls below the long readonly panel. At either edge the
+    // ordinary focus traversal resumes; Select and Back retain their actions.
+    position.jumpTo(target);
+    return KeyEventResult.handled;
   }
 
   DiagnosticSupportSnapshot _snapshot() {
@@ -337,21 +368,27 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             padding: EdgeInsets.fromLTRB(28, 16, 28, 0),
             child: Divider(height: 1, color: roles.subtleBorder),
           ),
-          ExpansionTile(
-            key: const PageStorageKey('diagnostic-technical-details'),
-            tilePadding: EdgeInsets.only(left: 28),
-            minTileHeight: 48,
-            title: Text(
-              'Technical details',
-              style: TextStyle(
-                color: roles.primaryText,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
+          Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: _readTechnicalDetails,
+            child: ExpansionTile(
+              controller: _technicalExpansion,
+              key: const PageStorageKey('diagnostic-technical-details'),
+              tilePadding: EdgeInsets.only(left: 28),
+              minTileHeight: 48,
+              title: Text(
+                'Technical details',
+                style: TextStyle(
+                  color: roles.primaryText,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
+              childrenPadding: EdgeInsets.fromLTRB(28, 0, 28, 28),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              children: [_technicalDetails(context, snapshot, telemetry)],
             ),
-            childrenPadding: EdgeInsets.fromLTRB(28, 0, 28, 28),
-            expandedCrossAxisAlignment: CrossAxisAlignment.start,
-            children: [_technicalDetails(context, snapshot, telemetry)],
           ),
         ],
       ),
