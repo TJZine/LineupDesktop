@@ -170,6 +170,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('native shown supersedes inset hide until native hidden', (
+    tester,
+  ) async {
+    final visibility = ValueNotifier<bool?>(false);
+    addTearDown(visibility.dispose);
+    addTearDown(tester.view.resetViewInsets);
+    final nodes = await _pump(tester, visibility);
+    await _activate(tester, nodes.field);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pumpAndSettle();
+    visibility.value = true;
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isTrue);
+    visibility.value = false;
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    // Native truth discarded prior inset credit; a fresh edit with native
+    // unknown cannot inherit the preceding docked-to-floating transition.
+    visibility.value = null;
+    await _activate(tester, nodes.field);
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isTrue);
+  });
+
   testWidgets('inset hide restores navigation while resumed', (tester) async {
     final visibility = ValueNotifier<bool?>(null);
     addTearDown(visibility.dispose);

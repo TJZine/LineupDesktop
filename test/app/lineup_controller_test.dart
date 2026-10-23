@@ -8463,6 +8463,73 @@ void main() {
     );
   }
 
+  test('background cancellation retires only playback authorization', () async {
+    final selected = _server('server');
+    final plex = _FakePlex()..serversResult = [selected];
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.fixtureActor.publishInventory(media: [_playableMovie]);
+    final request = controller.playbackFor('movie');
+    final connection = controller.connection;
+    final account = controller.account;
+    final profile = controller.profile;
+    final before = plex.discoveredTokens.length;
+    controller.cancelPlaybackAuthorization();
+    await expectLater(
+      request.authorizationRecovery!(),
+      throwsA(isA<PlexException>()),
+    );
+    expect(plex.discoveredTokens.length, before);
+    expect(controller.account, same(account));
+    expect(controller.profile, same(profile));
+    expect(controller.server?.id, 'server');
+    expect(controller.connection, same(connection));
+    final refreshed = await controller
+        .playbackFor('movie')
+        .authorizationRecovery!();
+    expect(refreshed.plexToken, plex.resourceToken);
+  });
+
+  test('background cancellation rejects an in-flight refresh before probing or publication', () async {
+    final selected = _server('server');
+    final plex = _FakePlex()..serversResult = [selected];
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.fixtureActor.publishInventory(media: [_playableMovie]);
+    final connection = controller.connection;
+    final discovery = Completer<List<PlexServerAccess>>();
+    final started = Completer<void>();
+    plex.discoverServersHandler = (_) {
+      started.complete();
+      return discovery.future;
+    };
+    final recovering = controller.playbackFor('movie').authorizationRecovery!();
+    final denied = expectLater(recovering, throwsA(isA<PlexException>()));
+    await started.future;
+    final probes = plex.selectedTokens.length;
+    controller.cancelPlaybackAuthorization();
+    discovery.complete([
+      PlexServerAccess(server: selected, token: 'retired-token'),
+    ]);
+    await denied;
+    expect(plex.selectedTokens.length, probes);
+    expect(controller.connection, same(connection));
+  });
+
   test('captured playback recovery survives discovery but rejects leave and return', () async {
     final selected = _server('server');
     final other = _server('other');

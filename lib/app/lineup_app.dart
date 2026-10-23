@@ -253,6 +253,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
           return Stack(
             children: [
               LineupShell(
+                androidTv: androidTv,
                 player: widget.player,
                 controller: widget.controller,
                 initialMediaPath: widget.initialMediaPath,
