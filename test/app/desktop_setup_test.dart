@@ -3,6 +3,7 @@ import '../support/committed_state_matchers.dart';
 import 'dart:async';
 
 import 'dart:ui' show CheckedState;
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
@@ -23,6 +24,69 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  for (final platform in [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      'source-order row retains focus and hover backgrounds: $platform',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        final tv = platform == TargetPlatform.android;
+        final controller = _SetupController();
+        try {
+          await _pump(tester, controller, androidTv: tv);
+          await _advanceToConfigure(tester);
+          await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+          await tester.pumpAndSettle();
+          final row = find.byKey(const ValueKey('source-order-recentlyAdded'));
+          await tester.ensureVisible(row);
+          await tester.pumpAndSettle();
+          final action = find.descendant(
+            of: row,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is IconButton && widget.tooltip == 'Move later',
+            ),
+          );
+          final focus = tester.widget<IconButton>(action).focusNode!;
+          final roles = LineupTheme.of(tester.element(row));
+          Color? background() =>
+              (tester.widget<DecoratedBox>(row).decoration as BoxDecoration)
+                  .color;
+          focus.requestFocus();
+          await tester.pumpAndSettle();
+          expect(background(), Colors.transparent);
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          focus.requestFocus();
+          await tester.pumpAndSettle();
+          expect(
+            background(),
+            tv ? roles.focusedSurface : roles.primarySurface,
+          );
+          final mouse = await tester.createGesture(
+            kind: PointerDeviceKind.mouse,
+          );
+          await mouse.addPointer(location: const Offset(0, 0));
+          await mouse.moveTo(const Offset(1, 1));
+          await tester.pumpAndSettle();
+          expect(background(), Colors.transparent);
+          expect(focus.hasPrimaryFocus, isTrue);
+          await mouse.moveTo(tester.getCenter(row));
+          await tester.pumpAndSettle();
+          expect(background(), roles.primarySurface);
+          expect(focus.hasPrimaryFocus, isTrue);
+          await mouse.removePointer();
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+          tester.view.reset();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
   for (final existing in [false, true]) {
     testWidgets(
       'TV Setup has a fixed footer and an initially complete Review row existing=$existing',

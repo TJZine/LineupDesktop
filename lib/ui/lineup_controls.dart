@@ -148,6 +148,7 @@ class LineupSegmentedControl<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final visible = LineupFocusScope.visible(context);
+    final ringFocus = roles.focusTreatment == LineupFocusTreatment.ring;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -165,23 +166,43 @@ class LineupSegmentedControl<T> extends StatelessWidget {
         expandedInsets: expanded && direction == Axis.horizontal
             ? EdgeInsets.zero
             : null,
-        style: LineupTheme.segmentedStyle(roles, focusVisible: visible)
-            .copyWith(
-              minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
-              padding: const WidgetStatePropertyAll(
-                EdgeInsets.symmetric(horizontal: 16),
-              ),
-              shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-              ),
-              textStyle: WidgetStateProperty.resolveWith(
-                (states) => LineupTypography.control.copyWith(
-                  fontWeight: states.contains(WidgetState.selected)
-                      ? FontWeight.w600
-                      : FontWeight.w500,
-                ),
-              ),
+        style: LineupTheme.segmentedStyle(roles, focusVisible: visible).copyWith(
+          // This control already has an outer frame. Desktop keeps its
+          // borderless segments and hover wash; TV retains shared fill focus.
+          side: ringFocus
+              ? WidgetStateProperty.resolveWith(
+                  (states) => visible && states.contains(WidgetState.focused)
+                      ? BorderSide(
+                          color: roles.focusBorder,
+                          width: roles.focusBorderWidth,
+                        )
+                      : BorderSide.none,
+                )
+              : null,
+          backgroundColor: ringFocus
+              ? WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.selected)
+                      ? roles.selectedSurface
+                      : states.contains(WidgetState.hovered)
+                      ? roles.primaryText.withValues(alpha: .08)
+                      : Colors.transparent,
+                )
+              : null,
+          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 16),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          ),
+          textStyle: WidgetStateProperty.resolveWith(
+            (states) => LineupTypography.control.copyWith(
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w600
+                  : FontWeight.w500,
             ),
+          ),
+        ),
       ),
     );
   }
