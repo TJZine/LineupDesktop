@@ -299,6 +299,8 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     required double maxWidth,
     required Iterable<String> labels,
     required TextStyle style,
+    double outerHorizontalChrome = 0,
+    double menuVerticalPadding = 8,
   }) {
     final horizontalPadding = 10;
     final arrowWidth = 24;
@@ -337,10 +339,16 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       maxWidth,
       math.max(
         desiredWidth,
-        intrinsicWidth + 2 * horizontalPadding + arrowWidth,
+        intrinsicWidth +
+            2 * horizontalPadding +
+            arrowWidth +
+            outerHorizontalChrome,
       ),
     );
-    final textWidth = math.max(1.0, width - 2 * horizontalPadding - arrowWidth);
+    final textWidth = math.max(
+      1.0,
+      width - 2 * horizontalPadding - arrowWidth - outerHorizontalChrome,
+    );
     var textHeight = 0.0;
     for (final label in labels) {
       textHeight = math.max(textHeight, measure(label, maxWidth: textWidth));
@@ -348,7 +356,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     return (
       width: width,
       closedHeight: math.max(baseHeight, textHeight + 8),
-      itemHeight: math.max(48, textHeight + 8),
+      itemHeight: math.max(48, textHeight + menuVerticalPadding),
     );
   }
 
@@ -1332,6 +1340,18 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       fontSize: 18,
       height: 1.4,
     );
+    Widget choiceLabel(int choice) => roles.androidTv
+        ? Builder(
+            builder: (context) => Text(
+              '$choice',
+              maxLines: 1,
+              softWrap: false,
+              style: dropdownStyle.copyWith(
+                color: LineupTheme.of(context).primaryText,
+              ),
+            ),
+          )
+        : Text('$choice');
 
     Widget field({
       required Key key,
@@ -1357,6 +1377,13 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                 maxWidth: constraints.maxWidth,
                 labels: choices.map((choice) => '$choice'),
                 style: dropdownStyle,
+                outerHorizontalChrome: roles.androidTv
+                    ? LineupDropdownBox.contentPadding().horizontal +
+                          2 * LineupDropdownBox.borderWidth
+                    : 0,
+                menuVerticalPadding: roles.androidTv
+                    ? LineupDropdownMenuRow.contentPadding.vertical
+                    : 8,
               );
               final dropdownWidth = metrics.width;
               final inline =
@@ -1377,28 +1404,37 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                         isExpanded: true,
                         isDense: true,
                         iconSize: 24,
+                        icon: roles.androidTv
+                            ? Builder(
+                                builder: (context) => Icon(
+                                  Icons.arrow_drop_down,
+                                  color: LineupTheme.of(context).secondaryText,
+                                ),
+                              )
+                            : null,
                         padding: EdgeInsets.symmetric(horizontal: 10),
                         itemHeight: metrics.itemHeight,
                         value: value,
                         style: dropdownStyle,
-                        items: lineupMenuItems([
-                          for (final choice in choices)
-                            DropdownMenuItem(
-                              value: choice,
-                              child: Text('$choice'),
-                            ),
-                        ], value),
+                        items: lineupMenuItems(
+                          [
+                            for (final choice in choices)
+                              DropdownMenuItem(
+                                value: choice,
+                                child: choiceLabel(choice),
+                              ),
+                          ],
+                          value,
+                          menuTheme: roles.androidTv ? Theme.of(context) : null,
+                        ),
                         onChanged: (next) {
                           if (next != null) onChanged(next);
                         },
                         dropdownColor: LineupTheme.of(context).elevatedSurface,
-                        selectedItemBuilder: (_) => ([
-                          for (final choice in choices)
-                            DropdownMenuItem(
-                              value: choice,
-                              child: Text('$choice'),
-                            ),
-                        ]).map<Widget>((item) => item.child).toList(),
+                        menuWidth: roles.androidTv ? dropdownWidth : null,
+                        selectedItemBuilder: (_) => [
+                          for (final choice in choices) choiceLabel(choice),
+                        ],
                       ),
                     ),
                   ),

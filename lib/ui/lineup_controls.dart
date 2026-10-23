@@ -530,6 +530,10 @@ class LineupTab extends StatelessWidget {
 }
 
 class LineupDropdownMenuRow extends StatelessWidget {
+  static const contentPadding = EdgeInsets.symmetric(
+    horizontal: 12,
+    vertical: 8,
+  );
   const LineupDropdownMenuRow({
     required this.selected,
     required this.child,
@@ -541,26 +545,34 @@ class LineupDropdownMenuRow extends StatelessWidget {
   Widget build(BuildContext context) => LineupRowSurface(
     selected: selected,
     focused: Focus.maybeOf(context)?.hasFocus ?? false,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: child,
-    ),
+    child: Padding(padding: contentPadding, child: child),
   );
 }
 
 List<DropdownMenuItem<T>> lineupMenuItems<T>(
   List<DropdownMenuItem<T>>? items,
-  T? selected,
-) => [
+  T? selected, {
+  ThemeData? menuTheme,
+}) => [
+  // A focused trigger may have a local ink theme. Its popup rows need the
+  // caller's base theme before applying their own independent focus ink.
   for (final item in items ?? <DropdownMenuItem<T>>[])
     DropdownMenuItem<T>(
       value: item.value,
       enabled: item.enabled,
       onTap: item.onTap,
-      child: LineupDropdownMenuRow(
-        selected: item.value == selected,
-        child: item.child,
-      ),
+      child: menuTheme == null
+          ? LineupDropdownMenuRow(
+              selected: item.value == selected,
+              child: item.child,
+            )
+          : Theme(
+              data: menuTheme,
+              child: LineupDropdownMenuRow(
+                selected: item.value == selected,
+                child: item.child,
+              ),
+            ),
     ),
 ];
 
@@ -603,6 +615,9 @@ DropdownButtonFormField<T> lineupDropdownField<T>({
 
 /// Dropdown trigger uses the same inset field and keyboard ring as text inputs.
 class LineupDropdownBox extends StatefulWidget {
+  static const borderWidth = 1.0;
+  static EdgeInsets contentPadding({bool compact = false}) =>
+      EdgeInsets.symmetric(horizontal: compact ? 14 : 18);
   const LineupDropdownBox({
     required this.child,
     required this.enabled,
@@ -636,7 +651,7 @@ class _LineupDropdownBoxState extends State<LineupDropdownBox> {
             : const Duration(milliseconds: 150),
         curve: Curves.easeOut,
         constraints: BoxConstraints(minHeight: widget.compact ? 44 : 56),
-        padding: EdgeInsets.symmetric(horizontal: widget.compact ? 14 : 18),
+        padding: LineupDropdownBox.contentPadding(compact: widget.compact),
         decoration: BoxDecoration(
           color: focusFill ? roles.focusedSurface : roles.onFocus,
           borderRadius: BorderRadius.circular(8),
@@ -646,7 +661,9 @@ class _LineupDropdownBoxState extends State<LineupDropdownBox> {
                 : widget.enabled
                 ? roles.defaultBorder
                 : roles.defaultBorder.withValues(alpha: .5),
-            width: focusRing ? roles.focusBorderWidth : 1,
+            width: focusRing
+                ? roles.focusBorderWidth
+                : LineupDropdownBox.borderWidth,
           ),
         ),
         child: LineupFocusFrame(
