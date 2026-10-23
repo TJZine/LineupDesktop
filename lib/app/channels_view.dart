@@ -1429,6 +1429,31 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
     super.dispose();
   }
 
+  KeyEventResult _readSelectedNames(FocusNode _, KeyEvent event) {
+    if (!LineupTheme.of(context).androidTv ||
+        !_scrollController.hasClients ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isShiftPressed) {
+      return KeyEventResult.ignored;
+    }
+    final amount = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowDown => 48.0,
+      LogicalKeyboardKey.arrowUp => -48.0,
+      _ => null,
+    };
+    if (amount == null) return KeyEventResult.ignored;
+    final position = _scrollController.position;
+    final target = (position.pixels + amount).clamp(
+      0.0,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return KeyEventResult.ignored;
+    position.jumpTo(target);
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
     final channels = widget.channels;
@@ -1499,47 +1524,53 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
               SizedBox(height: 8),
               Flexible(
                 fit: FlexFit.loose,
-                child: Scrollbar(
-                  controller: _scrollController,
-                  thumbVisibility: true,
-                  child: ListView.separated(
+                child: Focus(
+                  debugLabel: 'Selected channels to delete',
+                  canRequestFocus: roles.androidTv,
+                  skipTraversal: !roles.androidTv,
+                  onKeyEvent: _readSelectedNames,
+                  child: Scrollbar(
                     controller: _scrollController,
-                    shrinkWrap: true,
-                    padding: EdgeInsets.only(right: 12),
-                    itemCount: channels.length,
-                    separatorBuilder: (_, _) =>
-                        Divider(height: 1, color: roles.subtleBorder),
-                    itemBuilder: (context, index) {
-                      final channel = channels[index];
-                      return ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: 52),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 10),
-                          child: Row(
-                            key: ValueKey('delete-dialog-row-${channel.id}'),
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              SizedBox(
-                                width: 56,
-                                child: Text(
-                                  '${channel.number}',
-                                  style: numberStyle,
+                    thumbVisibility: true,
+                    child: ListView.separated(
+                      controller: _scrollController,
+                      shrinkWrap: true,
+                      padding: EdgeInsets.only(right: 12),
+                      itemCount: channels.length,
+                      separatorBuilder: (_, _) =>
+                          Divider(height: 1, color: roles.subtleBorder),
+                      itemBuilder: (context, index) {
+                        final channel = channels[index];
+                        return ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: 52),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 10),
+                            child: Row(
+                              key: ValueKey('delete-dialog-row-${channel.id}'),
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                SizedBox(
+                                  width: 56,
+                                  child: Text(
+                                    '${channel.number}',
+                                    style: numberStyle,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(width: 16),
-                              Expanded(
-                                child: Text(
-                                  channel.name,
-                                  softWrap: true,
-                                  style: nameStyle,
+                                SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    channel.name,
+                                    softWrap: true,
+                                    style: nameStyle,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
