@@ -33,6 +33,7 @@ void main() {
     double scale = 1,
     VoidCallback? back,
     LineupThemeName theme = LineupThemeName.emberSteel,
+    bool androidTv = false,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -40,7 +41,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
-        theme: LineupTheme.forName(theme, largeFocusIndicators: true),
+        theme: LineupTheme.forName(
+          theme,
+          largeFocusIndicators: true,
+          androidTv: androidTv,
+        ),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(scale),
@@ -88,25 +93,40 @@ void main() {
   ];
 
   testWidgets(
-    'Android D-pad reaches index and group rows, then scrolls documents',
+    'Android D-pad reaches Copy, reading and Back without trapping controls',
     (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final highlightStrategy = FocusManager.instance.highlightStrategy;
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTouch;
       try {
+        String? clipboard;
+        binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              clipboard = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        final text = List.filled(80, 'License paragraph.').join('\n\n');
         await show(tester, [
           LicenseSource(
             'Runtime',
             () async => [
               LicenseItem.list('component', 'Component', [
-                LicenseItem.document(
-                  'notice',
-                  'Notice',
-                  () async =>
-                      List.filled(80, 'License paragraph.').join('\n\n'),
-                ),
+                LicenseItem.document('notice', 'Notice', () async => text),
               ]),
             ],
           ),
-        ]);
+        ], androidTv: true);
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Component');
@@ -123,17 +143,176 @@ void main() {
         expect(scroll.offset, 0);
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
+        expect(scroll.offset, 0);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Copy license document',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(clipboard, text);
+        expect(find.text('Document copied'), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'License document',
+        );
+        final surface = tester.widget<ColoredBox>(
+          find.byKey(const Key('licenses-reading-surface')),
+        );
+        expect(
+          surface.color,
+          LineupTheme.of(tester.element(find.byType(LicensesView)))
+              .focusedSurface,
+        );
+        final paragraph = tester.widget<Text>(
+          find.text('License paragraph.').first,
+        );
+        expect(paragraph.style!.color, const Color(0xFF090806));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
         expect(scroll.offset, 48);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pumpAndSettle();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Copy license document',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'License document',
+        );
+        // Reach both bounds using the same remote keys, retaining reader focus.
+        for (var i = 0; i < 100; i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        }
+        await tester.pumpAndSettle();
+        expect(scroll.offset, scroll.position.maxScrollExtent);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'License document',
+        );
+        for (var i = 0; i < 100 && scroll.offset > 0; i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        }
+        await tester.pumpAndSettle();
+        expect(scroll.offset, 0);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Copy license document',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Licenses back');
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Notice');
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
+        FocusManager.instance.highlightStrategy = highlightStrategy;
         debugDefaultTargetPlatformOverride = null;
       }
     },
   );
+
+  testWidgets('Android loading and failed documents retain Back and Retry', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final pending = Completer<String>();
+    var attempts = 0;
+    try {
+      await show(tester, [
+        LicenseSource(
+          'Runtime',
+          () async => [
+            LicenseItem.document(
+              'notice',
+              'Notice',
+              () => attempts++ == 0
+                  ? pending.future
+                  : Future.value('Recovered notice'),
+            ),
+          ],
+        ),
+      ], androidTv: true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pump();
+      expect(find.text('Loading license document…'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Licenses back');
+      pending.completeError(StateError('synthetic private path'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('This license document could not be loaded.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('synthetic private path'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(
+        (FocusManager.instance.primaryFocus?.context
+                    ?.findAncestorWidgetOfExactType<OutlinedButton>()
+                    ?.child
+                as Text?)
+            ?.data,
+        'Retry',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(find.text('Recovered notice'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Licenses back');
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('desktop reader keys still scroll from the Back action', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await show(tester, [
+        LicenseSource(
+          'Runtime',
+          () async => [
+            LicenseItem.document(
+              'notice',
+              'Notice',
+              () async => List.filled(80, 'Desktop paragraph.').join('\n\n'),
+            ),
+          ],
+        ),
+      ]);
+      await open(tester, 'Notice');
+      final scroll = tester
+          .widget<CustomScrollView>(find.byType(CustomScrollView))
+          .controller!;
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, 48);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Licenses back');
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, scroll.position.maxScrollExtent);
+      await tester.sendKeyEvent(LogicalKeyboardKey.home);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, 0);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
   testWidgets('component/file/back retain focus and exact full-document copy', (
     tester,
