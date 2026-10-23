@@ -104,6 +104,20 @@ void main() {
       await tester.pump();
       expect(handled, 2);
       expect(backgrounded, 0);
+      // Real Android TV can deliver both paths while Back is held. The
+      // hardware key owns that press; the pop must not repeat its action.
+      await tester.sendKeyDownEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(handled, 3);
+      expect(backgrounded, 0);
+      await tester.sendKeyUpEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
       consume = false;
       await tester.binding.handlePopRoute();
       await tester.pump();
@@ -114,6 +128,17 @@ void main() {
       );
       await tester.pump();
       expect(backgrounded, 2);
+      await tester.sendKeyDownEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(backgrounded, 3);
+      await tester.sendKeyUpEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
     },
   );
 

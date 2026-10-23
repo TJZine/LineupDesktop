@@ -63,6 +63,14 @@ class _AndroidBackScopeState extends State<AndroidBackScope> {
 
   void _systemBack(bool didPop, Object? result) {
     if (didPop || ModalRoute.of(context)?.isCurrent != true) return;
+    // Android may send a route pop during a hardware Back dispatch, even when
+    // its key handler already consumed the press. That pressed key owns Back;
+    // only the key-free predictive path needs the route-to-focus translation.
+    if (HardwareKeyboard.instance.logicalKeysPressed.contains(
+      LogicalKeyboardKey.goBack,
+    )) {
+      return;
+    }
     const event = KeyDownEvent(
       physicalKey: PhysicalKeyboardKey.browserBack,
       logicalKey: LogicalKeyboardKey.goBack,
