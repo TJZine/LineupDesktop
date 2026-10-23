@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
@@ -856,32 +857,44 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             return RadioGroup<PlaybackMode>(
               groupValue: _playback,
               onChanged: (mode) => widget.onPlaybackChanged(mode!),
-              child: Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  _playbackChoice(
-                    PlaybackMode.shuffle,
-                    'Shuffle',
-                    'Mix programs into a shuffled schedule.',
-                    focus: focus,
-                    width: width,
-                  ),
-                  _playbackChoice(
-                    PlaybackMode.sequential,
-                    'In order',
-                    'Keep the order supplied by the channel’s source.',
-                    focus: focus,
-                    width: width,
-                  ),
-                  _playbackChoice(
-                    PlaybackMode.block,
-                    'Mini-marathons',
-                    'Play a few episodes of one show, then move to another.',
-                    focus: focus,
-                    width: width,
-                  ),
-                ],
+              child: Shortcuts(
+                // RadioGroup owns all four arrows by default. TV uses vertical
+                // arrows to leave the choices through normal spatial traversal.
+                shortcuts: LineupTheme.of(context).androidTv
+                    ? const {
+                        SingleActivator(LogicalKeyboardKey.arrowUp):
+                            DirectionalFocusIntent(TraversalDirection.up),
+                        SingleActivator(LogicalKeyboardKey.arrowDown):
+                            DirectionalFocusIntent(TraversalDirection.down),
+                      }
+                    : const {},
+                child: Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    _playbackChoice(
+                      PlaybackMode.shuffle,
+                      'Shuffle',
+                      'Mix programs into a shuffled schedule.',
+                      focus: focus,
+                      width: width,
+                    ),
+                    _playbackChoice(
+                      PlaybackMode.sequential,
+                      'In order',
+                      'Keep the order supplied by the channel’s source.',
+                      focus: focus,
+                      width: width,
+                    ),
+                    _playbackChoice(
+                      PlaybackMode.block,
+                      'Mini-marathons',
+                      'Play a few episodes of one show, then move to another.',
+                      focus: focus,
+                      width: width,
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -1024,90 +1037,99 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             autofocus: false,
             groupRegistry: RadioGroup.maybeOf<PlaybackMode>(context),
             enabled: true,
-            builder: (context, state) {
-              final roles = LineupTheme.of(context);
-              final selected = state.states.contains(WidgetState.selected);
-              final focused = LineupFocusScope.visible(
-                context,
-                state.states.contains(WidgetState.focused),
-              );
-              final hovered = state.states.contains(WidgetState.hovered);
-              final radius = BorderRadius.circular(roles.panelRadius);
-              final focusFill =
-                  focused && roles.focusTreatment == LineupFocusTreatment.fill;
-              final focusRing =
-                  focused && roles.focusTreatment == LineupFocusTreatment.ring;
-              final surface = selected
-                  ? roles.elevatedSurface
-                  : roles.primarySurface;
-              return LineupFocusFrame(
-                focused: focusFill,
-                child: Container(
-                  constraints: BoxConstraints(minHeight: 152),
-                  padding: EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: focusFill
-                        ? roles.focusedSurface
-                        : hovered
-                        ? Color.alphaBlend(
-                            roles.primaryText.withValues(alpha: 0.04),
-                            surface,
+            builder: (context, state) => ListenableBuilder(
+              listenable: focus.playback[mode]!,
+              builder: (context, _) {
+                final roles = LineupTheme.of(context);
+                final selected = state.states.contains(WidgetState.selected);
+                final focused = LineupFocusScope.visible(
+                  context,
+                  // Toggleable's focused state follows Flutter's platform
+                  // highlight mode, which can remain touch for native TV keys.
+                  roles.androidTv
+                      ? focus.playback[mode]!.hasFocus
+                      : state.states.contains(WidgetState.focused),
+                );
+                final hovered = state.states.contains(WidgetState.hovered);
+                final radius = BorderRadius.circular(roles.panelRadius);
+                final focusFill =
+                    focused &&
+                    roles.focusTreatment == LineupFocusTreatment.fill;
+                final focusRing =
+                    focused &&
+                    roles.focusTreatment == LineupFocusTreatment.ring;
+                final surface = selected
+                    ? roles.elevatedSurface
+                    : roles.primarySurface;
+                return LineupFocusFrame(
+                  focused: focusFill,
+                  child: Container(
+                    constraints: BoxConstraints(minHeight: 152),
+                    padding: EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: focusFill
+                          ? roles.focusedSurface
+                          : hovered
+                          ? Color.alphaBlend(
+                              roles.primaryText.withValues(alpha: 0.04),
+                              surface,
+                            )
+                          : surface,
+                      borderRadius: radius,
+                      border: Border.all(
+                        color: selected
+                            ? roles.progressFill
+                            : roles.defaultBorder,
+                      ),
+                    ),
+                    foregroundDecoration: focusRing
+                        ? BoxDecoration(
+                            borderRadius: radius,
+                            border: Border.all(
+                              color: roles.focusBorder,
+                              width: roles.focusBorderWidth,
+                            ),
                           )
-                        : surface,
-                    borderRadius: radius,
-                    border: Border.all(
-                      color: selected
-                          ? roles.progressFill
-                          : roles.defaultBorder,
+                        : null,
+                    child: LineupFocusInk(
+                      focused: focusFill,
+                      child: Builder(
+                        builder: (context) {
+                          final ink = LineupTheme.of(context);
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: TextStyle(
+                                  color: ink.primaryText,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.4,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                description,
+                                style: TextStyle(
+                                  color: ink.secondaryText,
+                                  fontSize: 18,
+                                  height: 1.4,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
                   ),
-                  foregroundDecoration: focusRing
-                      ? BoxDecoration(
-                          borderRadius: radius,
-                          border: Border.all(
-                            color: roles.focusBorder,
-                            width: roles.focusBorderWidth,
-                          ),
-                        )
-                      : null,
-                  child: LineupFocusInk(
-                    focused: focusFill,
-                    child: Builder(
-                      builder: (context) {
-                        final ink = LineupTheme.of(context);
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: TextStyle(
-                                color: ink.primaryText,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                                height: 1.4,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              description,
-                              style: TextStyle(
-                                color: ink.secondaryText,
-                                fontSize: 18,
-                                height: 1.4,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
