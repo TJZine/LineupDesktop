@@ -1755,7 +1755,9 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
     child: Focus(
       key: const Key('profile-pin-keyboard-owner'),
       focusNode: _keyboardFocus,
-      autofocus: true,
+      // TV traversal starts on the real digit control; this ancestor still
+      // owns number and Back routing without competing for autofocus.
+      autofocus: defaultTargetPlatform != TargetPlatform.android,
       onKeyEvent: _key,
       child: SizedBox(
         key: const Key('profile-pin-sheet'),
