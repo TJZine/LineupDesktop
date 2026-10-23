@@ -443,6 +443,59 @@ void main() {
     );
   });
 
+  testWidgets('Android transfers remote focus from welcome to PIN actions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = LineupController(
+      store: MemoryAppStore(),
+      credentials: MemoryCredentialStore(),
+      plex: _PinPollingPlex(
+        PlexPin(
+          id: 71,
+          code: 'REMOTE',
+          expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+        ),
+      ),
+    );
+    addTearDown(controller.dispose);
+    var browserCalls = 0;
+    await show(
+      tester,
+      controller,
+      browser: () async {
+        browserCalls++;
+        throw StateError('No browser on this synthetic TV.');
+      },
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(controller.stage, SetupStage.linking);
+    expect(find.text('REMOTE'), findsOneWidget);
+    final browser = find.widgetWithText(FilledButton, 'Open browser');
+    expect(tester.widget<FilledButton>(browser).focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(browserCalls, 1);
+    expect(find.textContaining('Couldn’t open your browser'), findsOneWidget);
+    expect(find.text('REMOTE'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    final focused = FocusManager.instance.primaryFocus!.context!;
+    expect(
+      find.ancestor(
+        of: find.byWidget(focused.widget),
+        matching: find.widgetWithText(OutlinedButton, 'Copy code'),
+      ),
+      findsOneWidget,
+    );
+    await controller.cancelLinking();
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   testWidgets('explicit browser failure retains complete code and QR', (
     tester,
   ) async {

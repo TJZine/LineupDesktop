@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -83,6 +84,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
   final _profileReturnFocus = FocusNode(debugLabel: 'Return to profiles');
   late bool _linkingStopped;
+  late bool _wasLinking;
   late bool _busy;
   int? _browserPinId;
   bool get _openingBrowser =>
@@ -96,6 +98,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   void initState() {
     super.initState();
     _linkingStopped = _isLinkingStopped(widget.controller);
+    _wasLinking = widget.controller.stage == SetupStage.linking;
     _busy = widget.controller.busy;
     widget.controller.addListener(_controllerChanged);
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -111,6 +114,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
     _linkingStopped = _isLinkingStopped(widget.controller);
+    _wasLinking = widget.controller.stage == SetupStage.linking;
     _busy = widget.controller.busy;
     widget.controller.addListener(_controllerChanged);
   }
@@ -121,6 +125,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final nextBusy = controller.busy;
     final nextLinkingStopped = _isLinkingStopped(controller);
     final retryNeedsFocus = !_linkingStopped && nextLinkingStopped;
+    final linkNeedsFocus =
+        defaultTargetPlatform == TargetPlatform.android &&
+        !_wasLinking &&
+        controller.stage == SetupStage.linking &&
+        controller.pinUsable;
     final cancelNeedsFocus =
         !_busy &&
         nextBusy &&
@@ -129,16 +138,21 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         controller.profileSelectionCanCancel;
     setState(() {
       _linkingStopped = nextLinkingStopped;
+      _wasLinking = controller.stage == SetupStage.linking;
       _busy = nextBusy;
       if (controller.stage != SetupStage.profiles) _pinUser = null;
     });
-    final target = retryNeedsFocus
+    final target = retryNeedsFocus || linkNeedsFocus
         ? _linkActionFocus
         : cancelNeedsFocus
         ? _profileCancelFocus
         : null;
     if (target != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (linkNeedsFocus &&
+            (controller.stage != SetupStage.linking || !controller.pinUsable)) {
+          return;
+        }
         if (mounted && target.canRequestFocus) target.requestFocus();
       });
     }
@@ -546,6 +560,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           );
     final action = usable
         ? FilledButton.icon(
+            focusNode: defaultTargetPlatform == TargetPlatform.android
+                ? _linkActionFocus
+                : null,
             onPressed: _openingBrowser ? null : _openBrowser,
             icon: const Icon(Icons.open_in_browser),
             label: const Text('Open browser'),

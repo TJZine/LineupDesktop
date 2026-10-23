@@ -81,7 +81,9 @@ class _LineupShellState extends State<LineupShell> {
     super.initState();
     _lastStage = widget.controller.stage;
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
-    _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
+    }
     _guide = GuideController(
       lineup: widget.controller,
       clock: widget.guideClock,
@@ -152,7 +154,9 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
-    _appMenuChannel.setMethodCallHandler(null);
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      _appMenuChannel.setMethodCallHandler(null);
+    }
     widget.controller.removeListener(_changed);
     _player.removeListener(_playerChanged);
     _player.dispose();
@@ -786,7 +790,9 @@ class _LineupShellState extends State<LineupShell> {
               onLogout: _logout,
               onRequestLogout: _requestLogout,
               accountOrigin: _onboardingFromAccount,
-              onOpenSettings: defaultTargetPlatform == TargetPlatform.macOS
+              onOpenSettings:
+                  (defaultTargetPlatform == TargetPlatform.macOS ||
+                      defaultTargetPlatform == TargetPlatform.android)
                   ? _showOnboardingSupport
                   : null,
               onOpenMenu: onboardingMenuAvailable ? _openAppMenu : null,
@@ -1435,7 +1441,8 @@ class _SettingsViewState extends State<SettingsView> {
                   onChanged: onChanged,
                 ),
               ),
-              if (defaultTargetPlatform != TargetPlatform.macOS)
+              if (defaultTargetPlatform != TargetPlatform.macOS &&
+                  defaultTargetPlatform != TargetPlatform.android)
                 ..._settingControl<bool>(
                   _SettingKey.matchDisplayHdr,
                   (current, item) => current.copyWith(matchDisplayHdr: item),
@@ -1586,7 +1593,8 @@ class _SettingsViewState extends State<SettingsView> {
                   child: const Text('Open Diagnostics'),
                 ),
               ),
-              if (defaultTargetPlatform == TargetPlatform.macOS)
+              if (defaultTargetPlatform == TargetPlatform.macOS ||
+                  defaultTargetPlatform == TargetPlatform.android)
                 _SettingsRow(
                   label: const Text('Licenses'),
                   helper: const Text(

@@ -485,15 +485,21 @@ class KeychainCredentialStore implements CredentialStore {
   const KeychainCredentialStore([this.storage = const FlutterSecureStorage()]);
 
   final FlutterSecureStorage storage;
+  // Keep Keystore failures visible rather than silently deleting credentials.
+  static const _androidOptions = AndroidOptions(resetOnError: false);
   static const _macosOptions = MacOsOptions(usesDataProtectionKeychain: false);
 
   @override
-  Future<String?> readAccountToken() =>
-      storage.read(key: 'plex.account-token', mOptions: _macosOptions);
+  Future<String?> readAccountToken() => storage.read(
+    key: 'plex.account-token',
+    aOptions: _androidOptions,
+    mOptions: _macosOptions,
+  );
 
   @override
   Future<String?> readProfileToken(String profileId) => storage.read(
     key: 'plex.profile-token.$profileId',
+    aOptions: _androidOptions,
     mOptions: _macosOptions,
   );
 
@@ -501,6 +507,7 @@ class KeychainCredentialStore implements CredentialStore {
   Future<void> writeAccountToken(String token) => storage.write(
     key: 'plex.account-token',
     value: token,
+    aOptions: _androidOptions,
     mOptions: _macosOptions,
   );
 
@@ -509,9 +516,11 @@ class KeychainCredentialStore implements CredentialStore {
       storage.write(
         key: 'plex.profile-token.$profileId',
         value: token,
+        aOptions: _androidOptions,
         mOptions: _macosOptions,
       );
 
   @override
-  Future<void> clear() => storage.deleteAll(mOptions: _macosOptions);
+  Future<void> clear() =>
+      storage.deleteAll(aOptions: _androidOptions, mOptions: _macosOptions);
 }
