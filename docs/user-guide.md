@@ -413,13 +413,22 @@ navigation, so the D-pad can reach the next control.
 
 | Remote button | Action |
 | --- | --- |
+| Select | With video focused, show the OSD and focus Subtitles or the last-used action; otherwise activate the focused control |
+| Left / Right | Move through focused Player actions; seek only with DVR enabled and video focused |
+| Up / Down | From the OSD action row, open Mini Guide / Now Playing; in Now Playing, move between Close and the actions |
 | Channel Up / Channel Down | Player: previous/next channel; Mini Guide: move seven channels; Guide: move a visible page, like Page Up / Page Down |
 | Guide | Open the full Guide from Player; in Guide, follow its Close Guide action |
-| Info / Menu | Player: expand Now Playing, or collapse it to the OSD when already open; other screens use their focused control's context action when available |
+| Info / Menu | Player: expand Now Playing, or collapse it to the OSD when already open; Menu in Guide opens the Lineup menu; other screens use their focused control's context action when available |
 | Play/Pause, Rewind, Fast Forward | Existing Player transport actions when DVR playback controls are enabled |
 | Number buttons | Enter a channel number in Player, then Select to confirm |
 
 Guide and Info depend on the remote; Fire TV remotes may not provide them.
+Up from the Guide's first channel row enters the nearest toolbar control; Down
+returns to the selected grid cell. Player action keys reset the OSD timeout;
+auto-hide returns focus to video. Closing a track drawer or sleep picker returns
+to its invoking action. If playback fails, use the focused Retry action when
+available, or Browse channels.
+
 Use the Player's OSD controls for tracks and sleep. Plex linking uses the code
 and QR shown on the TV; open plex.tv/link on another device when the TV has no
 browser. The Studio manual editor and air check remain reachable but are not
