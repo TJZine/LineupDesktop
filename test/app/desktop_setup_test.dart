@@ -9,6 +9,7 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
@@ -24,6 +25,179 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets(
+      'limit dropdown trigger and menu use legible focus ink: $platform',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        final controller = _SetupController();
+        final tv = platform == TargetPlatform.android;
+        final focusStrategy = FocusManager.instance.highlightStrategy;
+        if (tv) {
+          FocusManager.instance.highlightStrategy =
+              FocusHighlightStrategy.alwaysTouch;
+        }
+        try {
+          await tester.runAsync(loadPinnedTestFonts);
+          await _pump(tester, controller, androidTv: tv);
+          await _advanceToConfigure(tester);
+          await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+          await tester.pumpAndSettle();
+          final dropdown = find.byKey(const ValueKey('rules-maximum'));
+          await tester.ensureVisible(dropdown);
+          await tester.pumpAndSettle();
+          final element = tester.element(dropdown);
+          final roles = LineupTheme.of(element);
+          Finder label() =>
+              find.descendant(of: dropdown, matching: find.text('200'));
+          Color? ink(Finder text) {
+            final widget = tester.widget<Text>(text);
+            return DefaultTextStyle.of(tester.element(text)).style
+                .merge(widget.style)
+                .color;
+          }
+
+          expect(ink(label()), roles.primaryText);
+          final closedElement = tester.element(label());
+          final node = tester
+              .widget<InkWell>(
+                find.descendant(of: dropdown, matching: find.byType(InkWell)),
+              )
+              .focusNode!;
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+          node.requestFocus();
+          await tester.pumpAndSettle();
+          expect(node.hasPrimaryFocus, isTrue);
+          expect(ink(label()), tv ? roles.onFocus : roles.primaryText);
+          final icon = find.descendant(
+            of: dropdown,
+            matching: find.byIcon(Icons.arrow_drop_down),
+          );
+          expect(
+            tester.widget<Icon>(icon).color ??
+                IconTheme.of(tester.element(icon)).color,
+            tv ? roles.focusSecondaryText : Colors.white70,
+          );
+          expect(tester.element(label()), same(closedElement));
+          expect(tester.element(dropdown), same(element));
+          if (!tv) {
+            final box = find.ancestor(
+              of: dropdown,
+              matching: find.byType(LineupDropdownBox),
+            );
+            expect(tester.getSize(box).width, 110);
+          }
+          await tester.sendKeyEvent(
+            tv ? LogicalKeyboardKey.select : LogicalKeyboardKey.enter,
+          );
+          await tester.pumpAndSettle();
+          final unfocusedMenuLabel = find.text('50').last;
+          expect(
+            LineupTheme.of(tester.element(unfocusedMenuLabel)).primaryText,
+            roles.primaryText,
+            reason: 'Field focus ink must not be captured by the popup',
+          );
+          for (final value in [50, 100, 200, 300, 500, 750, 1000]) {
+            final text = find.text('$value').last;
+            expect(ink(text), LineupTheme.of(tester.element(text)).primaryText);
+          }
+          if (tv) {
+            final last = tester.element(find.text('1000').last);
+            for (var n = 0; n < 4; n++) {
+              await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+              await tester.pumpAndSettle();
+            }
+            expect(ink(find.text('1000').last), roles.onFocus);
+            expect(ink(find.text('200').last), roles.primaryText);
+            expect(tester.element(find.text('1000').last), same(last));
+            await tester.sendKeyEvent(LogicalKeyboardKey.select);
+            await tester.pumpAndSettle();
+            expect(tester.widget<DropdownButton<int>>(dropdown).value, 1000);
+          }
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+          tester.view.reset();
+          FocusManager.instance.highlightStrategy = focusStrategy;
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
+  for (final textScale in [1.0, 1.3]) {
+    testWidgets(
+      'TV limit dropdown accounts for all trigger and menu chrome: text=$textScale',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        final controller = _SetupController();
+        try {
+          await tester.runAsync(loadPinnedTestFonts);
+          await _pump(tester, controller, androidTv: true);
+          await _advanceToConfigure(tester);
+          await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+          await tester.pumpAndSettle();
+          void fits(Finder text) {
+            final element = tester.element(text);
+            final widget = tester.widget<Text>(text);
+            final painter = TextPainter(
+              text: TextSpan(
+                text: widget.data,
+                style: DefaultTextStyle.of(element).style.merge(widget.style),
+              ),
+              textScaler: MediaQuery.textScalerOf(element),
+              textDirection: Directionality.of(element),
+            )..layout();
+            final paragraph = tester.renderObject<RenderParagraph>(text);
+            expect(
+              paragraph.size.width + .01,
+              greaterThanOrEqualTo(painter.width),
+              reason: 'Complete ${widget.data} must fit',
+            );
+            expect(
+              paragraph.size.height,
+              lessThanOrEqualTo(painter.height + .01),
+              reason: '${widget.data} must stay single line',
+            );
+            painter.dispose();
+          }
+
+          for (final (name, choices) in [
+            ('rules-maximum', [50, 100, 200, 300, 500, 750, 1000]),
+            ('rules-minimum', [1, 5, 10, 20, 50]),
+          ]) {
+            final dropdown = find.byKey(ValueKey(name));
+            await tester.ensureVisible(dropdown);
+            await tester.pumpAndSettle();
+            for (final value in choices) {
+              await tester.tap(dropdown);
+              await tester.pumpAndSettle();
+              for (final option in choices) {
+                fits(find.text('$option').last);
+              }
+              await tester.tap(find.text('$value').last);
+              await tester.pumpAndSettle();
+              fits(
+                find.descendant(of: dropdown, matching: find.text('$value')),
+              );
+            }
+          }
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+          tester.view.reset();
+          tester.platformDispatcher.clearTextScaleFactorTestValue();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
   testWidgets(
     'TV playback cards leave the radio group vertically using remote keys',
     (tester) async {
