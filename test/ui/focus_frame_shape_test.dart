@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
-import 'package:lineup_desktop/ui/focus_ink.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 void main() {
