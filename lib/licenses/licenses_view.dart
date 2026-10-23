@@ -37,7 +37,12 @@ class _ReadingPage {
   final LicenseItem? item;
   final scroll = ScrollController();
   final back = FocusNode(debugLabel: 'Licenses back');
+  final copy = FocusNode(debugLabel: 'Copy license document');
   final content = FocusNode(debugLabel: 'License document');
+  final selection = FocusNode(
+    debugLabel: 'License text selection',
+    skipTraversal: defaultTargetPlatform == TargetPlatform.android,
+  );
   final rows = <String, FocusNode>{};
   Future<({String? text, bool failed})>? text;
   String? returnId;
@@ -45,7 +50,9 @@ class _ReadingPage {
   void dispose() {
     scroll.dispose();
     back.dispose();
+    copy.dispose();
     content.dispose();
+    selection.dispose();
     for (final node in rows.values) {
       node.dispose();
     }
@@ -148,71 +155,80 @@ class LicensesViewState extends State<LicensesView> {
                       children: [
                         // The header scrolls with the document in very short or scaled windows.
                         Expanded(
-                          child: Scrollbar(
-                            controller: page.scroll,
-                            thumbVisibility: true,
-                            child: Focus(
-                              focusNode: page.content,
-                              canRequestFocus:
-                                  defaultTargetPlatform !=
-                                      TargetPlatform.android ||
-                                  item?.read != null,
-                              onKeyEvent: (_, event) => _scrollKey(page, event),
-                              child: SelectionArea(
-                                child: CustomScrollView(
-                                  key: PageStorageKey(
-                                    'licenses-${item?.id ?? 'index'}',
-                                  ),
-                                  controller: page.scroll,
-                                  slivers: [
-                                    SliverToBoxAdapter(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          LineupInlineLink(
-                                            focusNode: page.back,
-                                            onPressed: back,
-                                            child: Text('‹ Back to $parent'),
-                                          ),
-                                          Semantics(
-                                            header: true,
-                                            child: Text(
-                                              item?.title ?? 'Licenses',
-                                              style: LineupTypography.pageTitle
-                                                  .copyWith(
-                                                    color: roles.primaryText,
-                                                  ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            item == null
-                                                ? 'Third-party software used by this build.'
-                                                : item.subtitle.isNotEmpty
-                                                ? item.subtitle
-                                                : 'License and notice documents bundled with this build.',
-                                            style: TextStyle(
-                                              color: roles.secondaryText,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 24),
-                                        ],
-                                      ),
+                          child: _readingSurface(page, (context) {
+                            final roles = LineupTheme.of(context);
+                            return Scrollbar(
+                              controller: page.scroll,
+                              thumbVisibility: true,
+                              child: Focus(
+                                focusNode: page.content,
+                                skipTraversal:
+                                    defaultTargetPlatform ==
+                                    TargetPlatform.android,
+                                canRequestFocus:
+                                    defaultTargetPlatform !=
+                                        TargetPlatform.android ||
+                                    item?.read != null,
+                                onKeyEvent: (_, event) =>
+                                    _scrollKey(page, event),
+                                child: SelectionArea(
+                                  focusNode: page.selection,
+                                  child: CustomScrollView(
+                                    key: PageStorageKey(
+                                      'licenses-${item?.id ?? 'index'}',
                                     ),
-                                    if (item == null)
-                                      ..._index()
-                                    else if (item.children != null)
-                                      _rows(item.children!)
-                                    else
+                                    controller: page.scroll,
+                                    slivers: [
                                       SliverToBoxAdapter(
-                                        child: _document(page),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            LineupInlineLink(
+                                              focusNode: page.back,
+                                              onPressed: back,
+                                              child: Text('‹ Back to $parent'),
+                                            ),
+                                            Semantics(
+                                              header: true,
+                                              child: Text(
+                                                item?.title ?? 'Licenses',
+                                                style: LineupTypography
+                                                    .pageTitle
+                                                    .copyWith(
+                                                      color: roles.primaryText,
+                                                    ),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              item == null
+                                                  ? 'Third-party software used by this build.'
+                                                  : item.subtitle.isNotEmpty
+                                                  ? item.subtitle
+                                                  : 'License and notice documents bundled with this build.',
+                                              style: TextStyle(
+                                                color: roles.secondaryText,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 24),
+                                          ],
+                                        ),
                                       ),
-                                  ],
+                                      if (item == null)
+                                        ..._index()
+                                      else if (item.children != null)
+                                        _rows(item.children!)
+                                      else
+                                        SliverToBoxAdapter(
+                                          child: _document(page),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
+                            );
+                          }),
                         ),
                       ],
                     ),
@@ -226,26 +242,83 @@ class LicensesViewState extends State<LicensesView> {
     );
   }
 
+  Widget _readingSurface(_ReadingPage page, WidgetBuilder builder) =>
+      AnimatedBuilder(
+        animation: page.content,
+        builder: (context, _) {
+          final tvDocument =
+              defaultTargetPlatform == TargetPlatform.android &&
+              page.item?.read != null;
+          final focused = LineupFocusScope.visible(
+            context,
+            tvDocument && page.content.hasPrimaryFocus,
+          );
+          final roles = LineupTheme.of(context);
+          return Semantics(
+            container: tvDocument,
+            label: tvDocument ? 'License document' : null,
+            focusable: tvDocument,
+            focused: tvDocument ? page.content.hasPrimaryFocus : null,
+            child: LineupFocusFrame(
+              focused: focused,
+              child: ColoredBox(
+                key: const Key('licenses-reading-surface'),
+                color: focused ? roles.focusedSurface : roles.deepBackground,
+                child: LineupFocusInk(
+                  focused: focused,
+                  child: Builder(builder: builder),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+
   KeyEventResult _scrollKey(_ReadingPage page, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
     if (!page.scroll.hasClients) return KeyEventResult.ignored;
     final key = event.logicalKey;
-    // TV arrows traverse index/group controls. Only a document owns scrolling;
-    // desktop retains its existing reader shortcuts on every page.
-    if (defaultTargetPlatform == TargetPlatform.android &&
-        (page.item == null || page.item!.children != null) &&
-        (key == LogicalKeyboardKey.arrowDown ||
-            key == LogicalKeyboardKey.arrowUp)) {
-      FocusManager.instance.primaryFocus?.focusInDirection(
-        key == LogicalKeyboardKey.arrowDown
-            ? TraversalDirection.down
-            : TraversalDirection.up,
-      );
-      return KeyEventResult.handled;
+    if (HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isShiftPressed) {
+      return KeyEventResult.ignored;
     }
     final position = page.scroll.position;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      // Back and Copy are actions; only the explicit reading owner consumes
+      // document arrows. Loading/failure pages retain ordinary Retry traversal.
+      final readable = page.item?.read != null && page.copy.context != null;
+      if (readable) {
+        if (key == LogicalKeyboardKey.arrowDown && page.back.hasFocus) {
+          return _focusAction(page.copy, towardsEnd: true);
+        }
+        if (key == LogicalKeyboardKey.arrowDown && page.copy.hasFocus) {
+          page.content.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowUp && page.copy.hasFocus) {
+          return _focusAction(page.back);
+        }
+        if (page.content.hasPrimaryFocus &&
+            (key == LogicalKeyboardKey.arrowLeft ||
+                (key == LogicalKeyboardKey.arrowUp &&
+                    position.pixels <= position.minScrollExtent))) {
+          return _focusAction(page.copy);
+        }
+      }
+      if (!page.content.hasPrimaryFocus &&
+          (key == LogicalKeyboardKey.arrowDown ||
+              key == LogicalKeyboardKey.arrowUp)) {
+        FocusManager.instance.primaryFocus?.focusInDirection(
+          key == LogicalKeyboardKey.arrowDown
+              ? TraversalDirection.down
+              : TraversalDirection.up,
+        );
+        return KeyEventResult.handled;
+      }
+    }
     final amount = switch (key) {
       LogicalKeyboardKey.arrowDown => 48.0,
       LogicalKeyboardKey.arrowUp => -48.0,
@@ -260,13 +333,26 @@ class LicensesViewState extends State<LicensesView> {
         : amount == null
         ? null
         : position.pixels + amount;
-    if (target == null ||
-        HardwareKeyboard.instance.isControlPressed ||
-        HardwareKeyboard.instance.isMetaPressed ||
-        HardwareKeyboard.instance.isShiftPressed) {
+    if (target == null) {
       return KeyEventResult.ignored;
     }
     page.scroll.jumpTo(target.clamp(0.0, position.maxScrollExtent));
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _focusAction(FocusNode node, {bool towardsEnd = false}) {
+    node.requestFocus();
+    final context = node.context;
+    if (context != null) {
+      unawaited(
+        Scrollable.ensureVisible(
+          context,
+          alignmentPolicy: towardsEnd
+              ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+              : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        ),
+      );
+    }
     return KeyEventResult.handled;
   }
 
@@ -373,6 +459,14 @@ class LicensesViewState extends State<LicensesView> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
+                  focusNode: page.copy,
+                  style: defaultTargetPlatform == TargetPlatform.android
+                      ? LineupTheme.buttonStyle(
+                          LineupTheme.of(context),
+                          LineupButtonTier.text,
+                          focusVisible: LineupFocusScope.visible(context),
+                        )
+                      : null,
                   onPressed: () => _copy(page, snapshot.requireData.text!),
                   child: const Text('Copy document'),
                 ),
@@ -385,8 +479,10 @@ class LicensesViewState extends State<LicensesView> {
                   child: Text(
                     paragraph,
                     softWrap: true,
-                    style: Theme.of(context).textTheme.bodyLarge
-                        ?.copyWith(height: 1.5),
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      height: 1.5,
+                      color: LineupTheme.of(context).primaryText,
+                    ),
                   ),
                 ),
             ],
