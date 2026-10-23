@@ -328,6 +328,8 @@ class _GuideViewState extends State<GuideView>
   final _removeLibraryFilterFocus = FocusNode(
     debugLabel: 'Guide remove library filter',
   );
+  final _focusedProgramKey = GlobalKey(debugLabel: 'Guide focused program');
+  final _focusedTimelineKey = GlobalKey(debugLabel: 'Guide focused timeline');
   final _searchController = TextEditingController();
   late String _observedSearchQuery;
   late int _searchContentGeneration;
@@ -589,7 +591,9 @@ class _GuideViewState extends State<GuideView>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final key = androidTvKeyAlias(event.logicalKey) ?? event.logicalKey;
+    final rawKey = event.logicalKey;
+    final key = androidTvKeyAlias(rawKey) ?? rawKey;
+    final roles = LineupTheme.of(context);
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
         keyboard.isControlPressed ||
@@ -606,8 +610,13 @@ class _GuideViewState extends State<GuideView>
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.keyI &&
+    final isAndroidTvMenu =
+        roles.androidTv &&
         defaultTargetPlatform == TargetPlatform.android &&
+        (rawKey == LogicalKeyboardKey.contextMenu ||
+            rawKey == LogicalKeyboardKey.info);
+    if (key == LogicalKeyboardKey.keyI &&
+        isAndroidTvMenu &&
         widget.onOpenMenu != null) {
       final invokerContext = _menuFocus.context ?? context;
       widget.onOpenMenu!(invokerContext, _menuFocus);
@@ -647,7 +656,8 @@ class _GuideViewState extends State<GuideView>
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
     if (key == LogicalKeyboardKey.arrowUp) {
-      if (widget.controller.focusedChannelIndex == 0) {
+      if (LineupTheme.of(context).androidTv &&
+          widget.controller.focusedChannelIndex == 0) {
         _focusNearestToolbarControl();
       } else {
         widget.controller.moveVertical(-1);
@@ -700,36 +710,23 @@ class _GuideViewState extends State<GuideView>
   ];
 
   void _focusNearestToolbarControl() {
-    final size = MediaQuery.sizeOf(context);
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final policy = GuideLayoutPolicy.forSize(
-      size,
-      hasPicture: false,
-      textScale: textScale,
-    );
-    final timelineWidth = math.max(
-      0.0,
-      size.width -
-          _guideEdgeContentInset * 2 -
-          policy.channelRailWidth -
-          _guideTimelineGutter,
-    );
-    final windowDuration = widget.controller.windowEnd
-        .difference(widget.controller.windowStart)
-        .inMicroseconds;
-    final fraction = windowDuration <= 0
-        ? 0.5
-        : ((widget.controller.focusTime
-                          .difference(widget.controller.windowStart)
-                          .inMicroseconds /
-                      windowDuration)
-                  .clamp(0.0, 1.0))
-              .toDouble();
-    final targetX =
-        _guideEdgeContentInset +
-        policy.channelRailWidth +
-        _guideTimelineGutter +
-        timelineWidth * fraction;
+    final focusedProgram = _focusedProgramKey.currentContext
+        ?.findRenderObject();
+    final focusedTimeline = _focusedTimelineKey.currentContext
+        ?.findRenderObject();
+    final programRect = focusedProgram is RenderBox && focusedProgram.hasSize
+        ? focusedProgram.localToGlobal(Offset.zero) & focusedProgram.size
+        : null;
+    final timelineRect = focusedTimeline is RenderBox && focusedTimeline.hasSize
+        ? focusedTimeline.localToGlobal(Offset.zero) & focusedTimeline.size
+        : null;
+    final visibleProgramRect = programRect != null && timelineRect != null
+        ? programRect.intersect(timelineRect)
+        : null;
+    final targetX = visibleProgramRect != null && !visibleProgramRect.isEmpty
+        ? visibleProgramRect.center.dx
+        : programRect?.center.dx ??
+              (timelineRect?.left ?? 0) + (timelineRect?.width ?? 0) / 2;
     final nodes = _toolbarFocusOrder();
     FocusNode? nearest;
     var nearestDistance = double.infinity;
@@ -750,6 +747,9 @@ class _GuideViewState extends State<GuideView>
   }
 
   KeyEventResult _toolbarKey(FocusNode node, KeyEvent event) {
+    if (!LineupTheme.of(context).androidTv) {
+      return KeyEventResult.ignored;
+    }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
@@ -932,6 +932,16 @@ class _GuideViewState extends State<GuideView>
                                   now: now,
                                   activityPulse: _activityPulse,
                                   onGridKey: _gridKey,
+                                  focusedProgramKey:
+                                      channels[index].id ==
+                                          widget.controller.focusedChannelId
+                                      ? _focusedProgramKey
+                                      : null,
+                                  focusedTimelineKey:
+                                      channels[index].id ==
+                                          widget.controller.focusedChannelId
+                                      ? _focusedTimelineKey
+                                      : null,
                                 ),
                               ),
                       ),
@@ -2006,6 +2016,8 @@ class _GuideRow extends StatelessWidget {
     required this.now,
     required this.activityPulse,
     required this.onGridKey,
+    this.focusedProgramKey,
+    this.focusedTimelineKey,
   });
   final Channel channel;
   final GuideController controller;
@@ -2017,6 +2029,8 @@ class _GuideRow extends StatelessWidget {
   final DateTime now;
   final Animation<double> activityPulse;
   final FocusOnKeyEventCallback onGridKey;
+  final GlobalKey? focusedProgramKey;
+  final GlobalKey? focusedTimelineKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2224,6 +2238,8 @@ class _GuideRow extends StatelessWidget {
                     now: now,
                     activityPulse: activityPulse,
                     onGridKey: onGridKey,
+                    focusedProgramKey: focusedProgramKey,
+                    focusedTimelineKey: focusedTimelineKey,
                   ),
           ),
         ],
@@ -2241,6 +2257,8 @@ class _Programs extends StatelessWidget {
     required this.now,
     required this.activityPulse,
     required this.onGridKey,
+    this.focusedProgramKey,
+    this.focusedTimelineKey,
   });
   final Channel channel;
   final GuideRowData data;
@@ -2249,6 +2267,8 @@ class _Programs extends StatelessWidget {
   final DateTime now;
   final Animation<double> activityPulse;
   final FocusOnKeyEventCallback onGridKey;
+  final GlobalKey? focusedProgramKey;
+  final GlobalKey? focusedTimelineKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2289,7 +2309,8 @@ class _Programs extends StatelessWidget {
       onKeyEvent: onGridKey,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          return ClipRect(
+          final timeline = ClipRect(
+            key: focusedTimelineKey,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -2336,6 +2357,12 @@ class _Programs extends StatelessWidget {
               ],
             ),
           );
+          return focusedTimelineKey == null
+              ? timeline
+              : KeyedSubtree(
+                  key: const Key('guide-focused-timeline'),
+                  child: timeline,
+                );
         },
       ),
     );
@@ -2354,7 +2381,7 @@ class _Programs extends StatelessWidget {
       viewportWidth: viewportWidth,
     );
     final current = program.isCurrentAt(now);
-    return _ProgramCell(
+    final cell = _ProgramCell(
       key: ValueKey(program.id),
       program: program,
       focused: program.id == controller.focusedProgramId,
@@ -2382,6 +2409,16 @@ class _Programs extends StatelessWidget {
       },
       reduceMotion: controller.lineup.settings.reduceMotion,
     );
+    return program.id == controller.focusedProgramId &&
+            focusedProgramKey != null
+        ? KeyedSubtree(
+            key: focusedProgramKey,
+            child: KeyedSubtree(
+              key: const Key('guide-focused-program'),
+              child: cell,
+            ),
+          )
+        : cell;
   }
 }
 
