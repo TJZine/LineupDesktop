@@ -231,13 +231,14 @@ Future<void> _run(List<String> args) async {
       await player.play();
       await _wait(
         () =>
-            player.position >= const Duration(seconds: 59) ||
+            player.position >= const Duration(seconds: 64) ||
             player.status.state == PlayerState.error,
         seconds: 25,
       );
-      await Future<void>.delayed(const Duration(seconds: 3));
-      if (player.status.state != PlayerState.playing)
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (player.status.state != PlayerState.playing) {
         throw StateError('valid_indexed_initialization');
+      }
       _fact('indexed-valid', {'positionMs': player.position.inMilliseconds});
       await player.stop();
       phase = 'indexed-omitted-load';
@@ -245,8 +246,9 @@ Future<void> _run(List<String> args) async {
       await player.seek(const Duration(seconds: 45));
       await player.play();
       await _wait(() => player.status.state == PlayerState.error, seconds: 30);
-      if (player.status.failureCode != 'video_decode_error')
+      if (player.status.failureCode != 'video_decode_error') {
         throw StateError('indexed_omission_not_typed');
+      }
       _fact('PASS', {'case': mode, 'code': player.status.failureCode});
       return;
     }

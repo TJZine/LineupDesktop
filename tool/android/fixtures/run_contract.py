@@ -90,7 +90,7 @@ if args.case == 'seek-lifetime':
     import re
     passed = (passed and all(any(int(value) > 0 for value in re.findall(r'fragment_seek .*loadId=' + str(load_id) + r' position=(\d+)', later)) for load_id in (1, 2))
               and 'loadId=1 revision=2 accepted=true' in later and 'loadId=2 revision=2 accepted=false' in later
-              and any(int(value) >= 60_000_000 for value in re.findall(r'frame_timestamp .*loadId=1 ptsUs=(\d+)', later)))
+              and any(int(value) > 61_000_000 for value in re.findall(r'frame_timestamp .*loadId=1 ptsUs=(\d+)', later)))
 result = {'case': args.case, 'serial': args.serial, 'pid': process, 'pass': passed, 'facts': facts}
 (args.evidence / 'result.json').write_text(json.dumps(result, indent=2))
 with (args.evidence / 'screen.png').open('wb') as output:
