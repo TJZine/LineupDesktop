@@ -41,6 +41,179 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  for (final dvr in [false, true]) {
+    testWidgets('TV Player remote action and return model DVR=$dvr', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      final root = FocusNode();
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        dvrControlsEnabled: dvr,
+        overlayTimeout: const Duration(seconds: 3),
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            title: 'English',
+            selected: true,
+          ),
+          PlayerTrack(
+            id: 2,
+            type: PlayerTrackType.subtitle,
+            title: 'English',
+            selected: false,
+          ),
+        ],
+      );
+      Future<void> key(LogicalKeyboardKey key) async {
+        // Flutter has no inferred physical key for normalized Android Back.
+        await tester.sendKeyEvent(
+          key,
+          physicalKey: key == LogicalKeyboardKey.goBack
+              ? PhysicalKeyboardKey.escape
+              : null,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      void focused(String label) {
+        expect(FocusManager.instance.primaryFocus!.debugLabel, switch (label) {
+          'menu' => 'Player Lineup menu',
+          'sleep' => 'Player sleep timer',
+          _ => 'Player $label',
+        });
+      }
+
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: true,
+            ),
+            builder: LineupCanvas.builder,
+            home: PlayerView(
+              controller: fixture.player,
+              focusNode: root,
+              openGuide: () {},
+              openMenu: (_, _) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await key(LogicalKeyboardKey.select);
+        focused('subtitles');
+        final initialCommands = fixture.native.transportCommands;
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('audio');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.overlay, PlayerOverlay.audioTracks);
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        focused('audio');
+        await key(LogicalKeyboardKey.arrowLeft);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
+        await key(LogicalKeyboardKey.goBack);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowRight);
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('sleep');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.sleepPickerOpen, isTrue);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(fixture.player.sleepPickerOpen, isTrue);
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.sleepPickerOpen, isFalse);
+        focused('sleep');
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('menu');
+        await key(LogicalKeyboardKey.arrowLeft);
+        focused('sleep');
+        expect(fixture.native.transportCommands, initialCommands);
+        await key(LogicalKeyboardKey.arrowUp);
+        expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+        await key(LogicalKeyboardKey.goBack);
+        expect(root.hasPrimaryFocus, isTrue);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowUp);
+        focused('close');
+        await key(LogicalKeyboardKey.arrowDown);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('audio');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.overlay, PlayerOverlay.audioTracks);
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+        focused('audio');
+        await key(LogicalKeyboardKey.arrowUp);
+        focused('close');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        focused('audio');
+        await key(LogicalKeyboardKey.arrowDown);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('audio');
+        await key(LogicalKeyboardKey.mediaRewind);
+        await key(LogicalKeyboardKey.mediaFastForward);
+        expect(
+          fixture.player.overlay,
+          dvr ? PlayerOverlay.osd : PlayerOverlay.nowPlaying,
+        );
+        expect(
+          fixture.native.transportCommands,
+          initialCommands + (dvr ? 2 : 0),
+        );
+        if (dvr) {
+          await key(LogicalKeyboardKey.arrowDown);
+          focused('subtitles');
+          await key(LogicalKeyboardKey.arrowRight);
+          focused('audio');
+        }
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        focused('audio');
+        await tester.pump(const Duration(seconds: 2));
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('sleep');
+        await tester.pump(const Duration(seconds: 2));
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+        expect(fixture.player.overlay, PlayerOverlay.none);
+        expect(root.hasPrimaryFocus, isTrue);
+        await key(LogicalKeyboardKey.arrowLeft);
+        await key(LogicalKeyboardKey.arrowRight);
+        expect(
+          fixture.native.transportCommands,
+          initialCommands + (dvr ? 4 : 0),
+        );
+        if (dvr) await key(LogicalKeyboardKey.goBack);
+        await key(LogicalKeyboardKey.select);
+        focused('sleep');
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.overlay, PlayerOverlay.none);
+        expect(root.hasPrimaryFocus, isTrue);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+        root.dispose();
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
   for (final window in const [Size(960, 540), Size(1920, 1080)]) {
     for (final dvr in [false, true]) {
       testWidgets(
