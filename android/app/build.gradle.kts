@@ -54,6 +54,15 @@ android {
                 signingConfig = signingConfigs.getByName("lineup")
             }
         }
+        getByName("profile") {
+            // Flutter creates profile by copying debug before this script sets
+            // debug's signingConfig, so configure it explicitly for upgrades.
+            signingConfig = if (hasLineupKey && !useDebugKey) {
+                signingConfigs.getByName("lineup")
+            } else {
+                null
+            }
+        }
         release {
             // Never use the contributor/CI debug key for release.
             signingConfig = if (hasLineupKey && !useDebugKey) {
@@ -72,11 +81,15 @@ android {
                 it.name.contains("Release") &&
                 (it.name.startsWith("package") || it.name.startsWith("bundle"))
         }
+        val packagesProfile = allTasks.any {
+            it.project == project && it.name.startsWith("package") &&
+                it.name.contains("Profile")
+        }
         val packagesDebug = allTasks.any {
             it.project == project && it.name.startsWith("package") &&
                 it.name.contains("Debug")
         }
-        if ((packagesRelease && (!hasLineupKey || useDebugKey)) ||
+        if (((packagesRelease || packagesProfile) && (!hasLineupKey || useDebugKey)) ||
             (packagesDebug && !hasLineupKey && !useDebugKey)) {
             throw GradleException(
                 "Lineup signing key required. Build through tool/android/with-signing.sh. " +
