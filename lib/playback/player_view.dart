@@ -1091,6 +1091,11 @@ class _Osd extends StatelessWidget {
           overlayShape: SliderComponentShape.noOverlay,
         ),
         child: Slider(
+          label: roles.androidTv ? 'Playback progress' : null,
+          semanticFormatterCallback: roles.androidTv
+              ? (value) =>
+                    '${_duration(Duration(milliseconds: value.round()))} of ${_duration(timingDuration)}'
+              : null,
           value: sliderPosition,
           max: sliderMax,
           onChanged: sliderInteractive
@@ -1108,6 +1113,7 @@ class _Osd extends StatelessWidget {
       child: SizedBox(
         height: 40,
         child: Semantics(
+          hidden: roles.androidTv && dvrControlsEnabled,
           label: 'Playback progress',
           value:
               '${_duration(displayedPosition)} of ${_duration(timingDuration)}',
@@ -1269,7 +1275,9 @@ class _Osd extends StatelessWidget {
             key: const Key('player-safe-dvr-target'),
             left: safe.left,
             right: safe.right,
-            bottom: safe.bottom,
+            // Slider's invisible 48cu semantics target extends 4cu beyond
+            // this 40cu portal. Keep that target above the bottom safe edge.
+            bottom: safe.bottom + (kMinInteractiveDimension - 40) / 2,
             height: 40,
             child: slider,
           ),

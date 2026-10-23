@@ -117,7 +117,41 @@ void main() {
               ).bottom,
               closeTo(window.height, .001),
             );
-            if (dvr) inside(find.byKey(const Key('player-safe-dvr-target')));
+            if (dvr) {
+              final target = find.byKey(const Key('player-safe-dvr-target'));
+              inside(target);
+              final sliderNode = tester.semantics
+                  .simulatedAccessibilityTraversal()
+                  .where(
+                    (node) => node.getSemanticsData().flagsCollection.isSlider,
+                  )
+                  .single;
+              final range = sliderNode.getSemanticsData();
+              expect(range.label, 'Playback progress');
+              expect(range.value, '10:00 of 1:00:00');
+              expect(range.hasAction(SemanticsAction.increase), isTrue);
+              expect(range.hasAction(SemanticsAction.decrease), isTrue);
+              final box = tester.renderObject<RenderBox>(target);
+              final accessibleBounds = Rect.fromPoints(
+                box.localToGlobal(sliderNode.rect.topLeft),
+                box.localToGlobal(sliderNode.rect.bottomRight),
+              );
+              expect(accessibleBounds.top, greaterThanOrEqualTo(safe.top));
+              expect(
+                accessibleBounds.bottom,
+                lessThanOrEqualTo(safe.bottom + .001),
+              );
+              fixture.player.closeOverlay();
+              await tester.pump();
+              expect(
+                tester.semantics.simulatedAccessibilityTraversal().where(
+                  (node) => node.getSemanticsData().flagsCollection.isSlider,
+                ),
+                isEmpty,
+              );
+              fixture.player.showOsd();
+              await tester.pumpAndSettle();
+            }
             fixture.player.showSleepTimer();
             await tester.pumpAndSettle();
             inside(find.byKey(const Key('sleep-timer-picker')));
