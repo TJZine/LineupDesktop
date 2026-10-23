@@ -264,9 +264,14 @@ class LicensesViewState extends State<LicensesView> {
               child: ColoredBox(
                 key: const Key('licenses-reading-surface'),
                 color: focused ? roles.focusedSurface : roles.deepBackground,
-                child: LineupFocusInk(
-                  focused: focused,
-                  child: Builder(builder: builder),
+                child: Padding(
+                  padding: tvDocument && roles.largeFocusIndicators
+                      ? const EdgeInsets.all(LineupFocusFrame.contentClearance)
+                      : EdgeInsets.zero,
+                  child: LineupFocusInk(
+                    focused: focused,
+                    child: Builder(builder: builder),
+                  ),
                 ),
               ),
             ),

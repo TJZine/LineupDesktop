@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/licenses/licenses_repository.dart';
 import 'package:lineup_desktop/licenses/licenses_view.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/focus_ink.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
@@ -189,6 +190,22 @@ void main() {
         expect(paragraph.style!.color, const Color(0xFF090806));
         expect(actionInk('‹ Back to Component'), roles.onFocus);
         expect(actionInk('Copy document'), roles.onFocus);
+        final background = tester.renderObject<RenderBox>(
+          find.byKey(const Key('licenses-reading-surface')),
+        );
+        final inset = LineupFocusFrame.contentClearance;
+        expect(
+          tester.getRect(find.byType(CustomScrollView)),
+          Rect.fromPoints(
+            background.localToGlobal(Offset(inset, inset)),
+            background.localToGlobal(
+              Offset(
+                background.size.width - inset,
+                background.size.height - inset,
+              ),
+            ),
+          ),
+        );
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         expect(scroll.offset, 48);
