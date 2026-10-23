@@ -1451,31 +1451,39 @@ class _ProfileBadge extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: label,
-    child: ExcludeSemantics(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: LineupTheme.of(context).elevatedSurface,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: LineupTheme.of(context).subtleBorder),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: label == 'Current'
-                  ? LineupTheme.of(context).progressFill
-                  : LineupTheme.of(context).secondaryText,
-              fontSize: LineupTheme.of(context).metadataTextSize(),
-              fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final focusedTv =
+        roles.androidTv &&
+        LineupFocusScope.visible(context, Focus.of(context).hasFocus);
+    return Semantics(
+      label: label,
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: LineupTheme.of(context).elevatedSurface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: LineupTheme.of(context).subtleBorder),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: label == 'Current'
+                    ? focusedTv
+                          ? roles.primaryText
+                          : roles.progressFill
+                    : LineupTheme.of(context).secondaryText,
+                fontSize: LineupTheme.of(context).metadataTextSize(),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 PlexConnection? _measuredConnection(PlexServer server) {
