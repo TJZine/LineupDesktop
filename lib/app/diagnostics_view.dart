@@ -38,6 +38,7 @@ class DiagnosticsView extends StatefulWidget {
 class _DiagnosticsViewState extends State<DiagnosticsView> {
   final _scroll = ScrollController();
   final _technicalExpansion = ExpansibleController();
+  final _technicalStates = WidgetStatesController();
   List<DiagnosticEntry> _visibleEvents = const [];
   bool _copying = false;
   String? _copyFeedback;
@@ -69,6 +70,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
   @override
   void dispose() {
     widget.controller.diagnostics.removeListener(_eventsChanged);
+    _technicalStates.dispose();
     _technicalExpansion.dispose();
     _scroll.dispose();
     super.dispose();
@@ -372,22 +374,53 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             canRequestFocus: false,
             skipTraversal: true,
             onKeyEvent: _readTechnicalDetails,
-            child: ExpansionTile(
-              controller: _technicalExpansion,
-              key: const PageStorageKey('diagnostic-technical-details'),
-              tilePadding: EdgeInsets.only(left: 28),
-              minTileHeight: 48,
-              title: Text(
-                'Technical details',
-                style: TextStyle(
-                  color: roles.primaryText,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              childrenPadding: EdgeInsets.fromLTRB(28, 0, 28, 28),
-              expandedCrossAxisAlignment: CrossAxisAlignment.start,
-              children: [_technicalDetails(context, snapshot, telemetry)],
+            child: ListenableBuilder(
+              listenable: _technicalStates,
+              builder: (context, _) {
+                final fill =
+                    roles.androidTv &&
+                    roles.focusTreatment == LineupFocusTreatment.fill &&
+                    LineupFocusScope.visible(
+                      context,
+                      _technicalStates.value.contains(WidgetState.focused),
+                    );
+                final tileTheme = ListTileTheme.of(context);
+                return ListTileTheme(
+                  data: tileTheme.copyWith(
+                    tileColor: fill
+                        ? roles.focusedSurface
+                        : tileTheme.tileColor,
+                    shape:
+                        LineupFocusFrame.shape(context, focused: fill) ??
+                        tileTheme.shape,
+                  ),
+                  child: ExpansionTile(
+                    controller: _technicalExpansion,
+                    statesController: _technicalStates,
+                    key: const PageStorageKey('diagnostic-technical-details'),
+                    tilePadding: EdgeInsets.only(left: 28),
+                    minTileHeight: 48,
+                    iconColor: fill ? roles.onFocus : null,
+                    collapsedIconColor: fill ? roles.onFocus : null,
+                    title: LineupFocusInk(
+                      focused: fill,
+                      child: Builder(
+                        builder: (context) => Text(
+                          'Technical details',
+                          style: TextStyle(
+                            color: LineupTheme.of(context).primaryText,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    childrenPadding: EdgeInsets.fromLTRB(28, 0, 28, 28),
+                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                    children: [_technicalDetails(context, snapshot, telemetry)],
+                  ),
+                );
+              },
             ),
           ),
         ],
