@@ -1282,6 +1282,10 @@ class _ProfileCardState extends State<_ProfileCard> {
     final next = _focusNode.hasFocus;
     if (next == _focused || !mounted) return;
     setState(() => _focused = next);
+    if (LineupTheme.of(context).androidTv) {
+      _nameOverlay.hide();
+      return;
+    }
     final style = LineupTypography.body.copyWith(fontWeight: FontWeight.w600);
     final painter = TextPainter(
       text: TextSpan(text: widget.user.name, style: style),
@@ -1349,44 +1353,50 @@ class _ProfileCardState extends State<_ProfileCard> {
                           );
                           return OverlayPortal(
                             controller: _nameOverlay,
-                            overlayChildBuilder: (_) => Positioned(
-                              left: 0,
-                              top: 0,
-                              width:
-                                  (_nameAnchor.leaderSize?.width ?? 200) + 16,
-                              child: CompositedTransformFollower(
-                                link: _nameAnchor,
-                                showWhenUnlinked: false,
-                                offset: const Offset(-8, -4),
-                                child: IgnorePointer(
-                                  child: ExcludeSemantics(
-                                    child: DecoratedBox(
-                                      key: ValueKey(
-                                        'profile-name-full-${user.id}',
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: roles.elevatedSurface,
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: roles.subtleBorder,
-                                        ),
-                                      ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        child: Text(
-                                          user.name,
-                                          textAlign: TextAlign.center,
-                                          style: nameStyle,
+                            overlayChildBuilder: (_) =>
+                                LineupTheme.of(context).androidTv
+                                ? const SizedBox.shrink()
+                                : Positioned(
+                                    left: 0,
+                                    top: 0,
+                                    width:
+                                        (_nameAnchor.leaderSize?.width ?? 200) +
+                                        16,
+                                    child: CompositedTransformFollower(
+                                      link: _nameAnchor,
+                                      showWhenUnlinked: false,
+                                      offset: const Offset(-8, -4),
+                                      child: IgnorePointer(
+                                        child: ExcludeSemantics(
+                                          child: DecoratedBox(
+                                            key: ValueKey(
+                                              'profile-name-full-${user.id}',
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: roles.elevatedSurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: roles.subtleBorder,
+                                              ),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              child: Text(
+                                                user.name,
+                                                textAlign: TextAlign.center,
+                                                style: nameStyle,
+                                              ),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            ),
                             child: CompositedTransformTarget(
                               link: _nameAnchor,
                               child: Tooltip(
@@ -1458,7 +1468,7 @@ class _ProfileBadge extends StatelessWidget {
               color: label == 'Current'
                   ? LineupTheme.of(context).progressFill
                   : LineupTheme.of(context).secondaryText,
-              fontSize: 14,
+              fontSize: LineupTheme.of(context).metadataTextSize(),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1528,7 +1538,7 @@ class _ServerCard extends StatelessWidget {
                   'Current',
                   style: TextStyle(
                     color: LineupTheme.of(context).progressFill,
-                    fontSize: 14,
+                    fontSize: LineupTheme.of(context).metadataTextSize(),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1754,170 +1764,183 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: AndroidBackScope.claims(context),
-    onPopInvokedWithResult: (_, _) {
-      if (!AndroidBackScope.claims(context) && !_submitting) widget.onBack();
-    },
-    child: Focus(
-      key: const Key('profile-pin-keyboard-owner'),
-      focusNode: _keyboardFocus,
-      // TV traversal starts on the real digit control; this ancestor still
-      // owns number and Back routing without competing for autofocus.
-      autofocus: defaultTargetPlatform != TargetPlatform.android,
-      onKeyEvent: _key,
-      child: SizedBox(
-        key: const Key('profile-pin-sheet'),
-        width: double.infinity,
-        child: ConstrainedBox(
-          key: const Key('profile-pin-surface'),
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: LineupInlineLink(
-                    onPressed: _submitting ? null : widget.onBack,
-                    child: Text(
-                      widget.accountOrigin && widget.profileOriginIsReady
-                          ? '‹ Settings · Account'
-                          : '‹ Profiles',
+  Widget build(BuildContext context) {
+    final androidTv = LineupTheme.of(context).androidTv;
+    final enlarged = MediaQuery.textScalerOf(context).scale(18) > 18;
+    final gap = androidTv ? (enlarged ? 4.0 : 8.0) : 16.0;
+    return PopScope(
+      canPop: AndroidBackScope.claims(context),
+      onPopInvokedWithResult: (_, _) {
+        if (!AndroidBackScope.claims(context) && !_submitting) widget.onBack();
+      },
+      child: Focus(
+        key: const Key('profile-pin-keyboard-owner'),
+        focusNode: _keyboardFocus,
+        // TV traversal starts on the real digit control; this ancestor still
+        // owns number and Back routing without competing for autofocus.
+        autofocus: defaultTargetPlatform != TargetPlatform.android,
+        onKeyEvent: _key,
+        child: SizedBox(
+          key: const Key('profile-pin-sheet'),
+          width: androidTv ? 520 : double.infinity,
+          child: ConstrainedBox(
+            key: const Key('profile-pin-surface'),
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: LineupInlineLink(
+                      onPressed: _submitting ? null : widget.onBack,
+                      child: Text(
+                        widget.accountOrigin && widget.profileOriginIsReady
+                            ? '‹ Settings · Account'
+                            : '‹ Profiles',
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 28),
-                LineupProfileAvatar(
-                  name: widget.user.name,
-                  identity: widget.user.id,
-                  size: 120,
-                  locked: true,
-                  photo: widget.user.thumb?.isAbsolute == true
-                      ? NetworkImage(widget.user.thumb.toString())
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  widget.user.name,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: LineupTypography.pageTitle,
-                ),
-                const SizedBox(height: 28),
-                Semantics(
-                  key: const Key('profile-pin-progress'),
-                  container: true,
-                  explicitChildNodes: true,
-                  liveRegion: true,
-                  label: '${_pin.length} of 4 digits entered',
-                  child: ExcludeSemantics(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (var index = 0; index < 4; index++)
-                          Container(
-                            width: 24,
-                            height: 24,
-                            margin: const EdgeInsets.symmetric(horizontal: 8),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: index < _pin.length
-                                  ? LineupTheme.of(context).progressFill
-                                  : Colors.transparent,
-                              border: Border.all(
+                  SizedBox(height: androidTv ? gap : 28),
+                  LineupProfileAvatar(
+                    name: widget.user.name,
+                    identity: widget.user.id,
+                    size: androidTv ? (enlarged ? 40 : 56) : 120,
+                    locked: true,
+                    photo: widget.user.thumb?.isAbsolute == true
+                        ? NetworkImage(widget.user.thumb.toString())
+                        : null,
+                  ),
+                  SizedBox(height: gap),
+                  Text(
+                    widget.user.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: androidTv
+                        ? LineupTypography.title(32, 92, height: 1.08)
+                        : LineupTypography.pageTitle,
+                  ),
+                  SizedBox(height: androidTv ? gap : 28),
+                  Semantics(
+                    key: const Key('profile-pin-progress'),
+                    container: true,
+                    explicitChildNodes: true,
+                    liveRegion: true,
+                    label: '${_pin.length} of 4 digits entered',
+                    child: ExcludeSemantics(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (var index = 0; index < 4; index++)
+                            Container(
+                              width: 24,
+                              height: 24,
+                              margin: const EdgeInsets.symmetric(horizontal: 8),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
                                 color: index < _pin.length
                                     ? LineupTheme.of(context).progressFill
-                                    : LineupTheme.of(context).defaultBorder,
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: index < _pin.length
+                                      ? LineupTheme.of(context).progressFill
+                                      : LineupTheme.of(context).defaultBorder,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 44,
-                  child: _submitting
-                      ? Semantics(
-                          label: 'Checking PIN',
-                          child: const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : _error == null
-                      ? const SizedBox.shrink()
-                      : Semantics(
-                          key: const Key('profile-pin-error'),
-                          container: true,
-                          liveRegion: true,
-                          label: _error,
-                          child: ExcludeSemantics(
-                            child: Center(
-                              child: Text(
-                                _error!,
-                                softWrap: true,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
+                  SizedBox(height: gap),
+                  SizedBox(
+                    key: const Key('profile-pin-status'),
+                    height: androidTv && enlarged ? 56 : 44,
+                    child: _submitting
+                        ? Semantics(
+                            label: 'Checking PIN',
+                            child: const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : _error == null
+                        ? const SizedBox.shrink()
+                        : Semantics(
+                            key: const Key('profile-pin-error'),
+                            container: true,
+                            liveRegion: true,
+                            label: _error,
+                            child: ExcludeSemantics(
+                              child: Center(
+                                child: Text(
+                                  _error!,
+                                  softWrap: true,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                ),
-                const SizedBox(height: 16),
-                LineupCompactControls(
-                  child: SizedBox(
-                    width: 3 * 104 + 2 * 8,
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (var digit = 1; digit <= 9; digit++)
+                  ),
+                  SizedBox(height: gap),
+                  LineupCompactControls(
+                    child: SizedBox(
+                      width: androidTv ? 304 : 3 * 104 + 2 * 8,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (var digit = 1; digit <= 9; digit++)
+                            _PinKey(
+                              digit: digit,
+                              focusNode: digit == 1 ? _firstDigitFocus : null,
+                              autofocus: digit == 1,
+                              onPressed: _submitting
+                                  ? null
+                                  : () => _digit(digit),
+                            ),
+                          SizedBox(
+                            width: androidTv ? 96 : 104,
+                            height: androidTv ? 56 : 76,
+                          ),
                           _PinKey(
-                            digit: digit,
-                            focusNode: digit == 1 ? _firstDigitFocus : null,
-                            autofocus: digit == 1,
-                            onPressed: _submitting ? null : () => _digit(digit),
+                            digit: 0,
+                            onPressed: _submitting ? null : () => _digit(0),
                           ),
-                        const SizedBox(width: 104, height: 76),
-                        _PinKey(
-                          digit: 0,
-                          onPressed: _submitting ? null : () => _digit(0),
-                        ),
-                        _PinControlKey(
-                          tooltip: 'Backspace',
-                          onPressed: _submitting || _pin.isEmpty
-                              ? null
-                              : () => setState(() {
-                                  _error = null;
-                                  _pin = _pin.substring(0, _pin.length - 1);
-                                }),
-                          child: const Text(
-                            '⌫',
-                            style: TextStyle(fontSize: 24),
+                          _PinControlKey(
+                            tooltip: 'Backspace',
+                            onPressed: _submitting || _pin.isEmpty
+                                ? null
+                                : () => setState(() {
+                                    _error = null;
+                                    _pin = _pin.substring(0, _pin.length - 1);
+                                  }),
+                            child: const Text(
+                              '⌫',
+                              style: TextStyle(fontSize: 24),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                TextButton(
-                  onPressed: _submitting ? null : widget.onBack,
-                  child: const Text('Cancel'),
-                ),
-              ],
+                  SizedBox(height: androidTv ? gap : 20),
+                  TextButton(
+                    onPressed: _submitting ? null : widget.onBack,
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _PinKey extends StatelessWidget {
@@ -1938,8 +1961,8 @@ class _PinKey extends StatelessWidget {
     label: '$digit',
     button: true,
     child: SizedBox(
-      width: 104,
-      height: 76,
+      width: LineupTheme.of(context).androidTv ? 96 : 104,
+      height: LineupTheme.of(context).androidTv ? 56 : 76,
       child: OutlinedButton(
         focusNode: focusNode,
         autofocus: autofocus,
@@ -1974,8 +1997,8 @@ class _PinControlKey extends StatelessWidget {
       message: tooltip,
       excludeFromSemantics: true,
       child: SizedBox(
-        width: 104,
-        height: 76,
+        width: LineupTheme.of(context).androidTv ? 96 : 104,
+        height: LineupTheme.of(context).androidTv ? 56 : 76,
         child: OutlinedButton(onPressed: onPressed, child: child),
       ),
     ),

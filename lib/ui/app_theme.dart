@@ -55,6 +55,9 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
   final LineupFocusTreatment focusTreatment;
   final bool largeFocusIndicators;
   final bool androidTv;
+  double metadataTextSize({double desktop = 14}) => androidTv ? 16.5 : desktop;
+  double get compactActionTextSize => androidTv ? 18 : 16;
+  double bodyTextSize({double desktop = 18}) => androidTv ? 18 : desktop;
   final Color subtleBorder;
   final Color defaultBorder;
   final Color focusBorder;
@@ -475,9 +478,8 @@ abstract final class LineupTheme {
         vertical: compact ? 10 : 16,
       ),
       hintStyle: LineupTypography.body.copyWith(color: roles.mutedText),
-      labelStyle: LineupTypography.fieldLabel.copyWith(
-        color: roles.secondaryText,
-      ),
+      labelStyle: LineupTypography.fieldLabelFor(roles)
+          .copyWith(color: roles.secondaryText),
       border: border(roles.defaultBorder),
       enabledBorder: border(roles.defaultBorder),
       disabledBorder: border(roles.defaultBorder.withValues(alpha: .5)),
@@ -491,7 +493,8 @@ abstract final class LineupTheme {
             ? roles.focusBorderWidth
             : 1,
       ),
-      errorStyle: LineupTypography.small.copyWith(color: roles.liveAccent),
+      errorStyle: LineupTypography.fieldErrorFor(roles)
+          .copyWith(color: roles.liveAccent),
       errorMaxLines: 3,
     );
   }
@@ -572,7 +575,7 @@ abstract final class LineupTheme {
         EdgeInsets.symmetric(horizontal: compact ? 20 : 28),
       ),
       textStyle: WidgetStatePropertyAll(
-        LineupTypography.button.copyWith(fontSize: compact ? 16 : 18),
+        LineupTypography.buttonFor(roles, compact: compact),
       ),
       iconSize: const WidgetStatePropertyAll(20),
       shape: WidgetStatePropertyAll(
@@ -795,6 +798,14 @@ enum LineupButtonTier { primary, secondary, text, link, destructive }
 
 /// Canvas-pixel roles. Width variation applies only to Instrument Sans titles.
 abstract final class LineupTypography {
+  static TextStyle smallFor(LineupThemeRoles roles) =>
+      small.copyWith(fontSize: roles.metadataTextSize());
+  static TextStyle fieldLabelFor(LineupThemeRoles roles) =>
+      fieldLabel.copyWith(fontSize: roles.metadataTextSize(desktop: 16));
+  static TextStyle buttonFor(LineupThemeRoles roles, {bool compact = false}) =>
+      button.copyWith(fontSize: compact ? roles.compactActionTextSize : 18);
+  static TextStyle fieldErrorFor(LineupThemeRoles roles) =>
+      roles.androidTv ? body : small;
   static const body = TextStyle(
     fontFamily: 'Inter',
     fontFeatures: [FontFeature.tabularFigures()],
@@ -853,12 +864,12 @@ abstract final class LineupTypography {
     headlineSmall: pageTitle,
     titleLarge: title(24, 92),
     titleMedium: control,
-    titleSmall: fieldLabel,
+    titleSmall: fieldLabelFor(roles),
     bodyLarge: body,
     bodyMedium: body,
     bodySmall: body.copyWith(color: roles.secondaryText),
     labelLarge: button,
     labelMedium: control,
-    labelSmall: small,
+    labelSmall: smallFor(roles),
   ).apply(bodyColor: roles.primaryText, displayColor: roles.primaryText);
 }

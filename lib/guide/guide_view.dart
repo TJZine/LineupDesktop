@@ -1368,7 +1368,10 @@ class _GuideControls extends StatelessWidget {
                   key: const Key('guide-active-library-label'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 16.0, color: roles.mutedText),
+                  style: TextStyle(
+                    fontSize: roles.metadataTextSize(desktop: 16),
+                    color: roles.mutedText,
+                  ),
                 ),
               ),
               IconButton(
@@ -2149,7 +2152,9 @@ class _GuideRow extends StatelessWidget {
                             final supportStyle = DefaultTextStyle.of(context)
                                 .style
                                 .copyWith(
-                                  fontSize: (showProvenance ? 16 : 14),
+                                  fontSize: roles.metadataTextSize(
+                                    desktop: showProvenance ? 16 : 14,
+                                  ),
                                   color: roles.mutedText,
                                 );
                             final supportHeight = _textHeight(
@@ -2690,7 +2695,7 @@ class _ProgramCellContent extends StatelessWidget {
         );
         final tagStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           height: 1.1,
-          fontSize: 14.0,
+          fontSize: roles.metadataTextSize(),
           color: focused ? roles.focusedText : null,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,
@@ -3055,7 +3060,7 @@ class _ProgramDetails extends StatelessWidget {
       color: roles.secondaryText,
     );
     final channelStyle = TextStyle(
-      fontSize: 16,
+      fontSize: roles.metadataTextSize(desktop: 16),
       height: 1.2,
       color: roles.mutedText,
       fontWeight: FontWeight.w500,
@@ -3264,7 +3269,14 @@ class _GuideMediaBadge extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            fontSize: roles.metadataTextSize(
+              desktop: Theme.of(context).textTheme.labelMedium?.fontSize ?? 18,
+            ),
+          ),
+        ),
       ),
     );
   }

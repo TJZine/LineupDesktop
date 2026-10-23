@@ -471,7 +471,10 @@ class ChannelsViewState extends State<ChannelsView> {
                           .textTheme
                           .titleMedium
                           ?.copyWith(
-                            fontSize: _directorySize(22, 16),
+                            fontSize: _directorySize(
+                              22,
+                              LineupTheme.of(context).bodyTextSize(desktop: 16),
+                            ),
                             fontWeight: FontWeight.w500,
                           );
                       final rowSupportStyle = Theme.of(context)
@@ -671,7 +674,10 @@ class ChannelsViewState extends State<ChannelsView> {
     final moveToTextWidth = TextPainter.computeWidth(
       text: TextSpan(
         text: 'Move to…',
-        style: LineupTypography.button.copyWith(fontSize: 16),
+        style: LineupTypography.buttonFor(
+          LineupTheme.of(context),
+          compact: true,
+        ),
       ),
       textDirection: Directionality.of(context),
       textScaler: textScaler,
@@ -1058,7 +1064,10 @@ class ChannelsViewState extends State<ChannelsView> {
             _reorderBase.firstWhere((item) => item.id == _reorderIds[index]);
         final nextNumber = positions[index];
         final rowNameStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontSize: _directorySize(22, 16),
+          fontSize: _directorySize(
+            22,
+            LineupTheme.of(context).bodyTextSize(desktop: 16),
+          ),
           fontWeight: FontWeight.w500,
         );
         final rowSupportStyle = Theme.of(context).textTheme.bodyMedium
@@ -1434,15 +1443,15 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
       fontWeight: FontWeight.w600,
     );
     final supportStyle = theme.textTheme.bodyLarge?.copyWith(
-      fontSize: (compact ? 14 : 18),
+      fontSize: roles.bodyTextSize(desktop: compact ? 14 : 18),
       color: roles.secondaryText,
     );
     final nameStyle = theme.textTheme.titleMedium?.copyWith(
-      fontSize: (compact ? 16 : 20),
+      fontSize: compact ? roles.bodyTextSize(desktop: 16) : 20,
       fontWeight: FontWeight.w500,
     );
     final numberStyle = theme.textTheme.bodyMedium?.copyWith(
-      fontSize: (compact ? 14 : 18),
+      fontSize: roles.bodyTextSize(desktop: compact ? 14 : 18),
       color: roles.secondaryText,
     );
 

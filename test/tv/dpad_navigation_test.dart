@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -97,6 +99,86 @@ void main() {
     () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(platform, null),
   );
+  for (final theme in LineupThemeName.values) {
+    for (final textScale in [1.0, 1.3]) {
+      _tvTest(
+        'PIN is initially complete and stationary: ${theme.name} text=$textScale',
+        (tester) async {
+          tester.platformDispatcher.textScaleFactorTestValue = textScale;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          final pending = Completer<void>();
+          final fixture = UiFixture(
+            androidTv: true,
+            controller: _RejectedPinController(
+              name: 'A deliberately long profile name with a second line and an ellipsis',
+              pending: pending,
+              rejectionMessage: textScale > 1
+                  ? 'The profile could not be selected. Check your connection and try again.'
+                  : 'That Plex Home PIN was not accepted.',
+              settings: LineupSettings(
+                theme: theme,
+                largeFocusIndicators: true,
+                reduceMotion: textScale > 1,
+              ),
+            ),
+          );
+          await tester.pumpWidget(fixture.build());
+          await tester.pumpAndSettle();
+          await _keys(tester, [_select]);
+          Rect drawn(Finder finder) => Rect.fromPoints(
+            tester.getTopLeft(finder),
+            tester.getBottomRight(finder),
+          );
+          void expectComplete() {
+            final controls = [
+              for (var digit = 0; digit <= 9; digit++)
+                find.widgetWithText(OutlinedButton, '$digit'),
+              find.byTooltip('Backspace'),
+              find.widgetWithText(TextButton, 'Cancel'),
+              find.byKey(const Key('profile-pin-progress')),
+              find.byKey(const Key('profile-pin-status')),
+            ];
+            for (final control in controls) {
+              final bounds = drawn(control)
+                  .inflate(2); // Includes the 3cu large-focus outer stroke.
+              expect(bounds.left, greaterThanOrEqualTo(48));
+              expect(bounds.top, greaterThanOrEqualTo(27));
+              expect(bounds.right, lessThanOrEqualTo(912));
+              expect(bounds.bottom, lessThanOrEqualTo(513));
+            }
+            for (final element in find.byType(Scrollable).evaluate()) {
+              expect(
+                (element as StatefulElement).state is ScrollableState,
+                isTrue,
+              );
+              expect(((element).state as ScrollableState).position.pixels, 0);
+            }
+            expect(tester.takeException(), isNull);
+          }
+
+          expectComplete(); // Before the first arrow or scroll.
+          _focusedVisible(tester, find.widgetWithText(OutlinedButton, '1'));
+          await _keys(tester, [_select, _select, _select]);
+          await tester.sendKeyEvent(_select);
+          await tester.pump();
+          expect(find.bySemanticsLabel('Checking PIN'), findsOneWidget);
+          expectComplete();
+          pending.complete();
+          await tester.pumpAndSettle();
+          expect(
+            find.text(
+              textScale > 1
+                  ? 'The profile could not be selected. Check your connection and try again.'
+                  : 'Incorrect PIN. Try again.',
+            ),
+            findsOneWidget,
+          );
+          expectComplete();
+          _focusedVisible(tester, find.widgetWithText(OutlinedButton, '1'));
+        },
+      );
+    }
+  }
   _tvTest(
     'protected PIN remote walk reaches every bottom key, error, Cancel and Back',
     (tester) async {
@@ -220,11 +302,15 @@ void main() {
       await tester.pumpAndSettle();
       await _keys(tester, [_back, _down, _select]);
       expect(find.byKey(const Key('channels-search')), findsOneWidget);
-      await _keys(tester, [_down, _down, _left, _left, _left, _left, _up]);
+      await _keys(tester, [_down, _left, _left, _left, _left]);
       final activation = tester.widget<LineupTextFieldActivation>(
         find.byType(LineupTextFieldActivation),
       );
-      expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+      expect(
+        activation.focusNode!.hasPrimaryFocus,
+        isTrue,
+        reason: 'primary=${FocusManager.instance.primaryFocus}',
+      );
       expect(tester.testTextInput.isVisible, isFalse);
       await _keys(tester, [_select]);
       expect(tester.testTextInput.isVisible, isTrue);
@@ -471,32 +557,35 @@ void main() {
 }
 
 class _RejectedPinController extends FixtureController {
-  _RejectedPinController({bool current = false})
-    : super(
-        scenario: LineupScenario(
-          stage: SetupStage.profiles,
-          profile: current
-              ? const PlexHomeUser(
-                  id: 'protected',
-                  name: 'Fixture viewer',
-                  protected: true,
-                )
-              : null,
-          profileSelectionOrigin: current ? SetupStage.ready : null,
-          profiles: const [
-            PlexHomeUser(
-              id: 'protected',
-              name: 'Fixture viewer',
-              protected: true,
-            ),
-          ],
-        ),
-      );
+  _RejectedPinController({
+    bool current = false,
+    String name = 'Fixture viewer',
+    LineupSettings? settings,
+    this.pending,
+    this.rejectionMessage = 'That Plex Home PIN was not accepted.',
+  }) : super(
+         scenario: LineupScenario(
+           stage: SetupStage.profiles,
+           settings: settings,
+           profile: current
+               ? const PlexHomeUser(
+                   id: 'protected',
+                   name: 'Fixture viewer',
+                   protected: true,
+                 )
+               : null,
+           profileSelectionOrigin: current ? SetupStage.ready : null,
+           profiles: [
+             PlexHomeUser(id: 'protected', name: name, protected: true),
+           ],
+         ),
+       );
+  final Completer<void>? pending;
+  final String rejectionMessage;
   @override
   Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
-    fixtureActor.present(
-      LineupPresentation(error: ('That Plex Home PIN was not accepted.',)),
-    );
+    await pending?.future;
+    fixtureActor.present(LineupPresentation(error: (rejectionMessage,)));
     notifyListeners();
     return false;
   }
