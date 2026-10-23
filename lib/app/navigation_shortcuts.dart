@@ -30,10 +30,10 @@ ShellDestination? navigationShortcutDestination(LogicalKeyboardKey key) {
   };
 }
 
-/// Android predictive Back uses route pops instead of key events. Keep a single
-/// route claim, then run the focused controls' ordinary Back handlers in their
-/// normal leaf-to-root order. This never injects a hardware event or changes the
-/// pressed-key state. A handled API 30 key therefore cannot also request a pop.
+/// Native Android normalizes OS Back to one route request. This single root
+/// claim runs the focused controls' ordinary Back handlers in leaf-to-root
+/// order, without injecting a hardware event or tracking a prior press. Product
+/// actions remain shared with the existing logical Back key path.
 class AndroidBackScope extends StatefulWidget {
   const AndroidBackScope({required this.child, super.key});
   final Widget child;
@@ -63,14 +63,6 @@ class _AndroidBackScopeState extends State<AndroidBackScope> {
 
   void _systemBack(bool didPop, Object? result) {
     if (didPop || ModalRoute.of(context)?.isCurrent != true) return;
-    // Android may send a route pop during a hardware Back dispatch, even when
-    // its key handler already consumed the press. That pressed key owns Back;
-    // only the key-free predictive path needs the route-to-focus translation.
-    if (HardwareKeyboard.instance.logicalKeysPressed.contains(
-      LogicalKeyboardKey.goBack,
-    )) {
-      return;
-    }
     const event = KeyDownEvent(
       physicalKey: PhysicalKeyboardKey.browserBack,
       logicalKey: LogicalKeyboardKey.goBack,

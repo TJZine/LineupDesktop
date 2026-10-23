@@ -92,7 +92,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      // API 36 route-pop and API 30 key paths share the same leaf owner.
+      // All OS Back ingress is native-normalized to route requests. Direct
+      // logical keys still share the same action owner (not native proof).
       await tester.binding.handlePopRoute();
       await tester.pump();
       expect(handled, 1);
@@ -104,20 +105,12 @@ void main() {
       await tester.pump();
       expect(handled, 2);
       expect(backgrounded, 0);
-      // Real Android TV can deliver both paths while Back is held. The
-      // hardware key owns that press; the pop must not repeat its action.
-      await tester.sendKeyDownEvent(
-        LogicalKeyboardKey.goBack,
-        physicalKey: PhysicalKeyboardKey.escape,
-      );
+      // A subsequent standalone predictive request is never suppressed by
+      // a previous logical key, including after its focus/frame update.
       await tester.binding.handlePopRoute();
       await tester.pump();
       expect(handled, 3);
       expect(backgrounded, 0);
-      await tester.sendKeyUpEvent(
-        LogicalKeyboardKey.goBack,
-        physicalKey: PhysicalKeyboardKey.escape,
-      );
       consume = false;
       await tester.binding.handlePopRoute();
       await tester.pump();
@@ -128,17 +121,9 @@ void main() {
       );
       await tester.pump();
       expect(backgrounded, 2);
-      await tester.sendKeyDownEvent(
-        LogicalKeyboardKey.goBack,
-        physicalKey: PhysicalKeyboardKey.escape,
-      );
       await tester.binding.handlePopRoute();
       await tester.pump();
       expect(backgrounded, 3);
-      await tester.sendKeyUpEvent(
-        LogicalKeyboardKey.goBack,
-        physicalKey: PhysicalKeyboardKey.escape,
-      );
     },
   );
 
