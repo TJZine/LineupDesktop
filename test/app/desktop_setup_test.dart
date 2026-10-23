@@ -24,6 +24,167 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  testWidgets(
+    'TV playback cards leave the radio group vertically using remote keys',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final strategy = FocusManager.instance.highlightStrategy;
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTouch;
+      final controller = _SetupController();
+      try {
+        await tester.runAsync(loadPinnedTestFonts);
+        await _pump(tester, controller, androidTv: true);
+        await _advanceToConfigure(tester);
+        final section = find.byKey(const ValueKey('configure-section-1'));
+        await tester.tap(section);
+        await tester.pumpAndSettle();
+        final label = find.descendant(
+          of: section,
+          matching: find.text('Playback order'),
+        );
+        // Fixture entry only. All subsequent movement is remote-only.
+        Focus.of(tester.element(label)).requestFocus();
+        await tester.pumpAndSettle();
+        Future<void> key(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+        }
+
+        bool inRadio() =>
+            FocusManager.instance.primaryFocus?.context
+                ?.findAncestorWidgetOfExactType<RawRadio<PlaybackMode>>() !=
+            null;
+        await key(LogicalKeyboardKey.arrowRight);
+        expect(
+          FocusManager.instance.primaryFocus!.debugLabel,
+          'Setup playback shuffle',
+        );
+        await key(LogicalKeyboardKey.arrowRight);
+        expect(
+          FocusManager.instance.primaryFocus!.debugLabel,
+          'Setup playback sequential',
+        );
+        await key(LogicalKeyboardKey.arrowRight);
+        expect(
+          FocusManager.instance.primaryFocus!.debugLabel,
+          'Setup playback block',
+        );
+        await key(LogicalKeyboardKey.select);
+        expect(find.text('Include specials'), findsOneWidget);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(inRadio(), isFalse, reason: 'Down must leave the radio group');
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(inRadio(), isFalse);
+        expect(
+          Focus.of(tester.element(find.text('Back to libraries')))
+              .hasPrimaryFocus,
+          isTrue,
+        );
+        await key(LogicalKeyboardKey.select);
+        expect(
+          find.byKey(const ValueKey('library-selection-list')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+        tester.view.reset();
+        FocusManager.instance.highlightStrategy = strategy;
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets(
+      'playback card tracks actual focus independently of toggleable highlight: $platform',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        final strategy = FocusManager.instance.highlightStrategy;
+        FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.alwaysTouch;
+        final tv = platform == TargetPlatform.android;
+        final controller = _SetupController();
+        try {
+          await _pump(tester, controller, androidTv: tv);
+          await _advanceToConfigure(tester);
+          await tester.tap(find.byKey(const ValueKey('configure-section-1')));
+          await tester.pumpAndSettle();
+          final shuffle = find.byKey(const ValueKey('setup-playback-shuffle'));
+          final sequential = find.byKey(
+            const ValueKey('setup-playback-sequential'),
+          );
+          final element = tester.element(sequential);
+          final radio = tester.widget<RawRadio<PlaybackMode>>(sequential);
+          final roles = LineupTheme.of(tester.element(shuffle));
+          final selectedNode = tester
+              .widget<RawRadio<PlaybackMode>>(shuffle)
+              .focusNode;
+          // Enter through the section's real focus target, then move with D-pad.
+          selectedNode.requestFocus();
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+          await tester.pumpAndSettle();
+          expect(radio.focusNode.hasPrimaryFocus, isTrue);
+          expect(
+            (tester.state(sequential) as ToggleableStateMixin).states.contains(
+              WidgetState.focused,
+            ),
+            isFalse,
+          );
+          final paint = _cardPaint(tester, sequential);
+          expect(
+            (paint.decoration as BoxDecoration).color,
+            tv ? roles.focusedSurface : roles.elevatedSurface,
+          );
+          final title = tester.widget<Text>(
+            find.descendant(of: sequential, matching: find.text('In order')),
+          );
+          expect(title.style!.color, tv ? roles.onFocus : roles.primaryText);
+          expect(paint.foregroundDecoration, isNull);
+          expect(tester.element(sequential), same(element));
+          // Selection can change separately; moving back must repaint focus,
+          // even while the selected sequential card remains selected.
+          selectedNode.requestFocus();
+          await tester.pumpAndSettle();
+          expect(selectedNode.hasPrimaryFocus, isTrue);
+          expect(
+            (_cardPaint(tester, sequential).decoration as BoxDecoration).color,
+            roles.elevatedSurface,
+          );
+          expect(
+            (_cardPaint(tester, shuffle).decoration as BoxDecoration).color,
+            tv ? roles.focusedSurface : roles.primarySurface,
+          );
+          final focused = FocusManager.instance.primaryFocus;
+          final mouse = await tester.createGesture(
+            kind: PointerDeviceKind.mouse,
+          );
+          await mouse.addPointer(location: const Offset(0, 0));
+          await mouse.moveTo(const Offset(1, 1));
+          await tester.pumpAndSettle();
+          expect(
+            (_cardPaint(tester, shuffle).decoration as BoxDecoration).color,
+            roles.primarySurface,
+          );
+          expect(FocusManager.instance.primaryFocus, same(focused));
+          expect(tester.element(sequential), same(element));
+          await mouse.removePointer();
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+          tester.view.reset();
+          FocusManager.instance.highlightStrategy = strategy;
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
   for (final platform in [
     TargetPlatform.windows,
     TargetPlatform.macOS,
@@ -180,6 +341,60 @@ void main() {
     await tester.tap(signOut);
     expect(signOutCalls, 1);
   });
+  for (final index in [0, 1, 2]) {
+    testWidgets(
+      'TV playback card $index escapes upward without changing selection',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final controller = _SetupController();
+        try {
+          await tester.runAsync(loadPinnedTestFonts);
+          await _pump(tester, controller, androidTv: true);
+          await _advanceToConfigure(tester);
+          final section = find.byKey(const ValueKey('configure-section-1'));
+          await tester.tap(section);
+          await tester.pumpAndSettle();
+          Focus.of(
+            tester.element(
+              find.descendant(
+                of: section,
+                matching: find.text('Playback order'),
+              ),
+            ),
+          ).requestFocus();
+          await tester.pumpAndSettle();
+          for (var n = 0; n <= index; n++) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+            await tester.pumpAndSettle();
+          }
+          final cards = [
+            for (final mode in PlaybackMode.values)
+              find.byKey(ValueKey('setup-playback-${mode.name}')),
+          ];
+          List<bool> selection() => [
+            for (final card in cards)
+              (tester.state(card) as ToggleableStateMixin).states.contains(
+                WidgetState.selected,
+              ),
+          ];
+          final before = selection();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+          await tester.pumpAndSettle();
+          expect(
+            FocusManager.instance.primaryFocus?.context
+                ?.findAncestorWidgetOfExactType<RawRadio<PlaybackMode>>(),
+            isNull,
+          );
+          expect(selection(), before);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+          tester.view.reset();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
 
   testWidgets(
     'Mini-marathon counts exclude specials-only sources until enabled',
