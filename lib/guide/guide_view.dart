@@ -609,7 +609,8 @@ class _GuideViewState extends State<GuideView>
         key == LogicalKeyboardKey.backspace ||
         key == LogicalKeyboardKey.goBack ||
         (key == LogicalKeyboardKey.keyG && !commandModified) ||
-        key == LogicalKeyboardKey.f2) {
+        key == LogicalKeyboardKey.f2 ||
+        key == LogicalKeyboardKey.guide) {
       final primary = FocusManager.instance.primaryFocus;
       final invoker =
           primary != null &&
@@ -649,9 +650,11 @@ class _GuideViewState extends State<GuideView>
       } else {
         widget.controller.moveHorizontal(1);
       }
-    } else if (key == LogicalKeyboardKey.pageUp) {
+    } else if (key == LogicalKeyboardKey.pageUp ||
+        key == LogicalKeyboardKey.channelUp) {
       widget.controller.page(-1, _visibleRows);
-    } else if (key == LogicalKeyboardKey.pageDown) {
+    } else if (key == LogicalKeyboardKey.pageDown ||
+        key == LogicalKeyboardKey.channelDown) {
       widget.controller.page(1, _visibleRows);
     } else if (key == LogicalKeyboardKey.mediaPlay ||
         (key == LogicalKeyboardKey.keyP && !commandModified) ||

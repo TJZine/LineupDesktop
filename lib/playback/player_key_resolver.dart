@@ -58,7 +58,11 @@ final _backKeys = {
   LogicalKeyboardKey.backspace,
   LogicalKeyboardKey.goBack,
 };
-final _guideKeys = {LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2};
+final _guideKeys = {
+  LogicalKeyboardKey.keyG,
+  LogicalKeyboardKey.f2,
+  LogicalKeyboardKey.guide,
+};
 final _enterKeys = {
   LogicalKeyboardKey.enter,
   LogicalKeyboardKey.numpadEnter,
@@ -81,7 +85,17 @@ final _keyboardTransportKeys = {
   LogicalKeyboardKey.arrowRight,
 };
 final _fullscreenKeys = {LogicalKeyboardKey.keyF, LogicalKeyboardKey.f11};
-final _pageKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
+final _pageUpKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.channelUp};
+final _pageDownKeys = {
+  LogicalKeyboardKey.pageDown,
+  LogicalKeyboardKey.channelDown,
+};
+final _pageKeys = {..._pageUpKeys, ..._pageDownKeys};
+final _infoKeys = {
+  LogicalKeyboardKey.keyI,
+  LogicalKeyboardKey.info,
+  LogicalKeyboardKey.contextMenu,
+};
 
 /// Resolves in the same priority order as the public Player interaction:
 /// Back, transport availability, unsupported playback, overlay ownership, then
@@ -155,12 +169,12 @@ PlayerCommand resolvePlayerKey(
   if (miniGuide && key == LogicalKeyboardKey.arrowDown) {
     return PlayerAction.miniGuideDown;
   }
-  if (key == LogicalKeyboardKey.pageUp) {
+  if (_pageUpKeys.contains(key)) {
     return miniGuide
         ? PlayerAction.miniGuidePageUp
         : PlayerAction.previousChannel;
   }
-  if (key == LogicalKeyboardKey.pageDown) {
+  if (_pageDownKeys.contains(key)) {
     return miniGuide
         ? PlayerAction.miniGuidePageDown
         : PlayerAction.nextChannel;
@@ -195,7 +209,7 @@ PlayerCommand resolvePlayerKey(
         ? PlayerAction.showNowPlaying
         : PlayerAction.showOsdFromInfo;
   }
-  if (initialPress && key == LogicalKeyboardKey.keyI) {
+  if (initialPress && _infoKeys.contains(key)) {
     return nowPlaying
         ? PlayerAction.showOsdFromInfo
         : PlayerAction.showNowPlaying;

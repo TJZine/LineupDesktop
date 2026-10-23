@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -152,6 +153,10 @@ class LicensesViewState extends State<LicensesView> {
                             thumbVisibility: true,
                             child: Focus(
                               focusNode: page.content,
+                              canRequestFocus:
+                                  defaultTargetPlatform !=
+                                      TargetPlatform.android ||
+                                  item?.read != null,
                               onKeyEvent: (_, event) => _scrollKey(page, event),
                               child: SelectionArea(
                                 child: CustomScrollView(
@@ -227,6 +232,19 @@ class LicensesViewState extends State<LicensesView> {
     }
     if (!page.scroll.hasClients) return KeyEventResult.ignored;
     final key = event.logicalKey;
+    // TV arrows traverse index/group controls. Only a document owns scrolling;
+    // desktop retains its existing reader shortcuts on every page.
+    if (defaultTargetPlatform == TargetPlatform.android &&
+        (page.item == null || page.item!.children != null) &&
+        (key == LogicalKeyboardKey.arrowDown ||
+            key == LogicalKeyboardKey.arrowUp)) {
+      FocusManager.instance.primaryFocus?.focusInDirection(
+        key == LogicalKeyboardKey.arrowDown
+            ? TraversalDirection.down
+            : TraversalDirection.up,
+      );
+      return KeyEventResult.handled;
+    }
     final position = page.scroll.position;
     final amount = switch (key) {
       LogicalKeyboardKey.arrowDown => 48.0,

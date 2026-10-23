@@ -122,6 +122,26 @@ void main() {
         tester.widget<LineupRowSurface>(find.byType(LineupRowSurface)).selected,
         isTrue,
       );
+      for (final remoteKey in [
+        LogicalKeyboardKey.channelUp,
+        LogicalKeyboardKey.channelDown,
+        LogicalKeyboardKey.guide,
+        LogicalKeyboardKey.info,
+        LogicalKeyboardKey.contextMenu,
+      ]) {
+        await tester.sendKeyEvent(
+          remoteKey,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pump();
+        expect(side().width, 3);
+        expect(node.hasFocus, isTrue);
+        await mouse.moveTo(const Offset(620, 400));
+        await tester.pump();
+        expect(side(), BorderSide.none);
+        await mouse.moveTo(const Offset(610, 400));
+        await tester.pump();
+      }
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
       expect(node.hasFocus, isTrue);

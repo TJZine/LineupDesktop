@@ -37,6 +37,11 @@ class _LineupFocusScopeState extends State<LineupFocusScope> {
     LogicalKeyboardKey.pageUp,
     LogicalKeyboardKey.pageDown,
     LogicalKeyboardKey.select,
+    LogicalKeyboardKey.channelUp,
+    LogicalKeyboardKey.channelDown,
+    LogicalKeyboardKey.guide,
+    LogicalKeyboardKey.info,
+    LogicalKeyboardKey.contextMenu,
   };
 
   @override

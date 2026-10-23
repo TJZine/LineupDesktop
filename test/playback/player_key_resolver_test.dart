@@ -116,12 +116,16 @@ void main() {
     final now = overlay == PlayerOverlay.nowPlaying;
 
     row(
-      [LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2],
+      [
+        LogicalKeyboardKey.keyG,
+        LogicalKeyboardKey.f2,
+        LogicalKeyboardKey.guide,
+      ],
       overlay,
       error || number ? PlayerAction.ignored : PlayerAction.openGuide,
     );
     row(
-      [LogicalKeyboardKey.pageUp],
+      [LogicalKeyboardKey.pageUp, LogicalKeyboardKey.channelUp],
       overlay,
       owned || number
           ? PlayerAction.ignored
@@ -130,7 +134,7 @@ void main() {
           : PlayerAction.previousChannel,
     );
     row(
-      [LogicalKeyboardKey.pageDown],
+      [LogicalKeyboardKey.pageDown, LogicalKeyboardKey.channelDown],
       overlay,
       owned || number
           ? PlayerAction.ignored
@@ -206,7 +210,11 @@ void main() {
     }
     final blocksActions = owned || error || number;
     row(
-      [LogicalKeyboardKey.keyI],
+      [
+        LogicalKeyboardKey.keyI,
+        LogicalKeyboardKey.info,
+        LogicalKeyboardKey.contextMenu,
+      ],
       overlay,
       blocksActions
           ? PlayerAction.ignored
@@ -227,6 +235,8 @@ void main() {
     row(
       [
         LogicalKeyboardKey.keyI,
+        LogicalKeyboardKey.info,
+        LogicalKeyboardKey.contextMenu,
         LogicalKeyboardKey.keyF,
         LogicalKeyboardKey.f11,
         LogicalKeyboardKey.keyS,
@@ -356,13 +366,13 @@ void main() {
       initialPress: false,
     );
     row(
-      [LogicalKeyboardKey.pageUp],
+      [LogicalKeyboardKey.pageUp, LogicalKeyboardKey.channelUp],
       overlay,
       mini ? PlayerAction.miniGuidePageUp : PlayerAction.consumed,
       unsupported: true,
     );
     row(
-      [LogicalKeyboardKey.pageDown],
+      [LogicalKeyboardKey.pageDown, LogicalKeyboardKey.channelDown],
       overlay,
       mini ? PlayerAction.miniGuidePageDown : PlayerAction.consumed,
       unsupported: true,

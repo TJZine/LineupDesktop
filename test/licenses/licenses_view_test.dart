@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -84,6 +86,54 @@ void main() {
       ],
     ),
   ];
+
+  testWidgets(
+    'Android D-pad reaches index and group rows, then scrolls documents',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        await show(tester, [
+          LicenseSource(
+            'Runtime',
+            () async => [
+              LicenseItem.list('component', 'Component', [
+                LicenseItem.document(
+                  'notice',
+                  'Notice',
+                  () async =>
+                      List.filled(80, 'License paragraph.').join('\n\n'),
+                ),
+              ]),
+            ],
+          ),
+        ]);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Component');
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Notice');
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        final scroll = tester
+            .widget<CustomScrollView>(find.byType(CustomScrollView))
+            .controller!;
+        expect(scroll.offset, 0);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(scroll.offset, 48);
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Licenses back');
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Notice');
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
 
   testWidgets('component/file/back retain focus and exact full-document copy', (
     tester,

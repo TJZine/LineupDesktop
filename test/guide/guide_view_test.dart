@@ -228,6 +228,13 @@ void main() {
           await tester.pumpAndSettle();
           expectSnapped();
         }
+        final beforeChannel = guide.focusedChannelIndex;
+        await tester.sendKeyEvent(LogicalKeyboardKey.channelDown);
+        await tester.pumpAndSettle();
+        expect(guide.focusedChannelIndex, beforeChannel + 5);
+        await tester.sendKeyEvent(LogicalKeyboardKey.channelUp);
+        await tester.pumpAndSettle();
+        expect(guide.focusedChannelIndex, beforeChannel);
         final beforePage = guide.focusedChannelIndex;
         await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
         await tester.pumpAndSettle();

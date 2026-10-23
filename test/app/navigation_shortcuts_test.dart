@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/navigation_shortcuts.dart';
@@ -50,6 +51,111 @@ void main() {
       await tester.sendKeyUpEvent(modifier);
     }
   }
+
+  testWidgets(
+    'Android root Back uses focused key ownership or backgrounds once',
+    (tester) async {
+      var backgrounded = 0;
+      var handled = 0;
+      var consume = true;
+      const platform = MethodChannel('lineup/platform');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(platform, (
+        call,
+      ) async {
+        expect(call.method, 'moveTaskToBack');
+        backgrounded++;
+        return true;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          platform,
+          null,
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AndroidBackScope(
+            child: Focus(
+              autofocus: true,
+              onKeyEvent: (_, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.goBack &&
+                    consume) {
+                  handled++;
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: const SizedBox(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // API 36 route-pop and API 30 key paths share the same leaf owner.
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(handled, 1);
+      expect(backgrounded, 0);
+      await tester.sendKeyEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
+      await tester.pump();
+      expect(handled, 2);
+      expect(backgrounded, 0);
+      consume = false;
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(backgrounded, 1);
+      await tester.sendKeyEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
+      await tester.pump();
+      expect(backgrounded, 2);
+    },
+  );
+
+  testWidgets('Android root Back leaves an overlaid dialog to Navigator', (
+    tester,
+  ) async {
+    var backgrounded = 0;
+    const platform = MethodChannel('lineup/platform');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(platform, (
+      _,
+    ) async {
+      backgrounded++;
+      return true;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        platform,
+        null,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AndroidBackScope(
+          child: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const AlertDialog(content: Text('Dialog')),
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Dialog'), findsNothing);
+    expect(backgrounded, 0);
+  });
 
   group('command modifier', () {
     // The binding verifies the override before tearDown callbacks run, so each
