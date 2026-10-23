@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
@@ -339,6 +340,173 @@ void main() {
     },
     semanticsEnabled: true,
   );
+
+  testWidgets(
+    'TV move search enters navigation and restores it after IME hide and Done',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final visibility = ValueNotifier<bool?>(false);
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      try {
+        final controller = _RecordingDirectoryController(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('first', 2, 'First'),
+              _channel('second', 7, 'Second'),
+              _channel('third', 20, 'Third'),
+            ],
+          ),
+        );
+        await tester.pumpWidget(
+          LineupBootstrap(
+            controller: controller,
+            player: FixturePlayer(),
+            androidTv: true,
+            keyboardVisibility: visibility,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        await tester.tap(find.text('Reorder channels'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Move to…').first);
+        await tester.pumpAndSettle();
+        final dialog = find.byType(AlertDialog);
+        final field = find.descendant(
+          of: dialog,
+          matching: find.byType(TextField),
+        );
+        EditableText editor() => tester.widget<EditableText>(
+          find.descendant(of: field, matching: find.byType(EditableText)),
+        );
+        Future<void> key(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+        }
+
+        bool focusedIn(Finder finder) {
+          final target = tester.element(finder);
+          final primary =
+              FocusManager.instance.primaryFocus?.context as Element?;
+          var inside = identical(target, primary);
+          primary?.visitAncestorElements((e) {
+            inside |= identical(e, target);
+            return !inside;
+          });
+          return inside;
+        }
+
+        expect(editor().focusNode.hasFocus, isFalse);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Move channel search',
+        );
+        expect(tester.testTextInput.isVisible, isFalse);
+        await key(LogicalKeyboardKey.select);
+        expect(editor().focusNode.hasFocus, isTrue);
+        await tester.enterText(field, 'Third');
+        await tester.pumpAndSettle();
+        expect(find.text('20 · Third'), findsOneWidget);
+        expect(find.text('7 · Second'), findsNothing);
+        // Observed native shown->hidden restores navigation before any arrow.
+        visibility.value = true;
+        await tester.pump();
+        visibility.value = false;
+        await tester.pumpAndSettle();
+        expect(editor().focusNode.hasFocus, isFalse);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Move channel search',
+        );
+        await key(LogicalKeyboardKey.select);
+        expect(editor().focusNode.hasFocus, isTrue);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(editor().focusNode.hasFocus, isFalse);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Move channel search',
+        );
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(focusedIn(find.widgetWithText(TextButton, 'Before')), isTrue);
+        await key(LogicalKeyboardKey.arrowRight);
+        expect(focusedIn(find.widgetWithText(TextButton, 'After')), isTrue);
+        await key(LogicalKeyboardKey.select);
+        expect(dialog, findsNothing);
+        // Reopening retains the same navigation-only entry. Back and Cancel
+        // dismiss without adding another reorder operation.
+        await tester.tap(find.text('Move to…').first);
+        await tester.pumpAndSettle();
+        expect(editor().focusNode.hasFocus, isFalse);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(dialog, findsNothing);
+        await tester.tap(find.text('Move to…').first);
+        await tester.pumpAndSettle();
+        await key(LogicalKeyboardKey.arrowDown);
+        await key(LogicalKeyboardKey.arrowDown);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(
+          focusedIn(
+            find.descendant(
+              of: dialog,
+              matching: find.widgetWithText(TextButton, 'Cancel'),
+            ),
+          ),
+          isTrue,
+        );
+        await key(LogicalKeyboardKey.select);
+        expect(dialog, findsNothing);
+        await tester.tap(find.text('Save order'));
+        await tester.pumpAndSettle();
+        expect(controller.orderedIds, ['second', 'third', 'first']);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        visibility.dispose();
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets('desktop move search keeps autofocus editing', (tester) async {
+    final controller = _RecordingDirectoryController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel('first', 2, 'First'),
+          _channel('second', 7, 'Second'),
+        ],
+      ),
+    );
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.text('Reorder channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move to…').first);
+    await tester.pumpAndSettle();
+    final editor = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(EditableText),
+    );
+    expect(tester.widget<EditableText>(editor).focusNode.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Cancel'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(controller.orderedIds, isEmpty);
+  });
 
   testWidgets('reorder previews retained number gaps and saves one order', (
     tester,
