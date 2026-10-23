@@ -17,6 +17,7 @@ campaign results retain their original source, build and platform limits.
 | Application, async, persistence or credential work | [Architecture](architecture.md) | Current source and linked owner tests |
 | UI, Guide, PiP or Studio | [Desktop UI specification](desktop-ui-design-spec.md) | [Interface system](../.interface-design/system.md), retained decision records, current source |
 | Native media protocol or macOS port planning | [Native-player protocol](native-player-protocol.md) | [Platform ownership](architecture.md#platform-neutral-native-player-protocol), [macOS backlog](open-obligations.md#macos-media-backlog), [macOS port plan](macos-port-plan.md) |
+| Android TV / Fire TV host and sideloading | [Android runtime](android-runtime.md) | [Development](DEVELOPMENT.md#android-tv-development) |
 | Windows media, runner or packaging | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Windows presentation](architecture.md#windows-presentation-and-ownership), [runtime provenance](windows-runtime.md), [physical acceptance](windows-native-validation.md) |
 | Security report | [Security Policy](../SECURITY.md) | Private reporting route; never include secrets in a public issue |
 

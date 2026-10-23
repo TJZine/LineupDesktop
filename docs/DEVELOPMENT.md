@@ -826,3 +826,25 @@ earlier recipe passed Debug. The recorded earlier Release failure remains blocke
 inspect which jobs ran before describing a green CI result. CI does not launch
 the application; runtime markers and native presentation still require physical
 Windows acceptance.
+
+## Android TV development
+
+[Android runtime](android-runtime.md) owns the Android host, signing, sideload,
+media-entrypoint and local diagnostic instructions. Use pinned Flutter 3.47.7
+first on `PATH`, JDK 17 and the SDK configured for that Flutter installation.
+Android uses the stock engine and supports API 28+ TV devices. Build the
+universal `armeabi-v7a` + `arm64-v8a` debug APK with:
+
+```sh
+tool/android/with-signing.sh flutter build apk --debug --target-platform android-arm,android-arm64
+```
+
+Both debug and release use the dedicated external Lineup keystore;
+`LINEUP_ANDROID_SIGNING=debug-key` is a debug-only contributor/CI override.
+Run the portable format/analyze/test checks and, when Kotlin tests exist,
+`cd android && ./gradlew :app:testDebugUnitTest`. Use the documented emulator
+secure-storage smoke entrypoint for native write/read/restart/delete and
+same-key upgrade evidence. Always pass `adb -s <serial>` / `flutter -d <id>`.
+On a signed-in device, update only with `adb install -r -d`, because Flutter's
+install/run workflows may uninstall and delete user state. Emulator checks
+do not establish physical 32-bit Fire OS, HDR, composition, or media acceptance.

@@ -130,6 +130,37 @@ void main() {
     },
   );
 
+  testWidgets('Android onboarding opens Support and offline licenses', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final fixture = UiFixture(
+        scenario: const LineupScenario(stage: SetupStage.welcome),
+      );
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await tap(tester, 'Settings');
+      expect(find.text('Open Licenses'), findsOneWidget);
+      await tap(tester, 'Open Licenses');
+      expect(find.text('Native runtime'), findsNothing);
+      expect(find.text('Sources and rebuilding'), findsNothing);
+      expect(find.text('Flutter and packages'), findsOneWidget);
+      expect(find.text('Fonts and engine notices'), findsOneWidget);
+      await tap(tester, 'Fonts and engine notices');
+      expect(find.text('Instrument Sans'), findsOneWidget);
+      expect(find.text('Inter'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await escape(tester);
+      await escape(tester);
+      await escape(tester);
+      expect(fixture.controller.stage, SetupStage.welcome);
+      expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   macTest('menu Esc precedes reader Back; Settings command dismisses reader', (
     tester,
   ) async {

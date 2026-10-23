@@ -121,40 +121,49 @@ void main() {
   testWidgets('fullscreen HDR switch follows DVR playback controls', (
     tester,
   ) async {
-    final controller = FixtureController();
-    addTearDown(controller.dispose);
-    await _showSettings(tester, controller);
-    await _openCategory(tester, SettingsCategory.playback);
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      await _showSettings(tester, controller);
+      await _openCategory(tester, SettingsCategory.playback);
 
-    final title = find.text('Match display HDR in fullscreen');
-    final toggle = find.byType(Switch).last;
-    await tester.ensureVisible(title);
-    await tester.pumpAndSettle();
-    expect(title, findsOneWidget);
-    expect(
-      find.text(
-        'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
-      ),
-      findsOneWidget,
-    );
-    expect(tester.widget<Switch>(toggle).value, isTrue);
+      final title = find.text('Match display HDR in fullscreen');
+      final toggle = find.byType(Switch).last;
+      await tester.ensureVisible(title);
+      await tester.pumpAndSettle();
+      expect(title, findsOneWidget);
+      expect(
+        find.text(
+          'Switch Windows HDR on for HDR programs and off for SDR programs while fullscreen, then restore your display setting.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.widget<Switch>(toggle).value, isTrue);
 
-    await tester.tap(toggle);
-    await tester.pumpAndSettle();
-    expect(controller.settings.matchDisplayHdr, isFalse);
-    expect(tester.widget<Switch>(toggle).value, isFalse);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(controller.settings.matchDisplayHdr, isFalse);
+      expect(tester.widget<Switch>(toggle).value, isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
-  testWidgets('fullscreen HDR switch is omitted on macOS only', (tester) async {
+  testWidgets('fullscreen HDR switch is omitted on macOS and Android', (
+    tester,
+  ) async {
     final controller = FixtureController();
     addTearDown(controller.dispose);
     try {
-      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-      await _showSettings(tester, controller);
-      await _openCategory(tester, SettingsCategory.playback);
-      expect(find.text('Match display HDR in fullscreen'), findsNothing);
-      expect(find.text('DVR playback controls'), findsOneWidget);
-      expect(controller.settings.matchDisplayHdr, isTrue);
+      for (final platform in [TargetPlatform.macOS, TargetPlatform.android]) {
+        debugDefaultTargetPlatformOverride = platform;
+        await _showSettings(tester, controller);
+        await _openCategory(tester, SettingsCategory.playback);
+        expect(find.text('Match display HDR in fullscreen'), findsNothing);
+        expect(find.text('DVR playback controls'), findsOneWidget);
+        expect(controller.settings.matchDisplayHdr, isTrue);
+      }
 
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       await _showSettings(tester, controller);

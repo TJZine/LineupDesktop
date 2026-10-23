@@ -37,3 +37,8 @@ windows/flutter/ephemeral/
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Android signing inputs (kept outside the repository)
+*.jks
+*.keystore
+android/key.properties

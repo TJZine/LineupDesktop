@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 
 import 'app/lineup_app.dart';
@@ -34,7 +35,8 @@ void main(List<String> arguments) {
   };
 
   String? mediaArgument;
-  for (final argument in arguments) {
+  for (final argument
+      in Platform.isAndroid && kReleaseMode ? const <String>[] : arguments) {
     if (argument.startsWith('--media=')) {
       mediaArgument = argument.substring('--media='.length);
       break;

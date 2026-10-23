@@ -8,8 +8,9 @@ const _plexLinkUrl = 'https://plex.tv/link';
 
 /// Opens only the public linking page; the viewer enters the displayed code.
 Future<void> openPlexLink() async {
-  if (defaultTargetPlatform == TargetPlatform.macOS) {
-    return _openPlexLinkMacOS();
+  if (defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.android) {
+    return _openPlexLinkNative();
   }
   final (executable, arguments) = switch (Platform.operatingSystem) {
     'windows' => (
@@ -28,9 +29,8 @@ Future<void> openPlexLink() async {
   }
 }
 
-/// Sandboxed builds open the link through NSWorkspace rather than spawning
-/// `open`; native code accepts no URL from Dart.
-Future<void> _openPlexLinkMacOS() async {
+/// Native code owns the fixed URL on macOS and Android; Dart supplies no URL.
+Future<void> _openPlexLinkNative() async {
   final bool opened;
   try {
     opened =
