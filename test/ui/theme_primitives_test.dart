@@ -1,5 +1,7 @@
 import 'dart:ui' show PointerDeviceKind;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,6 +72,74 @@ void main() {
     expect(LineupConnectionStatus.hasWarning(connection(relay: true)), isFalse);
     expect(LineupConnectionStatus.description(null), 'Not measured yet');
   });
+
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets('TV keys change focus modality only on Android: $platform', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = platform;
+      final focus = FocusNode();
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: LineupCanvas.builder,
+            home: Scaffold(
+              body: FilledButton(
+                focusNode: focus,
+                onPressed: () {},
+                child: const Text('Continue'),
+              ),
+            ),
+          ),
+        );
+        focus.requestFocus();
+        await tester.pump();
+        final control = find.byType(FilledButton);
+        BorderSide side() =>
+            Theme.of(tester.element(control)).filledButtonTheme.style!.side!
+                .resolve({WidgetState.focused})!;
+        for (final key in [
+          LogicalKeyboardKey.channelUp,
+          LogicalKeyboardKey.channelDown,
+          LogicalKeyboardKey.guide,
+          LogicalKeyboardKey.info,
+          LogicalKeyboardKey.contextMenu,
+        ]) {
+          await tester.tap(control);
+          await tester.pump();
+          expect(side(), BorderSide.none);
+          await tester.sendKeyEvent(
+            key,
+            physicalKey: PhysicalKeyboardKey.escape,
+            platform: 'android',
+          );
+          await tester.pump();
+          expect(
+            side(),
+            platform == TargetPlatform.android
+                ? isNot(BorderSide.none)
+                : BorderSide.none,
+          );
+          expect(focus.hasPrimaryFocus, isTrue);
+        }
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.arrowRight,
+          platform: 'android',
+        );
+        await tester.pump();
+        expect(side().width, 3);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        focus.dispose();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
 
   testWidgets(
     'pointer hides the ring and keyboard restores it without moving focus or selection',

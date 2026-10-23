@@ -10,6 +10,7 @@ import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
+import 'navigation_shortcuts.dart';
 import 'plex_link_launcher.dart';
 
 sealed class _ServerAttempt {
@@ -77,7 +78,8 @@ class UpstreamOnboardingView extends StatefulWidget {
   State<UpstreamOnboardingView> createState() => _UpstreamOnboardingViewState();
 }
 
-class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
+class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
+    with WidgetsBindingObserver {
   Timer? _clock;
   final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
@@ -93,10 +95,55 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   int _serverAttemptRevision = 0;
   PlexHomeUser? _pinUser;
   bool _pulse = true;
+  FocusNode? _lastControlFocus;
+  bool _focusRecoveryScheduled = false;
+
+  void _recoverAndroidFocus() {
+    if (defaultTargetPlatform != TargetPlatform.android || !mounted) return;
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary != null &&
+        primary != _navigationFocus &&
+        primary.ancestors.contains(_navigationFocus)) {
+      _lastControlFocus = primary;
+      return;
+    }
+    if (_focusRecoveryScheduled) return;
+    _focusRecoveryScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusRecoveryScheduled = false;
+      if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+      final current = FocusManager.instance.primaryFocus;
+      final stranded =
+          current == null ||
+          current == _navigationFocus ||
+          (current is FocusScopeNode &&
+              _navigationFocus.ancestors.contains(current));
+      if (!stranded) return;
+      final previous = _lastControlFocus;
+      final target =
+          previous != null &&
+              previous.context?.mounted == true &&
+              previous.canRequestFocus &&
+              previous.ancestors.contains(_navigationFocus)
+          ? previous
+          : _navigationFocus.descendants
+                .where((node) => node.canRequestFocus && !node.skipTraversal)
+                .firstOrNull;
+      target?.requestFocus();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _recoverAndroidFocus();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    FocusManager.instance.addListener(_recoverAndroidFocus);
     _linkingStopped = _isLinkingStopped(widget.controller);
     _wasLinking = widget.controller.stage == SetupStage.linking;
     _busy = widget.controller.busy;
@@ -166,6 +213,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   @override
   void dispose() {
     widget.controller.removeListener(_controllerChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    FocusManager.instance.removeListener(_recoverAndroidFocus);
     _clock?.cancel();
     _navigationFocus.dispose();
     _linkActionFocus.dispose();
@@ -215,7 +264,14 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   void _focusNavigation() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _navigationFocus.canRequestFocus) {
-        _navigationFocus.requestFocus();
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          _navigationFocus.descendants
+              .where((node) => node.canRequestFocus && !node.skipTraversal)
+              .firstOrNull
+              ?.requestFocus();
+        } else {
+          _navigationFocus.requestFocus();
+        }
       }
     });
   }
@@ -255,17 +311,27 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       _ => false,
     };
     return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (_, _) => _handleBack(),
+      canPop: AndroidBackScope.claims(context),
+      onPopInvokedWithResult: (_, _) {
+        if (!AndroidBackScope.claims(context)) _handleBack();
+      },
       child: Focus(
         focusNode: _navigationFocus,
+        skipTraversal: defaultTargetPlatform == TargetPlatform.android,
         canRequestFocus: true,
         onKeyEvent: _navigationKey,
         child: CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
-            const SingleActivator(LogicalKeyboardKey.escape): _handleBack,
-            const SingleActivator(LogicalKeyboardKey.goBack): _handleBack,
-            const SingleActivator(LogicalKeyboardKey.backspace): _handleBack,
+            // At the Android root an unavailable Back action must bubble to
+            // the shell so it can background the task.
+            if (!AndroidBackScope.claims(context) ||
+                _pinUser != null ||
+                widget.controller.profileSelectionCanCancel ||
+                widget.controller.serverSelectionCanCancel) ...{
+              const SingleActivator(LogicalKeyboardKey.escape): _handleBack,
+              const SingleActivator(LogicalKeyboardKey.goBack): _handleBack,
+              const SingleActivator(LogicalKeyboardKey.backspace): _handleBack,
+            },
           },
           child: Scaffold(
             body: DecoratedBox(
@@ -1682,9 +1748,9 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: false,
+    canPop: AndroidBackScope.claims(context),
     onPopInvokedWithResult: (_, _) {
-      if (!_submitting) widget.onBack();
+      if (!AndroidBackScope.claims(context) && !_submitting) widget.onBack();
     },
     child: Focus(
       key: const Key('profile-pin-keyboard-owner'),

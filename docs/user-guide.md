@@ -394,6 +394,27 @@ time regardless of that setting. Page Up/Page Down, number entry, Guide/Mini
 Guide tuning, tracks, sleep, menu, and fullscreen also do not depend on the
 setting. The timed OSD follows the configured 2–15 second auto-hide duration.
 
+### Android TV and Fire TV remote
+
+Use the D-pad to move focus and Select to activate the focused control. Back
+closes the current Player overlay, returns from Player to Guide, or follows the
+current screen's Back action. At the root, an unconsumed Back backgrounds Lineup
+without closing its task. Home belongs to the TV system.
+
+| Remote button | Action |
+| --- | --- |
+| Channel Up / Channel Down | Player: previous/next channel; Mini Guide: move seven channels; Guide: move a visible page, like Page Up / Page Down |
+| Guide | Open the full Guide from Player; in Guide, follow its Close Guide action |
+| Info / Menu | Player: expand Now Playing, or collapse it to the OSD when already open; other screens use their focused control's context action when available |
+| Play/Pause, Rewind, Fast Forward | Existing Player transport actions when DVR playback controls are enabled |
+| Number buttons | Enter a channel number in Player, then Select to confirm |
+
+Guide and Info depend on the remote; Fire TV remotes may not provide them.
+Use the Player's OSD controls for tracks and sleep. Plex linking uses the code
+and QR shown on the TV; open plex.tv/link on another device when the TV has no
+browser. The Studio manual editor and air check remain reachable but are not
+accepted for remote-only operation in this beta.
+
 ## Channels
 
 **Generate lineup** is the bulk workflow. It proposes generator-owned channels,

@@ -42,6 +42,95 @@ final _narrowLogoPng = base64Decode(
 );
 
 void main() {
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets('Guide TV aliases preserve desktop keys on $platform', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = platform;
+      final lineup = _Lineup(40);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final focus = FocusNode();
+      var closes = 0;
+      try {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: LineupCanvas.builder,
+            home: GuideView(
+              controller: guide,
+              focusNode: focus,
+              onClose: (_, _) => closes++,
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        focus.requestFocus();
+        await tester.pump();
+        final before = guide.focusedChannelIndex;
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.channelDown,
+          physicalKey: PhysicalKeyboardKey.escape,
+          platform: 'android',
+        );
+        await tester.pumpAndSettle();
+        if (platform == TargetPlatform.android) {
+          expect(guide.focusedChannelIndex, greaterThan(before));
+        } else {
+          expect(guide.focusedChannelIndex, before);
+        }
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.channelUp,
+          physicalKey: PhysicalKeyboardKey.escape,
+          platform: 'android',
+        );
+        await tester.pumpAndSettle();
+        expect(guide.focusedChannelIndex, before);
+        for (final key in [
+          LogicalKeyboardKey.guide,
+          LogicalKeyboardKey.info,
+          LogicalKeyboardKey.contextMenu,
+        ]) {
+          await tester.sendKeyEvent(
+            key,
+            physicalKey: PhysicalKeyboardKey.escape,
+            platform: 'android',
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(closes, platform == TargetPlatform.android ? 1 : 0);
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.pageDown,
+          platform: 'android',
+        );
+        await tester.pumpAndSettle();
+        expect(guide.focusedChannelIndex, greaterThan(before));
+        for (final key in [LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2]) {
+          await tester.sendKeyEvent(key, platform: 'android');
+          await tester.pumpAndSettle();
+        }
+        expect(closes, platform == TargetPlatform.android ? 3 : 2);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        tester.view.reset();
+        focus.dispose();
+        guide.dispose();
+        lineup.dispose();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
   testWidgets('Guide toolbar icons expose explicit accessible names', (
     tester,
   ) async {
@@ -228,6 +317,13 @@ void main() {
           await tester.pumpAndSettle();
           expectSnapped();
         }
+        final beforeChannel = guide.focusedChannelIndex;
+        await tester.sendKeyEvent(LogicalKeyboardKey.channelDown);
+        await tester.pumpAndSettle();
+        expect(guide.focusedChannelIndex, beforeChannel + 5);
+        await tester.sendKeyEvent(LogicalKeyboardKey.channelUp);
+        await tester.pumpAndSettle();
+        expect(guide.focusedChannelIndex, beforeChannel);
         final beforePage = guide.focusedChannelIndex;
         await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
         await tester.pumpAndSettle();

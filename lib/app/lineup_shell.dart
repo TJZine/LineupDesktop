@@ -753,6 +753,13 @@ class _LineupShellState extends State<LineupShell> {
 
   @override
   Widget build(BuildContext context) {
+    final child = _buildShell(context);
+    return defaultTargetPlatform == TargetPlatform.android
+        ? AndroidBackScope(child: child)
+        : child;
+  }
+
+  Widget _buildShell(BuildContext context) {
     _lastPlayerFacts = _shellPlayerFacts;
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
 import '../playback/player_coordinator.dart';
@@ -9,6 +10,7 @@ import '../ui/app_ui.dart';
 import 'channel_health_monitor.dart';
 import 'channel_studio_view.dart';
 import 'lineup_controller.dart';
+import 'navigation_shortcuts.dart';
 
 enum _DirectoryFilter { all, custom, generated }
 
@@ -230,36 +232,50 @@ class ChannelsViewState extends State<ChannelsView> {
   Widget build(BuildContext context) {
     if (_studioMode case final mode?) {
       return PopScope(
-        canPop: false,
+        canPop: AndroidBackScope.claims(context),
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) unawaited(closeStudio());
+          if (!didPop && !AndroidBackScope.claims(context)) {
+            unawaited(closeStudio());
+          }
         },
-        child: ChannelStudioView(
-          key: _studioKey,
-          controller: widget.controller,
-          mode: mode,
-          channel: _studioChannel,
-          onBack: closeStudio,
-          onOpenMenu: widget.onOpenMenu,
-          menuFocusNode: widget.menuFocusNode,
-          onSaved: (id) => _returnFocusId = id,
-          onDuplicate: _openDuplicate,
-          onOpenChannel: (channel) async {
-            if (await requestLeave(channel.id) && mounted) _open(channel);
-          },
-          onOpenGenerateLineup: _openGenerateLineupFromStudio,
-          clock: widget.clock,
-          onTune: (id) async {
-            final originatingStudio = _studioKey;
-            final success = await widget.player.tune(id);
-            if (success &&
-                mounted &&
-                _studioOpen &&
-                identical(_studioKey, originatingStudio)) {
-              widget.onOpenPlayer();
+        child: Focus(
+          canRequestFocus: false,
+          onKeyEvent: (_, event) {
+            if (AndroidBackScope.claims(context) &&
+                event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.goBack) {
+              unawaited(closeStudio());
+              return KeyEventResult.handled;
             }
-            return success;
+            return KeyEventResult.ignored;
           },
+          child: ChannelStudioView(
+            key: _studioKey,
+            controller: widget.controller,
+            mode: mode,
+            channel: _studioChannel,
+            onBack: closeStudio,
+            onOpenMenu: widget.onOpenMenu,
+            menuFocusNode: widget.menuFocusNode,
+            onSaved: (id) => _returnFocusId = id,
+            onDuplicate: _openDuplicate,
+            onOpenChannel: (channel) async {
+              if (await requestLeave(channel.id) && mounted) _open(channel);
+            },
+            onOpenGenerateLineup: _openGenerateLineupFromStudio,
+            clock: widget.clock,
+            onTune: (id) async {
+              final originatingStudio = _studioKey;
+              final success = await widget.player.tune(id);
+              if (success &&
+                  mounted &&
+                  _studioOpen &&
+                  identical(_studioKey, originatingStudio)) {
+                widget.onOpenPlayer();
+              }
+              return success;
+            },
+          ),
         ),
       );
     }

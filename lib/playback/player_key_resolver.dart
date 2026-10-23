@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../ui/lineup_focus.dart' show androidTvKeyAlias;
 import 'player_coordinator.dart';
 
 sealed class PlayerCommand {
@@ -98,6 +99,7 @@ PlayerCommand resolvePlayerKey(
   bool commandPressed = false,
 }) {
   if (commandPressed) return PlayerAction.ignored;
+  key = androidTvKeyAlias(key) ?? key;
   if (_backKeys.contains(key)) {
     return switch (overlay) {
       PlayerOverlay.none => PlayerAction.backToGuide,
