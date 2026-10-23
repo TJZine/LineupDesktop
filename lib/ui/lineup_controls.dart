@@ -50,9 +50,8 @@ class LineupField extends StatelessWidget {
     children: [
       Text(
         label,
-        style: LineupTypography.fieldLabel.copyWith(
-          color: LineupTheme.of(context).secondaryText,
-        ),
+        style: LineupTypography.fieldLabelFor(LineupTheme.of(context))
+            .copyWith(color: LineupTheme.of(context).secondaryText),
       ),
       const SizedBox(height: 8),
       child,

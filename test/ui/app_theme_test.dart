@@ -4,6 +4,28 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test('TV typography roles preserve desktop sizes in every palette', () {
+    for (final name in LineupThemeName.values) {
+      for (final tv in [false, true]) {
+        final theme = LineupTheme.forName(name, androidTv: tv);
+        final roles = theme.extension<LineupThemeRoles>()!;
+        expect(theme.textTheme.labelSmall!.fontSize, tv ? 16.5 : 14);
+        expect(theme.textTheme.titleSmall!.fontSize, tv ? 16.5 : 16);
+        expect(theme.inputDecorationTheme.errorStyle!.fontSize, tv ? 18 : 14);
+        final button = LineupTheme.buttonStyle(
+          roles,
+          LineupButtonTier.text,
+          compact: true,
+        );
+        for (final states in [
+          <WidgetState>{},
+          {WidgetState.focused},
+        ]) {
+          expect(button.textStyle!.resolve(states)!.fontSize, tv ? 18 : 16);
+        }
+      }
+    }
+  });
   test('theme inventory starts with the approved Lineup identity', () {
     expect(LineupThemeName.values.map((theme) => theme.label), [
       'Ember & Steel',

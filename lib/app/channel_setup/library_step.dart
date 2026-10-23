@@ -393,8 +393,11 @@ class SetupLibraryStep extends StatelessWidget {
 
   Widget _selectionSummary(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final summaryStyle = Theme.of(context).textTheme.bodyMedium!
-        .copyWith(color: roles.secondaryText, fontSize: 16, height: 1.4);
+    final summaryStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: roles.metadataTextSize(desktop: 16),
+      height: 1.4,
+    );
     final editable =
         !data.busy && data.libraryScanStatus != LibraryScanStatus.scanning;
     final libraries = data.libraries;
@@ -432,6 +435,7 @@ class SetupLibraryStep extends StatelessWidget {
                     return Text(
                       'Select all',
                       style: summaryStyle.copyWith(
+                        fontSize: ink.compactActionTextSize,
                         color: editable ? ink.secondaryText : ink.mutedText,
                       ),
                     );
@@ -497,7 +501,7 @@ class SetupLibraryStep extends StatelessWidget {
         );
         final typeStyle = textTheme.bodyMedium!.copyWith(
           color: roles.mutedText,
-          fontSize: 16,
+          fontSize: roles.metadataTextSize(desktop: 16),
           height: 1.4,
         );
         final textScale = MediaQuery.textScalerOf(context).scale(1);

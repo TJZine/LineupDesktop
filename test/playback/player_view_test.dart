@@ -41,6 +41,144 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  for (final window in const [Size(960, 540), Size(1920, 1080)]) {
+    for (final dvr in [false, true]) {
+      testWidgets(
+        'TV Player keeps video full-frame and overlay content safe: $window DVR=$dvr',
+        (tester) async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          tester.view
+            ..physicalSize = window * 2
+            ..devicePixelRatio = 2;
+          final fixture = _Fixture(
+            PlayerState.playing,
+            richProgram: true,
+            channelCount: 5,
+            dvrControlsEnabled: dvr,
+            tracks: const [
+              PlayerTrack(
+                id: 1,
+                type: PlayerTrackType.audio,
+                selected: true,
+                title: 'English',
+              ),
+            ],
+          );
+          final safe = Rect.fromLTWH(
+            window.width * .05,
+            window.height * .05,
+            window.width * .9,
+            window.height * .9,
+          );
+          void inside(Finder finder) {
+            final rect = _drawnRect(tester, finder);
+            expect(rect.left, greaterThanOrEqualTo(safe.left - .01));
+            expect(rect.top, greaterThanOrEqualTo(safe.top - .01));
+            expect(rect.right, lessThanOrEqualTo(safe.right + .01));
+            expect(rect.bottom, lessThanOrEqualTo(safe.bottom + .01));
+          }
+
+          try {
+            fixture.player.showOsd();
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: LineupTheme.forName(
+                  LineupThemeName.emberSteel,
+                  androidTv: true,
+                ),
+                builder: LineupCanvas.builder,
+                home: PlayerView(controller: fixture.player, openGuide: () {}),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              _drawnRect(tester, find.byType(NativeVideoSurface)),
+              Offset.zero & window,
+            );
+            final nativeRect = fixture.native.videoRects.last;
+            expect(nativeRect.left, 0);
+            expect(nativeRect.top, 0);
+            expect(nativeRect.width, closeTo(window.width, .001));
+            expect(nativeRect.height, closeTo(window.height, .001));
+            expect(nativeRect.scale, 2);
+            for (final key in [
+              'player-osd-title',
+              'player-osd-subtitles',
+              'player-osd-audio',
+              'player-osd-sleep',
+              'player-osd-channel-bug',
+            ]) {
+              inside(find.byKey(Key(key)));
+            }
+            expect(
+              _drawnRect(
+                tester,
+                find.byKey(const Key('player-osd-progress-line')),
+              ).bottom,
+              closeTo(window.height, .001),
+            );
+            if (dvr) {
+              final target = find.byKey(const Key('player-safe-dvr-target'));
+              inside(target);
+              final sliderNode = tester.semantics
+                  .simulatedAccessibilityTraversal()
+                  .where(
+                    (node) => node.getSemanticsData().flagsCollection.isSlider,
+                  )
+                  .single;
+              final range = sliderNode.getSemanticsData();
+              expect(range.label, 'Playback progress');
+              expect(range.value, '10:00 of 1:00:00');
+              expect(range.hasAction(SemanticsAction.increase), isTrue);
+              expect(range.hasAction(SemanticsAction.decrease), isTrue);
+              final box = tester.renderObject<RenderBox>(target);
+              final accessibleBounds = Rect.fromPoints(
+                box.localToGlobal(sliderNode.rect.topLeft),
+                box.localToGlobal(sliderNode.rect.bottomRight),
+              );
+              expect(accessibleBounds.top, greaterThanOrEqualTo(safe.top));
+              expect(
+                accessibleBounds.bottom,
+                lessThanOrEqualTo(safe.bottom + .001),
+              );
+              fixture.player.closeOverlay();
+              await tester.pump();
+              expect(
+                tester.semantics.simulatedAccessibilityTraversal().where(
+                  (node) => node.getSemanticsData().flagsCollection.isSlider,
+                ),
+                isEmpty,
+              );
+              fixture.player.showOsd();
+              await tester.pumpAndSettle();
+            }
+            fixture.player.showSleepTimer();
+            await tester.pumpAndSettle();
+            inside(find.byKey(const Key('sleep-timer-picker')));
+            fixture.player.closeSleepPicker();
+            fixture.player.showNowPlaying();
+            await tester.pumpAndSettle();
+            inside(find.byKey(const Key('player-now-playing-surface')));
+            fixture.player.closeOverlay();
+            fixture.player.showTracks(PlayerTrackType.audio);
+            await tester.pumpAndSettle();
+            inside(find.byKey(const Key('playback-options-footer')));
+            inside(find.text('English').last);
+            fixture.player.closeOverlay();
+            fixture.player.showMiniGuide();
+            await tester.pumpAndSettle();
+            inside(find.text('Up/Down Browse · Select Tune · Back Close'));
+            expect(tester.takeException(), isNull);
+          } finally {
+            await tester.pumpWidget(const SizedBox.shrink());
+            fixture.dispose();
+            tester.view.reset();
+            debugDefaultTargetPlatformOverride = null;
+          }
+        },
+      );
+    }
+  }
   testWidgets('deferred tune transport name and icon agree with K', (
     tester,
   ) async {
@@ -7014,8 +7152,12 @@ class _Native implements NativePlayer {
     transportCommands++;
   }
 
+  final videoRects = <PlayerVideoRect>[];
   @override
-  Future<void> setVideoRect(PlayerVideoRect rect) async {}
+  Future<void> setVideoRect(PlayerVideoRect rect) async {
+    videoRects.add(rect);
+  }
+
   @override
   Future<void> setFullscreen(bool fullscreen) async {
     fullscreenValues.add(fullscreen);

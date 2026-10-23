@@ -1,8 +1,103 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  for (final window in const [
+    Size(960, 540),
+    Size(1920, 1080),
+    Size(1200, 540),
+  ]) {
+    testWidgets('TV canvas converts and consumes insets once at $window', (
+      tester,
+    ) async {
+      tester.view
+        ..devicePixelRatio = 2
+        ..physicalSize = window * 2;
+      addTearDown(tester.view.reset);
+      late MediaQueryData outer;
+      late MediaQueryData consumed;
+      late MediaQueryData nested;
+      var taps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              padding: const EdgeInsets.fromLTRB(100, 4, 8, 80),
+              viewPadding: const EdgeInsets.fromLTRB(100, 4, 8, 80),
+              viewInsets: const EdgeInsets.only(bottom: 150),
+              systemGestureInsets: const EdgeInsets.all(6),
+              textScaler: const TextScaler.linear(1.3),
+            ),
+            child: LineupCanvas(child: child!),
+          ),
+          home: Builder(
+            builder: (context) {
+              outer = MediaQuery.of(context);
+              return SafeArea(
+                child: Builder(
+                  builder: (context) {
+                    consumed = MediaQuery.of(context);
+                    return SafeArea(
+                      child: Builder(
+                        builder: (context) {
+                          nested = MediaQuery.of(context);
+                          return Stack(
+                            children: [
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                child: GestureDetector(
+                                  key: const Key('safe-target'),
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => taps++,
+                                  child: const SizedBox(width: 80, height: 60),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      final scale = LineupCanvas.scaleFor(window, androidTv: true);
+      expect(scale, closeTo(window.height / 810, 1e-12));
+      expect(outer.size, window / scale);
+      expect(outer.size.height, 810);
+      expect(
+        outer.padding,
+        EdgeInsets.fromLTRB(100, window.height * .05, window.width * .05, 80) /
+            scale,
+      );
+      expect(
+        outer.viewPadding,
+        const EdgeInsets.fromLTRB(100, 4, 8, 80) / scale,
+      );
+      expect(outer.viewInsets, const EdgeInsets.only(bottom: 150) / scale);
+      expect(outer.systemGestureInsets, const EdgeInsets.all(6) / scale);
+      expect(outer.textScaler.scale(18), closeTo(23.4, .001));
+      expect(consumed.padding, EdgeInsets.zero);
+      expect(nested.padding, EdgeInsets.zero);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('safe-target'))),
+        Offset(100, window.height * .05),
+      );
+      await tester.tap(find.byKey(const Key('safe-target')));
+      expect(taps, 1);
+    });
+  }
   for (final window in const [
     Size(1280, 720),
     Size(1366, 768),

@@ -8,6 +8,7 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_text_field_activation.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -136,41 +137,80 @@ class _GuideFixtureController extends FixtureController {
       buildChannelSchedule(channel, (channel.source as ManualSource).items);
 }
 
-UiFixture _geometryFixture({required bool androidTv}) => UiFixture(
-  androidTv: androidTv,
-  guideClock: () => DateTime.utc(2026, 1, 15, 3, 17),
-  controller: _GuideFixtureController(
-    scenario: LineupScenario(
-      stage: SetupStage.ready,
-      settings: const LineupSettings(reduceMotion: true),
-      channels: [
-        for (var row = 0; row < 2; row++)
-          Channel(
-            id: 'geometry-$row',
-            number: row + 1,
-            name: 'Geometry $row',
-            source: const ManualSource([
-              ChannelItem(
-                id: 'long',
-                title: 'Long program',
-                duration: Duration(minutes: 67),
+UiFixture _geometryFixture({required bool androidTv, int channelCount = 2}) =>
+    UiFixture(
+      androidTv: androidTv,
+      guideClock: () => DateTime.utc(2026, 1, 15, 3, 17),
+      controller: _GuideFixtureController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          settings: const LineupSettings(reduceMotion: true),
+          channels: [
+            for (var row = 0; row < channelCount; row++)
+              Channel(
+                id: 'geometry-$row',
+                number: row + 1,
+                name: 'Geometry $row',
+                source: const ManualSource([
+                  ChannelItem(
+                    id: 'long',
+                    title: 'Long program',
+                    duration: Duration(minutes: 67),
+                  ),
+                  ChannelItem(
+                    id: 'short',
+                    title: 'Short program',
+                    duration: Duration(minutes: 37),
+                  ),
+                ]),
+                playbackMode: PlaybackMode.sequential,
+                anchor: DateTime.utc(2026, 1, 15, 3),
+                shuffleSeed: 1,
               ),
-              ChannelItem(
-                id: 'short',
-                title: 'Short program',
-                duration: Duration(minutes: 37),
-              ),
-            ]),
-            playbackMode: PlaybackMode.sequential,
-            anchor: DateTime.utc(2026, 1, 15, 3),
-            shuffleSeed: 1,
-          ),
-      ],
-    ),
-  ),
-);
+          ],
+        ),
+      ),
+    );
 
 void main() {
+  for (final window in const [Size(960, 540), Size(1920, 1080)]) {
+    testWidgets(
+      'TV Guide receives safe constraints and displays five full rows: $window',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.view
+          ..physicalSize = window * 2
+          ..devicePixelRatio = 2;
+        try {
+          await tester.pumpWidget(
+            _geometryFixture(androidTv: true, channelCount: 6).build(),
+          );
+          await _settle(tester);
+          final guide = find.byKey(const Key('classic-guide'));
+          final rect = _drawnRect(tester, guide);
+          expect(rect.left, closeTo(window.width * .05, .001));
+          expect(rect.top, closeTo(window.height * .05, .001));
+          expect(rect.right, closeTo(window.width * .95, .001));
+          expect(rect.bottom, closeTo(window.height * .95, .001));
+          expect(tester.getSize(guide), const Size(1296, 729));
+          expect(MediaQuery.paddingOf(tester.element(guide)), EdgeInsets.zero);
+          for (var i = 0; i < 5; i++) {
+            final channel = find.bySemanticsLabel(
+              RegExp('^Channel ${i + 1}, Geometry $i'),
+            );
+            final bounds = _drawnRect(tester, channel);
+            expect(bounds.left, greaterThanOrEqualTo(rect.left - .001));
+            expect(bounds.top, greaterThanOrEqualTo(rect.top));
+            expect(bounds.bottom, lessThanOrEqualTo(rect.bottom + .001));
+          }
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          tester.view.reset();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
   for (final scale in [0.8, 2 / 3]) {
     testWidgets('TV toolbar uses full rendered bounds at scale $scale', (
       tester,
@@ -183,7 +223,9 @@ void main() {
         final fixture = _geometryFixture(androidTv: true);
         await tester.pumpWidget(
           Transform.scale(
-            scale: scale / 0.8,
+            scale:
+                scale /
+                LineupCanvas.scaleFor(const Size(960, 540), androidTv: true),
             alignment: Alignment.topLeft,
             child: fixture.build(),
           ),

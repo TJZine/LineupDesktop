@@ -16,6 +16,7 @@ import '../playback/player_view.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
+import '../ui/lineup_canvas.dart';
 import 'channel_setup_view.dart';
 import 'channels_view.dart';
 import 'diagnostics_view.dart';
@@ -596,7 +597,15 @@ class _LineupShellState extends State<LineupShell> {
           color: roles.scrim.withValues(alpha: 0.45),
         ),
         CustomSingleChildLayout(
-          delegate: _AnchoredMenuLayout(anchor),
+          delegate: _AnchoredMenuLayout(
+            anchor,
+            insets: LineupTheme.of(context).androidTv
+                ? LineupCanvas.contentInsets(
+                    context,
+                    minimum: const EdgeInsets.all(16),
+                  )
+                : const EdgeInsets.all(16),
+          ),
           child: FocusScope(
             node: _appMenuScope,
             autofocus: true,
@@ -766,18 +775,20 @@ class _LineupShellState extends State<LineupShell> {
       if (_onboardingSupport) {
         return _withGlobalKeys(
           Scaffold(
-            body: _settingsWithLicenses(
-              SettingsView(
-                controller: controller,
-                category: SettingsCategory.support,
-                onCategoryChanged: (_) {},
-                supportOnly: true,
-                backLabel: '‹ Back to setup',
-                onBack: () => setState(() => _onboardingSupport = false),
-                openLicensesFocus: _openLicensesFocus,
-                onOpenLicenses: () => setState(() => _licensesOpen = true),
+            body: SafeArea(
+              child: _settingsWithLicenses(
+                SettingsView(
+                  controller: controller,
+                  category: SettingsCategory.support,
+                  onCategoryChanged: (_) {},
+                  supportOnly: true,
+                  backLabel: '‹ Back to setup',
+                  onBack: () => setState(() => _onboardingSupport = false),
+                  openLicensesFocus: _openLicensesFocus,
+                  onOpenLicenses: () => setState(() => _licensesOpen = true),
+                ),
+                onboarding: true,
               ),
-              onboarding: true,
             ),
           ),
         );
@@ -894,6 +905,10 @@ class _LineupShellState extends State<LineupShell> {
       openLicensesFocus: _openLicensesFocus,
       onOpenLicenses: () => setState(() => _licensesOpen = true),
     );
+    final routeConsumesSafeArea =
+        !(LineupTheme.of(context).androidTv &&
+            (_destination == ShellDestination.player ||
+                _destination == ShellDestination.settings));
     final routeView = switch (_destination) {
       ShellDestination.guide => guideView,
       ShellDestination.channels => ChannelsView(
@@ -910,7 +925,10 @@ class _LineupShellState extends State<LineupShell> {
         fit: StackFit.expand,
         children: [
           if (hasPlaybackSurface) PlayerSurface(controller: _player),
-          _settingsWithLicenses(settingsView),
+          if (LineupTheme.of(context).androidTv)
+            SafeArea(child: _settingsWithLicenses(settingsView))
+          else
+            _settingsWithLicenses(settingsView),
         ],
       ),
       ShellDestination.diagnostics => DiagnosticsView(
@@ -946,6 +964,10 @@ class _LineupShellState extends State<LineupShell> {
                 child: ExcludeFocus(
                   excluding: _appMenu != null,
                   child: SafeArea(
+                    left: routeConsumesSafeArea,
+                    top: routeConsumesSafeArea,
+                    right: routeConsumesSafeArea,
+                    bottom: routeConsumesSafeArea,
                     child: ColoredBox(
                       color:
                           _destination == ShellDestination.settings ||
@@ -969,18 +991,18 @@ class _LineupShellState extends State<LineupShell> {
 }
 
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
-  const _AnchoredMenuLayout(this.anchor);
+  const _AnchoredMenuLayout(this.anchor, {required this.insets});
 
   final Rect anchor;
+  final EdgeInsets insets;
 
-  double get _margin => 16;
   double get _gap => 8;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
       BoxConstraints(
-        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0.0, 320),
-        maxHeight: (constraints.maxHeight - _margin * 2).clamp(
+        maxWidth: (constraints.maxWidth - insets.horizontal).clamp(0.0, 320),
+        maxHeight: (constraints.maxHeight - insets.vertical).clamp(
           0.0,
           double.infinity,
         ),
@@ -988,17 +1010,19 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final horizontalMargin = math.min(_margin, size.width / 2);
-    final leftLimit = size.width - childSize.width - horizontalMargin;
+    final horizontalMargin = math.min(insets.left, size.width / 2);
+    final leftLimit =
+        size.width - childSize.width - math.min(insets.right, size.width / 2);
     final left = (anchor.right - childSize.width).clamp(
       math.min(horizontalMargin, leftLimit),
       math.max(horizontalMargin, leftLimit),
     );
-    final verticalMargin = math.min(_margin, size.height / 2);
-    final bottomLimit = size.height - childSize.height - verticalMargin;
+    final verticalMargin = math.min(insets.top, size.height / 2);
+    final bottomMargin = math.min(insets.bottom, size.height / 2);
+    final bottomLimit = size.height - childSize.height - bottomMargin;
     final below = anchor.bottom + _gap;
     final above = anchor.top - childSize.height - _gap;
-    final top = below + childSize.height <= size.height - verticalMargin
+    final top = below + childSize.height <= size.height - bottomMargin
         ? below
         : above >= verticalMargin
         ? above
@@ -1011,7 +1035,7 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_AnchoredMenuLayout oldDelegate) =>
-      oldDelegate.anchor != anchor;
+      oldDelegate.anchor != anchor || oldDelegate.insets != insets;
 }
 
 Uri _mediaUri(String value) {
@@ -1923,7 +1947,7 @@ class _Dropdown<T> extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: LineupTheme.of(context).secondaryText,
-                        fontSize: 14,
+                        fontSize: LineupTheme.of(context).metadataTextSize(),
                       ),
                     ),
                   ],

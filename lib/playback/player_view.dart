@@ -16,6 +16,7 @@ import '../guide/focused_ticker.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/lineup_canvas.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
 import 'player_coordinator.dart';
@@ -681,6 +682,21 @@ class _Osd extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
     final horizontalInset = (size.width * 0.05).clamp(24.0, 96.0).toDouble();
+    final safe = roles.androidTv
+        ? LineupCanvas.contentInsets(
+            context,
+            minimum: EdgeInsets.symmetric(
+              horizontal: horizontalInset,
+              vertical: 24,
+            ),
+          )
+        : EdgeInsets.zero;
+    final leftInset = roles.androidTv ? safe.left : horizontalInset;
+    final rightInset = roles.androidTv ? safe.right : horizontalInset;
+    final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
+    final bottomInset = roles.androidTv
+        ? math.max(12.0, safe.bottom) + (dvrControlsEnabled ? 40 : 0)
+        : 12.0 + (dvrControlsEnabled ? 40 : 0);
     final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
@@ -714,7 +730,6 @@ class _Osd extends StatelessWidget {
     final unsupported = controller.status.state == PlayerState.unsupported;
     final sliderInteractive =
         controller.duration > Duration.zero && !unsupported;
-    final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
     final expanded = !LineupLayout.isCompactWidth(size.width);
     final horizontal = size.width >= 1200 && size.height >= 640;
 
@@ -994,7 +1009,7 @@ class _Osd extends StatelessWidget {
     );
     Widget actionGroup(List<Widget> children) =>
         Row(mainAxisSize: MainAxisSize.min, children: children);
-    final availableWidth = size.width - horizontalInset * 2;
+    final availableWidth = size.width - leftInset - rightInset;
     final labelStyle = actionStyle.textStyle?.resolve({});
     final minimumSize =
         actionStyle.minimumSize?.resolve({}) ?? const Size(44, 44);
@@ -1062,6 +1077,34 @@ class _Osd extends StatelessWidget {
         },
       ),
     );
+    // The slider portal keeps the same fade/semantics ancestry as its lane.
+    // On TV only its interactive target moves inside the content-safe bounds.
+    final slider = Overlay.wrap(
+      key: ValueKey(sliderInteractive),
+      clipBehavior: Clip.none,
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 4,
+          activeTrackColor: Colors.transparent,
+          inactiveTrackColor: Colors.transparent,
+          thumbShape: SliderComponentShape.noThumb,
+          overlayShape: SliderComponentShape.noOverlay,
+        ),
+        child: Slider(
+          label: roles.androidTv ? 'Playback progress' : null,
+          semanticFormatterCallback: roles.androidTv
+              ? (value) =>
+                    '${_duration(Duration(milliseconds: value.round()))} of ${_duration(timingDuration)}'
+              : null,
+          value: sliderPosition,
+          max: sliderMax,
+          onChanged: sliderInteractive
+              ? (value) =>
+                    controller.seekTo(Duration(milliseconds: value.round()))
+              : null,
+        ),
+      ),
+    );
     final progressLine = Positioned(
       key: const Key('player-osd-progress-line'),
       left: 0,
@@ -1070,6 +1113,7 @@ class _Osd extends StatelessWidget {
       child: SizedBox(
         height: 40,
         child: Semantics(
+          hidden: roles.androidTv && dvrControlsEnabled,
           label: 'Playback progress',
           value:
               '${_duration(displayedPosition)} of ${_duration(timingDuration)}',
@@ -1087,33 +1131,7 @@ class _Osd extends StatelessWidget {
                   ),
                 ),
               ),
-              if (dvrControlsEnabled)
-                // Keep the Slider portal and its origin under the same fade,
-                // semantics exclusion and retirement ancestry.
-                Overlay.wrap(
-                  // An interactivity flip replaces Slider's semantics group;
-                  // remount its portal too so its new parent receives its data.
-                  key: ValueKey(sliderInteractive),
-                  clipBehavior: Clip.none,
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 4,
-                      activeTrackColor: Colors.transparent,
-                      inactiveTrackColor: Colors.transparent,
-                      thumbShape: SliderComponentShape.noThumb,
-                      overlayShape: SliderComponentShape.noOverlay,
-                    ),
-                    child: Slider(
-                      value: sliderPosition,
-                      max: sliderMax,
-                      onChanged: sliderInteractive
-                          ? (value) => controller.seekTo(
-                              Duration(milliseconds: value.round()),
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
+              if (dvrControlsEnabled && !roles.androidTv) slider,
             ],
           ),
         ),
@@ -1126,6 +1144,9 @@ class _Osd extends StatelessWidget {
           alignment: Alignment.bottomCenter,
           child: SafeArea(
             top: false,
+            left: !roles.androidTv,
+            right: !roles.androidTv,
+            bottom: !roles.androidTv,
             child: _BottomPanelExpansion(
               child: CustomPaint(
                 painter: _OsdPanelMaterial(
@@ -1139,84 +1160,88 @@ class _Osd extends StatelessWidget {
                   key: const Key('player-osd-surface'),
                   width: double.infinity,
                   padding: EdgeInsets.fromLTRB(
-                    horizontalInset,
+                    leftInset,
                     detailsExpanded
                         ? 20
                         : horizontal
                         ? (size.height >= 900 ? 44 : 20)
                         : (size.height >= 720 ? 56 : 40),
-                    horizontalInset,
-                    12 + (dvrControlsEnabled ? 40 : 0),
+                    rightInset,
+                    bottomInset,
                   ),
-                  child: Semantics(
-                    container: true,
-                    label: 'Playback controls',
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (detailsExpanded) ...[
-                          _NowPlaying(
-                            controller: controller,
-                            maxHeight: math.max(
-                              80,
-                              size.height -
-                                  (wrapActions ? 280 : 190) -
-                                  (dvrControlsEnabled ? 40 : 0),
+                  child: _consumeOverlayPadding(
+                    context,
+                    Semantics(
+                      container: true,
+                      label: 'Playback controls',
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (detailsExpanded) ...[
+                            _NowPlaying(
+                              controller: controller,
+                              maxHeight: math.max(
+                                80,
+                                size.height -
+                                    (roles.androidTv ? safe.vertical : 0) -
+                                    (wrapActions ? 280 : 190) -
+                                    (dvrControlsEnabled ? 40 : 0),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          if (horizontal && !wrapActions)
+                            const SizedBox(height: 20),
+                            if (horizontal && !wrapActions)
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(child: playbackStatus),
+                                  const SizedBox(width: 24),
+                                  groupedActions,
+                                ],
+                              )
+                            else ...[
+                              playbackStatus,
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: groupedActions,
+                              ),
+                            ],
+                          ] else if (horizontal && !wrapActions)
                             Row(
+                              key: const Key('player-osd-horizontal-layout'),
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Expanded(child: playbackStatus),
-                                const SizedBox(width: 24),
+                                Expanded(child: identity),
+                                SizedBox(width: 24),
                                 groupedActions,
                               ],
                             )
                           else ...[
-                            playbackStatus,
-                            const SizedBox(height: 6),
+                            KeyedSubtree(
+                              key: horizontal
+                                  ? const Key('player-osd-horizontal-layout')
+                                  : null,
+                              child: identity,
+                            ),
+                            SizedBox(height: 6),
                             Align(
                               alignment: Alignment.centerRight,
-                              child: groupedActions,
+                              child: wrapActions
+                                  ? groupedActions
+                                  : Row(
+                                      key: const Key(
+                                        'player-osd-stacked-controls',
+                                      ),
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [groupedActions],
+                                    ),
                             ),
                           ],
-                        ] else if (horizontal && !wrapActions)
-                          Row(
-                            key: const Key('player-osd-horizontal-layout'),
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Expanded(child: identity),
-                              SizedBox(width: 24),
-                              groupedActions,
-                            ],
-                          )
-                        else ...[
-                          KeyedSubtree(
-                            key: horizontal
-                                ? const Key('player-osd-horizontal-layout')
-                                : null,
-                            child: identity,
-                          ),
-                          SizedBox(height: 6),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: wrapActions
-                                ? groupedActions
-                                : Row(
-                                    key: const Key(
-                                      'player-osd-stacked-controls',
-                                    ),
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [groupedActions],
-                                  ),
-                          ),
+                          SizedBox(height: 10),
+                          progress,
                         ],
-                        SizedBox(height: 10),
-                        progress,
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -1228,8 +1253,8 @@ class _Osd extends StatelessWidget {
             controller.notice == null &&
             controller.busyLabel == null)
           Positioned(
-            top: 24,
-            right: horizontalInset,
+            top: roles.androidTv ? safe.top : 24,
+            right: rightInset,
             child: _ChannelBug(
               key: const Key('player-osd-channel-bug'),
               channel: channel,
@@ -1242,8 +1267,20 @@ class _Osd extends StatelessWidget {
             controller: controller,
             restoreFocus: restoreSleepFocus,
             anchor: sleepAnchor,
+            anchorFocus: sleepFocus,
           ),
         progressLine,
+        if (dvrControlsEnabled && roles.androidTv)
+          Positioned(
+            key: const Key('player-safe-dvr-target'),
+            left: safe.left,
+            right: safe.right,
+            // Slider's invisible 48cu semantics target extends 4cu beyond
+            // this 40cu portal. Keep that target above the bottom safe edge.
+            bottom: safe.bottom + (kMinInteractiveDimension - 40) / 2,
+            height: 40,
+            child: slider,
+          ),
       ],
     );
   }
@@ -1310,7 +1347,11 @@ class _ChannelBug extends StatelessWidget {
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: roles.primaryText,
               fontSize: osdPresentation
-                  ? (size.width >= 1920 && size.height >= 900 ? 16 : 14)
+                  ? roles.metadataTextSize(
+                      desktop: size.width >= 1920 && size.height >= 900
+                          ? 16
+                          : 14,
+                    )
                   : inheritedLabelSize,
               fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w600,
             ),
@@ -1789,7 +1830,9 @@ class _NowPlayingBadge extends StatelessWidget {
         child: Text(
           label,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            fontSize: (Theme.of(context).textTheme.labelMedium?.fontSize ?? 12),
+            fontSize: roles.metadataTextSize(
+              desktop: Theme.of(context).textTheme.labelMedium?.fontSize ?? 12,
+            ),
           ),
         ),
       ),
@@ -1828,12 +1871,16 @@ class _NowPlayingCast extends StatelessWidget {
     final visible = cast.take(limit).toList(growable: false);
     final diameter = (dense ? 40.0 : 46.0);
     const gap = 24.0;
-    final nameStyle = _nowPlayingSecondaryStyle(
-      context,
-      dense: dense,
-    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
-    final roleStyle = Theme.of(context).textTheme.bodySmall
-        ?.copyWith(color: roles.secondaryText, fontSize: 14);
+    final nameStyle = _nowPlayingSecondaryStyle(context, dense: dense)
+        ?.copyWith(
+          fontSize: roles.metadataTextSize(desktop: 16),
+          height: 1.3,
+          color: roles.primaryText,
+        );
+    final roleStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: roles.secondaryText,
+      fontSize: roles.metadataTextSize(),
+    );
     final naturalWidths = [
       for (final member in visible)
         math.max(
@@ -1995,10 +2042,12 @@ class _NowPlayingCastColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final portrait = member.portrait;
-    final nameStyle = _nowPlayingSecondaryStyle(
-      context,
-      dense: dense,
-    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
+    final nameStyle = _nowPlayingSecondaryStyle(context, dense: dense)
+        ?.copyWith(
+          fontSize: roles.metadataTextSize(desktop: 16),
+          height: 1.3,
+          color: roles.primaryText,
+        );
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
@@ -2079,8 +2128,10 @@ class _NowPlayingCastColumn extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.start,
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: roles.secondaryText, fontSize: 14),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: roles.secondaryText,
+                    fontSize: roles.metadataTextSize(),
+                  ),
                 ),
               ),
             ),
@@ -2135,6 +2186,12 @@ class _MiniGuide extends StatelessWidget {
     final contentInset = (horizontal
         ? (large ? 48.0 : 32.0)
         : roles.overlaySafeArea);
+    final contentPadding = roles.androidTv
+        ? LineupCanvas.contentInsets(
+            context,
+            minimum: EdgeInsets.fromLTRB(contentInset, 12, contentInset, 16),
+          )
+        : EdgeInsets.fromLTRB(contentInset, 12, contentInset, 16);
     final rowInset = (large ? 18.0 : 12.0);
     const fadeTail = 55.0;
     final theme = Theme.of(context);
@@ -2144,6 +2201,9 @@ class _MiniGuide extends StatelessWidget {
         builder: (context) => Align(
           alignment: Alignment.topCenter,
           child: SafeArea(
+            top: !roles.androidTv,
+            left: !roles.androidTv,
+            right: !roles.androidTv,
             bottom: false,
             child: CustomPaint(
               painter: _MiniGuideFadePainter(
@@ -2157,223 +2217,219 @@ class _MiniGuide extends StatelessWidget {
                 key: const Key('mini-guide-shelf'),
                 width: double.infinity,
                 constraints: BoxConstraints(maxHeight: size.height),
-                padding: EdgeInsets.fromLTRB(
-                  contentInset,
-                  12,
-                  contentInset,
-                  16,
-                ),
-                child: Semantics(
-                  container: true,
-                  explicitChildNodes: true,
-                  label: 'Mini Guide',
-                  child: SingleChildScrollView(
-                    key: const Key('mini-guide-scroll'),
-                    child: Listener(
-                      behavior: HitTestBehavior.opaque,
-                      onPointerSignal: (event) {
-                        if (event is! PointerScrollEvent ||
-                            event.scrollDelta.dy == 0) {
-                          return;
-                        }
-                        GestureBinding.instance.pointerSignalResolver.register(
-                          event,
-                          (_) {
-                            controller.moveMiniGuide(
-                              event.scrollDelta.dy > 0 ? 1 : -1,
-                            );
-                          },
-                        );
-                      },
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 12,
-                            runSpacing: 4,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ExcludeSemantics(
-                                    child: Text(
-                                      'Mini Guide',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge
-                                          ?.copyWith(
-                                            fontSize: (large ? 26 : 20),
-                                            fontWeight: FontWeight.w500,
+                padding: contentPadding,
+                child: _consumeOverlayPadding(
+                  context,
+                  Semantics(
+                    container: true,
+                    explicitChildNodes: true,
+                    label: 'Mini Guide',
+                    child: SingleChildScrollView(
+                      key: const Key('mini-guide-scroll'),
+                      child: Listener(
+                        behavior: HitTestBehavior.opaque,
+                        onPointerSignal: (event) {
+                          if (event is! PointerScrollEvent ||
+                              event.scrollDelta.dy == 0) {
+                            return;
+                          }
+                          GestureBinding.instance.pointerSignalResolver
+                              .register(event, (_) {
+                                controller.moveMiniGuide(
+                                  event.scrollDelta.dy > 0 ? 1 : -1,
+                                );
+                              });
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 12,
+                              runSpacing: 4,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ExcludeSemantics(
+                                      child: Text(
+                                        'Mini Guide',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              fontSize: (large ? 26 : 20),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 20),
+                                    Text(
+                                      _time(context, controller.guide.now),
+                                      style: TextStyle(
+                                        color: roles.secondaryText,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        controller.showFullGuide();
+                                        openGuide();
+                                      },
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text('Full Guide'),
+                                          SizedBox(width: 8),
+                                          ExcludeSemantics(
+                                            child: Icon(
+                                              Icons.arrow_forward,
+                                              size: 16,
+                                            ),
                                           ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  SizedBox(width: 20),
-                                  Text(
-                                    _time(context, controller.guide.now),
-                                    style: TextStyle(
-                                      color: roles.secondaryText,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  TextButton(
-                                    onPressed: () {
-                                      controller.showFullGuide();
-                                      openGuide();
-                                    },
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Text('Full Guide'),
-                                        SizedBox(width: 8),
-                                        ExcludeSemantics(
-                                          child: Icon(
-                                            Icons.arrow_forward,
-                                            size: 16,
+                                    TextButton(
+                                      onPressed: controller.closeOverlay,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text('Close'),
+                                          SizedBox(width: 8),
+                                          ExcludeSemantics(
+                                            child: Icon(Icons.close, size: 16),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: controller.closeOverlay,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Text('Close'),
-                                        SizedBox(width: 8),
-                                        ExcludeSemantics(
-                                          child: Icon(Icons.close, size: 16),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          if (horizontal)
-                            Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                rowInset,
-                                0,
-                                rowInset,
-                                large ? 8 : 6,
-                              ),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: channelColumnWidth,
-                                    child: Text(
-                                      'Channel',
-                                      style: TextStyle(
-                                        color: roles.secondaryText,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w500,
+                                        ],
                                       ),
                                     ),
-                                  ),
-                                  SizedBox(width: columnGap),
-                                  Expanded(
-                                    flex: 115,
-                                    child: Text(
-                                      'On now',
-                                      style: TextStyle(
-                                        color: roles.secondaryText,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: columnGap),
-                                  Expanded(
-                                    flex: 100,
-                                    child: Text(
-                                      'Up next',
-                                      style: TextStyle(
-                                        color: roles.secondaryText,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          for (final (index, channel) in channels.indexed)
-                            _MiniGuideRow(
-                              controller: controller,
-                              channel: channel,
-                              rowHeight: rowHeight,
-                              channelColumnWidth: channelColumnWidth,
-                              columnGap: columnGap,
-                              active: active,
-                              large: large,
-                              rowInset: rowInset,
-                              isLast: index == channels.length - 1,
-                            ),
-                          SizedBox(height: 8),
-                          Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 12,
-                            runSpacing: 4,
-                            children: [
-                              Text(
-                                roles.androidTv
-                                    ? 'Up/Down Browse · Select Tune · Back Close'
-                                    : 'Up / Down · Browse · Enter Tune · Esc Close',
-                                style: TextStyle(
-                                  color: roles.secondaryText,
-                                  fontSize: 18,
+                            if (horizontal)
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  rowInset,
+                                  0,
+                                  rowInset,
+                                  large ? 8 : 6,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: channelColumnWidth,
+                                      child: Text(
+                                        'Channel',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: columnGap),
+                                    Expanded(
+                                      flex: 115,
+                                      child: Text(
+                                        'On now',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: columnGap),
+                                    Expanded(
+                                      flex: 100,
+                                      child: Text(
+                                        'Up next',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Previous channel',
-                                    constraints: BoxConstraints(
-                                      minWidth: 44,
-                                      minHeight: 44,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    onPressed: () =>
-                                        controller.moveMiniGuide(-1),
-                                    icon: Icon(
-                                      Icons.arrow_upward,
-                                      size: 24,
-                                      semanticLabel: 'Previous channel',
-                                    ),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Next channel',
-                                    constraints: BoxConstraints(
-                                      minWidth: 44,
-                                      minHeight: 44,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    onPressed: () =>
-                                        controller.moveMiniGuide(1),
-                                    icon: Icon(
-                                      Icons.arrow_downward,
-                                      size: 24,
-                                      semanticLabel: 'Next channel',
-                                    ),
-                                  ),
-                                ],
+                            for (final (index, channel) in channels.indexed)
+                              _MiniGuideRow(
+                                controller: controller,
+                                channel: channel,
+                                rowHeight: rowHeight,
+                                channelColumnWidth: channelColumnWidth,
+                                columnGap: columnGap,
+                                active: active,
+                                large: large,
+                                rowInset: rowInset,
+                                isLast: index == channels.length - 1,
                               ),
-                            ],
-                          ),
-                        ],
+                            SizedBox(height: 8),
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 12,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  roles.androidTv
+                                      ? 'Up/Down Browse · Select Tune · Back Close'
+                                      : 'Up / Down · Browse · Enter Tune · Esc Close',
+                                  style: TextStyle(
+                                    color: roles.secondaryText,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Previous channel',
+                                      constraints: BoxConstraints(
+                                        minWidth: 44,
+                                        minHeight: 44,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () =>
+                                          controller.moveMiniGuide(-1),
+                                      icon: Icon(
+                                        Icons.arrow_upward,
+                                        size: 24,
+                                        semanticLabel: 'Previous channel',
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Next channel',
+                                      constraints: BoxConstraints(
+                                        minWidth: 44,
+                                        minHeight: 44,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () =>
+                                          controller.moveMiniGuide(1),
+                                      icon: Icon(
+                                        Icons.arrow_downward,
+                                        size: 24,
+                                        semanticLabel: 'Next channel',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -2689,11 +2745,13 @@ class _SleepTimerPicker extends StatelessWidget {
     required this.controller,
     required this.restoreFocus,
     required this.anchor,
+    required this.anchorFocus,
   });
 
   final PlayerCoordinator controller;
   final VoidCallback restoreFocus;
   final LayerLink anchor;
+  final FocusNode anchorFocus;
 
   void _choose(Duration? duration) {
     controller.setSleepTimer(duration);
@@ -2707,10 +2765,30 @@ class _SleepTimerPicker extends StatelessWidget {
     final size = mediaQuery.size;
     final availableHeight =
         size.height - mediaQuery.padding.vertical - (24 + 132);
-    final maxHeight = math
+    var maxHeight = math
         .min(size.height - 180, availableHeight)
         .clamp(240.0, double.infinity)
         .toDouble();
+    var followerOffset = const Offset(0, -8);
+    if (roles.androidTv) {
+      final safe = LineupCanvas.contentInsets(context);
+      final root = Overlay.of(context).context.findRenderObject();
+      final target = anchorFocus.context?.findRenderObject();
+      if (root is RenderBox && target is RenderBox && target.hasSize) {
+        final targetRect = Rect.fromPoints(
+          root.globalToLocal(target.localToGlobal(Offset.zero)),
+          root.globalToLocal(
+            target.localToGlobal(target.size.bottomRight(Offset.zero)),
+          ),
+        );
+        maxHeight = math.max(0, targetRect.top - safe.top - 8);
+        final right = targetRect.right.clamp(
+          safe.left + 354,
+          math.max(safe.left + 354, size.width - safe.right),
+        );
+        followerOffset = Offset(right - targetRect.right, -8);
+      }
+    }
     final supportingText = Color.lerp(
       roles.secondaryText,
       roles.primaryText,
@@ -2733,7 +2811,7 @@ class _SleepTimerPicker extends StatelessWidget {
           showWhenUnlinked: false,
           targetAnchor: Alignment.topRight,
           followerAnchor: Alignment.bottomRight,
-          offset: const Offset(0, -8),
+          offset: followerOffset,
           child: Material(
             key: const Key('sleep-timer-picker'),
             color: _overlayColor(context, controller),
@@ -2880,9 +2958,15 @@ class _TracksState extends State<_Tracks> {
       builder: (context, constraints) {
         final railWidth = math.min(constraints.maxWidth * 0.4, 600.0);
         final fadeWidth = math.min(55.0, constraints.maxWidth - railWidth);
-        final padding = constraints.maxWidth <= 800
+        final basePadding = constraints.maxWidth <= 800
             ? EdgeInsets.all(20)
             : EdgeInsets.fromLTRB(36, 48, 48, 36);
+        final padding = roles.androidTv
+            ? LineupCanvas.contentInsets(
+                context,
+                minimum: basePadding,
+              ).copyWith(left: basePadding.left)
+            : basePadding;
         final textTheme = Theme.of(context).textTheme;
 
         final supportingText = Color.lerp(
@@ -2922,344 +3006,360 @@ class _TracksState extends State<_Tracks> {
                   width: railWidth,
                   child: Padding(
                     padding: padding,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
+                    child: _consumeOverlayPadding(
+                      context,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.type == PlayerTrackType.audio
+                                      ? 'Audio'
+                                      : 'Subtitles',
+                                  style: textTheme.headlineSmall,
+                                ),
+                              ),
+                              TextButton(
+                                autofocus:
+                                    tracks.isEmpty &&
+                                    widget.type != PlayerTrackType.subtitle,
+                                onPressed: widget.controller.closeOverlay,
+                                child: const _OverlayCloseLabel(),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 36),
+                          if (tracks.isEmpty &&
+                              widget.type == PlayerTrackType.subtitle)
+                            Padding(
+                              padding: EdgeInsets.only(bottom: 12),
                               child: Text(
-                                widget.type == PlayerTrackType.audio
-                                    ? 'Audio'
-                                    : 'Subtitles',
-                                style: textTheme.headlineSmall,
+                                widget.controller.tuning ||
+                                        widget.controller.status.state ==
+                                            PlayerState.loading
+                                    ? 'Loading tracks…'
+                                    : 'No subtitle tracks available',
+                                style: textTheme.bodyMedium,
                               ),
                             ),
-                            TextButton(
-                              autofocus:
+                          Expanded(
+                            child: _TrackListFade(
+                              child:
                                   tracks.isEmpty &&
-                                  widget.type != PlayerTrackType.subtitle,
-                              onPressed: widget.controller.closeOverlay,
-                              child: const _OverlayCloseLabel(),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 36),
-                        if (tracks.isEmpty &&
-                            widget.type == PlayerTrackType.subtitle)
-                          Padding(
-                            padding: EdgeInsets.only(bottom: 12),
-                            child: Text(
-                              widget.controller.tuning ||
-                                      widget.controller.status.state ==
-                                          PlayerState.loading
-                                  ? 'Loading tracks…'
-                                  : 'No subtitle tracks available',
-                              style: textTheme.bodyMedium,
-                            ),
-                          ),
-                        Expanded(
-                          child: _TrackListFade(
-                            child:
-                                tracks.isEmpty &&
-                                    widget.type == PlayerTrackType.audio
-                                ? Center(
-                                    child: Text(
-                                      widget.controller.tuning ||
-                                              widget.controller.status.state ==
-                                                  PlayerState.loading
-                                          ? 'Loading tracks…'
-                                          : 'No audio tracks available',
-                                      style: textTheme.bodyMedium,
-                                    ),
-                                  )
-                                : SingleChildScrollView(
-                                    key: const Key('playback-options-list'),
-                                    controller: _scrollController,
-                                    child: Column(
-                                      children: [
-                                        for (
-                                          var index = 0;
-                                          index <
-                                              tracks.length +
-                                                  (widget.type ==
-                                                          PlayerTrackType
-                                                              .subtitle
-                                                      ? 1
-                                                      : 0);
-                                          index++
-                                        ) ...[
-                                          if (index > 0)
-                                            Divider(
-                                              height: 1,
-                                              color: roles.subtleBorder
-                                                  .withValues(alpha: 0.45),
-                                            ),
-                                          Builder(
-                                            builder: (context) {
-                                              final off =
-                                                  widget.type ==
-                                                      PlayerTrackType
-                                                          .subtitle &&
-                                                  index == 0;
-                                              final track = off
-                                                  ? null
-                                                  : tracks[index -
-                                                        (widget.type ==
-                                                                PlayerTrackType
-                                                                    .subtitle
-                                                            ? 1
-                                                            : 0)];
-                                              final selected = off
-                                                  ? selectedTrack == null
-                                                  : track!.selected;
-                                              final display = track == null
-                                                  ? null
-                                                  : displays.displayFor(track);
-                                              final title = off
-                                                  ? 'Off'
-                                                  : display!.primaryText;
-                                              final metadata =
-                                                  display?.secondaryFacts ??
-                                                  const <String>[];
-                                              final metadataText = metadata
-                                                  .join(' • ');
+                                      widget.type == PlayerTrackType.audio
+                                  ? Center(
+                                      child: Text(
+                                        widget.controller.tuning ||
+                                                widget
+                                                        .controller
+                                                        .status
+                                                        .state ==
+                                                    PlayerState.loading
+                                            ? 'Loading tracks…'
+                                            : 'No audio tracks available',
+                                        style: textTheme.bodyMedium,
+                                      ),
+                                    )
+                                  : SingleChildScrollView(
+                                      key: const Key('playback-options-list'),
+                                      controller: _scrollController,
+                                      child: Column(
+                                        children: [
+                                          for (
+                                            var index = 0;
+                                            index <
+                                                tracks.length +
+                                                    (widget.type ==
+                                                            PlayerTrackType
+                                                                .subtitle
+                                                        ? 1
+                                                        : 0);
+                                            index++
+                                          ) ...[
+                                            if (index > 0)
+                                              Divider(
+                                                height: 1,
+                                                color: roles.subtleBorder
+                                                    .withValues(alpha: 0.45),
+                                              ),
+                                            Builder(
+                                              builder: (context) {
+                                                final off =
+                                                    widget.type ==
+                                                        PlayerTrackType
+                                                            .subtitle &&
+                                                    index == 0;
+                                                final track = off
+                                                    ? null
+                                                    : tracks[index -
+                                                          (widget.type ==
+                                                                  PlayerTrackType
+                                                                      .subtitle
+                                                              ? 1
+                                                              : 0)];
+                                                final selected = off
+                                                    ? selectedTrack == null
+                                                    : track!.selected;
+                                                final display = track == null
+                                                    ? null
+                                                    : displays.displayFor(
+                                                        track,
+                                                      );
+                                                final title = off
+                                                    ? 'Off'
+                                                    : display!.primaryText;
+                                                final metadata =
+                                                    display?.secondaryFacts ??
+                                                    const <String>[];
+                                                final metadataText = metadata
+                                                    .join(' • ');
 
-                                              final tooltip =
-                                                  display?.tooltipText ?? title;
-                                              final pending =
-                                                  widget
-                                                          .controller
-                                                          .pendingTrackType ==
-                                                      widget.type &&
-                                                  widget
-                                                          .controller
-                                                          .pendingTrackId ==
-                                                      track?.id;
-                                              final semanticLabel =
-                                                  track == null
-                                                  ? 'Select subtitle track: Off.'
-                                                  : display!.semanticsText;
-                                              void selectTrack() {
-                                                unawaited(
-                                                  widget.controller.selectTrack(
-                                                    widget.type,
-                                                    track?.id,
-                                                  ),
-                                                );
-                                              }
+                                                final tooltip =
+                                                    display?.tooltipText ??
+                                                    title;
+                                                final pending =
+                                                    widget
+                                                            .controller
+                                                            .pendingTrackType ==
+                                                        widget.type &&
+                                                    widget
+                                                            .controller
+                                                            .pendingTrackId ==
+                                                        track?.id;
+                                                final semanticLabel =
+                                                    track == null
+                                                    ? 'Select subtitle track: Off.'
+                                                    : display!.semanticsText;
+                                                void selectTrack() {
+                                                  unawaited(
+                                                    widget.controller
+                                                        .selectTrack(
+                                                          widget.type,
+                                                          track?.id,
+                                                        ),
+                                                  );
+                                                }
 
-                                              final titleWidget = fillFocus
-                                                  ? Builder(
-                                                      builder: (context) {
-                                                        final rowRoles =
-                                                            LineupTheme.of(
-                                                              context,
-                                                            );
-                                                        return Text(
-                                                          title,
-                                                          maxLines: 3,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          softWrap: true,
-                                                          style: textTheme
-                                                              .bodyLarge
-                                                              ?.copyWith(
-                                                                color: rowRoles
-                                                                    .primaryText,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w500,
-                                                              ),
-                                                        );
-                                                      },
-                                                    )
-                                                  : Text(
-                                                      title,
-                                                      maxLines: 3,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      softWrap: true,
-                                                      style: textTheme.bodyLarge
-                                                          ?.copyWith(
-                                                            color: roles
-                                                                .primaryText,
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                          ),
-                                                    );
-                                              final Widget? subtitleWidget =
-                                                  metadata.isEmpty
-                                                  ? null
-                                                  : fillFocus
-                                                  ? Builder(
-                                                      builder: (context) {
-                                                        final rowRoles =
-                                                            LineupTheme.of(
-                                                              context,
-                                                            );
-                                                        final rowSupportingText =
-                                                            Color.lerp(
-                                                              rowRoles
-                                                                  .secondaryText,
-                                                              rowRoles
-                                                                  .primaryText,
-                                                              0.65,
-                                                            )!;
-                                                        return Text(
-                                                          metadataText,
-                                                          maxLines: 3,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          softWrap: true,
-                                                          style: textTheme
-                                                              .bodyMedium
-                                                              ?.copyWith(
-                                                                color:
-                                                                    rowSupportingText,
-                                                              ),
-                                                        );
-                                                      },
-                                                    )
-                                                  : Text(
-                                                      metadataText,
-                                                      maxLines: 3,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      softWrap: true,
-                                                      style: textTheme
-                                                          .bodyMedium
-                                                          ?.copyWith(
-                                                            color:
-                                                                supportingText,
-                                                          ),
-                                                    );
-                                              final Widget trailingWidget =
-                                                  fillFocus
-                                                  ? Builder(
-                                                      builder: (context) {
-                                                        final rowRoles =
-                                                            LineupTheme.of(
-                                                              context,
-                                                            );
-                                                        return _trackTrailing(
-                                                          pending: pending,
-                                                          selected: selected,
-                                                          progressFill: rowRoles
-                                                              .progressFill,
-                                                        );
-                                                      },
-                                                    )
-                                                  : _trackTrailing(
-                                                      pending: pending,
-                                                      selected: selected,
-                                                      progressFill:
-                                                          roles.progressFill,
-                                                    );
-
-                                              return Focus(
-                                                canRequestFocus: false,
-                                                skipTraversal: true,
-                                                onFocusChange: (focused) {
-                                                  if (!focused) return;
-                                                  WidgetsBinding.instance
-                                                      .addPostFrameCallback((
-                                                        _,
-                                                      ) {
-                                                        if (mounted &&
-                                                            context.mounted) {
-                                                          Scrollable.ensureVisible(
-                                                            context,
-                                                            alignment: .5,
+                                                final titleWidget = fillFocus
+                                                    ? Builder(
+                                                        builder: (context) {
+                                                          final rowRoles =
+                                                              LineupTheme.of(
+                                                                context,
+                                                              );
+                                                          return Text(
+                                                            title,
+                                                            maxLines: 3,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            softWrap: true,
+                                                            style: textTheme
+                                                                .bodyLarge
+                                                                ?.copyWith(
+                                                                  color: rowRoles
+                                                                      .primaryText,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w500,
+                                                                ),
                                                           );
-                                                        }
-                                                      });
-                                                },
-                                                child: Material(
-                                                  key:
-                                                      (off
-                                                          ? _initialSelectedTrackId ==
-                                                                null
-                                                          : track!.id ==
-                                                                _initialSelectedTrackId)
-                                                      ? _selectedRowKey
-                                                      : null,
-                                                  color: Colors.transparent,
-                                                  child: Tooltip(
-                                                    message: tooltip,
-                                                    excludeFromSemantics: true,
-                                                    child: Semantics(
-                                                      label: pending
-                                                          ? '$semanticLabel Pending.'
-                                                          : semanticLabel,
-                                                      button: true,
-                                                      selected: selected,
-                                                      onTap: selectTrack,
-                                                      excludeSemantics: true,
-                                                      child: LineupRowSurface(
+                                                        },
+                                                      )
+                                                    : Text(
+                                                        title,
+                                                        maxLines: 3,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        softWrap: true,
+                                                        style: textTheme
+                                                            .bodyLarge
+                                                            ?.copyWith(
+                                                              color: roles
+                                                                  .primaryText,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                            ),
+                                                      );
+                                                final Widget? subtitleWidget =
+                                                    metadata.isEmpty
+                                                    ? null
+                                                    : fillFocus
+                                                    ? Builder(
+                                                        builder: (context) {
+                                                          final rowRoles =
+                                                              LineupTheme.of(
+                                                                context,
+                                                              );
+                                                          final rowSupportingText =
+                                                              Color.lerp(
+                                                                rowRoles
+                                                                    .secondaryText,
+                                                                rowRoles
+                                                                    .primaryText,
+                                                                0.65,
+                                                              )!;
+                                                          return Text(
+                                                            metadataText,
+                                                            maxLines: 3,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            softWrap: true,
+                                                            style: textTheme
+                                                                .bodyMedium
+                                                                ?.copyWith(
+                                                                  color:
+                                                                      rowSupportingText,
+                                                                ),
+                                                          );
+                                                        },
+                                                      )
+                                                    : Text(
+                                                        metadataText,
+                                                        maxLines: 3,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        softWrap: true,
+                                                        style: textTheme
+                                                            .bodyMedium
+                                                            ?.copyWith(
+                                                              color:
+                                                                  supportingText,
+                                                            ),
+                                                      );
+                                                final Widget trailingWidget =
+                                                    fillFocus
+                                                    ? Builder(
+                                                        builder: (context) {
+                                                          final rowRoles =
+                                                              LineupTheme.of(
+                                                                context,
+                                                              );
+                                                          return _trackTrailing(
+                                                            pending: pending,
+                                                            selected: selected,
+                                                            progressFill: rowRoles
+                                                                .progressFill,
+                                                          );
+                                                        },
+                                                      )
+                                                    : _trackTrailing(
+                                                        pending: pending,
                                                         selected: selected,
-                                                        child: ListTile(
-                                                          key: Key(
-                                                            off
-                                                                ? 'playback-track-off'
-                                                                : 'playback-track-${widget.type.name}-${track!.id}',
-                                                          ),
-                                                          autofocus: selected,
+                                                        progressFill:
+                                                            roles.progressFill,
+                                                      );
+
+                                                return Focus(
+                                                  canRequestFocus: false,
+                                                  skipTraversal: true,
+                                                  onFocusChange: (focused) {
+                                                    if (!focused) return;
+                                                    WidgetsBinding.instance
+                                                        .addPostFrameCallback((
+                                                          _,
+                                                        ) {
+                                                          if (mounted &&
+                                                              context.mounted) {
+                                                            Scrollable.ensureVisible(
+                                                              context,
+                                                              alignment: .5,
+                                                            );
+                                                          }
+                                                        });
+                                                  },
+                                                  child: Material(
+                                                    key:
+                                                        (off
+                                                            ? _initialSelectedTrackId ==
+                                                                  null
+                                                            : track!.id ==
+                                                                  _initialSelectedTrackId)
+                                                        ? _selectedRowKey
+                                                        : null,
+                                                    color: Colors.transparent,
+                                                    child: Tooltip(
+                                                      message: tooltip,
+                                                      excludeFromSemantics:
+                                                          true,
+                                                      child: Semantics(
+                                                        label: pending
+                                                            ? '$semanticLabel Pending.'
+                                                            : semanticLabel,
+                                                        button: true,
+                                                        selected: selected,
+                                                        onTap: selectTrack,
+                                                        excludeSemantics: true,
+                                                        child: LineupRowSurface(
                                                           selected: selected,
-                                                          minTileHeight: null,
-                                                          contentPadding:
-                                                              EdgeInsets.symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 8,
-                                                              ),
-                                                          title: titleWidget,
-                                                          subtitle:
-                                                              subtitleWidget,
-                                                          trailing:
-                                                              trailingWidget,
-                                                          onTap: selectTrack,
+                                                          child: ListTile(
+                                                            key: Key(
+                                                              off
+                                                                  ? 'playback-track-off'
+                                                                  : 'playback-track-${widget.type.name}-${track!.id}',
+                                                            ),
+                                                            autofocus: selected,
+                                                            selected: selected,
+                                                            minTileHeight: null,
+                                                            contentPadding:
+                                                                EdgeInsets.symmetric(
+                                                                  horizontal:
+                                                                      12,
+                                                                  vertical: 8,
+                                                                ),
+                                                            title: titleWidget,
+                                                            subtitle:
+                                                                subtitleWidget,
+                                                            trailing:
+                                                                trailingWidget,
+                                                            onTap: selectTrack,
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
                                                   ),
-                                                ),
-                                              );
-                                            },
-                                          ),
+                                                );
+                                              },
+                                            ),
+                                          ],
                                         ],
-                                      ],
+                                      ),
                                     ),
-                                  ),
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 24),
-                        if (widget.controller.trackSelectionError
-                            case final error?)
-                          Padding(
-                            padding: EdgeInsets.only(top: 10),
-                            child: Semantics(
-                              liveRegion: true,
-                              child: Text(
-                                error,
-                                style: textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(context).colorScheme.error,
+                          SizedBox(height: 24),
+                          if (widget.controller.trackSelectionError
+                              case final error?)
+                            Padding(
+                              padding: EdgeInsets.only(top: 10),
+                              child: Semantics(
+                                liveRegion: true,
+                                child: Text(
+                                  error,
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        Padding(
-                          key: const Key('playback-options-footer'),
-                          padding: EdgeInsets.only(top: 20),
-                          child: Text(
-                            roles.androidTv
-                                ? 'Up/Down Browse · Select Choose · Back Close'
-                                : 'Up/Down Browse · Enter Select · Esc Close',
-                            style: textTheme.bodySmall?.copyWith(
-                              color: supportingText,
+                          Padding(
+                            key: const Key('playback-options-footer'),
+                            padding: EdgeInsets.only(top: 20),
+                            child: Text(
+                              roles.androidTv
+                                  ? 'Up/Down Browse · Select Choose · Back Close'
+                                  : 'Up/Down Browse · Enter Select · Esc Close',
+                              style: textTheme.bodySmall?.copyWith(
+                                color: supportingText,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -3316,28 +3416,43 @@ class _StatusBug extends StatelessWidget {
     return Align(
       alignment: Alignment.topRight,
       child: SafeArea(
+        left: !roles.androidTv,
+        top: !roles.androidTv,
+        right: !roles.androidTv,
+        bottom: !roles.androidTv,
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Semantics(
-            liveRegion: true,
-            label: text,
-            child: Container(
-              key: number
-                  ? const Key('channel-number-buffer')
-                  : const Key('player-status-bug'),
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.sizeOf(context).width * .65,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: _overlayColor(context, controller),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                text,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: roles.primaryText,
-                  shadows: _overlayTextShadow,
+          padding: roles.androidTv
+              ? LineupCanvas.contentInsets(
+                  context,
+                  minimum: const EdgeInsets.all(24),
+                )
+              : const EdgeInsets.all(24),
+          child: _consumeOverlayPadding(
+            context,
+            Semantics(
+              liveRegion: true,
+              label: text,
+              child: Container(
+                key: number
+                    ? const Key('channel-number-buffer')
+                    : const Key('player-status-bug'),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * .65,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: _overlayColor(context, controller),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  text,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: roles.primaryText,
+                    shadows: _overlayTextShadow,
+                  ),
                 ),
               ),
             ),
@@ -3369,46 +3484,57 @@ class _StoppedSlate extends StatelessWidget {
       child: Center(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Semantics(
-              liveRegion: true,
-              label: failed ? 'Playback error' : title,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (channel != null)
+            padding: roles.androidTv
+                ? LineupCanvas.contentInsets(
+                    context,
+                    minimum: const EdgeInsets.all(24),
+                  )
+                : const EdgeInsets.all(24),
+            child: _consumeOverlayPadding(
+              context,
+              Semantics(
+                liveRegion: true,
+                label: failed ? 'Playback error' : title,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (channel != null)
+                      Text(
+                        '${channel.number} · ${channel.name}',
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(color: roles.secondaryText),
+                      ),
+                    const SizedBox(height: 12),
                     Text(
-                      '${channel.number} · ${channel.name}',
-                      style: Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(color: roles.secondaryText),
+                      title,
+                      style: Theme.of(context).textTheme.headlineLarge,
                     ),
-                  const SizedBox(height: 12),
-                  Text(title, style: Theme.of(context).textTheme.headlineLarge),
-                  const SizedBox(height: 12),
-                  Text(
-                    controller.error ?? controller.status.message,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 12,
-                    children: [
-                      if (controller.canRetry)
-                        FilledButton(
-                          onPressed: controller.retry,
-                          child: const Text('Retry'),
+                    const SizedBox(height: 12),
+                    Text(
+                      controller.error ?? controller.status.message,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    Wrap(
+                      spacing: 12,
+                      children: [
+                        if (controller.canRetry)
+                          FilledButton(
+                            onPressed: controller.retry,
+                            child: const Text('Retry'),
+                          ),
+                        OutlinedButton(
+                          onPressed: controller.showMiniGuide,
+                          child: const Text('Browse channels'),
                         ),
-                      OutlinedButton(
-                        onPressed: controller.showMiniGuide,
-                        child: const Text('Browse channels'),
-                      ),
-                      TextButton(
-                        onPressed: onClose ?? controller.closeOverlay,
-                        child: const Text('Close'),
-                      ),
-                    ],
-                  ),
-                ],
+                        TextButton(
+                          onPressed: onClose ?? controller.closeOverlay,
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -3609,6 +3735,18 @@ Color _overlayColor(
     LineupTheme.of(context).overlaySurface
         .withValues(alpha: _overlayOpacity(controller, more: more));
 
+Widget _consumeOverlayPadding(BuildContext context, Widget child) {
+  final consume = LineupTheme.of(context).androidTv;
+  return MediaQuery.removePadding(
+    context: context,
+    removeLeft: consume,
+    removeTop: consume,
+    removeRight: consume,
+    removeBottom: consume,
+    child: child,
+  );
+}
+
 ButtonStyle _playerActionStyle(BuildContext context) {
   final roles = LineupTheme.of(context);
   return LineupTheme.buttonStyle(
@@ -3618,10 +3756,10 @@ ButtonStyle _playerActionStyle(BuildContext context) {
     focusVisible: LineupFocusScope.visible(context),
   ).copyWith(
     textStyle: WidgetStatePropertyAll(
-      LineupTypography.button.copyWith(
-        fontSize: 16,
-        shadows: _overlayTextShadow,
-      ),
+      LineupTypography.buttonFor(
+        roles,
+        compact: true,
+      ).copyWith(shadows: _overlayTextShadow),
     ),
     foregroundColor: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.disabled)
