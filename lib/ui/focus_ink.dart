@@ -138,10 +138,12 @@ class _LargeFocusShape extends ShapeBorder {
     required this.color,
     required this.innerColor,
     required this.radius,
+    this.strokeWidth = 3,
   });
   final Color color;
   final Color innerColor;
   final double radius;
+  final double strokeWidth;
   @override
   EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
   @override
@@ -154,7 +156,8 @@ class _LargeFocusShape extends ShapeBorder {
   ShapeBorder scale(double t) => _LargeFocusShape(
     color: color,
     innerColor: innerColor,
-    radius: radius * t,
+    radius: radius * t.clamp(0.0, double.infinity),
+    strokeWidth: strokeWidth * t.clamp(0.0, double.infinity),
   );
   @override
   void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) =>
@@ -164,6 +167,7 @@ class _LargeFocusShape extends ShapeBorder {
         color: color,
         innerColor: innerColor,
         radius: radius,
+        strokeWidth: strokeWidth,
       );
 }
 
@@ -173,8 +177,10 @@ void _paintLargeFocus(
   required Color color,
   required Color innerColor,
   required double radius,
+  double strokeWidth = 3,
 }) {
-  const stroke = 3.0;
+  if (strokeWidth <= 0) return;
+  final stroke = strokeWidth;
   final outer = Paint()
     ..color = color
     ..style = PaintingStyle.stroke
