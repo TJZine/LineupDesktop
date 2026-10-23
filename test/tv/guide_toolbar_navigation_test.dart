@@ -432,6 +432,8 @@ void main() {
       await tester.pumpAndSettle();
       await _key(tester, LogicalKeyboardKey.keyI);
       expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+      await _key(tester, LogicalKeyboardKey.info);
+      expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
 
       guide.focusNode!.requestFocus();
       await tester.pumpAndSettle();

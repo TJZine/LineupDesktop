@@ -612,8 +612,7 @@ class _GuideViewState extends State<GuideView>
     final isAndroidTvMenu =
         roles.androidTv &&
         defaultTargetPlatform == TargetPlatform.android &&
-        (rawKey == LogicalKeyboardKey.contextMenu ||
-            rawKey == LogicalKeyboardKey.info);
+        rawKey == LogicalKeyboardKey.contextMenu;
     if (key == LogicalKeyboardKey.keyI &&
         isAndroidTvMenu &&
         widget.onOpenMenu != null) {
