@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var nativePlayer: NativePlayerAdapter? = null
     private var platformChannel: MethodChannel? = null
+    private var keyboardVisibility: KeyboardVisibilityObserver? = null
     private val backInput by lazy {
         AndroidBackInput(systemBackCallbacks = Build.VERSION.SDK_INT >= 33) {
             flutterEngine?.navigationChannel?.popRoute()
@@ -49,14 +50,20 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         nativePlayer = NativePlayerAdapter(this, flutterEngine.dartExecutor.binaryMessenger)
-        platformChannel =
-            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "lineup/platform").also {
-                it.setMethodCallHandler(PlatformChannel(this))
-            }
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "lineup/platform")
+        val visibility = KeyboardVisibilityObserver(this) { visible ->
+            channel.invokeMethod("keyboardVisibilityChanged", visible)
+        }
+        keyboardVisibility = visibility
+        platformChannel = channel.also {
+            it.setMethodCallHandler(PlatformChannel(this, visibility))
+        }
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         backInput.cancelPendingPress()
+        keyboardVisibility?.close()
+        keyboardVisibility = null
         nativePlayer?.close()
         nativePlayer = null
         platformChannel?.setMethodCallHandler(null)
