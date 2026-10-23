@@ -850,6 +850,9 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
 
   Widget _reviewRowContent(BuildContext context, SetupReviewEntry entry) {
     final roles = LineupTheme.of(context);
+    final focusedTv =
+        roles.androidTv &&
+        LineupFocusScope.visible(context, Focus.of(context).hasFocus);
     final textTheme = Theme.of(context).textTheme;
     final nameStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
@@ -866,7 +869,8 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         SetupReviewKind.unchanged => roles.mutedText,
         SetupReviewKind.updated => roles.secondaryText,
         SetupReviewKind.added => roles.secondaryText,
-        SetupReviewKind.removed => Theme.of(context).colorScheme.error,
+        SetupReviewKind.removed =>
+          focusedTv ? roles.primaryText : Theme.of(context).colorScheme.error,
       },
     );
     final changeWidth = _reviewChangeWidth();

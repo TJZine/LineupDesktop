@@ -25,6 +25,208 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  testWidgets(
+    'TV conditional variant selection preserves its trigger element and focus',
+    (tester) async {
+      final controller = _SetupController();
+      try {
+        await tester.runAsync(loadPinnedTestFonts);
+        await _pump(tester, controller, androidTv: true);
+        await _openPlaybackControls(tester);
+        tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged!(
+          true,
+        );
+        await tester.pumpAndSettle();
+        final field = _setupField<PlaybackMode?>('Different playback mode');
+        await tester.ensureVisible(field);
+        final element = tester.element(field);
+        final node = tester
+            .widget<Focus>(
+              find.descendant(
+                of: field,
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is Focus &&
+                      widget.focusNode?.debugLabel ==
+                          'DropdownButton<PlaybackMode?>',
+                ),
+              ),
+            )
+            .focusNode!;
+        node.requestFocus();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        node.requestFocus();
+        await tester.pumpAndSettle();
+        expect(
+          node.hasPrimaryFocus,
+          isTrue,
+          reason: 'The actual variant trigger owns the key',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(find.byType(LineupDropdownMenuRow), findsWidgets);
+        for (var i = 0; i < 3; i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+        }
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<DropdownButtonFormField<PlaybackMode?>>(field)
+              .initialValue,
+          PlaybackMode.block,
+        );
+        expect(tester.element(field), same(element));
+        expect(node.hasFocus, isTrue);
+        expect(find.text('Extra block size'), findsOneWidget);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+        tester.view.reset();
+      }
+    },
+  );
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets('semantic failure leaves keep focused contrast: $platform', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = platform;
+      final tv = platform == TargetPlatform.android;
+      final controller = _SetupController(mixedScan: true);
+      try {
+        await _pump(tester, controller, androidTv: tv);
+        await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+        await tester.pumpAndSettle();
+        final status = find.text('Couldn’t scan · Try again.');
+        expect(status, findsOneWidget);
+        final element = tester.element(status);
+        final baseError = Theme.of(element).colorScheme.error;
+        Color? ink(Finder text) => tester
+            .widget<RichText>(
+              find.descendant(of: text, matching: find.byType(RichText)),
+            )
+            .text
+            .style
+            ?.color;
+        expect(ink(status), baseError);
+        final row = find.byKey(const ValueKey('library-row-archive'));
+        await tester.ensureVisible(row);
+        final rowFocus = Focus.of(tester.element(status));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        rowFocus.requestFocus();
+        await tester.pumpAndSettle();
+        expect(ink(status), tv ? const Color(0xFF090806) : baseError);
+        final retry = find.byKey(const ValueKey('retry-library-archive'));
+        final retryLeaf = find.descendant(
+          of: retry,
+          matching: find.text('Retry'),
+        );
+        Focus.of(tester.element(retryLeaf)).requestFocus();
+        await tester.pumpAndSettle();
+        expect(ink(status), tv ? const Color(0xFF090806) : baseError);
+        expect(tester.element(status), same(element));
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        expect(ink(status), baseError);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+    testWidgets('Removed review leaf keeps focused contrast: $platform', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = platform;
+      final tv = platform == TargetPlatform.android;
+      final controller = _SetupController(channels: [_missingChannel]);
+      try {
+        await tester.runAsync(loadPinnedTestFonts);
+        await _pump(tester, controller, androidTv: tv);
+        tester.view.physicalSize = const Size(1920, 1080);
+        await tester.pumpAndSettle();
+        await _advanceToReview(tester);
+        final search = find.byKey(
+          const ValueKey('channel-setup-review-search'),
+        );
+        await tester.ensureVisible(search);
+        await tester.enterText(search, 'Retired collection');
+        await tester.pumpAndSettle();
+        final choice = find.byKey(
+          const ValueKey('missing-source-choice-missing'),
+        );
+        await tester.scrollUntilVisible(
+          choice,
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('channel-setup-review-roster')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        // Removal interaction has its own coverage below. Initialize this paint
+        // case through the existing choice callback, without depending on its
+        // position in the separate missing-source scroll region.
+        tester.widget<LineupSegmentedControl<bool>>(choice).onSelectionChanged!(
+          {true},
+        );
+        await tester.pumpAndSettle();
+        final row = find.byKey(const ValueKey('review-channel-missing'));
+        await tester.scrollUntilVisible(
+          row,
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('channel-setup-review-roster')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        final removed = find.descendant(
+          of: row,
+          matching: find.text('Removed'),
+        );
+        final element = tester.element(removed);
+        final baseError = Theme.of(element).colorScheme.error;
+        Color? ink() => tester
+            .widget<RichText>(
+              find.descendant(of: removed, matching: find.byType(RichText)),
+            )
+            .text
+            .style
+            ?.color;
+        expect(ink(), baseError);
+        if (tv) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+          Focus.of(element).requestFocus();
+          await tester.pumpAndSettle();
+          expect(ink(), const Color(0xFF090806));
+          expect(
+            (const Color(0xFFE9DCC3).computeLuminance() + .05) /
+                (ink()!.computeLuminance() + .05),
+            greaterThan(4.5),
+          );
+        }
+        expect(tester.element(removed), same(element));
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        expect(ink(), baseError);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
   for (final platform in [
     TargetPlatform.android,
     TargetPlatform.windows,

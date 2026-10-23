@@ -644,10 +644,16 @@ class SetupLibraryStep extends StatelessWidget {
         : row;
   }
 
-  Color _scanColor(BuildContext context, LibraryScanStatus status) =>
-      status == LibraryScanStatus.transientFailure
-      ? Theme.of(context).colorScheme.error
-      : LineupTheme.of(context).secondaryText;
+  Color _scanColor(BuildContext context, LibraryScanStatus status) {
+    final roles = LineupTheme.of(context);
+    if (status != LibraryScanStatus.transientFailure) {
+      return roles.secondaryText;
+    }
+    final focusedTv =
+        roles.androidTv &&
+        LineupFocusScope.visible(context, Focus.of(context).hasFocus);
+    return focusedTv ? roles.primaryText : Theme.of(context).colorScheme.error;
+  }
 
   String _scanDetail(LibraryScanFact fact) => switch (fact.status) {
     LibraryScanStatus.idle => 'Waiting to scan',
