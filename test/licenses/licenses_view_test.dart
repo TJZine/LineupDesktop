@@ -117,6 +117,18 @@ void main() {
           ),
         );
         final text = List.filled(80, 'License paragraph.').join('\n\n');
+        Color? actionInk(String label) => tester
+            .widget<RichText>(
+              find
+                  .descendant(
+                    of: find.widgetWithText(TextButton, label),
+                    matching: find.byType(RichText),
+                  )
+                  .first,
+            )
+            .text
+            .style
+            ?.color;
         await show(tester, [
           LicenseSource(
             'Runtime',
@@ -127,6 +139,7 @@ void main() {
             ],
           ),
         ], androidTv: true);
+        final roles = LineupTheme.of(tester.element(find.byType(LicensesView)));
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Component');
@@ -141,6 +154,8 @@ void main() {
             .widget<CustomScrollView>(find.byType(CustomScrollView))
             .controller!;
         expect(scroll.offset, 0);
+        expect(actionInk('‹ Back to Component'), roles.onFocus);
+        expect(actionInk('Copy document'), roles.primaryText);
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         expect(scroll.offset, 0);
@@ -148,6 +163,8 @@ void main() {
           FocusManager.instance.primaryFocus?.debugLabel,
           'Copy license document',
         );
+        expect(actionInk('‹ Back to Component'), roles.primaryText);
+        expect(actionInk('Copy document'), roles.onFocus);
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         await tester.pumpAndSettle();
         expect(clipboard, text);
@@ -170,6 +187,8 @@ void main() {
           find.text('License paragraph.').first,
         );
         expect(paragraph.style!.color, const Color(0xFF090806));
+        expect(actionInk('‹ Back to Component'), roles.onFocus);
+        expect(actionInk('Copy document'), roles.onFocus);
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         expect(scroll.offset, 48);
@@ -209,6 +228,7 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
         await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Licenses back');
+        expect(actionInk('Copy document'), roles.primaryText);
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Notice');
