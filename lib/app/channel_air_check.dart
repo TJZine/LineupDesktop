@@ -339,7 +339,6 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           final program = programs[index];
           final current = program.isCurrentAt(now);
           final selected = program.id == _selectedId;
-          final roles = LineupTheme.of(context);
           void activate() => setState(() {
             _selectedId = program.id;
             _selectionFollowsNow = false;
@@ -355,54 +354,65 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
               selected: selected,
               key: ValueKey('air-check-program-${program.id}'),
               onPressed: activate,
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: (widget.compact ? 10 : 14),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: (widget.compact ? 76 : 94),
-                      child: Text(
-                        current
-                            ? 'ON NOW'
-                            : _time(context, program.scheduled.start),
-                        style: TextStyle(
-                          color: current
-                              ? roles.liveAccent
-                              : roles.secondaryText,
-                          fontWeight: current
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
-                      ),
+              child: Builder(
+                builder: (context) {
+                  final roles = LineupTheme.of(context);
+                  final focused =
+                      roles.androidTv &&
+                      Focus.of(context).hasFocus &&
+                      LineupFocusScope.visible(context);
+                  return Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: (widget.compact ? 10 : 14),
                     ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            program.scheduled.item.title,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: (widget.compact ? 76 : 94),
+                          child: Text(
+                            current
+                                ? 'ON NOW'
+                                : _time(context, program.scheduled.start),
                             style: TextStyle(
-                              fontSize: (widget.compact ? 14 : 20),
-                              fontWeight: FontWeight.w600,
+                              color: current
+                                  ? (focused
+                                        ? roles.primaryText
+                                        : roles.liveAccent)
+                                  : roles.secondaryText,
+                              fontWeight: current
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
                             ),
                           ),
-                          Text(
-                            '${_dateContext(program.scheduled.start)} · ${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                            style: _airCheckButtonTextStyle(
-                              color: roles.secondaryText,
-                              fontWeight: FontWeight.w400,
-                            ),
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                program.scheduled.item.title,
+                                style: TextStyle(
+                                  fontSize: (widget.compact ? 14 : 20),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                '${_dateContext(program.scheduled.start)} · ${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                                style: _airCheckButtonTextStyle(
+                                  color: roles.secondaryText,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           );
