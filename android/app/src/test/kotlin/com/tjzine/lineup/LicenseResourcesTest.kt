@@ -13,7 +13,7 @@ class LicenseResourcesTest {
         init {
             for (path in files.keys) {
                 val parts = path.split('/')
-                for (index in 0 until parts.lastIndex) {
+                for (index in parts.indices) {
                     val directory = parts.take(index).joinToString("/")
                     val child = parts[index]
                     listedDirectories[directory] =
