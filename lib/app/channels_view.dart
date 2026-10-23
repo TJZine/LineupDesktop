@@ -1332,9 +1332,21 @@ class _MoveChannelDialog extends StatefulWidget {
 
 class _MoveChannelDialogState extends State<_MoveChannelDialog> {
   final _search = TextEditingController();
+  final _searchFocus = FocusNode(debugLabel: 'Move channel search');
+  bool _autofocusRequested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_autofocusRequested && LineupTheme.of(context).androidTv) {
+      _autofocusRequested = true;
+      FocusScope.of(context).autofocus(_searchFocus);
+    }
+  }
 
   @override
   void dispose() {
+    _searchFocus.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -1372,11 +1384,16 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
         height: contentHeight,
         child: Column(
           children: [
-            TextField(
-              controller: _search,
-              autofocus: true,
-              decoration: searchDecoration,
-              onChanged: (_) => setState(() {}),
+            LineupTextFieldActivation(
+              focusNode: _searchFocus,
+              builder: (fieldContext, fieldFocus, finishEditing) => TextField(
+                controller: _search,
+                focusNode: fieldFocus,
+                autofocus: !LineupTheme.of(fieldContext).androidTv,
+                onEditingComplete: finishEditing,
+                decoration: searchDecoration,
+                onChanged: (_) => setState(() {}),
+              ),
             ),
             SizedBox(height: 8),
             Expanded(

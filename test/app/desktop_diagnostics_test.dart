@@ -19,6 +19,7 @@ void main() {
     WidgetTester tester,
     FixtureController controller, {
     bool androidTv = false,
+    bool largeFocus = false,
     VoidCallback? onRecordingSettings,
   }) async {
     await tester.pumpWidget(
@@ -26,7 +27,7 @@ void main() {
         builder: LineupCanvas.builder,
         theme: LineupTheme.forName(
           LineupThemeName.emberSteel,
-          largeFocusIndicators: false,
+          largeFocusIndicators: largeFocus,
           androidTv: androidTv,
         ),
         home: RepaintBoundary(
@@ -42,6 +43,94 @@ void main() {
           ),
         ),
       ),
+    );
+  }
+
+  for (final large in [false, true]) {
+    testWidgets(
+      'TV technical header uses actual focus ink and header-only frame (large $large)',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final previous = FocusManager.instance.highlightStrategy;
+        FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.alwaysTouch;
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 2;
+        try {
+          final controller = FixtureController();
+          addTearDown(controller.dispose);
+          await show(tester, controller, androidTv: true, largeFocus: large);
+          await tester.pumpAndSettle();
+          final technical = find.byKey(
+            const PageStorageKey('diagnostic-technical-details'),
+          );
+          final originalState = tester.state(technical);
+          final title = find.text('Technical details');
+          final tile = find.descendant(
+            of: technical,
+            matching: find.byType(ListTile),
+          );
+          final rect = tester.getRect(tile);
+          final roles = LineupTheme.of(tester.element(technical));
+          Future<void> key(LogicalKeyboardKey key) async {
+            await tester.sendKeyEvent(key);
+            await tester.pumpAndSettle();
+          }
+
+          await key(LogicalKeyboardKey.arrowDown);
+          await key(LogicalKeyboardKey.arrowDown);
+          final focusedTheme = ListTileTheme.of(tester.element(tile));
+          expect(focusedTheme.tileColor, roles.focusedSurface);
+          expect(
+            tester.widget<ExpansionTile>(technical).statesController!.value,
+            contains(WidgetState.focused),
+          );
+          expect(tester.widget<Text>(title).style?.color, roles.onFocus);
+          final arrow = find.descendant(
+            of: tile,
+            matching: find.byIcon(Icons.expand_more),
+          );
+          expect(IconTheme.of(tester.element(arrow)).color, roles.onFocus);
+          expect(focusedTheme.shape != null, large);
+          if (large) expect(focusedTheme.shape!.dimensions, EdgeInsets.zero);
+          expect(tester.getRect(tile), rect);
+          await key(LogicalKeyboardKey.select);
+          expect(tester.state(technical), same(originalState));
+          expect(
+            tester.widget<ExpansionTile>(technical).controller!.isExpanded,
+            isTrue,
+          );
+          expect(tester.getRect(tile), rect);
+          final body = find.text('Windows display');
+          expect(
+            LineupTheme.of(tester.element(body)).primaryText,
+            roles.primaryText,
+          );
+          expect(
+            Theme.of(tester.element(body)).textTheme.bodyMedium?.color,
+            Theme.of(tester.element(technical)).textTheme.bodyMedium?.color,
+          );
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(
+            tester.widget<ExpansionTile>(technical).controller!.isExpanded,
+            isTrue,
+          );
+          expect(tester.state(technical), same(originalState));
+          expect(
+            ListTileTheme.of(tester.element(tile)).tileColor,
+            isNot(roles.focusedSurface),
+          );
+          expect(tester.widget<Text>(title).style?.color, roles.primaryText);
+          expect(ListTileTheme.of(tester.element(tile)).shape, isNull);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          tester.view.reset();
+          FocusManager.instance.highlightStrategy = previous;
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
     );
   }
 
