@@ -4,9 +4,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/app/channel_setup/review_step.dart';
+import 'package:lineup_desktop/app/setup_review.dart';
+import 'package:lineup_desktop/channels/channel_builder.dart';
 
 import '../support/ui_fixture.dart';
 
+const _up = LogicalKeyboardKey.arrowUp;
 const _down = LogicalKeyboardKey.arrowDown;
 const _left = LogicalKeyboardKey.arrowLeft;
 const _right = LogicalKeyboardKey.arrowRight;
@@ -54,6 +63,23 @@ void _focusedVisible(WidgetTester tester, Finder control) {
   expect(rect.left, greaterThanOrEqualTo(0));
   expect(rect.right, lessThanOrEqualTo(960));
 }
+
+bool _hasFocusIn(WidgetTester tester, Finder control) {
+  final target = tester.element(control);
+  final primary = FocusManager.instance.primaryFocus!.context! as Element;
+  var inside = identical(target, primary);
+  primary.visitAncestorElements((element) {
+    inside |= identical(target, element);
+    return !inside;
+  });
+  return inside;
+}
+
+void _focusedIn(WidgetTester tester, Finder control) => expect(
+  _hasFocusIn(tester, control),
+  isTrue,
+  reason: 'Focus must be within $control',
+);
 
 var _backgroundRequests = 0;
 void main() {
@@ -164,6 +190,284 @@ void main() {
       expect(_backgroundRequests, 0);
     },
   );
+  _tvTest(
+    'Channels search uses closed navigation focus and explicit Select editing',
+    (tester) async {
+      final fixture = UiFixture(
+        androidTv: true,
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            Channel(
+              id: 'fixture',
+              number: 1,
+              name: 'Fixture channel',
+              source: const ManualSource([
+                ChannelItem(
+                  id: 'program',
+                  title: 'Fixture program',
+                  duration: Duration(minutes: 30),
+                ),
+              ]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: DateTime.utc(2026),
+              shuffleSeed: 1,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await _keys(tester, [_back, _down, _select]);
+      expect(find.byKey(const Key('channels-search')), findsOneWidget);
+      await _keys(tester, [_down, _down, _left, _left, _left, _left, _up]);
+      final activation = tester.widget<LineupTextFieldActivation>(
+        find.byType(LineupTextFieldActivation),
+      );
+      expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+      expect(tester.testTextInput.isVisible, isFalse);
+      await _keys(tester, [_select]);
+      expect(tester.testTextInput.isVisible, isTrue);
+      await _keys(tester, [_back]);
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+      await _keys(tester, [_select]);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+      await _keys(tester, [_down]);
+      expect(activation.focusNode!.hasPrimaryFocus, isFalse);
+    },
+  );
+  _tvTest('library rows toggle once and scroll in visual order', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      androidTv: true,
+      scenario: LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: [
+          for (var i = 1; i <= 8; i++)
+            PlexLibrary(
+              id: 'library-$i',
+              title: 'Library $i',
+              type: PlexLibraryType.movie,
+            ),
+        ],
+        selectedLibraryIds: const {},
+      ),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await _keys(tester, [_down]);
+    _focusedIn(tester, find.widgetWithText(TextButton, 'Select all'));
+    await _keys(tester, [_select]);
+    expect(find.text('0 of 8 selected'), findsOneWidget);
+    for (var i = 1; i <= 8; i++) {
+      await _keys(tester, [_down]);
+      final row = find.byKey(ValueKey('library-row-library-$i'));
+      _focusedIn(tester, row);
+      expect(tester.getRect(row).bottom, lessThanOrEqualTo(540));
+      await _keys(tester, [_select]);
+      expect(
+        tester
+            .widget<Checkbox>(
+              find.descendant(of: row, matching: find.byType(Checkbox)),
+            )
+            .value,
+        isTrue,
+      );
+      expect(find.text('$i of 8 selected'), findsOneWidget);
+    }
+    await _keys(tester, [_down]);
+    _focusedIn(tester, find.byKey(const ValueKey('setup-switch-server')));
+    for (var i = 8; i >= 1; i--) {
+      await _keys(tester, [_up]);
+      _focusedIn(tester, find.byKey(ValueKey('library-row-library-$i')));
+    }
+    await _keys(tester, [_up]);
+    _focusedIn(tester, find.widgetWithText(TextButton, 'Select all'));
+  });
+  for (final existing in [false, true]) {
+    _tvTest(
+      'Review search and readonly rows follow remote reading order (existing: $existing)',
+      (tester) async {
+        final channels = [
+          for (var i = 1; i <= 12; i++) _reviewChannel(i, generated: true),
+        ];
+        final review = SetupReview(
+          base: existing
+              ? [_reviewChannel(1, name: 'Before', generated: true)]
+              : const [],
+          plan: (
+            channels: channels,
+            allocatedOriginals: channels.length,
+            excludedOriginals: 0,
+            allocatedExtras: 0,
+            excludedExtras: 0,
+            numberLimitExcluded: 0,
+            existingSkipped: 0,
+            unmatchedGenerated: const [],
+            eligibleOriginalsByStrategy: const {},
+            allocatedOriginalsByStrategy: const {},
+            allocatedChannelsByStrategy: const {},
+            truncated: false,
+          ),
+          mode: ChannelBuildMode.replace,
+          strategyBySource: const {},
+        );
+        var applyCalls = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: true,
+            ),
+            home: Scaffold(
+              body: LineupFocusScope(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SetupReviewStep(
+                    review: review,
+                    notice: null,
+                    removalConfirmed: false,
+                    sourceOrder: const [],
+                    sourceLabel: (_) => 'Manual',
+                    initialFilter: SetupReviewFilter.all,
+                    initialSearch: '',
+                    onFilterChanged: (_) {},
+                    onSearchChanged: (_) {},
+                    isGeneratedSourceConfirmedGone: (_) => false,
+                    onBack: () {},
+                    onModeChanged: (_) {},
+                    onRemovalChanged: (_, _) {},
+                    onRemovalConfirmationChanged: (_) {},
+                    onApply: () => applyCalls++,
+                    onViewLineup: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final search = find.byType(LineupTextFieldActivation);
+        for (var step = 0; step < 12 && !_hasFocusIn(tester, search); step++) {
+          await _keys(tester, [_down]);
+        }
+        _focusedIn(tester, search);
+        expect(tester.testTextInput.isVisible, isFalse);
+        await _keys(tester, [_select]);
+        expect(tester.testTextInput.isVisible, isTrue);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(tester.testTextInput.isVisible, isFalse);
+        if (existing) {
+          await _keys(tester, [_down]);
+          _focusedIn(tester, find.byKey(const ValueKey('review-show-all')));
+        }
+        for (var i = 1; i <= channels.length; i++) {
+          await _keys(tester, [_down]);
+          final row = find.byKey(ValueKey('review-channel-review-$i'));
+          _focusedIn(tester, row);
+          if (existing && i == 1) {
+            await _keys(tester, [_select]);
+            expect(
+              find.text('Name: Before → Review channel 1'),
+              findsOneWidget,
+            );
+            await _keys(tester, [_select]);
+          }
+          final rect = tester.getRect(row);
+          expect(rect.top, greaterThanOrEqualTo(0));
+          expect(rect.bottom, lessThanOrEqualTo(540));
+        }
+        await _keys(tester, [_down]);
+        _focusedIn(tester, find.byKey(const ValueKey('back-to-configure')));
+        for (var i = channels.length; i >= 1; i--) {
+          await _keys(tester, [_up]);
+          _focusedIn(tester, find.byKey(ValueKey('review-channel-review-$i')));
+        }
+        expect(applyCalls, 0);
+      },
+    );
+  }
+  _tvTest('library Retry remains between its row and the next library', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      androidTv: true,
+      scenario: const LineupScenario(
+        stage: SetupStage.channelSetup,
+        libraries: [
+          PlexLibrary(
+            id: 'failed',
+            title: 'Failed library',
+            type: PlexLibraryType.movie,
+          ),
+          PlexLibrary(
+            id: 'next',
+            title: 'Next library',
+            type: PlexLibraryType.show,
+          ),
+        ],
+        selectedLibraryIds: {'failed', 'next'},
+        libraryScanStatus: LibraryScanStatus.transientFailure,
+        scanFacts: {
+          'failed': LibraryScanFact(status: LibraryScanStatus.transientFailure),
+        },
+      ),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await _keys(tester, [_down, _down]);
+    _focusedIn(tester, find.byKey(const ValueKey('library-row-failed')));
+    await _keys(tester, [_down]);
+    _focusedIn(tester, find.byKey(const ValueKey('retry-library-failed')));
+    await _keys(tester, [_down]);
+    _focusedIn(tester, find.byKey(const ValueKey('library-row-next')));
+    await _keys(tester, [_up]);
+    _focusedIn(tester, find.byKey(const ValueKey('retry-library-failed')));
+  });
+
+  _tvTest('Guide search has explicit activation and closed arrow traversal', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      androidTv: true,
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_reviewChannel(1)],
+      ),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    final field = find.byKey(const Key('guide-channel-search'));
+    final activation = tester.widget<LineupTextFieldActivation>(
+      find.ancestor(
+        of: field,
+        matching: find.byType(LineupTextFieldActivation),
+      ),
+    );
+    // Grid-to-toolbar access is UX4. Establish toolbar focus, then prove actual
+    // arrow arrival/exit and activation using the production Guide controls.
+    activation.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    await _keys(tester, [_left]);
+    expect(activation.focusNode!.hasPrimaryFocus, isFalse);
+    await _keys(tester, [_right]);
+    expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    await _keys(tester, [_select]);
+    expect(tester.testTextInput.isVisible, isTrue);
+    await _keys(tester, [_back]);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+    await _keys(tester, [_right]);
+    expect(activation.focusNode!.hasPrimaryFocus, isFalse);
+  });
 }
 
 class _RejectedPinController extends FixtureController {
@@ -197,3 +501,26 @@ class _RejectedPinController extends FixtureController {
     return false;
   }
 }
+
+Channel _reviewChannel(int i, {String? name, bool generated = false}) =>
+    Channel(
+      id: 'review-$i',
+      number: i,
+      name: name ?? 'Review channel $i',
+      source: generated
+          ? const LibrarySource(
+              libraryId: 'movies',
+              libraryType: PlexLibraryType.movie,
+            )
+          : const ManualSource([
+              ChannelItem(
+                id: 'show',
+                title: 'Show',
+                duration: Duration(minutes: 30),
+              ),
+            ]),
+      builderKey: generated ? 'generated-$i' : null,
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: 1,
+    );

@@ -272,7 +272,7 @@ class SetupLibraryStep extends StatelessWidget {
               child: Text(_settled ? 'Scan again' : 'Scan selected libraries'),
             ),
     );
-    return LayoutBuilder(
+    final body = LayoutBuilder(
       builder: (context, constraints) {
         final singleScroll =
             constraints.maxHeight < 800 ||
@@ -284,7 +284,7 @@ class SetupLibraryStep extends StatelessWidget {
           itemCount: data.libraries.length,
           separatorBuilder: (_, _) => const Divider(height: 1),
           itemBuilder: (_, index) =>
-              _libraryRow(context, data.libraries[index]),
+              _libraryRow(context, data.libraries[index], index),
         );
         final title = data.libraryScanStatus == LibraryScanStatus.scanning
             ? 'Scanning your libraries'
@@ -357,6 +357,12 @@ class SetupLibraryStep extends StatelessWidget {
         );
       },
     );
+    return roles.androidTv
+        ? FocusTraversalGroup(
+            policy: SetupVerticalTraversalPolicy(),
+            child: body,
+          )
+        : body;
   }
 
   Widget _header(BuildContext context, String title, String subtitle) => Column(
@@ -406,21 +412,30 @@ class SetupLibraryStep extends StatelessWidget {
           if (libraries.length > 1) ...[
             _checkbox(
               key: const ValueKey('select-all-libraries'),
+              skipTraversal: roles.androidTv,
               tristate: true,
               value: value,
               onChanged: editable ? (_) => onToggleAll() : null,
             ),
-            TextButton(
-              style: const ButtonStyle(
-                padding: WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 8),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(0),
+              child: TextButton(
+                style: const ButtonStyle(
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8),
+                  ),
                 ),
-              ),
-              onPressed: editable ? onToggleAll : null,
-              child: Text(
-                'Select all',
-                style: summaryStyle.copyWith(
-                  color: editable ? roles.secondaryText : roles.mutedText,
+                onPressed: editable ? onToggleAll : null,
+                child: Builder(
+                  builder: (context) {
+                    final ink = LineupTheme.of(context);
+                    return Text(
+                      'Select all',
+                      style: summaryStyle.copyWith(
+                        color: editable ? ink.secondaryText : ink.mutedText,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -441,6 +456,7 @@ class SetupLibraryStep extends StatelessWidget {
     required ValueChanged<bool?>? onChanged,
     bool tristate = false,
     double width = 48,
+    bool skipTraversal = false,
     String? semanticLabel,
   }) {
     final checkbox = Checkbox(
@@ -452,35 +468,38 @@ class SetupLibraryStep extends StatelessWidget {
     return SizedBox(
       width: width,
       height: 48,
-      child: semanticLabel == null
+      child: skipTraversal
+          ? ExcludeFocus(child: ExcludeSemantics(child: checkbox))
+          : semanticLabel == null
           ? checkbox
           : Semantics(label: semanticLabel, child: checkbox),
     );
   }
 
-  Widget _libraryRow(BuildContext context, PlexLibrary library) {
-    final roles = LineupTheme.of(context);
-    final textTheme = Theme.of(context).textTheme;
+  Widget _libraryRow(BuildContext context, PlexLibrary library, int index) {
+    final tv = LineupTheme.of(context).androidTv;
     final selected = selectedLibraryIds.contains(library.id);
-    final fact = data.libraryScanFacts[library.id];
-    final collectionRecovery = data.collectionRecoveryByLibrary[library.id];
-    final titleStyle = textTheme.bodyMedium!.copyWith(
-      color: roles.primaryText,
-      fontSize: 20,
-      fontWeight: FontWeight.w600,
-      height: 1.3,
-    );
-    final statusStyle = textTheme.bodyMedium!.copyWith(
-      fontSize: 18,
-      height: 1.4,
-    );
-    final typeStyle = textTheme.bodyMedium!.copyWith(
-      color: roles.mutedText,
-      fontSize: 16,
-      height: 1.4,
-    );
-    return LayoutBuilder(
+    final row = LayoutBuilder(
       builder: (context, constraints) {
+        final roles = LineupTheme.of(context);
+        final textTheme = Theme.of(context).textTheme;
+        final fact = data.libraryScanFacts[library.id];
+        final collectionRecovery = data.collectionRecoveryByLibrary[library.id];
+        final titleStyle = textTheme.bodyMedium!.copyWith(
+          color: roles.primaryText,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+        );
+        final statusStyle = textTheme.bodyMedium!.copyWith(
+          fontSize: 18,
+          height: 1.4,
+        );
+        final typeStyle = textTheme.bodyMedium!.copyWith(
+          color: roles.mutedText,
+          fontSize: 16,
+          height: 1.4,
+        );
         final textScale = MediaQuery.textScalerOf(context).scale(1);
         final narrow =
             constraints.maxWidth / textScale < 620 || textScale >= 1.6;
@@ -513,15 +532,18 @@ class SetupLibraryStep extends StatelessWidget {
                   ),
                   if (fact.status == LibraryScanStatus.transientFailure ||
                       data.unavailableCollectionLibraryIds.contains(library.id))
-                    LineupInlineLink(
-                      key: ValueKey('retry-library-${library.id}'),
-                      onPressed: data.busy
-                          ? null
-                          : () => onScan(retryLibraryIds: {library.id}),
-                      child: Text(
-                        collectionRecovery == null
-                            ? 'Retry'
-                            : 'Rescan after Plex changes',
+                    FocusTraversalOrder(
+                      order: NumericFocusOrder(index * 2 + 2),
+                      child: LineupInlineLink(
+                        key: ValueKey('retry-library-${library.id}'),
+                        onPressed: data.busy
+                            ? null
+                            : () => onScan(retryLibraryIds: {library.id}),
+                        child: Text(
+                          collectionRecovery == null
+                              ? 'Retry'
+                              : 'Rescan after Plex changes',
+                        ),
                       ),
                     ),
                 ],
@@ -544,6 +566,7 @@ class SetupLibraryStep extends StatelessWidget {
                 children: [
                   _checkbox(
                     value: selected,
+                    skipTraversal: tv,
                     semanticLabel: library.title,
                     onChanged: data.busy
                         ? null
@@ -567,6 +590,7 @@ class SetupLibraryStep extends StatelessWidget {
                 children: [
                   _checkbox(
                     value: selected,
+                    skipTraversal: tv,
                     semanticLabel: library.title,
                     onChanged: data.busy
                         ? null
@@ -579,8 +603,9 @@ class SetupLibraryStep extends StatelessWidget {
                 ],
               );
         return InkWell(
-          canRequestFocus: false,
-          excludeFromSemantics: true,
+          key: ValueKey('library-row-${library.id}'),
+          canRequestFocus: tv,
+          excludeFromSemantics: !tv,
           onTap: data.busy ? null : () => onToggleLibrary(library.id),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
@@ -589,6 +614,15 @@ class SetupLibraryStep extends StatelessWidget {
         );
       },
     );
+    return tv
+        ? FocusTraversalOrder(
+            order: NumericFocusOrder(index * 2 + 1),
+            child: Semantics(
+              checked: selected,
+              child: LineupRowSurface(selected: selected, child: row),
+            ),
+          )
+        : row;
   }
 
   Color _scanColor(BuildContext context, LibraryScanStatus status) =>

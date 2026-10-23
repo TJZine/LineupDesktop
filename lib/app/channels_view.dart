@@ -777,14 +777,19 @@ class ChannelsViewState extends State<ChannelsView> {
         final search = Semantics(
           container: true,
           label: 'Search channels',
-          child: TextField(
-            key: const Key('channels-search'),
-            enabled: !_saving,
-            controller: _search,
+          child: LineupTextFieldActivation(
             focusNode: _searchFocus,
-            style: _channelBodyStyle(context),
-            decoration: InputDecoration(hintText: 'Search by name or number'),
-            onChanged: (_) => setState(() {}),
+            enabled: !_saving,
+            builder: (fieldContext, fieldFocus, finishEditing) => TextField(
+              onEditingComplete: finishEditing,
+              key: const Key('channels-search'),
+              enabled: !_saving,
+              controller: _search,
+              focusNode: fieldFocus,
+              style: _channelBodyStyle(fieldContext),
+              decoration: InputDecoration(hintText: 'Search by name or number'),
+              onChanged: (_) => setState(() {}),
+            ),
           ),
         );
         final wide = constraints.maxWidth >= 1200 && textScale < 1.4;
