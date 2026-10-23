@@ -1317,6 +1317,7 @@ class _ProfileCardState extends State<_ProfileCard> {
           enabled: widget.onPressed != null,
           child: LineupRowSurface(
             selected: widget.active,
+            scaleOnFocus: true,
             child: TextButton(
               focusNode: _focusNode,
               autofocus: widget.autofocus,

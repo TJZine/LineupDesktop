@@ -388,7 +388,7 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
         selected: widget.selected,
         enabled: widget.onPressed != null,
         child: AnimatedScale(
-          scale: focusFill ? 1.06 : 1,
+          scale: focusFill && !reduceMotion ? 1.06 : 1,
           duration: reduceMotion
               ? Duration.zero
               : const Duration(milliseconds: 150),

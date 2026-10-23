@@ -90,7 +90,7 @@ void main() {
     await tester.pump();
 
     final scale = tester.widget<AnimatedScale>(find.byType(AnimatedScale));
-    expect(scale.scale, 1.06);
+    expect(scale.scale, 1.0);
     expect(scale.duration, Duration.zero);
     expect(
       tester

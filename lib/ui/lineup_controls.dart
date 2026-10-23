@@ -348,10 +348,12 @@ class LineupRowSurface extends StatefulWidget {
     required this.selected,
     required this.child,
     this.focused = false,
+    this.scaleOnFocus = false,
     super.key,
   });
   final bool selected;
   final bool focused;
+  final bool scaleOnFocus;
   final Widget child;
   @override
   State<LineupRowSurface> createState() => _LineupRowSurfaceState();
@@ -371,6 +373,10 @@ class _LineupRowSurfaceState extends State<LineupRowSurface> {
         focused && roles.focusTreatment == LineupFocusTreatment.fill;
     final focusRing =
         focused && roles.focusTreatment == LineupFocusTreatment.ring;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final scale = widget.scaleOnFocus && focusFill && !reduceMotion
+        ? 1.06
+        : 1.0;
     final material = Material(
       type: MaterialType.transparency,
       child: widget.child,
@@ -388,36 +394,66 @@ class _LineupRowSurfaceState extends State<LineupRowSurface> {
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: Container(
-          decoration: BoxDecoration(
-            color: focusFill
-                ? roles.focusedSurface
-                : widget.selected
-                ? roles.selectedSurface
-                : _hovered
-                ? roles.primaryText.withValues(alpha: .08)
-                : Colors.transparent,
-            border: Border(
-              left: BorderSide(
-                color: widget.selected
-                    ? roles.progressFill
-                    : Colors.transparent,
-                width: 3,
+        child: widget.scaleOnFocus
+            ? AnimatedScale(
+                scale: scale,
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 150),
+                curve: Curves.easeOut,
+                child: _rowSurfaceContainer(
+                  roles: roles,
+                  focusFill: focusFill,
+                  focusRing: focusRing,
+                  selected: widget.selected,
+                  hovered: _hovered,
+                  child: content,
+                ),
+              )
+            : _rowSurfaceContainer(
+                roles: roles,
+                focusFill: focusFill,
+                focusRing: focusRing,
+                selected: widget.selected,
+                hovered: _hovered,
+                child: content,
               ),
-            ),
-          ),
-          foregroundDecoration: BoxDecoration(
-            border: Border.all(
-              color: focusRing ? roles.focusBorder : Colors.transparent,
-              width: focusRing ? roles.focusBorderWidth : 0,
-            ),
-          ),
-          child: content,
-        ),
       ),
     );
   }
 }
+
+Widget _rowSurfaceContainer({
+  required LineupThemeRoles roles,
+  required bool focusFill,
+  required bool focusRing,
+  required bool selected,
+  required bool hovered,
+  required Widget child,
+}) => Container(
+  decoration: BoxDecoration(
+    color: focusFill
+        ? roles.focusedSurface
+        : selected
+        ? roles.selectedSurface
+        : hovered
+        ? roles.primaryText.withValues(alpha: .08)
+        : Colors.transparent,
+    border: Border(
+      left: BorderSide(
+        color: selected ? roles.progressFill : Colors.transparent,
+        width: 3,
+      ),
+    ),
+  ),
+  foregroundDecoration: BoxDecoration(
+    border: Border.all(
+      color: focusRing ? roles.focusBorder : Colors.transparent,
+      width: focusRing ? roles.focusBorderWidth : 0,
+    ),
+  ),
+  child: child,
+);
 
 class LineupTab extends StatelessWidget {
   const LineupTab({

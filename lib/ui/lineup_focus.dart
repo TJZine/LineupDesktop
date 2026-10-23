@@ -110,16 +110,19 @@ class LineupFocusTheme extends StatelessWidget {
     ButtonStyle style(LineupButtonTier tier) =>
         LineupTheme.buttonStyle(roles, tier, focusVisible: visible);
     final segmented = data.segmentedButtonTheme.style?.copyWith(
-      side: WidgetStateProperty.resolveWith(
-        (states) => BorderSide(
-          color: visible && states.contains(WidgetState.focused)
-              ? roles.focusBorder
-              : roles.defaultBorder,
-          width: visible && states.contains(WidgetState.focused)
-              ? roles.focusBorderWidth
-              : 1,
-        ),
-      ),
+      side: WidgetStateProperty.resolveWith((states) {
+        final focused = visible && states.contains(WidgetState.focused);
+        if (!focused) return BorderSide(color: roles.defaultBorder, width: 1);
+        if (roles.focusTreatment == LineupFocusTreatment.fill) {
+          return roles.largeFocusIndicators
+              ? BorderSide(color: roles.focusBorder, width: 3)
+              : BorderSide.none;
+        }
+        return BorderSide(
+          color: roles.focusBorder,
+          width: roles.focusBorderWidth,
+        );
+      }),
     );
     return Theme(
       data: data.copyWith(

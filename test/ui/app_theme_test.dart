@@ -92,7 +92,7 @@ void main() {
     expect(large.focusBorderWidth, greaterThan(normal.focusBorderWidth));
   });
 
-  test('Android TV uses fill focus while desktop and DirecTV keep rings', () {
+  test('Android TV uses fill focus while desktop keeps rings', () {
     final desktop = LineupTheme.forName(LineupThemeName.emberSteel)
         .extension<LineupThemeRoles>()!;
     final tv = LineupTheme.forName(
@@ -113,8 +113,11 @@ void main() {
     expect(tv.onFocus, const Color(0xFF090806));
     expect(tv.focusSecondaryText, const Color(0xFF3B3226));
     expect(tv.focusMutedText, const Color(0xFF5B5141));
-    expect(directv.focusTreatment, LineupFocusTreatment.ring);
-    expect(directv.focusBorder, const Color(0xFFFFCC00));
+    expect(directv.focusTreatment, LineupFocusTreatment.fill);
+    expect(directv.focusedSurface, const Color(0xFFFFCC00));
+    expect(directv.focusedInsetSurface, const Color(0xFFD7C7A8));
+    expect(directv.onFocus, const Color(0xFF090806));
+    expect(directv.focusBorder, const Color(0xFFF0D39A));
   });
 
   test('every Android TV palette follows the focus treatment matrix', () {
@@ -123,16 +126,46 @@ void main() {
         name,
         androidTv: true,
       ).extension<LineupThemeRoles>()!;
-      if (name == LineupThemeName.directv) {
-        expect(roles.focusTreatment, LineupFocusTreatment.ring);
-        expect(roles.focusBorder, const Color(0xFFFFCC00));
-      } else {
-        expect(roles.focusTreatment, LineupFocusTreatment.fill);
-        expect(roles.focusedSurface, const Color(0xFFE9DCC3));
-        expect(roles.focusedInsetSurface, const Color(0xFFD7C7A8));
-        expect(roles.onFocus, const Color(0xFF090806));
-      }
+      expect(roles.focusTreatment, LineupFocusTreatment.fill);
+      expect(
+        roles.focusedSurface,
+        name == LineupThemeName.directv
+            ? const Color(0xFFFFCC00)
+            : const Color(0xFFE9DCC3),
+      );
+      expect(roles.focusedInsetSurface, const Color(0xFFD7C7A8));
+      expect(roles.onFocus, const Color(0xFF090806));
+      expect(roles.focusSecondaryText, const Color(0xFF3B3226));
+      expect(roles.focusMutedText, const Color(0xFF5B5141));
+      expect(roles.focusBorder, const Color(0xFFF0D39A));
     }
+  });
+
+  test('TV field focus fills without a border except in large-focus mode', () {
+    final normal = LineupTheme.forName(
+      LineupThemeName.emberSteel,
+      androidTv: true,
+    ).extension<LineupThemeRoles>()!;
+    final large = LineupTheme.forName(
+      LineupThemeName.emberSteel,
+      androidTv: true,
+      largeFocusIndicators: true,
+    ).extension<LineupThemeRoles>()!;
+
+    final normalDecoration = LineupTheme.fieldDecoration(normal);
+    final largeDecoration = LineupTheme.fieldDecoration(large);
+
+    expect(
+      normalDecoration.focusedBorder!.borderSide.color,
+      Colors.transparent,
+    );
+    expect(normalDecoration.focusedBorder!.borderSide.width, 0);
+    expect(
+      normalDecoration.focusedErrorBorder!.borderSide.color,
+      normal.liveAccent,
+    );
+    expect(largeDecoration.focusedBorder!.borderSide.color, large.focusBorder);
+    expect(largeDecoration.focusedBorder!.borderSide.width, 3);
   });
 
   test('navigation selection preserves the application label typography', () {

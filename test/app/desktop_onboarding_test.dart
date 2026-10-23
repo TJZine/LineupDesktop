@@ -337,7 +337,10 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(textScaler: TextScaler.linear(textScale)),
-          child: LineupCanvas.builder(context, child),
+          child: LineupCanvas(
+            reduceMotion: controller.settings.reduceMotion,
+            child: child!,
+          ),
         ),
         theme: LineupTheme.forName(
           LineupThemeName.emberSteel,
@@ -396,6 +399,70 @@ void main() {
       tester.getTopLeft(avatars.last).dy,
     );
   }, semanticsEnabled: true);
+
+  testWidgets('Android TV profile focus uses shared fill ink and scale', (
+    tester,
+  ) async {
+    const active = PlexHomeUser(
+      id: 'active',
+      name: 'Active viewer',
+      protected: false,
+    );
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: [active],
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await show(tester, controller, androidTv: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 160));
+
+    expect(
+      tester
+          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
+          .any((scale) => scale.scale == 1.06),
+      isTrue,
+    );
+    expect(
+      LineupTheme.of(tester.element(find.text('Active viewer').last))
+          .primaryText,
+      const Color(0xFF090806),
+    );
+  });
+
+  testWidgets('Android TV profile focus does not scale under Reduce Motion', (
+    tester,
+  ) async {
+    const active = PlexHomeUser(
+      id: 'active',
+      name: 'Active viewer',
+      protected: false,
+    );
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        settings: LineupSettings(reduceMotion: true),
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: [active],
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await show(tester, controller, androidTv: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 160));
+
+    expect(
+      tester
+          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
+          .every((scale) => scale.scale == 1.0),
+      isTrue,
+    );
+  });
 
   testWidgets('profile card clamp accepts a sub-pixel width constraint', (
     tester,

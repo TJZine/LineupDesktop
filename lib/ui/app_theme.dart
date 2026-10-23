@@ -252,11 +252,12 @@ abstract final class LineupTheme {
     bool androidTv = false,
   }) {
     final basePalette = _palette(name);
-    final tvFillFocus = androidTv && name != LineupThemeName.directv;
+    final tvFillFocus = androidTv;
+    final tvFocusSurface = name == LineupThemeName.directv
+        ? basePalette.focusedSurface
+        : const Color(0xFFE9DCC3);
     final palette = basePalette.copyWith(
-      focusedSurface: tvFillFocus
-          ? const Color(0xFFE9DCC3)
-          : basePalette.focusedSurface,
+      focusedSurface: tvFillFocus ? tvFocusSurface : basePalette.focusedSurface,
       focusedInsetSurface: tvFillFocus
           ? const Color(0xFFD7C7A8)
           : basePalette.focusedInsetSurface,
@@ -271,7 +272,7 @@ abstract final class LineupTheme {
           ? const Color(0xFF5B5141)
           : basePalette.focusMutedText,
       focusBorder: tvFillFocus
-          ? basePalette.progressFill
+          ? const Color(0xFFF0D39A)
           : basePalette.focusBorder,
       focusBorderWidth: largeFocusIndicators ? 5 : 3,
       largeFocusIndicators: largeFocusIndicators,
@@ -446,6 +447,19 @@ abstract final class LineupTheme {
     bool focusVisible = true,
     bool compact = false,
   }) {
+    final fillFocus = roles.focusTreatment == LineupFocusTreatment.fill;
+    final focusedWidth = !focusVisible
+        ? 1.0
+        : fillFocus
+        ? roles.largeFocusIndicators
+              ? 3.0
+              : 0.0
+        : roles.focusBorderWidth;
+    final focusedColor = !focusVisible
+        ? roles.defaultBorder
+        : fillFocus && !roles.largeFocusIndicators
+        ? Colors.transparent
+        : roles.focusBorder;
     OutlineInputBorder border(Color color, [double width = 1]) =>
         OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -467,14 +481,15 @@ abstract final class LineupTheme {
       border: border(roles.defaultBorder),
       enabledBorder: border(roles.defaultBorder),
       disabledBorder: border(roles.defaultBorder.withValues(alpha: .5)),
-      focusedBorder: border(
-        focusVisible ? roles.focusBorder : roles.defaultBorder,
-        focusVisible ? roles.focusBorderWidth : 1,
-      ),
+      focusedBorder: border(focusedColor, focusedWidth),
       errorBorder: border(roles.liveAccent),
       focusedErrorBorder: border(
         roles.liveAccent,
-        focusVisible ? roles.focusBorderWidth : 1,
+        fillFocus && !roles.largeFocusIndicators
+            ? 1
+            : focusVisible
+            ? roles.focusBorderWidth
+            : 1,
       ),
       errorStyle: LineupTypography.small.copyWith(color: roles.liveAccent),
       errorMaxLines: 3,
