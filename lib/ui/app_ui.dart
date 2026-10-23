@@ -10,6 +10,7 @@ import 'lineup_focus.dart';
 
 export 'lineup_controls.dart';
 export 'lineup_focus.dart';
+export 'lineup_text_field_activation.dart';
 
 typedef LineupMenuCallback = void Function(
   BuildContext invokerContext,

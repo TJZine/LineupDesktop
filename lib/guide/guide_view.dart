@@ -1256,27 +1256,38 @@ class _GuideControls extends StatelessWidget {
             children: [
               Focus(
                 onKeyEvent: onSearchKey,
-                child: TextField(
-                  key: const Key('guide-channel-search'),
-                  style: searchStyle,
-                  textAlignVertical: TextAlignVertical.center,
-                  controller: searchController,
+                child: LineupTextFieldActivation(
                   focusNode: searchFocus,
-                  decoration: InputDecoration(
-                    hintText: 'Search channels',
-                    hintStyle: searchStyle.copyWith(color: roles.mutedText),
-                    isDense: true,
-                    constraints: BoxConstraints.tightFor(height: controlHeight),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: searchVerticalPadding,
-                    ),
-                    // Reserve the suffix slot while keeping its action outside
-                    // the native text field's leaf semantics and key handler.
-                    suffixIcon: value.text.isEmpty
-                        ? null
-                        : const SizedBox.shrink(),
-                  ),
+                  builder: (fieldContext, fieldFocus, finishEditing) =>
+                      TextField(
+                        onEditingComplete: finishEditing,
+                        key: const Key('guide-channel-search'),
+                        style: searchStyle.copyWith(
+                          color: LineupTheme.of(fieldContext).primaryText,
+                        ),
+                        textAlignVertical: TextAlignVertical.center,
+                        controller: searchController,
+                        focusNode: fieldFocus,
+                        decoration: InputDecoration(
+                          hintText: 'Search channels',
+                          hintStyle: searchStyle.copyWith(
+                            color: LineupTheme.of(fieldContext).mutedText,
+                          ),
+                          isDense: true,
+                          constraints: BoxConstraints.tightFor(
+                            height: controlHeight,
+                          ),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: searchVerticalPadding,
+                          ),
+                          // Reserve the suffix slot while keeping its action outside
+                          // the native text field's leaf semantics and key handler.
+                          suffixIcon: value.text.isEmpty
+                              ? null
+                              : const SizedBox.shrink(),
+                        ),
+                      ),
                 ),
               ),
               if (value.text.isNotEmpty)

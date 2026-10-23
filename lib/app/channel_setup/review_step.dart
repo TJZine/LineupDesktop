@@ -84,7 +84,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   Widget build(BuildContext context) {
     final review = widget.review;
     final noChanges = !review.counts.hasChanges;
-    return SetupStage(
+    final body = SetupStage(
       footer: SetupFooter(
         configuration: true,
         leading: [
@@ -133,12 +133,19 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
             ],
             const SizedBox(height: 24),
           ];
+          final orderedIntro = [
+            for (final child in intro)
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(-1),
+                child: child,
+              ),
+          ];
           if (constraints.maxHeight < 650 ||
               MediaQuery.textScalerOf(context).scale(1) >= 1.5) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _roster(leading: intro)),
+                Expanded(child: _roster(leading: orderedIntro)),
                 if (review.counts.removed > 0)
                   _removalNotice(review.counts.removed),
               ],
@@ -147,7 +154,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ...intro,
+              ...orderedIntro,
               Expanded(child: _roster()),
               if (review.counts.removed > 0)
                 _removalNotice(review.counts.removed),
@@ -156,6 +163,12 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         },
       ),
     );
+    return LineupTheme.of(context).androidTv
+        ? FocusTraversalGroup(
+            policy: SetupVerticalTraversalPolicy(),
+            child: body,
+          )
+        : body;
   }
 
   List<Channel> get _missingSources =>
@@ -607,29 +620,47 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: TextField(
-                      key: const ValueKey('channel-setup-review-search'),
-                      controller: _search,
-                      style: searchStyle,
-                      decoration: InputDecoration(
-                        hintText: 'Search channels by name or number',
-                        hintStyle: searchStyle,
+                    child: FocusTraversalOrder(
+                      order: const NumericFocusOrder(0),
+                      child: LineupTextFieldActivation(
+                        builder: (fieldContext, fieldFocus, finishEditing) =>
+                            TextField(
+                              onEditingComplete: finishEditing,
+                              focusNode: fieldFocus,
+                              key: const ValueKey(
+                                'channel-setup-review-search',
+                              ),
+                              controller: _search,
+                              style: searchStyle.copyWith(
+                                color: LineupTheme.of(fieldContext).primaryText,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'Search channels by name or number',
+                                hintStyle: searchStyle.copyWith(
+                                  color: LineupTheme.of(fieldContext)
+                                      .primaryText,
+                                ),
+                              ),
+                              onChanged: (value) {
+                                setState(() {});
+                                widget.onSearchChanged(value);
+                              },
+                            ),
                       ),
-                      onChanged: (value) {
-                        setState(() {});
-                        widget.onSearchChanged(value);
-                      },
                     ),
                   ),
                   if (!_firstSetup) ...[
                     const SizedBox(width: 12),
-                    TextButton(
-                      key: const ValueKey('review-show-all'),
-                      onPressed: () {
-                        setState(() => _filter = SetupReviewFilter.all);
-                        widget.onFilterChanged(SetupReviewFilter.all);
-                      },
-                      child: const Text('Show all'),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(0),
+                      child: TextButton(
+                        key: const ValueKey('review-show-all'),
+                        onPressed: () {
+                          setState(() => _filter = SetupReviewFilter.all);
+                          widget.onFilterChanged(SetupReviewFilter.all);
+                        },
+                        child: const Text('Show all'),
+                      ),
                     ),
                   ],
                 ],
@@ -650,7 +681,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
           else
             SliverList.builder(
               itemCount: entries.length,
-              itemBuilder: (_, index) => _reviewRow(entries[index]),
+              itemBuilder: (_, index) => _reviewRow(entries[index], index),
             ),
         ],
       ),
@@ -738,7 +769,20 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     ),
   );
 
-  Widget _reviewRow(SetupReviewEntry entry) {
+  Widget _reviewRow(SetupReviewEntry entry, int index) {
+    if (!LineupTheme.of(context).androidTv) {
+      return _reviewRowContent(context, entry);
+    }
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(index + 1),
+      child: LineupRowSurface(
+        selected: false,
+        child: Builder(builder: (context) => _reviewRowContent(context, entry)),
+      ),
+    );
+  }
+
+  Widget _reviewRowContent(BuildContext context, SetupReviewEntry entry) {
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final nameStyle = textTheme.bodyMedium!.copyWith(
@@ -817,9 +861,13 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                   ),
               ],
             )
-          : Padding(
-              padding: const EdgeInsets.fromLTRB(12, 16, 52, 16),
-              child: content,
+          : Focus(
+              canRequestFocus: roles.androidTv,
+              skipTraversal: !roles.androidTv,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 16, 52, 16),
+                child: content,
+              ),
             ),
     );
   }
