@@ -65,6 +65,23 @@ class LineupFocusFrame extends StatelessWidget {
   final bool focused;
   final Widget? child;
 
+  /// Header-only counterpart for controls whose Material owns a ShapeBorder
+  /// but exposes no header builder. Zero insets preserve the existing layout.
+  /// A null result leaves the caller's ordinary shape untouched.
+  static ShapeBorder? shape(BuildContext context, {required bool focused}) {
+    final roles = LineupTheme.of(context);
+    if (!focused ||
+        roles.focusTreatment != LineupFocusTreatment.fill ||
+        !roles.largeFocusIndicators) {
+      return null;
+    }
+    return _LargeFocusShape(
+      color: roles.focusBorder,
+      innerColor: roles.onFocus,
+      radius: roles.panelRadius,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
@@ -101,32 +118,79 @@ class _LargeFocusPainter extends CustomPainter {
   final double radius;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    const stroke = 3.0;
-    final bounds = Offset.zero & size;
-    final outer = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke;
-    final inner = Paint()
-      ..color = innerColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke;
-    final outerRadius = Radius.circular((radius + stroke).clamp(0, 999));
-    final innerRadius = Radius.circular((radius - stroke).clamp(0, 999));
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(bounds.deflate(stroke / 2), outerRadius),
-      outer,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(bounds.deflate(stroke * 1.5), innerRadius),
-      inner,
-    );
-  }
+  void paint(Canvas canvas, Size size) => _paintLargeFocus(
+    canvas,
+    Offset.zero & size,
+    color: color,
+    innerColor: innerColor,
+    radius: radius,
+  );
 
   @override
   bool shouldRepaint(_LargeFocusPainter oldDelegate) =>
       color != oldDelegate.color ||
       innerColor != oldDelegate.innerColor ||
       radius != oldDelegate.radius;
+}
+
+class _LargeFocusShape extends ShapeBorder {
+  const _LargeFocusShape({
+    required this.color,
+    required this.innerColor,
+    required this.radius,
+  });
+  final Color color;
+  final Color innerColor;
+  final double radius;
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
+      Path()..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      getOuterPath(rect, textDirection: textDirection);
+  @override
+  ShapeBorder scale(double t) => _LargeFocusShape(
+    color: color,
+    innerColor: innerColor,
+    radius: radius * t,
+  );
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) =>
+      _paintLargeFocus(
+        canvas,
+        rect,
+        color: color,
+        innerColor: innerColor,
+        radius: radius,
+      );
+}
+
+void _paintLargeFocus(
+  Canvas canvas,
+  Rect bounds, {
+  required Color color,
+  required Color innerColor,
+  required double radius,
+}) {
+  const stroke = 3.0;
+  final outer = Paint()
+    ..color = color
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = stroke;
+  final inner = Paint()
+    ..color = innerColor
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = stroke;
+  final outerRadius = Radius.circular((radius + stroke).clamp(0, 999));
+  final innerRadius = Radius.circular((radius - stroke).clamp(0, 999));
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(bounds.deflate(stroke / 2), outerRadius),
+    outer,
+  );
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(bounds.deflate(stroke * 1.5), innerRadius),
+    inner,
+  );
 }
