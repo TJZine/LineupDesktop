@@ -79,6 +79,7 @@ class LineupFocusInk extends StatelessWidget {
 /// changing layout. Ordinary TV focus has no outline.
 class LineupFocusFrame extends StatelessWidget {
   static const strokeWidth = 3.0;
+
   /// Edge-to-edge clipped content reserves the two inward paint strokes.
   static const contentClearance = strokeWidth * 2;
 
