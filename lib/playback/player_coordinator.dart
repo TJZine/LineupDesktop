@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart'
+    show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 
 import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
@@ -24,7 +26,7 @@ enum PlayerOverlay {
   error,
 }
 
-class PlayerCoordinator extends ChangeNotifier {
+class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   static const _catchUpTolerance = Duration(seconds: 30);
   static const _prematureEndTolerance = Duration(seconds: 30);
   static const _nativeStopTimeout = Duration(seconds: 10);
@@ -35,6 +37,7 @@ class PlayerCoordinator extends ChangeNotifier {
     required this.lineup,
     required this.guide,
     this.overlayTimeout,
+    this.androidTv = false,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
     _indexChannels();
@@ -60,6 +63,14 @@ class PlayerCoordinator extends ChangeNotifier {
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
+    if (androidTv) {
+      WidgetsBinding.instance.addObserver(this);
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (lifecycle == AppLifecycleState.hidden ||
+          lifecycle == AppLifecycleState.paused) {
+        unawaited(setApplicationForeground(false));
+      }
+    }
     notifyListeners();
   }
 
@@ -80,6 +91,11 @@ class PlayerCoordinator extends ChangeNotifier {
   final LineupController lineup;
   final GuideController guide;
   final Duration? overlayTimeout;
+  final bool androidTv;
+  bool _backgroundSuspended = false;
+  // Null means no captured intent; false keeps an explicit/untuned stop from
+  // being recaptured as play while native stop acknowledgement is pending.
+  bool? _resumeAfterBackground;
   final DateTime Function() _clock;
   GuideProgram? _resolvingProgram;
   late PlayerStatus _status;
@@ -463,6 +479,7 @@ class PlayerCoordinator extends ChangeNotifier {
   );
 
   void _event(PlayerEvent event) {
+    if (_disposed || _backgroundSuspended) return;
     if (event.generation != _activeLoadGeneration) return;
     final load = _activeLoad;
     final terminal = const {
@@ -704,6 +721,64 @@ class PlayerCoordinator extends ChangeNotifier {
     if (!_disposed && previousFacts != _eventVisibleFacts) notifyListeners();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!androidTv || _disposed) return;
+    switch (state) {
+      case AppLifecycleState.hidden || AppLifecycleState.paused:
+        unawaited(setApplicationForeground(false));
+      case AppLifecycleState.resumed:
+        unawaited(setApplicationForeground(true));
+      case AppLifecycleState.inactive:
+        // Observe intent without stopping: native onStop can publish Stopped
+        // before Flutter's hidden/paused message reaches this coordinator.
+        if (!_backgroundSuspended) _resumeAfterBackground ??= hasPlaybackIntent;
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+
+  Future<void> setApplicationForeground(bool foreground) async {
+    if (!androidTv || _disposed) return;
+    if (foreground) {
+      if (!_backgroundSuspended) {
+        if (_resumeAfterBackground == true) _resumeAfterBackground = null;
+        return;
+      }
+      _backgroundSuspended = false;
+      final resume = _resumeAfterBackground == true;
+      final deadline = _sleepDeadline;
+      if (deadline != null && _clock().isBefore(deadline)) {
+        final epoch = _sleepEpoch;
+        _sleepTimer = Timer(
+          deadline.difference(_clock()),
+          () => _expireSleepTimer(epoch),
+        );
+      }
+      final channelId = lineup.currentChannelId;
+      if (resume && channelId != null) await _tune(channelId);
+      return;
+    }
+    if (_backgroundSuspended) return;
+    _resumeAfterBackground ??= hasPlaybackIntent;
+    _backgroundSuspended = true; // Retire admission before any async cleanup.
+    lineup.cancelPlaybackAuthorization();
+    _clearTransientStatus();
+    _cancelOverlayTimer();
+    _cursorTimer?.cancel();
+    _cursorTimer = null;
+    try {
+      await _stop(forBackground: true);
+    } catch (error) {
+      if (!_disposed) {
+        _recordPlaybackFailure(error, operation: 'lifecycle_stop');
+        _error =
+            'Playback could not be stopped. Retry or choose another channel.';
+        notifyListeners();
+      }
+    }
+  }
+
   Future<bool> tune(String channelId) => _tune(channelId);
 
   Future<bool> _tune(
@@ -711,6 +786,8 @@ class PlayerCoordinator extends ChangeNotifier {
     GuideProgram? endedProgram,
     bool channelStep = false,
   }) {
+    if (_disposed || _backgroundSuspended) return Future.value(false);
+    _resumeAfterBackground = null;
     _cancelPendingChannelStep(clearTarget: !channelStep);
     if (channelStep) _channelStepTargetId = channelId;
     final deadline = _sleepDeadline;
@@ -763,8 +840,9 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> loadInitialMedia(Uri media) async {
-    if (_initialMediaRequested) return;
+    if (_disposed || _backgroundSuspended || _initialMediaRequested) return;
     _initialMediaRequested = true;
+    _resumeAfterBackground = null;
     _userPaused = false;
     if (await _expireSleepIfNeeded()) return;
     _clearTransientStatus();
@@ -932,7 +1010,7 @@ class PlayerCoordinator extends ChangeNotifier {
     }
   }
 
-  bool get _supersededByTune => _tuning || _disposed;
+  bool get _supersededByTune => _tuning || _disposed || _backgroundSuspended;
 
   _ActiveProgram _commitActive(
     LineupPlaybackRequest request,
@@ -975,6 +1053,7 @@ class PlayerCoordinator extends ChangeNotifier {
     SeekMode seekMode = SeekMode.exact,
     bool authorizationRetried = false,
   }) {
+    if (_disposed || _backgroundSuspended) throw const _PlaybackSuperseded();
     if (_nativeStopOperation != null) {
       throw const PlayerUnavailable('Playback stop is still pending.');
     }
@@ -1075,6 +1154,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   bool _ownsLoad(_PlaybackLoad load) =>
       !_disposed &&
+      !_backgroundSuspended &&
       load.tuneGeneration == _tuneGeneration &&
       identical(_activeLoad, load);
 
@@ -1397,18 +1477,30 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> pause() => _setPlaybackPaused(true);
 
-  Future<void> stop() async {
+  Future<void> stop() => _stop();
+
+  Future<void> _stop({bool forBackground = false}) async {
+    if (!forBackground) _resumeAfterBackground = false;
     _cancelPendingChannelStep();
-    _clearSleepTimer();
+    if (forBackground) {
+      // Keep the absolute sleep deadline: returning after expiry cannot revive
+      // playback, and a non-expired timer is rearmed on foreground return.
+      _sleepTimer?.cancel();
+      _sleepTimer = null;
+    } else {
+      _clearSleepTimer();
+    }
     final generation = ++_tuneGeneration;
     ++_controlGeneration;
     _tuning = false;
     _canRetry = false;
     _invalidateAuthorizationRecovery();
-    final nativeStop = _beginNativeStop(force: true)!;
+    final nativeStop = _beginNativeStop(
+      force: !forBackground || hasPlaybackIntent,
+    );
     if (!_disposed) notifyListeners();
     final operation = _tuneOperations.then((_) async {
-      await nativeStop;
+      if (nativeStop != null) await nativeStop;
       if (_disposed || generation != _tuneGeneration) return;
       _status = const PlayerStatus(
         state: PlayerState.stopped,
@@ -1642,7 +1734,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> _setPlaybackPaused(bool paused) async {
-    if (_disposed) return;
+    if (_disposed || _backgroundSuspended) return;
     final intentRevision = ++_playbackIntentRevision;
     final controlGeneration = ++_controlGeneration;
     final tuneGeneration = _tuneGeneration;
@@ -1685,11 +1777,13 @@ class PlayerCoordinator extends ChangeNotifier {
 
   bool _ownsPlaybackControl(int controlGeneration, int tuneGeneration) =>
       !_disposed &&
+      !_backgroundSuspended &&
       controlGeneration == _controlGeneration &&
       tuneGeneration == _tuneGeneration;
 
   bool _ownsSeek(int seekGeneration, int tuneGeneration) =>
       !_disposed &&
+      !_backgroundSuspended &&
       seekGeneration == _seekGeneration &&
       tuneGeneration == _tuneGeneration;
 
@@ -1887,6 +1981,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> _expireSleepTimer(int epoch) async {
     if (_disposed || epoch != _sleepEpoch) return;
+    _resumeAfterBackground = false;
     _cancelPendingChannelStep();
     _sleepTimer?.cancel();
     _sleepTimer = null;
@@ -2265,6 +2360,8 @@ class PlayerCoordinator extends ChangeNotifier {
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
+    if (androidTv) WidgetsBinding.instance.removeObserver(this);
+    _resumeAfterBackground = false;
     _displayMatching.dispose();
     unawaited(_cancelPlayerSubscription(_displaySubscription));
     _displaySubscription = null;

@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -25,6 +26,195 @@ import '../support/test_doubles.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('Android background lifecycle', () {
+    test(
+      'inactive is inert; background stops once and resumes current schedule',
+      () async {
+        final f = _ContinuationFixture(androidTv: true);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        expect(f.player.stops, 0);
+        await f.coordinator.setApplicationForeground(false);
+        await f.coordinator.setApplicationForeground(false);
+        expect(f.player.stops, 1);
+        expect(await f.coordinator.tune('channel-b'), isFalse);
+        await f.coordinator.play();
+        expect(f.player.loads, hasLength(1));
+        f.player.emitStatus(
+          PlayerState.ended,
+          generation: f.player.loadGenerations.first,
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(f.player.loads, hasLength(1));
+        await f.lineup.setCurrentChannel('channel-b');
+        f.now = f.now.add(const Duration(seconds: 310));
+        await f.coordinator.setApplicationForeground(true);
+        expect(f.player.loads, hasLength(2));
+        expect(f.coordinator.currentChannel?.id, 'channel-b');
+        expect(f.lineup.lastPlaybackItemId, 'short-2');
+        expect(f.player.loadStartPositions.last, const Duration(seconds: 70));
+        await f.coordinator.setApplicationForeground(true);
+        expect(f.player.loads, hasLength(2));
+      },
+    );
+
+    test('desktop opt-out, untuned initial, intentional stop and disposal never revive', () async {
+      final desktop = _ContinuationFixture();
+      addTearDown(desktop.close);
+      await desktop.coordinator.tune('channel-0');
+      await desktop.coordinator.setApplicationForeground(false);
+      await desktop.coordinator.setApplicationForeground(true);
+      expect(desktop.player.stops, 0);
+      expect(desktop.player.loads, hasLength(1));
+      final idle = _EventPlayer()
+        ..status = const PlayerStatus(state: PlayerState.idle, message: 'Idle');
+      final f = _ContinuationFixture(player: idle, androidTv: true);
+      addTearDown(f.close);
+      await f.coordinator.setApplicationForeground(false);
+      await f.coordinator.setApplicationForeground(true);
+      expect(f.player.loads, isEmpty);
+      expect(f.player.stops, 0);
+      await f.coordinator.tune('channel-0');
+      await f.coordinator.setApplicationForeground(false);
+      await f.coordinator.stop();
+      await f.coordinator.setApplicationForeground(true);
+      expect(f.player.loads, hasLength(1));
+      await f.coordinator.setApplicationForeground(false);
+      f.coordinator.dispose();
+      f.disposed = true;
+      await f.coordinator.setApplicationForeground(true);
+      expect(f.player.loads, hasLength(1));
+    });
+
+    test('pending native load is canceled; late readiness cannot restart background playback', () async {
+      final p = _PreemptibleLoadPlayer(blockStop: false);
+      final f = _ContinuationFixture(player: p, androidTv: true);
+      addTearDown(f.close);
+      final tuning = f.coordinator.tune('channel-0');
+      await p.loadStarted.future;
+      await f.coordinator.setApplicationForeground(false);
+      expect(await tuning, isFalse);
+      expect(p.loadSettled, isTrue);
+      expect(p.loads, hasLength(1));
+      f.now = f.now.add(const Duration(seconds: 20));
+      await f.coordinator.setApplicationForeground(true);
+      expect(p.loads, hasLength(2));
+      expect(p.loadStartPositions.last, const Duration(seconds: 20));
+    });
+
+    test(
+      'rapid pause/resume waits for owned stop and admits only the final tune',
+      () async {
+        final p = _PreemptibleLoadPlayer(blockStop: true);
+        final f = _ContinuationFixture(player: p, androidTv: true);
+        addTearDown(f.close);
+        addTearDown(() {
+          if (!p.releaseStop.isCompleted) p.releaseStop.complete();
+        });
+        final first = f.coordinator.tune('channel-0');
+        await p.loadStarted.future;
+        final suspend = f.coordinator.setApplicationForeground(false);
+        await p.stopStarted.future;
+        final staleResume = f.coordinator.setApplicationForeground(true);
+        final suspendAgain = f.coordinator.setApplicationForeground(false);
+        f.now = f.now.add(const Duration(seconds: 40));
+        final resume = f.coordinator.setApplicationForeground(true);
+        p.releaseStop.complete();
+        await Future.wait([suspend, staleResume, suspendAgain, resume]);
+        expect(await first, isFalse);
+        expect(p.loads, hasLength(2));
+        expect(p.loadStartPositions.last, const Duration(seconds: 40));
+      },
+    );
+
+    test(
+      'late authorization recovery cannot load over a resumed scheduled tune',
+      () async {
+        final lineup = _TestLineup(
+          recoverAuthorization: true,
+          blockAuthorizationRecovery: true,
+        );
+        final f = _ContinuationFixture(
+          lineupController: lineup,
+          androidTv: true,
+        );
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        f.player.emitError(
+          generation: f.player.loadGenerations.last,
+          failureCode: 'http_error',
+          httpStatus: 401,
+        );
+        await lineup.recoveryStarted.future;
+        await f.coordinator.setApplicationForeground(false);
+        await f.coordinator.setApplicationForeground(true);
+        lineup.finishRecovery.complete();
+        await Future<void>.delayed(Duration.zero);
+        expect(f.player.loads, hasLength(2));
+        expect(f.coordinator.hasPlaybackIntent, isTrue);
+        expect(f.coordinator.error, isNull);
+      },
+    );
+
+    test(
+      'native background Stopped before hidden does not erase captured intent',
+      () async {
+        final f = _ContinuationFixture(androidTv: true);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        f.player.emitStatus(
+          PlayerState.stopped,
+          generation: f.player.loadGenerations.last,
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(f.coordinator.hasPlaybackIntent, isFalse);
+        await f.coordinator.setApplicationForeground(false);
+        f.now = f.now.add(const Duration(seconds: 30));
+        await f.coordinator.setApplicationForeground(true);
+        expect(f.player.loads, hasLength(2));
+        expect(f.player.loadStartPositions.last, const Duration(seconds: 30));
+      },
+    );
+
+    test(
+      'pending intentional stop cannot be recaptured as a resume intent',
+      () async {
+        final p = _PreemptibleLoadPlayer(blockStop: true);
+        final f = _ContinuationFixture(player: p, androidTv: true);
+        addTearDown(f.close);
+        addTearDown(() {
+          if (!p.releaseStop.isCompleted) p.releaseStop.complete();
+        });
+        final initial = f.coordinator.tune('channel-0');
+        await p.loadStarted.future;
+        final stopping = f.coordinator.stop();
+        await p.stopStarted.future;
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        final suspend = f.coordinator.setApplicationForeground(false);
+        final resume = f.coordinator.setApplicationForeground(true);
+        p.releaseStop.complete();
+        await Future.wait([stopping, suspend, resume]);
+        expect(await initial, isFalse);
+        expect(p.loads, hasLength(1));
+      },
+    );
+
+    test('expired absolute sleep deadline prevents resume', () async {
+      final f = _ContinuationFixture(androidTv: true);
+      addTearDown(f.close);
+      await f.coordinator.tune('channel-0');
+      f.coordinator.setSleepTimer(const Duration(minutes: 1));
+      await f.coordinator.setApplicationForeground(false);
+      f.now = f.now.add(const Duration(minutes: 2));
+      await f.coordinator.setApplicationForeground(true);
+      expect(f.player.loads, hasLength(1));
+      expect(f.coordinator.hasPlaybackIntent, isFalse);
+      expect(f.coordinator.sleepDeadline, isNull);
+    });
+  });
 
   test(
     'disposal observes all three delayed native subscription cleanup failures',
@@ -8048,6 +8238,7 @@ class _ContinuationFixture {
     List<LineupPlaybackPart>? parts,
     _EventPlayer? player,
     bool recoverAuthorization = false,
+    bool androidTv = false,
     _TestLineup? lineupController,
   }) : lineup =
            lineupController ??
@@ -8081,6 +8272,7 @@ class _ContinuationFixture {
       lineup: lineup,
       guide: guide,
       clock: () => now,
+      androidTv: androidTv,
     );
   }
   DateTime now = DateTime(2026, 10, 10, 12);

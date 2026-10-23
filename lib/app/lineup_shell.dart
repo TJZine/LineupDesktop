@@ -30,12 +30,14 @@ class LineupShell extends StatefulWidget {
     required this.controller,
     this.initialMediaPath,
     this.guideClock,
+    this.androidTv = false,
     super.key,
   });
   final NativePlayer player;
   final LineupController controller;
   final String? initialMediaPath;
   final DateTime Function()? guideClock;
+  final bool androidTv;
   @override
   State<LineupShell> createState() => _LineupShellState();
 }
@@ -93,6 +95,7 @@ class _LineupShellState extends State<LineupShell> {
       lineup: widget.controller,
       guide: _guide,
       clock: widget.guideClock,
+      androidTv: widget.androidTv,
     );
     _player.setPlayerDestinationVisible(
       _destination == ShellDestination.player,

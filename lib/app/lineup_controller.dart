@@ -2394,6 +2394,10 @@ class LineupController extends ChangeNotifier {
     _retireAuthorizationScope();
   }
 
+  /// Retires playback-only refresh work without signing out or changing the
+  /// selected session. Existing requests cannot recover over a background stop.
+  void cancelPlaybackAuthorization() => _retireAuthorizationScope();
+
   void _retireAuthorizationScope() {
     _authorizationScope++;
     _playbackRefresh = null;

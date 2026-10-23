@@ -800,6 +800,81 @@ void main() {
     expect(find.text('‹ Settings · Account'), findsNothing);
   });
 
+  for (final tv in [false, true]) {
+    testWidgets(
+      'explicit TV lifecycle wiring controls scheduled playback (TV: $tv)',
+      (tester) async {
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        final controller = _FakeController(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              Channel(
+                id: 'lifecycle',
+                number: 1,
+                name: 'Lifecycle channel',
+                source: const ManualSource([
+                  ChannelItem(
+                    id: 'program',
+                    title: 'Program',
+                    duration: Duration(hours: 24),
+                  ),
+                ]),
+                playbackMode: PlaybackMode.sequential,
+                anchor: DateTime.now().subtract(const Duration(minutes: 1)),
+                shuffleSeed: 1,
+              ),
+            ],
+          ),
+        );
+        final player = _FakePlayer();
+        await tester.pumpWidget(
+          LineupBootstrap(
+            player: player,
+            controller: controller,
+            androidTv: tv,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(player.loads, hasLength(1));
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+        expect(player.stops, 0);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+        expect(player.loads, hasLength(1));
+        for (final state in [
+          AppLifecycleState.inactive,
+          AppLifecycleState.hidden,
+          AppLifecycleState.paused,
+        ]) {
+          tester.binding.handleAppLifecycleStateChanged(state);
+        }
+        await tester.pumpAndSettle();
+        expect(player.stops, tv ? 1 : 0);
+        for (final state in [
+          AppLifecycleState.hidden,
+          AppLifecycleState.inactive,
+          AppLifecycleState.resumed,
+        ]) {
+          tester.binding.handleAppLifecycleStateChanged(state);
+        }
+        await tester.pumpAndSettle();
+        expect(player.loads, hasLength(tv ? 2 : 1));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+  }
+
   testWidgets('Guide activation tunes and returns to the full player', (
     tester,
   ) async {
