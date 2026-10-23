@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
+    show TargetPlatform, ValueListenable, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../playback/native_player.dart';
@@ -9,6 +9,7 @@ import '../persistence/app_store.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
+import '../ui/keyboard_visibility.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
@@ -69,6 +70,7 @@ class LineupBootstrap extends StatefulWidget {
     this.initialMediaPath,
     this.guideClock,
     this.androidTv,
+    this.keyboardVisibility,
     super.key,
   });
 
@@ -80,6 +82,9 @@ class LineupBootstrap extends StatefulWidget {
   /// Null follows the host platform for the production composition root.
   /// Tests and alternate compositions can inject the form factor explicitly.
   final bool? androidTv;
+
+  /// An injected observation source remains owned by its caller.
+  final ValueListenable<bool?>? keyboardVisibility;
 
   @override
   State<LineupBootstrap> createState() => _LineupBootstrapState();
@@ -118,9 +123,29 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   bool _nativeInitialized = false;
   bool _restoreStarted = false;
 
+  PlatformKeyboardVisibility? _ownedKeyboardVisibility;
+  bool get _androidTv =>
+      widget.androidTv ?? defaultTargetPlatform == TargetPlatform.android;
+
+  void _configureKeyboardVisibility() {
+    if (_androidTv && widget.keyboardVisibility == null) {
+      _ownedKeyboardVisibility ??= PlatformKeyboardVisibility();
+    } else {
+      _ownedKeyboardVisibility?.dispose();
+      _ownedKeyboardVisibility = null;
+    }
+  }
+
+  @override
+  void didUpdateWidget(LineupBootstrap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _configureKeyboardVisibility();
+  }
+
   @override
   void initState() {
     super.initState();
+    _configureKeyboardVisibility();
     _settings = widget.controller.settings;
     _startupRecoveryNotice = widget.controller.startupRecoveryNotice;
     _restoreStarted = widget.controller.restoringSavedLineup;
@@ -159,6 +184,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
 
   @override
   void dispose() {
+    _ownedKeyboardVisibility?.dispose();
     widget.controller.removeListener(_changed);
     unawaited(_disposePlayer());
     widget.controller.dispose();
@@ -182,8 +208,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   @override
   Widget build(BuildContext context) {
     final settings = _settings;
-    final androidTv =
-        widget.androidTv ?? defaultTargetPlatform == TargetPlatform.android;
+    final androidTv = _androidTv;
     return MaterialApp(
       title: 'Lineup Desktop',
       debugShowCheckedModeBanner: false,
@@ -195,8 +220,19 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
       themeAnimationDuration: settings.reduceMotion
           ? Duration.zero
           : kThemeAnimationDuration,
-      builder: (context, child) =>
-          LineupCanvas(reduceMotion: settings.reduceMotion, child: child!),
+      builder: (context, child) {
+        final canvas = LineupCanvas(
+          reduceMotion: settings.reduceMotion,
+          child: child!,
+        );
+        return androidTv
+            ? KeyboardVisibilityScope(
+                visibility:
+                    widget.keyboardVisibility ?? _ownedKeyboardVisibility!,
+                child: canvas,
+              )
+            : canvas;
+      },
       home: FutureBuilder<void>(
         future: _startup,
         builder: (context, snapshot) {

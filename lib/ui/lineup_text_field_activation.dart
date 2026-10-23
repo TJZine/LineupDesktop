@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart';
 
 import 'app_theme.dart';
+import 'keyboard_visibility.dart';
 import 'lineup_focus.dart';
 
 /// Android TV fields have separate navigation and editing focus. Arrow arrival
@@ -36,12 +38,54 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
   FocusNode get _focus => widget.focusNode ?? _navigationFocus;
   bool _editing = false;
   bool _keyboardWasVisible = false;
+  ValueListenable<bool?>? _visibility;
+  bool _observedVisible = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _editingFocus.addListener(_editingFocusChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visibility = KeyboardVisibilityScope.maybeOf(context);
+    if (identical(visibility, _visibility)) return;
+    _visibility?.removeListener(_visibilityChanged);
+    _visibility = visibility;
+    _observedVisible = false;
+    visibility?.addListener(_visibilityChanged);
+    _visibilityChanged();
+  }
+
+  bool get _activeEditor =>
+      mounted &&
+      widget.enabled &&
+      _editing &&
+      _editingFocus.hasPrimaryFocus &&
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+      ModalRoute.of(context)?.isCurrent != false;
+
+  void _visibilityChanged() {
+    if (!_activeEditor) {
+      _observedVisible = false;
+      return;
+    }
+    switch (_visibility?.value) {
+      case true:
+        _observedVisible = true;
+      case false:
+        if (_observedVisible) _finishEditing();
+      case null:
+        _observedVisible = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _observedVisible = false;
   }
 
   @override
@@ -55,10 +99,12 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
 
   void _editingFocusChanged() {
     if (!_editing && _editingFocus.hasFocus) {
+      _observedVisible = false;
       setState(() => _editing = true);
     } else if (_editing && !_editingFocus.hasFocus) {
       // A pointer or another route may take focus. End editing without stealing
       // that control's focus; Back/Done explicitly restore navigation focus.
+      _observedVisible = false;
       setState(() => _editing = false);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted ||
@@ -75,6 +121,7 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
         if (primary == null || primary is FocusScopeNode) _focus.requestFocus();
       });
     }
+    if (_editingFocus.hasPrimaryFocus) _visibilityChanged();
   }
 
   void _activate() {
@@ -82,6 +129,7 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
     setState(() {
       _editing = true;
       _keyboardWasVisible = false;
+      _observedVisible = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _editing) _editingFocus.requestFocus();
@@ -90,6 +138,7 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
 
   void _finishEditing() {
     if (!_editing) return;
+    _observedVisible = false;
     setState(() => _editing = false);
     _focus.requestFocus();
   }
@@ -143,6 +192,7 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
 
   @override
   void dispose() {
+    _visibility?.removeListener(_visibilityChanged);
     WidgetsBinding.instance.removeObserver(this);
     _editingFocus.removeListener(_editingFocusChanged);
     _editingFocus.dispose();
