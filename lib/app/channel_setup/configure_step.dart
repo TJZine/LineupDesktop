@@ -1535,7 +1535,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                   decoration: BoxDecoration(
                     color: fillFocus
                         ? roles.focusedSurface
-                        : hovered
+                        : hovered || visible
                         ? roles.primarySurface
                         : Colors.transparent,
                     border: Border(
