@@ -1804,12 +1804,14 @@ class _SettingsRow extends StatelessWidget {
     required this.helper,
     required this.control,
     this.first = false,
+    this.horizontalPadding = 0,
   });
 
   final Widget label;
   final Widget helper;
   final Widget control;
   final bool first;
+  final double horizontalPadding;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -1845,7 +1847,12 @@ class _SettingsRow extends StatelessWidget {
       );
       return Container(
         constraints: BoxConstraints(minHeight: 132),
-        padding: EdgeInsets.fromLTRB(0, (first ? 16 : 28), 0, 28),
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          (first ? 16 : 28),
+          horizontalPadding,
+          28,
+        ),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: roles.subtleBorder)),
         ),
@@ -1890,33 +1897,39 @@ class _SettingsSwitchTile extends StatelessWidget {
   final bool first;
 
   @override
-  Widget build(BuildContext context) => LineupToggleSurface(
-    child: MergeSemantics(
-      child: _SettingsRow(
-        label: title,
-        helper: subtitle,
-        control: Builder(
-          builder: (context) {
-            return SizedBox(
-              height: 48,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: SizedBox(
-                  width: 56,
-                  child: Switch(
-                    value: value,
-                    onChanged: onChanged,
-                    padding: EdgeInsets.zero,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return LineupToggleSurface(
+      child: MergeSemantics(
+        child: _SettingsRow(
+          horizontalPadding: roles.androidTv && roles.largeFocusIndicators
+              ? LineupFocusFrame.contentClearance
+              : 0,
+          label: title,
+          helper: subtitle,
+          control: Builder(
+            builder: (context) {
+              return SizedBox(
+                height: 48,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: SizedBox(
+                    width: 56,
+                    child: Switch(
+                      value: value,
+                      onChanged: onChanged,
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
+          first: first,
         ),
-        first: first,
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Dropdown<T> extends StatelessWidget {

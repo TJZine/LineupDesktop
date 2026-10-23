@@ -8,6 +8,7 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -20,6 +21,67 @@ Color? _ink(WidgetTester tester, Finder text) => tester
     ?.color;
 
 void main() {
+  testWidgets(
+    'Settings Large focus preserves Switch owner and clears content at 1.3',
+    (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final fixture = UiFixture(
+        androidTv: true,
+        scenario: const LineupScenario(stage: SetupStage.ready),
+      );
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Settings');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      final title = find.text('Use title artwork');
+      final surface = find.ancestor(
+        of: title,
+        matching: find.byType(LineupRowSurface),
+      );
+      final control = find.descendant(
+        of: surface,
+        matching: find.byType(Switch),
+      );
+      expect(control, findsOneWidget);
+      final owner = FocusManager.instance.primaryFocus;
+      expect(Focus.of(tester.element(title)).hasFocus, isTrue);
+      final element = tester.element(control);
+      final original = tester.getTopLeft(title);
+      await fixture.controller.updateSettings(
+        (s) => s.copyWith(largeFocusIndicators: true),
+      );
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus, same(owner));
+      expect(tester.element(control), same(element));
+      final scale = LineupCanvas.scaleFor(
+        tester.view.physicalSize / tester.view.devicePixelRatio,
+        androidTv: true,
+      );
+      final frame = tester.getRect(surface);
+      expect(
+        tester.getTopLeft(title).dx,
+        greaterThanOrEqualTo(frame.left + 6 * scale - .01),
+      );
+      expect(
+        tester.getRect(control).right,
+        lessThanOrEqualTo(frame.right - 6 * scale + .01),
+      );
+      await fixture.controller.updateSettings(
+        (s) => s.copyWith(largeFocusIndicators: false),
+      );
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus, same(owner));
+      expect(tester.element(control), same(element));
+      expect(tester.getTopLeft(title), original);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('TV Guide raw dropdowns read focused leaf ink', (tester) async {
     FocusManager.instance.highlightStrategy =
         FocusHighlightStrategy.alwaysTouch;
