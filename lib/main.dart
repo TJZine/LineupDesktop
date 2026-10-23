@@ -56,6 +56,7 @@ void main(List<String> arguments) {
           player: createPlatformNativePlayer(
             isWindows: Platform.isWindows,
             isMacOS: Platform.isMacOS,
+            isAndroid: Platform.isAndroid,
           ),
           initialMediaPath: mediaArgument,
         );

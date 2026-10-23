@@ -18,6 +18,7 @@ Flutter/Dart application
               +-- C++ / libmpv
               +-- Windows presentation / DirectComposition
               +-- macOS presentation / MoltenVK / CAMetalLayer
+              +-- Android Kotlin / Media3 / SurfaceView
 ```
 
 ## Accepted ownership
@@ -52,6 +53,19 @@ event queue and generation filtering, token handling, and telemetry encoding.
 A platform adapter owns the channel and codec conversion, presentation, and
 window lifecycle; the Windows adapter is `windows/runner/native_player.*` and
 the macOS adapter is `macos/Runner/NativePlayer/LineupNativePlayer.*`.
+
+Android uses `android/app/src/main/kotlin/com/tjzine/lineup/player/` for the same
+protocol with Media3, independently of the desktop libmpv engine. Kotlin owns
+media decoding, scoped HTTP, native video/subtitle views and OS teardown only.
+The shared Dart controller/coordinator retain Plex, schedule, state, playback and
+navigation policy. Android/Media3 types do not enter domain or Flutter UI state.
+
+| Android owner | Responsibility |
+| --- | --- |
+| Dart composition root / existing method-channel transport | Select adapter; preserve shared domain/playback policy and wire validation |
+| `NativePlayerController` | Bounded command/event queues, immutable load/request/stop correlation and native lifecycle fencing |
+| `Media3Engine`, guarded extractors, origin policy | Decoder/track observations, progressive HTTPS, credential scope, unsupported media failures |
+| `NativePlayerAdapter` / activity | Passive SurfaceView and SubtitleView under transparent Flutter; physical rectangle and screen-awake mechanism |
 
 macOS is not yet a release platform; the [port plan](macos-port-plan.md) owns
 its decisions and remaining packages. The following section describes the
