@@ -35,7 +35,7 @@ void main() {
             for (var i = 0; i < 40; i++)
               _channel(
                 'selected-$i',
-                i + 1,
+                i + 100,
                 'Selected channel $i with a name that wraps clearly in the review list',
               ),
           ];
@@ -109,7 +109,25 @@ void main() {
           );
           expect(frame, findsOneWidget);
           expect(tester.widget<LineupFocusFrame>(frame).focused, isTrue);
-          expect(tester.getRect(frame), tester.getRect(list));
+          final frameBox = tester.renderObject<RenderBox>(frame);
+          final clearance = large ? 6.0 : 0.0;
+          final safeViewport = Rect.fromPoints(
+            frameBox.localToGlobal(Offset(clearance, clearance)),
+            frameBox.localToGlobal(
+              Offset(
+                frameBox.size.width - clearance,
+                frameBox.size.height - clearance,
+              ),
+            ),
+          );
+          expect(tester.getRect(list), safeViewport);
+          final viewportWidget = tester.widget<ShrinkWrappingViewport>(
+            find.descendant(
+              of: list,
+              matching: find.byType(ShrinkWrappingViewport),
+            ),
+          );
+          expect(viewportWidget.clipBehavior, Clip.hardEdge);
           final surface = find
               .ancestor(of: list, matching: find.byType(DecoratedBox))
               .first;
@@ -135,6 +153,60 @@ void main() {
             find.bySemanticsLabel(RegExp('Selected channels for deletion')),
             findsOneWidget,
           );
+          void expectReaderContentClear(Channel channel) {
+            final row = find.byKey(ValueKey('delete-dialog-row-${channel.id}'));
+            final frameBox = tester.renderObject<RenderBox>(frame);
+            // The shared large indicator paints two 3cu strokes inside its
+            // outer region. Its scroll clip and text must clear that paint.
+            final clearance = large ? 6.0 : 0.0;
+            final safe = Rect.fromPoints(
+              frameBox.localToGlobal(Offset(clearance, clearance)),
+              frameBox.localToGlobal(
+                Offset(
+                  frameBox.size.width - clearance,
+                  frameBox.size.height - clearance,
+                ),
+              ),
+            );
+            for (final label in ['${channel.number}', channel.name]) {
+              final text = find.descendant(of: row, matching: find.text(label));
+              final paragraph = tester.renderObject<RenderParagraph>(
+                find.descendant(of: text, matching: find.byType(RichText)),
+              );
+              final boxes = paragraph.getBoxesForSelection(
+                TextSelection(baseOffset: 0, extentOffset: label.length),
+              );
+              expect(boxes, isNotEmpty);
+              for (final box in boxes) {
+                final rect = Rect.fromPoints(
+                  paragraph.localToGlobal(box.toRect().topLeft),
+                  paragraph.localToGlobal(box.toRect().bottomRight),
+                );
+                expect(
+                  rect.left,
+                  greaterThanOrEqualTo(safe.left - .25),
+                  reason: label,
+                );
+                expect(
+                  rect.right,
+                  lessThanOrEqualTo(safe.right + .25),
+                  reason: label,
+                );
+                expect(
+                  rect.top,
+                  greaterThanOrEqualTo(safe.top - .25),
+                  reason: label,
+                );
+                expect(
+                  rect.bottom,
+                  lessThanOrEqualTo(safe.bottom + .25),
+                  reason: label,
+                );
+              }
+            }
+          }
+
+          expectReaderContentClear(channels.first);
           final seen = <String>{};
           for (var i = 0; i < 150; i++) {
             final viewport = tester.getRect(list);
@@ -146,6 +218,7 @@ void main() {
                 final rect = tester.getRect(row);
                 if (rect.top >= viewport.top &&
                     rect.bottom <= viewport.bottom) {
+                  expectReaderContentClear(channel);
                   seen.add(channel.id);
                 }
               }
