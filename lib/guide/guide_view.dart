@@ -328,8 +328,7 @@ class _GuideViewState extends State<GuideView>
   final _removeLibraryFilterFocus = FocusNode(
     debugLabel: 'Guide remove library filter',
   );
-  final _focusedProgramKey = GlobalKey(debugLabel: 'Guide focused program');
-  final _focusedTimelineKey = GlobalKey(debugLabel: 'Guide focused timeline');
+  final _scheduleKey = GlobalKey(debugLabel: 'Guide schedule');
   final _searchController = TextEditingController();
   late String _observedSearchQuery;
   late int _searchContentGeneration;
@@ -710,18 +709,38 @@ class _GuideViewState extends State<GuideView>
   ];
 
   void _focusNearestToolbarControl() {
-    final focusedProgram = _focusedProgramKey.currentContext
-        ?.findRenderObject();
-    final focusedTimeline = _focusedTimelineKey.currentContext
-        ?.findRenderObject();
-    final programRect = focusedProgram is RenderBox && focusedProgram.hasSize
-        ? focusedProgram.localToGlobal(Offset.zero) & focusedProgram.size
-        : null;
-    final timelineRect = focusedTimeline is RenderBox && focusedTimeline.hasSize
-        ? focusedTimeline.localToGlobal(Offset.zero) & focusedTimeline.size
-        : null;
+    Rect? programRect;
+    Rect? timelineRect;
+    final programId = widget.controller.focusedProgramId;
+    final programKey = programId == null ? null : ValueKey(programId);
+    final timelineKey = ValueKey(
+      'guide-timeline-${widget.controller.focusedChannelId}',
+    );
+    // Search only the mounted viewport, on demand. Cells retain their stable
+    // keys and parents as inspection moves between programs and channels.
+    void measure(Element element) {
+      if ((programKey != null && element.widget.key == programKey) ||
+          element.widget.key == timelineKey) {
+        final box = element.findRenderObject();
+        if (box is RenderBox && box.hasSize) {
+          final rect = Rect.fromPoints(
+            box.localToGlobal(Offset.zero),
+            box.localToGlobal(box.size.bottomRight(Offset.zero)),
+          );
+          if (programKey != null && element.widget.key == programKey) {
+            programRect = rect;
+          }
+          if (element.widget.key == timelineKey) timelineRect = rect;
+        }
+      }
+      if (programRect == null || timelineRect == null) {
+        element.visitChildElements(measure);
+      }
+    }
+
+    (_scheduleKey.currentContext as Element?)?.visitChildElements(measure);
     final visibleProgramRect = programRect != null && timelineRect != null
-        ? programRect.intersect(timelineRect)
+        ? programRect!.intersect(timelineRect!)
         : null;
     final targetX = visibleProgramRect != null && !visibleProgramRect.isEmpty
         ? visibleProgramRect.center.dx
@@ -808,6 +827,7 @@ class _GuideViewState extends State<GuideView>
   Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
     final scroll = _scrollFor(policy.rowHeight);
     return Column(
+      key: _scheduleKey,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(
@@ -932,16 +952,6 @@ class _GuideViewState extends State<GuideView>
                                   now: now,
                                   activityPulse: _activityPulse,
                                   onGridKey: _gridKey,
-                                  focusedProgramKey:
-                                      channels[index].id ==
-                                          widget.controller.focusedChannelId
-                                      ? _focusedProgramKey
-                                      : null,
-                                  focusedTimelineKey:
-                                      channels[index].id ==
-                                          widget.controller.focusedChannelId
-                                      ? _focusedTimelineKey
-                                      : null,
                                 ),
                               ),
                       ),
@@ -2016,8 +2026,6 @@ class _GuideRow extends StatelessWidget {
     required this.now,
     required this.activityPulse,
     required this.onGridKey,
-    this.focusedProgramKey,
-    this.focusedTimelineKey,
   });
   final Channel channel;
   final GuideController controller;
@@ -2029,8 +2037,6 @@ class _GuideRow extends StatelessWidget {
   final DateTime now;
   final Animation<double> activityPulse;
   final FocusOnKeyEventCallback onGridKey;
-  final GlobalKey? focusedProgramKey;
-  final GlobalKey? focusedTimelineKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2238,8 +2244,6 @@ class _GuideRow extends StatelessWidget {
                     now: now,
                     activityPulse: activityPulse,
                     onGridKey: onGridKey,
-                    focusedProgramKey: focusedProgramKey,
-                    focusedTimelineKey: focusedTimelineKey,
                   ),
           ),
         ],
@@ -2257,8 +2261,6 @@ class _Programs extends StatelessWidget {
     required this.now,
     required this.activityPulse,
     required this.onGridKey,
-    this.focusedProgramKey,
-    this.focusedTimelineKey,
   });
   final Channel channel;
   final GuideRowData data;
@@ -2267,8 +2269,6 @@ class _Programs extends StatelessWidget {
   final DateTime now;
   final Animation<double> activityPulse;
   final FocusOnKeyEventCallback onGridKey;
-  final GlobalKey? focusedProgramKey;
-  final GlobalKey? focusedTimelineKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2309,8 +2309,8 @@ class _Programs extends StatelessWidget {
       onKeyEvent: onGridKey,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final timeline = ClipRect(
-            key: focusedTimelineKey,
+          return ClipRect(
+            key: ValueKey('guide-timeline-${channel.id}'),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -2357,12 +2357,6 @@ class _Programs extends StatelessWidget {
               ],
             ),
           );
-          return focusedTimelineKey == null
-              ? timeline
-              : KeyedSubtree(
-                  key: const Key('guide-focused-timeline'),
-                  child: timeline,
-                );
         },
       ),
     );
@@ -2381,7 +2375,7 @@ class _Programs extends StatelessWidget {
       viewportWidth: viewportWidth,
     );
     final current = program.isCurrentAt(now);
-    final cell = _ProgramCell(
+    return _ProgramCell(
       key: ValueKey(program.id),
       program: program,
       focused: program.id == controller.focusedProgramId,
@@ -2409,16 +2403,6 @@ class _Programs extends StatelessWidget {
       },
       reduceMotion: controller.lineup.settings.reduceMotion,
     );
-    return program.id == controller.focusedProgramId &&
-            focusedProgramKey != null
-        ? KeyedSubtree(
-            key: focusedProgramKey,
-            child: KeyedSubtree(
-              key: const Key('guide-focused-program'),
-              child: cell,
-            ),
-          )
-        : cell;
   }
 }
 

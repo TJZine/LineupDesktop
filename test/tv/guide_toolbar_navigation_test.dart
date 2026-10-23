@@ -81,13 +81,22 @@ Finder _toolbarFinder(String name) => switch (name) {
   _ => throw StateError('Unknown Guide toolbar control: $name'),
 };
 
-String _expectedToolbarControl(WidgetTester tester) {
-  final cell = tester.getRect(find.byKey(const Key('guide-focused-program')));
-  final timeline = tester.getRect(
-    find.byKey(const Key('guide-focused-timeline')),
+Rect _drawnRect(WidgetTester tester, Finder finder) =>
+    Rect.fromPoints(tester.getTopLeft(finder), tester.getBottomRight(finder));
+
+String _expectedToolbarControl(WidgetTester tester, {double? target}) {
+  final guide = tester.widget<GuideView>(find.byType(GuideView)).controller;
+  final cell = _drawnRect(
+    tester,
+    find.byKey(ValueKey(guide.focusedProgramId!)),
+  );
+  final timeline = _drawnRect(
+    tester,
+    find.byKey(ValueKey('guide-timeline-${guide.focusedChannelId}')),
   );
   final visibleCell = cell.intersect(timeline);
-  final targetX = (visibleCell.isEmpty ? cell : visibleCell).center.dx;
+  final targetX =
+      target ?? (visibleCell.isEmpty ? cell : visibleCell).center.dx;
   const controls = [
     'library',
     'search',
@@ -103,9 +112,10 @@ String _expectedToolbarControl(WidgetTester tester) {
   );
   return candidates.reduce((nearest, candidate) {
     final nearestDistance =
-        (tester.getRect(_toolbarFinder(nearest)).center.dx - targetX).abs();
+        (_drawnRect(tester, _toolbarFinder(nearest)).center.dx - targetX).abs();
     final candidateDistance =
-        (tester.getRect(_toolbarFinder(candidate)).center.dx - targetX).abs();
+        (_drawnRect(tester, _toolbarFinder(candidate)).center.dx - targetX)
+            .abs();
     return candidateDistance < nearestDistance ? candidate : nearest;
   });
 }
@@ -126,7 +136,166 @@ class _GuideFixtureController extends FixtureController {
       buildChannelSchedule(channel, (channel.source as ManualSource).items);
 }
 
+UiFixture _geometryFixture({required bool androidTv}) => UiFixture(
+  androidTv: androidTv,
+  guideClock: () => DateTime.utc(2026, 1, 15, 3, 17),
+  controller: _GuideFixtureController(
+    scenario: LineupScenario(
+      stage: SetupStage.ready,
+      settings: const LineupSettings(reduceMotion: true),
+      channels: [
+        for (var row = 0; row < 2; row++)
+          Channel(
+            id: 'geometry-$row',
+            number: row + 1,
+            name: 'Geometry $row',
+            source: const ManualSource([
+              ChannelItem(
+                id: 'long',
+                title: 'Long program',
+                duration: Duration(minutes: 67),
+              ),
+              ChannelItem(
+                id: 'short',
+                title: 'Short program',
+                duration: Duration(minutes: 37),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026, 1, 15, 3),
+            shuffleSeed: 1,
+          ),
+      ],
+    ),
+  ),
+);
+
 void main() {
+  for (final scale in [0.8, 2 / 3]) {
+    testWidgets('TV toolbar uses full rendered bounds at scale $scale', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      try {
+        final fixture = _geometryFixture(androidTv: true);
+        await tester.pumpWidget(
+          Transform.scale(
+            scale: scale / 0.8,
+            alignment: Alignment.topLeft,
+            child: fixture.build(),
+          ),
+        );
+        await _settle(tester);
+        final guide = tester.widget<GuideView>(find.byType(GuideView));
+        var crossingCases = 0;
+        var positions = 0;
+        for (var window = 0; window < 2; window++) {
+          for (final program in guide.controller.row('geometry-0').programs) {
+            guide.controller.focusProgram(program);
+            await tester.pump();
+            final cellFinder = find.byKey(ValueKey(program.id));
+            final timelineFinder = find.byKey(
+              const ValueKey('guide-timeline-geometry-0'),
+            );
+            final cellRect = _drawnRect(tester, cellFinder);
+            final timelineRect = _drawnRect(tester, timelineFinder);
+            expect(
+              cellRect.width / tester.getSize(cellFinder).width,
+              closeTo(scale, 0.0001),
+            );
+            final expected = _expectedToolbarControl(tester);
+            // Deliberate previous defect: transformed origins with canvas sizes.
+            final mixedCell = cellRect.topLeft & tester.getSize(cellFinder);
+            final mixedTimeline =
+                timelineRect.topLeft & tester.getSize(timelineFinder);
+            final wrongTarget = mixedCell.intersect(mixedTimeline).center.dx;
+            if (_expectedToolbarControl(tester, target: wrongTarget) !=
+                expected) {
+              crossingCases++;
+            }
+            guide.focusNode!.requestFocus();
+            await tester.pump();
+            await _key(tester, _up);
+            _expectToolbarFocus(tester, expected);
+            await _key(tester, _down);
+            positions++;
+          }
+          guide.controller.moveWindow(1);
+          await tester.pump();
+        }
+        expect(positions, greaterThanOrEqualTo(2));
+        expect(
+          crossingCases,
+          greaterThan(0),
+          reason: 'the fixture must distinguish the mixed-coordinate defect',
+        );
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
+  for (final androidTv in [false, true]) {
+    testWidgets(
+      'Guide keeps mounted cell and timeline identity (TV: $androidTv)',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = androidTv
+            ? TargetPlatform.android
+            : TargetPlatform.macOS;
+        try {
+          final fixture = _geometryFixture(androidTv: androidTv);
+          await tester.pumpWidget(fixture.build());
+          await _settle(tester);
+          final guide = tester.widget<GuideView>(find.byType(GuideView));
+          final programs = [
+            ...guide.controller.row('geometry-0').programs,
+            ...guide.controller.row('geometry-1').programs,
+          ];
+          expect(programs.length, greaterThanOrEqualTo(4));
+          final elements = {
+            for (final program in programs)
+              program.id: tester.element(find.byKey(ValueKey(program.id))),
+          };
+          final states = {
+            for (final program in programs)
+              program.id: tester.state(find.byKey(ValueKey(program.id))),
+          };
+          final timelines = {
+            for (var row = 0; row < 2; row++)
+              row: tester.element(
+                find.byKey(ValueKey('guide-timeline-geometry-$row')),
+              ),
+          };
+          for (final selected in programs.reversed) {
+            guide.controller.focusProgram(selected);
+            await tester.pump();
+            for (final program in programs) {
+              final finder = find.byKey(ValueKey(program.id));
+              expect(tester.element(finder), same(elements[program.id]));
+              expect(tester.state(finder), same(states[program.id]));
+            }
+            for (var row = 0; row < 2; row++) {
+              expect(
+                tester.element(
+                  find.byKey(ValueKey('guide-timeline-geometry-$row')),
+                ),
+                same(timelines[row]),
+              );
+            }
+          }
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
+
   testWidgets('TV Guide walks the toolbar and returns to the same grid cell', (
     tester,
   ) async {
@@ -198,7 +367,7 @@ void main() {
         guide.controller.focusProgram(program);
         await tester.pumpAndSettle();
         expect(
-          find.byKey(const Key('guide-focused-program')),
+          find.byKey(ValueKey(program.id)),
           findsOneWidget,
           reason:
               'row=${guide.controller.row('fixture').state} '
