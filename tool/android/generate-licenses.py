@@ -42,6 +42,7 @@ ARTIFACT_NOTICE = re.compile(
     re.IGNORECASE,
 )
 URL = re.compile(r"https?://[^\s)<>]+")
+MOZILLA_MPL_PLAINTEXT_URL = "https://www.mozilla.org/media/MPL/2.0/index.txt"
 
 
 class GenerationError(RuntimeError):
@@ -344,8 +345,12 @@ def generate(
                 entries.append(
                     (
                         notice_coordinate,
-                        "Referenced Mozilla Public License, v. 2.0 terms",
-                        url,
+                        (
+                            "Referenced Mozilla Public License, v. 2.0 terms; "
+                            f"NOTICE reference: {url}; plaintext source: "
+                            f"{MOZILLA_MPL_PLAINTEXT_URL}"
+                        ),
+                        MOZILLA_MPL_PLAINTEXT_URL,
                         referenced_relative,
                         "",
                     )
