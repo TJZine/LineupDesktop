@@ -25,6 +25,67 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  for (final tv in [false, true]) {
+    testWidgets(
+      'Library explicit footer action labels follow focus ink TV=$tv',
+      (tester) async {
+        final controller = _SetupController(
+          blockScan: true,
+          scenario: const LineupScenario(channelSetupCanCancel: true),
+        );
+        final strategy = FocusManager.instance.highlightStrategy;
+        try {
+          FocusManager.instance.highlightStrategy =
+              FocusHighlightStrategy.alwaysTouch;
+          await _pump(tester, controller, androidTv: tv);
+          Future<void> checkLabel(String label) async {
+            final text = find.text(label);
+            expect(text, findsOneWidget);
+            final element = tester.element(text);
+            final originalStyle = tester.widget<Text>(text).style!;
+            final originalInk = originalStyle.color;
+            final node = Focus.of(element);
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+            node.requestFocus();
+            await tester.pumpAndSettle();
+            expect(node.hasPrimaryFocus, isTrue);
+            final richText = tester.widget<RichText>(
+              find.descendant(of: text, matching: find.byType(RichText)),
+            );
+            expect(
+              richText.text.style?.color,
+              tv
+                  ? LineupTheme.of(tester.element(text)).primaryText
+                  : originalInk,
+            );
+            expect(
+              tester.widget<Text>(text).style!.fontSize,
+              originalStyle.fontSize,
+            );
+            expect(tester.element(text), same(element));
+            node.unfocus();
+            await tester.pumpAndSettle();
+            expect(tester.widget<Text>(text).style!.color, originalInk);
+          }
+
+          await checkLabel('Switch server');
+          await checkLabel('Cancel');
+          await tester.tap(
+            find.byKey(const ValueKey('scan-selected-libraries')),
+          );
+          await tester.pump();
+          await checkLabel('Cancel scan');
+          controller.cancelLibraryScan();
+          await tester.pumpAndSettle();
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+          tester.view.reset();
+          FocusManager.instance.highlightStrategy = strategy;
+        }
+      },
+    );
+  }
   testWidgets(
     'TV conditional variant selection preserves its trigger element and focus',
     (tester) async {
