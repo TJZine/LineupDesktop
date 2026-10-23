@@ -4459,6 +4459,70 @@ void main() {
     fixture.dispose();
   });
 
+  for (final androidTv in [false, true]) {
+    testWidgets(
+      'playback drawer hints use the ${androidTv ? 'TV' : 'desktop'} vocabulary',
+      (tester) async {
+        final previousPlatform = debugDefaultTargetPlatformOverride;
+        if (androidTv) {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        }
+        final fixture = _Fixture(
+          PlayerState.playing,
+          tracks: const [
+            PlayerTrack(
+              id: 1,
+              type: PlayerTrackType.audio,
+              selected: true,
+              title: 'Original mix',
+            ),
+          ],
+        );
+        try {
+          fixture.player.showMiniGuide();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: androidTv,
+              ),
+              builder: LineupCanvas.builder,
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text(
+              androidTv
+                  ? 'Up/Down Browse · Select Tune · Back Close'
+                  : 'Up / Down · Browse · Enter Tune · Esc Close',
+            ),
+            findsOneWidget,
+          );
+
+          fixture.player.closeOverlay();
+          fixture.player.showOsd();
+          fixture.player.showTracks(PlayerTrackType.audio);
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+              of: find.byKey(const Key('playback-options-footer')),
+              matching: find.text(
+                androidTv
+                    ? 'Up/Down Browse · Select Choose · Back Close'
+                    : 'Up/Down Browse · Enter Select · Esc Close',
+              ),
+            ),
+            findsOneWidget,
+          );
+        } finally {
+          fixture.dispose();
+          debugDefaultTargetPlatformOverride = previousPlatform;
+        }
+      },
+    );
+  }
+
   testWidgets('mini Guide wheel changes selection without scrolling', (
     tester,
   ) async {
