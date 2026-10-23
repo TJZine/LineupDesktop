@@ -275,6 +275,7 @@ class SetupLibraryStep extends StatelessWidget {
     final body = LayoutBuilder(
       builder: (context, constraints) {
         final singleScroll =
+            roles.androidTv ||
             constraints.maxHeight < 800 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.5;
         final list = ListView.separated(
@@ -337,10 +338,24 @@ class SetupLibraryStep extends StatelessWidget {
                   ),
                 ),
               ),
-            const SizedBox(height: 24),
-            footer,
+            if (!roles.androidTv) ...[const SizedBox(height: 24), footer],
           ],
         );
+        if (roles.androidTv) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1040),
+              child: SetupStage(
+                footer: footer,
+                child: SingleChildScrollView(
+                  key: const ValueKey('channel-setup-single-scroll'),
+                  child: content,
+                ),
+              ),
+            ),
+          );
+        }
         return Align(
           alignment: singleScroll ? Alignment.topCenter : Alignment.center,
           child: ConstrainedBox(

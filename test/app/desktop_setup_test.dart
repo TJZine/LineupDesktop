@@ -8,6 +8,8 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -21,6 +23,59 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  for (final existing in [false, true]) {
+    testWidgets(
+      'TV Setup has a fixed footer and an initially complete Review row existing=$existing',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        try {
+          await tester.runAsync(loadPinnedTestFonts);
+          final controller = _SetupController(
+            channels: existing ? [_missingChannel] : [],
+          );
+          addTearDown(controller.dispose);
+          await _pump(tester, controller, androidTv: true);
+          await _advanceToConfigure(tester);
+          final configuration = find.byKey(
+            const ValueKey('channel-configuration'),
+          );
+          expect(
+            find.ancestor(of: configuration, matching: find.byType(Scrollable)),
+            findsNothing,
+          );
+          final reviewButton = find.byKey(const ValueKey('review-channels'));
+          final footerBounds = tester.getRect(reviewButton);
+          expect(footerBounds.bottom, lessThanOrEqualTo(513));
+          await tester.drag(configuration, const Offset(0, -3000));
+          await tester.pumpAndSettle();
+          expect(tester.getRect(reviewButton), footerBounds);
+          await tester.tap(reviewButton);
+          await tester.pumpAndSettle();
+          final roster = find.byKey(
+            const ValueKey('channel-setup-review-roster'),
+          );
+          final row = find
+              .byWidgetPredicate(
+                (widget) =>
+                    widget.key is ValueKey<String> &&
+                    (widget.key as ValueKey<String>).value.startsWith(
+                      'review-channel-',
+                    ),
+              )
+              .first;
+          final viewport = tester.getRect(roster);
+          final rowBounds = tester.getRect(row);
+          expect(rowBounds.top, greaterThanOrEqualTo(viewport.top));
+          expect(rowBounds.bottom, lessThanOrEqualTo(viewport.bottom));
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          tester.view.reset();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
   testWidgets('empty library recovery exposes quiet Sign out', (tester) async {
     final controller = _SetupController(
       scenario: LineupScenario(libraries: const []),
@@ -1818,15 +1873,19 @@ Future<void> _pump(
   _SetupController controller, {
   VoidCallback? onView,
   VoidCallback? onAdd,
+  bool androidTv = false,
 }) async {
   tester.view
-    ..physicalSize = const Size(1280, 720)
-    ..devicePixelRatio = 1;
+    ..physicalSize = androidTv ? const Size(1920, 1080) : const Size(1280, 720)
+    ..devicePixelRatio = androidTv ? 2 : 1;
   await tester.pumpWidget(
     MaterialApp(
       builder: (context, child) =>
           LineupCanvas.builder(context, LineupFocusScope(child: child!)),
-      theme: LineupTheme.forName(LineupThemeName.emberSteel),
+      theme: LineupTheme.forName(
+        LineupThemeName.emberSteel,
+        androidTv: androidTv,
+      ),
       home: UpstreamChannelSetupView(
         controller: controller,
         onViewLineup: onView,
