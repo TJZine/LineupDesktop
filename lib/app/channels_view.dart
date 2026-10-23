@@ -1605,68 +1605,79 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                                   ? 'Selected channels for deletion'
                                   : null,
                               readOnly: roles.androidTv ? true : null,
-                              child: Scrollbar(
-                                controller: _scrollController,
-                                thumbVisibility: true,
-                                child: ListView.separated(
+                              child: Padding(
+                                padding: EdgeInsets.all(
+                                  roles.androidTv &&
+                                          roles.focusTreatment ==
+                                              LineupFocusTreatment.fill &&
+                                          roles.largeFocusIndicators
+                                      ? LineupFocusFrame.contentClearance
+                                      : 0,
+                                ),
+                                child: Scrollbar(
                                   controller: _scrollController,
-                                  shrinkWrap: true,
-                                  padding: EdgeInsets.only(right: 12),
-                                  itemCount: channels.length,
-                                  separatorBuilder: (_, _) => Divider(
-                                    height: 1,
-                                    color: roles.subtleBorder,
-                                  ),
-                                  itemBuilder: (context, index) {
-                                    final channel = channels[index];
-                                    return ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        minHeight: 52,
-                                      ),
-                                      child: Padding(
-                                        padding: EdgeInsets.symmetric(
-                                          vertical: 10,
+                                  thumbVisibility: true,
+                                  child: ListView.separated(
+                                    controller: _scrollController,
+                                    shrinkWrap: true,
+                                    padding: EdgeInsets.only(right: 12),
+                                    itemCount: channels.length,
+                                    separatorBuilder: (_, _) => Divider(
+                                      height: 1,
+                                      color: roles.subtleBorder,
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      final channel = channels[index];
+                                      return ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          minHeight: 52,
                                         ),
-                                        child: Row(
-                                          key: ValueKey(
-                                            'delete-dialog-row-${channel.id}',
+                                        child: Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 10,
                                           ),
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.baseline,
-                                          textBaseline: TextBaseline.alphabetic,
-                                          children: [
-                                            SizedBox(
-                                              width: 56,
-                                              child: Text(
-                                                '${channel.number}',
-                                                style: fill
-                                                    ? numberStyle?.copyWith(
-                                                        color: LineupTheme.of(
-                                                          context,
-                                                        ).secondaryText,
-                                                      )
-                                                    : numberStyle,
-                                              ),
+                                          child: Row(
+                                            key: ValueKey(
+                                              'delete-dialog-row-${channel.id}',
                                             ),
-                                            SizedBox(width: 16),
-                                            Expanded(
-                                              child: Text(
-                                                channel.name,
-                                                softWrap: true,
-                                                style: fill
-                                                    ? nameStyle?.copyWith(
-                                                        color: LineupTheme.of(
-                                                          context,
-                                                        ).primaryText,
-                                                      )
-                                                    : nameStyle,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.baseline,
+                                            textBaseline:
+                                                TextBaseline.alphabetic,
+                                            children: [
+                                              SizedBox(
+                                                width: 56,
+                                                child: Text(
+                                                  '${channel.number}',
+                                                  style: fill
+                                                      ? numberStyle?.copyWith(
+                                                          color: LineupTheme.of(
+                                                            context,
+                                                          ).secondaryText,
+                                                        )
+                                                      : numberStyle,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                              SizedBox(width: 16),
+                                              Expanded(
+                                                child: Text(
+                                                  channel.name,
+                                                  softWrap: true,
+                                                  style: fill
+                                                      ? nameStyle?.copyWith(
+                                                          color: LineupTheme.of(
+                                                            context,
+                                                          ).primaryText,
+                                                        )
+                                                      : nameStyle,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  },
+                                      );
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
