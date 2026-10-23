@@ -55,6 +55,8 @@ com.google.errorprone:error_prone_annotations:2.41.0 Apache 2.0 http://www.apach
 com.google.guava:failureaccess:1.0.2 The Apache Software License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0.txt sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 com.google.guava:guava:33.3.1-android Apache License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0.txt sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava The Apache Software License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0.txt sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+com.squareup.okhttp3:okhttp:4.12.0 Artifact notice: okhttp3/internal/publicsuffix/NOTICE jar:com.squareup.okhttp3:okhttp:4.12.0!/okhttp3/internal/publicsuffix/NOTICE sha256:8a9c58fbded5ea3474315e4a9824ca8b1486098a1a03e897e0b19419d5e1876a
+com.squareup.okhttp3:okhttp:4.12.0 Referenced Mozilla Public License, v. 2.0 terms https://mozilla.org/MPL/2.0/ sha256:79fefbb5ce750421056e8639e83b055fa97deb02407617d4c0f9d50cfa0cfd32
 com.squareup.okhttp3:okhttp:4.12.0 The Apache Software License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0.txt sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 com.squareup.okio:okio-jvm:3.6.0 The Apache Software License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0.txt sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 com.squareup.okio:okio:3.6.0 The Apache Software License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0.txt sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
@@ -70,4 +72,4 @@ org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1 The Apache Software License,
 org.jetbrains:annotations:23.0.0 The Apache Software License, Version 2.0 https://www.apache.org/licenses/LICENSE-2.0.txt sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 org.jspecify:jspecify:1.0.0 The Apache License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0.txt sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 
-Generated license bytes: 739789
+Generated license bytes: 757336

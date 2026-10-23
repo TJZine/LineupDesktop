@@ -22,6 +22,7 @@ import tempfile
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -36,6 +37,11 @@ COORDINATE = re.compile(
     r"(?P<version>[A-Za-z0-9][A-Za-z0-9_.+\-]*)"
 )
 XML_NS = {"m": "http://maven.apache.org/POM/4.0.0"}
+ARTIFACT_NOTICE = re.compile(
+    r"(?:^|/)NOTICE(?:\.[A-Za-z0-9._-]+)?$",
+    re.IGNORECASE,
+)
+URL = re.compile(r"https?://[^\s)<>]+")
 
 
 class GenerationError(RuntimeError):
@@ -90,6 +96,24 @@ def locate_pom(cache_roots: list[Path], group: str, artifact: str, version: str)
             f"Resolved dependency has no cached POM: {group}:{artifact}:{version}"
         )
     return sorted(set(candidates))[0]
+
+
+def locate_jar(
+    cache_roots: list[Path], group: str, artifact: str, version: str
+) -> Path | None:
+    filename = f"{artifact}-{version}.jar"
+    candidates: list[Path] = []
+    for root in cache_roots:
+        for relative in (
+            Path(group) / artifact / version,
+            Path(*group.split(".")) / artifact / version,
+        ):
+            directory = root / relative
+            candidates.extend(directory.glob(f"*/{filename}"))
+            direct = root / relative / filename
+            if direct.is_file():
+                candidates.append(direct)
+    return sorted(set(candidates))[0] if candidates else None
 
 
 def pom_licenses(
@@ -175,6 +199,67 @@ def download_license(url: str, cache: Path | None) -> bytes:
     return data
 
 
+def artifact_notice_documents(
+    group: str,
+    artifact: str,
+    version: str,
+    cache_roots: list[Path],
+) -> list[tuple[str, str, str, str, bytes]]:
+    """Read human-readable NOTICE entries shipped inside a cached artifact JAR."""
+    jar = locate_jar(cache_roots, group, artifact, version)
+    if jar is None:
+        return []
+    coordinate = f"{group}:{artifact}:{version}"
+    artifact_dir = Path("licenses/artifacts") / (
+        f"{safe_name(group)}__{safe_name(artifact)}__{safe_name(version)}"
+    )
+    documents: list[tuple[str, str, str, str, bytes]] = []
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            for member in archive.infolist():
+                if member.is_dir() or not ARTIFACT_NOTICE.search(member.filename):
+                    continue
+                if member.file_size > MAX_DOCUMENT_BYTES:
+                    raise GenerationError(
+                        f"Artifact NOTICE is too large: {coordinate}!/{member.filename}"
+                    )
+                data = archive.read(member)
+                if not data or len(data) > MAX_DOCUMENT_BYTES:
+                    raise GenerationError(
+                        f"Artifact NOTICE has invalid size: {coordinate}!/{member.filename}"
+                    )
+                try:
+                    data.decode("utf-8")
+                except UnicodeDecodeError as error:
+                    raise GenerationError(
+                        f"Artifact NOTICE is not UTF-8: {coordinate}!/{member.filename}"
+                    ) from error
+                relative = artifact_dir / f"{safe_name(member.filename.replace('/', '__'))}.txt"
+                documents.append(
+                    (
+                        coordinate,
+                        f"Artifact notice: {member.filename}",
+                        f"jar:{coordinate}!/{member.filename}",
+                        relative.as_posix(),
+                        data,
+                    )
+                )
+    except (OSError, zipfile.BadZipFile) as error:
+        raise GenerationError(f"Cannot read dependency artifact {jar.name}: {error}") from error
+    return documents
+
+
+def referenced_mozilla_license_urls(data: bytes) -> list[str]:
+    text = data.decode("utf-8")
+    urls = set()
+    for raw_url in URL.findall(text):
+        url = raw_url.rstrip(".,;)")
+        parsed = urlparse(url)
+        if "mozilla.org" in parsed.netloc.lower() and "/mpl/2.0" in parsed.path.lower():
+            urls.add(url)
+    return sorted(urls)
+
+
 def flutter_root_from_args(value: str | None) -> Path | None:
     if value:
         return Path(value).resolve()
@@ -226,6 +311,7 @@ def generate(
 ) -> dict[str, object]:
     coordinates = parse_report(report)
     entries: list[tuple[str, str, str, str, str]] = []
+    local_documents: dict[str, bytes] = {}
     # coordinate, license name, URL, relative asset path, sha256
     flutter_coordinates: list[tuple[str, str, str]] = []
     for group, artifact, version in coordinates:
@@ -238,6 +324,32 @@ def generate(
             basename = safe_name(name)
             relative = Path("licenses") / f"{safe_name(group)}__{safe_name(artifact)}" / f"{basename}.txt"
             entries.append((coordinate, name, url, relative.as_posix(), ""))
+        for notice_coordinate, name, source, relative, data in artifact_notice_documents(
+            group, artifact, version, cache_roots
+        ):
+            entries.append(
+                (
+                    notice_coordinate,
+                    name,
+                    source,
+                    relative,
+                    hashlib.sha256(data).hexdigest(),
+                )
+            )
+            local_documents[relative] = data
+            for url in referenced_mozilla_license_urls(data):
+                referenced_relative = (
+                    Path(relative).parent / "Mozilla_Public_License_2.0.txt"
+                ).as_posix()
+                entries.append(
+                    (
+                        notice_coordinate,
+                        "Referenced Mozilla Public License, v. 2.0 terms",
+                        url,
+                        referenced_relative,
+                        "",
+                    )
+                )
 
     if flutter_coordinates:
         if flutter_root is None:
@@ -280,7 +392,8 @@ def generate(
                 "metadata; license text was fetched from that metadata URL. "
                 "Flutter engine artifacts use the exact LICENSE file from the "
                 "selected Flutter SDK because their POMs do not carry license "
-                "metadata."
+                "metadata. Cached artifact JAR NOTICE entries and referenced "
+                "license terms are included with their archive provenance."
             ),
             "",
         ]
@@ -296,7 +409,9 @@ def generate(
             if relative in seen_paths:
                 continue
             seen_paths.add(relative)
-            if url == "Flutter SDK LICENSE file":
+            if relative in local_documents:
+                data = local_documents[relative]
+            elif url == "Flutter SDK LICENSE file":
                 assert flutter_root is not None
                 data = read_utf8(flutter_root / "LICENSE")
             else:

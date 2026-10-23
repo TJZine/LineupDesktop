@@ -8,7 +8,7 @@ if [[ -z "$flutter_bin" ]]; then
   exit 1
 fi
 if [[ ! -x "$root/android/gradlew" ]]; then
-  echo 'Android Gradle wrapper is missing. Run flutter create --platforms=android --no-overwrite .' >&2
+  echo 'Android Gradle wrapper is missing. Run flutter create --empty --platforms=android --no-overwrite .' >&2
   exit 1
 fi
 
@@ -21,7 +21,8 @@ fi
 read -r version_name version_code <<< "$version_line"
 
 report="$(mktemp "${TMPDIR:-/tmp}/lineup-android-release-dependencies.XXXXXX")"
-cleanup() { rm -f "$report"; }
+cert_report="$(mktemp "${TMPDIR:-/tmp}/lineup-android-release-certificates.XXXXXX")"
+cleanup() { rm -f "$report" "$cert_report"; }
 trap cleanup EXIT
 
 (
@@ -50,7 +51,22 @@ if command -v shasum >/dev/null 2>&1; then
 else
   apk_sha256="$(openssl dgst -sha256 "$apk" | awk '{print $NF}')"
 fi
-cert_sha256="$(keytool -printcert -jarfile "$apk" | sed -nE 's/^[[:space:]]*SHA256:[[:space:]]*(.*)$/\1/p' | tr -d ':')"
+android_sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+apksigner="$(find "$android_sdk/build-tools" -maxdepth 2 -type f -name apksigner -print 2>/dev/null | sort -V | tail -n 1)"
+if [[ -z "$apksigner" || ! -x "$apksigner" ]]; then
+  echo "Android SDK apksigner is unavailable under $android_sdk/build-tools." >&2
+  exit 1
+fi
+if ! "$apksigner" verify --print-certs "$apk" > "$cert_report" 2>&1; then
+  echo "apksigner rejected the release APK: $apk" >&2
+  exit 1
+fi
+cert_sha256="$(sed -nE 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*([[:xdigit:]:]+)[[:space:]]*$/\1/p' "$cert_report" | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+expected_cert_sha256='D67697201152AB71DD9D5820D06B128520242EE171117F923A4328F52894C6B8'
+if [[ ! "$cert_sha256" =~ ^[[:xdigit:]]{64}$ || "$cert_sha256" != "$expected_cert_sha256" ]]; then
+  echo 'Release APK signing certificate did not match the expected Lineup certificate.' >&2
+  exit 1
+fi
 media3_version="$(sed -nE 's/.*media3-exoplayer:([^" ]+).*/\1/p' "$root/android/app/build.gradle.kts" | head -n 1)"
 if [[ -z "$media3_version" ]]; then
   media3_version='not-integrated'
