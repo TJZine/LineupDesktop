@@ -79,7 +79,9 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
       _observeVisibility(_visibility?.value, fromInsets: false);
 
   void _insetsChanged() => _observeVisibility(
-    View.of(context).viewInsets.bottom > 0,
+    // A shown floating IME can have zero insets. Native visibility wins and
+    // retires inset-only hide credit while it explicitly reports shown.
+    _visibility?.value == true ? null : View.of(context).viewInsets.bottom > 0,
     fromInsets: true,
   );
 
