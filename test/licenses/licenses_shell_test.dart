@@ -143,7 +143,7 @@ void main() {
       await tap(tester, 'Settings');
       expect(find.text('Open Licenses'), findsOneWidget);
       await tap(tester, 'Open Licenses');
-      expect(find.text('Native runtime'), findsNothing);
+      expect(find.text('Native runtime'), findsOneWidget);
       expect(find.text('Sources and rebuilding'), findsNothing);
       expect(find.text('Flutter and packages'), findsOneWidget);
       expect(find.text('Fonts and engine notices'), findsOneWidget);
