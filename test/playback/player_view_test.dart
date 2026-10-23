@@ -41,6 +41,118 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  for (final state in [
+    PlayerState.error,
+    PlayerState.stopped,
+    PlayerState.unsupported,
+  ]) {
+    testWidgets(
+      'TV recovery slate owns remote focus and retires controls: $state',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 2;
+        final fixture = _Fixture(
+          state == PlayerState.error ? PlayerState.playing : state,
+          failLoad: state == PlayerState.error,
+        );
+        final root = FocusNode();
+        var closed = false;
+        Future<void> key(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(
+            key,
+            physicalKey: key == LogicalKeyboardKey.goBack
+                ? PhysicalKeyboardKey.escape
+                : null,
+          );
+          await tester.pumpAndSettle();
+        }
+
+        bool focused(String label) =>
+            Focus.of(tester.element(find.text(label))).hasFocus;
+        try {
+          if (state == PlayerState.error) {
+            await fixture.player.tune('channel');
+            expect(fixture.player.canRetry, isTrue);
+          }
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: true,
+              ),
+              builder: LineupCanvas.builder,
+              home: PlayerView(
+                controller: fixture.player,
+                focusNode: root,
+                openGuide: () => closed = true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            focused(state == PlayerState.error ? 'Retry' : 'Browse channels'),
+            isTrue,
+          );
+          if (state == PlayerState.error) {
+            await key(LogicalKeyboardKey.arrowRight);
+          }
+          expect(focused('Browse channels'), isTrue);
+          for (var i = 0; i < 3; i++) {
+            fixture.lineup.notifyListeners();
+            await tester.pumpAndSettle();
+            expect(
+              focused('Browse channels'),
+              isTrue,
+              reason: 'Rebuilds must not restart autofocus',
+            );
+          }
+          await key(LogicalKeyboardKey.arrowRight);
+          expect(focused('Close'), isTrue);
+          await key(LogicalKeyboardKey.arrowLeft);
+          expect(focused('Browse channels'), isTrue);
+          await key(LogicalKeyboardKey.select);
+          expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+          expect(
+            tester.semantics.simulatedAccessibilityTraversal().any(
+              (node) =>
+                  node.getSemanticsData().label == 'Browse channels' &&
+                  node.getSemanticsData().hasAction(SemanticsAction.tap),
+            ),
+            isFalse,
+          );
+          await key(LogicalKeyboardKey.goBack);
+          expect(
+            focused(state == PlayerState.error ? 'Retry' : 'Browse channels'),
+            isTrue,
+          );
+          if (state == PlayerState.error) {
+            final loads = fixture.native.loadCalls;
+            fixture.native.failLoad = false;
+            await key(LogicalKeyboardKey.select);
+            expect(fixture.native.loadCalls, greaterThan(loads));
+            expect(fixture.player.error, isNull);
+            expect(find.widgetWithText(FilledButton, 'Retry'), findsNothing);
+            expect(root.hasPrimaryFocus, isTrue);
+          } else {
+            await key(LogicalKeyboardKey.arrowRight);
+            await key(LogicalKeyboardKey.select);
+            expect(closed, isTrue);
+            expect(find.bySemanticsLabel('Browse channels'), findsNothing);
+          }
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+          root.dispose();
+          tester.view.reset();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+      semanticsEnabled: true,
+    );
+  }
   for (final dvr in [false, true]) {
     testWidgets('TV Player remote action and return model DVR=$dvr', (
       tester,
@@ -7212,7 +7324,7 @@ class _Native implements NativePlayer {
     _tracks = tracks;
   }
 
-  final bool failLoad;
+  bool failLoad;
   final bool failStop;
   final bool failControls;
   final bool failTrackSelect;

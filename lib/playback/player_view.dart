@@ -327,6 +327,23 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (_androidTv && !controller.sleepPickerOpen) {
       final key = event.logicalKey;
       final overlay = controller.overlay;
+      final slateFocused =
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<_StoppedSlate>() !=
+          null;
+      if (slateFocused &&
+          {
+            LogicalKeyboardKey.arrowLeft,
+            LogicalKeyboardKey.arrowRight,
+            LogicalKeyboardKey.arrowUp,
+            LogicalKeyboardKey.arrowDown,
+            LogicalKeyboardKey.select,
+            LogicalKeyboardKey.enter,
+            LogicalKeyboardKey.numpadEnter,
+          }.contains(key)) {
+        // These are ordinary focusable recovery buttons, not video shortcuts.
+        return KeyEventResult.ignored;
+      }
       if (key == LogicalKeyboardKey.mediaRewind ||
           key == LogicalKeyboardKey.mediaFastForward) {
         if (controller.lineup.settings.dvrControlsEnabled &&
@@ -3661,7 +3678,7 @@ class _StoppedSlate extends StatelessWidget {
         ? "Couldn't start playback"
         : 'Playback stopped';
     final channel = controller.currentChannel;
-    return ColoredBox(
+    final slate = ColoredBox(
       color: roles.deepBackground,
       child: Center(
         child: SingleChildScrollView(
@@ -3702,10 +3719,12 @@ class _StoppedSlate extends StatelessWidget {
                       children: [
                         if (controller.canRetry)
                           FilledButton(
+                            autofocus: roles.androidTv,
                             onPressed: controller.retry,
                             child: const Text('Retry'),
                           ),
                         OutlinedButton(
+                          autofocus: roles.androidTv && !controller.canRetry,
                           onPressed: controller.showMiniGuide,
                           child: const Text('Browse channels'),
                         ),
@@ -3723,6 +3742,16 @@ class _StoppedSlate extends StatelessWidget {
         ),
       ),
     );
+    if (!roles.androidTv) return slate;
+    final active =
+        controller.overlay == PlayerOverlay.none ||
+        controller.overlay == PlayerOverlay.error;
+    // Enter once per active slate presentation, and let its default button
+    // autofocus within a fresh scope. Covered recovery controls must not take
+    // remote focus or expose accessibility actions behind another overlay.
+    return active
+        ? FocusScope(autofocus: true, child: slate)
+        : ExcludeFocus(child: ExcludeSemantics(child: slate));
   }
 }
 
