@@ -88,6 +88,10 @@ void main() {
     _backgroundRequests = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(platform, (call) async {
+          if (call.method == 'watchKeyboardVisibility' ||
+              call.method == 'unwatchKeyboardVisibility') {
+            return false;
+          }
           expect(call.method, 'moveTaskToBack');
           _backgroundRequests++;
           return true;

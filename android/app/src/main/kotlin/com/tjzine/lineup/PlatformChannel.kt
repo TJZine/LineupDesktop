@@ -8,9 +8,24 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /** The only lineup/platform dispatcher. Native code owns the linking URL. */
-class PlatformChannel(private val activity: Activity) : MethodChannel.MethodCallHandler {
+class PlatformChannel(
+    private val activity: Activity,
+    private val keyboardVisibility: KeyboardVisibilityObserver,
+) : MethodChannel.MethodCallHandler {
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "watchKeyboardVisibility", "unwatchKeyboardVisibility" -> {
+                if (call.arguments != null) {
+                    result.error("invalid_arguments", "${call.method} accepts no arguments.", null)
+                    return
+                }
+                if (call.method == "watchKeyboardVisibility") {
+                    result.success(keyboardVisibility.watch())
+                } else {
+                    keyboardVisibility.unwatch()
+                    result.success(null)
+                }
+            }
             "moveTaskToBack" -> {
                 activity.moveTaskToBack(true)
                 result.success(true)
