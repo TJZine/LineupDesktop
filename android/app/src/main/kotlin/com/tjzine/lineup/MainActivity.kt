@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var nativePlayer: NativePlayerAdapter? = null
     private var platformChannel: MethodChannel? = null
+    private var platformDispatcher: PlatformChannel? = null
     private var keyboardVisibility: KeyboardVisibilityObserver? = null
     private val backInput by lazy {
         AndroidBackInput(systemBackCallbacks = Build.VERSION.SDK_INT >= 33) {
@@ -55,8 +56,10 @@ class MainActivity : FlutterActivity() {
             channel.invokeMethod("keyboardVisibilityChanged", visible)
         }
         keyboardVisibility = visibility
+        val dispatcher = PlatformChannel(this, visibility)
+        platformDispatcher = dispatcher
         platformChannel = channel.also {
-            it.setMethodCallHandler(PlatformChannel(this, visibility))
+            it.setMethodCallHandler(dispatcher)
         }
     }
 
@@ -68,6 +71,8 @@ class MainActivity : FlutterActivity() {
         nativePlayer = null
         platformChannel?.setMethodCallHandler(null)
         platformChannel = null
+        platformDispatcher?.close()
+        platformDispatcher = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 }

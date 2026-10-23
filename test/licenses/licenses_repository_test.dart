@@ -250,6 +250,19 @@ void main() {
   );
 
   test(
+    'Android exposes native runtime notices but keeps rebuilding macOS-only',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final sources = LicensesRepository().sources;
+      expect(sources.map((source) => source.title), contains('Native runtime'));
+      expect(
+        sources.map((source) => source.title),
+        isNot(contains('Sources and rebuilding')),
+      );
+    },
+  );
+
+  test(
     'Flutter entries retain all package attribution and indentation',
     () async {
       LicenseRegistry.addLicense(

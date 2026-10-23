@@ -84,6 +84,43 @@ and `LINEUP_ANDROID_KEY_ALIAS` can override those non-secret defaults.
 **Back up the keystore securely.** Losing it prevents in-place updates and forces
 an uninstall, deleting on-device lineups and sign-in.
 
+## Release packaging and runtime notices
+
+Run the release recipe from the repository root after the U3 Media3 dependency
+block is integrated:
+
+```sh
+export PATH="$HOME/.cache/lineup-flutter/3.47.7/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export GRADLE_OPTS=-Dorg.gradle.project.android.builder.sdkDownload=false
+tool/android/build-release.sh
+```
+
+The recipe resolves `releaseRuntimeClasspath`, requires Maven POM license
+metadata for every external module, and writes the upstream license text and a
+dependency manifest to `android/app/src/main/assets/licenses/`. Flutter engine
+artifacts are the explicit exception: their Maven POMs omit license metadata,
+so the generator embeds the exact `LICENSE` file from the selected Flutter SDK.
+Unknown or incomplete metadata fails closed; the generator never assumes a
+license from a group name or artifact type. The generated tree includes
+`BUILD-INFO.txt`, `licenses/NOTICES-SUMMARY.txt`, `licenses/DEPENDENCIES.txt`,
+each resolved component's complete fetched license document, and any
+artifact-specific `NOTICE` entries plus referenced license terms found in the
+actual cached JAR. It is served offline through the existing `lineup/platform`
+license operations using opaque asset IDs and bounded UTF-8 reads. Android
+ships no LGPL runtime or Sources-and-rebuilding group.
+
+`build-release.sh` runs through `with-signing.sh`, builds the universal
+`armeabi-v7a` plus `arm64-v8a` release APK, and prints the APK SHA-256,
+versionName/versionCode, verified signing certificate fingerprint, Flutter
+version and resolved Media3 version. It verifies the final APK with the
+Android SDK `apksigner` and fails unless the expected Lineup certificate is
+present. A missing Lineup key fails before release packaging;
+`LINEUP_ANDROID_SIGNING=debug-key` is accepted only by the CI debug job and is
+never a release fallback. The Android CI job uses pinned Flutter, the debug-key
+mode, the ARM debug build, and `:app:testDebugUnitTest`; hosted CI execution is
+separate from the maintainer's signed release and device acceptance.
+
 ## Install, launch and logs
 
 Always select the assigned device explicitly. Replace `emulator-5554` with the

@@ -67,7 +67,8 @@ class LicensesRepository {
   }
 
   List<LicenseSource> get sources => [
-    if (defaultTargetPlatform == TargetPlatform.macOS)
+    if (defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.android)
       LicenseSource('Native runtime', _native),
     LicenseSource('Flutter and packages', _packages),
     LicenseSource('Fonts and engine notices', _notices),
