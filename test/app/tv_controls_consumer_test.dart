@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
 
@@ -69,54 +72,107 @@ void main() {
     fixture.controller.dispose();
   });
 
-  testWidgets(
-    'TV Channels directory styles resolve inside the row focus scope',
-    (tester) async {
-      final fixture = UiFixture(
-        androidTv: true,
-        scenario: LineupScenario(
-          stage: SetupStage.ready,
-          channels: [
-            Channel(
-              id: 'focus-channel',
-              number: 7,
-              name: 'Focus channel',
-              source: const ManualSource([]),
-              playbackMode: PlaybackMode.shuffle,
-              anchor: DateTime.utc(2026),
-              shuffleSeed: 0,
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets(
+      '$platform Channels issue and directory styles resolve inside the row focus scope',
+      (tester) async {
+        final tv = platform == TargetPlatform.android;
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          final fixture = UiFixture(
+            androidTv: tv,
+            controller: _IssueController(
+              LineupScenario(
+                stage: SetupStage.ready,
+                channels: [
+                  Channel(
+                    id: 'focus-channel',
+                    number: 7,
+                    name: 'Focus channel',
+                    source: const ManualSource([]),
+                    playbackMode: PlaybackMode.shuffle,
+                    anchor: DateTime.utc(2026),
+                    shuffleSeed: 0,
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-      );
-      await tester.pumpWidget(fixture.build());
-      await tester.pumpAndSettle();
-      await openDestination(tester, 'Channels');
-      final row = find.byKey(const ValueKey('channel-row-focus-channel'));
-      final name = find.descendant(
-        of: row,
-        matching: find.text('Focus channel'),
-      );
-      final element = tester.element(name);
-      final node = tester
-          .widget<InkWell>(
-            find.descendant(of: row, matching: find.byType(InkWell)).first,
-          )
-          .focusNode!;
-      node.requestFocus();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-      node.requestFocus();
-      await tester.pumpAndSettle();
-      expect(node.hasFocus, isTrue);
-      expect(_ink(tester, name), const Color(0xFF090806));
-      final number = find.descendant(of: row, matching: find.text('7'));
-      expect(
-        _ink(tester, number),
-        LineupTheme.of(tester.element(number)).secondaryText,
-      );
-      expect(tester.element(name), same(element));
-      await tester.pumpWidget(const SizedBox.shrink());
-      fixture.controller.dispose();
-    },
+          );
+          await tester.pumpWidget(fixture.build());
+          await tester.pumpAndSettle();
+          await openDestination(tester, 'Channels');
+          final row = find.byKey(const ValueKey('channel-row-focus-channel'));
+          final name = find.descendant(
+            of: row,
+            matching: find.text('Focus channel'),
+          );
+          final element = tester.element(name);
+          final node = tester
+              .widget<InkWell>(
+                find.descendant(of: row, matching: find.byType(InkWell)).first,
+              )
+              .focusNode!;
+          node.requestFocus();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+          node.requestFocus();
+          await tester.pumpAndSettle();
+          expect(node.hasFocus, isTrue);
+          expect(
+            _ink(tester, name),
+            tv ? const Color(0xFF090806) : const Color(0xFFF3E8D2),
+          );
+          final number = find.descendant(of: row, matching: find.text('7'));
+          expect(
+            _ink(tester, number),
+            LineupTheme.of(tester.element(number)).secondaryText,
+          );
+          expect(tester.element(name), same(element));
+          // The view contract receives a deterministic schedule failure. Native
+          // acceptance separately exercises the real worker with invalid content.
+          final issue = find.text(
+            'Schedule issue — open this channel to recover',
+          );
+          expect(issue, findsOneWidget);
+          final issueElement = tester.element(issue);
+          final focusedInk = _ink(tester, issue)!;
+          expect(
+            focusedInk,
+            tv
+                ? const Color(0xFF090806)
+                : Theme.of(tester.element(issue)).colorScheme.error,
+          );
+          if (tv) {
+            expect(
+              (const Color(0xFFE9DCC3).computeLuminance() + .05) /
+                  (focusedInk.computeLuminance() + .05),
+              greaterThan(4.5),
+            );
+          }
+          node.unfocus();
+          await tester.pumpAndSettle();
+          expect(
+            _ink(tester, issue),
+            Theme.of(tester.element(issue)).colorScheme.error,
+          );
+          expect(tester.element(issue), same(issueElement));
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.controller.dispose();
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
+}
+
+class _IssueController extends FixtureController {
+  _IssueController(LineupScenario scenario) : super(scenario: scenario);
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) => Future.error(
+    const ScheduleBuildException(ScheduleFailureReason.noContent),
   );
 }

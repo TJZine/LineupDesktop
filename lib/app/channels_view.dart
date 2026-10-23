@@ -474,6 +474,12 @@ class ChannelsViewState extends State<ChannelsView> {
                         selected: _selectedIds.contains(channel.id),
                         child: Builder(
                           builder: (context) {
+                            final focusedTv =
+                                LineupTheme.of(context).androidTv &&
+                                LineupFocusScope.visible(
+                                  context,
+                                  Focus.of(context).hasFocus,
+                                );
                             final rowNameStyle = Theme.of(context)
                                 .textTheme
                                 .titleMedium
@@ -547,9 +553,12 @@ class ChannelsViewState extends State<ChannelsView> {
                                           Text(
                                             'Schedule issue — open this channel to recover',
                                             style: rowSupportStyle?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .error,
+                                              color: focusedTv
+                                                  ? LineupTheme.of(context)
+                                                        .primaryText
+                                                  : Theme.of(context)
+                                                        .colorScheme
+                                                        .error,
                                             ),
                                           ),
                                       ],
