@@ -8,8 +8,9 @@ import 'package:lineup_desktop/ui/keyboard_visibility.dart';
 
 Future<({FocusNode field, FocusNode other})> _pump(
   WidgetTester tester,
-  ValueNotifier<bool?> visibility,
-) async {
+  ValueNotifier<bool?> visibility, {
+  ValueNotifier<bool>? enabled,
+}) async {
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   final field = FocusNode(debugLabel: 'Navigation field');
   final other = FocusNode(debugLabel: 'Other control');
@@ -24,11 +25,22 @@ Future<({FocusNode field, FocusNode other})> _pump(
         body: LineupFocusScope(
           child: Column(
             children: [
-              LineupTextFieldActivation(
-                focusNode: field,
-                builder: (context, focus, done) =>
-                    TextField(focusNode: focus, onEditingComplete: done),
-              ),
+              if (enabled != null)
+                ValueListenableBuilder<bool>(
+                  valueListenable: enabled,
+                  builder: (context, value, _) => LineupTextFieldActivation(
+                    enabled: value,
+                    focusNode: field,
+                    builder: (context, focus, done) =>
+                        TextField(focusNode: focus, onEditingComplete: done),
+                  ),
+                )
+              else
+                LineupTextFieldActivation(
+                  focusNode: field,
+                  builder: (context, focus, done) =>
+                      TextField(focusNode: focus, onEditingComplete: done),
+                ),
               TextButton(
                 focusNode: other,
                 onPressed: () {},
@@ -127,42 +139,133 @@ void main() {
     await dialog;
   });
 
-  testWidgets(
-    'paused, unknown and disposed observations cannot restore focus',
-    (tester) async {
-      final visibility = ValueNotifier<bool?>(null);
-      addTearDown(visibility.dispose);
-      final nodes = await _pump(tester, visibility);
-      await _activate(tester, nodes.field);
-      visibility.value = true;
-      for (final state in [
-        AppLifecycleState.inactive,
-        AppLifecycleState.hidden,
-        AppLifecycleState.paused,
-      ]) {
-        tester.binding.handleAppLifecycleStateChanged(state);
-      }
-      visibility.value = false;
-      await tester.pump();
-      expect(nodes.field.hasPrimaryFocus, isFalse);
-      for (final state in [
-        AppLifecycleState.hidden,
-        AppLifecycleState.inactive,
-        AppLifecycleState.resumed,
-      ]) {
-        tester.binding.handleAppLifecycleStateChanged(state);
-      }
-      visibility.value = true;
-      visibility.value = null;
-      visibility.value = false;
-      await tester.pumpAndSettle();
-      expect(nodes.field.hasPrimaryFocus, isFalse);
-      await tester.pumpWidget(const SizedBox.shrink());
-      visibility.value = true;
-      visibility.value = false;
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    },
-  );
+  testWidgets('paused hide restores the same live editor only on resume', (
+    tester,
+  ) async {
+    final visibility = ValueNotifier<bool?>(null);
+    addTearDown(visibility.dispose);
+    final nodes = await _pump(tester, visibility);
+    await _activate(tester, nodes.field);
+    visibility.value = true;
+    _pause(tester);
+    visibility.value = false;
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isFalse);
+    _resume(tester);
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    await _activate(tester, nodes.field);
+    visibility.value = true;
+    _pause(tester);
+    visibility.value = null;
+    visibility.value = false;
+    _resume(tester);
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    visibility.value = true;
+    visibility.value = false;
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final retirement in [
+    'other control',
+    'modal',
+    'modal without focus',
+    'disabled',
+    'disposed',
+  ]) {
+    testWidgets(
+      'resume never restores a paused editor retired by $retirement',
+      (tester) async {
+        final visibility = ValueNotifier<bool?>(null);
+        final enabled = ValueNotifier(true);
+        addTearDown(visibility.dispose);
+        addTearDown(enabled.dispose);
+        final nodes = await _pump(tester, visibility, enabled: enabled);
+        await _activate(tester, nodes.field);
+        visibility.value = true;
+        _pause(tester);
+        FocusNode? dialogFocus;
+        Future<void>? dialog;
+        switch (retirement) {
+          case 'other control':
+            nodes.other.requestFocus();
+          case 'modal':
+          case 'modal without focus':
+            dialogFocus = FocusNode(debugLabel: 'Paused modal');
+            addTearDown(dialogFocus.dispose);
+            dialog = showDialog<void>(
+              context: nodes.field.context!,
+              requestFocus: retirement != 'modal without focus',
+              builder: (context) => AlertDialog(
+                actions: [
+                  TextButton(
+                    focusNode: dialogFocus,
+                    autofocus: retirement != 'modal without focus',
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            );
+          case 'disabled':
+            enabled.value = false;
+          case 'disposed':
+            await tester.pumpWidget(const SizedBox.shrink());
+        }
+        await tester.pumpAndSettle();
+        if (retirement == 'modal without focus') {
+          expect(
+            tester
+                .widget<EditableText>(find.byType(EditableText))
+                .focusNode
+                .hasPrimaryFocus,
+            isTrue,
+          );
+        }
+        visibility.value = false;
+        await tester.pump();
+        expect(nodes.field.hasPrimaryFocus, isFalse);
+        _resume(tester);
+        await tester.pumpAndSettle();
+        expect(nodes.field.hasPrimaryFocus, isFalse);
+        if (retirement == 'other control') {
+          expect(nodes.other.hasPrimaryFocus, isTrue);
+        }
+        if (dialogFocus != null) {
+          if (retirement == 'modal') {
+            expect(dialogFocus.hasPrimaryFocus, isTrue);
+          }
+          Navigator.pop(dialogFocus.context!);
+          await tester.pumpAndSettle();
+          await dialog;
+          expect(nodes.field.hasPrimaryFocus, isFalse);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+}
+
+void _pause(WidgetTester tester) {
+  for (final state in [
+    AppLifecycleState.inactive,
+    AppLifecycleState.hidden,
+    AppLifecycleState.paused,
+  ]) {
+    tester.binding.handleAppLifecycleStateChanged(state);
+  }
+}
+
+void _resume(WidgetTester tester) {
+  for (final state in [
+    AppLifecycleState.hidden,
+    AppLifecycleState.inactive,
+    AppLifecycleState.resumed,
+  ]) {
+    tester.binding.handleAppLifecycleStateChanged(state);
+  }
 }

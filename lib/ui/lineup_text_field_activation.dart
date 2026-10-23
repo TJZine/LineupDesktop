@@ -52,7 +52,10 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final visibility = KeyboardVisibilityScope.maybeOf(context);
-    if (identical(visibility, _visibility)) return;
+    if (identical(visibility, _visibility)) {
+      if (!_currentEditor) _observedVisible = false;
+      return;
+    }
     _visibility?.removeListener(_visibilityChanged);
     _visibility = visibility;
     _observedVisible = false;
@@ -60,24 +63,30 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
     _visibilityChanged();
   }
 
-  bool get _activeEditor =>
+  bool get _currentEditor =>
       mounted &&
       widget.enabled &&
       _editing &&
       _editingFocus.hasPrimaryFocus &&
-      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
       ModalRoute.of(context)?.isCurrent != false;
 
   void _visibilityChanged() {
-    if (!_activeEditor) {
+    if (!_currentEditor) {
       _observedVisible = false;
       return;
     }
     switch (_visibility?.value) {
       case true:
-        _observedVisible = true;
+        if (WidgetsBinding.instance.lifecycleState ==
+            AppLifecycleState.resumed) {
+          _observedVisible = true;
+        }
       case false:
-        if (_observedVisible) _finishEditing();
+        if (_observedVisible &&
+            WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed) {
+          _finishEditing();
+        }
       case null:
         _observedVisible = false;
     }
@@ -85,13 +94,21 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) _observedVisible = false;
+    // Keep shown history only while this editor remains live/current. A hide
+    // observed while paused is reconciled on return, without taking focus in
+    // the background or carrying history across an actual editor retirement.
+    if (state == AppLifecycleState.resumed) {
+      _visibilityChanged();
+    } else if (!_currentEditor) {
+      _observedVisible = false;
+    }
   }
 
   @override
   void didUpdateWidget(LineupTextFieldActivation oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.enabled && _editing) {
+      _observedVisible = false;
       _editing = false;
       _editingFocus.unfocus();
     }
