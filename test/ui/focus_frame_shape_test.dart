@@ -2,12 +2,75 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/focus_ink.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 void main() {
+  testWidgets('changing large TV focus preserves the owned toggle focus', (
+    tester,
+  ) async {
+    final strategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTouch;
+    addTearDown(() => FocusManager.instance.highlightStrategy = strategy);
+    final large = ValueNotifier(false);
+    addTearDown(large.dispose);
+    await tester.pumpWidget(
+      ValueListenableBuilder<bool>(
+        valueListenable: large,
+        builder: (context, enabled, _) => MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+            largeFocusIndicators: enabled,
+          ),
+          builder: LineupCanvas.builder,
+          home: Scaffold(
+            body: Column(
+              children: [
+                TextButton(
+                  autofocus: true,
+                  onPressed: () {},
+                  child: const Text('Start'),
+                ),
+                LineupToggleSurface(
+                  child: SwitchListTile(
+                    value: enabled,
+                    title: const Text('Large focus indicators'),
+                    onChanged: (value) => large.value = value,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    final element = tester.element(find.byType(SwitchListTile));
+    final focus = FocusManager.instance.primaryFocus!;
+    expect(
+      focus.context!.findAncestorWidgetOfExactType<SwitchListTile>(),
+      isNotNull,
+    );
+    for (final expected in [true, false]) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(large.value, expected);
+      expect(tester.element(find.byType(SwitchListTile)), same(element));
+      expect(FocusManager.instance.primaryFocus, same(focus));
+      expect(FocusManager.instance.highlightMode, FocusHighlightMode.touch);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'header shape scales paint to zero and follows null interpolation',
     (tester) async {
