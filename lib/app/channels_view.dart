@@ -1422,9 +1422,11 @@ class _ChannelDeletionDialog extends StatefulWidget {
 
 class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
   final _scrollController = ScrollController();
+  final _readerFocus = FocusNode(debugLabel: 'Selected channels to delete');
 
   @override
   void dispose() {
+    _readerFocus.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -1525,52 +1527,107 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
               Flexible(
                 fit: FlexFit.loose,
                 child: Focus(
-                  debugLabel: 'Selected channels to delete',
+                  focusNode: _readerFocus,
                   canRequestFocus: roles.androidTv,
                   skipTraversal: !roles.androidTv,
                   onKeyEvent: _readSelectedNames,
-                  child: Scrollbar(
-                    controller: _scrollController,
-                    thumbVisibility: true,
-                    child: ListView.separated(
-                      controller: _scrollController,
-                      shrinkWrap: true,
-                      padding: EdgeInsets.only(right: 12),
-                      itemCount: channels.length,
-                      separatorBuilder: (_, _) =>
-                          Divider(height: 1, color: roles.subtleBorder),
-                      itemBuilder: (context, index) {
-                        final channel = channels[index];
-                        return ConstrainedBox(
-                          constraints: BoxConstraints(minHeight: 52),
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 10),
-                            child: Row(
-                              key: ValueKey('delete-dialog-row-${channel.id}'),
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                SizedBox(
-                                  width: 56,
-                                  child: Text(
-                                    '${channel.number}',
-                                    style: numberStyle,
-                                  ),
-                                ),
-                                SizedBox(width: 16),
-                                Expanded(
-                                  child: Text(
-                                    channel.name,
-                                    softWrap: true,
-                                    style: nameStyle,
-                                  ),
-                                ),
-                              ],
+                  child: ListenableBuilder(
+                    listenable: _readerFocus,
+                    builder: (context, _) {
+                      final fill =
+                          roles.androidTv &&
+                          roles.focusTreatment == LineupFocusTreatment.fill &&
+                          LineupFocusScope.visible(
+                            context,
+                            _readerFocus.hasFocus,
+                          );
+                      return LineupFocusFrame(
+                        focused: fill,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: fill
+                                ? roles.focusedSurface
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(
+                              roles.panelRadius,
                             ),
                           ),
-                        );
-                      },
-                    ),
+                          child: LineupFocusInk(
+                            focused: fill,
+                            child: Semantics(
+                              label: roles.androidTv
+                                  ? 'Selected channels for deletion'
+                                  : null,
+                              readOnly: roles.androidTv ? true : null,
+                              child: Scrollbar(
+                                controller: _scrollController,
+                                thumbVisibility: true,
+                                child: ListView.separated(
+                                  controller: _scrollController,
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.only(right: 12),
+                                  itemCount: channels.length,
+                                  separatorBuilder: (_, _) => Divider(
+                                    height: 1,
+                                    color: roles.subtleBorder,
+                                  ),
+                                  itemBuilder: (context, index) {
+                                    final channel = channels[index];
+                                    return ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        minHeight: 52,
+                                      ),
+                                      child: Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 10,
+                                        ),
+                                        child: Row(
+                                          key: ValueKey(
+                                            'delete-dialog-row-${channel.id}',
+                                          ),
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.baseline,
+                                          textBaseline: TextBaseline.alphabetic,
+                                          children: [
+                                            SizedBox(
+                                              width: 56,
+                                              child: Text(
+                                                '${channel.number}',
+                                                style: fill
+                                                    ? numberStyle?.copyWith(
+                                                        color: LineupTheme.of(
+                                                          context,
+                                                        ).secondaryText,
+                                                      )
+                                                    : numberStyle,
+                                              ),
+                                            ),
+                                            SizedBox(width: 16),
+                                            Expanded(
+                                              child: Text(
+                                                channel.name,
+                                                softWrap: true,
+                                                style: fill
+                                                    ? nameStyle?.copyWith(
+                                                        color: LineupTheme.of(
+                                                          context,
+                                                        ).primaryText,
+                                                      )
+                                                    : nameStyle,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),

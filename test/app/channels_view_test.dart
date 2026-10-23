@@ -10,128 +10,197 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/focus_ink.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 import '../support/ui_fixture.dart';
 
 void main() {
-  testWidgets(
-    'TV deletion dialog reads every selected name before cancel or confirm',
-    (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      tester.view
-        ..physicalSize = const Size(1920, 1080)
-        ..devicePixelRatio = 2;
-      try {
-        final channels = [
-          for (var i = 0; i < 40; i++)
-            _channel(
-              'selected-$i',
-              i + 1,
-              'Selected channel $i with a name that wraps clearly in the review list',
+  for (final large in [false, true]) {
+    testWidgets(
+      'TV deletion dialog reads every selected name before cancel or confirm (large focus $large)',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final previousHighlight = FocusManager.instance.highlightStrategy;
+        FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.alwaysTouch;
+        final semantics = tester.ensureSemantics();
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 2;
+        try {
+          final channels = [
+            for (var i = 0; i < 40; i++)
+              _channel(
+                'selected-$i',
+                i + 1,
+                'Selected channel $i with a name that wraps clearly in the review list',
+              ),
+          ];
+          final controller = _RecordingDirectoryController(
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              channels: channels,
+              settings: LineupSettings(largeFocusIndicators: large),
             ),
-        ];
-        final controller = _RecordingDirectoryController(
-          scenario: LineupScenario(stage: SetupStage.ready, channels: channels),
-        );
-        await tester.pumpWidget(
-          UiFixture(controller: controller, androidTv: true).build(),
-        );
-        await tester.pumpAndSettle();
-        // Establish selection through existing controls. Reading and the dialog's
-        // actions below use remote keys only, without requestFocus/ensureVisible.
-        await openDestination(tester, 'Channels');
-        await tester.tap(find.text('Select'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Select all matching'));
-        await tester.pumpAndSettle();
-        Future<void> openDelete() async {
-          await tester.tap(find.text('Delete selected'));
+          );
+          await tester.pumpWidget(
+            UiFixture(controller: controller, androidTv: true).build(),
+          );
           await tester.pumpAndSettle();
-        }
-
-        Future<void> key(LogicalKeyboardKey key) async {
-          await tester.sendKeyEvent(key);
+          // Establish selection through existing controls. Reading and the dialog's
+          // actions below use remote keys only, without requestFocus/ensureVisible.
+          await openDestination(tester, 'Channels');
+          await tester.tap(find.text('Select'));
           await tester.pumpAndSettle();
-        }
+          await tester.tap(find.text('Select all matching'));
+          await tester.pumpAndSettle();
+          Future<void> openDelete() async {
+            await tester.tap(find.text('Delete selected'));
+            await tester.pumpAndSettle();
+          }
 
-        bool focusedIn(Finder finder) {
-          final target = tester.element(finder);
-          final primary =
-              FocusManager.instance.primaryFocus?.context as Element?;
-          var inside = identical(target, primary);
-          primary?.visitAncestorElements((e) {
-            inside |= identical(e, target);
-            return !inside;
-          });
-          return inside;
-        }
+          Future<void> key(LogicalKeyboardKey key) async {
+            await tester.sendKeyEvent(key);
+            await tester.pumpAndSettle();
+          }
 
-        await openDelete();
-        final dialog = find.byType(Dialog);
-        final cancel = find.descendant(
-          of: dialog,
-          matching: find.widgetWithText(TextButton, 'Cancel'),
-        );
-        expect(focusedIn(cancel), isTrue);
-        final list = find.descendant(
-          of: dialog,
-          matching: find.byType(ListView),
-        );
-        final scroll = tester.widget<ListView>(list).controller!;
-        expect(scroll.position.maxScrollExtent, greaterThan(0));
-        await key(LogicalKeyboardKey.arrowUp);
-        await key(LogicalKeyboardKey.arrowDown);
-        expect(scroll.offset, greaterThan(0));
-        await key(LogicalKeyboardKey.arrowUp);
-        expect(scroll.offset, 0);
-        final seen = <String>{};
-        for (var i = 0; i < 150; i++) {
-          final viewport = tester.getRect(list);
-          for (final channel in channels) {
-            final row = find.byKey(ValueKey('delete-dialog-row-${channel.id}'));
-            if (row.evaluate().isNotEmpty) {
-              final rect = tester.getRect(row);
-              if (rect.top >= viewport.top && rect.bottom <= viewport.bottom) {
-                seen.add(channel.id);
+          bool focusedIn(Finder finder) {
+            final target = tester.element(finder);
+            final primary =
+                FocusManager.instance.primaryFocus?.context as Element?;
+            var inside = identical(target, primary);
+            primary?.visitAncestorElements((e) {
+              inside |= identical(e, target);
+              return !inside;
+            });
+            return inside;
+          }
+
+          await openDelete();
+          final dialog = find.byType(Dialog);
+          final cancel = find.descendant(
+            of: dialog,
+            matching: find.widgetWithText(TextButton, 'Cancel'),
+          );
+          expect(focusedIn(cancel), isTrue);
+          final list = find.descendant(
+            of: dialog,
+            matching: find.byType(ListView),
+          );
+          final originalState = tester.state<ScrollableState>(
+            find.descendant(of: list, matching: find.byType(Scrollable)),
+          );
+          final scroll = tester.widget<ListView>(list).controller!;
+          expect(scroll.position.maxScrollExtent, greaterThan(0));
+          await key(LogicalKeyboardKey.arrowUp);
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(scroll.offset, greaterThan(0));
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(scroll.offset, 0);
+          final firstRow = find.byKey(
+            const ValueKey('delete-dialog-row-selected-0'),
+          );
+          final frame = find.ancestor(
+            of: list,
+            matching: find.byType(LineupFocusFrame),
+          );
+          expect(frame, findsOneWidget);
+          expect(tester.widget<LineupFocusFrame>(frame).focused, isTrue);
+          expect(tester.getRect(frame), tester.getRect(list));
+          final surface = find
+              .ancestor(of: list, matching: find.byType(DecoratedBox))
+              .first;
+          final roles = LineupTheme.of(tester.element(dialog));
+          expect(
+            (tester.widget<DecoratedBox>(surface).decoration as BoxDecoration)
+                .color,
+            roles.focusedSurface,
+          );
+          expect(
+            tester
+                .widget<Text>(
+                  find.descendant(
+                    of: firstRow,
+                    matching: find.text(channels.first.name),
+                  ),
+                )
+                .style
+                ?.color,
+            roles.onFocus,
+          );
+          expect(
+            find.bySemanticsLabel(RegExp('Selected channels for deletion')),
+            findsOneWidget,
+          );
+          final seen = <String>{};
+          for (var i = 0; i < 150; i++) {
+            final viewport = tester.getRect(list);
+            for (final channel in channels) {
+              final row = find.byKey(
+                ValueKey('delete-dialog-row-${channel.id}'),
+              );
+              if (row.evaluate().isNotEmpty) {
+                final rect = tester.getRect(row);
+                if (rect.top >= viewport.top &&
+                    rect.bottom <= viewport.bottom) {
+                  seen.add(channel.id);
+                }
               }
             }
+            if (scroll.offset >= scroll.position.maxScrollExtent) break;
+            await key(LogicalKeyboardKey.arrowDown);
           }
-          if (scroll.offset >= scroll.position.maxScrollExtent) break;
+          expect(seen, channels.map((c) => c.id).toSet());
+          // At the end the same arrow resumes ordinary action traversal. Reading
+          // does not authorize or invoke deletion, and Cancel retains its result.
           await key(LogicalKeyboardKey.arrowDown);
+          expect(focusedIn(cancel), isTrue);
+          expect(
+            tester.state<ScrollableState>(
+              find.descendant(of: list, matching: find.byType(Scrollable)),
+            ),
+            same(originalState),
+          );
+          expect(tester.widget<LineupFocusFrame>(frame).focused, isFalse);
+          await key(LogicalKeyboardKey.arrowRight);
+          expect(
+            focusedIn(
+              find.widgetWithText(
+                LineupDestructiveButton,
+                'Delete 40 channels',
+              ),
+            ),
+            isTrue,
+          );
+          await key(LogicalKeyboardKey.arrowLeft);
+          await key(LogicalKeyboardKey.select);
+          expect(find.byType(Dialog), findsNothing);
+          expect(controller.deleted, isEmpty);
+          await openDelete();
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.byType(Dialog), findsNothing);
+          expect(controller.deleted, isEmpty);
+          await openDelete();
+          await key(LogicalKeyboardKey.arrowRight);
+          await key(LogicalKeyboardKey.select);
+          expect(
+            controller.deleted.map((c) => c.id),
+            channels.map((c) => c.id),
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          tester.view.reset();
+          semantics.dispose();
+          FocusManager.instance.highlightStrategy = previousHighlight;
+          debugDefaultTargetPlatformOverride = null;
         }
-        expect(seen, channels.map((c) => c.id).toSet());
-        // At the end the same arrow resumes ordinary action traversal. Reading
-        // does not authorize or invoke deletion, and Cancel retains its result.
-        await key(LogicalKeyboardKey.arrowDown);
-        expect(focusedIn(cancel), isTrue);
-        await key(LogicalKeyboardKey.arrowRight);
-        expect(
-          focusedIn(
-            find.widgetWithText(LineupDestructiveButton, 'Delete 40 channels'),
-          ),
-          isTrue,
-        );
-        await key(LogicalKeyboardKey.arrowLeft);
-        await key(LogicalKeyboardKey.select);
-        expect(find.byType(Dialog), findsNothing);
-        expect(controller.deleted, isEmpty);
-        await openDelete();
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        expect(find.byType(Dialog), findsNothing);
-        expect(controller.deleted, isEmpty);
-        await openDelete();
-        await key(LogicalKeyboardKey.arrowRight);
-        await key(LogicalKeyboardKey.select);
-        expect(controller.deleted.map((c) => c.id), channels.map((c) => c.id));
-        expect(tester.takeException(), isNull);
-      } finally {
-        await tester.pumpWidget(const SizedBox.shrink());
-        tester.view.reset();
-        debugDefaultTargetPlatformOverride = null;
-      }
-    },
-  );
+      },
+    );
+  }
 
   testWidgets('directory exposes search, management actions and channel rows', (
     tester,
