@@ -289,14 +289,16 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               ),
               SizedBox(
                 width: 220,
-                child: CheckboxListTile(
-                  key: const ValueKey('channel-setup-replace-confirmation'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  value: widget.removalConfirmed,
-                  title: const Text('I understand'),
-                  onChanged: (value) =>
-                      widget.onRemovalConfirmationChanged(value == true),
+                child: LineupToggleSurface(
+                  child: CheckboxListTile(
+                    key: const ValueKey('channel-setup-replace-confirmation'),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    value: widget.removalConfirmed,
+                    title: const Text('I understand'),
+                    onChanged: (value) =>
+                        widget.onRemovalConfirmationChanged(value == true),
+                  ),
                 ),
               ),
             ],

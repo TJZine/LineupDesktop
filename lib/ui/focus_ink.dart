@@ -41,7 +41,29 @@ class LineupFocusInk extends StatelessWidget {
       inkRoles,
     ];
     return Theme(
-      data: data.copyWith(extensions: extensions),
+      data: data.copyWith(
+        extensions: extensions,
+        // Material and ListTile install their own text defaults below this
+        // scope. Carry the same ink through those owners, not just Text's
+        // inherited DefaultTextStyle. Unfocused and desktop themes stay exact.
+        textTheme: active
+            ? data.textTheme.apply(
+                bodyColor: inkRoles.primaryText,
+                displayColor: inkRoles.primaryText,
+              )
+            : data.textTheme,
+        listTileTheme: active
+            ? data.listTileTheme.copyWith(
+                textColor: inkRoles.primaryText,
+                iconColor: inkRoles.secondaryText,
+                titleTextStyle: data.listTileTheme.titleTextStyle?.copyWith(
+                  color: inkRoles.primaryText,
+                ),
+                subtitleTextStyle: data.listTileTheme.subtitleTextStyle
+                    ?.copyWith(color: inkRoles.secondaryText),
+              )
+            : data.listTileTheme,
+      ),
       child: DefaultTextStyle.merge(
         style: TextStyle(color: inkRoles.primaryText),
         child: IconTheme.merge(

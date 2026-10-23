@@ -467,144 +467,164 @@ class ChannelsViewState extends State<ChannelsView> {
                     itemBuilder: (context, index) {
                       final channel = visible[index];
                       _noteVisibleHealth(channel.id);
-                      final rowNameStyle = Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(
-                            fontSize: _directorySize(
-                              22,
-                              LineupTheme.of(context).bodyTextSize(desktop: 16),
-                            ),
-                            fontWeight: FontWeight.w500,
-                          );
-                      final rowSupportStyle = Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(
-                            fontSize: 18,
-                            color: LineupTheme.of(context).secondaryText,
-                          );
-                      final ownership = channel.builderKey == null
-                          ? 'Custom'
-                          : 'Generated';
-                      final rowFocus = _openFocus.putIfAbsent(
-                        channel.id,
-                        () => FocusNode(debugLabel: 'Open ${channel.name}'),
-                      );
-                      rowFocus.debugLabel = 'Open ${channel.name}';
+                      final menuTheme = LineupTheme.of(context).androidTv
+                          ? Theme.of(context)
+                          : null;
                       return LineupRowSurface(
                         selected: _selectedIds.contains(channel.id),
-                        child: Material(
-                          key: ValueKey('channel-row-${channel.id}'),
-                          color: Colors.transparent,
-                          child: Tooltip(
-                            message: _mode == _DirectoryMode.selection
-                                ? '${_selectedIds.contains(channel.id) ? 'Deselect' : 'Select'} ${channel.name}'
-                                : 'Open ${channel.name}',
-                            child: InkWell(
-                              focusNode: rowFocus,
-                              onTap: _saving
-                                  ? null
-                                  : _mode == _DirectoryMode.selection
-                                  ? () => _toggleSelected(channel.id)
-                                  : () => _open(channel),
-                              child: _directoryColumns(
-                                leading: _mode == _DirectoryMode.selection
-                                    ? Checkbox(
-                                        semanticLabel: 'Select ${channel.name}',
-                                        value: _selectedIds.contains(
-                                          channel.id,
-                                        ),
-                                        onChanged: _saving
-                                            ? null
-                                            : (_) =>
-                                                  _toggleSelected(channel.id),
-                                      )
-                                    : null,
-                                number: Text(
-                                  '${channel.number}',
-                                  style: rowSupportStyle,
-                                ),
-                                name: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(channel.name, style: rowNameStyle),
-                                    if (_healthMonitor.issueFor(channel.id) ==
-                                        true)
-                                      Text(
-                                        'Schedule issue — open this channel to recover',
-                                        style: rowSupportStyle?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .error,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                source: Text(
-                                  channelSourceLabel(
-                                    channel.source,
-                                    widget.controller,
+                        child: Builder(
+                          builder: (context) {
+                            final rowNameStyle = Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontSize: _directorySize(
+                                    22,
+                                    LineupTheme.of(context)
+                                        .bodyTextSize(desktop: 16),
                                   ),
-                                  style: rowSupportStyle,
-                                ),
-                                playback: Text(
-                                  channelRhythmLabel(
-                                    channel.playbackMode,
-                                    channel.blockSize,
-                                  ),
-                                  style: rowSupportStyle,
-                                ),
-                                type: Text(ownership, style: rowSupportStyle),
-                                action: _mode == _DirectoryMode.selection
-                                    ? const SizedBox.shrink()
-                                    : PopupMenuButton<_RowAction>(
-                                        enabled: !_saving,
-                                        tooltip: 'Actions for ${channel.name}',
-                                        padding: EdgeInsets.all(8),
-                                        iconSize: 24,
-                                        icon: Icon(
-                                          Icons.adaptive.more,
-                                          semanticLabel:
-                                              'Actions for ${channel.name}',
-                                        ),
-                                        menuPadding: EdgeInsets.zero,
-                                        onSelected: (action) =>
-                                            switch (action) {
-                                              _RowAction.duplicate =>
-                                                _openDuplicate(channel),
-                                              _RowAction.delete => _delete(
-                                                channel,
-                                              ),
-                                            },
-                                        itemBuilder: (_) => [
-                                          if (channel.builderKey != null)
-                                            PopupMenuItem(
-                                              value: _RowAction.duplicate,
-                                              height: 48,
-                                              padding: EdgeInsets.zero,
-                                              child: LineupDropdownMenuRow(
-                                                selected: false,
-                                                child: const Text(
-                                                  'Duplicate as custom',
-                                                ),
-                                              ),
+                                  fontWeight: FontWeight.w500,
+                                );
+                            final rowSupportStyle = Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  fontSize: 18,
+                                  color: LineupTheme.of(context).secondaryText,
+                                );
+                            final ownership = channel.builderKey == null
+                                ? 'Custom'
+                                : 'Generated';
+                            final rowFocus = _openFocus.putIfAbsent(
+                              channel.id,
+                              () =>
+                                  FocusNode(debugLabel: 'Open ${channel.name}'),
+                            );
+                            rowFocus.debugLabel = 'Open ${channel.name}';
+                            return Material(
+                              key: ValueKey('channel-row-${channel.id}'),
+                              color: Colors.transparent,
+                              child: Tooltip(
+                                message: _mode == _DirectoryMode.selection
+                                    ? '${_selectedIds.contains(channel.id) ? 'Deselect' : 'Select'} ${channel.name}'
+                                    : 'Open ${channel.name}',
+                                child: InkWell(
+                                  focusNode: rowFocus,
+                                  onTap: _saving
+                                      ? null
+                                      : _mode == _DirectoryMode.selection
+                                      ? () => _toggleSelected(channel.id)
+                                      : () => _open(channel),
+                                  child: _directoryColumns(
+                                    leading: _mode == _DirectoryMode.selection
+                                        ? Checkbox(
+                                            semanticLabel:
+                                                'Select ${channel.name}',
+                                            value: _selectedIds.contains(
+                                              channel.id,
                                             ),
-                                          PopupMenuItem(
-                                            value: _RowAction.delete,
-                                            height: 48,
-                                            padding: EdgeInsets.zero,
-                                            child: const LineupDropdownMenuRow(
-                                              selected: false,
-                                              child: Text('Delete…'),
+                                            onChanged: _saving
+                                                ? null
+                                                : (_) => _toggleSelected(
+                                                    channel.id,
+                                                  ),
+                                          )
+                                        : null,
+                                    number: Text(
+                                      '${channel.number}',
+                                      style: rowSupportStyle,
+                                    ),
+                                    name: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(channel.name, style: rowNameStyle),
+                                        if (_healthMonitor.issueFor(
+                                              channel.id,
+                                            ) ==
+                                            true)
+                                          Text(
+                                            'Schedule issue — open this channel to recover',
+                                            style: rowSupportStyle?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .error,
                                             ),
                                           ),
-                                        ],
+                                      ],
+                                    ),
+                                    source: Text(
+                                      channelSourceLabel(
+                                        channel.source,
+                                        widget.controller,
                                       ),
+                                      style: rowSupportStyle,
+                                    ),
+                                    playback: Text(
+                                      channelRhythmLabel(
+                                        channel.playbackMode,
+                                        channel.blockSize,
+                                      ),
+                                      style: rowSupportStyle,
+                                    ),
+                                    type: Text(
+                                      ownership,
+                                      style: rowSupportStyle,
+                                    ),
+                                    action: _mode == _DirectoryMode.selection
+                                        ? const SizedBox.shrink()
+                                        : PopupMenuButton<_RowAction>(
+                                            enabled: !_saving,
+                                            tooltip:
+                                                'Actions for ${channel.name}',
+                                            padding: EdgeInsets.all(8),
+                                            iconSize: 24,
+                                            icon: Icon(
+                                              Icons.adaptive.more,
+                                              semanticLabel:
+                                                  'Actions for ${channel.name}',
+                                            ),
+                                            menuPadding: EdgeInsets.zero,
+                                            onSelected: (action) =>
+                                                switch (action) {
+                                                  _RowAction.duplicate =>
+                                                    _openDuplicate(channel),
+                                                  _RowAction.delete => _delete(
+                                                    channel,
+                                                  ),
+                                                },
+                                            itemBuilder: (_) => [
+                                              if (channel.builderKey != null)
+                                                PopupMenuItem(
+                                                  value: _RowAction.duplicate,
+                                                  height: 48,
+                                                  padding: EdgeInsets.zero,
+                                                  child: LineupDropdownMenuRow(
+                                                    menuTheme: menuTheme,
+                                                    selected: false,
+                                                    child: const Text(
+                                                      'Duplicate as custom',
+                                                    ),
+                                                  ),
+                                                ),
+                                              PopupMenuItem(
+                                                value: _RowAction.delete,
+                                                height: 48,
+                                                padding: EdgeInsets.zero,
+                                                child: LineupDropdownMenuRow(
+                                                  menuTheme: menuTheme,
+                                                  selected: false,
+                                                  child: Text('Delete…'),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                       );
                     },

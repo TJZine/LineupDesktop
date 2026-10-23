@@ -1305,6 +1305,7 @@ class _GuideControls extends StatelessWidget {
     );
     final enlargedControls = textScale > 1;
     final roles = LineupTheme.of(context);
+    final menuTheme = roles.androidTv ? Theme.of(context) : null;
     final libraryIds = controller.availableLibraryIds.toList()..sort();
     final selectedLibrary = controller.libraryFilterId;
     final selectedLibraryName = selectedLibrary == null
@@ -1318,41 +1319,58 @@ class _GuideControls extends StatelessWidget {
         child: LineupDropdownBox(
           compact: true,
           enabled: true,
-          child: DropdownButton<String?>(
-            key: const Key('guide-library-picker'),
-            focusNode: libraryFocus,
-            style: controlStyle,
-            isExpanded: true,
-            isDense: enlargedControls,
-            padding: EdgeInsets.symmetric(horizontal: _guideEdgeContentInset),
-            iconSize: 24,
-            itemHeight: enlargedControls ? null : controlHeight,
-            value: selectedLibrary,
-            hint: Text(selectedLibrary == null ? 'All libraries' : 'Libraries'),
-            selectedItemBuilder: (context) => [
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text('All libraries'),
+          child: Builder(
+            builder: (context) => DropdownButton<String?>(
+              key: const Key('guide-library-picker'),
+              focusNode: libraryFocus,
+              style: roles.androidTv
+                  ? controlStyle.copyWith(
+                      color: LineupTheme.of(context).primaryText,
+                    )
+                  : controlStyle,
+              iconEnabledColor: roles.androidTv
+                  ? LineupTheme.of(context).secondaryText
+                  : null,
+              isExpanded: true,
+              isDense: enlargedControls,
+              padding: EdgeInsets.symmetric(horizontal: _guideEdgeContentInset),
+              iconSize: 24,
+              itemHeight: enlargedControls ? null : controlHeight,
+              value: selectedLibrary,
+              hint: Text(
+                selectedLibrary == null ? 'All libraries' : 'Libraries',
               ),
-              for (final _ in libraryIds)
+              selectedItemBuilder: (context) => [
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Libraries'),
+                  child: Text('All libraries'),
                 ),
-            ],
-            items: lineupMenuItems([
-              DropdownMenuItem(
-                value: null,
-                child: menuItemContent(const Text('All libraries')),
+                for (final _ in libraryIds)
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Libraries'),
+                  ),
+              ],
+              items: lineupMenuItems(
+                [
+                  DropdownMenuItem(
+                    value: null,
+                    child: menuItemContent(const Text('All libraries')),
+                  ),
+                  for (final id in libraryIds)
+                    DropdownMenuItem(
+                      value: id,
+                      child: menuItemContent(
+                        Text(_libraryName(controller, id)),
+                      ),
+                    ),
+                ],
+                selectedLibrary,
+                menuTheme: menuTheme,
               ),
-              for (final id in libraryIds)
-                DropdownMenuItem(
-                  value: id,
-                  child: menuItemContent(Text(_libraryName(controller, id))),
-                ),
-            ], selectedLibrary),
-            onChanged: controller.setLibraryFilter,
-            dropdownColor: LineupTheme.of(context).elevatedSurface,
+              onChanged: controller.setLibraryFilter,
+              dropdownColor: roles.elevatedSurface,
+            ),
           ),
         ),
       ),
@@ -1542,44 +1560,56 @@ class _GuideControls extends StatelessWidget {
           child: LineupDropdownBox(
             compact: true,
             enabled: true,
-            child: DropdownButton<int>(
-              key: const Key('guide-hours'),
-              focusNode: hoursFocus,
-              style: controlStyle,
-              isDense: enlargedControls,
-              iconSize: 24,
-              itemHeight: enlargedControls ? null : controlHeight,
-              padding: null,
-              value:
-                  LineupSettings.guideHoursOptions.contains(
-                    controller.guideHours,
-                  )
-                  ? controller.guideHours
-                  : null,
-              hint: const Text('Hours'),
-              selectedItemBuilder: (context) => [
-                for (final hours in LineupSettings.guideHoursOptions)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('$hours hours'),
-                  ),
-              ],
-              items: lineupMenuItems(
-                [
-                  for (final hours in LineupSettings.guideHoursOptions)
-                    DropdownMenuItem(
-                      value: hours,
-                      child: menuItemContent(Text('$hours hours')),
-                    ),
-                ],
-                LineupSettings.guideHoursOptions.contains(controller.guideHours)
+            child: Builder(
+              builder: (context) => DropdownButton<int>(
+                key: const Key('guide-hours'),
+                focusNode: hoursFocus,
+                style: roles.androidTv
+                    ? controlStyle.copyWith(
+                        color: LineupTheme.of(context).primaryText,
+                      )
+                    : controlStyle,
+                iconEnabledColor: roles.androidTv
+                    ? LineupTheme.of(context).secondaryText
+                    : null,
+                isDense: enlargedControls,
+                iconSize: 24,
+                itemHeight: enlargedControls ? null : controlHeight,
+                padding: null,
+                value:
+                    LineupSettings.guideHoursOptions.contains(
+                      controller.guideHours,
+                    )
                     ? controller.guideHours
                     : null,
+                hint: const Text('Hours'),
+                selectedItemBuilder: (context) => [
+                  for (final hours in LineupSettings.guideHoursOptions)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('$hours hours'),
+                    ),
+                ],
+                items: lineupMenuItems(
+                  [
+                    for (final hours in LineupSettings.guideHoursOptions)
+                      DropdownMenuItem(
+                        value: hours,
+                        child: menuItemContent(Text('$hours hours')),
+                      ),
+                  ],
+                  LineupSettings.guideHoursOptions.contains(
+                        controller.guideHours,
+                      )
+                      ? controller.guideHours
+                      : null,
+                  menuTheme: menuTheme,
+                ),
+                onChanged: (hours) {
+                  if (hours != null) unawaited(_saveHours(context, hours));
+                },
+                dropdownColor: roles.elevatedSurface,
               ),
-              onChanged: (hours) {
-                if (hours != null) unawaited(_saveHours(context, hours));
-              },
-              dropdownColor: LineupTheme.of(context).elevatedSurface,
             ),
           ),
         ),

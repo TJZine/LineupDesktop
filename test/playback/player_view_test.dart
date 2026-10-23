@@ -41,6 +41,57 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  testWidgets(
+    'TV Sleep presets keep focus ink separate from selected preset in touch mode',
+    (tester) async {
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTouch;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      final fixture = _Fixture(PlayerState.playing);
+      fixture.player.showOsd();
+      fixture.player.showSleepTimer();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Color? ink(String text) => tester
+          .widget<RichText>(
+            find.descendant(
+              of: find.text(text),
+              matching: find.byType(RichText),
+            ),
+          )
+          .text
+          .style
+          ?.color;
+      final off = tester.element(find.byKey(const Key('sleep-timer-off')));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.highlightMode, FocusHighlightMode.touch);
+      expect(ink('30 minutes'), const Color(0xFF090806));
+      expect(ink('Off'), const Color(0xFFF3E8D2));
+      expect(fixture.player.sleepDuration, isNull);
+      expect(
+        tester.element(find.byKey(const Key('sleep-timer-off'))),
+        same(off),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
   for (final state in [
     PlayerState.error,
     PlayerState.stopped,

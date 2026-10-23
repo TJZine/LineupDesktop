@@ -612,6 +612,20 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
   Widget _sourceSelectionControl(
     BuilderStrategy strategy,
     ChannelPlanAllocation allocation,
+  ) => LineupTheme.of(context).androidTv
+      ? LineupRowSurface(
+          selected: false,
+          child: Builder(
+            builder: (context) =>
+                _sourceSelectionContent(context, strategy, allocation),
+          ),
+        )
+      : _sourceSelectionContent(context, strategy, allocation);
+
+  Widget _sourceSelectionContent(
+    BuildContext context,
+    BuilderStrategy strategy,
+    ChannelPlanAllocation allocation,
   ) {
     final roles = LineupTheme.of(context);
     final enabled = _strategies.contains(strategy);
@@ -715,6 +729,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
 
   Widget _sourceGroupingControl(BuilderStrategy strategy) {
     final roles = LineupTheme.of(context);
+    final menuTheme = roles.androidTv ? Theme.of(context) : null;
     final enabled = _strategies.contains(strategy);
     final countStyle = TextStyle(
       color: roles.secondaryText,
@@ -746,6 +761,13 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             maxWidth: constraints.maxWidth,
             labels: ['Separate by library', groupingLabel],
             style: groupingStyle,
+            outerHorizontalChrome: roles.androidTv
+                ? LineupDropdownBox.contentPadding(compact: true).horizontal +
+                      2 * LineupDropdownBox.borderWidth
+                : 0,
+            menuVerticalPadding: roles.androidTv
+                ? LineupDropdownMenuRow.contentPadding.vertical
+                : 8,
           );
           final dropdown = SizedBox(
             width: metrics.width,
@@ -754,34 +776,55 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               child: LineupDropdownBox(
                 compact: true,
                 enabled: enabled,
-                child: DropdownButton<bool>(
-                  key: ValueKey('source-grouping-${strategy.name}'),
-                  isExpanded: true,
-                  isDense: true,
-                  iconSize: 24,
-                  padding: EdgeInsets.symmetric(horizontal: 10),
-                  itemHeight: metrics.itemHeight,
-                  value: _grouped.contains(strategy),
-                  style: groupingStyle,
-                  items: lineupMenuItems([
-                    const DropdownMenuItem(
-                      value: false,
-                      child: Text('Separate by library'),
+                child: Builder(
+                  builder: (context) => DropdownButton<bool>(
+                    key: ValueKey('source-grouping-${strategy.name}'),
+                    isExpanded: true,
+                    isDense: true,
+                    iconSize: 24,
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    itemHeight: metrics.itemHeight,
+                    value: _grouped.contains(strategy),
+                    style: roles.androidTv
+                        ? groupingStyle.copyWith(
+                            color: enabled
+                                ? LineupTheme.of(context).primaryText
+                                : LineupTheme.of(context).mutedText,
+                          )
+                        : groupingStyle,
+                    iconEnabledColor: roles.androidTv
+                        ? LineupTheme.of(context).secondaryText
+                        : null,
+                    iconDisabledColor: roles.androidTv
+                        ? LineupTheme.of(context).mutedText
+                        : null,
+                    items: lineupMenuItems(
+                      [
+                        const DropdownMenuItem(
+                          value: false,
+                          child: Text('Separate by library'),
+                        ),
+                        DropdownMenuItem(
+                          value: true,
+                          child: Text(groupingLabel),
+                        ),
+                      ],
+                      _grouped.contains(strategy),
+                      menuTheme: menuTheme,
                     ),
-                    DropdownMenuItem(value: true, child: Text(groupingLabel)),
-                  ], _grouped.contains(strategy)),
-                  onChanged: enabled
-                      ? (value) =>
-                            widget.onGroupingChanged(strategy, value == true)
-                      : null,
-                  dropdownColor: LineupTheme.of(context).elevatedSurface,
-                  selectedItemBuilder: (_) => ([
-                    const DropdownMenuItem(
-                      value: false,
-                      child: Text('Separate by library'),
-                    ),
-                    DropdownMenuItem(value: true, child: Text(groupingLabel)),
-                  ]).map<Widget>((item) => item.child).toList(),
+                    onChanged: enabled
+                        ? (value) =>
+                              widget.onGroupingChanged(strategy, value == true)
+                        : null,
+                    dropdownColor: roles.elevatedSurface,
+                    selectedItemBuilder: (_) => ([
+                      const DropdownMenuItem(
+                        value: false,
+                        child: Text('Separate by library'),
+                      ),
+                      DropdownMenuItem(value: true, child: Text(groupingLabel)),
+                    ]).map<Widget>((item) => item.child).toList(),
+                  ),
                 ),
               ),
             ),
@@ -831,16 +874,18 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       'Additional channel versions',
       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.4),
     );
-    final additionalVersionsSubtitle = Padding(
-      padding: EdgeInsets.only(top: 12),
-      child: Text(
-        _playback == PlaybackMode.sequential
-            ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
-            : 'Create extra channels with alternate schedules or another playback mode.',
-        style: TextStyle(
-          color: LineupTheme.of(context).secondaryText,
-          fontSize: 18,
-          height: 1.4,
+    final additionalVersionsSubtitle = Builder(
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(top: 12),
+        child: Text(
+          _playback == PlaybackMode.sequential
+              ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
+              : 'Create extra channels with alternate schedules or another playback mode.',
+          style: TextStyle(
+            color: LineupTheme.of(context).secondaryText,
+            fontSize: 18,
+            height: 1.4,
+          ),
         ),
       ),
     );
@@ -930,15 +975,17 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
         SizedBox(height: sectionGap),
         _episodeStrip(),
         SizedBox(height: 28),
-        ListTileTheme.merge(
-          titleAlignment: ListTileTitleAlignment.top,
-          child: SwitchListTile(
-            value: _extras,
-            controlAffinity: ListTileControlAffinity.trailing,
-            contentPadding: EdgeInsets.zero,
-            title: additionalVersionsTitle,
-            subtitle: additionalVersionsSubtitle,
-            onChanged: changeAdditionalVersions,
+        LineupToggleSurface(
+          child: ListTileTheme.merge(
+            titleAlignment: ListTileTitleAlignment.top,
+            child: SwitchListTile(
+              value: _extras,
+              controlAffinity: ListTileControlAffinity.trailing,
+              contentPadding: EdgeInsets.zero,
+              title: additionalVersionsTitle,
+              subtitle: additionalVersionsSubtitle,
+              onChanged: changeAdditionalVersions,
+            ),
           ),
         ),
         if (_extras)
