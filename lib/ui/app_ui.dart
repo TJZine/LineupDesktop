@@ -52,33 +52,45 @@ class LineupTopBar extends StatelessWidget {
       final roles = LineupTheme.of(context);
       final menu = onOpenMenu != null && menuFocusNode != null;
       final condensed = constraints.maxWidth < 900;
-      final lockup = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            'assets/branding/lineup-logo-mark.png',
-            width: 30,
-            height: 30,
-            excludeFromSemantics: true,
-          ),
-          if (!condensed) ...[
-            const SizedBox(width: 14),
-            Text(
-              'LINEUP',
-              style: TextStyle(
-                fontFamily: 'Arial',
-                fontSize: 22,
-                fontWeight: FontWeight.w400,
-                letterSpacing: 3,
-                color: roles.primaryText,
-              ),
+      final lockup = Builder(
+        builder: (context) {
+          final ink = LineupTheme.of(context);
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: menu && ink.androidTv && ink.largeFocusIndicators
+                  ? LineupFocusFrame.contentClearance
+                  : 0,
             ),
-          ],
-          if (menu) ...[
-            const SizedBox(width: 14),
-            Icon(Icons.menu, size: 22, color: roles.primaryText),
-          ],
-        ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/branding/lineup-logo-mark.png',
+                  width: 30,
+                  height: 30,
+                  excludeFromSemantics: true,
+                ),
+                if (!condensed) ...[
+                  const SizedBox(width: 14),
+                  Text(
+                    'LINEUP',
+                    style: TextStyle(
+                      fontFamily: 'Arial',
+                      fontSize: 22,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 3,
+                      color: ink.primaryText,
+                    ),
+                  ),
+                ],
+                if (menu) ...[
+                  const SizedBox(width: 14),
+                  Icon(Icons.menu, size: 22, color: ink.primaryText),
+                ],
+              ],
+            ),
+          );
+        },
       );
       return Container(
         key: const ValueKey('lineup-top-bar'),
