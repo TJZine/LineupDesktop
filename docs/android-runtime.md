@@ -13,11 +13,34 @@ browser opened. TVs without a browser retain the displayed PIN and QR code.
 `moveTaskToBack` backgrounds the task without finishing it. Android does not
 register the desktop `lineup/app_menu` handler.
 
-The initial host has no Android playback adapter. Its native-player factory
-reports unsupported playback until the Android adapter is integrated. Packages
-and bundled font notices work offline; Android native-runtime notices are added
+The Dart composition root selects the existing native-player protocol on Android.
+The Kotlin adapter uses Media3 for media/OS mechanisms while the shared Dart
+coordinator retains playback and scheduling policy. Packages and bundled font
+notices work offline; Android native-runtime notices are added
 with the packaging unit. Android hides the Windows HDR-matching toggle and
 exposes Settings during onboarding and the Licenses row under Support.
+
+## Playback adapter
+
+`MainActivity` composes native default-z-order video, a Media3 SubtitleView and
+transparent surface-rendered Flutter. `player/NativePlayerAdapter.kt` owns these
+passive views and the method channel; `NativePlayerController.kt` owns protocol
+validation, bounded queues, correlation and lifecycle fencing. A fresh
+`Media3Engine` belongs to each load. See the [Android protocol details](native-player-protocol.md#android-backend)
+for failure mapping, telemetry, exact initial joins and display limitations.
+There is one authoritative Dart application; no Android Plex, schedule,
+persistence or navigation implementation exists beside it. Windows/macOS keep
+their existing libmpv adapters and transport contracts.
+
+Synthetic runtime tools live in [tool/android/fixtures](../tool/android/fixtures/README.md).
+The CA public certificate and trust override are debug-only. Fixture keys stay
+outside the repository. Profile and release do not trust that CA. Use an assigned
+device and loopback-only adb reverse; never feed private media or credentials to
+the fixture entrypoint. JVM tests establish protocol/encoding behavior and
+extractor regressions, while emulator media checks establish actual Media3
+control behavior on that emulator. Neither replaces physical Fire TV/HDR/audio
+or final integrated acceptance. Temporal G6 remains unverified; proceeding with
+D8 does not establish its one-display-frame transition bound.
 
 ## Toolchain and builds
 
