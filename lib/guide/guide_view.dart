@@ -1332,10 +1332,12 @@ class _GuideControls extends StatelessWidget {
                   ? LineupTheme.of(context).secondaryText
                   : null,
               isExpanded: true,
-              isDense: enlargedControls,
+              isDense: roles.androidTv || enlargedControls,
               padding: EdgeInsets.symmetric(horizontal: _guideEdgeContentInset),
               iconSize: 24,
-              itemHeight: enlargedControls ? null : controlHeight,
+              itemHeight: roles.androidTv || enlargedControls
+                  ? null
+                  : controlHeight,
               value: selectedLibrary,
               hint: Text(
                 selectedLibrary == null ? 'All libraries' : 'Libraries',
@@ -3025,23 +3027,72 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
       GuideLoadState.error => 'Schedule unavailable',
       GuideLoadState.ready => 'No programs scheduled in this time range',
     };
+    final roles = LineupTheme.of(context);
+    final identity = '${inspected.number} • ${inspected.name}';
+    final identityStyle = Theme.of(context).textTheme.labelLarge
+        ?.copyWith(color: roles.progressFill, fontWeight: FontWeight.w600);
+    Widget channelText({bool compact = false}) => Text(
+      identity,
+      style: identityStyle,
+      maxLines: compact ? 1 : null,
+      overflow: compact ? TextOverflow.ellipsis : null,
+    );
+    final statusText = Text(status);
+    Widget stacked(double gap) => Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        channelText(),
+        SizedBox(height: gap),
+        statusText,
+      ],
+    );
     return Align(
       alignment: Alignment.centerLeft,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${inspected.number} • ${inspected.name}',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: LineupTheme.of(context).progressFill,
-              fontWeight: FontWeight.w600,
+      child: !roles.androidTv
+          ? stacked(8)
+          : LayoutBuilder(
+              builder: (context, box) {
+                final inherited = DefaultTextStyle.of(context).style;
+                final scaler = MediaQuery.textScalerOf(context);
+                final direction = Directionality.of(context);
+                double height(String text, TextStyle style) {
+                  final painter = TextPainter(
+                    text: TextSpan(text: text, style: style),
+                    textScaler: scaler,
+                    textDirection: direction,
+                  )..layout(maxWidth: box.maxWidth);
+                  try {
+                    return painter.height;
+                  } finally {
+                    painter.dispose();
+                  }
+                }
+
+                final textHeight =
+                    height(identity, inherited.merge(identityStyle)) +
+                    height(status, inherited);
+                if (textHeight <= box.maxHeight) {
+                  // The five-row Guide budget is fixed. Spend only the vertical gap
+                  // that remains after the actual scaled glyphs, not another row.
+                  return stacked((box.maxHeight - textHeight).clamp(0.0, 8.0));
+                }
+                // Like normal Guide metadata, a long channel identity can ellipsize
+                // while its full semantics/rail identity remain. Required state text
+                // keeps its original type and complete content beside it.
+                final statusWidth = math.min(
+                  box.maxWidth * .65,
+                  _textWidth(status, inherited, scaler, direction),
+                );
+                return Row(
+                  children: [
+                    Expanded(child: channelText(compact: true)),
+                    const SizedBox(width: 24),
+                    SizedBox(width: statusWidth, child: statusText),
+                  ],
+                );
+              },
             ),
-          ),
-          SizedBox(height: 8),
-          Text(status),
-        ],
-      ),
     );
   }
 }
