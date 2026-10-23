@@ -331,6 +331,7 @@ void main() {
     bool accountOrigin = false,
     bool androidTv = false,
     double textScale = 1,
+    LineupThemeName themeName = LineupThemeName.emberSteel,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -343,7 +344,7 @@ void main() {
           ),
         ),
         theme: LineupTheme.forName(
-          LineupThemeName.emberSteel,
+          themeName,
           largeFocusIndicators: false,
           androidTv: androidTv,
         ),
@@ -356,6 +357,104 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));
+  }
+
+  for (final themeName in LineupThemeName.values) {
+    for (final tv in [false, true]) {
+      testWidgets(
+        'Current badge follows actual profile focus: $themeName TV=$tv',
+        (tester) async {
+          const active = PlexHomeUser(
+            id: 'active',
+            name: 'Active viewer',
+            protected: true,
+            admin: true,
+            restricted: true,
+          );
+          const other = PlexHomeUser(
+            id: 'other',
+            name: 'Other viewer',
+            protected: false,
+          );
+          final controller = FixtureController(
+            scenario: const LineupScenario(
+              stage: SetupStage.profiles,
+              profile: active,
+              profiles: [active, other],
+            ),
+          );
+          final strategy = FocusManager.instance.highlightStrategy;
+          try {
+            FocusManager.instance.highlightStrategy =
+                FocusHighlightStrategy.alwaysTouch;
+            await show(tester, controller, androidTv: tv, themeName: themeName);
+            final activeButton = find.widgetWithText(
+              TextButton,
+              'Active viewer',
+            );
+            final otherButton = find.widgetWithText(TextButton, 'Other viewer');
+            final node = tester.widget<TextButton>(activeButton).focusNode!;
+            final otherNode = tester.widget<TextButton>(otherButton).focusNode!;
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+            otherNode.requestFocus();
+            await tester.pumpAndSettle();
+            final current = find.text('Current');
+            final element = tester.element(current);
+            final base = LineupTheme.of(element);
+            Color ink(String label) => tester
+                .widget<RichText>(
+                  find.descendant(
+                    of: find.text(label),
+                    matching: find.byType(RichText),
+                  ),
+                )
+                .text
+                .style!
+                .color!;
+            expect(ink('Current'), base.progressFill);
+            node.requestFocus();
+            await tester.pumpAndSettle();
+            expect(node.hasPrimaryFocus, isTrue);
+            expect(
+              FocusManager.instance.highlightMode,
+              FocusHighlightMode.touch,
+            );
+            final focused = LineupTheme.of(tester.element(current));
+            expect(
+              ink('Current'),
+              tv ? focused.primaryText : base.progressFill,
+            );
+            expect(ink('Admin'), focused.secondaryText);
+            expect(ink('Restricted'), focused.secondaryText);
+            if (tv) {
+              final badge = tester.widget<DecoratedBox>(
+                find
+                    .ancestor(of: current, matching: find.byType(DecoratedBox))
+                    .first,
+              );
+              final inset = (badge.decoration as BoxDecoration).color!;
+              expect(inset, focused.elevatedSurface);
+              final light = inset.computeLuminance();
+              final dark = ink('Current').computeLuminance();
+              expect((light + .05) / (dark + .05), greaterThanOrEqualTo(4.7));
+            }
+            expect(tester.element(current), same(element));
+            otherNode.requestFocus();
+            await tester.pumpAndSettle();
+            expect(ink('Current'), base.progressFill);
+            expect(tester.element(current), same(element));
+            expect(
+              tester.widget<TextButton>(activeButton).focusNode,
+              same(node),
+            );
+          } finally {
+            await tester.pumpWidget(const SizedBox.shrink());
+            controller.dispose();
+            FocusManager.instance.highlightStrategy = strategy;
+          }
+        },
+      );
+    }
   }
 
   testWidgets('returning profiles expose active selection and a Back action', (

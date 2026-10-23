@@ -176,6 +176,14 @@ class SetupLibraryStep extends StatelessWidget {
         .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
     final actionStyle = Theme.of(context).textTheme.labelLarge!
         .copyWith(fontSize: 18);
+    Widget actionLabel(String label) => Builder(
+      builder: (context) => Text(
+        label,
+        style: roles.androidTv
+            ? actionStyle.copyWith(color: LineupTheme.of(context).primaryText)
+            : actionStyle,
+      ),
+    );
     final retryLabel = data.selectionCollectionRecovery != null
         ? 'Rescan after Plex changes'
         : retry.isEmpty
@@ -197,13 +205,10 @@ class SetupLibraryStep extends StatelessWidget {
                 alignment: Alignment.centerLeft,
               ),
               onPressed: data.canSwitchServer ? onSwitchServer : null,
-              child: Text('Switch server', style: actionStyle),
+              child: actionLabel('Switch server'),
             ),
           if (!scanning && data.channelSetupCanCancel)
-            TextButton(
-              onPressed: onCancelSetup,
-              child: Text('Cancel', style: actionStyle),
-            ),
+            TextButton(onPressed: onCancelSetup, child: actionLabel('Cancel')),
         ],
       ),
       leading: [
@@ -246,7 +251,7 @@ class SetupLibraryStep extends StatelessWidget {
           : scanning
           ? TextButton(
               onPressed: onCancelScan,
-              child: Text('Cancel scan', style: actionStyle),
+              child: actionLabel('Cancel scan'),
             )
           : canContinue
           ? FilledButton(
