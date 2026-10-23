@@ -53,7 +53,7 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
     super.didChangeDependencies();
     final visibility = KeyboardVisibilityScope.maybeOf(context);
     if (identical(visibility, _visibility)) {
-      if (!_currentEditor) _observedVisible = false;
+      if (!_currentEditor) _clearVisibilityHistory();
       return;
     }
     _visibility?.removeListener(_visibilityChanged);
@@ -70,25 +70,35 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
       _editingFocus.hasPrimaryFocus &&
       ModalRoute.of(context)?.isCurrent != false;
 
-  void _visibilityChanged() {
+  void _clearVisibilityHistory() {
+    _observedVisible = false;
+    _keyboardWasVisible = false;
+  }
+
+  void _visibilityChanged() =>
+      _observeVisibility(_visibility?.value, fromInsets: false);
+
+  void _insetsChanged() => _observeVisibility(
+    View.of(context).viewInsets.bottom > 0,
+    fromInsets: true,
+  );
+
+  void _observeVisibility(bool? visible, {required bool fromInsets}) {
     if (!_currentEditor) {
-      _observedVisible = false;
+      _clearVisibilityHistory();
       return;
     }
-    switch (_visibility?.value) {
-      case true:
-        if (WidgetsBinding.instance.lifecycleState ==
-            AppLifecycleState.resumed) {
-          _observedVisible = true;
-        }
-      case false:
-        if (_observedVisible &&
-            WidgetsBinding.instance.lifecycleState ==
-                AppLifecycleState.resumed) {
-          _finishEditing();
-        }
-      case null:
-        _observedVisible = false;
+    final resumed =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    final wasVisible = fromInsets ? _keyboardWasVisible : _observedVisible;
+    if (visible == null || (visible && resumed)) {
+      if (fromInsets) {
+        _keyboardWasVisible = visible == true;
+      } else {
+        _observedVisible = visible == true;
+      }
+    } else if (visible == false && wasVisible && resumed) {
+      _finishEditing();
     }
   }
 
@@ -99,8 +109,9 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
     // the background or carrying history across an actual editor retirement.
     if (state == AppLifecycleState.resumed) {
       _visibilityChanged();
+      _insetsChanged();
     } else if (!_currentEditor) {
-      _observedVisible = false;
+      _clearVisibilityHistory();
     }
   }
 
@@ -108,7 +119,7 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
   void didUpdateWidget(LineupTextFieldActivation oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.enabled && _editing) {
-      _observedVisible = false;
+      _clearVisibilityHistory();
       _editing = false;
       _editingFocus.unfocus();
     }
@@ -116,12 +127,12 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
 
   void _editingFocusChanged() {
     if (!_editing && _editingFocus.hasFocus) {
-      _observedVisible = false;
+      _clearVisibilityHistory();
       setState(() => _editing = true);
     } else if (_editing && !_editingFocus.hasFocus) {
       // A pointer or another route may take focus. End editing without stealing
       // that control's focus; Back/Done explicitly restore navigation focus.
-      _observedVisible = false;
+      _clearVisibilityHistory();
       setState(() => _editing = false);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted ||
@@ -145,8 +156,7 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
     if (!widget.enabled || _editing) return;
     setState(() {
       _editing = true;
-      _keyboardWasVisible = false;
-      _observedVisible = false;
+      _clearVisibilityHistory();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _editing) _editingFocus.requestFocus();
@@ -155,22 +165,14 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
 
   void _finishEditing() {
     if (!_editing) return;
-    _observedVisible = false;
+    _clearVisibilityHistory();
     setState(() => _editing = false);
     _focus.requestFocus();
   }
 
   @override
   void didChangeMetrics() {
-    if (!mounted || !_editing) return;
-    final keyboardVisible = View.of(context).viewInsets.bottom > 0;
-    if (keyboardVisible) {
-      _keyboardWasVisible = true;
-    } else if (_keyboardWasVisible) {
-      // Android's IME can consume Back without sending Flutter a key or pop.
-      // Its inset transition is the observation that editing has ended.
-      _finishEditing();
-    }
+    if (mounted) _insetsChanged();
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {

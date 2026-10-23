@@ -170,6 +170,74 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('inset hide restores navigation while resumed', (tester) async {
+    final visibility = ValueNotifier<bool?>(null);
+    addTearDown(visibility.dispose);
+    addTearDown(tester.view.resetViewInsets);
+    final nodes = await _pump(tester, visibility);
+    await _activate(tester, nodes.field);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets('paused inset hide reconciles only on resume', (tester) async {
+    final visibility = ValueNotifier<bool?>(null);
+    addTearDown(visibility.dispose);
+    addTearDown(tester.view.resetViewInsets);
+    final nodes = await _pump(tester, visibility);
+    await _activate(tester, nodes.field);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pumpAndSettle();
+    _pause(tester);
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isTrue);
+    _resume(tester);
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets('covered inset hide retires history without taking modal focus', (
+    tester,
+  ) async {
+    final visibility = ValueNotifier<bool?>(null);
+    addTearDown(visibility.dispose);
+    addTearDown(tester.view.resetViewInsets);
+    final nodes = await _pump(tester, visibility);
+    await _activate(tester, nodes.field);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pumpAndSettle();
+    final editor = FocusManager.instance.primaryFocus;
+    _pause(tester);
+    final dialog = showDialog<void>(
+      context: nodes.field.context!,
+      requestFocus: false,
+      builder: (_) => const AlertDialog(content: Text('Covering route')),
+    );
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(editor));
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(editor));
+    expect(nodes.field.hasPrimaryFocus, isFalse);
+    _resume(tester);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(editor));
+    Navigator.pop(nodes.field.context!);
+    await tester.pumpAndSettle();
+    await dialog;
+    // Returning to the field cannot spend hide history from a covered route.
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+    expect(nodes.field.hasPrimaryFocus, isFalse);
+  });
+
   for (final retirement in [
     'other control',
     'modal',

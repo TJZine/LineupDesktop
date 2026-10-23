@@ -9,6 +9,7 @@ void main() {
   testWidgets('TV field handles Done, inset dismissal and connection closure', (
     tester,
   ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     final navigation = FocusNode();
     final next = FocusNode();
     addTearDown(next.dispose);
