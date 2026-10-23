@@ -33,8 +33,10 @@ UI, operate accounts/devices or launch every listed project.
 macOS Direct Play private beta on Apple Silicon. Transcoding (F-01), the other F rows,
 TV work and Windows physical/package acceptance are outside it; Windows engine-script
 integration (R-01) and CI-executable engine tests (V-02) are inside it. The macOS
-deployment target stays 12.0 and the promised floor is set from an older-macOS check
-(V-06). Signing and distribution (R-02) are excluded for now; the beta candidate is the
+preserved candidate's build deployment target stays 12.0. On October 22 the
+maintainer selected **macOS 14 Sonoma as the supported minimum OS family**;
+physical default-runtime verification remains V-06. Signing and distribution
+(R-02) are excluded for now; the beta candidate is the
 verified ad-hoc-signed build using the repaired engine (B-01). On October 21 the
 maintainer selected the V-05 beta subset: local PMS Direct Play with the owner
 account and available Home profiles, saved-lineup restore, scan/retry/cancel,
@@ -44,6 +46,15 @@ relay, alternate PMS shapes, large/partial catalogs, smart collections and live
 membership/portrait probes remain beta limitations. R-03 implementation must land
 before the candidate after design approval; V-07 remains deferred until the
 maintainer chooses the existing checklist or a limited candidate.
+
+**October 22 current maintainer disposition:** stop further VM graphics work;
+select macOS 14 Sonoma as the new support target and prepare its native installer
+and test files on the current M1 Pro Mac. The maintainer subsequently specified
+**files only for now**: no volume creation, installation, reboot or startup-disk
+change. V-06 stays open, V-05 live Cancel/Retry stays pending, and V-07 stays
+unverified. The [release-gate reassessment](#october-22-release-gate-reassessment)
+and later execution entries preserve the evidence and superseded recommendations.
+The chosen support floor does not accept the beta.
 
 ## Confirmed bugs and repair status
 
@@ -69,7 +80,7 @@ the discriminating evidence in the investigation rows below.
 | V-03 | Windows native lifecycle, physical media and exact package | Later recorded CI run [39383128215](https://github.com/TJZine/LineupDesktop/actions/runs/39383128215) passed stock Windows build and eight explicit CTests: encoder, playback state, core, codec, display dynamic range, guardian, player contract and authenticated reference. Earlier L2 Windows auth/package gates also passed at their recorded identities. | `runner_lifecycle` is still outside current CI and lacks recorded execution here. Run it with its actual patched-engine prerequisites. Physical playback/parts/EOF, HDR/restoration, tracks, input, monitor/DPI and clean-system package remain distinct. Revalidate changed inputs; do not repeat all earlier tests solely because an old handoff says pending. [Development tiers](DEVELOPMENT.md#current-test-tiers-and-gaps), [physical/package procedure](windows-native-validation.md). |
 | V-04 | macOS real-app reliability beyond recorded scenarios | Current canonical app `8c98fb80` passed clean artifact verification and loaded-engine hash checks. After maintainer Keychain approval, owner local-PMS current playback reached native readiness and displayed video; Guide/Settings/native notices/source-reader navigation returned to continuing video. Native menu Settings, fullscreen exit, minimize and Window-menu restore were observed. This build reached natural EOF with mpv error 0, then a successor accepted/opening/ready session and visible video; normal native-menu Quit exited 0. Earlier `ddefaa4e` source-open failures remain attributed and their original cause unproven; they did not reproduce on this build. | Sustained listening/audio drift, true live resize/minimum size, multi-display/Spaces/Stage Manager and sleep/wake remain in the existing human checklist. Automated actions establish bounded observations, not physical acceptance. |
 | V-05 | Real Plex scope, catalog and recovery edge cases | Current app `8c98fb80`: saved owner lineup restored; an available unprotected Home profile connected to the same PMS and completed three selected library scans without applying a generated lineup. Maintainer locally unlocked owner restoration; the renewed owner connection labeled Direct local and current authorized playback displayed actual video. Initial Direct remote playback is separately attributed. | Unambiguous live scan cancel/retry evidence remains pending; fast scans and changing UI prevented isolated attribution. On October 21 the maintainer explicitly retained these live checks as pending; deterministic tests do not close this beta gate. Protected-profile/server failures and 401/403 retain deterministic evidence. Remote/relay, alternate PMS shapes, large/partial catalogs, smart collections and live membership/portrait probes remain beta limitations. No account/server configuration or credentials were changed by the controller. |
-| V-06 | macOS declared minimum version | Controller tested exact `8c98fb80` in approved macOS 12.6 (21G115), 13.0 (22A380) and 14.6.1 (23G93) Apple Virtualization VMs, each four cores / 8 GiB. The macOS 14 controlled renderer comparison and authenticated/media observations are recorded below. Candidate hashes and deep strict signatures matched; quarantine was preserved and separately approved one-app Finder Open exceptions applied. Cold native notices, authenticated PMS access, five selected library scans, guest-local lineup creation, saved-account/lineup restoration and normal menu Quit were observed in the macOS 12/13 guests. | Default current-program activation aborts in guest Metal/IOGPU argument-encoder creation during MoltenVK initialization in all three guests. Intermittent glyph corruption also remains; these VM-only failures do not establish physical-hardware failure. A process-only `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0` diagnostic reached actual changing video and native readiness in macOS 13, then normal Quit; macOS 12 still aborted later in libplacebo. This diagnostic does not establish unchanged default-candidate support. Native media TLS/CA was not separately established. The promised older-OS support floor remains unresolved: establish it on suitable hardware/default runtime or obtain an explicit narrower tested-support decision. Host default playback remains attributed to macOS 27.0.1 (26A434). Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
+| V-06 | macOS declared minimum version | Controller tested exact `8c98fb80` in approved macOS 12.6 (21G115), 13.0 (22A380) and 14.6.1 (23G93) Apple Virtualization VMs, each four cores / 8 GiB. The macOS 14 controlled renderer comparison and authenticated/media observations are recorded below. Candidate hashes and deep strict signatures matched; quarantine was preserved and separately approved one-app Finder Open exceptions applied. Cold native notices, authenticated PMS access, five selected library scans, guest-local lineup creation, saved-account/lineup restoration and normal menu Quit were observed in the macOS 12/13 guests. | Default current-program activation aborts in guest Metal/IOGPU argument-encoder creation during MoltenVK initialization in all three guests. Intermittent glyph corruption also remains; these VM-only failures do not establish physical-hardware failure. A process-only `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0` diagnostic reached actual changing video and native readiness in macOS 13, then normal Quit; macOS 12 still aborted later in libplacebo. This diagnostic does not establish unchanged default-candidate support. Native media TLS/CA was not separately established. **October 22: further VM graphics work is stopped.** The maintainer subsequently selected macOS 14 Sonoma as the supported minimum OS family. V-06 remains open pending native default-runtime verification on this M1 Pro Mac, first on 14.8.9. Preparation is installer/test files only; no disk or boot changes. A Sonoma pass does not establish every later OS. See the latest preparation entry below. Host default playback remains attributed to macOS 27.0.1 (26A434). Intel/universal is outside the approved first target. [Runtime risks](macos-runtime.md#remaining-work-and-risks). |
 | V-07 | Existing physical/spoken acceptance | Automated semantics/native evidence is recorded separately. On October 21 the maintainer explicitly chose **Leave V-07 unverified** for the later limited-candidate decision. | All six boxes remain unchecked; this disposition does not accept the beta or establish physical/listening behavior. Do not start synthetic VoiceOver/modifier work or infer passes from unlock/authentication assistance. [Checklist](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist). Windows Narrator/physical checks retain their separate platform scope. |
 
 ## Investigations and unresolved observations
@@ -1082,3 +1093,183 @@ diagnostic unchanged or count it as graphics evidence. Normal menu Quit complete
 native shutdown and process search returned no match (status 1); VM input capture
 was released. No further build or VM trial was started in this turn. V-06 remains
 open, with the original candidate and all engine/runtime identities preserved.
+
+## October 22 release-gate reassessment
+
+Analysis source: clean `platform/macos` at
+`39bdfb5644c8406ed6a1dccb9dac5dd50c4ce6e5`. The preserved candidate remains
+`8c98fb8079553af7f4b7be728c832366827681bb`; the tracked candidate-to-HEAD delta
+changes only this register and `docs/macos-runtime.md`. The reassessment used
+existing records and read-only identity/source checks, with no agents, rebuilds,
+VM operations, installations or new runtime experiments. This entry records the
+maintainer's subsequent instruction to stop further VM graphics work.
+
+The objective remains an Apple Silicon macOS Direct Play private beta using the
+verified ad-hoc-signed app and repaired engine. Keep deployment target 12.0;
+V-06 must inform the support promise. R-01 and CI-executable V-02 are included;
+transcoding, TV, physical Windows acceptance, team signing and distribution are
+outside this scope. The approved local-PMS V-05 subset still includes live
+Cancel/Retry. No beta acceptance or narrower OS support follows from this review.
+
+Preserved identity verification matched all ten recorded full hashes: compiled
+Dart, bundled signed engine, raw engine, runtime BUILD-INFO, objective_c asset,
+native executable, successful-build receipt, bundle provenance, candidate ZIP
+and source-companion manifest. Both sidecars attribute source to `8c98fb80` and
+each matched all 149 recorded bundle entries, including bytes, modes and symlinks.
+Full candidate identities remain in the October 21 canonical-app entry above;
+private comparison inputs are `canonical-app-rebuild-origin/artifact.json` and
+`canonical-source-companion-8c98fb80/status.json` under the existing evidence cache.
+This checks preservation, not fresh playback, full source-companion verification
+or a new signature-verification run.
+
+| Gate | Reassessed status |
+| --- | --- |
+| R-01/V-02 | Recorded integration and executable Windows engine gates passed at `4f2e2429`; current Mac artifact gates passed at `8c98fb80`. Earlier Release failure is superseded by attributed corrective evidence. |
+| B-01 | Repair implemented, integrated and covered by controlled recovery evidence. M-04 overall acceptance remains open. |
+| I-08 | Newer-format refusal implemented before candidate with deterministic preservation/startup evidence. Candidate-level future-format refusal remains unexecuted. |
+| R-03/R-04 | Notices/source preparation and exact local candidate provenance established at recorded boundaries. No distribution, legal acceptance or fully byte-reproducible runtime claim. |
+| V-04/V-05 | Bounded host playback/navigation, owner local-PMS playback, Home-profile routes, scans, saved-lineup restore, natural EOF/successor video and normal Quit observed. Live Cancel/Retry remains pending; sustained listening and remaining physical lifecycle behavior are unverified. |
+| V-01 | Initial 350-ms fade/menu timing and natural same-presenter Slider transition remain unverified. |
+| V-06 | Older physical Apple Silicon default-runtime support remains unverified. Default VM playback failed; these failures do not demonstrate physical-macOS incompatibility. |
+| V-07 | Maintainer explicitly leaves all six existing human-checklist boxes unverified. |
+
+Evidence remains separated by environment and configuration:
+
+- Physical macOS 27.0.1 / 26A434 host: default candidate displayed video, local-PMS
+  playback, natural rollover and normal Quit with exit 0. This does not establish
+  an older support floor or physical/listening/spoken acceptance.
+- Default Apple Virtualization guests 12.6, 13.0 and 14.6.1: bounded launch,
+  resource and account observations exist; playback activation aborted in Metal
+  argument-encoder creation during MoltenVK initialization. Intermittent glyph
+  corruption is separate evidence. No physical-Mac incompatibility follows.
+- Process-only argument-buffer override: macOS 13 displayed changing video;
+  macOS 12 aborted later in libplacebo; macOS 14 reached readiness but stayed
+  black. Changed configuration does not establish default-candidate support.
+- Skia diagnostic: bounded glyph comparisons support a renderer distinction in
+  Sonoma, but did not solve media initialization or the override black picture.
+  No production renderer/color-policy change is approved.
+- Override Vulkan trace: returned acquire/submit/present calls establish an
+  exercised API path, not successful return codes, GPU completion or pixels.
+- Synthetic fixtures, sanitizers and compilation establish their controlled
+  contracts; none substitutes for the missing real-runtime observation.
+
+The separate native readback diagnostic (`091e8fcf…`) obtained zero samples:
+only `armed` and `timeout`, with no option-read/set or capture record. Source
+confirms transitions depend on `MPV_EVENT_NONE` after a 50-ms wait. Continuous
+events could prevent progress, but live queue counts were not measured; the exact
+cause remains inferred. Idle-supplying synthetic tests did not prove that
+scheduling condition. This is an inconclusive measurement attempt, not evidence
+about decoded/GPU frame contents. Do not repeat it unchanged. Correcting the
+probe is a prerequisite only if a future diagnostic is separately commissioned;
+it is not an owed or scheduled implementation cycle.
+
+**Decision: further VM graphics work is stopped.** No more VM graphics trials,
+readback repairs/builds, renderer fallbacks or OS step-up downloads are scheduled.
+Even a successful readback could only localize the VM path; it would leave older
+physical support and possibly presentation/composition/capture unresolved.
+
+The cheapest direct evidence, if available, is one unchanged-default-candidate
+session on an older physical Apple Silicon Mac at the intended oldest OS. It need
+not be a MacBook or locally owned. Maintainer access is currently uncertain.
+The local stabilization plan records borrowed/tester hardware, dedicated remote
+bare-metal hardware and a compatible native second-boot installation as options
+to assess, not authorized operations. Remote bare-metal evidence must identify
+the real GPU, desktop/display and capture path; it cannot close V-07, and offsite
+PMS access cannot be relabeled as the local-PMS V-05 route.
+
+For a later authorized session: record exact hardware/OS/candidate/configuration;
+observe cold resources, Keychain/saved-state continuity, one known-changing
+authorized Direct Play item, normal Quit and relaunch. Record native media TLS/CA
+only if actually exercised. Stop after one session capped at 30 minutes, with a
+bounded pass, attributed failure or explicit inconclusive result; do not add
+fallbacks or debugging cycles. A pass covers that exact physical configuration,
+not 12.0 or every intervening OS. A failure establishes only the observed physical
+combination and boundary. Unavailable hardware leaves V-06 open.
+
+The immediate next decision is access to suitable hardware/exact OS and the cost
+and authorization of any proposed route, not another VM experiment. No rental,
+purchase, OS installation, tester handoff, account/server change or external
+message is authorized by this record. Preserve the candidate and local plans;
+V-06 remains open, live Cancel/Retry pending, V-07 unverified and beta unaccepted.
+
+October 22 local-hardware clarification: the maintainer pointed out that the
+current Mac is Apple Silicon. Read-only host checks identify `MacBookPro18,1`,
+Apple M1 Pro, macOS 27.0.1 / 26A434. Apple's model/Monterey records provide a
+compatibility basis for this 2021 MacBook Pro. The first access route to assess
+is therefore native Monterey on a separate volume on this machine, before
+borrowing or renting. This would exercise the real GPU/display. Installation and
+boot feasibility with current firmware remain unverified; Apple cautions that
+later system security changes can affect significantly earlier macOS versions.
+The local plan records the sources and revised recommendation. No installer,
+disk, boot or system changes were made or authorized. V-06 remains open, VM
+graphics work stopped, live Cancel/Retry pending and V-07 unverified.
+
+October 22 maintainer-authorized VM cleanup: the sole remaining registered VM,
+`Lineup V-06 macOS 14.6.1` / `D6C37B94-F913-42E1-ADF1-48E19190521C`, was
+requested to shut down. It remained started, so a VM-only power-off was applied;
+stopped status was confirmed before deletion/unregistration. The exact VM bundle,
+Sonoma 14.6.1 / 23G93 restore image, UTM 5.0.8 installer DMG and installed
+`~/Applications/UTM.app` were deleted; all four paths were confirmed absent and
+UTM quit. The older macOS 12/13 artifacts were already deleted in the earlier
+authorized cleanup. Host free space increased from 144.06 to 191.78 GiB
+(47.73 GiB observed increase). No unrelated Trash or download contents were
+removed. The preserved candidate/engine paths and small diagnostic evidence
+remain; the candidate compiled-Dart hash was independently matched afterward.
+Final VM configuration and cleanup metadata remain privately in
+`v06-retired-vms/macos14-final-config.plist` and `macos14-cleanup.json` under the
+existing evidence cache. This retires the VM environment, not V-06: support stays
+unchanged, live Cancel/Retry pending, V-07 unverified and beta unaccepted.
+
+October 22 Sonoma target and native preparation (latest maintainer instruction):
+the maintainer selected **macOS 14 Sonoma as the supported minimum OS family**
+and requested preparation. After backup preflight, the maintainer explicitly
+selected **Prepare the installer and test files only for now**. This supersedes
+earlier Monterey and borrowed/rented-hardware recommendations, and the earlier
+absence of support-narrowing approval. The decision does not establish support
+through a test result or accept the beta. macOS 12/13 are no longer the selected
+beta support obligation; their observations remain historical evidence, not
+proof of physical incompatibility.
+
+Preparation on `MacBookPro18,1` / Apple M1 Pro / macOS 27.0.1 / 26A434:
+
+- Apple `softwareupdate --fetch-full-installer --full-installer-version 14.8.9`
+  finished with exit 0. Installer is `/Applications/Install macOS Sonoma.app`.
+  Its payload metadata independently identifies 14.8.9 / 23J631. SharedSupport.dmg
+  is 13,654,790,295 bytes, SHA-256
+  `ecc36bf172105f8c3325ceeb4e5ab8cc297260be806eac10b21b784ff40d8173`;
+  `hdiutil verify` reported its checksum valid. The temporary read-only metadata
+  inspection mount was detached.
+- InstallAssistant executable signature verification passed. Installer-bundle
+  `codesign --verify --deep --no-strict -R='anchor apple'` passed; ordinary/strict
+  bundle verification and generic Gatekeeper assessment rejected its custom
+  resource omit rules (`resource envelope is obsolete (custom omit rules)`).
+  The signed resource envelope itself contains these omit rules. Record that
+  qualification rather than a blanket bundle/Gatekeeper pass. No re-signing,
+  quarantine removal or security-policy change was made. The installer was not
+  launched; installation and boot remain unverified.
+- `/Users/Shared/Lineup-Sonoma-Validation` contains the exact candidate ZIP,
+  receipt/provenance sidecars, SHA256SUMS, a local extraction/hash/signature
+  command, prepared application, standalone instructions and preparation status.
+  Archive/sidecar checksums, all five selected component hashes and the staged
+  app's deep strict signature passed. No Lineup process was launched. The
+  original candidate and engine remain unchanged; their 12.0 build deployment
+  target is not a macOS 12/13 product-support promise. No rebuild was performed.
+- No credentials, saved lineup/account or raw media diagnostics were staged.
+  The existing approximately 4-GB source companion remains preserved, without
+  another copy. The packet's current data volume is FileVault-protected;
+  accessing it from a fresh Sonoma user may require maintainer-local unlock.
+- No external physical disk was connected. Time Machine reported no configured
+  destinations and no accessible latest backup; a backup made another way was
+  not established. No APFS volume, OS installation, reboot, startup-disk change,
+  external-drive formatting or security-policy change occurred. Proposed future
+  test-volume name is `Lineup Sonoma Test`, with approximately 80 GB total
+  installer/test working budget; that volume has not been created.
+
+Native physical 14.8.9 with the unchanged default candidate is the next selected
+runtime observation after a separately authorized installation. A pass covers
+the tested configuration, not 14.0 or every later macOS. Existing physical macOS
+27 evidence retains its own attribution; macOS 15/26 runtime acceptance remains
+unverified here. V-06 remains open, live Cancel/Retry pending, V-07 unverified,
+VM graphics work stopped and the beta unaccepted. Before any later disk change,
+establish the backup/destination and review the installer assessment qualification;
+do not bypass signing/security checks or erase an HDD as an automatic workaround.

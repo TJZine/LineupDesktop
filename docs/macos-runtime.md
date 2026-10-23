@@ -578,13 +578,16 @@ This is an engineering list of review items, not legal advice.
   covers the selected real runtime with synthetic loopback TLS/HTTP and token
   audit. This does not establish signed-sandbox, physical or real-Plex behavior.
 - **Sandbox and hardened runtime:** see the pending checks above.
-- **Older macOS support:** all libraries target 12.0. Current candidate `8c98fb80`
-  passed default playback on macOS 27.0.1. Approved macOS 12.6 and 13.0 VMs passed
-  cold native notices, PMS scans and saved-session checks, but default playback
-  aborted in guest Metal/MoltenVK initialization and intermittent glyph corruption
-  remained. A process-only Metal-argument-buffer diagnostic reached video on 13.0;
-  it does not establish default support or physical-hardware failure. The tested
-  support commitment remains unresolved in [V-06](open-obligations.md).
+- **Older macOS support:** on October 22 the maintainer selected macOS 14 Sonoma
+  as the supported minimum OS family. Native default-runtime proof remains open
+  in [V-06](open-obligations.md); 14.8.9 is the first selected physical test.
+  Current candidate `8c98fb80` and its libraries retain their recorded 12.0 build
+  deployment target. It passed default playback on physical macOS 27.0.1; this
+  does not establish every later version from Sonoma. Historical macOS 12/13/14
+  VM graphics failures and diagnostic overrides retain their attributed limits
+  and do not prove physical incompatibility. Further VM graphics work is stopped
+  and the VM environment was removed. Current authorization is installer/test
+  files only, with no volume, installation or boot changes.
 - **Hosted CI acceptance:** `.github/workflows/ci.yml` now provisions/builds
   the pinned runtime and requires portable/native, embed/signing and
   authenticated-reference checks. The separate core-contract job is also

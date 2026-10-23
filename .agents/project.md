@@ -46,6 +46,16 @@ them report completion or blockers back to this orchestrator chat."
 
 ## Current planning and verification status
 
+October 22 macOS support decision: the maintainer selected macOS 14 Sonoma as
+the supported minimum OS family. V-06 native default-runtime validation remains
+open; the preserved `8c98fb80` candidate keeps its exact 12.0 deployment/build
+identities. A Sonoma pass does not prove every later OS. Further VM graphics work
+is stopped and the VM environment removed. Preparation is explicitly limited to
+the native installer and test files for now: no volume, installation, reboot or
+startup-disk change. Live Cancel/Retry remains pending and V-07 unverified.
+See the [register](../docs/open-obligations.md) and
+[port decision](../docs/macos-port-plan.md#3-decisions).
+
 The [Plex transcoding plan](../docs/plex-transcoding-implementation-plan.md)
 records product decisions settled on October 3, 2026 and bounded P0
 observations. Production implementation remains pending. Its P1 foundation

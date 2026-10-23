@@ -381,7 +381,10 @@ Player layouts and separate approval for structural proposals.
 For macOS application builds/runs, install Xcode and its command-line tools on
 macOS 12 or newer. Resolve relevant Xcode/macOS warnings from `flutter doctor`;
 those application prerequisites do not gate unrelated Dart checks. The
-application currently targets macOS 12.0 on Apple silicon (arm64 only).
+preserved application currently has a macOS 12.0 build deployment target on Apple
+silicon (arm64 only). The October 22 product support target is macOS 14 Sonoma
+and later, pending V-06 native validation; the lower build setting is not a
+macOS 12/13 support promise. See the port plan for current evidence and limits.
 macOS is not yet a release platform; the port plan is
 [macos-port-plan.md](macos-port-plan.md). The macOS player implements
 [the protocol](native-player-protocol.md) with the Objective-C++ adapter in
