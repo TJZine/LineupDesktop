@@ -734,11 +734,19 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(top: 16),
-                child: _missingSourceReview(),
+                child: FocusTraversalOrder(
+                  order: NumericFocusOrder(review.entries.length + .5),
+                  child: _missingSourceReview(),
+                ),
               ),
             ),
           if (includeRemoval && review.counts.removed > 0)
-            SliverToBoxAdapter(child: _removalNotice(review.counts.removed)),
+            SliverToBoxAdapter(
+              child: FocusTraversalOrder(
+                order: NumericFocusOrder(review.entries.length + 1),
+                child: _removalNotice(review.counts.removed),
+              ),
+            ),
         ],
       ),
     );
