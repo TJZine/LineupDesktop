@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 
 import 'app_theme.dart';
 
+export 'focus_ink.dart';
+
 /// D14 aliases belong to Android TV. Keep the platform policy shared by
 /// command routing and focus modality so desktop Application/Menu and remote
 /// keys retain their existing behavior.
@@ -122,7 +124,9 @@ class LineupFocusTheme extends StatelessWidget {
     return Theme(
       data: data.copyWith(
         focusColor: visible
-            ? roles.focusBorder.withValues(alpha: .08)
+            ? roles.focusTreatment == LineupFocusTreatment.fill
+                  ? Colors.transparent
+                  : roles.focusBorder.withValues(alpha: .08)
             : Colors.transparent,
         filledButtonTheme: FilledButtonThemeData(
           style: style(LineupButtonTier.primary),

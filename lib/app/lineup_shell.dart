@@ -1132,6 +1132,7 @@ class _SettingsViewState extends State<SettingsView> {
     final settingsTheme = LineupTheme.forName(
       _displaySettings.theme,
       largeFocusIndicators: _displaySettings.largeFocusIndicators,
+      androidTv: LineupTheme.of(context).androidTv,
     );
     final roles = settingsTheme.extension<LineupThemeRoles>()!;
     return LineupFocusTheme(

@@ -102,8 +102,14 @@ class LineupNavigationRow extends StatelessWidget {
               ).copyWith(
                 shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
                 alignment: Alignment.centerLeft,
-                foregroundColor: WidgetStatePropertyAll(
-                  selected ? roles.primaryText : roles.secondaryText,
+                foregroundColor: WidgetStateProperty.resolveWith(
+                  (states) =>
+                      roles.focusTreatment == LineupFocusTreatment.fill &&
+                          states.contains(WidgetState.focused)
+                      ? roles.onFocus
+                      : selected
+                      ? roles.primaryText
+                      : roles.secondaryText,
                 ),
                 padding: const WidgetStatePropertyAll(
                   EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -160,44 +166,23 @@ class LineupSegmentedControl<T> extends StatelessWidget {
         expandedInsets: expanded && direction == Axis.horizontal
             ? EdgeInsets.zero
             : null,
-        style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
-          padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 16),
-          ),
-          shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          ),
-          side: WidgetStateProperty.resolveWith(
-            (states) => visible && states.contains(WidgetState.focused)
-                ? BorderSide(
-                    color: roles.focusBorder,
-                    width: roles.focusBorderWidth,
-                  )
-                : BorderSide.none,
-          ),
-          backgroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.selected)
-                ? roles.selectedSurface
-                : states.contains(WidgetState.hovered)
-                ? roles.primaryText.withValues(alpha: .08)
-                : Colors.transparent,
-          ),
-          foregroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.disabled)
-                ? roles.mutedText
-                : states.contains(WidgetState.selected)
-                ? roles.primaryText
-                : roles.secondaryText,
-          ),
-          textStyle: WidgetStateProperty.resolveWith(
-            (states) => LineupTypography.control.copyWith(
-              fontWeight: states.contains(WidgetState.selected)
-                  ? FontWeight.w600
-                  : FontWeight.w500,
+        style: LineupTheme.segmentedStyle(roles, focusVisible: visible)
+            .copyWith(
+              minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+              padding: const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 16),
+              ),
+              shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              ),
+              textStyle: WidgetStateProperty.resolveWith(
+                (states) => LineupTypography.control.copyWith(
+                  fontWeight: states.contains(WidgetState.selected)
+                      ? FontWeight.w600
+                      : FontWeight.w500,
+                ),
+              ),
             ),
-          ),
-        ),
       ),
     );
   }
@@ -382,6 +367,20 @@ class _LineupRowSurfaceState extends State<LineupRowSurface> {
       context,
       _focused || widget.focused,
     );
+    final focusFill =
+        focused && roles.focusTreatment == LineupFocusTreatment.fill;
+    final focusRing =
+        focused && roles.focusTreatment == LineupFocusTreatment.ring;
+    final material = Material(
+      type: MaterialType.transparency,
+      child: widget.child,
+    );
+    final content = roles.focusTreatment == LineupFocusTreatment.fill
+        ? LineupFocusInk(
+            focused: focusFill,
+            child: LineupFocusFrame(focused: focusFill, child: material),
+          )
+        : material;
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -391,7 +390,9 @@ class _LineupRowSurfaceState extends State<LineupRowSurface> {
         onExit: (_) => setState(() => _hovered = false),
         child: Container(
           decoration: BoxDecoration(
-            color: widget.selected
+            color: focusFill
+                ? roles.focusedSurface
+                : widget.selected
                 ? roles.selectedSurface
                 : _hovered
                 ? roles.primaryText.withValues(alpha: .08)
@@ -407,11 +408,11 @@ class _LineupRowSurfaceState extends State<LineupRowSurface> {
           ),
           foregroundDecoration: BoxDecoration(
             border: Border.all(
-              color: focused ? roles.focusBorder : Colors.transparent,
-              width: focused ? roles.focusBorderWidth : 0,
+              color: focusRing ? roles.focusBorder : Colors.transparent,
+              width: focusRing ? roles.focusBorderWidth : 0,
             ),
           ),
-          child: Material(type: MaterialType.transparency, child: widget.child),
+          child: content,
         ),
       ),
     );
@@ -565,26 +566,43 @@ class _LineupDropdownBoxState extends State<LineupDropdownBox> {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final visible = LineupFocusScope.visible(context, _focused);
+    final focusFill =
+        visible && roles.focusTreatment == LineupFocusTreatment.fill;
+    final focusRing =
+        visible && roles.focusTreatment == LineupFocusTreatment.ring;
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
       onFocusChange: (value) => setState(() => _focused = value),
-      child: Container(
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
         constraints: BoxConstraints(minHeight: widget.compact ? 44 : 56),
         padding: EdgeInsets.symmetric(horizontal: widget.compact ? 14 : 18),
         decoration: BoxDecoration(
-          color: roles.onFocus,
+          color: focusFill ? roles.focusedSurface : roles.onFocus,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: visible
+            color: focusRing
                 ? roles.focusBorder
                 : widget.enabled
                 ? roles.defaultBorder
                 : roles.defaultBorder.withValues(alpha: .5),
-            width: visible ? roles.focusBorderWidth : 1,
+            width: focusRing ? roles.focusBorderWidth : 1,
           ),
         ),
-        child: Material(type: MaterialType.transparency, child: widget.child),
+        child: LineupFocusFrame(
+          focused: focusFill,
+          child: LineupFocusInk(
+            focused: focusFill,
+            child: Material(
+              type: MaterialType.transparency,
+              child: Builder(builder: (context) => widget.child),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -607,25 +625,30 @@ class LineupFieldButton extends StatelessWidget {
     label: label,
     child: LineupDropdownBox(
       enabled: onPressed != null,
-      child: InkWell(
-        focusNode: focusNode,
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                value,
-                style: LineupTypography.control.copyWith(
-                  color: onPressed == null
-                      ? LineupTheme.of(context).mutedText
-                      : LineupTheme.of(context).primaryText,
+      child: Builder(
+        builder: (context) {
+          final roles = LineupTheme.of(context);
+          return InkWell(
+            focusNode: focusNode,
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    value,
+                    style: LineupTypography.control.copyWith(
+                      color: onPressed == null
+                          ? roles.mutedText
+                          : roles.primaryText,
+                    ),
+                  ),
                 ),
-              ),
+                const Icon(Icons.keyboard_arrow_down, size: 20),
+              ],
             ),
-            const Icon(Icons.keyboard_arrow_down, size: 20),
-          ],
-        ),
+          );
+        },
       ),
     ),
   );

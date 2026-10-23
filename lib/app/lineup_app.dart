@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../playback/native_player.dart';
@@ -45,6 +47,7 @@ class _LineupStartupState extends State<LineupStartup> {
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
             largeFocusIndicators: false,
+            androidTv: defaultTargetPlatform == TargetPlatform.android,
           ),
           builder: LineupCanvas.builder,
           home: snapshot.hasError
@@ -65,6 +68,7 @@ class LineupBootstrap extends StatefulWidget {
     required this.controller,
     this.initialMediaPath,
     this.guideClock,
+    this.androidTv,
     super.key,
   });
 
@@ -72,6 +76,10 @@ class LineupBootstrap extends StatefulWidget {
   final LineupController controller;
   final String? initialMediaPath;
   final DateTime Function()? guideClock;
+
+  /// Null follows the host platform for the production composition root.
+  /// Tests and alternate compositions can inject the form factor explicitly.
+  final bool? androidTv;
 
   @override
   State<LineupBootstrap> createState() => _LineupBootstrapState();
@@ -174,12 +182,15 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   @override
   Widget build(BuildContext context) {
     final settings = _settings;
+    final androidTv =
+        widget.androidTv ?? defaultTargetPlatform == TargetPlatform.android;
     return MaterialApp(
       title: 'Lineup Desktop',
       debugShowCheckedModeBanner: false,
       theme: LineupTheme.forName(
         settings.theme,
         largeFocusIndicators: settings.largeFocusIndicators,
+        androidTv: androidTv,
       ),
       themeAnimationDuration: settings.reduceMotion
           ? Duration.zero

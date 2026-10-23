@@ -92,6 +92,49 @@ void main() {
     expect(large.focusBorderWidth, greaterThan(normal.focusBorderWidth));
   });
 
+  test('Android TV uses fill focus while desktop and DirecTV keep rings', () {
+    final desktop = LineupTheme.forName(LineupThemeName.emberSteel)
+        .extension<LineupThemeRoles>()!;
+    final tv = LineupTheme.forName(
+      LineupThemeName.emberSteel,
+      androidTv: true,
+    ).extension<LineupThemeRoles>()!;
+    final directv = LineupTheme.forName(
+      LineupThemeName.directv,
+      androidTv: true,
+    ).extension<LineupThemeRoles>()!;
+
+    expect(desktop.focusTreatment, LineupFocusTreatment.ring);
+    expect(desktop.androidTv, isFalse);
+    expect(tv.focusTreatment, LineupFocusTreatment.fill);
+    expect(tv.androidTv, isTrue);
+    expect(tv.focusedSurface, const Color(0xFFE9DCC3));
+    expect(tv.focusedInsetSurface, const Color(0xFFD7C7A8));
+    expect(tv.onFocus, const Color(0xFF090806));
+    expect(tv.focusSecondaryText, const Color(0xFF3B3226));
+    expect(tv.focusMutedText, const Color(0xFF5B5141));
+    expect(directv.focusTreatment, LineupFocusTreatment.ring);
+    expect(directv.focusBorder, const Color(0xFFFFCC00));
+  });
+
+  test('every Android TV palette follows the focus treatment matrix', () {
+    for (final name in LineupThemeName.values) {
+      final roles = LineupTheme.forName(
+        name,
+        androidTv: true,
+      ).extension<LineupThemeRoles>()!;
+      if (name == LineupThemeName.directv) {
+        expect(roles.focusTreatment, LineupFocusTreatment.ring);
+        expect(roles.focusBorder, const Color(0xFFFFCC00));
+      } else {
+        expect(roles.focusTreatment, LineupFocusTreatment.fill);
+        expect(roles.focusedSurface, const Color(0xFFE9DCC3));
+        expect(roles.focusedInsetSurface, const Color(0xFFD7C7A8));
+        expect(roles.onFocus, const Color(0xFF090806));
+      }
+    }
+  });
+
   test('navigation selection preserves the application label typography', () {
     for (final name in LineupThemeName.values) {
       final theme = LineupTheme.forName(name);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../settings/lineup_settings.dart';
+import 'focus_ink.dart';
 
 @immutable
 class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
@@ -10,6 +11,7 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     required this.elevatedSurface,
     required this.overlaySurface,
     required this.focusedSurface,
+    required this.focusedInsetSurface,
     required this.selectedSurface,
     required this.tunedSurface,
     required this.liveAccent,
@@ -18,6 +20,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     required this.mutedText,
     required this.onFocus,
     required this.focusedText,
+    required this.focusSecondaryText,
+    required this.focusMutedText,
+    required this.focusTreatment,
+    required this.largeFocusIndicators,
+    required this.androidTv,
     required this.subtleBorder,
     required this.defaultBorder,
     required this.focusBorder,
@@ -34,6 +41,7 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
   final Color elevatedSurface;
   final Color overlaySurface;
   final Color focusedSurface;
+  final Color focusedInsetSurface;
   final Color selectedSurface;
   final Color tunedSurface;
   final Color liveAccent;
@@ -42,6 +50,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
   final Color mutedText;
   final Color onFocus;
   final Color focusedText;
+  final Color focusSecondaryText;
+  final Color focusMutedText;
+  final LineupFocusTreatment focusTreatment;
+  final bool largeFocusIndicators;
+  final bool androidTv;
   final Color subtleBorder;
   final Color defaultBorder;
   final Color focusBorder;
@@ -59,6 +72,7 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     Color? elevatedSurface,
     Color? overlaySurface,
     Color? focusedSurface,
+    Color? focusedInsetSurface,
     Color? selectedSurface,
     Color? tunedSurface,
     Color? liveAccent,
@@ -67,6 +81,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     Color? mutedText,
     Color? onFocus,
     Color? focusedText,
+    Color? focusSecondaryText,
+    Color? focusMutedText,
+    LineupFocusTreatment? focusTreatment,
+    bool? largeFocusIndicators,
+    bool? androidTv,
     Color? subtleBorder,
     Color? defaultBorder,
     Color? focusBorder,
@@ -82,6 +101,7 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     elevatedSurface: elevatedSurface ?? this.elevatedSurface,
     overlaySurface: overlaySurface ?? this.overlaySurface,
     focusedSurface: focusedSurface ?? this.focusedSurface,
+    focusedInsetSurface: focusedInsetSurface ?? this.focusedInsetSurface,
     selectedSurface: selectedSurface ?? this.selectedSurface,
     tunedSurface: tunedSurface ?? this.tunedSurface,
     liveAccent: liveAccent ?? this.liveAccent,
@@ -90,6 +110,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     mutedText: mutedText ?? this.mutedText,
     onFocus: onFocus ?? this.onFocus,
     focusedText: focusedText ?? this.focusedText,
+    focusSecondaryText: focusSecondaryText ?? this.focusSecondaryText,
+    focusMutedText: focusMutedText ?? this.focusMutedText,
+    focusTreatment: focusTreatment ?? this.focusTreatment,
+    largeFocusIndicators: largeFocusIndicators ?? this.largeFocusIndicators,
+    androidTv: androidTv ?? this.androidTv,
     subtleBorder: subtleBorder ?? this.subtleBorder,
     defaultBorder: defaultBorder ?? this.defaultBorder,
     focusBorder: focusBorder ?? this.focusBorder,
@@ -110,6 +135,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
       elevatedSurface: Color.lerp(elevatedSurface, other.elevatedSurface, t)!,
       overlaySurface: Color.lerp(overlaySurface, other.overlaySurface, t)!,
       focusedSurface: Color.lerp(focusedSurface, other.focusedSurface, t)!,
+      focusedInsetSurface: Color.lerp(
+        focusedInsetSurface,
+        other.focusedInsetSurface,
+        t,
+      )!,
       selectedSurface: Color.lerp(selectedSurface, other.selectedSurface, t)!,
       tunedSurface: Color.lerp(tunedSurface, other.tunedSurface, t)!,
       liveAccent: Color.lerp(liveAccent, other.liveAccent, t)!,
@@ -118,6 +148,17 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
       mutedText: Color.lerp(mutedText, other.mutedText, t)!,
       onFocus: Color.lerp(onFocus, other.onFocus, t)!,
       focusedText: Color.lerp(focusedText, other.focusedText, t)!,
+      focusSecondaryText: Color.lerp(
+        focusSecondaryText,
+        other.focusSecondaryText,
+        t,
+      )!,
+      focusMutedText: Color.lerp(focusMutedText, other.focusMutedText, t)!,
+      focusTreatment: t < 0.5 ? focusTreatment : other.focusTreatment,
+      largeFocusIndicators: t < 0.5
+          ? largeFocusIndicators
+          : other.largeFocusIndicators,
+      androidTv: t < 0.5 ? androidTv : other.androidTv,
       subtleBorder: Color.lerp(subtleBorder, other.subtleBorder, t)!,
       defaultBorder: Color.lerp(defaultBorder, other.defaultBorder, t)!,
       focusBorder: Color.lerp(focusBorder, other.focusBorder, t)!,
@@ -141,6 +182,7 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
           elevatedSurface == other.elevatedSurface &&
           overlaySurface == other.overlaySurface &&
           focusedSurface == other.focusedSurface &&
+          focusedInsetSurface == other.focusedInsetSurface &&
           selectedSurface == other.selectedSurface &&
           tunedSurface == other.tunedSurface &&
           liveAccent == other.liveAccent &&
@@ -149,6 +191,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
           mutedText == other.mutedText &&
           onFocus == other.onFocus &&
           focusedText == other.focusedText &&
+          focusSecondaryText == other.focusSecondaryText &&
+          focusMutedText == other.focusMutedText &&
+          focusTreatment == other.focusTreatment &&
+          largeFocusIndicators == other.largeFocusIndicators &&
+          androidTv == other.androidTv &&
           subtleBorder == other.subtleBorder &&
           defaultBorder == other.defaultBorder &&
           focusBorder == other.focusBorder &&
@@ -166,6 +213,7 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     elevatedSurface,
     overlaySurface,
     focusedSurface,
+    focusedInsetSurface,
     selectedSurface,
     tunedSurface,
     liveAccent,
@@ -174,6 +222,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     mutedText,
     onFocus,
     focusedText,
+    focusSecondaryText,
+    focusMutedText,
+    focusTreatment,
+    largeFocusIndicators,
+    androidTv,
     subtleBorder,
     defaultBorder,
     focusBorder,
@@ -196,9 +249,37 @@ abstract final class LineupTheme {
   static ThemeData forName(
     LineupThemeName name, {
     bool largeFocusIndicators = false,
+    bool androidTv = false,
   }) {
-    final palette = _palette(name)
-        .copyWith(focusBorderWidth: largeFocusIndicators ? 5 : 3);
+    final basePalette = _palette(name);
+    final tvFillFocus = androidTv && name != LineupThemeName.directv;
+    final palette = basePalette.copyWith(
+      focusedSurface: tvFillFocus
+          ? const Color(0xFFE9DCC3)
+          : basePalette.focusedSurface,
+      focusedInsetSurface: tvFillFocus
+          ? const Color(0xFFD7C7A8)
+          : basePalette.focusedInsetSurface,
+      focusedText: tvFillFocus
+          ? const Color(0xFF090806)
+          : basePalette.focusedText,
+      onFocus: tvFillFocus ? const Color(0xFF090806) : basePalette.onFocus,
+      focusSecondaryText: tvFillFocus
+          ? const Color(0xFF3B3226)
+          : basePalette.focusSecondaryText,
+      focusMutedText: tvFillFocus
+          ? const Color(0xFF5B5141)
+          : basePalette.focusMutedText,
+      focusBorder: tvFillFocus
+          ? basePalette.progressFill
+          : basePalette.focusBorder,
+      focusBorderWidth: largeFocusIndicators ? 5 : 3,
+      largeFocusIndicators: largeFocusIndicators,
+      androidTv: androidTv,
+      focusTreatment: tvFillFocus
+          ? LineupFocusTreatment.fill
+          : LineupFocusTreatment.ring,
+    );
     final scheme = ColorScheme.dark(
       primary: palette.progressFill,
       onPrimary: palette.onFocus,
@@ -251,35 +332,7 @@ abstract final class LineupTheme {
       ),
       inputDecorationTheme: fieldDecoration(palette),
       segmentedButtonTheme: SegmentedButtonThemeData(
-        style: ButtonStyle(
-          backgroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.selected)
-                ? palette.selectedSurface
-                : Colors.transparent,
-          ),
-          foregroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.disabled)
-                ? palette.mutedText
-                : states.contains(WidgetState.selected)
-                ? palette.primaryText
-                : palette.secondaryText,
-          ),
-          side: WidgetStateProperty.resolveWith(
-            (states) => BorderSide(
-              color: states.contains(WidgetState.focused)
-                  ? palette.focusBorder
-                  : palette.subtleBorder,
-              width: states.contains(WidgetState.focused)
-                  ? (largeFocusIndicators ? palette.focusBorderWidth : 2)
-                  : 1,
-            ),
-          ),
-          shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(palette.panelRadius),
-            ),
-          ),
-        ),
+        style: segmentedStyle(palette),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: palette.overlaySurface,
@@ -428,6 +481,63 @@ abstract final class LineupTheme {
     );
   }
 
+  static ButtonStyle segmentedStyle(
+    LineupThemeRoles roles, {
+    bool focusVisible = true,
+  }) {
+    final fillFocus = roles.focusTreatment == LineupFocusTreatment.fill;
+    return ButtonStyle(
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.focused) && fillFocus) {
+          return roles.focusedSurface;
+        }
+        return states.contains(WidgetState.selected)
+            ? roles.selectedSurface
+            : Colors.transparent;
+      }),
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) return roles.mutedText;
+        if (states.contains(WidgetState.focused) && fillFocus) {
+          return roles.onFocus;
+        }
+        return states.contains(WidgetState.selected)
+            ? roles.primaryText
+            : roles.secondaryText;
+      }),
+      side: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.focused) && focusVisible) {
+          if (fillFocus) {
+            return roles.largeFocusIndicators
+                ? BorderSide(color: roles.focusBorder, width: 3)
+                : BorderSide.none;
+          }
+          return BorderSide(
+            color: roles.focusBorder,
+            width: roles.focusBorderWidth,
+          );
+        }
+        return BorderSide(color: roles.subtleBorder, width: 1);
+      }),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+        ),
+      ),
+      backgroundBuilder: (context, states, child) => fillFocus
+          ? LineupFocusFrame(
+              focused: states.contains(WidgetState.focused),
+              child: child,
+            )
+          : child ?? const SizedBox.shrink(),
+      foregroundBuilder: (context, states, child) => fillFocus
+          ? LineupFocusInk(
+              focused: states.contains(WidgetState.focused),
+              child: child,
+            )
+          : child ?? const SizedBox.shrink(),
+    );
+  }
+
   static ButtonStyle buttonStyle(
     LineupThemeRoles roles,
     LineupButtonTier tier, {
@@ -440,6 +550,7 @@ abstract final class LineupTheme {
     final accent = tier == LineupButtonTier.destructive
         ? roles.liveAccent
         : roles.progressFill;
+    final fillFocus = roles.focusTreatment == LineupFocusTreatment.fill;
     return ButtonStyle(
       minimumSize: WidgetStatePropertyAll(Size(0, compact ? 44 : 56)),
       padding: WidgetStatePropertyAll(
@@ -456,12 +567,17 @@ abstract final class LineupTheme {
       ),
       backgroundColor: WidgetStateProperty.resolveWith((states) {
         final disabled = states.contains(WidgetState.disabled);
+        final focused = states.contains(WidgetState.focused);
+        if (focused && fillFocus && !disabled) return roles.focusedSurface;
         if (filled) {
           return disabled
               ? accent.withValues(alpha: .22)
               : states.contains(WidgetState.hovered)
               ? Color.lerp(accent, roles.primaryText, .18)
               : accent;
+        }
+        if (fillFocus && tier == LineupButtonTier.secondary && !disabled) {
+          return roles.primaryText.withValues(alpha: .10);
         }
         return states.contains(WidgetState.hovered)
             ? roles.primaryText.withValues(alpha: .08)
@@ -470,6 +586,9 @@ abstract final class LineupTheme {
       foregroundColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.disabled)) {
           return (filled ? accent : roles.secondaryText).withValues(alpha: .45);
+        }
+        if (fillFocus && states.contains(WidgetState.focused)) {
+          return roles.onFocus;
         }
         if (filled) return roles.onFocus;
         if (tier == LineupButtonTier.link) return roles.progressFill;
@@ -480,6 +599,11 @@ abstract final class LineupTheme {
       }),
       side: WidgetStateProperty.resolveWith((states) {
         if (focusVisible && states.contains(WidgetState.focused)) {
+          if (fillFocus) {
+            return roles.largeFocusIndicators
+                ? BorderSide(color: roles.focusBorder, width: 3)
+                : BorderSide.none;
+          }
           return BorderSide(
             color: roles.focusBorder,
             width: roles.focusBorderWidth,
@@ -495,6 +619,18 @@ abstract final class LineupTheme {
         return BorderSide.none;
       }),
       overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      backgroundBuilder: (context, states, child) => fillFocus
+          ? LineupFocusFrame(
+              focused: states.contains(WidgetState.focused),
+              child: child,
+            )
+          : child ?? const SizedBox.shrink(),
+      foregroundBuilder: (context, states, child) => fillFocus
+          ? LineupFocusInk(
+              focused: states.contains(WidgetState.focused),
+              child: child,
+            )
+          : child ?? const SizedBox.shrink(),
     );
   }
 
@@ -513,6 +649,9 @@ abstract final class LineupTheme {
         foregroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.disabled)
               ? roles.secondaryText.withValues(alpha: .3)
+              : roles.focusTreatment == LineupFocusTreatment.fill &&
+                    states.contains(WidgetState.focused)
+              ? roles.onFocus
               : roles.secondaryText,
         ),
       );
@@ -524,6 +663,7 @@ abstract final class LineupTheme {
       elevatedSurface: Color(0xFF1A1712),
       overlaySurface: Color(0xF20A0907),
       focusedSurface: Color(0x33F0D39A),
+      focusedInsetSurface: Color(0xFF1A1712),
       selectedSurface: Color(0xFF2B2419),
       tunedSurface: Color(0xFF3B3020),
       liveAccent: Color(0xFFFF7768),
@@ -532,6 +672,11 @@ abstract final class LineupTheme {
       mutedText: Color(0xFF978B76),
       onFocus: Color(0xFF060504),
       focusedText: Color(0xFFF3E8D2),
+      focusSecondaryText: Color(0xFFC7B99F),
+      focusMutedText: Color(0xFF978B76),
+      focusTreatment: LineupFocusTreatment.ring,
+      largeFocusIndicators: false,
+      androidTv: false,
       subtleBorder: Color(0xFF2B261E),
       defaultBorder: Color(0xFF494031),
       focusBorder: Color(0xFFF0D39A),
@@ -602,6 +747,7 @@ abstract final class LineupTheme {
       elevatedSurface: elevated,
       overlaySurface: overlay,
       focusedSurface: focusColor,
+      focusedInsetSurface: elevated,
       selectedSurface: primary.withValues(alpha: 0.20),
       tunedSurface: tuned,
       liveAccent: live,
@@ -610,6 +756,11 @@ abstract final class LineupTheme {
       mutedText: Colors.white.withValues(alpha: 0.50),
       onFocus: onFocus,
       focusedText: focus == null ? Colors.white : onFocus,
+      focusSecondaryText: onFocus,
+      focusMutedText: onFocus.withValues(alpha: 0.72),
+      focusTreatment: LineupFocusTreatment.ring,
+      largeFocusIndicators: false,
+      androidTv: false,
       subtleBorder: Colors.white.withValues(alpha: 0.08),
       defaultBorder: Colors.white.withValues(alpha: 0.12),
       focusBorder: focusBorder ?? const Color(0xFFF0D39A),
@@ -622,6 +773,8 @@ abstract final class LineupTheme {
     );
   }
 }
+
+enum LineupFocusTreatment { ring, fill }
 
 enum LineupButtonTier { primary, secondary, text, link, destructive }
 

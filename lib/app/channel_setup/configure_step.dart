@@ -1033,59 +1033,78 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               );
               final hovered = state.states.contains(WidgetState.hovered);
               final radius = BorderRadius.circular(roles.panelRadius);
+              final focusFill =
+                  focused && roles.focusTreatment == LineupFocusTreatment.fill;
+              final focusRing =
+                  focused && roles.focusTreatment == LineupFocusTreatment.ring;
               final surface = selected
                   ? roles.elevatedSurface
                   : roles.primarySurface;
-              return Container(
-                constraints: BoxConstraints(minHeight: 152),
-                padding: EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: hovered
-                      ? Color.alphaBlend(
-                          roles.primaryText.withValues(alpha: 0.04),
-                          surface,
-                        )
-                      : surface,
-                  borderRadius: radius,
-                  border: Border.all(
-                    color: selected ? roles.progressFill : roles.defaultBorder,
+              return LineupFocusFrame(
+                focused: focusFill,
+                child: Container(
+                  constraints: BoxConstraints(minHeight: 152),
+                  padding: EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: focusFill
+                        ? roles.focusedSurface
+                        : hovered
+                        ? Color.alphaBlend(
+                            roles.primaryText.withValues(alpha: 0.04),
+                            surface,
+                          )
+                        : surface,
+                    borderRadius: radius,
+                    border: Border.all(
+                      color: selected
+                          ? roles.progressFill
+                          : roles.defaultBorder,
+                    ),
                   ),
-                ),
-                foregroundDecoration: focused
-                    ? BoxDecoration(
-                        borderRadius: radius,
-                        border: Border.all(
-                          color: roles.focusBorder,
-                          width: roles.focusBorderWidth,
-                        ),
-                      )
-                    : null,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: roles.primaryText,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        height: 1.4,
-                        letterSpacing: 0,
-                      ),
+                  foregroundDecoration: focusRing
+                      ? BoxDecoration(
+                          borderRadius: radius,
+                          border: Border.all(
+                            color: roles.focusBorder,
+                            width: roles.focusBorderWidth,
+                          ),
+                        )
+                      : null,
+                  child: LineupFocusInk(
+                    focused: focusFill,
+                    child: Builder(
+                      builder: (context) {
+                        final ink = LineupTheme.of(context);
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: TextStyle(
+                                color: ink.primaryText,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                height: 1.4,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              description,
+                              style: TextStyle(
+                                color: ink.secondaryText,
+                                fontSize: 18,
+                                height: 1.4,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
-                    SizedBox(height: 12),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        color: roles.secondaryText,
-                        fontSize: 18,
-                        height: 1.4,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               );
             },
@@ -1505,61 +1524,100 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             onExit: (_) {
               if (hovered) setRowState(() => hovered = false);
             },
-            child: DecoratedBox(
-              key: ValueKey('source-order-${strategy.name}'),
-              decoration: BoxDecoration(
-                color: hovered || LineupFocusScope.visible(context, focused)
-                    ? roles.primarySurface
-                    : Colors.transparent,
-                border: Border(bottom: BorderSide(color: roles.subtleBorder)),
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: rowHeight),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 28,
-                      child: Text('${index + 1}', style: rankStyle),
+            child: Builder(
+              builder: (context) {
+                final visible = LineupFocusScope.visible(context, focused);
+                final fillFocus =
+                    visible &&
+                    roles.focusTreatment == LineupFocusTreatment.fill;
+                return DecoratedBox(
+                  key: ValueKey('source-order-${strategy.name}'),
+                  decoration: BoxDecoration(
+                    color: fillFocus
+                        ? roles.focusedSurface
+                        : hovered
+                        ? roles.primarySurface
+                        : Colors.transparent,
+                    border: Border(
+                      bottom: BorderSide(color: roles.subtleBorder),
                     ),
-                    SizedBox(width: rowGap),
-                    Expanded(
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(text: builderStrategyLabels[strategy]!),
-                            if (!enabled)
-                              TextSpan(text: '  Off', style: rankStyle),
-                          ],
-                        ),
-                        style: nameStyle,
+                  ),
+                  child: LineupFocusFrame(
+                    focused: fillFocus,
+                    child: LineupFocusInk(
+                      focused: fillFocus,
+                      child: Builder(
+                        builder: (context) {
+                          final ink = LineupTheme.of(context);
+                          final inkNameStyle = nameStyle.copyWith(
+                            color: ink.primaryText,
+                          );
+                          final inkRankStyle = rankStyle.copyWith(
+                            color: ink.secondaryText,
+                          );
+                          return ConstrainedBox(
+                            constraints: BoxConstraints(minHeight: rowHeight),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 28,
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: inkRankStyle,
+                                  ),
+                                ),
+                                SizedBox(width: rowGap),
+                                Expanded(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text:
+                                              builderStrategyLabels[strategy]!,
+                                        ),
+                                        if (!enabled)
+                                          TextSpan(
+                                            text: '  Off',
+                                            style: inkRankStyle,
+                                          ),
+                                      ],
+                                    ),
+                                    style: inkNameStyle,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    lineupArrowButton(
+                                      focusNode: focus.order[strategy]!.earlier,
+                                      tooltip: 'Move earlier',
+                                      onPressed: index == 0
+                                          ? null
+                                          : () => _moveSource(index, -1, focus),
+                                      icon: Icons.arrow_upward,
+                                    ),
+                                    lineupArrowButton(
+                                      focusNode: focus.order[strategy]!.later,
+                                      tooltip: 'Move later',
+                                      onPressed:
+                                          index == _sourceOrder.length - 1
+                                          ? null
+                                          : () => _moveSource(index, 1, focus),
+                                      icon: Icons.arrow_downward,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    SizedBox(width: 8),
-                    Wrap(
-                      spacing: 4,
-                      children: [
-                        lineupArrowButton(
-                          focusNode: focus.order[strategy]!.earlier,
-                          tooltip: 'Move earlier',
-                          onPressed: index == 0
-                              ? null
-                              : () => _moveSource(index, -1, focus),
-                          icon: Icons.arrow_upward,
-                        ),
-                        lineupArrowButton(
-                          focusNode: focus.order[strategy]!.later,
-                          tooltip: 'Move later',
-                          onPressed: index == _sourceOrder.length - 1
-                              ? null
-                              : () => _moveSource(index, 1, focus),
-                          icon: Icons.arrow_downward,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ),
