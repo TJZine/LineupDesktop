@@ -78,6 +78,10 @@ class LineupFocusInk extends StatelessWidget {
 /// Paints the accessibility exception for large TV focus indicators without
 /// changing layout. Ordinary TV focus has no outline.
 class LineupFocusFrame extends StatelessWidget {
+  static const strokeWidth = 3.0;
+  /// Edge-to-edge clipped content reserves the two inward paint strokes.
+  static const contentClearance = strokeWidth * 2;
+
   const LineupFocusFrame({
     required this.focused,
     required this.child,
@@ -111,10 +115,11 @@ class LineupFocusFrame extends StatelessWidget {
         focused &&
         roles.focusTreatment == LineupFocusTreatment.fill &&
         roles.largeFocusIndicators;
-    if (roles.focusTreatment != LineupFocusTreatment.fill ||
-        !roles.largeFocusIndicators) {
+    if (roles.focusTreatment != LineupFocusTreatment.fill) {
       return child ?? const SizedBox.shrink();
     }
+    // Keep the TV subtree stable when the accessibility setting changes. Its
+    // stateful child can own focus even while the frame has no painter.
     return CustomPaint(
       foregroundPainter: active
           ? _LargeFocusPainter(
@@ -160,7 +165,7 @@ class _LargeFocusShape extends ShapeBorder {
     required this.color,
     required this.innerColor,
     required this.radius,
-    this.strokeWidth = 3,
+    this.strokeWidth = LineupFocusFrame.strokeWidth,
   });
   final Color color;
   final Color innerColor;
@@ -199,7 +204,7 @@ void _paintLargeFocus(
   required Color color,
   required Color innerColor,
   required double radius,
-  double strokeWidth = 3,
+  double strokeWidth = LineupFocusFrame.strokeWidth,
 }) {
   if (strokeWidth <= 0) return;
   final stroke = strokeWidth;
