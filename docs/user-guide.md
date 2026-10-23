@@ -401,6 +401,16 @@ closes the current Player overlay, returns from Player to Guide, or follows the
 current screen's Back action. At the root, an unconsumed Back backgrounds Lineup
 without closing its task. Home belongs to the TV system.
 
+Leaving Lineup or putting the TV to sleep stops playback and releases the player.
+Returning while playback was active tunes the current channel at its current
+scheduled position. An explicit Stop or an expired sleep timer keeps playback
+stopped. Restarting Lineup restores its saved profile, server, lineup and channel
+through the normal startup flow.
+
+Text fields use two steps: focus the field with the D-pad, then press Select to
+open the keyboard. Dismissing the keyboard or choosing Done returns to field
+navigation, so the D-pad can reach the next control.
+
 | Remote button | Action |
 | --- | --- |
 | Channel Up / Channel Down | Player: previous/next channel; Mini Guide: move seven channels; Guide: move a visible page, like Page Up / Page Down |
