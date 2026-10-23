@@ -315,6 +315,7 @@ class _GuideViewState extends State<GuideView>
   bool _allVisibleFailed = false;
   final _menuFocus = FocusNode(debugLabel: 'Guide Lineup menu');
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
+  final _libraryFocus = FocusNode(debugLabel: 'Guide library picker');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
   // TooltipVisibility replaces each tooltip's child when the menu opens.
   // Keep these invokers alive so closing the menu can restore exact focus.
@@ -322,6 +323,7 @@ class _GuideViewState extends State<GuideView>
   final _earlierFocus = FocusNode(debugLabel: 'Guide earlier');
   final _nowFocus = FocusNode(debugLabel: 'Guide now');
   final _laterFocus = FocusNode(debugLabel: 'Guide later');
+  final _hoursFocus = FocusNode(debugLabel: 'Guide hours picker');
   final _clearSearchFocus = FocusNode(debugLabel: 'Guide clear search');
   final _removeLibraryFilterFocus = FocusNode(
     debugLabel: 'Guide remove library filter',
@@ -380,11 +382,13 @@ class _GuideViewState extends State<GuideView>
     _setupFocus.dispose();
     _menuFocus.dispose();
     _guideFocus.dispose();
+    _libraryFocus.dispose();
     _searchFocus.dispose();
     _closeFocus.dispose();
     _earlierFocus.dispose();
     _nowFocus.dispose();
     _laterFocus.dispose();
+    _hoursFocus.dispose();
     _clearSearchFocus.dispose();
     _removeLibraryFilterFocus.dispose();
     _searchController
@@ -602,6 +606,13 @@ class _GuideViewState extends State<GuideView>
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
+    if (key == LogicalKeyboardKey.keyI &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        widget.onOpenMenu != null) {
+      final invokerContext = _menuFocus.context ?? context;
+      widget.onOpenMenu!(invokerContext, _menuFocus);
+      return KeyEventResult.handled;
+    }
     if (_searchFocus.hasFocus && !commandModified) {
       return KeyEventResult.ignored;
     }
@@ -636,7 +647,11 @@ class _GuideViewState extends State<GuideView>
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
     if (key == LogicalKeyboardKey.arrowUp) {
-      widget.controller.moveVertical(-1);
+      if (widget.controller.focusedChannelIndex == 0) {
+        _focusNearestToolbarControl();
+      } else {
+        widget.controller.moveVertical(-1);
+      }
     } else if (key == LogicalKeyboardKey.arrowDown) {
       widget.controller.moveVertical(1);
     } else if (key == LogicalKeyboardKey.arrowLeft) {
@@ -671,6 +686,101 @@ class _GuideViewState extends State<GuideView>
     return KeyEventResult.handled;
   }
 
+  List<FocusNode> _toolbarFocusOrder() => [
+    _libraryFocus,
+    if (widget.controller.libraryFilterId != null) _removeLibraryFilterFocus,
+    _searchFocus,
+    if (_searchController.text.isNotEmpty) _clearSearchFocus,
+    _earlierFocus,
+    _nowFocus,
+    _laterFocus,
+    _hoursFocus,
+    _menuFocus,
+    _closeFocus,
+  ];
+
+  void _focusNearestToolbarControl() {
+    final size = MediaQuery.sizeOf(context);
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final policy = GuideLayoutPolicy.forSize(
+      size,
+      hasPicture: false,
+      textScale: textScale,
+    );
+    final timelineWidth = math.max(
+      0.0,
+      size.width -
+          _guideEdgeContentInset * 2 -
+          policy.channelRailWidth -
+          _guideTimelineGutter,
+    );
+    final windowDuration = widget.controller.windowEnd
+        .difference(widget.controller.windowStart)
+        .inMicroseconds;
+    final fraction = windowDuration <= 0
+        ? 0.5
+        : ((widget.controller.focusTime
+                          .difference(widget.controller.windowStart)
+                          .inMicroseconds /
+                      windowDuration)
+                  .clamp(0.0, 1.0))
+              .toDouble();
+    final targetX =
+        _guideEdgeContentInset +
+        policy.channelRailWidth +
+        _guideTimelineGutter +
+        timelineWidth * fraction;
+    final nodes = _toolbarFocusOrder();
+    FocusNode? nearest;
+    var nearestDistance = double.infinity;
+    for (final node in nodes) {
+      if (!node.canRequestFocus) continue;
+      final renderObject = node.context?.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) continue;
+      final center = renderObject.localToGlobal(
+        renderObject.size.center(Offset.zero),
+      );
+      final distance = (center.dx - targetX).abs();
+      if (distance < nearestDistance) {
+        nearest = node;
+        nearestDistance = distance;
+      }
+    }
+    (nearest ?? _searchFocus).requestFocus();
+  }
+
+  KeyEventResult _toolbarKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = androidTvKeyAlias(event.logicalKey) ?? event.logicalKey;
+    final gridFocus = widget.focusNode ?? _guideFocus;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      gridFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key != LogicalKeyboardKey.arrowLeft &&
+        key != LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.ignored;
+    }
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null ||
+        (_searchFocus.hasFocus && !_searchFocus.hasPrimaryFocus)) {
+      return KeyEventResult.ignored;
+    }
+    final nodes = _toolbarFocusOrder();
+    final index = nodes.indexWhere((candidate) => candidate.hasPrimaryFocus);
+    if (index < 0) return KeyEventResult.ignored;
+    final delta = key == LogicalKeyboardKey.arrowLeft ? -1 : 1;
+    var next = index + delta;
+    while (next >= 0 && next < nodes.length && !nodes[next].canRequestFocus) {
+      next += delta;
+    }
+    if (next < 0 || next >= nodes.length) return KeyEventResult.handled;
+    nodes[next].requestFocus();
+    return KeyEventResult.handled;
+  }
+
   Widget _toolbar(GuideLayoutPolicy policy) => _Toolbar(
     controller: widget.controller,
     compact: policy.compact,
@@ -679,6 +789,7 @@ class _GuideViewState extends State<GuideView>
     onOpenMenu: widget.onOpenMenu,
     menuFocus: _menuFocus,
     closeFocus: _closeFocus,
+    onKeyEvent: _toolbarKey,
   );
 
   Widget _showcase(GuideLayoutPolicy policy) => SizedBox(
@@ -707,13 +818,16 @@ class _GuideViewState extends State<GuideView>
             controller: widget.controller,
             railWidth: policy.channelRailWidth,
             searchController: _searchController,
+            libraryFocus: _libraryFocus,
             searchFocus: _searchFocus,
             earlierFocus: _earlierFocus,
             nowFocus: _nowFocus,
             laterFocus: _laterFocus,
+            hoursFocus: _hoursFocus,
             clearSearchFocus: _clearSearchFocus,
             removeLibraryFilterFocus: _removeLibraryFilterFocus,
             onSearchKey: _searchKey,
+            onKeyEvent: _toolbarKey,
           ),
         ),
         Expanded(
@@ -1007,6 +1121,7 @@ class _Toolbar extends StatelessWidget {
     required this.onOpenMenu,
     required this.menuFocus,
     required this.closeFocus,
+    required this.onKeyEvent,
   });
   final GuideController controller;
   final String? watchingChannelId;
@@ -1015,6 +1130,7 @@ class _Toolbar extends StatelessWidget {
   final LineupMenuCallback? onOpenMenu;
   final FocusNode menuFocus;
   final FocusNode closeFocus;
+  final FocusOnKeyEventCallback onKeyEvent;
 
   @override
   Widget build(BuildContext context) {
@@ -1038,47 +1154,52 @@ class _Toolbar extends StatelessWidget {
       color: roles.secondaryText,
     );
 
-    return LineupTopBar(
-      inset: _guideEdgeContentInset,
-      menuKey: const Key('guide-app-menu'),
-      menuFocusNode: menuFocus,
-      onOpenMenu: onOpenMenu,
-      trailing: Row(
-        children: [
-          if (showPlaying) ...[
-            SizedBox(width: 20.0),
-            Expanded(
-              child: Text(
-                '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
-                key: const Key('guide-now-playing-context'),
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: onKeyEvent,
+      child: LineupTopBar(
+        inset: _guideEdgeContentInset,
+        menuKey: const Key('guide-app-menu'),
+        menuFocusNode: menuFocus,
+        onOpenMenu: onOpenMenu,
+        trailing: Row(
+          children: [
+            if (showPlaying) ...[
+              SizedBox(width: 20.0),
+              Expanded(
+                child: Text(
+                  '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
+                  key: const Key('guide-now-playing-context'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: supportingStyle,
+                ),
+              ),
+            ] else
+              const Spacer(),
+            if (showDate)
+              Text(
+                '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}',
+                key: const Key('guide-current-date-time'),
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: supportingStyle,
+                style: supportingStyle.copyWith(color: roles.mutedText),
+              ),
+            SizedBox(width: 8),
+            Builder(
+              builder: (invokerContext) => IconButton(
+                tooltip: 'Close Guide',
+                focusNode: closeFocus,
+                onPressed: () => onClose(invokerContext, closeFocus),
+                constraints: enlargedControls
+                    ? BoxConstraints(minWidth: 48, minHeight: 48)
+                    : null,
+                iconSize: 24,
+                icon: const Icon(Icons.close, semanticLabel: 'Close Guide'),
               ),
             ),
-          ] else
-            const Spacer(),
-          if (showDate)
-            Text(
-              '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}',
-              key: const Key('guide-current-date-time'),
-              maxLines: 1,
-              style: supportingStyle.copyWith(color: roles.mutedText),
-            ),
-          SizedBox(width: 8),
-          Builder(
-            builder: (invokerContext) => IconButton(
-              tooltip: 'Close Guide',
-              focusNode: closeFocus,
-              onPressed: () => onClose(invokerContext, closeFocus),
-              constraints: enlargedControls
-                  ? BoxConstraints(minWidth: 48, minHeight: 48)
-                  : null,
-              iconSize: 24,
-              icon: const Icon(Icons.close, semanticLabel: 'Close Guide'),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1090,25 +1211,31 @@ class _GuideControls extends StatelessWidget {
     required this.controller,
     required this.railWidth,
     required this.searchController,
+    required this.libraryFocus,
     required this.searchFocus,
     required this.earlierFocus,
     required this.nowFocus,
     required this.laterFocus,
+    required this.hoursFocus,
     required this.clearSearchFocus,
     required this.removeLibraryFilterFocus,
     required this.onSearchKey,
+    required this.onKeyEvent,
   });
 
   final GuideController controller;
   final double railWidth;
   final TextEditingController searchController;
+  final FocusNode libraryFocus;
   final FocusNode searchFocus;
   final FocusNode earlierFocus;
   final FocusNode nowFocus;
   final FocusNode laterFocus;
+  final FocusNode hoursFocus;
   final FocusNode clearSearchFocus;
   final FocusNode removeLibraryFilterFocus;
   final FocusOnKeyEventCallback onSearchKey;
+  final FocusOnKeyEventCallback onKeyEvent;
 
   Future<void> _saveHours(BuildContext context, int hours) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -1174,6 +1301,7 @@ class _GuideControls extends StatelessWidget {
           enabled: true,
           child: DropdownButton<String?>(
             key: const Key('guide-library-picker'),
+            focusNode: libraryFocus,
             style: controlStyle,
             isExpanded: true,
             isDense: enlargedControls,
@@ -1394,6 +1522,7 @@ class _GuideControls extends StatelessWidget {
             enabled: true,
             child: DropdownButton<int>(
               key: const Key('guide-hours'),
+              focusNode: hoursFocus,
               style: controlStyle,
               isDense: enlargedControls,
               iconSize: 24,
@@ -1434,51 +1563,56 @@ class _GuideControls extends StatelessWidget {
         ),
       ],
     );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (GuideLayoutPolicy.controlsWrapForWidth(
-          constraints.maxWidth,
-          textScale: textScale,
-        )) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  picker,
-                  SizedBox(width: 8),
-                  Expanded(child: label),
-                ],
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: onKeyEvent,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (GuideLayoutPolicy.controlsWrapForWidth(
+            constraints.maxWidth,
+            textScale: textScale,
+          )) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    picker,
+                    SizedBox(width: 8),
+                    Expanded(child: label),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(child: search(double.infinity)),
+                    SizedBox(width: 8),
+                    navigation,
+                  ],
+                ),
+              ],
+            );
+          }
+          return ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: GuideLayoutPolicy.controlsHeight(
+                size,
+                textScale: textScale,
               ),
-              Row(
-                children: [
-                  Expanded(child: search(double.infinity)),
-                  SizedBox(width: 8),
-                  navigation,
-                ],
-              ),
-            ],
-          );
-        }
-        return ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: GuideLayoutPolicy.controlsHeight(
-              size,
-              textScale: textScale,
             ),
-          ),
-          child: Row(
-            children: [
-              picker,
-              SizedBox(width: 8),
-              Expanded(child: label),
-              search(340.0),
-              SizedBox(width: 8),
-              navigation,
-            ],
-          ),
-        );
-      },
+            child: Row(
+              children: [
+                picker,
+                SizedBox(width: 8),
+                Expanded(child: label),
+                search(340.0),
+                SizedBox(width: 8),
+                navigation,
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

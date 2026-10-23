@@ -2328,7 +2328,9 @@ class _MiniGuide extends StatelessWidget {
                             runSpacing: 4,
                             children: [
                               Text(
-                                'Up / Down · Browse · Enter Tune · Esc Close',
+                                roles.androidTv
+                                    ? 'Up/Down Browse · Select Tune · Back Close'
+                                    : 'Up / Down · Browse · Enter Tune · Esc Close',
                                 style: TextStyle(
                                   color: roles.secondaryText,
                                   fontSize: 18,
@@ -3249,7 +3251,9 @@ class _TracksState extends State<_Tracks> {
                           key: const Key('playback-options-footer'),
                           padding: EdgeInsets.only(top: 20),
                           child: Text(
-                            'Up/Down Browse · Enter Select · Esc Close',
+                            roles.androidTv
+                                ? 'Up/Down Browse · Select Choose · Back Close'
+                                : 'Up/Down Browse · Enter Select · Esc Close',
                             style: textTheme.bodySmall?.copyWith(
                               color: supportingText,
                             ),
