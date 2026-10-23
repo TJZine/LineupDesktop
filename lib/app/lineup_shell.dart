@@ -661,9 +661,9 @@ class _LineupShellState extends State<LineupShell> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text('Now Playing'),
-                              Text(
+                              _menuDetail(
                                 _player.currentProgram!.scheduled.item.title,
-                                style: detailStyle,
+                                detailStyle,
                               ),
                             ],
                           ),
@@ -703,7 +703,7 @@ class _LineupShellState extends State<LineupShell> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(profileName ?? accountName),
-                                    Text(serverName, style: detailStyle),
+                                    _menuDetail(serverName, detailStyle),
                                     LineupConnectionStatus(
                                       connection: widget.controller.connection,
                                     ),
@@ -726,6 +726,15 @@ class _LineupShellState extends State<LineupShell> {
       ],
     );
   }
+
+  Widget _menuDetail(String text, TextStyle? style) => Builder(
+    builder: (context) => Text(
+      text,
+      style: LineupTheme.of(context).androidTv
+          ? style?.copyWith(color: LineupTheme.of(context).secondaryText)
+          : style,
+    ),
+  );
 
   Widget _menuDestination({
     required ShellDestination destination,
@@ -756,7 +765,7 @@ class _LineupShellState extends State<LineupShell> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label),
-            if (helper != null) Text(helper, style: detailStyle),
+            if (helper != null) _menuDetail(helper, detailStyle),
           ],
         ),
       ),
@@ -1881,29 +1890,31 @@ class _SettingsSwitchTile extends StatelessWidget {
   final bool first;
 
   @override
-  Widget build(BuildContext context) => MergeSemantics(
-    child: _SettingsRow(
-      label: title,
-      helper: subtitle,
-      control: Builder(
-        builder: (context) {
-          return SizedBox(
-            height: 48,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: SizedBox(
-                width: 56,
-                child: Switch(
-                  value: value,
-                  onChanged: onChanged,
-                  padding: EdgeInsets.zero,
+  Widget build(BuildContext context) => LineupToggleSurface(
+    child: MergeSemantics(
+      child: _SettingsRow(
+        label: title,
+        helper: subtitle,
+        control: Builder(
+          builder: (context) {
+            return SizedBox(
+              height: 48,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: SizedBox(
+                  width: 56,
+                  child: Switch(
+                    value: value,
+                    onChanged: onChanged,
+                    padding: EdgeInsets.zero,
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
+        first: first,
       ),
-      first: first,
     ),
   );
 }
@@ -1944,13 +1955,15 @@ class _Dropdown<T> extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(label),
-                    Text(
-                      choiceDescription!(item),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: LineupTheme.of(context).secondaryText,
-                        fontSize: LineupTheme.of(context).metadataTextSize(),
+                    Builder(
+                      builder: (context) => Text(
+                        choiceDescription!(item),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: LineupTheme.of(context).secondaryText,
+                          fontSize: LineupTheme.of(context).metadataTextSize(),
+                        ),
                       ),
                     ),
                   ],

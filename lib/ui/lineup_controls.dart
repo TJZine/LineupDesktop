@@ -362,7 +362,19 @@ IconButton lineupArrowButton({
   icon: Icon(icon, semanticLabel: tooltip),
 );
 
-/// Reuses the child's real focus/traversal and adds selection plus a distinct ring.
+/// Toggleable's focus highlight can stay suppressed in Android touch mode even
+/// while D-pad focus is real. Observe descendant focus at the row boundary.
+/// Desktop keeps the original control subtree without a new surface.
+class LineupToggleSurface extends StatelessWidget {
+  const LineupToggleSurface({required this.child, super.key});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => LineupTheme.of(context).androidTv
+      ? LineupRowSurface(selected: false, child: child)
+      : child;
+}
+
+/// Reuses the child's real focus/traversal, with independent selection and focus.
 class LineupRowSurface extends StatefulWidget {
   const LineupRowSurface({
     required this.selected,
@@ -537,16 +549,26 @@ class LineupDropdownMenuRow extends StatelessWidget {
   const LineupDropdownMenuRow({
     required this.selected,
     required this.child,
+    this.menuTheme,
     super.key,
   });
   final bool selected;
   final Widget child;
+  final ThemeData? menuTheme;
   @override
-  Widget build(BuildContext context) => LineupRowSurface(
-    selected: selected,
-    focused: Focus.maybeOf(context)?.hasFocus ?? false,
-    child: Padding(padding: contentPadding, child: child),
-  );
+  Widget build(BuildContext context) {
+    Widget row(BuildContext context) => LineupRowSurface(
+      selected: selected,
+      focused: Focus.maybeOf(context)?.hasFocus ?? false,
+      child: Padding(padding: contentPadding, child: child),
+    );
+    return menuTheme == null
+        ? row(context)
+        : Theme(
+            data: menuTheme!,
+            child: Builder(builder: row),
+          );
+  }
 }
 
 List<DropdownMenuItem<T>> lineupMenuItems<T>(
@@ -576,7 +598,7 @@ List<DropdownMenuItem<T>> lineupMenuItems<T>(
     ),
 ];
 
-DropdownButtonFormField<T> lineupDropdownField<T>({
+Widget lineupDropdownField<T>({
   required BuildContext context,
   required List<DropdownMenuItem<T>>? items,
   required ValueChanged<T?>? onChanged,
@@ -592,26 +614,86 @@ DropdownButtonFormField<T> lineupDropdownField<T>({
   FormFieldValidator<T>? validator,
   FocusNode? focusNode,
   bool autofocus = false,
-}) => DropdownButtonFormField<T>(
-  key: key,
-  initialValue: initialValue,
-  onChanged: onChanged,
-  items: lineupMenuItems(items, initialValue),
-  selectedItemBuilder: (_) =>
-      selectedItemChildren ??
-      (items ?? <DropdownMenuItem<T>>[]).map((item) => item.child).toList(),
-  dropdownColor: LineupTheme.of(context).elevatedSurface,
-  borderRadius: BorderRadius.circular(8),
-  isExpanded: isExpanded,
-  iconSize: iconSize,
-  itemHeight: itemHeight,
-  icon: icon ?? const Icon(Icons.keyboard_arrow_down),
-  style: style ?? LineupTypography.control,
-  decoration: decoration,
-  validator: validator,
-  focusNode: focusNode,
-  autofocus: autofocus,
-);
+}) {
+  final baseTheme = Theme.of(context);
+  final dropdownColor = LineupTheme.of(context).elevatedSurface;
+  final tv = LineupTheme.of(context).androidTv;
+  Widget field(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return DropdownButtonFormField<T>(
+      key: key,
+      initialValue: initialValue,
+      onChanged: onChanged,
+      items: lineupMenuItems(
+        items,
+        initialValue,
+        menuTheme: tv ? baseTheme : null,
+      ),
+      selectedItemBuilder: (_) =>
+          selectedItemChildren ??
+          (items ?? <DropdownMenuItem<T>>[]).map((item) => item.child).toList(),
+      dropdownColor: dropdownColor,
+      borderRadius: BorderRadius.circular(8),
+      isExpanded: isExpanded,
+      iconSize: iconSize,
+      itemHeight: itemHeight,
+      icon: icon ?? const Icon(Icons.keyboard_arrow_down),
+      style: tv
+          ? (style ?? LineupTypography.control).copyWith(
+              color: onChanged == null ? roles.mutedText : roles.primaryText,
+            )
+          : style ?? LineupTypography.control,
+      iconEnabledColor: tv ? roles.secondaryText : null,
+      iconDisabledColor: tv ? roles.mutedText : null,
+      decoration: decoration,
+      validator: validator,
+      focusNode: focusNode,
+      autofocus: autofocus,
+    );
+  }
+
+  if (!tv) return field(context);
+  return _LineupDropdownFocus(enabled: onChanged != null, builder: field);
+}
+
+class _LineupDropdownFocus extends StatefulWidget {
+  const _LineupDropdownFocus({required this.enabled, required this.builder});
+  final bool enabled;
+  final WidgetBuilder builder;
+  @override
+  State<_LineupDropdownFocus> createState() => _LineupDropdownFocusState();
+}
+
+class _LineupDropdownFocusState extends State<_LineupDropdownFocus> {
+  bool _focused = false;
+  @override
+  Widget build(BuildContext context) {
+    final focused =
+        widget.enabled && LineupFocusScope.visible(context, _focused);
+    // Capture the surface before applying inset ink roles.
+    final surface = LineupTheme.of(context).focusedSurface;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (value) => setState(() => _focused = value),
+      child: LineupFocusFrame(
+        focused: focused,
+        child: LineupFocusInk(
+          focused: focused,
+          child: Builder(
+            builder: (context) => Theme(
+              data: Theme.of(context).copyWith(
+                inputDecorationTheme: Theme.of(context).inputDecorationTheme
+                    .copyWith(fillColor: focused ? surface : null),
+              ),
+              child: Builder(builder: widget.builder),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Dropdown trigger uses the same inset field and keyboard ring as text inputs.
 class LineupDropdownBox extends StatefulWidget {
@@ -636,7 +718,8 @@ class _LineupDropdownBoxState extends State<LineupDropdownBox> {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final visible = LineupFocusScope.visible(context, _focused);
+    final visible =
+        widget.enabled && LineupFocusScope.visible(context, _focused);
     final focusFill =
         visible && roles.focusTreatment == LineupFocusTreatment.fill;
     final focusRing =
