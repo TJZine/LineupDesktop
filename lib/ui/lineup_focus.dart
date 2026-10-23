@@ -1,7 +1,23 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_theme.dart';
+
+/// D14 aliases belong to Android TV. Keep the platform policy shared by
+/// command routing and focus modality so desktop Application/Menu and remote
+/// keys retain their existing behavior.
+LogicalKeyboardKey? androidTvKeyAlias(LogicalKeyboardKey key) {
+  if (defaultTargetPlatform != TargetPlatform.android) return null;
+  return switch (key) {
+    LogicalKeyboardKey.channelUp => LogicalKeyboardKey.pageUp,
+    LogicalKeyboardKey.channelDown => LogicalKeyboardKey.pageDown,
+    LogicalKeyboardKey.guide => LogicalKeyboardKey.f2,
+    LogicalKeyboardKey.info ||
+    LogicalKeyboardKey.contextMenu => LogicalKeyboardKey.keyI,
+    _ => null,
+  };
+}
 
 /// Paint modality is separate from focus ownership. Pointer input never unfocuses.
 ///
@@ -37,11 +53,6 @@ class _LineupFocusScopeState extends State<LineupFocusScope> {
     LogicalKeyboardKey.pageUp,
     LogicalKeyboardKey.pageDown,
     LogicalKeyboardKey.select,
-    LogicalKeyboardKey.channelUp,
-    LogicalKeyboardKey.channelDown,
-    LogicalKeyboardKey.guide,
-    LogicalKeyboardKey.info,
-    LogicalKeyboardKey.contextMenu,
   };
 
   @override
@@ -51,7 +62,9 @@ class _LineupFocusScopeState extends State<LineupFocusScope> {
   }
 
   bool _onKey(KeyEvent event) {
-    if (event is! KeyUpEvent && _navigationKeys.contains(event.logicalKey)) {
+    if (event is! KeyUpEvent &&
+        (_navigationKeys.contains(event.logicalKey) ||
+            androidTvKeyAlias(event.logicalKey) != null)) {
       _setVisible(true);
     }
     return false;

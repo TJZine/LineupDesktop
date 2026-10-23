@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
@@ -458,46 +459,68 @@ void main() {
     }
   }
 
-  test('Player key resolution table preserves priority, aliases and sleep policy', () {
-    final actions = <PlayerAction>{};
-    for (final c in cases) {
-      final reason =
-          '${c.key.keyLabel} / ${c.overlay.name} / dvr=${c.dvr} / unsupported=${c.unsupported} / initial=${c.initialPress} / program=${c.hasProgram}';
-      final command = resolvePlayerKey(
-        c.key,
-        overlay: c.overlay,
-        dvr: c.dvr,
-        unsupported: c.unsupported,
-        initialPress: c.initialPress,
-        hasProgram: c.hasProgram,
-      );
-      if (c.digit != null) {
+  final tvAliases = {
+    LogicalKeyboardKey.channelUp,
+    LogicalKeyboardKey.channelDown,
+    LogicalKeyboardKey.guide,
+    LogicalKeyboardKey.info,
+    LogicalKeyboardKey.contextMenu,
+  };
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    test('Player key priority, aliases and sleep policy on $platform', () {
+      debugDefaultTargetPlatformOverride = platform;
+      try {
+        final actions = <PlayerAction>{};
+        for (final c in cases) {
+          final reason =
+              '${c.key.keyLabel} / ${c.overlay.name} / dvr=${c.dvr} / unsupported=${c.unsupported} / initial=${c.initialPress} / program=${c.hasProgram}';
+          final command = resolvePlayerKey(
+            c.key,
+            overlay: c.overlay,
+            dvr: c.dvr,
+            unsupported: c.unsupported,
+            initialPress: c.initialPress,
+            hasProgram: c.hasProgram,
+          );
+          final expectedAction =
+              platform != TargetPlatform.android && tvAliases.contains(c.key)
+              ? PlayerAction.ignored
+              : c.action;
+          if (c.digit != null) {
+            expect(
+              command,
+              isA<AppendChannelDigit>().having(
+                (value) => value.digit,
+                'digit',
+                c.digit,
+              ),
+              reason: reason,
+            );
+            expect(command.closesSleepPicker, isTrue, reason: reason);
+          } else {
+            expect(command, expectedAction, reason: reason);
+            expect(
+              command.closesSleepPicker,
+              !noSleepClose.contains(expectedAction),
+              reason: reason,
+            );
+            actions.add(expectedAction!);
+          }
+        }
         expect(
-          command,
-          isA<AppendChannelDigit>().having(
-            (value) => value.digit,
-            'digit',
-            c.digit,
-          ),
-          reason: reason,
+          actions,
+          containsAll(PlayerAction.values),
+          reason: 'Every executor action has behavioral table evidence.',
         );
-        expect(command.closesSleepPicker, isTrue, reason: reason);
-      } else {
-        expect(command, c.action, reason: reason);
-        expect(
-          command.closesSleepPicker,
-          !noSleepClose.contains(c.action),
-          reason: reason,
-        );
-        actions.add(c.action!);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
       }
-    }
-    expect(
-      actions,
-      containsAll(PlayerAction.values),
-      reason: 'Every executor action has behavioral table evidence.',
-    );
-  });
+    });
+  }
 
   test('a pressed Command key leaves every key unresolved for the menu', () {
     for (final key in [

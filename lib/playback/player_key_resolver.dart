@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../ui/lineup_focus.dart' show androidTvKeyAlias;
 import 'player_coordinator.dart';
 
 sealed class PlayerCommand {
@@ -58,11 +59,7 @@ final _backKeys = {
   LogicalKeyboardKey.backspace,
   LogicalKeyboardKey.goBack,
 };
-final _guideKeys = {
-  LogicalKeyboardKey.keyG,
-  LogicalKeyboardKey.f2,
-  LogicalKeyboardKey.guide,
-};
+final _guideKeys = {LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2};
 final _enterKeys = {
   LogicalKeyboardKey.enter,
   LogicalKeyboardKey.numpadEnter,
@@ -85,17 +82,7 @@ final _keyboardTransportKeys = {
   LogicalKeyboardKey.arrowRight,
 };
 final _fullscreenKeys = {LogicalKeyboardKey.keyF, LogicalKeyboardKey.f11};
-final _pageUpKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.channelUp};
-final _pageDownKeys = {
-  LogicalKeyboardKey.pageDown,
-  LogicalKeyboardKey.channelDown,
-};
-final _pageKeys = {..._pageUpKeys, ..._pageDownKeys};
-final _infoKeys = {
-  LogicalKeyboardKey.keyI,
-  LogicalKeyboardKey.info,
-  LogicalKeyboardKey.contextMenu,
-};
+final _pageKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
 
 /// Resolves in the same priority order as the public Player interaction:
 /// Back, transport availability, unsupported playback, overlay ownership, then
@@ -112,6 +99,7 @@ PlayerCommand resolvePlayerKey(
   bool commandPressed = false,
 }) {
   if (commandPressed) return PlayerAction.ignored;
+  key = androidTvKeyAlias(key) ?? key;
   if (_backKeys.contains(key)) {
     return switch (overlay) {
       PlayerOverlay.none => PlayerAction.backToGuide,
@@ -169,12 +157,12 @@ PlayerCommand resolvePlayerKey(
   if (miniGuide && key == LogicalKeyboardKey.arrowDown) {
     return PlayerAction.miniGuideDown;
   }
-  if (_pageUpKeys.contains(key)) {
+  if (key == LogicalKeyboardKey.pageUp) {
     return miniGuide
         ? PlayerAction.miniGuidePageUp
         : PlayerAction.previousChannel;
   }
-  if (_pageDownKeys.contains(key)) {
+  if (key == LogicalKeyboardKey.pageDown) {
     return miniGuide
         ? PlayerAction.miniGuidePageDown
         : PlayerAction.nextChannel;
@@ -209,7 +197,7 @@ PlayerCommand resolvePlayerKey(
         ? PlayerAction.showNowPlaying
         : PlayerAction.showOsdFromInfo;
   }
-  if (initialPress && _infoKeys.contains(key)) {
+  if (initialPress && key == LogicalKeyboardKey.keyI) {
     return nowPlaying
         ? PlayerAction.showOsdFromInfo
         : PlayerAction.showNowPlaying;

@@ -585,7 +585,7 @@ class _GuideViewState extends State<GuideView>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final key = event.logicalKey;
+    final key = androidTvKeyAlias(event.logicalKey) ?? event.logicalKey;
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
         keyboard.isControlPressed ||
@@ -609,8 +609,7 @@ class _GuideViewState extends State<GuideView>
         key == LogicalKeyboardKey.backspace ||
         key == LogicalKeyboardKey.goBack ||
         (key == LogicalKeyboardKey.keyG && !commandModified) ||
-        key == LogicalKeyboardKey.f2 ||
-        key == LogicalKeyboardKey.guide) {
+        key == LogicalKeyboardKey.f2) {
       final primary = FocusManager.instance.primaryFocus;
       final invoker =
           primary != null &&
@@ -630,7 +629,7 @@ class _GuideViewState extends State<GuideView>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final key = event.logicalKey;
+    final key = androidTvKeyAlias(event.logicalKey) ?? event.logicalKey;
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
         keyboard.isControlPressed ||
@@ -650,11 +649,9 @@ class _GuideViewState extends State<GuideView>
       } else {
         widget.controller.moveHorizontal(1);
       }
-    } else if (key == LogicalKeyboardKey.pageUp ||
-        key == LogicalKeyboardKey.channelUp) {
+    } else if (key == LogicalKeyboardKey.pageUp) {
       widget.controller.page(-1, _visibleRows);
-    } else if (key == LogicalKeyboardKey.pageDown ||
-        key == LogicalKeyboardKey.channelDown) {
+    } else if (key == LogicalKeyboardKey.pageDown) {
       widget.controller.page(1, _visibleRows);
     } else if (key == LogicalKeyboardKey.mediaPlay ||
         (key == LogicalKeyboardKey.keyP && !commandModified) ||
