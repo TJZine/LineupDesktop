@@ -52,6 +52,13 @@ class KeyboardVisibilityObserverTest {
         dispatcher.onMethodCall(MethodCall("unwatchKeyboardVisibility", null), unwatch)
         assertTrue(unwatch.succeeded)
         assertNull(unwatch.value)
+        val invalidLicense = Result()
+        dispatcher.onMethodCall(
+            MethodCall("readLicenseDocument", mapOf("path" to "not-an-id")),
+            invalidLicense,
+        )
+        assertEquals("invalid_arguments", invalidLicense.errorCode)
+        dispatcher.close()
         observer.close()
         controller.pause().stop().destroy()
     }
