@@ -309,6 +309,7 @@ def generate(
     flutter_root: Path | None,
     license_cache: Path | None,
     flutter_version: str,
+    check: bool = False,
 ) -> dict[str, object]:
     coordinates = parse_report(report)
     entries: list[tuple[str, str, str, str, str]] = []
@@ -448,10 +449,29 @@ def generate(
         build_info.append(f"Generated license bytes: {total}")
         write_text(staging / "BUILD-INFO.txt", ("\n".join(build_info) + "\n").encode("utf-8"))
 
-        if output.exists():
-            shutil.rmtree(output)
-        staging.rename(output)
-        staging = None
+        if check:
+            expected = {
+                p.relative_to(staging): p.read_bytes()
+                for p in staging.rglob("*") if p.is_file()
+            }
+            actual = {
+                p.relative_to(output): p.read_bytes()
+                for p in output.rglob("*") if p.is_file()
+            }
+            changed = sorted(
+                str(p) for p in expected.keys() | actual.keys()
+                if expected.get(p) != actual.get(p)
+            )
+            if changed:
+                raise GenerationError(
+                    "Committed Android notices differ; regenerate and commit: "
+                    + ", ".join(changed)
+                )
+        else:
+            if output.exists():
+                shutil.rmtree(output)
+            staging.rename(output)
+            staging = None
     finally:
         if staging is not None and staging.exists():
             shutil.rmtree(staging)
@@ -478,6 +498,10 @@ def main() -> int:
     parser.add_argument("--flutter-root")
     parser.add_argument("--flutter-version", default="unknown")
     parser.add_argument("--license-cache", type=Path)
+    parser.add_argument(
+        "--check", action="store_true",
+        help="Fail on asset drift without modifying output",
+    )
     args = parser.parse_args()
     if bool(args.dependency_report) == bool(args.gradle_project):
         parser.error("provide exactly one of --dependency-report or --gradle-project")
@@ -494,13 +518,14 @@ def main() -> int:
             flutter_root_from_args(args.flutter_root),
             args.license_cache.resolve() if args.license_cache else None,
             args.flutter_version,
+            check=args.check,
         )
     except GenerationError as error:
         print(f"generate-licenses: {error}", file=sys.stderr)
         return 1
     print(
-        "generated Android license assets: "
-        f"{result['coordinates']} modules, {result['documents']} documents, "
+        ("checked Android license assets: " if args.check else "generated Android license assets: ")
+        + f"{result['coordinates']} modules, {result['documents']} documents, "
         f"{result['bytes']} license bytes at {result['output']}"
     )
     return 0

@@ -30,7 +30,21 @@ internal class Media3Engine(
     // The default builder owns an exclusive playback thread. Media3 quits it only
     // after releaseInternal finishes renderer/source teardown. Keep that public
     // thread handle: release() returning (or isReleased) cannot prove completion.
-    private val player = createPlayer(context).also { it.setVideoSurfaceView(video) }
+    private val player = createPlayer(context).also {
+        it.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .build(),
+            /* handleAudioFocus = */ true,
+        )
+        it.setVideoSurfaceView(video)
+    }
+    // Transient focus loss suppresses playback without clearing playWhenReady.
+    // Report the observed pause through the existing Dart event contract; Media3
+    // alone owns ducking/resumption, while Dart retains scheduling policy.
+    private fun observedPaused() = !player.playWhenReady ||
+        player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
     private val playbackThread = player.playbackLooper.thread
     private var releasingPlayer = false
     private var releaseTimedOut = false
@@ -107,13 +121,18 @@ internal class Media3Engine(
                 override fun onPlaybackStateChanged(state: Int) {
                     if (closed) return
                     when (state) {
-                        Player.STATE_READY -> listener.ready(!player.playWhenReady)
+                        Player.STATE_READY -> listener.ready(observedPaused())
                         Player.STATE_ENDED -> listener.ended()
                     }
                 }
 
-                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                    if (!closed) listener.property("pause", !playWhenReady)
+                override fun onEvents(player: Player, events: Player.Events) {
+                    if (!closed && events.containsAny(
+                            Player.EVENT_PLAY_WHEN_READY_CHANGED,
+                            Player.EVENT_PLAYBACK_SUPPRESSION_REASON_CHANGED,
+                        )) {
+                        listener.property("pause", observedPaused())
+                    }
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {

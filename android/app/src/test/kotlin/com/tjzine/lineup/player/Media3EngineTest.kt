@@ -51,6 +51,67 @@ class Media3EngineTest {
     }
 
     @Test
+    fun movieAudioFocusPausesTransientlyAndPermanentlyThroughObservedPauseEvents() {
+        lateinit var player: ExoPlayer
+        val engine = engine { ExoPlayer.Builder(it).build().also { value -> player = value } }
+        shadowOf(player.playbackLooper).unPause()
+        try {
+            assertEquals(androidx.media3.common.C.USAGE_MEDIA, player.audioAttributes.usage)
+            assertEquals(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE, player.audioAttributes.contentType)
+            val pauses = mutableListOf<Boolean>()
+            engine.load(MediaLoad("https://127.0.0.1:9/synthetic", 1, null, false, 0.0),
+                object : PlayerEngine.Listener {
+                    override fun ready(paused: Boolean) {}
+                    override fun ended() {}
+                    override fun failure(code: String, httpStatus: Int?) {}
+                    override fun property(name: String, value: Any?) {
+                        if (name == "pause") pauses += value as Boolean
+                    }
+                })
+            // Replace networking with Media3's real in-memory silent media source.
+            player.setMediaSource(androidx.media3.exoplayer.source.SilenceMediaSource.Factory()
+                .setDurationUs(60_000_000).createMediaSource())
+            player.prepare()
+            player.play()
+            fun settle(until: () -> Boolean) {
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (!until() && System.nanoTime() < deadline) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    Thread.sleep(5)
+                }
+                assertTrue("Media3 callback must arrive", until())
+            }
+            val audio = shadowOf(context.getSystemService(android.content.Context.AUDIO_SERVICE)
+                as android.media.AudioManager)
+            settle { audio.lastAudioFocusRequest != null }
+            val callback = audio.lastAudioFocusRequest.listener
+            assertNotNull(callback)
+            callback.onAudioFocusChange(android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+            val duckHandled = CountDownLatch(1)
+            Handler(player.playbackLooper).post { duckHandled.countDown() }
+            assertTrue(duckHandled.await(5, TimeUnit.SECONDS))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertTrue("can-duck keeps play intent", player.playWhenReady)
+            assertEquals(Player.PLAYBACK_SUPPRESSION_REASON_NONE, player.playbackSuppressionReason)
+            assertNotEquals(true, pauses.lastOrNull())
+            callback.onAudioFocusChange(android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+            settle { pauses.lastOrNull() == true }
+            assertTrue("transient suppression retains play intent", player.playWhenReady)
+            callback.onAudioFocusChange(android.media.AudioManager.AUDIOFOCUS_GAIN)
+            settle { pauses.lastOrNull() == false }
+            callback.onAudioFocusChange(android.media.AudioManager.AUDIOFOCUS_LOSS)
+            settle { !player.playWhenReady && pauses.lastOrNull() == true }
+            callback.onAudioFocusChange(android.media.AudioManager.AUDIOFOCUS_GAIN)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertFalse("permanent loss requires explicit resume", player.playWhenReady)
+            engine.play()
+            settle { player.playWhenReady && pauses.lastOrNull() == false }
+        } finally {
+            release(engine)
+        }
+    }
+
+    @Test
     fun realMedia3ReleaseTimeoutRetainsOwnershipUntilPlaybackThreadFinishes() {
         lateinit var player: ExoPlayer
         var timeoutObserved = false

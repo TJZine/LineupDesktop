@@ -86,8 +86,7 @@ an uninstall, deleting on-device lineups and sign-in.
 
 ## Release packaging and runtime notices
 
-Run the release recipe from the repository root after the U3 Media3 dependency
-block is integrated:
+Run the release recipe from the repository root:
 
 ```sh
 export PATH="$HOME/.cache/lineup-flutter/3.47.7/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
@@ -97,8 +96,21 @@ tool/android/build-release.sh
 ```
 
 The recipe resolves `releaseRuntimeClasspath`, requires Maven POM license
-metadata for every external module, and writes the upstream license text and a
-dependency manifest to `android/app/src/main/assets/licenses/`. Flutter engine
+metadata for every external module, and checks the committed upstream license
+text and dependency manifest under `android/app/src/main/assets/licenses/`.
+Notice drift fails release preparation without rewriting tracked assets. After
+an intentional dependency or Flutter SDK update, regenerate and commit the
+notices before building:
+
+```sh
+python3 tool/android/generate-licenses.py --gradle-project android \
+  --output android/app/src/main/assets \
+  --flutter-root "$HOME/.cache/lineup-flutter/3.47.7/flutter" \
+  --flutter-version 3.47.7 --license-cache build/android-license-cache
+```
+
+Add `--check` to verify the same graph without changing the asset tree; the
+Android CI job runs this check too. Flutter engine
 artifacts are the explicit exception: their Maven POMs omit license metadata,
 so the generator embeds the exact `LICENSE` file from the selected Flutter SDK.
 Unknown or incomplete metadata fails closed; the generator never assumes a
@@ -115,7 +127,9 @@ ships no LGPL runtime or Sources-and-rebuilding group.
 versionName/versionCode, verified signing certificate fingerprint, Flutter
 version and resolved Media3 version. It verifies the final APK with the
 Android SDK `apksigner` and fails unless the expected Lineup certificate is
-present. A missing Lineup key fails before release packaging;
+present. Source and packaged manifests must opt in to `OnBackInvokedCallback`
+so Back works on API 33–35; the release script checks both using the SDK's
+`apkanalyzer` for the APK. A missing Lineup key fails before release packaging;
 `LINEUP_ANDROID_SIGNING=debug-key` is accepted only by the CI debug job and is
 never a release fallback. The Android CI job uses pinned Flutter, the debug-key
 mode, the ARM debug build, and `:app:testDebugUnitTest`; hosted CI execution is

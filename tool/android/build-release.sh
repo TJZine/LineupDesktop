@@ -30,7 +30,9 @@ trap cleanup EXIT
   ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon
 ) > "$report"
 
-python3 "$root/tool/android/generate-licenses.py" \
+python3 "$root/tool/android/check-manifest.py" "$root/android/app/src/main/AndroidManifest.xml"
+
+python3 "$root/tool/android/generate-licenses.py" --check \
   --dependency-report "$report" \
   --output "$root/android/app/src/main/assets" \
   --flutter-root "$flutter_root" \
@@ -52,6 +54,8 @@ else
   apk_sha256="$(openssl dgst -sha256 "$apk" | awk '{print $NF}')"
 fi
 android_sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+"$android_sdk/cmdline-tools/latest/bin/apkanalyzer" manifest print "$apk" | \
+  python3 "$root/tool/android/check-manifest.py" -
 apksigner="$(find "$android_sdk/build-tools" -maxdepth 2 -type f -name apksigner -print 2>/dev/null | sort -V | tail -n 1)"
 if [[ -z "$apksigner" || ! -x "$apksigner" ]]; then
   echo "Android SDK apksigner is unavailable under $android_sdk/build-tools." >&2

@@ -489,6 +489,84 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Component 20');
   });
 
+  testWidgets(
+    'native Android index labels render with notice identity retained',
+    (tester) async {
+      const channel = MethodChannel('lineup/platform');
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (call) async => [
+          {'id': 'build', 'path': 'BUILD-INFO.txt', 'bytes': 10},
+          {
+            'id': 'summary',
+            'path': 'licenses/NOTICES-SUMMARY.txt',
+            'bytes': 10,
+          },
+          {
+            'id': 'activity',
+            'path': 'licenses/androidx.activity__activity/Apache.txt',
+            'bytes': 10,
+          },
+          {
+            'id': 'media3',
+            'path': 'licenses/androidx.media3__media3-exoplayer/Apache.txt',
+            'bytes': 10,
+          },
+          {
+            'id': 'okhttp',
+            'path': 'licenses/com.squareup.okhttp3__okhttp/Apache.txt',
+            'bytes': 10,
+          },
+        ],
+      );
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+      });
+      for (final android in [true, false]) {
+        debugDefaultTargetPlatformOverride = android
+            ? TargetPlatform.android
+            : TargetPlatform.macOS;
+        final groups = await LicensesRepository().sources.first.load();
+        for (final size in [const Size(1280, 720), const Size(1920, 1080)]) {
+          await show(
+            tester,
+            [LicenseSource('Native runtime', () async => groups)],
+            size: size,
+            androidTv: android,
+          );
+          await tester.pumpAndSettle();
+          for (final group in groups) {
+            expect(find.text(group.title), findsOneWidget);
+          }
+          expect(tester.takeException(), isNull);
+          final directory = Platform.environment['LINEUP_LICENSE_RENDER_DIR'];
+          if (directory != null) {
+            await tester.runAsync(() async {
+              final image = await tester
+                  .renderObject<RenderRepaintBoundary>(
+                    find.byKey(const Key('license-render')),
+                  )
+                  .toImage(
+                    pixelRatio: LineupCanvas.scaleFor(size, androidTv: android),
+                  );
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              await Directory(directory).create(recursive: true);
+              await File(
+                '$directory/index-${android ? 'tv' : 'desktop'}-${size.width.toInt()}x${size.height.toInt()}.png',
+              ).writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          await tester.pumpWidget(const SizedBox());
+        }
+      }
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
+
   testWidgets('long real notice renders across sizes, text scales and themes', (
     tester,
   ) async {
