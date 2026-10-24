@@ -1601,11 +1601,9 @@ class _ChannelBug extends StatelessWidget {
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: roles.primaryText,
               fontSize: osdPresentation
-                  ? roles.metadataTextSize(
-                      desktop: size.width >= 1920 && size.height >= 900
-                          ? 16
-                          : 14,
-                    )
+                  ? size.width >= 1920 && size.height >= 900
+                        ? 16
+                        : 14
                   : inheritedLabelSize,
               fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w600,
             ),
@@ -2164,9 +2162,7 @@ class _NowPlayingBadge extends StatelessWidget {
         child: Text(
           label,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            fontSize: roles.metadataTextSize(
-              desktop: Theme.of(context).textTheme.labelMedium?.fontSize ?? 12,
-            ),
+            fontSize: Theme.of(context).textTheme.labelMedium?.fontSize ?? 12,
           ),
         ),
       ),
@@ -2205,16 +2201,12 @@ class _NowPlayingCast extends StatelessWidget {
     final visible = cast.take(limit).toList(growable: false);
     final diameter = (dense ? 40.0 : 46.0);
     const gap = 24.0;
-    final nameStyle = _nowPlayingSecondaryStyle(context, dense: dense)
-        ?.copyWith(
-          fontSize: roles.metadataTextSize(desktop: 16),
-          height: 1.3,
-          color: roles.primaryText,
-        );
-    final roleStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: roles.secondaryText,
-      fontSize: roles.metadataTextSize(),
-    );
+    final nameStyle = _nowPlayingSecondaryStyle(
+      context,
+      dense: dense,
+    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
+    final roleStyle = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: roles.secondaryText, fontSize: 14);
     final naturalWidths = [
       for (final member in visible)
         math.max(
@@ -2376,12 +2368,10 @@ class _NowPlayingCastColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final portrait = member.portrait;
-    final nameStyle = _nowPlayingSecondaryStyle(context, dense: dense)
-        ?.copyWith(
-          fontSize: roles.metadataTextSize(desktop: 16),
-          height: 1.3,
-          color: roles.primaryText,
-        );
+    final nameStyle = _nowPlayingSecondaryStyle(
+      context,
+      dense: dense,
+    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
@@ -2462,10 +2452,8 @@ class _NowPlayingCastColumn extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.start,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: roles.secondaryText,
-                    fontSize: roles.metadataTextSize(),
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: roles.secondaryText, fontSize: 14),
                 ),
               ),
             ),
@@ -4371,10 +4359,9 @@ ButtonStyle _playerActionStyle(BuildContext context) {
     focusVisible: LineupFocusScope.visible(context),
   ).copyWith(
     textStyle: WidgetStatePropertyAll(
-      LineupTypography.buttonFor(
-        roles,
-        compact: true,
-      ).copyWith(shadows: _overlayTextShadow),
+      LineupTypography.button
+          .copyWith(fontSize: 16)
+          .copyWith(shadows: _overlayTextShadow),
     ),
     foregroundColor: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.disabled)

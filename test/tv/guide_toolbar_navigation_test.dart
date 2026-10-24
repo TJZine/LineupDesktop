@@ -246,7 +246,7 @@ void main() {
           expect(rect.top, closeTo(window.height * .05, .001));
           expect(rect.right, closeTo(window.width * .95, .001));
           expect(rect.bottom, closeTo(window.height * .95, .001));
-          expect(tester.getSize(guide), const Size(1296, 729));
+          expect(tester.getSize(guide), const Size(1728, 972));
           expect(MediaQuery.paddingOf(tester.element(guide)), EdgeInsets.zero);
           for (var i = 0; i < 5; i++) {
             final channel = find.bySemanticsLabel(
@@ -265,7 +265,7 @@ void main() {
       },
     );
   }
-  for (final scale in [0.8, 2 / 3]) {
+  for (final scale in [0.8, 2 / 3, 0.5]) {
     testWidgets('TV toolbar uses full rendered bounds at scale $scale', (
       tester,
     ) async {

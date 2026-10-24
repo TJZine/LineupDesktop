@@ -38,6 +38,10 @@ class GuideLayoutPolicy {
     required bool hasPicture,
     double textScale = 1,
     double? timeHeaderHeight,
+    double? tvControlsHeight,
+    double tvRowFloor = 0,
+    double tvInformationHeight = 0,
+    double tvIdentityWidth = 0,
   }) {
     final width = size.width.isFinite
         ? size.width.clamp(0.0, 10000.0).toDouble()
@@ -51,9 +55,9 @@ class GuideLayoutPolicy {
     final chromeHeight =
         toolbarHeight(size, textScale: textScale) +
         10 +
-        controlsHeight(size, textScale: textScale) +
+        (tvControlsHeight ?? controlsHeight(size, textScale: textScale)) +
         (timeHeaderHeight ?? 38 * textScale);
-    final minimumRowHeight = 58 * textScale;
+    final minimumRowHeight = math.max(58 * textScale, tvRowFloor);
     final available = math.max(0.0, height - chromeHeight);
     final pictureControlHeight = controlHeight(size, textScale: textScale);
     final pictureControlsHeight =
@@ -82,19 +86,31 @@ class GuideLayoutPolicy {
       ),
     );
     const showcaseHeightAdjustment = 0.01;
-    final showcaseHeight = math.max(
-      0.0,
-      pictureAllocation - showcaseHeightAdjustment,
-    );
+    final showcaseHeight = tvControlsHeight == null
+        ? math.max(0.0, pictureAllocation - showcaseHeightAdjustment)
+        : math.min(
+            tvInformationHeight,
+            math.max(0.0, available - minimumRowHeight * minimumRows),
+          );
     final rowHeight = math.max(
       minimumRowHeight,
       (available - showcaseHeight) / minimumRows,
     );
-    final pictureHeight = math.min(324.0, pictureAllocation);
+    final pictureHeight = tvControlsHeight == null
+        ? math.min(324.0, pictureAllocation)
+        : showcaseHeight;
     final widthBudget = math.max(0.0, width - 360 - 12 - 40);
-    final pictureWidth = hasPicture
-        ? math.min(pictureHeight * 16 / 9, widthBudget)
-        : pictureHeight * 16 / 9;
+    final pictureWidth = tvControlsHeight == null
+        ? (hasPicture
+              ? math.min(pictureHeight * 16 / 9, widthBudget)
+              : pictureHeight * 16 / 9)
+        : math.max(
+            0.0,
+            math.min(
+              pictureHeight * 16 / 9,
+              math.min(width * .32, width - 12 - 40 - 32 - tvIdentityWidth * 2),
+            ),
+          );
     return GuideLayoutPolicy._(
       compact: compact,
       timeHeaderHeight: timeHeaderHeight ?? 38 * textScale,
@@ -344,6 +360,16 @@ class _GuideViewState extends State<GuideView>
   bool _viewportRequestScheduled = false;
   _GuideViewportDemand? _lastViewportDemand;
   String? _lastFocusedChannelId;
+
+  ({
+    Size size,
+    TextScaler scaler,
+    TextDirection direction,
+    TextTheme theme,
+    bool logos,
+  })?
+  _tvMetricsKey;
+  _TvGuideSchema? _tvSchema;
 
   @override
   void initState() {
@@ -1055,7 +1081,7 @@ class _GuideViewState extends State<GuideView>
             color: Colors.transparent,
             child: LayoutBuilder(
               builder: (context, outer) {
-                final policy = GuideLayoutPolicy.forSize(
+                var policy = GuideLayoutPolicy.forSize(
                   outer.biggest,
                   hasPicture: widget.pictureInPicture != null,
                   textScale: MediaQuery.textScalerOf(context).scale(1),
@@ -1064,6 +1090,38 @@ class _GuideViewState extends State<GuideView>
                     widget.controller,
                   ),
                 );
+                if (roles.androidTv) {
+                  final key = (
+                    size: outer.biggest,
+                    scaler: MediaQuery.textScalerOf(context),
+                    direction: Directionality.of(context),
+                    theme: Theme.of(context).textTheme,
+                    logos: widget.controller.lineup.settings.preferClearLogos,
+                  );
+                  if (_tvMetricsKey != key) {
+                    _tvMetricsKey = key;
+                    _tvSchema = _TvGuideSchema.measure(
+                      context,
+                      reserveLogo: key.logos,
+                    );
+                  }
+                  final controls = _GuideControlsMetrics.measure(
+                    context,
+                    widget.controller,
+                    outer.maxWidth - _guideEdgeContentInset * 2,
+                    policy.channelRailWidth,
+                  );
+                  policy = GuideLayoutPolicy.forSize(
+                    outer.biggest,
+                    hasPicture: widget.pictureInPicture != null,
+                    textScale: key.scaler.scale(1),
+                    timeHeaderHeight: policy.timeHeaderHeight,
+                    tvControlsHeight: controls.height,
+                    tvRowFloor: _tvSchema!.rowFloor,
+                    tvInformationHeight: _tvSchema!.informationHeight,
+                    tvIdentityWidth: _tvSchema!.identityWidth,
+                  );
+                }
                 final schedule = _schedule(policy, channels);
                 final theme = Theme.of(context);
                 return DefaultTextStyle(
@@ -1238,6 +1296,124 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
+/// Measured fixed controls and label text determine both wrapping and its
+/// vertical budget. Desktop retains its established layout policy.
+class _GuideControlsMetrics {
+  const _GuideControlsMetrics(this.wrap, this.height);
+  final bool wrap;
+  final double height;
+
+  factory _GuideControlsMetrics.measure(
+    BuildContext context,
+    GuideController controller,
+    double width,
+    double railWidth,
+  ) {
+    final theme = Theme.of(context);
+    final direction = Directionality.of(context);
+    final controlHeight = GuideLayoutPolicy.controlHeight(
+      MediaQuery.sizeOf(context),
+      textScale: MediaQuery.textScalerOf(context).scale(1),
+    );
+    final style = _GuideControls.controlStyle(context);
+    final button = theme.textButtonTheme.style!;
+    final buttonStyle = button.textStyle!.resolve({})!;
+    final buttonPadding = button.padding!.resolve({})!.resolve(direction);
+    final minimum = button.minimumSize!.resolve({})!;
+    final now = Size(
+      _textWidth(
+        _guideNowLabel(controller),
+        buttonStyle,
+        MediaQuery.textScalerOf(context),
+        direction,
+      ),
+      _textHeight(buttonStyle, MediaQuery.textScalerOf(context), direction),
+    );
+    final iconStyle = theme.iconButtonTheme.style;
+    final iconPadding =
+        iconStyle?.padding?.resolve({})?.resolve(direction) ??
+        const EdgeInsets.all(8);
+    final iconMinimum =
+        iconStyle?.minimumSize?.resolve({}) ?? const Size(48, 48);
+    final iconWidth = math.max(
+      48.0,
+      math.max(iconMinimum.width, 24 + iconPadding.horizontal),
+    );
+    final iconHeight = math.max(
+      48.0,
+      math.max(iconMinimum.height, 24 + iconPadding.vertical),
+    );
+    final hours = [
+      for (final value in LineupSettings.guideHoursOptions)
+        _guideMeasuredText(context, '$value hours', style),
+    ];
+    final hoursWidth =
+        hours.map((s) => s.width).reduce(math.max) +
+        24 +
+        LineupDropdownBox.contentPadding(compact: true).horizontal +
+        2 * LineupDropdownBox.borderWidth;
+    final navigationWidth =
+        iconWidth * 2 +
+        math.max(minimum.width, now.width + buttonPadding.horizontal) +
+        8 +
+        hoursWidth;
+    final navigationHeight = math.max(
+      controlHeight,
+      math.max(
+        iconHeight,
+        math.max(minimum.height, now.height + buttonPadding.vertical),
+      ),
+    );
+    final selected = controller.libraryFilterId;
+    final label = selected == null ? null : _libraryName(controller, selected);
+    final labelStyle = theme.textTheme.bodyMedium!.copyWith(fontSize: 16);
+    final remaining = width - railWidth - 8 - 340 - 8 - navigationWidth;
+    var wrap = remaining < 0;
+    if (label != null) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: labelStyle),
+        textScaler: MediaQuery.textScalerOf(context),
+        textDirection: direction,
+        maxLines: 2,
+        ellipsis: '…',
+      )..layout(maxWidth: math.max(0.0, remaining - iconWidth));
+      wrap = remaining <= iconWidth || painter.didExceedMaxLines;
+      painter.dispose();
+    }
+    final labelTextWidth = math.max(
+      0.0,
+      (wrap ? width - railWidth - 8 : remaining) - iconWidth,
+    );
+    final labelHeight = label == null
+        ? 0.0
+        : math.max(
+            iconHeight,
+            _guideMeasuredText(
+              context,
+              label,
+              labelStyle,
+              width: labelTextWidth,
+              maxLines: 2,
+            ).height,
+          );
+    return _GuideControlsMetrics(
+      wrap,
+      wrap
+          ? math.max(controlHeight, labelHeight) + navigationHeight
+          : math.max(navigationHeight, labelHeight),
+    );
+  }
+}
+
+String _guideNowLabel(GuideController controller) {
+  final future = controller.now.isBefore(controller.windowStart);
+  return future
+      ? '← Now'
+      : !controller.now.isBefore(controller.windowEnd)
+      ? 'Now →'
+      : 'Now';
+}
+
 class _GuideControls extends StatelessWidget {
   const _GuideControls({
     super.key,
@@ -1306,13 +1482,16 @@ class _GuideControls extends StatelessWidget {
     );
   }
 
+  static TextStyle controlStyle(BuildContext context) =>
+      Theme.of(context).textTheme.bodyMedium!
+          .copyWith(fontSize: 18, color: LineupTheme.of(context).secondaryText);
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
 
-    final controlStyle = Theme.of(context).textTheme.bodyMedium!
-        .copyWith(fontSize: 18.0, color: LineupTheme.of(context).secondaryText);
+    final controlStyle = _GuideControls.controlStyle(context);
     final controlHeight = GuideLayoutPolicy.controlHeight(
       size,
       textScale: textScale,
@@ -1402,10 +1581,7 @@ class _GuideControls extends StatelessWidget {
                   key: const Key('guide-active-library-label'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: roles.metadataTextSize(desktop: 16),
-                    color: roles.mutedText,
-                  ),
+                  style: TextStyle(fontSize: 16, color: roles.mutedText),
                 ),
               ),
               IconButton(
@@ -1637,10 +1813,19 @@ class _GuideControls extends StatelessWidget {
       onKeyEvent: onKeyEvent,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (GuideLayoutPolicy.controlsWrapForWidth(
-            constraints.maxWidth,
-            textScale: textScale,
-          )) {
+          final measured = roles.androidTv
+              ? _GuideControlsMetrics.measure(
+                  context,
+                  controller,
+                  constraints.maxWidth,
+                  railWidth,
+                )
+              : null;
+          if (measured?.wrap ??
+              GuideLayoutPolicy.controlsWrapForWidth(
+                constraints.maxWidth,
+                textScale: textScale,
+              )) {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1663,10 +1848,9 @@ class _GuideControls extends StatelessWidget {
           }
           return ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: GuideLayoutPolicy.controlsHeight(
-                size,
-                textScale: textScale,
-              ),
+              minHeight:
+                  measured?.height ??
+                  GuideLayoutPolicy.controlsHeight(size, textScale: textScale),
             ),
             child: Row(
               children: [
@@ -2199,9 +2383,7 @@ class _GuideRow extends StatelessWidget {
                             final supportStyle = DefaultTextStyle.of(context)
                                 .style
                                 .copyWith(
-                                  fontSize: roles.metadataTextSize(
-                                    desktop: showProvenance ? 16 : 14,
-                                  ),
+                                  fontSize: showProvenance ? 16 : 14,
                                   color: roles.mutedText,
                                 );
                             final supportHeight = _textHeight(
@@ -2728,21 +2910,18 @@ class _ProgramCellContent extends StatelessWidget {
         final scaler = MediaQuery.textScalerOf(context);
         final direction = Directionality.of(context);
         final roles = LineupTheme.of(context);
-        final titleStyle = LineupTypography.guideTitle.copyWith(
+        final titleStyle = _GuideStyles.rowTitle.copyWith(
           color: focused
               ? roles.focusedText
               : past
               ? roles.mutedText
               : null,
         );
-        final secondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          height: 1.1,
-          fontSize: 18.0,
-          color: focused ? roles.focusedText : roles.mutedText,
-        );
+        final secondaryStyle = _GuideStyles.rowSecondary(context)
+            .copyWith(color: focused ? roles.focusedText : roles.mutedText);
         final tagStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           height: 1.1,
-          fontSize: roles.metadataTextSize(),
+          fontSize: 14,
           color: focused ? roles.focusedText : null,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,
@@ -2838,7 +3017,7 @@ class _ProgramCellContent extends StatelessWidget {
                       Text(
                         time,
                         maxLines: 1,
-                        style: secondaryStyle?.copyWith(
+                        style: secondaryStyle.copyWith(
                           fontFeatures: const [ui.FontFeature.tabularFigures()],
                         ),
                       ),
@@ -2880,6 +3059,108 @@ double _textWidth(
     textScaler: scaler,
     maxLines: 1,
   );
+}
+
+Size _guideMeasuredText(
+  BuildContext context,
+  String text,
+  TextStyle style, {
+  double width = double.infinity,
+  int? maxLines,
+}) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textScaler: MediaQuery.textScalerOf(context),
+    textDirection: Directionality.of(context),
+    maxLines: maxLines,
+  )..layout(maxWidth: width);
+  final size = painter.size;
+  painter.dispose();
+  return size;
+}
+
+abstract final class _GuideStyles {
+  static final title = LineupTypography.programTitle;
+  static final rowTitle = LineupTypography.guideTitle;
+  static const channel = TextStyle(
+    fontSize: 16,
+    height: 1.2,
+    fontWeight: FontWeight.w500,
+  );
+  static const episode = TextStyle(fontSize: 22, height: 1.2);
+  static final metadata = LineupTypography.body.copyWith(height: 1.2);
+  static TextStyle rowSecondary(BuildContext context) =>
+      Theme.of(context).textTheme.bodySmall!
+          .copyWith(height: 1.1, fontSize: 18);
+  static TextStyle badge(BuildContext context) => Theme.of(context)
+      .textTheme
+      .labelMedium!
+      .copyWith(
+        fontSize: Theme.of(context).textTheme.labelMedium?.fontSize ?? 18,
+      );
+}
+
+/// Reserve every supported information field, even when the inspected program
+/// omits it. Moving the cursor must never resize the grid or native PiP.
+class _TvGuideSchema {
+  const _TvGuideSchema(
+    this.informationHeight,
+    this.rowFloor,
+    this.identityWidth,
+  );
+  final double informationHeight;
+  final double rowFloor;
+  final double identityWidth;
+
+  factory _TvGuideSchema.measure(
+    BuildContext context, {
+    required bool reserveLogo,
+  }) {
+    final inherited = Theme.of(context).textTheme.bodyMedium!;
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    double line(TextStyle style) =>
+        _textHeight(inherited.merge(style), scaler, direction);
+    final enlarged = scaler.scale(1) > 1;
+    // Both desktop responsive compositions retain their original gaps. Reserve
+    // the larger normal composition; enlarged text uses the existing dense one.
+    final gap = enlarged ? 4.0 : 10.0;
+    final titleHeight = math.max(
+      line(_GuideStyles.title),
+      reserveLogo ? 64.0 : 0.0,
+    );
+    final badgeHeight = line(_GuideStyles.badge(context)) + 8;
+    final identity =
+        line(_GuideStyles.channel) +
+        titleHeight +
+        line(_GuideStyles.episode) +
+        line(_GuideStyles.metadata) * 2 +
+        badgeHeight +
+        gap * 5;
+    // The five badge roles are a single row. Their standard widest labels
+    // establish a minimum identity width independently of current catalog data.
+    final badgeWidth =
+        ['TV-MA', '1080P', 'DOLBY VISION', 'TRUEHD', 'STEREO']
+            .map(
+              (label) =>
+                  _textWidth(
+                    label,
+                    inherited.merge(_GuideStyles.badge(context)),
+                    scaler,
+                    direction,
+                  ) +
+                  20,
+            )
+            .reduce((a, b) => a + b) +
+        6 * 4;
+    return _TvGuideSchema(
+      (identity + gap + 4 + line(_GuideStyles.metadata) + 28).ceilToDouble(),
+      line(_GuideStyles.rowTitle) +
+          line(_GuideStyles.rowSecondary(context)) +
+          18,
+      badgeWidth.ceilToDouble(),
+    );
+  }
 }
 
 class _Details extends StatelessWidget {
@@ -3067,68 +3348,17 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
     final identity = '${inspected.number} • ${inspected.name}';
     final identityStyle = Theme.of(context).textTheme.labelLarge
         ?.copyWith(color: roles.progressFill, fontWeight: FontWeight.w600);
-    Widget channelText({bool compact = false}) => Text(
-      identity,
-      style: identityStyle,
-      maxLines: compact ? 1 : null,
-      overflow: compact ? TextOverflow.ellipsis : null,
-    );
-    final statusText = Text(status);
-    Widget stacked(double gap) => Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        channelText(),
-        SizedBox(height: gap),
-        statusText,
-      ],
-    );
     return Align(
       alignment: Alignment.centerLeft,
-      child: !roles.androidTv
-          ? stacked(8)
-          : LayoutBuilder(
-              builder: (context, box) {
-                final inherited = DefaultTextStyle.of(context).style;
-                final scaler = MediaQuery.textScalerOf(context);
-                final direction = Directionality.of(context);
-                double height(String text, TextStyle style) {
-                  final painter = TextPainter(
-                    text: TextSpan(text: text, style: style),
-                    textScaler: scaler,
-                    textDirection: direction,
-                  )..layout(maxWidth: box.maxWidth);
-                  try {
-                    return painter.height;
-                  } finally {
-                    painter.dispose();
-                  }
-                }
-
-                final textHeight =
-                    height(identity, inherited.merge(identityStyle)) +
-                    height(status, inherited);
-                if (textHeight <= box.maxHeight) {
-                  // The five-row Guide budget is fixed. Spend only the vertical gap
-                  // that remains after the actual scaled glyphs, not another row.
-                  return stacked((box.maxHeight - textHeight).clamp(0.0, 8.0));
-                }
-                // Like normal Guide metadata, a long channel identity can ellipsize
-                // while its full semantics/rail identity remain. Required state text
-                // keeps its original type and complete content beside it.
-                final statusWidth = math.min(
-                  box.maxWidth * .65,
-                  _textWidth(status, inherited, scaler, direction),
-                );
-                return Row(
-                  children: [
-                    Expanded(child: channelText(compact: true)),
-                    const SizedBox(width: 24),
-                    SizedBox(width: statusWidth, child: statusText),
-                  ],
-                );
-              },
-            ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(identity, style: identityStyle),
+          const SizedBox(height: 8),
+          Text(status),
+        ],
+      ),
     );
   }
 }
@@ -3167,8 +3397,7 @@ class _ProgramDetails extends StatelessWidget {
     final remaining = _duration(duration - elapsed);
     final current = program.isCurrentAt(now);
     final past = !now.isBefore(program.scheduled.end);
-    final metadataStyle = LineupTypography.body.copyWith(
-      height: 1.2,
+    final metadataStyle = _GuideStyles.metadata.copyWith(
       color: roles.secondaryText,
       fontFeatures: const [ui.FontFeature.tabularFigures()],
     );
@@ -3176,12 +3405,7 @@ class _ProgramDetails extends StatelessWidget {
       height: 1.3,
       color: roles.secondaryText,
     );
-    final channelStyle = TextStyle(
-      fontSize: roles.metadataTextSize(desktop: 16),
-      height: 1.2,
-      color: roles.mutedText,
-      fontWeight: FontWeight.w500,
-    );
+    final channelStyle = _GuideStyles.channel.copyWith(color: roles.mutedText);
     final airing =
         '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
     final timeLine = [
@@ -3204,7 +3428,7 @@ class _ProgramDetails extends StatelessWidget {
       key: const Key('guide-clear-logo-fallback'),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: LineupTypography.programTitle.copyWith(color: roles.primaryText),
+      style: _GuideStyles.title.copyWith(color: roles.primaryText),
     );
     final episode = [
       ?_episodeCode(item),
@@ -3216,7 +3440,13 @@ class _ProgramDetails extends StatelessWidget {
         final dense = box.maxHeight < 270 || enlarged;
         final mergeFacts = dense && !enlarged;
         final gap = dense ? 4.0 : 10.0;
-        final logoHeight = compactLogo || dense ? 42.0 : 64.0;
+        final desktopLogoHeight = compactLogo || dense ? 42.0 : 64.0;
+        final logoHeight = roles.androidTv
+            ? math.max(
+                desktopLogoHeight,
+                _lineHeight(context, _GuideStyles.title),
+              )
+            : desktopLogoHeight;
         final identityFlex = box.maxHeight < 220
             ? 6
             : compactLogo || dense
@@ -3253,9 +3483,7 @@ class _ProgramDetails extends StatelessWidget {
                 key: const Key('guide-info-episode'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 22,
-                  height: 1.2,
+                style: _GuideStyles.episode.copyWith(
                   color: roles.secondaryText,
                 ),
               ),
@@ -3266,6 +3494,8 @@ class _ProgramDetails extends StatelessWidget {
                   ? '$timeLine · $factsLine'
                   : timeLine,
               key: const Key('guide-program-meta'),
+              maxLines: roles.androidTv ? 1 : null,
+              overflow: roles.androidTv ? TextOverflow.ellipsis : null,
               style: metadataStyle,
             ),
             if (!mergeFacts && factsLine.isNotEmpty) ...[
@@ -3273,19 +3503,45 @@ class _ProgramDetails extends StatelessWidget {
               Text(
                 factsLine,
                 key: const Key('guide-info-genres'),
+                maxLines: roles.androidTv ? 1 : null,
+                overflow: roles.androidTv ? TextOverflow.ellipsis : null,
                 style: metadataStyle,
               ),
             ],
             if (badges.isNotEmpty) ...[
               SizedBox(height: gap),
-              Wrap(
-                key: const Key('guide-program-badges'),
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  for (final badge in badges) _GuideMediaBadge(label: badge),
-                ],
-              ),
+              if (roles.androidTv)
+                Row(
+                  key: const Key('guide-program-badges'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var index = 0; index < badges.length; index++) ...[
+                      if (index > 0) const SizedBox(width: 6),
+                      Flexible(
+                        flex:
+                            (_textWidth(
+                                      badges[index],
+                                      DefaultTextStyle.of(context).style
+                                          .merge(_GuideStyles.badge(context)),
+                                      scaler,
+                                      Directionality.of(context),
+                                    ) +
+                                    20)
+                                .ceil(),
+                        child: _GuideMediaBadge(label: badges[index]),
+                      ),
+                    ],
+                  ],
+                )
+              else
+                Wrap(
+                  key: const Key('guide-program-badges'),
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final badge in badges) _GuideMediaBadge(label: badge),
+                  ],
+                ),
             ],
           ],
         );
@@ -3298,7 +3554,9 @@ class _ProgramDetails extends StatelessWidget {
                 children: [
                   Expanded(
                     flex: hasSynopsis ? identityFlex : 1,
-                    child: SingleChildScrollView(child: identity),
+                    child: roles.androidTv
+                        ? identity
+                        : SingleChildScrollView(child: identity),
                   ),
                   if (hasSynopsis) ...[
                     const SizedBox(width: 32),
@@ -3346,6 +3604,7 @@ class _ProgramDetails extends StatelessWidget {
             if (playbackMessage != null)
               Text(
                 playbackMessage!,
+                key: const Key('guide-playback-message'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: metadataStyle,
@@ -3386,14 +3645,7 @@ class _GuideMediaBadge extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            fontSize: roles.metadataTextSize(
-              desktop: Theme.of(context).textTheme.labelMedium?.fontSize ?? 18,
-            ),
-          ),
-        ),
+        child: Text(label, style: _GuideStyles.badge(context)),
       ),
     );
   }

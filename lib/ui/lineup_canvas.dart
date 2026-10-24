@@ -18,7 +18,7 @@ class LineupCanvas extends StatelessWidget {
   final bool reduceMotion;
 
   static double scaleFor(Size window, {bool androidTv = false}) => androidTv
-      ? math.min(window.width / 1440, window.height / 810)
+      ? math.min(window.width / 1920, window.height / 1080)
       : math.max(0.8, math.min(window.width / 1920, window.height / 1080));
 
   static EdgeInsets contentInsets(

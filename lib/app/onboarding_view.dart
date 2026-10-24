@@ -1492,7 +1492,7 @@ class _ProfileBadge extends StatelessWidget {
                           ? roles.primaryText
                           : roles.progressFill
                     : roles.secondaryText,
-                fontSize: LineupTheme.of(context).metadataTextSize(),
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1563,7 +1563,7 @@ class _ServerCard extends StatelessWidget {
                   'Current',
                   style: TextStyle(
                     color: LineupTheme.of(context).progressFill,
-                    fontSize: LineupTheme.of(context).metadataTextSize(),
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1791,8 +1791,9 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
   @override
   Widget build(BuildContext context) {
     final androidTv = LineupTheme.of(context).androidTv;
-    final enlarged = MediaQuery.textScalerOf(context).scale(18) > 18;
-    final gap = androidTv ? (enlarged ? 4.0 : 8.0) : 16.0;
+    // Desktop geometry needs 9cu of additional headroom for the complete
+    // two-line-name task and Large Focus at 1.3x inside TV's safe area.
+    final gap = androidTv ? 13.0 : 16.0;
     return PopScope(
       canPop: AndroidBackScope.claims(context),
       onPopInvokedWithResult: (_, _) {
@@ -1807,7 +1808,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
         onKeyEvent: _key,
         child: SizedBox(
           key: const Key('profile-pin-sheet'),
-          width: androidTv ? 520 : double.infinity,
+          width: double.infinity,
           child: ConstrainedBox(
             key: const Key('profile-pin-surface'),
             constraints: const BoxConstraints(maxWidth: 520),
@@ -1826,11 +1827,11 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                       ),
                     ),
                   ),
-                  SizedBox(height: androidTv ? gap : 28),
+                  SizedBox(height: 28),
                   LineupProfileAvatar(
                     name: widget.user.name,
                     identity: widget.user.id,
-                    size: androidTv ? (enlarged ? 40 : 56) : 120,
+                    size: 120,
                     locked: true,
                     photo: widget.user.thumb?.isAbsolute == true
                         ? NetworkImage(widget.user.thumb.toString())
@@ -1842,11 +1843,9 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: androidTv
-                        ? LineupTypography.title(32, 92, height: 1.08)
-                        : LineupTypography.pageTitle,
+                    style: LineupTypography.pageTitle,
                   ),
-                  SizedBox(height: androidTv ? gap : 28),
+                  SizedBox(height: 28),
                   Semantics(
                     key: const Key('profile-pin-progress'),
                     container: true,
@@ -1881,7 +1880,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   SizedBox(height: gap),
                   SizedBox(
                     key: const Key('profile-pin-status'),
-                    height: androidTv && enlarged ? 56 : 44,
+                    height: 44,
                     child: _submitting
                         ? Semantics(
                             label: 'Checking PIN',
@@ -1914,7 +1913,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   SizedBox(height: gap),
                   LineupCompactControls(
                     child: SizedBox(
-                      width: androidTv ? 304 : 3 * 104 + 2 * 8,
+                      width: 3 * 104 + 2 * 8,
                       child: Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -1928,10 +1927,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                                   ? null
                                   : () => _digit(digit),
                             ),
-                          SizedBox(
-                            width: androidTv ? 96 : 104,
-                            height: androidTv ? 56 : 76,
-                          ),
+                          SizedBox(width: 104, height: 76),
                           _PinKey(
                             digit: 0,
                             onPressed: _submitting ? null : () => _digit(0),
@@ -1953,7 +1949,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                       ),
                     ),
                   ),
-                  SizedBox(height: androidTv ? gap : 20),
+                  SizedBox(height: 20),
                   TextButton(
                     onPressed: _submitting ? null : widget.onBack,
                     child: const Text('Cancel'),
@@ -1986,8 +1982,8 @@ class _PinKey extends StatelessWidget {
     label: '$digit',
     button: true,
     child: SizedBox(
-      width: LineupTheme.of(context).androidTv ? 96 : 104,
-      height: LineupTheme.of(context).androidTv ? 56 : 76,
+      width: 104,
+      height: 76,
       child: OutlinedButton(
         focusNode: focusNode,
         autofocus: autofocus,
@@ -2022,8 +2018,8 @@ class _PinControlKey extends StatelessWidget {
       message: tooltip,
       excludeFromSemantics: true,
       child: SizedBox(
-        width: LineupTheme.of(context).androidTv ? 96 : 104,
-        height: LineupTheme.of(context).androidTv ? 56 : 76,
+        width: 104,
+        height: 76,
         child: OutlinedButton(onPressed: onPressed, child: child),
       ),
     ),
