@@ -68,7 +68,7 @@ Future<void> _key(
 }
 
 void main() {
-  for (final scale in [1.0, 1.3]) {
+  for (final scale in [1.0, 1.15, 1.3]) {
     for (final large in [false, true]) {
       for (final reduce in [false, true]) {
         testWidgets(
@@ -103,6 +103,19 @@ void main() {
                 LogicalKeyboardKey.arrowRight,
                 instant: reduce,
               );
+
+              // Right enters the spatially nearest Account control. Canvas and
+              // text density can place that on a later row; walk the real remote
+              // path to the first row before checking the complete down/up tour.
+              for (
+                var i = 0;
+                i < 3 &&
+                    !Focus.of(tester.element(_row('Plex Home profile')))
+                        .hasFocus;
+                i++
+              ) {
+                await _key(tester, LogicalKeyboardKey.arrowUp, instant: reduce);
+              }
 
               Future<void> inspect(
                 String title,
