@@ -16,6 +16,7 @@ import '../ui/app_ui.dart';
 import '../ui/lineup_canvas.dart';
 import 'focused_ticker.dart';
 import 'guide_controller.dart';
+import 'guide_playback_placeholder.dart';
 
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
@@ -31,6 +32,7 @@ class GuideLayoutPolicy {
     required this.rowHeight,
     required this.minimumRows,
     required this.compactLogo,
+    required this.minimumIdentityWidth,
   });
 
   factory GuideLayoutPolicy.forSize(
@@ -42,6 +44,7 @@ class GuideLayoutPolicy {
     double tvRowFloor = 0,
     double tvInformationHeight = 0,
     double tvIdentityWidth = 0,
+    Size tvPictureMinimum = Size.zero,
   }) {
     final width = size.width.isFinite
         ? size.width.clamp(0.0, 10000.0).toDouble()
@@ -89,7 +92,7 @@ class GuideLayoutPolicy {
     final showcaseHeight = tvControlsHeight == null
         ? math.max(0.0, pictureAllocation - showcaseHeightAdjustment)
         : math.min(
-            tvInformationHeight,
+            math.max(tvInformationHeight, tvPictureMinimum.height),
             math.max(0.0, available - minimumRowHeight * minimumRows),
           );
     final rowHeight = math.max(
@@ -100,15 +103,25 @@ class GuideLayoutPolicy {
         ? math.min(324.0, pictureAllocation)
         : showcaseHeight;
     final widthBudget = math.max(0.0, width - 360 - 12 - 40);
+    final identityFraction =
+        _GuideInformationLayout.identityFlex(
+          height: showcaseHeight - 28,
+          compactLogo: showcaseHeight < 180 * textScale,
+          enlarged: textScale > 1,
+        ) /
+        10;
     final pictureWidth = tvControlsHeight == null
         ? (hasPicture
               ? math.min(pictureHeight * 16 / 9, widthBudget)
               : pictureHeight * 16 / 9)
         : math.max(
-            0.0,
+            tvPictureMinimum.width,
             math.min(
               pictureHeight * 16 / 9,
-              math.min(width * .32, width - 12 - 40 - 32 - tvIdentityWidth * 2),
+              math.min(
+                width * .32,
+                width - 12 - 40 - 32 - tvIdentityWidth / identityFraction,
+              ),
             ),
           );
     return GuideLayoutPolicy._(
@@ -127,6 +140,7 @@ class GuideLayoutPolicy {
       rowHeight: rowHeight,
       minimumRows: minimumRows,
       compactLogo: showcaseHeight < 180 * textScale,
+      minimumIdentityWidth: tvControlsHeight == null ? 0 : tvIdentityWidth,
     );
   }
 
@@ -182,6 +196,7 @@ class GuideLayoutPolicy {
   final double rowHeight;
   final int minimumRows;
   final bool compactLogo;
+  final double minimumIdentityWidth;
 }
 
 class _GuideRowScrollController extends ScrollController {
@@ -366,6 +381,9 @@ class _GuideViewState extends State<GuideView>
     TextScaler scaler,
     TextDirection direction,
     TextTheme theme,
+    TextStyle? retryTextStyle,
+    Size retryMinimum,
+    EdgeInsets retryPadding,
     bool logos,
   })?
   _tvMetricsKey;
@@ -858,6 +876,7 @@ class _GuideViewState extends State<GuideView>
       showIdleArtwork: widget.showIdleArtwork,
       pictureWidth: policy.pictureWidth,
       compactLogo: policy.compactLogo,
+      minimumIdentityWidth: policy.minimumIdentityWidth,
       playbackMessage: widget.playbackMessage,
       onOpenPlayer: widget.onOpenPlayer,
     ),
@@ -1091,11 +1110,19 @@ class _GuideViewState extends State<GuideView>
                   ),
                 );
                 if (roles.androidTv) {
+                  final theme = Theme.of(context);
+                  final direction = Directionality.of(context);
+                  final retry = theme.textButtonTheme.style!;
                   final key = (
                     size: outer.biggest,
                     scaler: MediaQuery.textScalerOf(context),
-                    direction: Directionality.of(context),
-                    theme: Theme.of(context).textTheme,
+                    direction: direction,
+                    theme: theme.textTheme,
+                    retryTextStyle: retry.textStyle!.resolve({}),
+                    retryMinimum: retry.minimumSize!.resolve({})!,
+                    retryPadding: retry.padding!
+                        .resolve({})!
+                        .resolve(direction),
                     logos: widget.controller.lineup.settings.preferClearLogos,
                   );
                   if (_tvMetricsKey != key) {
@@ -1120,6 +1147,7 @@ class _GuideViewState extends State<GuideView>
                     tvRowFloor: _tvSchema!.rowFloor,
                     tvInformationHeight: _tvSchema!.informationHeight,
                     tvIdentityWidth: _tvSchema!.identityWidth,
+                    tvPictureMinimum: _tvSchema!.pictureMinimum,
                   );
                 }
                 final schedule = _schedule(policy, channels);
@@ -1876,6 +1904,7 @@ class _GuideShowcase extends StatefulWidget {
     required this.showIdleArtwork,
     required this.pictureWidth,
     required this.compactLogo,
+    required this.minimumIdentityWidth,
     required this.playbackMessage,
     required this.onOpenPlayer,
   });
@@ -1885,6 +1914,7 @@ class _GuideShowcase extends StatefulWidget {
   final bool showIdleArtwork;
   final double pictureWidth;
   final bool compactLogo;
+  final double minimumIdentityWidth;
   final String? playbackMessage;
   final VoidCallback? onOpenPlayer;
 
@@ -2069,6 +2099,7 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
               dynamicColor: _dynamicColor,
               bleedLeft: picture == null,
               compactLogo: widget.compactLogo,
+              minimumIdentityWidth: widget.minimumIdentityWidth,
               playbackMessage: widget.playbackMessage,
             ),
           ),
@@ -3100,6 +3131,21 @@ abstract final class _GuideStyles {
       );
 }
 
+abstract final class _GuideInformationLayout {
+  static bool dense({required double height, required bool enlarged}) =>
+      height < 270 || enlarged;
+
+  static int identityFlex({
+    required double height,
+    required bool compactLogo,
+    required bool enlarged,
+  }) => height < 220
+      ? 6
+      : compactLogo || dense(height: height, enlarged: enlarged)
+      ? 5
+      : 4;
+}
+
 /// Reserve every supported information field, even when the inspected program
 /// omits it. Moving the cursor must never resize the grid or native PiP.
 class _TvGuideSchema {
@@ -3107,7 +3153,9 @@ class _TvGuideSchema {
     this.informationHeight,
     this.rowFloor,
     this.identityWidth,
+    this.pictureMinimum,
   );
+  final Size pictureMinimum;
   final double informationHeight;
   final double rowFloor;
   final double identityWidth;
@@ -3137,19 +3185,31 @@ class _TvGuideSchema {
         line(_GuideStyles.metadata) * 2 +
         badgeHeight +
         gap * 5;
-    // The five badge roles are a single row. Their standard widest labels
-    // establish a minimum identity width independently of current catalog data.
+    // A finite display budget for the five badge roles, independent of the
+    // inspected program. Include the wider supported catalog codes; raw values
+    // outside this budget retain their text/semantics but ellipsize on TV.
     final badgeWidth =
-        ['TV-MA', '1080P', 'DOLBY VISION', 'TRUEHD', 'STEREO']
+        [
+              ['TV-Y7-FV', 'TV-MA', 'NC-17'],
+              ['1080P', '2160P'],
+              ['DOLBY VISION'],
+              ['TRUEHD', 'DTS-HD'],
+              ['STEREO', 'MONO', '7.1'],
+            ]
             .map(
-              (label) =>
-                  _textWidth(
-                    label,
-                    inherited.merge(_GuideStyles.badge(context)),
-                    scaler,
-                    direction,
-                  ) +
-                  20,
+              (labels) => labels
+                  .map(
+                    (label) =>
+                        (_textWidth(
+                                  label,
+                                  inherited.merge(_GuideStyles.badge(context)),
+                                  scaler,
+                                  direction,
+                                ) +
+                                20)
+                            .ceilToDouble(),
+                  )
+                  .reduce(math.max),
             )
             .reduce((a, b) => a + b) +
         6 * 4;
@@ -3159,6 +3219,7 @@ class _TvGuideSchema {
           line(_GuideStyles.rowSecondary(context)) +
           18,
       badgeWidth.ceilToDouble(),
+      GuidePlaybackPlaceholder.minimumSize(context),
     );
   }
 }
@@ -3171,6 +3232,7 @@ class _Details extends StatelessWidget {
     required this.clearLogo,
     required this.dynamicColor,
     required this.compactLogo,
+    required this.minimumIdentityWidth,
     required this.playbackMessage,
     required this.bleedLeft,
   });
@@ -3180,6 +3242,7 @@ class _Details extends StatelessWidget {
   final Color? dynamicColor;
   final GuideController controller;
   final bool compactLogo;
+  final double minimumIdentityWidth;
   final bool bleedLeft;
   final String? playbackMessage;
 
@@ -3293,6 +3356,7 @@ class _Details extends StatelessWidget {
                                 ? clearLogo
                                 : null,
                             compactLogo: compactLogo,
+                            minimumIdentityWidth: minimumIdentityWidth,
                             playbackMessage: playbackMessage,
                             now: controller.now,
                           ),
@@ -3369,6 +3433,7 @@ class _ProgramDetails extends StatelessWidget {
     required this.channel,
     required this.clearLogo,
     required this.compactLogo,
+    required this.minimumIdentityWidth,
     required this.playbackMessage,
     required this.now,
   });
@@ -3376,6 +3441,7 @@ class _ProgramDetails extends StatelessWidget {
   final Channel? channel;
   final Uint8List? clearLogo;
   final bool compactLogo;
+  final double minimumIdentityWidth;
   final String? playbackMessage;
   final DateTime now;
 
@@ -3437,7 +3503,10 @@ class _ProgramDetails extends StatelessWidget {
     final badges = mediaBadges(item, surface: MediaBadgeSurface.guide);
     return LayoutBuilder(
       builder: (context, box) {
-        final dense = box.maxHeight < 270 || enlarged;
+        final dense = _GuideInformationLayout.dense(
+          height: box.maxHeight,
+          enlarged: enlarged,
+        );
         final mergeFacts = dense && !enlarged;
         final gap = dense ? 4.0 : 10.0;
         final desktopLogoHeight = compactLogo || dense ? 42.0 : 64.0;
@@ -3447,11 +3516,11 @@ class _ProgramDetails extends StatelessWidget {
                 _lineHeight(context, _GuideStyles.title),
               )
             : desktopLogoHeight;
-        final identityFlex = box.maxHeight < 220
-            ? 6
-            : compactLogo || dense
-            ? 5
-            : 4;
+        final identityFlex = _GuideInformationLayout.identityFlex(
+          height: box.maxHeight,
+          compactLogo: compactLogo,
+          enlarged: enlarged,
+        );
         final identity = Column(
           key: const Key('guide-program-identity'),
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3552,12 +3621,21 @@ class _ProgramDetails extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    flex: hasSynopsis ? identityFlex : 1,
-                    child: roles.androidTv
-                        ? identity
-                        : SingleChildScrollView(child: identity),
-                  ),
+                  if (roles.androidTv && hasSynopsis)
+                    SizedBox(
+                      width: math.max(
+                        minimumIdentityWidth,
+                        (box.maxWidth - 32) * identityFlex / 10,
+                      ),
+                      child: identity,
+                    )
+                  else
+                    Expanded(
+                      flex: hasSynopsis ? identityFlex : 1,
+                      child: roles.androidTv
+                          ? identity
+                          : SingleChildScrollView(child: identity),
+                    ),
                   if (hasSynopsis) ...[
                     const SizedBox(width: 32),
                     Expanded(
@@ -3645,7 +3723,12 @@ class _GuideMediaBadge extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Text(label, style: _GuideStyles.badge(context)),
+        child: Text(
+          label,
+          style: _GuideStyles.badge(context),
+          maxLines: roles.androidTv ? 1 : null,
+          overflow: roles.androidTv ? TextOverflow.ellipsis : null,
+        ),
       ),
     );
   }
