@@ -188,7 +188,15 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         widget.controller.showNowPlaying();
         return;
       }
-      if ((_renderedOverlay != nextOverlay &&
+      final leavingInfo =
+          _renderedOverlay == PlayerOverlay.programInfo &&
+          nextOverlay != PlayerOverlay.programInfo;
+      if (leavingInfo && _canOwnFocus && _rootFocus.hasFocus) {
+        _rootFocus.requestFocus();
+      }
+      if (leavingInfo && nextOverlay == PlayerOverlay.nowPlaying) {
+        _restoreMoreInfoFocus();
+      } else if ((_renderedOverlay != nextOverlay &&
               nextOverlay == PlayerOverlay.nowPlaying) ||
           ((_renderedOverlay == PlayerOverlay.nowPlaying || leavingTracks) &&
               nextOverlay == PlayerOverlay.osd)) {
@@ -239,11 +247,16 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
           _renderedOverlay == PlayerOverlay.subtitleTracks ||
           nextOverlay == PlayerOverlay.audioTracks ||
           nextOverlay == PlayerOverlay.subtitleTracks;
+      final transitioningInfo =
+          _renderedOverlay == PlayerOverlay.programInfo ||
+          nextOverlay == PlayerOverlay.programInfo;
       final transitioningMiniGuide =
           _renderedOverlay == PlayerOverlay.miniGuide ||
           nextOverlay == PlayerOverlay.miniGuide;
       _overlayTransitionDuration = Duration(
-        milliseconds: transitioningNowPlaying
+        milliseconds: transitioningInfo
+            ? 300
+            : transitioningNowPlaying
             ? 200
             : transitioningTracks
             ? 300
@@ -424,6 +437,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       resolvePlayerKey(
         event.logicalKey,
         overlay: controller.overlay,
+        androidTv: _androidTv,
         dvr: controller.lineup.settings.dvrControlsEnabled,
         unsupported: controller.status.state == PlayerState.unsupported,
         initialPress: event is KeyDownEvent,
@@ -479,7 +493,9 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         controller.showOsd();
       case PlayerAction.togglePlayback:
         unawaited(controller.togglePlayback());
-        controller.showOsd();
+        if (controller.overlay != PlayerOverlay.programInfo) {
+          controller.showOsd();
+        }
       case PlayerAction.seekBackward || PlayerAction.rewind:
         unawaited(controller.seekBy(const Duration(seconds: -10)));
         if (command == PlayerAction.seekBackward) controller.showOsd();
@@ -508,6 +524,24 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         unawaited(controller.requestStop());
     }
     return KeyEventResult.handled;
+  }
+
+  void _restoreMoreInfoFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_canOwnFocus ||
+          widget.controller.overlay != PlayerOverlay.nowPlaying) {
+        return;
+      }
+      final invoker = _controls[_PlayerControl.moreInfo]!;
+      if (invoker.context != null && invoker.canRequestFocus) {
+        invoker.requestFocus();
+      } else {
+        final actions = _availableTvActions;
+        (actions.isEmpty ? _rootFocus : _controls[actions.first]!)
+            .requestFocus();
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _restoreSleepFocus() {
@@ -550,6 +584,9 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final overlay = controller.overlay;
+    final infoProgram = overlay == PlayerOverlay.programInfo
+        ? controller.currentProgram
+        : null;
     final presentationGeneration = controller.overlayPresentationGeneration;
     final bottomPanel =
         overlay == PlayerOverlay.osd || overlay == PlayerOverlay.nowPlaying;
@@ -598,6 +635,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                     },
                   ),
                   if (overlay != PlayerOverlay.channelNumber &&
+                      overlay != PlayerOverlay.programInfo &&
                       (controller.notice != null ||
                           controller.busyLabel != null))
                     _StatusBug(
@@ -611,16 +649,17 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                       alignment: Alignment.center,
                       children: [
                         for (final child in previousChildren)
-                          ExcludeFocus(
-                            child: ExcludeSemantics(
-                              // Dispose tooltip overlays with their retiring
-                              // semantics origin, before further label updates.
-                              child: TooltipVisibility(
-                                visible: false,
-                                child: child,
+                          if (overlay != PlayerOverlay.programInfo)
+                            ExcludeFocus(
+                              child: ExcludeSemantics(
+                                // Dispose tooltip overlays with their retiring
+                                // semantics origin, before further label updates.
+                                child: TooltipVisibility(
+                                  visible: false,
+                                  child: child,
+                                ),
                               ),
                             ),
-                          ),
                         ?currentChild,
                       ],
                     ),
@@ -639,7 +678,8 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                               .value
                               .$1;
                       if (childOverlay == PlayerOverlay.audioTracks ||
-                          childOverlay == PlayerOverlay.subtitleTracks) {
+                          childOverlay == PlayerOverlay.subtitleTracks ||
+                          childOverlay == PlayerOverlay.programInfo) {
                         return SlideTransition(
                           position: Tween(
                             begin: const Offset(1, 0),
@@ -692,6 +732,13 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                             restoreSleepFocus: _restoreSleepFocus,
                             controls: _controls,
                           ),
+                          PlayerOverlay.programInfo =>
+                            infoProgram == null
+                                ? const SizedBox.shrink()
+                                : _NowPlayingInfo(
+                                    controller: controller,
+                                    program: infoProgram,
+                                  ),
                           PlayerOverlay.miniGuide => _MiniGuide(
                             controller: controller,
                             active: _appActive,
@@ -1594,30 +1641,8 @@ class _NowPlaying extends StatelessWidget {
     final artworkIdentity = (program.id, generation);
     final posterPath = _artworkPath(item, GuideArtworkKind.poster);
     final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
-    final duration = controller.duration > Duration.zero
-        ? controller.duration
-        : program.scheduled.end.difference(program.scheduled.start);
     final episode = _episodeLabel(item);
-    final numberedEpisode = [
-      if (item.seasonNumber != null) 'S${item.seasonNumber}',
-      if (item.episodeNumber != null) 'E${item.episodeNumber}',
-    ].join(' ');
-    final editorial = [
-      if (numberedEpisode.isNotEmpty) numberedEpisode,
-      if (duration > Duration.zero) '${duration.inMinutes} min',
-      if (item.year != null) '${item.year}',
-      ...item.genres.where((genre) => genre.trim().isNotEmpty).take(3),
-    ].join(' · ');
-    final videoCodec =
-        formatPlayerVideoCodec(controller.telemetry.videoFormat) ??
-        formatPlayerVideoCodec(item.videoCodec) ??
-        formatPlayerVideoCodec(controller.telemetry.videoCodec);
-    final badges = mediaBadges(
-      item,
-      surface: MediaBadgeSurface.nowPlaying,
-      runtimeHdr: controller.telemetry.isHdr,
-      effectiveVideoCodec: videoCodec,
-    );
+    final (:editorial, :badges) = _nowPlayingFacts(controller, program);
     final castFacts = item.cast
         .map(
           (member) => member.role == null
@@ -1852,53 +1877,7 @@ class _NowPlaying extends StatelessWidget {
                                         context,
                                       ),
                                     ),
-                                    onPressed: () async {
-                                      await showGeneralDialog<void>(
-                                        context: context,
-                                        barrierDismissible: false,
-                                        barrierColor: Colors.transparent,
-                                        transitionDuration:
-                                            MediaQuery.disableAnimationsOf(
-                                              context,
-                                            )
-                                            ? Duration.zero
-                                            : const Duration(milliseconds: 300),
-                                        pageBuilder: (context, _, _) =>
-                                            _OverlayTextTheme(
-                                              child: _NowPlayingInfo(
-                                                controller: controller,
-                                                item: item,
-                                                editorial: editorial,
-                                                badges: badges,
-                                              ),
-                                            ),
-                                        transitionBuilder:
-                                            (
-                                              context,
-                                              animation,
-                                              _,
-                                              child,
-                                            ) => FadeTransition(
-                                              opacity: animation,
-                                              child: SlideTransition(
-                                                position:
-                                                    Tween(
-                                                      begin: const Offset(1, 0),
-                                                      end: Offset.zero,
-                                                    ).animate(
-                                                      CurvedAnimation(
-                                                        parent: animation,
-                                                        curve: Curves.easeOut,
-                                                      ),
-                                                    ),
-                                                child: child,
-                                              ),
-                                            ),
-                                      );
-                                      if (moreInfoFocus.canRequestFocus) {
-                                        moreInfoFocus.requestFocus();
-                                      }
-                                    },
+                                    onPressed: controller.showProgramInfo,
                                     child: const Text('More info'),
                                   ),
                                 ],
@@ -1925,6 +1904,37 @@ class _NowPlaying extends StatelessWidget {
       ),
     );
   }
+}
+
+({String editorial, List<String> badges}) _nowPlayingFacts(
+  PlayerCoordinator controller,
+  GuideProgram program,
+) {
+  final item = program.scheduled.item;
+  final duration = controller.duration > Duration.zero
+      ? controller.duration
+      : program.scheduled.end.difference(program.scheduled.start);
+  final numberedEpisode = [
+    if (item.seasonNumber != null) 'S${item.seasonNumber}',
+    if (item.episodeNumber != null) 'E${item.episodeNumber}',
+  ].join(' ');
+  final editorial = [
+    if (numberedEpisode.isNotEmpty) numberedEpisode,
+    if (duration > Duration.zero) '${duration.inMinutes} min',
+    if (item.year != null) '${item.year}',
+    ...item.genres.where((genre) => genre.trim().isNotEmpty).take(3),
+  ].join(' · ');
+  final videoCodec =
+      formatPlayerVideoCodec(controller.telemetry.videoFormat) ??
+      formatPlayerVideoCodec(item.videoCodec) ??
+      formatPlayerVideoCodec(controller.telemetry.videoCodec);
+  final badges = mediaBadges(
+    item,
+    surface: MediaBadgeSurface.nowPlaying,
+    runtimeHdr: controller.telemetry.isHdr,
+    effectiveVideoCodec: videoCodec,
+  );
+  return (editorial: editorial, badges: badges);
 }
 
 TextStyle? _nowPlayingSecondaryStyle(
@@ -2803,6 +2813,10 @@ class _MiniGuideRow extends StatelessWidget {
         builder: (context) {
           final roles = LineupTheme.of(context);
           final foreground = roles.primaryText;
+          final filledFocus =
+              roles.androidTv &&
+              roles.focusTreatment == LineupFocusTreatment.fill &&
+              LineupFocusScope.visible(context, focused);
           final tuned = channel.id == controller.watchingChannelId;
           final unsupported =
               controller.status.state == PlayerState.unsupported;
@@ -2820,11 +2834,15 @@ class _MiniGuideRow extends StatelessWidget {
                     spanMilliseconds;
           final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: foreground,
+            shadows: filledFocus ? const [] : null,
             fontSize: 18,
             fontWeight: FontWeight.w500,
           );
-          final metadataStyle = Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: roles.secondaryText, fontSize: 18);
+          final metadataStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: roles.secondaryText,
+            fontSize: 18,
+            shadows: filledFocus ? const [] : null,
+          );
           final nextTitleStyle = titleStyle?.copyWith(
             color: roles.secondaryText,
             fontWeight: FontWeight.w400,
@@ -3595,16 +3613,9 @@ class _TracksState extends State<_Tracks> {
 /// TV's explicit readonly focus owner keeps arrows reading long content rather
 /// than moving between individual cast rows. Close is the only action.
 class _NowPlayingInfo extends StatefulWidget {
-  const _NowPlayingInfo({
-    required this.controller,
-    required this.item,
-    required this.editorial,
-    required this.badges,
-  });
+  const _NowPlayingInfo({required this.controller, required this.program});
   final PlayerCoordinator controller;
-  final ChannelItem item;
-  final String editorial;
-  final List<String> badges;
+  final GuideProgram program;
 
   @override
   State<_NowPlayingInfo> createState() => _NowPlayingInfoState();
@@ -3628,10 +3639,6 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
-      Navigator.of(context).pop();
-      return KeyEventResult.handled;
-    }
     if (_close.hasFocus && key == LogicalKeyboardKey.arrowDown) {
       _reader.requestFocus();
       return KeyEventResult.handled;
@@ -3661,190 +3668,246 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
   }
 
   @override
-  Widget build(BuildContext context) => Material(
-    type: MaterialType.transparency,
-    child: FocusScope(
-      onKeyEvent: _key,
-      child: _PlaybackDrawer(
-        controller: widget.controller,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'More info',
-                    style: Theme.of(context).textTheme.headlineSmall,
+  void didUpdateWidget(covariant _NowPlayingInfo oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.program.id == widget.program.id) return;
+    // A new scheduled program is a new document, never an old scroll offset.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.program.scheduled.item;
+    final (:editorial, :badges) = _nowPlayingFacts(
+      widget.controller,
+      widget.program,
+    );
+    return Material(
+      type: MaterialType.transparency,
+      child: FocusScope(
+        onKeyEvent: _key,
+        child: _PlaybackDrawer(
+          controller: widget.controller,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'More info',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
                   ),
-                ),
-                TextButton(
-                  key: const Key('player-more-info-close'),
-                  focusNode: _close,
+                  TextButton(
+                    key: const Key('player-more-info-close'),
+                    focusNode: _close,
+                    onPressed: widget.controller.closeOverlay,
+                    child: const _OverlayCloseLabel(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Expanded(
+                child: Focus(
+                  focusNode: _reader,
                   autofocus: true,
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const _OverlayCloseLabel(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Expanded(
-              child: Focus(
-                focusNode: _reader,
-                child: AnimatedBuilder(
-                  animation: _reader,
-                  builder: (context, _) {
-                    final roles = LineupTheme.of(context);
-                    final focused = LineupFocusScope.visible(
-                      context,
-                      _reader.hasPrimaryFocus,
-                    );
-                    return Semantics(
-                      label: 'Program information',
-                      focusable: true,
-                      focused: _reader.hasPrimaryFocus,
-                      child: LineupFocusFrame(
-                        focused: focused,
-                        child: ColoredBox(
-                          key: const Key('player-more-info-reading'),
-                          color: focused
-                              ? roles.focusedSurface
-                              : Colors.transparent,
-                          child: LineupFocusInk(
-                            focused: focused,
-                            child: Builder(
-                              builder: (context) {
-                                final ink = LineupTheme.of(context);
-                                return SingleChildScrollView(
-                                  key: const Key('player-more-info-scroll'),
-                                  controller: _scroll,
-                                  padding: const EdgeInsets.all(16),
-                                  child: DefaultTextStyle.merge(
-                                    style: TextStyle(color: ink.primaryText),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        if (widget.item.showTitle
-                                            case final series?)
-                                          Text(
-                                            series,
-                                            style: TextStyle(
-                                              color: ink.secondaryText,
-                                              shadows: const [],
-                                            ),
-                                          ),
-                                        Text(
-                                          widget.item.title,
-                                          style: LineupTypography.programTitle
-                                              .copyWith(
-                                                color: ink.primaryText,
-                                                shadows: const [],
-                                              ),
+                  child: AnimatedBuilder(
+                    animation: _reader,
+                    builder: (context, _) {
+                      final roles = LineupTheme.of(context);
+                      final focused = LineupFocusScope.visible(
+                        context,
+                        _reader.hasPrimaryFocus,
+                      );
+                      return Semantics(
+                        label: 'Program information',
+                        focusable: true,
+                        focused: _reader.hasPrimaryFocus,
+                        child: LineupFocusFrame(
+                          focused: focused,
+                          child: Padding(
+                            padding: roles.largeFocusIndicators
+                                ? const EdgeInsets.all(
+                                    LineupFocusFrame.contentClearance,
+                                  )
+                                : EdgeInsets.zero,
+                            child: DecoratedBox(
+                              key: const Key('player-more-info-reading'),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  left: BorderSide(
+                                    color: focused
+                                        ? roles.focusedSurface
+                                        : roles.subtleBorder,
+                                    width: 4,
+                                  ),
+                                ),
+                              ),
+                              child: RawScrollbar(
+                                key: const Key('player-more-info-scrollbar'),
+                                controller: _scroll,
+                                thumbVisibility: true,
+                                thumbColor: focused
+                                    ? roles.focusedSurface
+                                    : roles.secondaryText.withValues(alpha: .5),
+                                thickness: 4,
+                                radius: const Radius.circular(2),
+                                child: Builder(
+                                  builder: (context) {
+                                    final ink = LineupTheme.of(context);
+                                    return SingleChildScrollView(
+                                      key: const Key('player-more-info-scroll'),
+                                      controller: _scroll,
+                                      padding: const EdgeInsets.fromLTRB(
+                                        20,
+                                        4,
+                                        20,
+                                        16,
+                                      ),
+                                      child: DefaultTextStyle.merge(
+                                        style: TextStyle(
+                                          color: ink.primaryText,
                                         ),
-                                        if (widget.editorial.isNotEmpty) ...[
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            widget.editorial,
-                                            style: TextStyle(
-                                              color: ink.secondaryText,
-                                              shadows: const [],
-                                            ),
-                                          ),
-                                        ],
-                                        if (widget.badges.isNotEmpty) ...[
-                                          const SizedBox(height: 12),
-                                          Wrap(
-                                            spacing: 8,
-                                            runSpacing: 8,
-                                            children: [
-                                              for (final badge in widget.badges)
-                                                _NowPlayingBadge(label: badge),
-                                            ],
-                                          ),
-                                        ],
-                                        if (widget.item.summary
-                                            case final summary?) ...[
-                                          const SizedBox(height: 16),
-                                          Text(
-                                            summary,
-                                            key: const Key(
-                                              'player-more-info-summary',
-                                            ),
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyLarge
-                                                ?.copyWith(
-                                                  color: ink.primaryText,
-                                                  shadows: const [],
-                                                  height: 1.45,
-                                                ),
-                                          ),
-                                        ],
-                                        if (widget.item.cast.isNotEmpty) ...[
-                                          const SizedBox(height: 24),
-                                          Text(
-                                            'Cast',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium
-                                                ?.copyWith(
-                                                  color: ink.primaryText,
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            if (item.showTitle
+                                                case final series?)
+                                              Text(
+                                                series,
+                                                style: TextStyle(
+                                                  color: ink.secondaryText,
                                                   shadows: const [],
                                                 ),
-                                          ),
-                                          for (
-                                            var i = 0;
-                                            i < widget.item.cast.length;
-                                            i++
-                                          )
-                                            Padding(
-                                              key: ValueKey(
-                                                'player-more-info-cast-$i',
                                               ),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8,
+                                            Text(
+                                              item.title,
+                                              style: LineupTypography
+                                                  .programTitle
+                                                  .copyWith(
+                                                    color: ink.primaryText,
+                                                    shadows: const [],
                                                   ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.stretch,
+                                            ),
+                                            if (editorial.isNotEmpty) ...[
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                editorial,
+                                                style: TextStyle(
+                                                  color: ink.secondaryText,
+                                                  shadows: const [],
+                                                ),
+                                              ),
+                                            ],
+                                            if (badges.isNotEmpty) ...[
+                                              const SizedBox(height: 12),
+                                              Wrap(
+                                                spacing: 8,
+                                                runSpacing: 8,
                                                 children: [
-                                                  Text(
-                                                    widget.item.cast[i].name,
-                                                  ),
-                                                  if (widget.item.cast[i].role
-                                                      case final role?)
-                                                    Text(
-                                                      role,
-                                                      style: TextStyle(
-                                                        color:
-                                                            ink.secondaryText,
-                                                      ),
+                                                  for (final badge in badges)
+                                                    _NowPlayingBadge(
+                                                      label: badge,
                                                     ),
                                                 ],
                                               ),
-                                            ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
+                                            ],
+                                            if (item.summary
+                                                case final summary?) ...[
+                                              const SizedBox(height: 16),
+                                              Text(
+                                                summary,
+                                                key: const Key(
+                                                  'player-more-info-summary',
+                                                ),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyLarge
+                                                    ?.copyWith(
+                                                      color: ink.primaryText,
+                                                      shadows: const [],
+                                                      height: 1.45,
+                                                    ),
+                                              ),
+                                            ],
+                                            if (item.cast.isNotEmpty) ...[
+                                              const SizedBox(height: 24),
+                                              Text(
+                                                'Cast',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium
+                                                    ?.copyWith(
+                                                      color: ink.primaryText,
+                                                      shadows: const [],
+                                                    ),
+                                              ),
+                                              for (
+                                                var i = 0;
+                                                i < item.cast.length;
+                                                i++
+                                              )
+                                                Padding(
+                                                  key: ValueKey(
+                                                    'player-more-info-cast-$i',
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 8,
+                                                      ),
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .stretch,
+                                                    children: [
+                                                      Text(item.cast[i].name),
+                                                      if (item.cast[i].role
+                                                          case final role?)
+                                                        Text(
+                                                          role,
+                                                          style: TextStyle(
+                                                            color: ink
+                                                                .secondaryText,
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: Text(
+                  'Up/Down Scroll · Back Close',
+                  key: const Key('player-more-info-hint'),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: LineupTheme.of(context).secondaryText),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _PlaybackDrawer extends StatelessWidget {

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,11 +5,14 @@ import 'app_theme.dart';
 
 export 'focus_ink.dart';
 
-/// D14 aliases belong to Android TV. Keep the platform policy shared by
-/// command routing and focus modality so desktop Application/Menu and remote
-/// keys retain their existing behavior.
-LogicalKeyboardKey? androidTvKeyAlias(LogicalKeyboardKey key) {
-  if (defaultTargetPlatform != TargetPlatform.android) return null;
+/// D14 aliases belong to the explicit TV capability, including injected TV
+/// surfaces on desktop hosts. Share that policy between command routing and
+/// focus modality; ordinary desktop Application/Menu keys remain untouched.
+LogicalKeyboardKey? androidTvKeyAlias(
+  LogicalKeyboardKey key, {
+  required bool androidTv,
+}) {
+  if (!androidTv) return null;
   return switch (key) {
     LogicalKeyboardKey.channelUp => LogicalKeyboardKey.pageUp,
     LogicalKeyboardKey.channelDown => LogicalKeyboardKey.pageDown,
@@ -76,7 +78,11 @@ class _LineupFocusScopeState extends State<LineupFocusScope> {
   bool _onKey(KeyEvent event) {
     if (event is! KeyUpEvent &&
         (_navigationKeys.contains(event.logicalKey) ||
-            androidTvKeyAlias(event.logicalKey) != null)) {
+            androidTvKeyAlias(
+                  event.logicalKey,
+                  androidTv: LineupTheme.of(context).androidTv,
+                ) !=
+                null)) {
       _setVisible(true);
     }
     return false;

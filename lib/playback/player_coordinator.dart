@@ -18,6 +18,7 @@ enum PlayerOverlay {
   none,
   osd,
   nowPlaying,
+  programInfo,
   miniGuide,
   fullGuide,
   audioTracks,
@@ -641,7 +642,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
           if (holdTransition) break;
           if (!_preservePresentation &&
               event.status.state != previousState &&
-              _overlay != PlayerOverlay.nowPlaying) {
+              _overlay != PlayerOverlay.nowPlaying &&
+              _overlay != PlayerOverlay.programInfo) {
             _setOverlay(PlayerOverlay.osd);
           }
           break;
@@ -1498,6 +1500,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final nativeStop = _beginNativeStop(
       force: !forBackground || hasPlaybackIntent,
     );
+    if (_overlay == PlayerOverlay.programInfo) {
+      _cancelOverlayTimer();
+      _presentOverlay(PlayerOverlay.none);
+    }
     if (!_disposed) notifyListeners();
     final operation = _tuneOperations.then((_) async {
       if (nativeStop != null) await nativeStop;
@@ -1771,7 +1777,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     if (current() && _ownsPlaybackControl(controlGeneration, tuneGeneration)) {
-      showOsd();
+      if (_overlay != PlayerOverlay.programInfo) showOsd();
     }
   }
 
@@ -1800,6 +1806,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   void showNowPlaying() {
     if (currentProgram == null) return;
     _setOverlay(PlayerOverlay.nowPlaying, timed: false);
+  }
+
+  void showProgramInfo() {
+    if (_overlay != PlayerOverlay.nowPlaying || currentProgram == null) return;
+    _setOverlay(PlayerOverlay.programInfo, timed: false);
   }
 
   void showMiniGuide() {
@@ -1880,6 +1891,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void closeOverlay() {
+    if (_overlay == PlayerOverlay.programInfo) {
+      currentProgram == null ? showOsd() : showNowPlaying();
+      return;
+    }
     if (_overlay == PlayerOverlay.channelNumber) {
       _numberTimer?.cancel();
       _numberTimer = null;
@@ -2192,11 +2207,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _guideChanged() {
-    if (_overlay == PlayerOverlay.nowPlaying && currentProgram == null) {
+    if (_overlay == PlayerOverlay.programInfo && currentProgram == null) {
+      showOsd();
+    } else if (_overlay == PlayerOverlay.nowPlaying && currentProgram == null) {
       closeOverlay();
     } else if (_overlay == PlayerOverlay.miniGuide ||
         _overlay == PlayerOverlay.osd ||
-        _overlay == PlayerOverlay.nowPlaying) {
+        _overlay == PlayerOverlay.nowPlaying ||
+        _overlay == PlayerOverlay.programInfo) {
       notifyListeners();
     }
   }

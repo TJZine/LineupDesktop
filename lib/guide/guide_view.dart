@@ -592,7 +592,12 @@ class _GuideViewState extends State<GuideView>
       return KeyEventResult.ignored;
     }
     final rawKey = event.logicalKey;
-    final key = androidTvKeyAlias(rawKey) ?? rawKey;
+    final key =
+        androidTvKeyAlias(
+          rawKey,
+          androidTv: LineupTheme.of(context).androidTv,
+        ) ??
+        rawKey;
     final roles = LineupTheme.of(context);
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
@@ -611,9 +616,7 @@ class _GuideViewState extends State<GuideView>
       return KeyEventResult.handled;
     }
     final isAndroidTvMenu =
-        roles.androidTv &&
-        defaultTargetPlatform == TargetPlatform.android &&
-        rawKey == LogicalKeyboardKey.contextMenu;
+        roles.androidTv && rawKey == LogicalKeyboardKey.contextMenu;
     if (key == LogicalKeyboardKey.keyI &&
         isAndroidTvMenu &&
         widget.onOpenMenu != null) {
@@ -648,7 +651,12 @@ class _GuideViewState extends State<GuideView>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final key = androidTvKeyAlias(event.logicalKey) ?? event.logicalKey;
+    final key =
+        androidTvKeyAlias(
+          event.logicalKey,
+          androidTv: LineupTheme.of(context).androidTv,
+        ) ??
+        event.logicalKey;
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
         keyboard.isControlPressed ||
@@ -772,7 +780,12 @@ class _GuideViewState extends State<GuideView>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final key = androidTvKeyAlias(event.logicalKey) ?? event.logicalKey;
+    final key =
+        androidTvKeyAlias(
+          event.logicalKey,
+          androidTv: LineupTheme.of(context).androidTv,
+        ) ??
+        event.logicalKey;
     final gridFocus = widget.focusNode ?? _guideFocus;
     if (key == LogicalKeyboardKey.arrowDown) {
       gridFocus.requestFocus();
