@@ -73,9 +73,9 @@ void main() {
         ),
       );
       final scale = LineupCanvas.scaleFor(window, androidTv: true);
-      expect(scale, closeTo(window.height / 810, 1e-12));
+      expect(scale, closeTo(window.height / 1080, 1e-12));
       expect(outer.size, window / scale);
-      expect(outer.size.height, 810);
+      expect(outer.size.height, 1080);
       expect(
         outer.padding,
         EdgeInsets.fromLTRB(100, window.height * .05, window.width * .05, 80) /

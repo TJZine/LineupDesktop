@@ -2037,7 +2037,7 @@ class _Dropdown<T> extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: LineupTheme.of(context).secondaryText,
-                          fontSize: LineupTheme.of(context).metadataTextSize(),
+                          fontSize: 14,
                         ),
                       ),
                     ),

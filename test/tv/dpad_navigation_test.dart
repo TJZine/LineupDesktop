@@ -16,6 +16,7 @@ import 'package:lineup_desktop/app/setup_review.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 
 import '../support/ui_fixture.dart';
+import '../support/golden_test_support.dart';
 
 const _up = LogicalKeyboardKey.arrowUp;
 const _down = LogicalKeyboardKey.arrowDown;
@@ -104,10 +105,11 @@ void main() {
         .setMockMethodCallHandler(platform, null),
   );
   for (final theme in LineupThemeName.values) {
-    for (final textScale in [1.0, 1.3]) {
+    for (final textScale in [1.0, 1.15, 1.3]) {
       _tvTest(
         'PIN is initially complete and stationary: ${theme.name} text=$textScale',
         (tester) async {
+          await tester.runAsync(loadPinnedTestFonts);
           tester.platformDispatcher.textScaleFactorTestValue = textScale;
           addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
           final pending = Completer<void>();
@@ -425,26 +427,28 @@ void main() {
               androidTv: true,
             ),
             home: Scaffold(
-              body: LineupFocusScope(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: SetupReviewStep(
-                    review: review,
-                    notice: null,
-                    removalConfirmed: false,
-                    sourceOrder: const [],
-                    sourceLabel: (_) => 'Manual',
-                    initialFilter: SetupReviewFilter.all,
-                    initialSearch: '',
-                    onFilterChanged: (_) {},
-                    onSearchChanged: (_) {},
-                    isGeneratedSourceConfirmedGone: (_) => false,
-                    onBack: () {},
-                    onModeChanged: (_) {},
-                    onRemovalChanged: (_, _) {},
-                    onRemovalConfirmationChanged: (value) => consent = value,
-                    onApply: () => applyCalls++,
-                    onViewLineup: () {},
+              body: SafeArea(
+                child: LineupFocusScope(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: SetupReviewStep(
+                      review: review,
+                      notice: null,
+                      removalConfirmed: false,
+                      sourceOrder: const [],
+                      sourceLabel: (_) => 'Manual',
+                      initialFilter: SetupReviewFilter.all,
+                      initialSearch: '',
+                      onFilterChanged: (_) {},
+                      onSearchChanged: (_) {},
+                      isGeneratedSourceConfirmedGone: (_) => false,
+                      onBack: () {},
+                      onModeChanged: (_) {},
+                      onRemovalChanged: (_, _) {},
+                      onRemovalConfirmationChanged: (value) => consent = value,
+                      onApply: () => applyCalls++,
+                      onViewLineup: () {},
+                    ),
                   ),
                 ),
               ),

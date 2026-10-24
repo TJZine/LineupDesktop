@@ -383,7 +383,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                 'Combine matching values to create shared channels across your selected libraries.',
                 style: TextStyle(
                   color: roles.secondaryText,
-                  fontSize: roles.bodyTextSize(desktop: 16),
+                  fontSize: 16,
                   height: 1.4,
                 ),
               ),
@@ -645,7 +645,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     );
     final countStyle = TextStyle(
       color: eligible == 0 ? roles.mutedText : roles.secondaryText,
-      fontSize: roles.metadataTextSize(desktop: 16),
+      fontSize: 16,
       height: 1.4,
     );
     final detailStyle = TextStyle(
@@ -735,7 +735,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     final enabled = _strategies.contains(strategy);
     final countStyle = TextStyle(
       color: roles.secondaryText,
-      fontSize: roles.metadataTextSize(desktop: 16),
+      fontSize: 16,
       height: 1.4,
     );
     return Padding(
@@ -753,7 +753,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
           };
           final groupingStyle = Theme.of(context).textTheme.bodyMedium!
               .copyWith(
-                fontSize: roles.compactActionTextSize,
+                fontSize: 16,
                 height: 1.4,
                 color: enabled ? roles.primaryText : roles.mutedText,
               );

@@ -204,8 +204,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                           'This session only · Up to 250 recent events retained',
                           style: TextStyle(
                             color: LineupTheme.of(context).secondaryText,
-                            fontSize: LineupTheme.of(context)
-                                .metadataTextSize(),
+                            fontSize: 14,
                           ),
                         ),
                         SizedBox(height: 8),
@@ -213,8 +212,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                           'Reports exclude credentials, URLs and private paths. Review before sharing.',
                           style: TextStyle(
                             color: LineupTheme.of(context).secondaryText,
-                            fontSize: LineupTheme.of(context)
-                                .bodyTextSize(desktop: 14),
+                            fontSize: 14,
                           ),
                         ),
                         SizedBox(height: 16),
@@ -253,10 +251,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               child: Text(
                 _copyFeedback ?? '',
                 textAlign: TextAlign.end,
-                style: TextStyle(
-                  color: roles.secondaryText,
-                  fontSize: roles.bodyTextSize(desktop: 14),
-                ),
+                style: TextStyle(color: roles.secondaryText, fontSize: 14),
               ),
             ),
           ),
@@ -552,7 +547,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   : Diagnostics.windowsDisplayStateNote,
               style: TextStyle(
                 color: LineupTheme.of(context).secondaryText,
-                fontSize: LineupTheme.of(context).bodyTextSize(desktop: 14),
+                fontSize: 14,
               ),
             ),
           ],
@@ -616,7 +611,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
           label,
           style: TextStyle(
             color: LineupTheme.of(context).secondaryText,
-            fontSize: LineupTheme.of(context).metadataTextSize(),
+            fontSize: 14,
           ),
         ),
         SizedBox(height: 4),
@@ -642,10 +637,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         SizedBox(height: 4),
         Text(
           '${_visibleEvents.length} events · newest first',
-          style: TextStyle(
-            color: roles.secondaryText,
-            fontSize: roles.metadataTextSize(),
-          ),
+          style: TextStyle(color: roles.secondaryText, fontSize: 14),
         ),
       ],
     );
@@ -698,10 +690,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         SizedBox(width: 8),
         Text(
           'Recording ${snapshot.recordingEnabled ? 'on' : 'off'}',
-          style: TextStyle(
-            color: roles.secondaryText,
-            fontSize: roles.metadataTextSize(),
-          ),
+          style: TextStyle(color: roles.secondaryText, fontSize: 14),
         ),
       ],
     );
@@ -791,14 +780,14 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   _eventTime(event.time),
                   style: TextStyle(
                     color: LineupTheme.of(context).secondaryText,
-                    fontSize: LineupTheme.of(context).metadataTextSize(),
+                    fontSize: 14,
                   ),
                 );
                 final area = Text(
                   _eventAreaLabel(event.area),
                   style: TextStyle(
                     color: LineupTheme.of(context).secondaryText,
-                    fontSize: LineupTheme.of(context).metadataTextSize(),
+                    fontSize: 14,
                   ),
                 );
                 final message = Text(

@@ -9,9 +9,9 @@ void main() {
       for (final tv in [false, true]) {
         final theme = LineupTheme.forName(name, androidTv: tv);
         final roles = theme.extension<LineupThemeRoles>()!;
-        expect(theme.textTheme.labelSmall!.fontSize, tv ? 16.5 : 14);
-        expect(theme.textTheme.titleSmall!.fontSize, tv ? 16.5 : 16);
-        expect(theme.inputDecorationTheme.errorStyle!.fontSize, tv ? 18 : 14);
+        expect(theme.textTheme.labelSmall!.fontSize, 14);
+        expect(theme.textTheme.titleSmall!.fontSize, 16);
+        expect(theme.inputDecorationTheme.errorStyle!.fontSize, 14);
         final button = LineupTheme.buttonStyle(
           roles,
           LineupButtonTier.text,
@@ -21,7 +21,7 @@ void main() {
           <WidgetState>{},
           {WidgetState.focused},
         ]) {
-          expect(button.textStyle!.resolve(states)!.fontSize, tv ? 18 : 16);
+          expect(button.textStyle!.resolve(states)!.fontSize, 16);
         }
       }
     }
