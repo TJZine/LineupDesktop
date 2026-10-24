@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -39,10 +38,7 @@ class _ReadingPage {
   final back = FocusNode(debugLabel: 'Licenses back');
   final copy = FocusNode(debugLabel: 'Copy license document');
   final content = FocusNode(debugLabel: 'License document');
-  final selection = FocusNode(
-    debugLabel: 'License text selection',
-    skipTraversal: defaultTargetPlatform == TargetPlatform.android,
-  );
+  final selection = FocusNode(debugLabel: 'License text selection');
   final rows = <String, FocusNode>{};
   Future<({String? text, bool failed})>? text;
   String? returnId;
@@ -73,6 +69,15 @@ class LicensesViewState extends State<LicensesView> {
       unawaited(_load(source));
     }
     _focusBack();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final androidTv = LineupTheme.of(context).androidTv;
+    for (final page in _pages) {
+      page.selection.skipTraversal = androidTv;
+    }
   }
 
   void _focusBack() => WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -131,6 +136,7 @@ class LicensesViewState extends State<LicensesView> {
     final roles = LineupTheme.of(context);
     final page = _page;
     final item = page.item;
+    page.selection.skipTraversal = roles.androidTv;
     final parent = _pages.length == 1
         ? 'Support'
         : _pages[_pages.length - 2].item?.title ?? 'Licenses';
@@ -162,13 +168,9 @@ class LicensesViewState extends State<LicensesView> {
                               thumbVisibility: true,
                               child: Focus(
                                 focusNode: page.content,
-                                skipTraversal:
-                                    defaultTargetPlatform ==
-                                    TargetPlatform.android,
+                                skipTraversal: roles.androidTv,
                                 canRequestFocus:
-                                    defaultTargetPlatform !=
-                                        TargetPlatform.android ||
-                                    item?.read != null,
+                                    !roles.androidTv || item?.read != null,
                                 onKeyEvent: (_, event) =>
                                     _scrollKey(page, event),
                                 child: SelectionArea(
@@ -246,14 +248,12 @@ class LicensesViewState extends State<LicensesView> {
       AnimatedBuilder(
         animation: page.content,
         builder: (context, _) {
-          final tvDocument =
-              defaultTargetPlatform == TargetPlatform.android &&
-              page.item?.read != null;
+          final roles = LineupTheme.of(context);
+          final tvDocument = roles.androidTv && page.item?.read != null;
           final focused = LineupFocusScope.visible(
             context,
             tvDocument && page.content.hasPrimaryFocus,
           );
-          final roles = LineupTheme.of(context);
           return Semantics(
             container: tvDocument,
             label: tvDocument ? 'License document' : null,
@@ -291,7 +291,7 @@ class LicensesViewState extends State<LicensesView> {
       return KeyEventResult.ignored;
     }
     final position = page.scroll.position;
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (LineupTheme.of(context).androidTv) {
       // Back and Copy are actions; only the explicit reading owner consumes
       // document arrows. Loading/failure pages retain ordinary Retry traversal.
       final readable = page.item?.read != null && page.copy.context != null;
@@ -465,7 +465,7 @@ class LicensesViewState extends State<LicensesView> {
                 alignment: Alignment.centerLeft,
                 child: TextButton(
                   focusNode: page.copy,
-                  style: defaultTargetPlatform == TargetPlatform.android
+                  style: LineupTheme.of(context).androidTv
                       ? LineupTheme.buttonStyle(
                           LineupTheme.of(context),
                           LineupButtonTier.text,

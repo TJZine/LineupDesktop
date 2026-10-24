@@ -77,7 +77,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
   }
 
   KeyEventResult _readTechnicalDetails(FocusNode _, KeyEvent event) {
-    if (defaultTargetPlatform != TargetPlatform.android ||
+    if (!LineupTheme.of(context).androidTv ||
         !_technicalExpansion.isExpanded ||
         !_scroll.hasClients ||
         (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
