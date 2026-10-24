@@ -403,11 +403,20 @@ class _LineupShellState extends State<LineupShell> {
             child: ExcludeFocus(excluding: _licensesOpen, child: settings),
           ),
           if (_licensesOpen)
-            LicensesView(
-              key: _licensesKey,
-              onBack: _closeLicenses,
-              onOpenMenu: onboarding ? null : _openAppMenu,
-              menuFocusNode: onboarding ? null : _licensesMenuFocus,
+            ColoredBox(
+              color: LineupTheme.of(context).deepBackground,
+              child: SafeArea(
+                left: LineupTheme.of(context).androidTv,
+                top: LineupTheme.of(context).androidTv,
+                right: LineupTheme.of(context).androidTv,
+                bottom: LineupTheme.of(context).androidTv,
+                child: LicensesView(
+                  key: _licensesKey,
+                  onBack: _closeLicenses,
+                  onOpenMenu: onboarding ? null : _openAppMenu,
+                  menuFocusNode: onboarding ? null : _licensesMenuFocus,
+                ),
+              ),
             ),
         ],
       );
@@ -788,6 +797,10 @@ class _LineupShellState extends State<LineupShell> {
         return _withGlobalKeys(
           Scaffold(
             body: SafeArea(
+              left: !LineupTheme.of(context).androidTv,
+              top: !LineupTheme.of(context).androidTv,
+              right: !LineupTheme.of(context).androidTv,
+              bottom: !LineupTheme.of(context).androidTv,
               child: _settingsWithLicenses(
                 SettingsView(
                   controller: controller,
@@ -937,10 +950,7 @@ class _LineupShellState extends State<LineupShell> {
         fit: StackFit.expand,
         children: [
           if (hasPlaybackSurface) PlayerSurface(controller: _player),
-          if (LineupTheme.of(context).androidTv)
-            SafeArea(child: _settingsWithLicenses(settingsView))
-          else
-            _settingsWithLicenses(settingsView),
+          _settingsWithLicenses(settingsView),
         ],
       ),
       ShellDestination.diagnostics => DiagnosticsView(
@@ -960,6 +970,55 @@ class _LineupShellState extends State<LineupShell> {
       ),
       ShellDestination.player => playerView,
     };
+    final roles = LineupTheme.of(context);
+    final routeColor =
+        _destination == ShellDestination.settings ||
+            _destination == ShellDestination.player ||
+            (_destination == ShellDestination.guide && hasPlaybackSurface)
+        ? Colors.transparent
+        : Theme.of(context).scaffoldBackgroundColor;
+    final insets = MediaQuery.paddingOf(context);
+    final safeRoute = SafeArea(
+      left: routeConsumesSafeArea,
+      top: routeConsumesSafeArea,
+      right: routeConsumesSafeArea,
+      bottom: routeConsumesSafeArea,
+      child: routeView,
+    );
+    final paintedRoute = roles.androidTv
+        ? ColoredBox(
+            color: routeColor,
+            // Paint only the margin around the Guide's transparent native PiP
+            // aperture. Filling the whole route would cover the video.
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: _destination == ShellDestination.guide
+                    ? Border(
+                        left: BorderSide(
+                          color: roles.deepBackground,
+                          width: insets.left,
+                        ),
+                        top: BorderSide(
+                          color: roles.deepBackground,
+                          width: insets.top,
+                        ),
+                        right: BorderSide(
+                          color: roles.deepBackground,
+                          width: insets.right,
+                        ),
+                        bottom: BorderSide(
+                          color: roles.deepBackground,
+                          width: insets.bottom,
+                        ),
+                      )
+                    : null,
+              ),
+              child: safeRoute,
+            ),
+          )
+        : SafeArea(
+            child: ColoredBox(color: routeColor, child: routeView),
+          );
     return _withGlobalKeys(
       Scaffold(
         backgroundColor: Colors.transparent,
@@ -975,22 +1034,7 @@ class _LineupShellState extends State<LineupShell> {
                 visible: TooltipVisibility.of(context) && _appMenu == null,
                 child: ExcludeFocus(
                   excluding: _appMenu != null,
-                  child: SafeArea(
-                    left: routeConsumesSafeArea,
-                    top: routeConsumesSafeArea,
-                    right: routeConsumesSafeArea,
-                    bottom: routeConsumesSafeArea,
-                    child: ColoredBox(
-                      color:
-                          _destination == ShellDestination.settings ||
-                              _destination == ShellDestination.player ||
-                              (_destination == ShellDestination.guide &&
-                                  hasPlaybackSurface)
-                          ? Colors.transparent
-                          : Theme.of(context).scaffoldBackgroundColor,
-                      child: routeView,
-                    ),
-                  ),
+                  child: paintedRoute,
                 ),
               ),
             ),
@@ -1179,66 +1223,75 @@ class _SettingsViewState extends State<SettingsView> {
           child: ColoredBox(
             key: const Key('settings-immersive-scrim'),
             color: roles.deepBackground.withValues(alpha: 0.94),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compact =
-                    LineupLayout.isCompactWidth(constraints.maxWidth) ||
-                    MediaQuery.textScalerOf(context).scale(1) >= 2;
-                final theme = Theme.of(context);
-                return DefaultTextStyle(
-                  style: theme.textTheme.bodyMedium!,
-                  child: Builder(
-                    builder: (context) => Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        LineupTopBar(
-                          menuKey: const Key('settings-app-menu'),
-                          onOpenMenu: widget.onOpenMenu,
-                          menuFocusNode: widget.menuFocusNode,
-                        ),
-                        Expanded(
-                          child: LineupContentWidth(
-                            vertical: 24,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _settingsHeader(context),
-                                const SizedBox(height: 24),
-                                Expanded(
-                                  child: compact
-                                      ? Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            _categoryRail(context, true),
-                                            Expanded(
-                                              child: _detailPane(context, true),
-                                            ),
-                                          ],
-                                        )
-                                      : Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            _categoryRail(context, false),
-                                            Expanded(
-                                              child: _detailPane(
-                                                context,
-                                                false,
+            child: SafeArea(
+              left: roles.androidTv,
+              top: roles.androidTv,
+              right: roles.androidTv,
+              bottom: roles.androidTv,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact =
+                      LineupLayout.isCompactWidth(constraints.maxWidth) ||
+                      MediaQuery.textScalerOf(context).scale(1) >= 2;
+                  final theme = Theme.of(context);
+                  return DefaultTextStyle(
+                    style: theme.textTheme.bodyMedium!,
+                    child: Builder(
+                      builder: (context) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          LineupTopBar(
+                            menuKey: const Key('settings-app-menu'),
+                            onOpenMenu: widget.onOpenMenu,
+                            menuFocusNode: widget.menuFocusNode,
+                          ),
+                          Expanded(
+                            child: LineupContentWidth(
+                              vertical: 24,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _settingsHeader(context),
+                                  const SizedBox(height: 24),
+                                  Expanded(
+                                    child: compact
+                                        ? Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              _categoryRail(context, true),
+                                              Expanded(
+                                                child: _detailPane(
+                                                  context,
+                                                  true,
+                                                ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                ),
-                              ],
+                                            ],
+                                          )
+                                        : Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              _categoryRail(context, false),
+                                              Expanded(
+                                                child: _detailPane(
+                                                  context,
+                                                  false,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -1902,9 +1955,7 @@ class _SettingsSwitchTile extends StatelessWidget {
     return LineupToggleSurface(
       child: MergeSemantics(
         child: _SettingsRow(
-          horizontalPadding: roles.androidTv && roles.largeFocusIndicators
-              ? LineupFocusFrame.contentClearance
-              : 0,
+          horizontalPadding: roles.androidTv ? 16 : 0,
           label: title,
           helper: subtitle,
           control: Builder(
@@ -1985,33 +2036,36 @@ class _Dropdown<T> extends StatelessWidget {
       );
       selectedItems.add(Text(label));
     }
-    return MergeSemantics(
-      child: _SettingsRow(
-        label: Text(label),
-        helper: Text(description),
-        control: SizedBox(
-          width: double.infinity,
-          child: lineupDropdownField<T>(
-            context: context,
-            key: ValueKey('settings-field-$label'),
-            initialValue: value,
-            isExpanded: true,
-            itemHeight: null,
-            icon: const Icon(Icons.arrow_drop_down, size: 20),
-            style: theme.textTheme.bodyLarge?.copyWith(fontSize: 18),
-            decoration: InputDecoration(),
-            items: items,
-            selectedItemChildren: choiceDescription == null
-                ? null
-                : selectedItems,
-            onChanged: changed == null
-                ? null
-                : (item) {
-                    if (item != null) changed!(item);
-                  },
+    return LineupToggleSurface(
+      child: MergeSemantics(
+        child: _SettingsRow(
+          horizontalPadding: LineupTheme.of(context).androidTv ? 16 : 0,
+          label: Text(label),
+          helper: Text(description),
+          control: SizedBox(
+            width: double.infinity,
+            child: lineupDropdownField<T>(
+              context: context,
+              key: ValueKey('settings-field-$label'),
+              initialValue: value,
+              isExpanded: true,
+              itemHeight: null,
+              icon: const Icon(Icons.arrow_drop_down, size: 20),
+              style: theme.textTheme.bodyLarge?.copyWith(fontSize: 18),
+              decoration: InputDecoration(),
+              items: items,
+              selectedItemChildren: choiceDescription == null
+                  ? null
+                  : selectedItems,
+              onChanged: changed == null
+                  ? null
+                  : (item) {
+                      if (item != null) changed!(item);
+                    },
+            ),
           ),
+          first: first,
         ),
-        first: first,
       ),
     );
   }

@@ -708,7 +708,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
+                  padding: LineupTheme.of(context).androidTv
+                      ? const EdgeInsets.symmetric(horizontal: 20)
+                      : EdgeInsets.zero,
                   minimumSize: const Size(0, 48),
                   alignment: Alignment.centerLeft,
                 ),

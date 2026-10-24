@@ -56,11 +56,7 @@ class LineupTopBar extends StatelessWidget {
         builder: (context) {
           final ink = LineupTheme.of(context);
           return Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: menu && ink.androidTv && ink.largeFocusIndicators
-                  ? LineupFocusFrame.contentClearance
-                  : 0,
-            ),
+            padding: EdgeInsets.symmetric(horizontal: 0),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -112,7 +108,11 @@ class LineupTopBar extends StatelessWidget {
                     focusNode: menuFocusNode,
                     onPressed: () =>
                         onOpenMenu!(invokerContext, menuFocusNode!),
-                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    style: TextButton.styleFrom(
+                      padding: roles.androidTv
+                          ? const EdgeInsets.symmetric(horizontal: 20)
+                          : EdgeInsets.zero,
+                    ),
                     child: lockup,
                   ),
                 ),

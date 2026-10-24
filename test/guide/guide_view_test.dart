@@ -2388,7 +2388,7 @@ void main() {
       await tester.pumpAndSettle();
       guide.selectProgram(guide.row('channel-a').programs.first);
       await tester.pumpAndSettle();
-      final details = find.byKey(const Key('guide-info-dynamic-background'));
+      final details = find.byKey(const Key('guide-information-details'));
       Finder detailText(String value) =>
           find.descendant(of: details, matching: find.text(value));
       expect(detailText('Program A'), findsOneWidget);

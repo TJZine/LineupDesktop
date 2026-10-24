@@ -41,6 +41,7 @@ class LineupFocusScope extends StatefulWidget {
 
 class _LineupFocusScopeState extends State<LineupFocusScope> {
   bool _visible = false;
+  bool _initialized = false;
   static final _navigationKeys = {
     LogicalKeyboardKey.tab,
     LogicalKeyboardKey.arrowUp,
@@ -61,6 +62,15 @@ class _LineupFocusScopeState extends State<LineupFocusScope> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _visible = LineupTheme.of(context).androidTv;
+      _initialized = true;
+    }
   }
 
   bool _onKey(KeyEvent event) {

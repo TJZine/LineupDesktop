@@ -200,7 +200,9 @@ class SetupLibraryStep extends StatelessWidget {
             TextButton(
               key: const ValueKey('setup-switch-server'),
               style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
+                padding: LineupTheme.of(context).androidTv
+                    ? const EdgeInsets.symmetric(horizontal: 20)
+                    : EdgeInsets.zero,
                 minimumSize: const Size(0, 48),
                 alignment: Alignment.centerLeft,
               ),
@@ -208,7 +210,13 @@ class SetupLibraryStep extends StatelessWidget {
               child: actionLabel('Switch server'),
             ),
           if (!scanning && data.channelSetupCanCancel)
-            TextButton(onPressed: onCancelSetup, child: actionLabel('Cancel')),
+            TextButton(
+              style: roles.androidTv
+                  ? TextButton.styleFrom(minimumSize: const Size(0, 48))
+                  : null,
+              onPressed: onCancelSetup,
+              child: actionLabel('Cancel'),
+            ),
         ],
       ),
       leading: [

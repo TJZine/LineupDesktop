@@ -41,6 +41,344 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  for (final size in [
+    const Size(1280, 720),
+    const Size(1920, 1080),
+    const Size(960, 540),
+  ]) {
+    testWidgets('R2 matched Player size=$size', (tester) async {
+      await tester.runAsync(loadPinnedTestFonts);
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final tv = size.width == 960;
+      debugDefaultTargetPlatformOverride = tv
+          ? TargetPlatform.android
+          : TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final fixture = _Fixture(
+        PlayerState.playing,
+        guideClock: () => DateTime(2026, 1, 15, 12),
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 24),
+          summary: List.filled(20, 'A synthetic synopsis.').join(' '),
+          cast: _fixtureCast,
+        ),
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            selected: true,
+            language: 'eng',
+          ),
+        ],
+      );
+      await fixture.guide.ensureCurrentProgram('channel');
+      fixture.player.showNowPlaying();
+      final captureKey = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: captureKey,
+          child: MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: tv,
+            ),
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _settleNowPlayingArtwork(tester);
+      await _r2Capture(
+        tester,
+        captureKey,
+        'matched-$tv-${size.width.toInt()}-NowPlaying',
+      );
+      fixture.player.showMiniGuide();
+      await tester.pumpAndSettle();
+      await _r2Capture(
+        tester,
+        captureKey,
+        'matched-$tv-${size.width.toInt()}-MiniGuide',
+      );
+      fixture.player.showOsd();
+      fixture.player.showTracks(PlayerTrackType.audio);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+      await _r2Capture(
+        tester,
+        captureKey,
+        'matched-$tv-${size.width.toInt()}-Audio',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }, skip: Platform.environment['R2_CAPTURE'] == null);
+  }
+
+  for (final variant in [
+    (tv: true, long: false, cast: 4, shown: false),
+    (tv: true, long: true, cast: 4, shown: true),
+    (tv: true, long: false, cast: 24, shown: true),
+    (tv: false, long: true, cast: 24, shown: false),
+  ]) {
+    testWidgets('O1 More info uses actual synopsis and cast clamp $variant', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final item = _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 24),
+        summary: variant.long
+            ? List.filled(50, 'A lengthy program synopsis.').join(' ')
+            : 'Short synopsis.',
+        cast: List.generate(
+          variant.cast,
+          (i) => ChannelCastMember(name: 'Performer $i', role: 'Role $i'),
+        ),
+      );
+      final fixture = _Fixture(PlayerState.playing, richItemOverride: item);
+      await fixture.player.tune('channel');
+      fixture.player.showNowPlaying();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: variant.tv,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('player-more-info')),
+        variant.shown ? findsOneWidget : findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    });
+  }
+
+  for (final large in [false, true]) {
+    for (final textScale in [1.0, 1.3]) {
+      testWidgets(
+        'O1 remote reads full drawer and returns Large=$large scale=$textScale',
+        (tester) async {
+          await tester.runAsync(loadPinnedTestFonts);
+          await tester.binding.setSurfaceSize(const Size(960, 540));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final item = _fixtureItem(
+            0,
+            rich: true,
+            duration: const Duration(hours: 24),
+            summary: List.filled(
+              30,
+              'A lengthy program synopsis with all its details.',
+            ).join(' '),
+            cast: List.generate(
+              24,
+              (i) => ChannelCastMember(name: 'Performer $i', role: 'Role $i'),
+            ),
+          );
+          final fixture = _Fixture(
+            PlayerState.playing,
+            richItemOverride: item,
+            guideClock: () => DateTime(2026, 1, 15, 12),
+          );
+          await fixture.lineup.updateSettings(
+            (s) => s.copyWith(reduceMotion: large, largeFocusIndicators: large),
+          );
+          await fixture.player.tune('channel');
+          fixture.player.showNowPlaying();
+          final captureKey = GlobalKey();
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: captureKey,
+              child: MaterialApp(
+                theme: LineupTheme.forName(
+                  LineupThemeName.emberSteel,
+                  androidTv: true,
+                  largeFocusIndicators: large,
+                ),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(textScaler: TextScaler.linear(textScale)),
+                  child: LineupCanvas(reduceMotion: large, child: child!),
+                ),
+                home: PlayerView(controller: fixture.player, openGuide: () {}),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          Future<void> key(LogicalKeyboardKey key) async {
+            await tester.sendKeyEvent(key);
+            await tester.pumpAndSettle();
+          }
+
+          final shelf = tester.getRect(
+            find.byKey(const Key('player-now-playing-details')),
+          );
+          final fourthRole = tester.getRect(
+            find.byKey(const ValueKey('player-now-playing-cast-role-3')),
+          );
+          expect(fourthRole.bottom, lessThanOrEqualTo(shelf.bottom + .1));
+          expect(
+            tester
+                .getRect(find.byKey(const Key('player-now-playing-collapse')))
+                .top,
+            greaterThanOrEqualTo(27),
+          );
+          await _r2Capture(
+            tester,
+            captureKey,
+            'now-playing-entry-large$large-scale$textScale',
+          );
+          final more = find.byKey(const Key('player-more-info'));
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          await _r2Capture(
+            tester,
+            captureKey,
+            'now-playing-large$large-scale$textScale',
+          );
+          await key(LogicalKeyboardKey.select);
+          expect(
+            find.byKey(const Key('player-more-info-close')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const Key('player-more-info-cast-23')),
+            findsOneWidget,
+          );
+          expect(
+            tester
+                .widget<Text>(find.byKey(const Key('player-more-info-summary')))
+                .maxLines,
+            isNull,
+          );
+          await key(LogicalKeyboardKey.arrowDown);
+          final reader = find.byKey(const Key('player-more-info-reading'));
+          expect(Focus.of(tester.element(reader)).hasPrimaryFocus, isTrue);
+          expect(
+            tester.widget<ColoredBox>(reader).color,
+            const Color(0xFFE9DCC3),
+          );
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-top-large$large-scale$textScale',
+          );
+          final scroll = tester
+              .widget<SingleChildScrollView>(
+                find.byKey(const Key('player-more-info-scroll')),
+              )
+              .controller!;
+          for (
+            var n = 0;
+            n < 160 && scroll.offset < scroll.position.maxScrollExtent;
+            n++
+          ) {
+            await key(LogicalKeyboardKey.arrowDown);
+          }
+          expect(scroll.offset, scroll.position.maxScrollExtent);
+          final last = tester.getRect(
+            find.byKey(const Key('player-more-info-cast-23')),
+          );
+          final viewport = tester.getRect(reader);
+          expect(last.top, greaterThanOrEqualTo(viewport.top));
+          expect(last.bottom, lessThanOrEqualTo(viewport.bottom));
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-end-large$large-scale$textScale',
+          );
+          for (var n = 0; n < 160 && scroll.offset > 0; n++) {
+            await key(LogicalKeyboardKey.arrowUp);
+          }
+          expect(scroll.offset, 0);
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(
+            tester
+                .widget<TextButton>(
+                  find.byKey(const Key('player-more-info-close')),
+                )
+                .focusNode!
+                .hasPrimaryFocus,
+            isTrue,
+          );
+          await key(LogicalKeyboardKey.select);
+          expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          await key(LogicalKeyboardKey.arrowUp);
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          await key(LogicalKeyboardKey.select);
+          await key(LogicalKeyboardKey.escape);
+          expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+        },
+      );
+    }
+  }
+
+  testWidgets('C5 TV Mini Guide virtual cursor paints cream and leaf ink', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, channelCount: 12);
+    await fixture.player.tune('channel');
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Establish remote modality first so this negative isolates virtual-cursor
+    // paint from the separate cold-focus correction.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    final owner = FocusManager.instance.primaryFocus;
+    for (var i = 0; i < 13; i++) {
+      final id = fixture.player.miniGuideChannelId!;
+      final text = find.byKey(Key('mini-guide-channel-$id'));
+      final rich = find
+          .descendant(of: text, matching: find.byType(RichText))
+          .first;
+      expect(
+        tester.widget<RichText>(rich).text.style?.color,
+        const Color(0xFF090806),
+      );
+      final row = find
+          .ancestor(of: text, matching: find.byType(LineupRowSurface))
+          .first;
+      final paints = find.descendant(
+        of: row,
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.decoration is BoxDecoration &&
+              (w.decoration! as BoxDecoration).color == const Color(0xFFE9DCC3),
+        ),
+      );
+      expect(paints, findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus, same(owner));
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets(
     'TV Sleep presets keep focus ink separate from selected preset in touch mode',
     (tester) async {
@@ -7569,4 +7907,19 @@ Future<void> _showReachableTooltip(WidgetTester tester, String message) async {
     overlay.single.getSemanticsData().hasAction(SemanticsAction.tap),
     isFalse,
   );
+}
+
+Future<void> _r2Capture(WidgetTester tester, GlobalKey key, String name) async {
+  final directory = Platform.environment['R2_CAPTURE'];
+  if (directory == null) return;
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(directory).create(recursive: true);
+    await File('$directory/$name.png')
+        .writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
 }

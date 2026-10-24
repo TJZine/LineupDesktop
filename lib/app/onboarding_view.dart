@@ -94,6 +94,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   _ServerAttempt _serverAttempt = const _NoServerAttempt();
   int _serverAttemptRevision = 0;
   PlexHomeUser? _pinUser;
+  String? _invokedProfileId;
   bool _pulse = true;
   FocusNode? _lastControlFocus;
   bool _focusRecoveryScheduled = false;
@@ -226,7 +227,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   void _returnFromPin() {
     if (_pinUser == null) return;
     setState(() => _pinUser = null);
-    if (widget.accountOrigin &&
+    if (!LineupTheme.of(context).androidTv &&
+        widget.accountOrigin &&
         widget.controller.profileSelectionCanCancel &&
         widget.controller.profileSelectionOriginStage == SetupStage.ready) {
       widget.controller.cancelProfileSelection();
@@ -832,6 +834,12 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     );
   }
 
+  bool _profileReturnTarget(int index) =>
+      LineupTheme.of(context).androidTv &&
+          widget.controller.profiles.any((p) => p.id == _invokedProfileId)
+      ? widget.controller.profiles[index].id == _invokedProfileId
+      : index == 0;
+
   Widget _profiles() => _HeroContent(
     title: "Who's watching?",
     subtitle: 'Choose a Plex Home profile to continue.',
@@ -894,8 +902,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                                           .profiles[start + column]
                                           .id ==
                                       widget.controller.profile?.id,
-                                  autofocus: start + column == 0,
-                                  focusNode: start + column == 0
+                                  autofocus: _profileReturnTarget(
+                                    start + column,
+                                  ),
+                                  focusNode:
+                                      _profileReturnTarget(start + column)
                                       ? _profileReturnFocus
                                       : null,
                                   onPressed: widget.controller.busy
@@ -1131,7 +1142,10 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       return;
     }
     if (!mounted || widget.controller.busy) return;
-    setState(() => _pinUser = user);
+    setState(() {
+      if (LineupTheme.of(context).androidTv) _invokedProfileId = user.id;
+      _pinUser = user;
+    });
   }
 
   Widget _profilePin({required Key key}) => _ProfilePinStep(
@@ -1453,9 +1467,6 @@ class _ProfileBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final focusedTv =
-        roles.androidTv &&
-        LineupFocusScope.visible(context, Focus.of(context).hasFocus);
     return Semantics(
       label: label,
       child: ExcludeSemantics(
@@ -1471,10 +1482,10 @@ class _ProfileBadge extends StatelessWidget {
               label,
               style: TextStyle(
                 color: label == 'Current'
-                    ? focusedTv
+                    ? roles.androidTv && roles.primaryText == roles.onFocus
                           ? roles.primaryText
                           : roles.progressFill
-                    : LineupTheme.of(context).secondaryText,
+                    : roles.secondaryText,
                 fontSize: LineupTheme.of(context).metadataTextSize(),
                 fontWeight: FontWeight.w500,
               ),
