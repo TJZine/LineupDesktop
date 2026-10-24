@@ -100,6 +100,13 @@ class GuideLayoutPolicy {
         ? math.min(324.0, pictureAllocation)
         : showcaseHeight;
     final widthBudget = math.max(0.0, width - 360 - 12 - 40);
+    final identityFraction =
+        _GuideInformationLayout.identityFlex(
+          height: showcaseHeight - 28,
+          compactLogo: showcaseHeight < 180 * textScale,
+          enlarged: textScale > 1,
+        ) /
+        10;
     final pictureWidth = tvControlsHeight == null
         ? (hasPicture
               ? math.min(pictureHeight * 16 / 9, widthBudget)
@@ -108,7 +115,10 @@ class GuideLayoutPolicy {
             0.0,
             math.min(
               pictureHeight * 16 / 9,
-              math.min(width * .32, width - 12 - 40 - 32 - tvIdentityWidth * 2),
+              math.min(
+                width * .32,
+                width - 12 - 40 - 32 - tvIdentityWidth / identityFraction,
+              ),
             ),
           );
     return GuideLayoutPolicy._(
@@ -3100,6 +3110,21 @@ abstract final class _GuideStyles {
       );
 }
 
+abstract final class _GuideInformationLayout {
+  static bool dense({required double height, required bool enlarged}) =>
+      height < 270 || enlarged;
+
+  static int identityFlex({
+    required double height,
+    required bool compactLogo,
+    required bool enlarged,
+  }) => height < 220
+      ? 6
+      : compactLogo || dense(height: height, enlarged: enlarged)
+      ? 5
+      : 4;
+}
+
 /// Reserve every supported information field, even when the inspected program
 /// omits it. Moving the cursor must never resize the grid or native PiP.
 class _TvGuideSchema {
@@ -3137,19 +3162,31 @@ class _TvGuideSchema {
         line(_GuideStyles.metadata) * 2 +
         badgeHeight +
         gap * 5;
-    // The five badge roles are a single row. Their standard widest labels
-    // establish a minimum identity width independently of current catalog data.
+    // A finite display budget for the five badge roles, independent of the
+    // inspected program. Include the wider supported catalog codes; raw values
+    // outside this budget retain their text/semantics but ellipsize on TV.
     final badgeWidth =
-        ['TV-MA', '1080P', 'DOLBY VISION', 'TRUEHD', 'STEREO']
+        [
+              ['TV-Y7-FV', 'TV-MA', 'NC-17'],
+              ['1080P', '2160P'],
+              ['DOLBY VISION'],
+              ['TRUEHD', 'DTS-HD'],
+              ['STEREO', 'MONO', '7.1'],
+            ]
             .map(
-              (label) =>
-                  _textWidth(
-                    label,
-                    inherited.merge(_GuideStyles.badge(context)),
-                    scaler,
-                    direction,
-                  ) +
-                  20,
+              (labels) => labels
+                  .map(
+                    (label) =>
+                        (_textWidth(
+                                  label,
+                                  inherited.merge(_GuideStyles.badge(context)),
+                                  scaler,
+                                  direction,
+                                ) +
+                                20)
+                            .ceilToDouble(),
+                  )
+                  .reduce(math.max),
             )
             .reduce((a, b) => a + b) +
         6 * 4;
@@ -3437,7 +3474,10 @@ class _ProgramDetails extends StatelessWidget {
     final badges = mediaBadges(item, surface: MediaBadgeSurface.guide);
     return LayoutBuilder(
       builder: (context, box) {
-        final dense = box.maxHeight < 270 || enlarged;
+        final dense = _GuideInformationLayout.dense(
+          height: box.maxHeight,
+          enlarged: enlarged,
+        );
         final mergeFacts = dense && !enlarged;
         final gap = dense ? 4.0 : 10.0;
         final desktopLogoHeight = compactLogo || dense ? 42.0 : 64.0;
@@ -3447,11 +3487,11 @@ class _ProgramDetails extends StatelessWidget {
                 _lineHeight(context, _GuideStyles.title),
               )
             : desktopLogoHeight;
-        final identityFlex = box.maxHeight < 220
-            ? 6
-            : compactLogo || dense
-            ? 5
-            : 4;
+        final identityFlex = _GuideInformationLayout.identityFlex(
+          height: box.maxHeight,
+          compactLogo: compactLogo,
+          enlarged: enlarged,
+        );
         final identity = Column(
           key: const Key('guide-program-identity'),
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3645,7 +3685,12 @@ class _GuideMediaBadge extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Text(label, style: _GuideStyles.badge(context)),
+        child: Text(
+          label,
+          style: _GuideStyles.badge(context),
+          maxLines: roles.androidTv ? 1 : null,
+          overflow: roles.androidTv ? TextOverflow.ellipsis : null,
+        ),
       ),
     );
   }

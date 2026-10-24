@@ -33,6 +33,9 @@ void main() {
           'facts',
           'message',
           'no-synopsis',
+          'wide',
+          'logo-wide',
+          'wide-no-synopsis',
         ])
           (
             name: 'tv-$variant-$scale-large$large',
@@ -75,6 +78,7 @@ void main() {
         final library = configuration.name.contains('library');
         final logo = configuration.name.contains('logo');
         final longFacts = configuration.name.contains('facts');
+        final wide = configuration.name.contains('wide');
         final message = configuration.name.contains('message')
             ? 'Playback unavailable — choose another channel or try again.'
             : null;
@@ -98,11 +102,11 @@ void main() {
                       ]
                     : const ['Drama', 'Science Fiction'])
               : const [],
-          contentRating: rich ? 'TV-14' : null,
-          resolution: rich ? '4k' : null,
-          audioCodec: rich ? 'eac3' : null,
-          audioChannels: rich && longFacts ? 8 : null,
-          dynamicRange: rich && longFacts ? 'dolbyVision' : null,
+          contentRating: rich ? (wide ? 'TV-Y7-FV' : 'TV-14') : null,
+          resolution: rich ? (wide ? '1080p' : '4k') : null,
+          audioCodec: rich ? (wide ? 'dts-hd' : 'eac3') : null,
+          audioChannels: rich && (longFacts || wide) ? (wide ? 2 : 8) : null,
+          dynamicRange: rich && (longFacts || wide) ? 'dolbyVision' : null,
           clearLogo: logo ? Uri.parse('/clear-logo') : null,
         );
         final channels = List.generate(
@@ -311,6 +315,8 @@ void main() {
               violations.add('$name clipped: $rect outside $aperture');
             }
           }
+          final badgeMeasurements = <Map<String, Object?>>[];
+          var requiredBadgeWidth = 0.0;
           for (final badge
               in find
                   .descendant(
@@ -319,11 +325,60 @@ void main() {
                   )
                   .evaluate()) {
             final paragraph = badge.renderObject! as RenderParagraph;
-            if (paragraph.didExceedMaxLines) {
+            final natural = TextPainter(
+              text: paragraph.text,
+              textScaler: paragraph.textScaler,
+              textDirection: paragraph.textDirection,
+              maxLines: 1,
+            )..layout();
+            final painted = TextPainter(
+              text: paragraph.text,
+              textScaler: paragraph.textScaler,
+              textDirection: paragraph.textDirection,
+              maxLines: paragraph.maxLines,
+              ellipsis: paragraph.overflow == TextOverflow.ellipsis
+                  ? '…'
+                  : null,
+            )..layout(maxWidth: paragraph.size.width);
+            final lineCount = painted.computeLineMetrics().length;
+            if (configuration.tv && lineCount != 1) {
               violations.add(
-                'Badge label clipped: ${paragraph.text.toPlainText()}',
+                'Badge label wraps to $lineCount lines: ${paragraph.text.toPlainText()}',
               );
             }
+            if (paragraph.didExceedMaxLines ||
+                natural.width > paragraph.size.width + .1) {
+              violations.add(
+                'Badge label clipped: ${paragraph.text.toPlainText()} (${natural.width} > ${paragraph.size.width})',
+              );
+            }
+            if (paragraph.size.height + .1 < painted.height) {
+              violations.add(
+                'Badge glyph height clipped: ${paragraph.text.toPlainText()}',
+              );
+            }
+            requiredBadgeWidth += natural.width + 20;
+            badgeMeasurements.add({
+              'label': paragraph.text.toPlainText(),
+              'lineCount': lineCount,
+              'naturalWidthCu': natural.width,
+              'paintedWidthCu': paragraph.size.width,
+              'glyphHeightCu': painted.height,
+              'paintedHeightCu': paragraph.size.height,
+            });
+            natural.dispose();
+            painted.dispose();
+          }
+          if (badgeMeasurements.isNotEmpty) {
+            requiredBadgeWidth += (badgeMeasurements.length - 1) * 6;
+          }
+          final identityWidth = tester
+              .getSize(find.byKey(const Key('guide-program-identity')))
+              .width;
+          if (configuration.tv && requiredBadgeWidth > identityWidth + .1) {
+            violations.add(
+              'Badge schema requires $requiredBadgeWidth cu but identity has $identityWidth cu',
+            );
           }
           final pip = tester.getRect(
             find.byKey(const Key('guide-picture-in-picture')),
@@ -446,6 +501,9 @@ void main() {
             'rowHeightCu': rowHeight,
             'completeRows': completeRows,
             'fields': fields,
+            'badgeMeasurements': badgeMeasurements,
+            'identityWidthCu': identityWidth,
+            'requiredBadgeWidthCu': requiredBadgeWidth,
             ...paragraphBounds,
             'pip': _rect(pip),
             'placeholder': _rect(placeholder),
@@ -526,13 +584,14 @@ void _stabilityTests() {
   for (final scale in [1.0, 1.15, 1.3]) {
     for (final large in [false, true]) {
       testWidgets(
-        'TV allocation stable through remote rich minimal empty logo scale=$scale large=$large',
+        'TV allocation stable through remote rich minimal empty logo oversized scale=$scale large=$large',
         (tester) async {
           await tester.runAsync(loadPinnedTestFonts);
           tester.view
             ..physicalSize = const Size(1920, 1080)
             ..devicePixelRatio = 2;
           addTearDown(tester.view.reset);
+          final oversized = List.filled(160, 'X').join();
           final now = DateTime(2026, 10, 24, 6, 40);
           final logo = base64Decode(
             'iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAAAAAA+i0toAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC',
@@ -557,8 +616,15 @@ void _stabilityTests() {
                               : null,
                           year: i == 0 ? 2026 : null,
                           genres: i == 0 ? ['Drama', 'Science Fiction'] : [],
-                          contentRating: i == 0 ? 'TV-MA' : null,
-                          resolution: i == 0 ? '4k' : null,
+                          contentRating: i == 0
+                              ? 'TV-Y7-FV'
+                              : i == 4
+                              ? oversized
+                              : null,
+                          resolution: i == 0 || i == 4 ? '1080p' : null,
+                          dynamicRange: i == 0 || i == 4 ? 'dolbyVision' : null,
+                          audioCodec: i == 0 || i == 4 ? 'dts-hd' : null,
+                          audioChannels: i == 0 || i == 4 ? 2 : null,
                           clearLogo: i == 3 ? Uri.parse('/clear-logo') : null,
                         ),
                       ],
@@ -589,59 +655,46 @@ void _stabilityTests() {
               seed: channel.shuffleSeed,
             ),
           );
-          await tester.pumpWidget(
-            MaterialApp(
-              theme: LineupTheme.forName(
-                LineupThemeName.emberSteel,
-                androidTv: true,
-                largeFocusIndicators: large,
-              ),
-              builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(context)
-                    .copyWith(textScaler: TextScaler.linear(scale)),
-                child: LineupCanvas(child: child!),
-              ),
-              home: SafeArea(
-                child: GuideView(
-                  controller: guide,
-                  pictureInPicture: const GuidePlaybackPlaceholder(
-                    unavailable: false,
-                    reduceMotion: true,
+          final semantics = tester.ensureSemantics();
+          try {
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: LineupTheme.forName(
+                  LineupThemeName.emberSteel,
+                  androidTv: true,
+                  largeFocusIndicators: large,
+                ),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(textScaler: TextScaler.linear(scale)),
+                  child: LineupCanvas(child: child!),
+                ),
+                home: SafeArea(
+                  child: GuideView(
+                    controller: guide,
+                    pictureInPicture: const GuidePlaybackPlaceholder(
+                      unavailable: false,
+                      reduceMotion: true,
+                    ),
+                    onClose: (_, _) {},
+                    onTune: (_) async {},
+                    onOpenMenu: (_, _) {},
                   ),
-                  onClose: (_, _) {},
-                  onTune: (_) async {},
-                  onOpenMenu: (_, _) {},
                 ),
               ),
-            ),
-          );
-          await tester.pumpAndSettle();
-          final list = find.byKey(const Key('guide-schedule-list'));
-          final row = tester.widget<ListView>(list).itemExtent;
-          final listRect = tester.getRect(list);
-          final pipRect = tester.getRect(
-            find.byKey(const Key('guide-picture-in-picture')),
-          );
-          for (var i = 1; i < 4; i++) {
-            await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-            await tester.pumpAndSettle();
-            expect(guide.focusedChannel?.id, 'c$i');
-            expect(tester.widget<ListView>(list).itemExtent, row);
-            expect(tester.getRect(list), listRect);
-            expect(
-              tester.getRect(find.byKey(const Key('guide-picture-in-picture'))),
-              pipRect,
             );
-            if (i == 2) expect(find.text('Schedule unavailable'), findsWidgets);
-            if (i == 3) {
-              await tester.runAsync(
-                () => precacheImage(
-                  MemoryImage(logo),
-                  tester.element(find.byType(GuideView)),
-                ),
-              );
+            await tester.pumpAndSettle();
+            final list = find.byKey(const Key('guide-schedule-list'));
+            final row = tester.widget<ListView>(list).itemExtent;
+            final listRect = tester.getRect(list);
+            final pipRect = tester.getRect(
+              find.byKey(const Key('guide-picture-in-picture')),
+            );
+            for (var i = 1; i < 5; i++) {
+              await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
               await tester.pumpAndSettle();
-              expect(find.byKey(const Key('guide-clear-logo')), findsOneWidget);
+              expect(guide.focusedChannel?.id, 'c$i');
+              expect(tester.widget<ListView>(list).itemExtent, row);
               expect(tester.getRect(list), listRect);
               expect(
                 tester.getRect(
@@ -649,12 +702,73 @@ void _stabilityTests() {
                 ),
                 pipRect,
               );
+              if (i == 2) {
+                expect(find.text('Schedule unavailable'), findsWidgets);
+              }
+              if (i == 4) {
+                expect(
+                  find.bySemanticsLabel(RegExp(oversized)),
+                  findsOneWidget,
+                );
+                var ellipsized = false;
+                for (final element
+                    in find
+                        .descendant(
+                          of: find.byKey(const Key('guide-program-badges')),
+                          matching: find.byType(RichText),
+                        )
+                        .evaluate()) {
+                  final paragraph = element.renderObject! as RenderParagraph;
+                  final painter = TextPainter(
+                    text: paragraph.text,
+                    textScaler: paragraph.textScaler,
+                    textDirection: paragraph.textDirection,
+                    maxLines: paragraph.maxLines,
+                    ellipsis: '…',
+                  )..layout(maxWidth: paragraph.size.width);
+                  expect(painter.computeLineMetrics(), hasLength(1));
+                  expect(
+                    paragraph.size.height,
+                    greaterThanOrEqualTo(painter.height),
+                  );
+                  ellipsized |= paragraph.didExceedMaxLines;
+                  painter.dispose();
+                }
+                expect(
+                  ellipsized,
+                  isTrue,
+                  reason: 'Unbounded raw text stays in the bounded row while its full semantics remain',
+                );
+              }
+
+              if (i == 3) {
+                await tester.runAsync(
+                  () => precacheImage(
+                    MemoryImage(logo),
+                    tester.element(find.byType(GuideView)),
+                  ),
+                );
+                await tester.pumpAndSettle();
+                expect(
+                  find.byKey(const Key('guide-clear-logo')),
+                  findsOneWidget,
+                );
+                expect(tester.getRect(list), listRect);
+                expect(
+                  tester.getRect(
+                    find.byKey(const Key('guide-picture-in-picture')),
+                  ),
+                  pipRect,
+                );
+              }
             }
+            expect(tester.takeException(), isNull);
+          } finally {
+            await tester.pumpWidget(const SizedBox.shrink());
+            guide.dispose();
+            lineup.dispose();
+            semantics.dispose();
           }
-          expect(tester.takeException(), isNull);
-          await tester.pumpWidget(const SizedBox.shrink());
-          guide.dispose();
-          lineup.dispose();
         },
       );
     }
