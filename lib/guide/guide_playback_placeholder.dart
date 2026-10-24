@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../ui/app_theme.dart';
@@ -16,6 +18,72 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
   final bool reduceMotion;
   final String? message;
   final VoidCallback? onRetry;
+
+  static const _contentPadding = 16.0;
+  static const _gap = 8.0;
+  static const _messageLines = 3;
+
+  static TextStyle? _titleStyle(BuildContext context) =>
+      Theme.of(context).textTheme.titleLarge;
+  static TextStyle? _messageStyle(BuildContext context) =>
+      Theme.of(context).textTheme.bodyMedium
+          ?.copyWith(color: LineupTheme.of(context).secondaryText);
+
+  /// A state-independent 16:9 aperture for the complete existing placeholder
+  /// contract: either title, three message lines, Retry, and its normal padding.
+  /// The 16cu inset also contains the existing 6cu Large Focus clearance.
+  static Size minimumSize(BuildContext context) {
+    final theme = Theme.of(context);
+    final inherited = theme.textTheme.bodyMedium!;
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    Size text(String value, TextStyle? style) {
+      final painter = TextPainter(
+        text: TextSpan(text: value, style: inherited.merge(style)),
+        textScaler: scaler,
+        textDirection: direction,
+        maxLines: 1,
+      )..layout();
+      final size = painter.size;
+      painter.dispose();
+      return size;
+    }
+
+    final idle = text('Choose a channel to watch', _titleStyle(context));
+    final unavailable = text('Playback unavailable', _titleStyle(context));
+    final messageLine = text(
+      'Ag',
+      _messageStyle(context),
+    ).height.ceilToDouble();
+    final button = theme.textButtonTheme.style!;
+    final retry = text('Retry', button.textStyle!.resolve({}));
+    final minimum = button.minimumSize!.resolve({})!;
+    final padding = button.padding!.resolve({})!.resolve(direction);
+    final retryHeight = math.max(
+      minimum.height,
+      retry.height + padding.vertical,
+    );
+    final height =
+        2 * _contentPadding +
+        math.max(
+          idle.height,
+          unavailable.height +
+              _gap * 2 +
+              _messageLines * messageLine +
+              retryHeight,
+        );
+    final width = math
+        .max(
+          height * 16 / 9,
+          2 * _contentPadding +
+              math.max(
+                math.max(idle.width, unavailable.width),
+                math.max(minimum.width, retry.width + padding.horizontal),
+              ),
+        )
+        .ceilToDouble();
+    return Size(width, width * 9 / 16);
+  }
 
   @override
   State<GuidePlaybackPlaceholder> createState() =>
@@ -81,7 +149,9 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
             ),
           Center(
             child: SingleChildScrollView(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(
+                GuidePlaybackPlaceholder._contentPadding,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -90,21 +160,20 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
                         ? 'Playback unavailable'
                         : 'Choose a channel to watch',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: GuidePlaybackPlaceholder._titleStyle(context),
                   ),
                   if (widget.unavailable && widget.message != null) ...[
-                    SizedBox(height: 8),
+                    const SizedBox(height: GuidePlaybackPlaceholder._gap),
                     Text(
                       widget.message!,
-                      maxLines: 3,
+                      maxLines: GuidePlaybackPlaceholder._messageLines,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium
-                          ?.copyWith(color: roles.secondaryText),
+                      style: GuidePlaybackPlaceholder._messageStyle(context),
                     ),
                   ],
                   if (widget.onRetry != null) ...[
-                    SizedBox(height: 8),
+                    const SizedBox(height: GuidePlaybackPlaceholder._gap),
                     TextButton(
                       onPressed: widget.onRetry,
                       child: const Text('Retry'),

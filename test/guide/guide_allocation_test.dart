@@ -44,6 +44,7 @@ void main() {
             large: large,
             dpr: 2.0,
             theme: LineupThemeName.emberSteel,
+            state: 'idle',
           ),
     for (final scale in [1.0, 1.15, 1.3])
       (
@@ -53,6 +54,7 @@ void main() {
         large: false,
         dpr: 1.0,
         theme: LineupThemeName.emberSteel,
+        state: 'idle',
       ),
     for (final theme in LineupThemeName.values.skip(1))
       (
@@ -62,7 +64,20 @@ void main() {
         large: true,
         dpr: 2.0,
         theme: theme,
+        state: 'idle',
       ),
+    for (final scale in [1.0, 1.15, 1.3])
+      for (final large in [false, true])
+        for (final variant in ['normal', 'logo-wide', 'wide-no-synopsis'])
+          (
+            name: 'tv-$variant-$scale-large$large-unavailable',
+            tv: true,
+            scale: scale,
+            large: large,
+            dpr: 2.0,
+            theme: LineupThemeName.emberSteel,
+            state: 'unavailable',
+          ),
   ]) {
     final scale = configuration.scale;
     final large = configuration.large;
@@ -74,6 +89,7 @@ void main() {
         tester.view
           ..physicalSize = const Size(1920, 1080)
           ..devicePixelRatio = configuration.dpr;
+        var retryCalls = 0;
         final now = DateTime(2026, 10, 24, 6, 40);
         final library = configuration.name.contains('library');
         final logo = configuration.name.contains('logo');
@@ -182,9 +198,9 @@ void main() {
                   child: GuideView(
                     controller: guide,
                     playbackMessage: message,
-                    pictureInPicture: const GuidePlaybackPlaceholder(
-                      unavailable: false,
-                      reduceMotion: true,
+                    pictureInPicture: _pictureForState(
+                      configuration.state,
+                      () => retryCalls++,
                     ),
                     onOpenMenu: (_, _) {},
                     onClose: (_, _) {},
@@ -383,13 +399,90 @@ void main() {
           final pip = tester.getRect(
             find.byKey(const Key('guide-picture-in-picture')),
           );
-          final placeholder = tester.getRect(
-            find.text('Choose a channel to watch'),
-          );
-          if (placeholder.top < pip.top - .1 ||
-              placeholder.bottom > pip.bottom + .1) {
-            violations.add('PiP text clipped: $placeholder outside $pip');
+          final placeholderFields = <Map<String, Object?>>[];
+          final required = configuration.state == 'playing'
+              ? [find.byKey(const Key('playing-proxy'))]
+              : [
+                  find.text(
+                    configuration.state == 'unavailable'
+                        ? 'Playback unavailable'
+                        : 'Choose a channel to watch',
+                  ),
+                  if (configuration.state == 'unavailable') ...[
+                    find.text(_playbackError),
+                    find.widgetWithText(TextButton, 'Retry'),
+                  ],
+                ];
+          final placeholder = tester.getRect(required.first);
+          for (final field in required) {
+            final rect = tester.getRect(field);
+            var frame = rect;
+            if (tester.widget(field) is TextButton && large) {
+              frame = rect.inflate(6 * canvasScale);
+            }
+            if (frame.top < pip.top - .1 ||
+                frame.bottom > pip.bottom + .1 ||
+                (configuration.tv &&
+                    (frame.left < pip.left - .1 ||
+                        frame.right > pip.right + .1))) {
+              violations.add(
+                'Complete placeholder/control/frame clipped: $frame outside $pip',
+              );
+            }
+            if (tester.widget(field) is Text) {
+              final paragraph = tester.renderObject<RenderParagraph>(field);
+              final painter = TextPainter(
+                text: paragraph.text,
+                textScaler: paragraph.textScaler,
+                textDirection: paragraph.textDirection,
+                maxLines: paragraph.maxLines,
+                ellipsis: paragraph.overflow == TextOverflow.ellipsis
+                    ? '…'
+                    : null,
+              )..layout(maxWidth: paragraph.size.width);
+              if (paragraph.size.height + .1 < painter.height) {
+                violations.add('Placeholder glyph line clipped');
+              }
+              if (configuration.state == 'unavailable' &&
+                  tester.widget<Text>(field).data == _playbackError) {
+                expect(painter.computeLineMetrics(), hasLength(3));
+              }
+              placeholderFields.add({
+                'text': paragraph.text.toPlainText(),
+                'rect': _rect(rect),
+                'fontSizeCu': paragraph.text.style?.fontSize,
+                'lines': painter.computeLineMetrics().length,
+                'glyphHeightCu': painter.height,
+                'paintedHeightCu': paragraph.size.height,
+              });
+              painter.dispose();
+            } else {
+              placeholderFields.add({
+                'control': 'Retry',
+                'rect': _rect(rect),
+                'frame': _rect(frame),
+              });
+            }
           }
+          final placeholderScrolls = <double>[];
+          for (final element
+              in find
+                  .descendant(
+                    of: find.byType(GuidePlaybackPlaceholder),
+                    matching: find.byType(Scrollable),
+                  )
+                  .evaluate()) {
+            final state = tester.state<ScrollableState>(
+              find.byElementPredicate((e) => e == element),
+            );
+            placeholderScrolls.add(state.position.maxScrollExtent);
+            if (configuration.tv && state.position.maxScrollExtent > .1) {
+              violations.add(
+                'Placeholder has hidden scroll extent ${state.position.maxScrollExtent}',
+              );
+            }
+          }
+          expect(pip.width / pip.height, closeTo(16 / 9, .000001));
           final completeRows =
               ((listRect.height + .1) / (rowHeight * canvasScale)).floor();
           if (completeRows < 5) {
@@ -482,6 +575,18 @@ void main() {
           }
           final observation = {
             'configuration': configuration.name,
+            'pictureState': configuration.state,
+            'placeholderFields': placeholderFields,
+            'placeholderScrollExtents': placeholderScrolls,
+            'synopsisWidthCu':
+                find
+                    .byKey(const Key('guide-program-synopsis'))
+                    .evaluate()
+                    .isEmpty
+                ? null
+                : tester
+                      .getSize(find.byKey(const Key('guide-program-synopsis')))
+                      .width,
             'physicalSize': [1920, 1080],
             'dpr': configuration.dpr,
             'windowSize': [1920 / configuration.dpr, 1080 / configuration.dpr],
@@ -529,6 +634,120 @@ void main() {
                   .writeAsBytes(bytes!.buffer.asUint8List());
               image.dispose();
             });
+          }
+          if (configuration.state == 'unavailable') {
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+            await tester.pumpAndSettle();
+            final picker = tester.widget<DropdownButton<String?>>(
+              find.byKey(const Key('guide-library-picker')),
+            );
+            for (
+              var step = 0;
+              step < 8 && !picker.focusNode!.hasFocus;
+              step++
+            ) {
+              await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+              await tester.pumpAndSettle();
+            }
+            expect(picker.focusNode!.hasFocus, isTrue);
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+            await tester.pumpAndSettle();
+            final retry = find.widgetWithText(TextButton, 'Retry');
+            final owner = FocusManager.instance.primaryFocus!;
+            expect(
+              owner.context!.findAncestorWidgetOfExactType<TextButton>(),
+              same(tester.widget<TextButton>(retry)),
+            );
+            // The entire unchanged placeholder remains visible while its actual
+            // Retry button owns focus, with no scroll/reveal hiding earlier text.
+            final focusedFields = <Map<String, Object?>>[];
+            for (final field in required) {
+              final rect = tester.getRect(field);
+              final frame = tester.widget(field) is TextButton && large
+                  ? rect.inflate(6 * canvasScale)
+                  : rect;
+              if (frame.top < pip.top - .1 ||
+                  frame.bottom > pip.bottom + .1 ||
+                  frame.left < pip.left - .1 ||
+                  frame.right > pip.right + .1) {
+                violations.add(
+                  'Retry focus hides required placeholder/frame: $frame outside $pip',
+                );
+              }
+              focusedFields.add({'rect': _rect(rect), 'frame': _rect(frame)});
+            }
+            final focusedScrolls = <Map<String, double>>[];
+            for (final element
+                in find
+                    .descendant(
+                      of: find.byType(GuidePlaybackPlaceholder),
+                      matching: find.byType(Scrollable),
+                    )
+                    .evaluate()) {
+              final state = tester.state<ScrollableState>(
+                find.byElementPredicate((e) => e == element),
+              );
+              focusedScrolls.add({
+                'extent': state.position.maxScrollExtent,
+                'offset': state.position.pixels,
+              });
+              if (state.position.maxScrollExtent > .1 ||
+                  state.position.pixels.abs() > .1) {
+                violations.add(
+                  'Focused Retry needs placeholder scroll: ${state.position.pixels}/${state.position.maxScrollExtent}',
+                );
+              }
+            }
+            expect(tester.getRect(list), listRect);
+            expect(tester.widget<ListView>(list).itemExtent, rowHeight);
+            expect(
+              tester.getRect(find.byKey(const Key('guide-picture-in-picture'))),
+              pip,
+            );
+            final dir = Platform.environment['GUIDE_ALLOCATION_CAPTURE'];
+            if (dir != null) {
+              await tester.runAsync(() async {
+                final image =
+                    await (capture.currentContext!.findRenderObject()!
+                            as RenderRepaintBoundary)
+                        .toImage(pixelRatio: configuration.dpr);
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                await File(
+                  '$dir/${configuration.name}-rich$rich-retry-focused.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+                image.dispose();
+              });
+            }
+            await tester.sendKeyEvent(LogicalKeyboardKey.select);
+            await tester.pumpAndSettle();
+            expect(retryCalls, 1);
+            if (dir != null) {
+              await tester.runAsync(
+                () =>
+                    File(
+                      '$dir/${configuration.name}-rich$rich-retry-focus.json',
+                    ).writeAsString(
+                      jsonEncode({
+                        'keyRoute': [
+                          'Up',
+                          'Left to library picker',
+                          'Up',
+                          'Select',
+                        ],
+                        'actualRetryOwner': true,
+                        'callbackCount': retryCalls,
+                        'fields': focusedFields,
+                        'scrolls': focusedScrolls,
+                        'rowHeightCu': rowHeight,
+                        'list': _rect(listRect),
+                        'pip': _rect(pip),
+                        'violations': violations,
+                      }),
+                    ),
+              );
+            }
           }
           expect(
             violations,
@@ -655,30 +874,39 @@ void _stabilityTests() {
               seed: channel.shuffleSeed,
             ),
           );
+          final pictureState = ValueNotifier('idle');
+          final baseTheme = LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+            largeFocusIndicators: large,
+          );
+          final theme = ValueNotifier(baseTheme);
+          final transitions = <Map<String, Object?>>[];
           final semantics = tester.ensureSemantics();
           try {
             await tester.pumpWidget(
-              MaterialApp(
-                theme: LineupTheme.forName(
-                  LineupThemeName.emberSteel,
-                  androidTv: true,
-                  largeFocusIndicators: large,
-                ),
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(context)
-                      .copyWith(textScaler: TextScaler.linear(scale)),
-                  child: LineupCanvas(child: child!),
-                ),
-                home: SafeArea(
-                  child: GuideView(
-                    controller: guide,
-                    pictureInPicture: const GuidePlaybackPlaceholder(
-                      unavailable: false,
-                      reduceMotion: true,
+              ValueListenableBuilder<ThemeData>(
+                valueListenable: theme,
+                builder: (context, value, child) => MaterialApp(
+                  theme: value,
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(textScaler: TextScaler.linear(scale)),
+                    child: LineupCanvas(
+                      child: Theme(data: value, child: child!),
                     ),
-                    onClose: (_, _) {},
-                    onTune: (_) async {},
-                    onOpenMenu: (_, _) {},
+                  ),
+                  home: SafeArea(
+                    child: ValueListenableBuilder<String>(
+                      valueListenable: pictureState,
+                      builder: (context, state, child) => GuideView(
+                        controller: guide,
+                        pictureInPicture: _pictureForState(state, () {}),
+                        onClose: (_, _) {},
+                        onTune: (_) async {},
+                        onOpenMenu: (_, _) {},
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -690,6 +918,106 @@ void _stabilityTests() {
             final pipRect = tester.getRect(
               find.byKey(const Key('guide-picture-in-picture')),
             );
+            final element = tester.element(find.byType(GuideView));
+            final owner = FocusManager.instance.primaryFocus;
+            final stableFields = {
+              for (final key in [
+                'guide-information-area',
+                'guide-program-identity',
+                'guide-program-synopsis',
+              ])
+                key: tester.getRect(find.byKey(Key(key))),
+            };
+            for (final state in ['playing', 'unavailable', 'idle']) {
+              pictureState.value = state;
+              await tester.pumpAndSettle();
+              expect(
+                state == 'playing'
+                    ? find.byKey(const Key('playing-proxy'))
+                    : find.text(
+                        state == 'unavailable'
+                            ? 'Playback unavailable'
+                            : 'Choose a channel to watch',
+                      ),
+                findsOneWidget,
+              );
+              expect(tester.element(find.byType(GuideView)), same(element));
+              expect(FocusManager.instance.primaryFocus, same(owner));
+              expect(tester.widget<ListView>(list).itemExtent, row);
+              expect(tester.getRect(list), listRect);
+              expect(
+                tester.getRect(
+                  find.byKey(const Key('guide-picture-in-picture')),
+                ),
+                pipRect,
+              );
+              for (final field in stableFields.entries) {
+                expect(tester.getRect(find.byKey(Key(field.key))), field.value);
+              }
+              transitions.add({
+                'state': state,
+                'contentObserved': true,
+                'fields': {
+                  for (final f in stableFields.entries) f.key: _rect(f.value),
+                },
+                'rowHeightCu': row,
+                'list': _rect(listRect),
+                'pip': _rect(pipRect),
+              });
+            }
+            // Retry geometry is a theme input, unlike playback or program state.
+            // Change each dependency while retaining the same Guide and TextTheme.
+            pictureState.value = 'unavailable';
+            await tester.pumpAndSettle();
+            final retryStyle = baseTheme.textButtonTheme.style!;
+            for (final geometry in {
+              'text': retryStyle.copyWith(
+                textStyle: WidgetStatePropertyAll(
+                  retryStyle.textStyle!.resolve({})!.copyWith(fontSize: 60),
+                ),
+              ),
+              'minimum': retryStyle.copyWith(
+                minimumSize: const WidgetStatePropertyAll(Size(48, 100)),
+              ),
+              'padding': retryStyle.copyWith(
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+                ),
+              ),
+            }.entries) {
+              theme.value = baseTheme.copyWith(
+                textButtonTheme: TextButtonThemeData(style: geometry.value),
+              );
+              await tester.pumpAndSettle();
+              expect(tester.element(find.byType(GuideView)), same(element));
+              final changedPiP = tester.getRect(
+                find.byKey(const Key('guide-picture-in-picture')),
+              );
+              expect(
+                changedPiP.width,
+                greaterThan(pipRect.width),
+                reason: geometry.key,
+              );
+              _expectCompletePlaybackTask(tester, changedPiP, large: large);
+              theme.value = baseTheme;
+              await tester.pumpAndSettle();
+              expect(
+                tester.getRect(
+                  find.byKey(const Key('guide-picture-in-picture')),
+                ),
+                pipRect,
+              );
+            }
+            pictureState.value = 'idle';
+            await tester.pumpAndSettle();
+            final directory = Platform.environment['GUIDE_ALLOCATION_CAPTURE'];
+            if (directory != null) {
+              await tester.runAsync(() async {
+                await Directory(directory).create(recursive: true);
+                await File('$directory/state-stability-$scale-large$large.json')
+                    .writeAsString(jsonEncode(transitions));
+              });
+            }
             for (var i = 1; i < 5; i++) {
               await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
               await tester.pumpAndSettle();
@@ -768,9 +1096,91 @@ void _stabilityTests() {
             guide.dispose();
             lineup.dispose();
             semantics.dispose();
+            pictureState.dispose();
+            theme.dispose();
           }
         },
       );
     }
+  }
+}
+
+const _playbackError =
+    'A synthetic playback request failed while connecting to the media source. Check the connection and try playback again. The original three-line message contract is retained for this deliberate long synthetic error.';
+Widget _pictureForState(String state, VoidCallback retry) => state == 'playing'
+    ? const ColoredBox(
+        color: Color(0xFF203747),
+        child: Center(
+          child: Text('Synthetic playing PiP proxy', key: Key('playing-proxy')),
+        ),
+      )
+    : GuidePlaybackPlaceholder(
+        unavailable: state == 'unavailable',
+        reduceMotion: true,
+        message: state == 'unavailable' ? _playbackError : null,
+        onRetry: state == 'unavailable' ? retry : null,
+      );
+
+void _expectCompletePlaybackTask(
+  WidgetTester tester,
+  Rect pip, {
+  required bool large,
+}) {
+  final box = tester.renderObject<RenderBox>(
+    find.byKey(const Key('guide-picture-in-picture')),
+  );
+  final scale =
+      (box.localToGlobal(const Offset(1, 0)) - box.localToGlobal(Offset.zero))
+          .distance;
+  for (final field in [
+    find.text('Playback unavailable'),
+    find.text(_playbackError),
+    find.descendant(
+      of: find.byType(GuidePlaybackPlaceholder),
+      matching: find.widgetWithText(TextButton, 'Retry'),
+    ),
+  ]) {
+    final rect = tester.getRect(field);
+    final frame = tester.widget(field) is TextButton && large
+        ? rect.inflate(6 * scale)
+        : rect;
+    expect(frame.left, greaterThanOrEqualTo(pip.left - .1));
+    expect(frame.right, lessThanOrEqualTo(pip.right + .1));
+    expect(frame.top, greaterThanOrEqualTo(pip.top - .1));
+    expect(frame.bottom, lessThanOrEqualTo(pip.bottom + .1));
+  }
+  for (final element
+      in find
+          .descendant(
+            of: find.byType(GuidePlaybackPlaceholder),
+            matching: find.byType(RichText),
+          )
+          .evaluate()) {
+    final paragraph = element.renderObject! as RenderParagraph;
+    final painter = TextPainter(
+      text: paragraph.text,
+      textScaler: paragraph.textScaler,
+      textDirection: paragraph.textDirection,
+      maxLines: paragraph.maxLines,
+      ellipsis: paragraph.overflow == TextOverflow.ellipsis ? '…' : null,
+    )..layout(maxWidth: paragraph.size.width);
+    expect(paragraph.size.height + .1, greaterThanOrEqualTo(painter.height));
+    if (paragraph.text.toPlainText() == _playbackError) {
+      expect(painter.computeLineMetrics(), hasLength(3));
+    }
+    painter.dispose();
+  }
+  for (final element
+      in find
+          .descendant(
+            of: find.byType(GuidePlaybackPlaceholder),
+            matching: find.byType(Scrollable),
+          )
+          .evaluate()) {
+    final state = tester.state<ScrollableState>(
+      find.byElementPredicate((e) => e == element),
+    );
+    expect(state.position.maxScrollExtent, closeTo(0, .1));
+    expect(state.position.pixels, closeTo(0, .1));
   }
 }

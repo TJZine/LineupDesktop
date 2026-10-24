@@ -16,6 +16,7 @@ import '../ui/app_ui.dart';
 import '../ui/lineup_canvas.dart';
 import 'focused_ticker.dart';
 import 'guide_controller.dart';
+import 'guide_playback_placeholder.dart';
 
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
@@ -31,6 +32,7 @@ class GuideLayoutPolicy {
     required this.rowHeight,
     required this.minimumRows,
     required this.compactLogo,
+    required this.minimumIdentityWidth,
   });
 
   factory GuideLayoutPolicy.forSize(
@@ -42,6 +44,7 @@ class GuideLayoutPolicy {
     double tvRowFloor = 0,
     double tvInformationHeight = 0,
     double tvIdentityWidth = 0,
+    Size tvPictureMinimum = Size.zero,
   }) {
     final width = size.width.isFinite
         ? size.width.clamp(0.0, 10000.0).toDouble()
@@ -89,7 +92,7 @@ class GuideLayoutPolicy {
     final showcaseHeight = tvControlsHeight == null
         ? math.max(0.0, pictureAllocation - showcaseHeightAdjustment)
         : math.min(
-            tvInformationHeight,
+            math.max(tvInformationHeight, tvPictureMinimum.height),
             math.max(0.0, available - minimumRowHeight * minimumRows),
           );
     final rowHeight = math.max(
@@ -112,7 +115,7 @@ class GuideLayoutPolicy {
               ? math.min(pictureHeight * 16 / 9, widthBudget)
               : pictureHeight * 16 / 9)
         : math.max(
-            0.0,
+            tvPictureMinimum.width,
             math.min(
               pictureHeight * 16 / 9,
               math.min(
@@ -137,6 +140,7 @@ class GuideLayoutPolicy {
       rowHeight: rowHeight,
       minimumRows: minimumRows,
       compactLogo: showcaseHeight < 180 * textScale,
+      minimumIdentityWidth: tvControlsHeight == null ? 0 : tvIdentityWidth,
     );
   }
 
@@ -192,6 +196,7 @@ class GuideLayoutPolicy {
   final double rowHeight;
   final int minimumRows;
   final bool compactLogo;
+  final double minimumIdentityWidth;
 }
 
 class _GuideRowScrollController extends ScrollController {
@@ -376,6 +381,9 @@ class _GuideViewState extends State<GuideView>
     TextScaler scaler,
     TextDirection direction,
     TextTheme theme,
+    TextStyle? retryTextStyle,
+    Size retryMinimum,
+    EdgeInsets retryPadding,
     bool logos,
   })?
   _tvMetricsKey;
@@ -868,6 +876,7 @@ class _GuideViewState extends State<GuideView>
       showIdleArtwork: widget.showIdleArtwork,
       pictureWidth: policy.pictureWidth,
       compactLogo: policy.compactLogo,
+      minimumIdentityWidth: policy.minimumIdentityWidth,
       playbackMessage: widget.playbackMessage,
       onOpenPlayer: widget.onOpenPlayer,
     ),
@@ -1101,11 +1110,19 @@ class _GuideViewState extends State<GuideView>
                   ),
                 );
                 if (roles.androidTv) {
+                  final theme = Theme.of(context);
+                  final direction = Directionality.of(context);
+                  final retry = theme.textButtonTheme.style!;
                   final key = (
                     size: outer.biggest,
                     scaler: MediaQuery.textScalerOf(context),
-                    direction: Directionality.of(context),
-                    theme: Theme.of(context).textTheme,
+                    direction: direction,
+                    theme: theme.textTheme,
+                    retryTextStyle: retry.textStyle!.resolve({}),
+                    retryMinimum: retry.minimumSize!.resolve({})!,
+                    retryPadding: retry.padding!
+                        .resolve({})!
+                        .resolve(direction),
                     logos: widget.controller.lineup.settings.preferClearLogos,
                   );
                   if (_tvMetricsKey != key) {
@@ -1130,6 +1147,7 @@ class _GuideViewState extends State<GuideView>
                     tvRowFloor: _tvSchema!.rowFloor,
                     tvInformationHeight: _tvSchema!.informationHeight,
                     tvIdentityWidth: _tvSchema!.identityWidth,
+                    tvPictureMinimum: _tvSchema!.pictureMinimum,
                   );
                 }
                 final schedule = _schedule(policy, channels);
@@ -1886,6 +1904,7 @@ class _GuideShowcase extends StatefulWidget {
     required this.showIdleArtwork,
     required this.pictureWidth,
     required this.compactLogo,
+    required this.minimumIdentityWidth,
     required this.playbackMessage,
     required this.onOpenPlayer,
   });
@@ -1895,6 +1914,7 @@ class _GuideShowcase extends StatefulWidget {
   final bool showIdleArtwork;
   final double pictureWidth;
   final bool compactLogo;
+  final double minimumIdentityWidth;
   final String? playbackMessage;
   final VoidCallback? onOpenPlayer;
 
@@ -2079,6 +2099,7 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
               dynamicColor: _dynamicColor,
               bleedLeft: picture == null,
               compactLogo: widget.compactLogo,
+              minimumIdentityWidth: widget.minimumIdentityWidth,
               playbackMessage: widget.playbackMessage,
             ),
           ),
@@ -3132,7 +3153,9 @@ class _TvGuideSchema {
     this.informationHeight,
     this.rowFloor,
     this.identityWidth,
+    this.pictureMinimum,
   );
+  final Size pictureMinimum;
   final double informationHeight;
   final double rowFloor;
   final double identityWidth;
@@ -3196,6 +3219,7 @@ class _TvGuideSchema {
           line(_GuideStyles.rowSecondary(context)) +
           18,
       badgeWidth.ceilToDouble(),
+      GuidePlaybackPlaceholder.minimumSize(context),
     );
   }
 }
@@ -3208,6 +3232,7 @@ class _Details extends StatelessWidget {
     required this.clearLogo,
     required this.dynamicColor,
     required this.compactLogo,
+    required this.minimumIdentityWidth,
     required this.playbackMessage,
     required this.bleedLeft,
   });
@@ -3217,6 +3242,7 @@ class _Details extends StatelessWidget {
   final Color? dynamicColor;
   final GuideController controller;
   final bool compactLogo;
+  final double minimumIdentityWidth;
   final bool bleedLeft;
   final String? playbackMessage;
 
@@ -3330,6 +3356,7 @@ class _Details extends StatelessWidget {
                                 ? clearLogo
                                 : null,
                             compactLogo: compactLogo,
+                            minimumIdentityWidth: minimumIdentityWidth,
                             playbackMessage: playbackMessage,
                             now: controller.now,
                           ),
@@ -3406,6 +3433,7 @@ class _ProgramDetails extends StatelessWidget {
     required this.channel,
     required this.clearLogo,
     required this.compactLogo,
+    required this.minimumIdentityWidth,
     required this.playbackMessage,
     required this.now,
   });
@@ -3413,6 +3441,7 @@ class _ProgramDetails extends StatelessWidget {
   final Channel? channel;
   final Uint8List? clearLogo;
   final bool compactLogo;
+  final double minimumIdentityWidth;
   final String? playbackMessage;
   final DateTime now;
 
@@ -3592,12 +3621,21 @@ class _ProgramDetails extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    flex: hasSynopsis ? identityFlex : 1,
-                    child: roles.androidTv
-                        ? identity
-                        : SingleChildScrollView(child: identity),
-                  ),
+                  if (roles.androidTv && hasSynopsis)
+                    SizedBox(
+                      width: math.max(
+                        minimumIdentityWidth,
+                        (box.maxWidth - 32) * identityFlex / 10,
+                      ),
+                      child: identity,
+                    )
+                  else
+                    Expanded(
+                      flex: hasSynopsis ? identityFlex : 1,
+                      child: roles.androidTv
+                          ? identity
+                          : SingleChildScrollView(child: identity),
+                    ),
                   if (hasSynopsis) ...[
                     const SizedBox(width: 32),
                     Expanded(
