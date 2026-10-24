@@ -1582,6 +1582,7 @@ class _SettingsViewState extends State<SettingsView> {
             ],
             SettingsCategory.account => [
               _SettingsRow(
+                revealOnFocus: true,
                 label: const Text('Plex Home profile'),
                 helper: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1636,6 +1637,7 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ),
               _SettingsRow(
+                revealOnFocus: true,
                 label: const Text('Plex Media Server'),
                 helper: widget.controller.server == null
                     ? const Text('No server selected')
@@ -1656,6 +1658,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               SizedBox(height: 24),
               _SettingsRow(
+                revealOnFocus: true,
                 label: const Text('Signed-in Plex account'),
                 helper: Text(widget.controller.account?.name ?? 'Plex account'),
                 control: OutlinedButton(
@@ -1681,6 +1684,7 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ),
               _SettingsRow(
+                revealOnFocus: true,
                 label: const Text('Diagnostics'),
                 helper: const Text(
                   'Review redacted support events from this session.',
@@ -1692,6 +1696,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               if (defaultTargetPlatform == TargetPlatform.macOS || androidTv)
                 _SettingsRow(
+                  revealOnFocus: true,
                   label: const Text('Licenses'),
                   helper: const Text(
                     'Read third-party licenses, notices, and source information.',
@@ -1856,6 +1861,7 @@ class _SettingsRow extends StatelessWidget {
     required this.helper,
     required this.control,
     this.first = false,
+    this.revealOnFocus = false,
     this.horizontalPadding = 0,
   });
 
@@ -1863,74 +1869,80 @@ class _SettingsRow extends StatelessWidget {
   final Widget helper;
   final Widget control;
   final bool first;
+  final bool revealOnFocus;
   final double horizontalPadding;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final reflow =
-          constraints.maxWidth < 900 ||
-          MediaQuery.textScalerOf(context).scale(1) >= 1.5;
-      final controlWidth = math.min(280.0, constraints.maxWidth);
-      final theme = Theme.of(context);
-      final roles = LineupTheme.of(context);
-      final description = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DefaultTextStyle.merge(
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: roles.primaryText,
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              height: 1.2,
-            ),
-            child: label,
-          ),
-          SizedBox(height: 6),
-          DefaultTextStyle.merge(
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: roles.secondaryText,
-              fontSize: 18,
-              height: 1.5,
-            ),
-            child: helper,
-          ),
-        ],
-      );
-      return Container(
-        constraints: BoxConstraints(minHeight: 132),
-        padding: EdgeInsets.fromLTRB(
-          horizontalPadding,
-          (first ? 16 : 28),
-          horizontalPadding,
-          28,
-        ),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: roles.subtleBorder)),
-        ),
-        child: reflow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  description,
-                  SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(width: controlWidth, child: control),
-                  ),
-                ],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: description),
-                  SizedBox(width: 32),
-                  SizedBox(width: controlWidth, child: control),
-                ],
+  Widget build(BuildContext context) {
+    final row = LayoutBuilder(
+      builder: (context, constraints) {
+        final reflow =
+            constraints.maxWidth < 900 ||
+            MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+        final controlWidth = math.min(280.0, constraints.maxWidth);
+        final theme = Theme.of(context);
+        final roles = LineupTheme.of(context);
+        final description = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DefaultTextStyle.merge(
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: roles.primaryText,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                height: 1.2,
               ),
-      );
-    },
-  );
+              child: label,
+            ),
+            SizedBox(height: 6),
+            DefaultTextStyle.merge(
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: roles.secondaryText,
+                fontSize: 18,
+                height: 1.5,
+              ),
+              child: helper,
+            ),
+          ],
+        );
+        return Container(
+          constraints: BoxConstraints(minHeight: 132),
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            (first ? 16 : 28),
+            horizontalPadding,
+            28,
+          ),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+          ),
+          child: reflow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    description,
+                    SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(width: controlWidth, child: control),
+                    ),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: description),
+                    SizedBox(width: 32),
+                    SizedBox(width: controlWidth, child: control),
+                  ],
+                ),
+        );
+      },
+    );
+    return revealOnFocus && LineupTheme.of(context).androidTv
+        ? LineupFocusReveal(child: row)
+        : row;
+  }
 }
 
 class _SettingsSwitchTile extends StatelessWidget {

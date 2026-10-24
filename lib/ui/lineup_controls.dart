@@ -374,32 +374,33 @@ class LineupToggleSurface extends StatelessWidget {
       : child;
 }
 
-/// Reuses the child's real focus/traversal, with independent selection and focus.
-class LineupRowSurface extends StatefulWidget {
-  const LineupRowSurface({
-    required this.selected,
+/// Reveals a row's complete context while its child retains focus ownership.
+/// This observer adds no paint or traversal target.
+class LineupFocusReveal extends StatefulWidget {
+  const LineupFocusReveal({
     required this.child,
-    this.focused = false,
     this.scaleOnFocus = false,
+    this.onFocusChange,
     super.key,
   });
-  final bool selected;
-  final bool focused;
-  final bool scaleOnFocus;
+
   final Widget child;
+  final bool scaleOnFocus;
+  final ValueChanged<bool>? onFocusChange;
+
   @override
-  State<LineupRowSurface> createState() => _LineupRowSurfaceState();
+  State<LineupFocusReveal> createState() => _LineupFocusRevealState();
 }
 
-class _LineupRowSurfaceState extends State<LineupRowSurface> {
+class _LineupFocusRevealState extends State<LineupFocusReveal> {
   bool _focused = false;
-  bool _hovered = false;
 
   void _focusChanged(bool value) {
-    setState(() => _focused = value);
+    _focused = value;
+    widget.onFocusChange?.call(value);
     if (!value || !LineupTheme.of(context).androidTv) return;
-    // Traversal reveals the child control. Paint belongs to the whole row,
-    // including the card expansion and the optional outer focus frame.
+    // Traversal reveals the child control. Also reveal the whole context,
+    // including any card expansion and optional outer focus frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_focused) return;
       final box = context.findRenderObject();
@@ -423,6 +424,40 @@ class _LineupRowSurfaceState extends State<LineupRowSurface> {
         curve: Curves.easeOut,
       );
     });
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onFocusChange: _focusChanged,
+    child: widget.child,
+  );
+}
+
+/// Reuses the child's real focus/traversal, with independent selection and focus.
+class LineupRowSurface extends StatefulWidget {
+  const LineupRowSurface({
+    required this.selected,
+    required this.child,
+    this.focused = false,
+    this.scaleOnFocus = false,
+    super.key,
+  });
+  final bool selected;
+  final bool focused;
+  final bool scaleOnFocus;
+  final Widget child;
+  @override
+  State<LineupRowSurface> createState() => _LineupRowSurfaceState();
+}
+
+class _LineupRowSurfaceState extends State<LineupRowSurface> {
+  bool _focused = false;
+  bool _hovered = false;
+
+  void _focusChanged(bool value) {
+    setState(() => _focused = value);
   }
 
   @override
@@ -450,9 +485,8 @@ class _LineupRowSurfaceState extends State<LineupRowSurface> {
             child: LineupFocusFrame(focused: focusFill, child: material),
           )
         : material;
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
+    return LineupFocusReveal(
+      scaleOnFocus: widget.scaleOnFocus,
       onFocusChange: _focusChanged,
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
