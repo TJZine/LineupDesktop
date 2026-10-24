@@ -20,6 +20,7 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -88,13 +89,88 @@ void main() {
           .isSelected,
       ui.Tristate.isFalse,
     );
+    final disabled = tester
+        .getSemantics(find.widgetWithText(TextButton, 'Movies'))
+        .getSemanticsData();
+    expect(disabled.flagsCollection.isEnabled, ui.Tristate.isFalse);
+    expect(disabled.hasAction(ui.SemanticsAction.tap), isFalse);
+  });
+
+  testWidgets('Swiss notices keep square production corners', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        theme: LineupTheme.forName(LineupThemeName.swiss),
+        home: const LineupNotice(message: 'Unavailable'),
+      ),
+    );
+
+    final notice = tester.widget<Container>(
+      find
+          .descendant(
+            of: find.byType(LineupNotice),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    expect(
+      (notice.decoration! as BoxDecoration).borderRadius,
+      BorderRadius.zero,
+    );
+  });
+
+  testWidgets('Swiss profile rows keep square production surfaces', (
+    tester,
+  ) async {
+    const profile = PlexHomeUser(
+      id: 'movies',
+      name: 'Movies',
+      protected: false,
+    );
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        settings: LineupSettings(
+          theme: LineupThemeName.swiss,
+          largeFocusIndicators: true,
+        ),
+        stage: SetupStage.profiles,
+        profile: profile,
+        profiles: [profile],
+      ),
+    );
+    addTearDown(controller.dispose);
+    final fixture = UiFixture(controller: controller, androidTv: true);
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Movies'))
+        .focusNode!
+        .requestFocus();
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(const ValueKey('profile-card-movies'));
+    final row = find.descendant(
+      of: card,
+      matching: find.byType(LineupRowSurface),
+    );
+    expect(row, findsOneWidget);
+    final surface = tester.widget<Container>(
+      find.descendant(of: row, matching: find.byType(Container)).first,
+    );
+    expect((surface.decoration! as BoxDecoration).borderRadius, isNull);
+    expect(LineupTheme.of(tester.element(row)).panelRadius, 0);
+    final frame = find.descendant(
+      of: row,
+      matching: find.byType(LineupFocusFrame),
+    );
+    expect(frame, findsNWidgets(2));
     expect(
       tester
-          .getSemantics(find.widgetWithText(TextButton, 'Movies'))
-          .getSemanticsData()
-          .flagsCollection
-          .isEnabled,
-      ui.Tristate.isFalse,
+          .widgetList<CustomPaint>(
+            find.descendant(of: frame, matching: find.byType(CustomPaint)),
+          )
+          .any((paint) => paint.foregroundPainter != null),
+      isTrue,
     );
   });
 
