@@ -150,23 +150,30 @@ void main() {
     }
   });
 
-  testWidgets('fullscreen HDR switch is omitted on macOS and Android', (
+  testWidgets('fullscreen HDR switch follows platform and TV capability', (
     tester,
   ) async {
     final controller = FixtureController();
     addTearDown(controller.dispose);
     try {
-      for (final platform in [TargetPlatform.macOS, TargetPlatform.android]) {
+      for (final (platform, tv, visible) in [
+        (TargetPlatform.macOS, false, false),
+        (TargetPlatform.android, true, false),
+        (TargetPlatform.android, false, true),
+      ]) {
         debugDefaultTargetPlatformOverride = platform;
-        await _showSettings(tester, controller);
+        await _showSettings(tester, controller, androidTv: tv);
         await _openCategory(tester, SettingsCategory.playback);
-        expect(find.text('Match display HDR in fullscreen'), findsNothing);
+        expect(
+          find.text('Match display HDR in fullscreen'),
+          visible ? findsOneWidget : findsNothing,
+        );
         expect(find.text('DVR playback controls'), findsOneWidget);
         expect(controller.settings.matchDisplayHdr, isTrue);
       }
 
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      await _showSettings(tester, controller);
+      await _showSettings(tester, controller, androidTv: false);
       await _openCategory(tester, SettingsCategory.playback);
       expect(find.text('Match display HDR in fullscreen'), findsOneWidget);
     } finally {
@@ -366,14 +373,16 @@ void main() {
 
 Future<void> _showSettings(
   WidgetTester tester,
-  FixtureController controller,
-) async {
+  FixtureController controller, {
+  bool androidTv = false,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       builder: LineupCanvas.builder,
       theme: LineupTheme.forName(
         LineupThemeName.emberSteel,
         largeFocusIndicators: false,
+        androidTv: androidTv,
       ),
       home: RepaintBoundary(
         key: const Key('desktop-settings-render'),

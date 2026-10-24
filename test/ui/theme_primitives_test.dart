@@ -197,12 +197,15 @@ void main() {
     expect(LineupConnectionStatus.description(null), 'Not measured yet');
   });
 
-  for (final platform in [
-    TargetPlatform.android,
-    TargetPlatform.windows,
-    TargetPlatform.macOS,
+  for (final (platform, tv) in [
+    (TargetPlatform.android, false),
+    (TargetPlatform.android, true),
+    (TargetPlatform.windows, false),
+    (TargetPlatform.windows, true),
+    (TargetPlatform.macOS, false),
+    (TargetPlatform.macOS, true),
   ]) {
-    testWidgets('TV keys change focus modality only on Android: $platform', (
+    testWidgets('TV keys change focus modality: $platform TV=$tv', (
       tester,
     ) async {
       debugDefaultTargetPlatformOverride = platform;
@@ -210,7 +213,10 @@ void main() {
       try {
         await tester.pumpWidget(
           MaterialApp(
-            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: tv,
+            ),
             builder: LineupCanvas.builder,
             home: Scaffold(
               body: FilledButton(
@@ -224,8 +230,22 @@ void main() {
         focus.requestFocus();
         await tester.pump();
         final control = find.byType(FilledButton);
+        final roles = LineupTheme.of(tester.element(control));
+        final fillFocus = roles.focusTreatment == LineupFocusTreatment.fill;
         BorderSide side() =>
             Theme.of(tester.element(control)).filledButtonTheme.style!.side!
+                .resolve({WidgetState.focused})!;
+        Color background() =>
+            Theme.of(tester.element(control))
+                .filledButtonTheme
+                .style!
+                .backgroundColor!
+                .resolve({WidgetState.focused})!;
+        Color foreground() =>
+            Theme.of(tester.element(control))
+                .filledButtonTheme
+                .style!
+                .foregroundColor!
                 .resolve({WidgetState.focused})!;
         for (final key in [
           LogicalKeyboardKey.channelUp,
@@ -245,10 +265,19 @@ void main() {
           await tester.pump();
           expect(
             side(),
-            platform == TargetPlatform.android
-                ? isNot(BorderSide.none)
+            tv
+                ? fillFocus
+                      ? roles.largeFocusIndicators
+                            ? isNot(BorderSide.none)
+                            : BorderSide.none
+                      : isNot(BorderSide.none)
                 : BorderSide.none,
           );
+          expect(
+            background(),
+            tv && fillFocus ? roles.focusedSurface : roles.progressFill,
+          );
+          expect(foreground(), roles.onFocus);
           expect(focus.hasPrimaryFocus, isTrue);
         }
         await tester.sendKeyEvent(
@@ -256,7 +285,10 @@ void main() {
           platform: 'android',
         );
         await tester.pump();
-        expect(side().width, 3);
+        expect(
+          side().width,
+          tv && fillFocus && !roles.largeFocusIndicators ? 0 : 3,
+        );
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         focus.dispose();
