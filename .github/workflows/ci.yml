@@ -61,6 +61,16 @@ jobs:
         run: flutter test
         env:
           TZ: America/New_York
+      - name: Check committed Android runtime notices
+        run: >-
+          python3 tool/android/generate-licenses.py --check
+          --gradle-project android --output android/app/src/main/assets
+          --flutter-root "$FLUTTER_ROOT" --flutter-version 3.47.7
+          --license-cache build/android-license-cache
+      - name: Check Android Back manifest contract and tooling tests
+        run: |
+          python3 tool/android/check-manifest.py android/app/src/main/AndroidManifest.xml
+          python3 -m unittest discover -s tool/android -p '*_test.py'
       - name: Build ARM debug APK with the CI debug key
         env:
           LINEUP_ANDROID_SIGNING: debug-key
