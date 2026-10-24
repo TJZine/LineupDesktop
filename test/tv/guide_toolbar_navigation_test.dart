@@ -9,6 +9,7 @@ import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_text_field_activation.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
+import 'package:lineup_desktop/ui/lineup_focus.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -173,6 +174,59 @@ UiFixture _geometryFixture({required bool androidTv, int channelCount = 2}) =>
     );
 
 void main() {
+  for (final platform in [TargetPlatform.windows, TargetPlatform.android]) {
+    for (final tv in [false, true]) {
+      testWidgets(
+        'L2 Guide aliases and modality follow capability $platform TV=$tv',
+        (tester) async {
+          debugDefaultTargetPlatformOverride = platform;
+          final fixture = _geometryFixture(androidTv: tv, channelCount: 12);
+          try {
+            await tester.pumpWidget(fixture.build());
+            await _settle(tester);
+            final guide = tester.widget<GuideView>(find.byType(GuideView));
+            guide.focusNode!.requestFocus();
+            await tester.pumpAndSettle();
+            await tester.tapAt(const Offset(5, 5));
+            await tester.pumpAndSettle();
+            expect(
+              LineupFocusScope.visible(tester.element(find.byType(GuideView))),
+              isFalse,
+            );
+            final before = guide.controller.focusedChannelId;
+            await tester.sendKeyEvent(
+              LogicalKeyboardKey.channelDown,
+              // Deliver the remote logical event without pretending Windows
+              // has a native ChannelDown scan-code mapping.
+              platform: 'android',
+              physicalKey: PhysicalKeyboardKey.pageDown,
+            );
+            await tester.pumpAndSettle();
+            expect(guide.controller.focusedChannelId == before, !tv);
+            expect(
+              LineupFocusScope.visible(tester.element(find.byType(GuideView))),
+              tv,
+            );
+            await tester.sendKeyEvent(
+              LogicalKeyboardKey.contextMenu,
+              platform: 'android',
+              physicalKey: PhysicalKeyboardKey.contextMenu,
+            );
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const Key('immersive-app-menu')),
+              tv ? findsOneWidget : findsNothing,
+            );
+          } finally {
+            await tester.pumpWidget(const SizedBox.shrink());
+            fixture.controller.dispose();
+            debugDefaultTargetPlatformOverride = null;
+          }
+        },
+      );
+    }
+  }
+
   for (final window in const [Size(960, 540), Size(1920, 1080)]) {
     testWidgets(
       'TV Guide receives safe constraints and displays five full rows: $window',

@@ -248,7 +248,16 @@ void main() {
             captureKey,
             'now-playing-large$large-scale$textScale',
           );
-          await key(LogicalKeyboardKey.select);
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+          await tester.pump();
+          expect(
+            tester
+                .widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher).first)
+                .duration,
+            large ? Duration.zero : const Duration(milliseconds: 300),
+          );
+          expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+          await tester.pumpAndSettle();
           expect(
             find.byKey(const Key('player-more-info-close')),
             findsOneWidget,
@@ -263,12 +272,61 @@ void main() {
                 .maxLines,
             isNull,
           );
-          await key(LogicalKeyboardKey.arrowDown);
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-entry-large$large-scale$textScale',
+          );
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'More info reading',
+          );
+          expect(fixture.player.overlay.name, 'programInfo');
+          expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+          expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+          expect(find.text('Up/Down Scroll · Back Close'), findsOneWidget);
           final reader = find.byKey(const Key('player-more-info-reading'));
           expect(Focus.of(tester.element(reader)).hasPrimaryFocus, isTrue);
+          final decoration =
+              tester.widget<DecoratedBox>(reader).decoration as BoxDecoration;
+          expect(decoration.color, isNull);
           expect(
-            tester.widget<ColoredBox>(reader).color,
+            (decoration.border! as Border).left,
+            const BorderSide(color: Color(0xFFE9DCC3), width: 4),
+          );
+          expect(
+            tester
+                .widget<RawScrollbar>(
+                  find.byKey(const Key('player-more-info-scrollbar')),
+                )
+                .thickness,
+            4,
+          );
+          expect(
+            tester
+                .widget<RawScrollbar>(
+                  find.byKey(const Key('player-more-info-scrollbar')),
+                )
+                .thumbColor,
             const Color(0xFFE9DCC3),
+          );
+          final summaryInk = tester
+              .widget<RichText>(
+                find.descendant(
+                  of: find.byKey(const Key('player-more-info-summary')),
+                  matching: find.byType(RichText),
+                ),
+              )
+              .text
+              .style!
+              .color;
+          expect(summaryInk, const Color(0xFFF3E8D2));
+          await _expectInfoPaint(
+            tester,
+            captureKey,
+            reader,
+            focused: true,
+            name: 'paint-large$large-scale$textScale-reader',
           );
           await _r2Capture(
             tester,
@@ -313,8 +371,25 @@ void main() {
                 .hasPrimaryFocus,
             isTrue,
           );
+          await _expectInfoPaint(
+            tester,
+            captureKey,
+            reader,
+            focused: false,
+            name: 'paint-large$large-scale$textScale-close',
+          );
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-close-large$large-scale$textScale',
+          );
           await key(LogicalKeyboardKey.select);
           expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-return-large$large-scale$textScale',
+          );
           await key(LogicalKeyboardKey.arrowUp);
           await key(LogicalKeyboardKey.arrowDown);
           expect(Focus.of(tester.element(more)).hasFocus, isTrue);
@@ -327,6 +402,210 @@ void main() {
         },
       );
     }
+  }
+
+  testWidgets('O1 amendment reader owns initial focus', (tester) async {
+    final fixture = _amendmentFixture();
+    await _openInfoForAmendment(tester, fixture);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'More info reading');
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('O1 amendment reader paint stays dark instead of inverting', (
+    tester,
+  ) async {
+    final fixture = _amendmentFixture();
+    await _openInfoForAmendment(tester, fixture);
+    // On d155 entry is Close; establish its old reading state to isolate paint.
+    if (FocusManager.instance.primaryFocus?.debugLabel != 'More info reading') {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    final text = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(const Key('player-more-info-summary')),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(text.text.style?.color, const Color(0xFFF3E8D2));
+    expect(find.byKey(const Key('player-more-info-scrollbar')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+  testWidgets('O1 amendment replaces chrome without a Navigator route', (
+    tester,
+  ) async {
+    final fixture = _amendmentFixture();
+    await _openInfoForAmendment(tester, fixture);
+    expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+    expect(find.byKey(const Key('player-status-bug')), findsNothing);
+    expect(find.text('Up/Down Scroll · Back Close'), findsOneWidget);
+    expect(
+      Navigator.of(
+        tester.element(find.byKey(const Key('player-more-info-close'))),
+      ).canPop(),
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  for (final dvr in [false, true]) {
+    for (final key in [
+      LogicalKeyboardKey.mediaPlayPause,
+      LogicalKeyboardKey.mediaPause,
+      LogicalKeyboardKey.mediaPlay,
+    ]) {
+      testWidgets('O1 amendment media action $key DVR=$dvr', (tester) async {
+        final fixture = _amendmentFixture(dvr: dvr);
+        fixture.native.emitControlEvents = true;
+        await _openInfoForAmendment(tester, fixture);
+        final count = fixture.native.pausedValues.length;
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+        if (dvr) {
+          final pause = key != LogicalKeyboardKey.mediaPlay;
+          expect(fixture.native.pausedValues.skip(count), [pause]);
+          expect(
+            fixture.player.status.state,
+            pause ? PlayerState.paused : PlayerState.playing,
+          );
+        } else {
+          expect(fixture.native.pausedValues.length, count);
+        }
+        expect(fixture.player.overlay.name, 'programInfo');
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'More info reading',
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      });
+    }
+  }
+  for (final key in [
+    LogicalKeyboardKey.channelUp,
+    LogicalKeyboardKey.channelDown,
+  ]) {
+    testWidgets('O1 amendment actual channel action $key', (tester) async {
+      final fixture = _amendmentFixture(channels: 3);
+      await _openInfoForAmendment(tester, fixture);
+      final before = fixture.native.loadCalls;
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+      expect(
+        fixture.lineup.currentChannelId,
+        key == LogicalKeyboardKey.channelUp ? 'channel-2' : 'channel-1',
+      );
+      expect(fixture.native.loadCalls, greaterThan(before));
+      expect(find.byKey(const Key('player-more-info-reading')), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.context, isNotNull);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('More info reading'),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    });
+  }
+  testWidgets('O1 amendment Close keeps media PlayPause in Player policy', (
+    tester,
+  ) async {
+    final fixture = _amendmentFixture(dvr: true);
+    fixture.native.emitControlEvents = true;
+    await _openInfoForAmendment(tester, fixture);
+    if (FocusManager.instance.primaryFocus?.debugLabel == 'More info reading') {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlayPause);
+    await tester.pumpAndSettle();
+    expect(fixture.native.pausedValues, [true]);
+    expect(fixture.player.status.state, PlayerState.paused);
+    expect(fixture.player.overlay.name, 'programInfo');
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'More info Close');
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'O1 amendment reads a real scheduled boundary live and safely returns without invoker',
+    (tester) async {
+      var now = DateTime(2026, 1, 15, 12);
+      final fixture = _amendmentFixture(now: () => now, short: true);
+      await _openInfoForAmendment(tester, fixture);
+      final old = fixture.player.currentProgram!.id;
+      final scroll = tester
+          .widget<SingleChildScrollView>(
+            find.byKey(const Key('player-more-info-scroll')),
+          )
+          .controller!;
+      if (FocusManager.instance.primaryFocus?.debugLabel !=
+          'More info reading') {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, greaterThan(0));
+      now = now.add(const Duration(hours: 1));
+      fixture.guide.playToNow();
+      fixture.native.emitState(PlayerState.ended, at: const Duration(hours: 1));
+      await tester.pumpAndSettle();
+      expect(fixture.native.loadCalls, 2);
+      expect(fixture.player.currentProgram!.id, isNot(old));
+      expect(
+        fixture.player.currentProgram!.scheduled.item.title,
+        'Replacement Program',
+      );
+      expect(find.text('Replacement Program'), findsOneWidget);
+      expect(find.text('Program'), findsNothing);
+      expect(scroll.offset, 0);
+      expect(fixture.player.overlay.name, 'programInfo');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      expect(find.byKey(const Key('player-more-info')), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.context, isNotNull);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('More info reading'),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+  for (final failure in ['stop', 'error']) {
+    testWidgets('O1 amendment $failure retires reader to live recovery focus', (
+      tester,
+    ) async {
+      final fixture = _amendmentFixture(dvr: true);
+      await _openInfoForAmendment(tester, fixture);
+      if (failure == 'stop') {
+        await tester.sendKeyEvent(LogicalKeyboardKey.mediaStop);
+      } else {
+        fixture.native.emitState(PlayerState.error);
+      }
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('player-more-info-reading')), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.context, isNotNull);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('More info reading'),
+      );
+      expect(
+        Focus.of(
+          tester.element(
+            find.text(failure == 'error' ? 'Retry' : 'Browse channels'),
+          ),
+        ).hasFocus,
+        isTrue,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    });
   }
 
   testWidgets('C5 TV Mini Guide virtual cursor paints cream and leaf ink', (
@@ -358,9 +637,20 @@ void main() {
         tester.widget<RichText>(rich).text.style?.color,
         const Color(0xFF090806),
       );
+      expect(tester.widget<RichText>(rich).text.style?.shadows, isEmpty);
       final row = find
           .ancestor(of: text, matching: find.byType(LineupRowSurface))
           .first;
+      for (final text in tester.widgetList<RichText>(
+        find.descendant(of: row, matching: find.byType(RichText)),
+      )) {
+        if (text.text.style?.fontFamily == 'MaterialIcons') continue;
+        expect(
+          text.text.style?.shadows ?? const [],
+          isEmpty,
+          reason: text.text.toPlainText(),
+        );
+      }
       final paints = find.descendant(
         of: row,
         matching: find.byWidgetPredicate(
@@ -375,6 +665,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(FocusManager.instance.primaryFocus, same(owner));
     }
+    // Pointer modality hides the fill; restore the ordinary overlay shadow.
+    final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(5, 5));
+    await mouse.moveTo(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    final cursor = find.byKey(
+      Key('mini-guide-channel-${fixture.player.miniGuideChannelId}'),
+    );
+    final pointerText = tester.widget<RichText>(
+      find.descendant(of: cursor, matching: find.byType(RichText)).first,
+    );
+    expect(pointerText.text.style?.shadows, isNotEmpty);
+    expect(pointerText.text.style?.color, const Color(0xFFF3E8D2));
+    await mouse.removePointer();
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -7375,6 +7679,7 @@ class _Fixture {
     bool failSchedule = false,
     ChannelItem? richItemOverride,
     DateTime Function()? guideClock,
+    DateTime Function()? playerClock,
     Duration nativePosition = const Duration(minutes: 10),
     Duration nativeDuration = const Duration(hours: 1),
     PlayerTelemetry nativeTelemetry = const PlayerTelemetry(),
@@ -7421,6 +7726,7 @@ class _Fixture {
       lineup: lineup,
       guide: guide,
       overlayTimeout: overlayTimeout,
+      clock: playerClock,
     );
   }
 
@@ -7725,6 +8031,28 @@ class _Native implements NativePlayer {
   final _loadCompletion = Completer<void>();
   final _events = StreamController<PlayerEvent>.broadcast();
   int transportCommands = 0;
+  final pausedValues = <bool>[];
+  bool emitControlEvents = false;
+  int? lastLoadGeneration;
+
+  void emitState(PlayerState state, {Duration? at}) {
+    _events.add(
+      PlayerEvent(
+        status: PlayerStatus(
+          state: state,
+          message: state.name,
+          recoverable: true,
+          failureCode: state == PlayerState.error ? 'synthetic' : null,
+        ),
+        position: at ?? position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: tracks,
+        generation: lastLoadGeneration,
+      ),
+    );
+  }
+
   int loadCalls = 0;
   final fullscreenValues = <bool>[];
   final selectedTracks = <(PlayerTrackType, int?)>[];
@@ -7770,6 +8098,7 @@ class _Native implements NativePlayer {
     Duration? startPosition,
   }) async {
     loadCalls++;
+    lastLoadGeneration = generation;
     if (failLoad) throw const PlayerUnavailable('synthetic load failure');
     if (blockLoad) {
       if (!loadStarted.isCompleted) loadStarted.complete();
@@ -7802,6 +8131,8 @@ class _Native implements NativePlayer {
   @override
   Future<void> play() async {
     transportCommands++;
+    pausedValues.add(false);
+    if (emitControlEvents) emitState(PlayerState.playing);
     if (failControls) {
       throw const PlayerUnavailable(
         'Synthetic play failure.',
@@ -7813,6 +8144,8 @@ class _Native implements NativePlayer {
   @override
   Future<void> pause() async {
     transportCommands++;
+    pausedValues.add(true);
+    if (emitControlEvents) emitState(PlayerState.paused);
     if (failControls) {
       throw const PlayerUnavailable(
         'Synthetic pause failure.',
@@ -7922,4 +8255,111 @@ Future<void> _r2Capture(WidgetTester tester, GlobalKey key, String name) async {
         .writeAsBytes(bytes!.buffer.asUint8List());
     image.dispose();
   });
+}
+
+_Fixture _amendmentFixture({
+  bool dvr = false,
+  int channels = 1,
+  DateTime Function()? now,
+  bool short = false,
+}) {
+  final clock = now ?? () => DateTime(2026, 1, 15, 12);
+  return _Fixture(
+    PlayerState.playing,
+    dvrControlsEnabled: dvr,
+    channelCount: channels,
+    guideClock: clock,
+    playerClock: clock,
+    shortPrograms: short,
+    richItemOverride: _fixtureItem(
+      0,
+      rich: true,
+      duration: Duration(hours: short ? 1 : 24),
+      summary: List.filled(
+        30,
+        'Complete program details for reading.',
+      ).join(' '),
+      cast: List.generate(
+        24,
+        (i) => ChannelCastMember(name: 'Performer $i', role: 'Role $i'),
+      ),
+    ),
+  );
+}
+
+Future<void> _openInfoForAmendment(
+  WidgetTester tester,
+  _Fixture fixture,
+) async {
+  await fixture.player.tune('channel');
+  fixture.player.showNowPlaying();
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+      builder: LineupCanvas.builder,
+      home: PlayerView(controller: fixture.player, openGuide: () {}),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+  await tester.pumpAndSettle();
+  await tester.sendKeyEvent(LogicalKeyboardKey.select);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _expectInfoPaint(
+  WidgetTester tester,
+  GlobalKey captureKey,
+  Finder reader, {
+  required bool focused,
+  required String name,
+}) async {
+  final rect = tester.getRect(reader);
+  final box = tester.renderObject<RenderBox>(reader);
+  final scale = rect.width / box.size.width;
+  final sampleY = (rect.top + 20).floor();
+  final pixels = (await tester.runAsync(() async {
+    final image =
+        await (captureKey.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary)
+            .toImage();
+    final data = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!
+        .buffer
+        .asUint8List();
+    List<int> sample(double x) {
+      final offset = (sampleY * image.width + x.floor()) * 4;
+      return data.sublist(offset, offset + 4);
+    }
+
+    final values = {
+      'bar': sample(rect.left + 2 * scale),
+      'body': sample(rect.left + 12 * scale),
+      'thumb': sample(rect.right - 2 * scale),
+    };
+    image.dispose();
+    final directory = Platform.environment['R2_CAPTURE'];
+    if (directory != null) {
+      await File('$directory/$name.json').writeAsString(
+        jsonEncode({
+          'focused': focused,
+          'scale': scale,
+          'reader': [rect.left, rect.top, rect.right, rect.bottom],
+          'sample_y': sampleY,
+          'rgba': values,
+        }),
+      );
+    }
+    return values;
+  }))!;
+  expect(pixels['bar'], focused ? [233, 220, 195, 255] : [43, 38, 30, 255]);
+  expect(pixels['body']!.take(3).reduce((a, b) => a + b), lessThan(100));
+  if (focused) {
+    expect(pixels['thumb'], [233, 220, 195, 255]);
+  } else {
+    expect(pixels['thumb'], isNot([233, 220, 195, 255]));
+    expect(
+      pixels['thumb']!.take(3).reduce((a, b) => a + b),
+      greaterThan(pixels['body']!.take(3).reduce((a, b) => a + b)),
+    );
+  }
 }

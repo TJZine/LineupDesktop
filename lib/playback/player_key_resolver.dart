@@ -90,6 +90,7 @@ final _pageKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
 PlayerCommand resolvePlayerKey(
   LogicalKeyboardKey key, {
   required PlayerOverlay overlay,
+  required bool androidTv,
   required bool dvr,
   required bool unsupported,
   required bool initialPress,
@@ -99,7 +100,7 @@ PlayerCommand resolvePlayerKey(
   bool commandPressed = false,
 }) {
   if (commandPressed) return PlayerAction.ignored;
-  key = androidTvKeyAlias(key) ?? key;
+  key = androidTvKeyAlias(key, androidTv: androidTv) ?? key;
   if (_backKeys.contains(key)) {
     return switch (overlay) {
       PlayerOverlay.none => PlayerAction.backToGuide,
@@ -136,6 +137,26 @@ PlayerCommand resolvePlayerKey(
                   key == LogicalKeyboardKey.arrowRight)) ||
           (overlay == PlayerOverlay.miniGuide && selects))) {
     return PlayerAction.consumed;
+  }
+  // Program information is readonly: arrows/Select belong to its reader and
+  // Close. Only explicit remote transport/channel commands escape to Player.
+  // Availability and unsupported-media guards above remain authoritative.
+  if (overlay == PlayerOverlay.programInfo) {
+    if (_guideKeys.contains(key)) return PlayerAction.openGuide;
+    if (unsupported && key == LogicalKeyboardKey.mediaPlayPause) {
+      return PlayerAction.consumed;
+    }
+    return switch (key) {
+      LogicalKeyboardKey.mediaPlayPause => PlayerAction.togglePlayback,
+      LogicalKeyboardKey.mediaPlay => PlayerAction.play,
+      LogicalKeyboardKey.mediaPause => PlayerAction.pause,
+      LogicalKeyboardKey.mediaStop => PlayerAction.stop,
+      LogicalKeyboardKey.mediaRewind => PlayerAction.rewind,
+      LogicalKeyboardKey.mediaFastForward => PlayerAction.fastForward,
+      LogicalKeyboardKey.pageUp => PlayerAction.previousChannel,
+      LogicalKeyboardKey.pageDown => PlayerAction.nextChannel,
+      _ => PlayerAction.ignored,
+    };
   }
   final overlayOwnsKey = switch (overlay) {
     PlayerOverlay.audioTracks ||

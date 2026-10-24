@@ -47,7 +47,7 @@ void main() {
     TargetPlatform.windows,
     TargetPlatform.macOS,
   ]) {
-    testWidgets('Guide TV aliases preserve desktop keys on $platform', (
+    testWidgets('Guide non-TV capability ignores TV aliases on $platform', (
       tester,
     ) async {
       debugDefaultTargetPlatformOverride = platform;
@@ -84,11 +84,7 @@ void main() {
           platform: 'android',
         );
         await tester.pumpAndSettle();
-        if (platform == TargetPlatform.android) {
-          expect(guide.focusedChannelIndex, greaterThan(before));
-        } else {
-          expect(guide.focusedChannelIndex, before);
-        }
+        expect(guide.focusedChannelIndex, before);
         await tester.sendKeyEvent(
           LogicalKeyboardKey.channelUp,
           physicalKey: PhysicalKeyboardKey.escape,
@@ -108,7 +104,7 @@ void main() {
           );
           await tester.pumpAndSettle();
         }
-        expect(closes, platform == TargetPlatform.android ? 1 : 0);
+        expect(closes, 0);
         await tester.sendKeyEvent(
           LogicalKeyboardKey.pageDown,
           platform: 'android',
@@ -119,7 +115,7 @@ void main() {
           await tester.sendKeyEvent(key, platform: 'android');
           await tester.pumpAndSettle();
         }
-        expect(closes, platform == TargetPlatform.android ? 3 : 2);
+        expect(closes, 2);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         tester.view.reset();
@@ -320,7 +316,8 @@ void main() {
         final beforeChannel = guide.focusedChannelIndex;
         await tester.sendKeyEvent(LogicalKeyboardKey.channelDown);
         await tester.pumpAndSettle();
-        expect(guide.focusedChannelIndex, beforeChannel + 5);
+        // This is the desktop canvas: remote aliases do not act like PageDown.
+        expect(guide.focusedChannelIndex, beforeChannel);
         await tester.sendKeyEvent(LogicalKeyboardKey.channelUp);
         await tester.pumpAndSettle();
         expect(guide.focusedChannelIndex, beforeChannel);
