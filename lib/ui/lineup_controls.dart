@@ -394,6 +394,37 @@ class LineupRowSurface extends StatefulWidget {
 class _LineupRowSurfaceState extends State<LineupRowSurface> {
   bool _focused = false;
   bool _hovered = false;
+
+  void _focusChanged(bool value) {
+    setState(() => _focused = value);
+    if (!value || !LineupTheme.of(context).androidTv) return;
+    // Traversal reveals the child control. Paint belongs to the whole row,
+    // including the card expansion and the optional outer focus frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_focused) return;
+      final box = context.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      final roles = LineupTheme.of(context);
+      final reduceMotion = MediaQuery.disableAnimationsOf(context);
+      final expansion = widget.scaleOnFocus && !reduceMotion ? .03 : 0.0;
+      final clearance = roles.largeFocusIndicators
+          ? LineupFocusFrame.contentClearance
+          : 0.0;
+      box.showOnScreen(
+        rect: Rect.fromLTRB(
+          -box.size.width * expansion - clearance,
+          -box.size.height * expansion - clearance,
+          box.size.width * (1 + expansion) + clearance,
+          box.size.height * (1 + expansion) + clearance,
+        ),
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
@@ -422,7 +453,7 @@ class _LineupRowSurfaceState extends State<LineupRowSurface> {
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
-      onFocusChange: (value) => setState(() => _focused = value),
+      onFocusChange: _focusChanged,
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),

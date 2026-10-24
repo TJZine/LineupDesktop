@@ -13,6 +13,7 @@ import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/lineup_canvas.dart';
 import 'focused_ticker.dart';
 import 'guide_controller.dart';
 
@@ -1869,6 +1870,7 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
               backdrop: _backdrop,
               clearLogo: _clearLogo,
               dynamicColor: _dynamicColor,
+              bleedLeft: picture == null,
               compactLogo: widget.compactLogo,
               playbackMessage: widget.playbackMessage,
             ),
@@ -2876,6 +2878,7 @@ class _Details extends StatelessWidget {
     required this.dynamicColor,
     required this.compactLogo,
     required this.playbackMessage,
+    required this.bleedLeft,
   });
   final GuideProgram? program;
   final Uint8List? backdrop;
@@ -2883,6 +2886,7 @@ class _Details extends StatelessWidget {
   final Color? dynamicColor;
   final GuideController controller;
   final bool compactLogo;
+  final bool bleedLeft;
   final String? playbackMessage;
 
   @override
@@ -2913,7 +2917,7 @@ class _Details extends StatelessWidget {
         colors: [roles.primarySurface, roles.deepBackground],
       ),
     };
-    return ClipRect(
+    final background = ClipRect(
       child: AnimatedContainer(
         key: const Key('guide-info-dynamic-background'),
         duration: controller.lineup.settings.reduceMotion
@@ -2951,41 +2955,60 @@ class _Details extends StatelessWidget {
                 ),
               ),
             ],
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: SizedBox(
-                  width: double.infinity,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: program == null
-                            ? _GuideDetailsPlaceholder(
-                                controller: controller,
-                                channel: channel,
-                                playbackMessage: playbackMessage,
-                              )
-                            : _ProgramDetails(
-                                program: program!,
-                                channel: channel,
-                                clearLogo: settings.preferClearLogos
-                                    ? clearLogo
-                                    : null,
-                                compactLogo: compactLogo,
-                                playbackMessage: playbackMessage,
-                                now: controller.now,
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       ),
+    );
+    final margin = roles.androidTv
+        ? LineupCanvas.fullSafeInsetsOf(context)
+        : EdgeInsets.zero;
+    // Only paint bleeds beyond the route's safe content. Keep the information
+    // text and the native PiP aperture at their existing geometry.
+    return Stack(
+      key: const Key('guide-information-details'),
+      clipBehavior: Clip.none,
+      fit: StackFit.expand,
+      children: [
+        Positioned(
+          left: bleedLeft ? -margin.left : 0,
+          right: -margin.right,
+          top: 0,
+          bottom: 0,
+          child: background,
+        ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: program == null
+                        ? _GuideDetailsPlaceholder(
+                            controller: controller,
+                            channel: channel,
+                            playbackMessage: playbackMessage,
+                          )
+                        : _ProgramDetails(
+                            program: program!,
+                            channel: channel,
+                            clearLogo: settings.preferClearLogos
+                                ? clearLogo
+                                : null,
+                            compactLogo: compactLogo,
+                            playbackMessage: playbackMessage,
+                            now: controller.now,
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

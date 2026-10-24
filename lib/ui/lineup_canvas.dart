@@ -34,6 +34,12 @@ class LineupCanvas extends StatelessWidget {
         math.max(a.bottom, b.bottom),
       );
 
+  /// Original canvas safe margin for background paint that extends beyond a
+  /// SafeArea. Content still uses MediaQuery.padding, which SafeArea consumes.
+  static EdgeInsets fullSafeInsetsOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_CanvasSafeInsets>()?.insets ??
+      MediaQuery.paddingOf(context);
+
   static Widget builder(BuildContext context, Widget? child) =>
       LineupCanvas(child: child ?? const SizedBox.shrink());
 
@@ -75,7 +81,10 @@ class LineupCanvas extends StatelessWidget {
                   systemGestureInsets: media.systemGestureInsets / scale,
                   disableAnimations: media.disableAnimations || reduceMotion,
                 ),
-                child: LineupFocusScope(child: child),
+                child: _CanvasSafeInsets(
+                  insets: padding / scale,
+                  child: LineupFocusScope(child: child),
+                ),
               ),
             ),
           ),
@@ -83,4 +92,13 @@ class LineupCanvas extends StatelessWidget {
       },
     );
   }
+}
+
+class _CanvasSafeInsets extends InheritedWidget {
+  const _CanvasSafeInsets({required this.insets, required super.child});
+  final EdgeInsets insets;
+
+  @override
+  bool updateShouldNotify(_CanvasSafeInsets oldWidget) =>
+      insets != oldWidget.insets;
 }

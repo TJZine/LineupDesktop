@@ -223,9 +223,7 @@ void main() {
               ),
             );
             await tester.pumpAndSettle();
-            final details = find.byKey(
-              const Key('guide-info-dynamic-background'),
-            );
+            final details = find.byKey(const Key('guide-information-details'));
             var originalArea = tester.getRect(
               find.byKey(const Key('guide-information-area')),
             );

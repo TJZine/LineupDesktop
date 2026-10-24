@@ -191,19 +191,8 @@ void main() {
       expect(tester.element(find.text('LINEUP')), same(word));
       expect(tester.element(find.byIcon(Icons.menu)), same(icon));
       expect(tester.element(find.byType(Image)), same(image));
-      expect(
-        tester.getTopLeft(find.byType(Image)).dx - defaultLeft,
-        tv
-            ? closeTo(
-                6 *
-                    LineupCanvas.scaleFor(
-                      const Size(1920, 1080),
-                      androidTv: true,
-                    ),
-                .01,
-              )
-            : 0,
-      );
+      // Compact padding includes the Large frame clearance in both modes.
+      expect(tester.getTopLeft(find.byType(Image)).dx - defaultLeft, 0);
       large.value = false;
       await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);

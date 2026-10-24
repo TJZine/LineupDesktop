@@ -116,7 +116,7 @@ void main() {
 
             Focus.of(tester.element(find.text('One'))).requestFocus();
             await tester.pumpAndSettle();
-            checkStyles(keyboard: false);
+            checkStyles(keyboard: tv);
             await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
             await tester.pumpAndSettle();
             checkStyles(keyboard: true);
