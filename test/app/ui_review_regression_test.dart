@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,102 +25,86 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
-  testWidgets('selection cards expose one complete semantic control', (
+  testWidgets('profile cards expose one complete semantic control', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: LineupCanvas.builder,
-        home: LineupSelectionCard(
-          selected: true,
-          onPressed: () {},
-          child: const Text('Movies'),
-        ),
+    const profile = PlexHomeUser(
+      id: 'movies',
+      name: 'Movies',
+      protected: false,
+    );
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profile: profile,
+        profiles: [profile],
       ),
     );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
 
+    final card = find.byKey(const ValueKey('profile-card-movies'));
+    final semantics = find
+        .descendant(of: card, matching: find.byType(Semantics))
+        .first;
+    final node = tester.getSemantics(semantics);
+    expect(node.getSemanticsData().label, contains('Movies'));
     expect(
-      tester.getSemantics(find.byType(LineupSelectionCard)),
+      node,
       matchesSemantics(
-        label: 'Movies',
         hasEnabledState: true,
         isEnabled: true,
         hasSelectedState: true,
         isSelected: true,
         isButton: true,
         isFocusable: true,
+        isFocused: true,
         hasTapAction: true,
-        hasFocusAction: true,
-      ),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: LineupCanvas.builder,
-        home: LineupSelectionCard(
-          selected: false,
-          onPressed: null,
-          child: Text('Movies'),
-        ),
-      ),
-    );
-
-    expect(
-      tester.getSemantics(find.byType(LineupSelectionCard)),
-      matchesSemantics(
-        label: 'Movies',
-        hasEnabledState: true,
-        isEnabled: false,
-        hasSelectedState: true,
-        isSelected: false,
-        isButton: true,
-        isFocusable: true,
-        hasTapAction: false,
         hasFocusAction: true,
       ),
     );
   });
 
-  testWidgets('Swiss panels keep shared custom surfaces square', (
+  testWidgets('disabled navigation rows retain selection semantics', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         builder: LineupCanvas.builder,
-        theme: LineupTheme.forName(LineupThemeName.swiss),
-        home: const Column(
-          children: [
-            LineupSelectionCard(
-              selected: false,
-              onPressed: null,
-              child: Text('Movies'),
-            ),
-            LineupNotice(message: 'Unavailable'),
-          ],
+        home: LineupNavigationRow(
+          key: const ValueKey('navigation-row'),
+          selected: false,
+          onPressed: null,
+          child: const Text('Movies'),
         ),
       ),
     );
 
-    final selectionCard = tester.widget<Card>(
-      find.descendant(
-        of: find.byType(LineupSelectionCard),
-        matching: find.byType(Card),
+    expect(
+      tester
+          .getSemantics(find.byKey(const ValueKey('navigation-row')))
+          .getSemanticsData()
+          .flagsCollection
+          .isSelected,
+      ui.Tristate.isFalse,
+    );
+    final disabled = tester
+        .getSemantics(find.widgetWithText(TextButton, 'Movies'))
+        .getSemanticsData();
+    expect(disabled.flagsCollection.isEnabled, ui.Tristate.isFalse);
+    expect(disabled.hasAction(ui.SemanticsAction.tap), isFalse);
+  });
+
+  testWidgets('Swiss notices keep square production corners', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        theme: LineupTheme.forName(LineupThemeName.swiss),
+        home: const LineupNotice(message: 'Unavailable'),
       ),
     );
-    expect(
-      (selectionCard.shape! as RoundedRectangleBorder).borderRadius,
-      BorderRadius.zero,
-    );
-    final focusRing = tester.widget<AnimatedContainer>(
-      find.descendant(
-        of: find.byType(LineupSelectionCard),
-        matching: find.byType(AnimatedContainer),
-      ),
-    );
-    expect(
-      (focusRing.decoration! as BoxDecoration).borderRadius,
-      BorderRadius.zero,
-    );
+
     final notice = tester.widget<Container>(
       find
           .descendant(
@@ -129,6 +116,61 @@ void main() {
     expect(
       (notice.decoration! as BoxDecoration).borderRadius,
       BorderRadius.zero,
+    );
+  });
+
+  testWidgets('Swiss profile rows keep square production surfaces', (
+    tester,
+  ) async {
+    const profile = PlexHomeUser(
+      id: 'movies',
+      name: 'Movies',
+      protected: false,
+    );
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        settings: LineupSettings(
+          theme: LineupThemeName.swiss,
+          largeFocusIndicators: true,
+        ),
+        stage: SetupStage.profiles,
+        profile: profile,
+        profiles: [profile],
+      ),
+    );
+    addTearDown(controller.dispose);
+    final fixture = UiFixture(controller: controller, androidTv: true);
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Movies'))
+        .focusNode!
+        .requestFocus();
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(const ValueKey('profile-card-movies'));
+    final row = find.descendant(
+      of: card,
+      matching: find.byType(LineupRowSurface),
+    );
+    expect(row, findsOneWidget);
+    final surface = tester.widget<Container>(
+      find.descendant(of: row, matching: find.byType(Container)).first,
+    );
+    expect((surface.decoration! as BoxDecoration).borderRadius, isNull);
+    expect(LineupTheme.of(tester.element(row)).panelRadius, 0);
+    final frame = find.descendant(
+      of: row,
+      matching: find.byType(LineupFocusFrame),
+    );
+    expect(frame, findsNWidgets(2));
+    expect(
+      tester
+          .widgetList<CustomPaint>(
+            find.descendant(of: frame, matching: find.byType(CustomPaint)),
+          )
+          .any((paint) => paint.foregroundPainter != null),
+      isTrue,
     );
   });
 
@@ -686,6 +728,7 @@ void main() {
   testWidgets('PIN dialog leaves autofocus with its keyboard owner', (
     tester,
   ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     const profile = PlexHomeUser(id: 'child', name: 'Child', protected: true);
     final controller = _ProfileFixtureController(
       scenario: LineupScenario(
@@ -693,16 +736,23 @@ void main() {
         profiles: const [profile],
       ),
     );
-    await tester.pumpWidget(UiFixture(controller: controller).build());
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Child'));
-    await tester.pumpAndSettle();
+    addTearDown(controller.dispose);
+    try {
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Child'));
+      await tester.pumpAndSettle();
 
-    final keyboardOwner = tester.widget<Focus>(
-      find.byKey(const Key('profile-pin-keyboard-owner')),
-    );
-    expect(keyboardOwner.focusNode, isNotNull);
-    expect(keyboardOwner.focusNode!.hasFocus, isTrue);
+      final keyboardOwner = tester.widget<Focus>(
+        find.byKey(const Key('profile-pin-keyboard-owner')),
+      );
+      expect(keyboardOwner.focusNode, isNotNull);
+      expect(keyboardOwner.autofocus, isTrue);
+      expect(keyboardOwner.focusNode!.hasFocus, isTrue);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('Channel Setup excludes descriptor-invalid inventory', (

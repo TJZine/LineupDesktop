@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -98,9 +97,16 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   bool _pulse = true;
   FocusNode? _lastControlFocus;
   bool _focusRecoveryScheduled = false;
+  var _androidTv = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _androidTv = LineupTheme.of(context).androidTv;
+  }
 
   void _recoverAndroidFocus() {
-    if (defaultTargetPlatform != TargetPlatform.android || !mounted) return;
+    if (!_androidTv || !mounted) return;
     final primary = FocusManager.instance.primaryFocus;
     if (primary != null &&
         primary != _navigationFocus &&
@@ -174,7 +180,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     final nextLinkingStopped = _isLinkingStopped(controller);
     final retryNeedsFocus = !_linkingStopped && nextLinkingStopped;
     final linkNeedsFocus =
-        defaultTargetPlatform == TargetPlatform.android &&
+        _androidTv &&
         !_wasLinking &&
         controller.stage == SetupStage.linking &&
         controller.pinUsable;
@@ -266,7 +272,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   void _focusNavigation() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _navigationFocus.canRequestFocus) {
-        if (defaultTargetPlatform == TargetPlatform.android) {
+        if (_androidTv) {
           _navigationFocus.descendants
               .where((node) => node.canRequestFocus && !node.skipTraversal)
               .firstOrNull
@@ -319,7 +325,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       },
       child: Focus(
         focusNode: _navigationFocus,
-        skipTraversal: defaultTargetPlatform == TargetPlatform.android,
+        skipTraversal: roles.androidTv,
         canRequestFocus: true,
         onKeyEvent: _navigationKey,
         child: CallbackShortcuts(
@@ -1797,7 +1803,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
         focusNode: _keyboardFocus,
         // TV traversal starts on the real digit control; this ancestor still
         // owns number and Back routing without competing for autofocus.
-        autofocus: defaultTargetPlatform != TargetPlatform.android,
+        autofocus: !androidTv,
         onKeyEvent: _key,
         child: SizedBox(
           key: const Key('profile-pin-sheet'),

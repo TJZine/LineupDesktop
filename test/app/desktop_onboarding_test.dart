@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -358,6 +360,31 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
   }
+
+  testWidgets(
+    'injected TV capability controls onboarding traversal on desktop',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      final controller = FixtureController(
+        scenario: const LineupScenario(stage: SetupStage.welcome),
+      );
+      addTearDown(controller.dispose);
+
+      try {
+        await show(tester, controller, androidTv: true);
+
+        final navigation = tester
+            .widgetList<Focus>(find.byType(Focus))
+            .firstWhere(
+              (focus) => focus.focusNode?.debugLabel == 'Onboarding navigation',
+            );
+        expect(navigation.skipTraversal, isTrue);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
 
   for (final themeName in LineupThemeName.values) {
     for (final tv in [false, true]) {

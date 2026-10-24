@@ -835,7 +835,7 @@ class _LineupShellState extends State<LineupShell> {
               accountOrigin: _onboardingFromAccount,
               onOpenSettings:
                   (defaultTargetPlatform == TargetPlatform.macOS ||
-                      defaultTargetPlatform == TargetPlatform.android)
+                      LineupTheme.of(context).androidTv)
                   ? _showOnboardingSupport
                   : null,
               onOpenMenu: onboardingMenuAvailable ? _openAppMenu : null,
@@ -1394,6 +1394,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _categoryDetail(BuildContext context) {
     final value = _displaySettings;
+    final androidTv = LineupTheme.of(context).androidTv;
 
     return ListView(
       children: [
@@ -1538,8 +1539,7 @@ class _SettingsViewState extends State<SettingsView> {
                   onChanged: onChanged,
                 ),
               ),
-              if (defaultTargetPlatform != TargetPlatform.macOS &&
-                  defaultTargetPlatform != TargetPlatform.android)
+              if (defaultTargetPlatform != TargetPlatform.macOS && !androidTv)
                 ..._settingControl<bool>(
                   _SettingKey.matchDisplayHdr,
                   (current, item) => current.copyWith(matchDisplayHdr: item),
@@ -1690,8 +1690,7 @@ class _SettingsViewState extends State<SettingsView> {
                   child: const Text('Open Diagnostics'),
                 ),
               ),
-              if (defaultTargetPlatform == TargetPlatform.macOS ||
-                  defaultTargetPlatform == TargetPlatform.android)
+              if (defaultTargetPlatform == TargetPlatform.macOS || androidTv)
                 _SettingsRow(
                   label: const Text('Licenses'),
                   helper: const Text(

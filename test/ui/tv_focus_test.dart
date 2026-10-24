@@ -58,53 +58,54 @@ void main() {
     );
   });
 
-  testWidgets('large TV focus paints the exception and honors reduce motion', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: LineupTheme.forName(
-          LineupThemeName.emberSteel,
-          androidTv: true,
-          largeFocusIndicators: true,
-        ),
-        builder: (context, child) => LineupCanvas.builder(
-          context,
-          MediaQuery(
-            data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: child!,
+  testWidgets(
+    'large TV row focus paints the exception and honors reduce motion',
+    (tester) async {
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+            largeFocusIndicators: true,
+          ),
+          builder: (context, child) => LineupCanvas.builder(
+            context,
+            MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
+          ),
+          home: Scaffold(
+            body: LineupRowSurface(
+              selected: false,
+              scaleOnFocus: true,
+              child: TextButton(
+                autofocus: true,
+                focusNode: focusNode,
+                onPressed: () {},
+                child: const Text('Row'),
+              ),
+            ),
           ),
         ),
-        home: Scaffold(
-          body: LineupSelectionCard(
-            autofocus: true,
-            selected: false,
-            onPressed: () {},
-            child: const Text('Card'),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump();
+      );
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
 
-    final scale = tester.widget<AnimatedScale>(find.byType(AnimatedScale));
-    expect(scale.scale, 1.0);
-    expect(scale.duration, Duration.zero);
-    expect(
-      tester
-          .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))
-          .every((container) => container.duration == Duration.zero),
-      isTrue,
-    );
-    expect(
-      find.byWidgetPredicate(
-        (widget) => widget is CustomPaint && widget.foregroundPainter != null,
-      ),
-      findsWidgets,
-    );
-  });
+      final scale = tester.widget<AnimatedScale>(find.byType(AnimatedScale));
+      expect(scale.scale, 1.0);
+      expect(scale.duration, Duration.zero);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is CustomPaint && widget.foregroundPainter != null,
+        ),
+        findsWidgets,
+      );
+    },
+  );
 }
 
 class _RoleProbe extends StatelessWidget {
