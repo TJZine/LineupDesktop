@@ -19,12 +19,546 @@ import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
+import 'package:lineup_desktop/persistence/app_store.dart';
+import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  testWidgets('NAV-I2 Applying Back is claimed without duplicate apply', (
+    tester,
+  ) async {
+    final controller = _SetupController()..applyGate = Completer<void>();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, androidTv: true);
+    await tester.pumpAndSettle();
+    await _advanceToReview(tester);
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+    await tester.pump();
+
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+    expect(state.handleBack(), isTrue);
+    expect(state.handleBack(), isTrue);
+    expect(controller.applyCalls, 1);
+    expect(find.text('Creating your lineup…'), findsOneWidget);
+    controller.applyGate!.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('NAV-I2 completed Back invokes the visible primary once', (
+    tester,
+  ) async {
+    var viewCalls = 0;
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, androidTv: true, onView: () => viewCalls++);
+    await _advanceToReview(tester);
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+    await tester.pumpAndSettle();
+
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+    expect(state.handleBack(), isTrue);
+    expect(state.handleBack(), isTrue);
+    expect(viewCalls, 1);
+  });
+
+  testWidgets('NAV-I2 scanning Back cancels the real scan once', (
+    tester,
+  ) async {
+    final controller = _SetupController(blockScan: true);
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, androidTv: true);
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await controller.scanStarted.future;
+
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+    expect(state.handleBack(), isTrue);
+    expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
+    expect(
+      find.byKey(const ValueKey('library-selection-list')),
+      findsOneWidget,
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('NAV-I2 library commit Back is claimed while persistence waits', (
+    tester,
+  ) async {
+    final controller = _SetupController()..commitGate = Completer<void>();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, androidTv: true);
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pump();
+    expect(controller.commitCalls, 1);
+
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+    expect(state.handleBack(), isTrue);
+    expect(state.handleBack(), isTrue);
+    expect(
+      find.byKey(const ValueKey('library-selection-list')),
+      findsOneWidget,
+    );
+    controller.commitGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Shape your lineup'), findsOneWidget);
+  });
+
+  testWidgets('NAV-I2 desktop picker ignores non-Back navigation keys', (
+    tester,
+  ) async {
+    final controller = _SetupController(
+      scenario: const LineupScenario(channelSetupCanCancel: true),
+    );
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _advanceToConfigure(tester);
+
+    final navigation = tester
+        .widgetList<Focus>(find.byType(Focus))
+        .firstWhere(
+          (focus) => focus.onKeyEvent != null && focus.focusNode == null,
+        );
+    expect(navigation.onKeyEvent, isNotNull);
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+
+    for (final key in [
+      LogicalKeyboardKey.tab,
+      LogicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.keyX,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+    }
+    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(state.handleBack(), isTrue);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('library-selection-list')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('NAV-I2 TV Libraries chooses the enabled recovery target', (
+    tester,
+  ) async {
+    final controller = _SetupController(
+      scenario: const LineupScenario(libraries: []),
+    );
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, androidTv: true);
+    await tester.pumpAndSettle();
+    final switchServer = find.byKey(const ValueKey('setup-switch-server'));
+    final switchButton = tester.widget<FilledButton>(switchServer);
+    expect(switchButton.onPressed, isNotNull);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Setup libraries entry',
+    );
+
+    controller.fixtureActor.present(const LineupPresentation(busy: true));
+    await _pump(tester, controller, androidTv: true);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(switchServer).focusNode, isNull);
+  });
+
+  testWidgets('NAV-I2 TV scan Cancel autofocus is not a desktop policy', (
+    tester,
+  ) async {
+    for (final tv in [true, false]) {
+      final controller = _SetupController(blockScan: true);
+      addTearDown(controller.dispose);
+      await _pump(tester, controller, androidTv: tv);
+      await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+      await controller.scanStarted.future;
+      await tester.pump();
+      final cancel = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, 'Cancel scan'),
+      );
+      expect(cancel.autofocus, tv);
+      controller.cancelLibraryScan();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('NAV-I2 Libraries and Review expose their first TV focus', (
+    tester,
+  ) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, androidTv: true);
+    await tester.pumpAndSettle();
+
+    _expectLibraryEntryPaint(tester);
+
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('scan-selected-libraries')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    final searchFocus = tester
+        .widgetList<Focus>(find.byType(Focus))
+        .firstWhere(
+          (focus) => focus.focusNode?.debugLabel == 'Setup review search',
+        )
+        .focusNode!;
+    expect(searchFocus.hasPrimaryFocus, isTrue);
+    final search = find.byKey(const ValueKey('channel-setup-review-search'));
+    final searchInk = find.ancestor(
+      of: search,
+      matching: find.byType(LineupFocusInk),
+    );
+    expect(searchInk, findsOneWidget);
+    expect(tester.widget<LineupFocusInk>(searchInk).focused, isTrue);
+    final searchRoles = LineupTheme.of(
+      tester.element(find.byType(UpstreamChannelSetupView)),
+    );
+    expect(tester.widget<TextField>(search).style!.color, searchRoles.onFocus);
+    expect(
+      Theme.of(tester.element(search)).inputDecorationTheme.fillColor,
+      searchRoles.focusedSurface,
+    );
+
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+    expect(state.handleBack(), isTrue);
+    await tester.pumpAndSettle();
+    expect(state.handleBack(), isTrue);
+    await tester.pumpAndSettle();
+    _expectLibraryEntryPaint(tester);
+  });
+
+  testWidgets('NAV-I2 review entry yields to a modal opened before its frame', (
+    tester,
+  ) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, androidTv: true);
+    await _advanceToConfigure(tester);
+
+    final reviewButton = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('review-channels')),
+    );
+    reviewButton.onPressed!();
+    final modalFocus = FocusNode(debugLabel: 'NAV-I2 modal owner');
+    addTearDown(modalFocus.dispose);
+    final dialog = showDialog<void>(
+      context: tester.element(find.byType(UpstreamChannelSetupView)),
+      builder: (context) => AlertDialog(
+        title: const Text('Modal owner'),
+        actions: [
+          TextButton(
+            focusNode: modalFocus,
+            autofocus: true,
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(modalFocus.hasPrimaryFocus, isTrue);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      isNot('Setup review search'),
+    );
+    Navigator.of(tester.element(find.text('Modal owner'))).pop();
+    await dialog;
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'NAV-I2 Libraries restores visible focus after scan cancellation',
+    (tester) async {
+      final controller = _SetupController(blockScan: true);
+      addTearDown(controller.dispose);
+      await _pump(tester, controller, androidTv: true);
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('scan-selected-libraries')),
+          )
+          .onPressed!();
+      await controller.scanStarted.future;
+      await tester.pump();
+      expect(
+        tester
+            .state<UpstreamChannelSetupViewState>(
+              find.byType(UpstreamChannelSetupView),
+            )
+            .handleBack(),
+        isTrue,
+      );
+      await tester.pumpAndSettle();
+      expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
+      _expectLibraryEntryPaint(tester);
+    },
+  );
+
+  for (final entry in ['Libraries', 'Review']) {
+    testWidgets('NAV-I2 pending $entry entry preserves visible Support focus', (
+      tester,
+    ) async {
+      final controller = _SetupController();
+      addTearDown(controller.dispose);
+      final hostKey = GlobalKey<_RetainedSetupHostState>();
+      await _pumpRetainedSetup(tester, controller, hostKey);
+      await _advanceToConfigure(tester);
+
+      if (entry == 'Review') {
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+            .onPressed!();
+      } else {
+        tester
+            .state<UpstreamChannelSetupViewState>(
+              find.byType(UpstreamChannelSetupView),
+            )
+            .handleBack();
+      }
+      hostKey.currentState!.hide();
+      FocusManager.instance.applyFocusChangesIfNeeded();
+      expect(
+        FocusManager.instance.primaryFocus,
+        same(hostKey.currentState!.supportFocus),
+      );
+      await tester.pumpAndSettle();
+      expect(hostKey.currentState!.supportFocus.hasPrimaryFocus, isTrue);
+      expect(find.text('Support owner'), findsOneWidget);
+      expect(
+        FocusManager.instance.primaryFocus,
+        same(hostKey.currentState!.supportFocus),
+      );
+    });
+  }
+
+  testWidgets('NAV-I2 real scan Back rejects a late successful IO result', (
+    tester,
+  ) async {
+    final fixture = await _createBoundarySetup();
+    addTearDown(fixture.controller.dispose);
+    fixture.plex.scanGate = Completer<PlexLibraryScan>();
+    final saves = fixture.store.saveCalls;
+    await _pump(tester, fixture.controller, androidTv: true);
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await fixture.plex.scanStarted.future;
+
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+    expect(state.handleBack(), isTrue);
+    expect(state.handleBack(), isFalse);
+    expect(fixture.controller.libraryScanStatus, LibraryScanStatus.cancelled);
+    fixture.plex.scanGate!.complete(
+      PlexLibraryScan(items: [_boundaryMediaItem]),
+    );
+    await tester.pumpAndSettle();
+
+    expect(fixture.controller.stage, SetupStage.channelSetup);
+    expect(fixture.controller.selectedLibraryIds, isEmpty);
+    expect(find.text('Choose libraries'), findsOneWidget);
+    expect(fixture.store.saveCalls, saves);
+  });
+
+  testWidgets('NAV-I2 scan failure restores visible focus and retry advances', (
+    tester,
+  ) async {
+    final fixture = await _createBoundarySetup();
+    addTearDown(fixture.controller.dispose);
+    fixture.plex.scanGate = Completer<PlexLibraryScan>();
+    final saves = fixture.store.saveCalls;
+    await _pump(tester, fixture.controller, androidTv: true);
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('scan-selected-libraries')),
+        )
+        .onPressed!();
+    await fixture.plex.scanStarted.future;
+    await tester.pump();
+    fixture.plex.scanGate!.completeError(
+      const PlexException('server-unreachable', 'Synthetic scan failure.'),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      fixture.controller.libraryScanStatus,
+      LibraryScanStatus.transientFailure,
+    );
+    expect(fixture.store.saveCalls, saves);
+    _expectSingleLibraryEntryPaint(tester);
+    fixture.plex.scanGate = null;
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('retry-failed-libraries')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(fixture.store.saveCalls, saves + 1);
+  });
+
+  for (final fail in [false, true]) {
+    testWidgets(
+      'NAV-I2 real library persistence Back is claimed before ${fail ? 'failure' : 'success'}',
+      (tester) async {
+        final fixture = await _createBoundarySetup();
+        addTearDown(fixture.controller.dispose);
+        fixture.store.blockNext(fail: fail);
+        final saves = fixture.store.saveCalls;
+        await _pump(tester, fixture.controller, androidTv: true);
+        tester
+            .widget<FilledButton>(
+              find.byKey(const ValueKey('scan-selected-libraries')),
+            )
+            .onPressed!();
+        await fixture.store.saveStarted.future;
+        await tester.pump();
+        expect(
+          tester
+              .widget<InkWell>(find.byKey(const ValueKey('library-row-movies')))
+              .focusNode,
+          isNull,
+        );
+
+        final state = tester.state<UpstreamChannelSetupViewState>(
+          find.byType(UpstreamChannelSetupView),
+        );
+        expect(state.handleBack(), isTrue);
+        expect(state.handleBack(), isTrue);
+        expect(fixture.controller.canSwitchServer, isFalse);
+        expect(fixture.store.saveCalls, saves + 1);
+        fixture.store.releaseBlockedSave();
+        await tester.pumpAndSettle();
+
+        expect(fixture.controller.canSwitchServer, isTrue);
+        expect(fixture.store.saveCalls, saves + 1);
+        if (fail) {
+          expect(fixture.controller.selectedLibraryIds, isEmpty);
+          expect(fixture.controller.stage, SetupStage.channelSetup);
+          expect(
+            find.byKey(const ValueKey('library-selection-list')),
+            findsOneWidget,
+          );
+          _expectSingleLibraryEntryPaint(tester);
+          tester
+              .widget<FilledButton>(
+                find.byKey(const ValueKey('continue-ready-libraries')),
+              )
+              .onPressed!();
+          await tester.pumpAndSettle();
+          expect(find.text('Shape your lineup'), findsOneWidget);
+          expect(fixture.store.saveCalls, saves + 2);
+        } else {
+          expect(fixture.controller.selectedLibraryIds, {'movies'});
+          expect(fixture.store.state.selectedLibraryIdsByProfileServer, {
+            'owner': {
+              'server': ['movies'],
+            },
+          });
+          expect(find.text('Shape your lineup'), findsOneWidget);
+        }
+      },
+    );
+  }
+
+  testWidgets('NAV-I2 actual Applying save claims repeated Back until commit', (
+    tester,
+  ) async {
+    final fixture = await _createBoundarySetup();
+    addTearDown(fixture.controller.dispose);
+    var completions = 0;
+    await _pump(
+      tester,
+      fixture.controller,
+      androidTv: true,
+      onView: () => completions++,
+    );
+    await _advanceToReview(tester);
+    final saves = fixture.store.saveCalls;
+    fixture.store.blockNext(fail: false);
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+    await fixture.store.saveStarted.future;
+    await tester.pump();
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+    expect(state.handleBack(), isTrue);
+    expect(state.handleBack(), isTrue);
+    await tester.pump();
+    expect(find.text('Creating your lineup…'), findsOneWidget);
+    expect(fixture.controller.channels, isEmpty);
+    expect(completions, 0);
+    expect(fixture.store.saveCalls, saves + 1);
+    fixture.store.releaseBlockedSave();
+    await tester.pumpAndSettle();
+    expect(fixture.controller.channels, isNotEmpty);
+    expect(fixture.store.saveCalls, saves + 1);
+    expect(completions, 0);
+    expect(state.handleBack(), isTrue);
+    expect(state.handleBack(), isTrue);
+    expect(completions, 1);
+    expect(fixture.store.saveCalls, saves + 1);
+  });
+
+  testWidgets('NAV-I2 Configure Back returns to Libraries', (tester) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, androidTv: true);
+    await _advanceToConfigure(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('library-selection-list')),
+      findsOneWidget,
+      reason: 'Configure Back should return to Libraries',
+    );
+  });
+
+  testWidgets('NAV-I2 Review and Failed Back return to their owners', (
+    tester,
+  ) async {
+    final reviewController = _SetupController();
+    addTearDown(reviewController.dispose);
+    await _pump(tester, reviewController, androidTv: true);
+    await _advanceToReview(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Shape your lineup'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final failedController = _SetupController(failApply: true);
+    addTearDown(failedController.dispose);
+    await _pump(tester, failedController, androidTv: true);
+    await _advanceToReview(tester);
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+    await tester.pumpAndSettle();
+    expect(find.text('We couldn’t create your lineup'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Review your first lineup'), findsOneWidget);
+  });
+
   for (final tv in [false, true]) {
     testWidgets(
       'Library explicit footer action labels follow focus ink TV=$tv',
@@ -2646,9 +3180,60 @@ Container _cardPaint(WidgetTester tester, Finder card) =>
       ),
     );
 
+void _expectLibraryEntryPaint(WidgetTester tester) {
+  final button = find.widgetWithText(TextButton, 'Select all');
+  final node = tester.widget<TextButton>(button).focusNode!;
+  expect(node.hasPrimaryFocus, isTrue);
+  expect(node.canRequestFocus, isTrue);
+  expect(node.context?.mounted, isTrue);
+  final roles = LineupTheme.of(tester.element(button));
+  final material = tester.widget<Material>(
+    find.descendant(of: button, matching: find.byType(Material)).first,
+  );
+  expect(material.color, roles.focusedSurface);
+  final label = find.descendant(of: button, matching: find.text('Select all'));
+  final rich = tester.widget<RichText>(
+    find.descendant(of: label, matching: find.byType(RichText)),
+  );
+  expect(rich.text.style?.color, roles.focusSecondaryText);
+  expect(
+    tester
+        .getRect(button)
+        .overlaps(
+          Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio,
+        ),
+    isTrue,
+  );
+}
+
+void _expectSingleLibraryEntryPaint(WidgetTester tester) {
+  final row = find.byKey(const ValueKey('library-row-movies'));
+  final node = tester.widget<InkWell>(row).focusNode!;
+  expect(node.hasPrimaryFocus, isTrue);
+  expect(node.canRequestFocus, isTrue);
+  expect(node.context?.mounted, isTrue);
+  expect(
+    tester
+        .getRect(row)
+        .overlaps(
+          Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio,
+        ),
+    isTrue,
+  );
+  final ink = find
+      .ancestor(of: row, matching: find.byType(LineupFocusInk))
+      .first;
+  expect(tester.widget<LineupFocusInk>(ink).focused, isTrue);
+  final label = find.descendant(of: row, matching: find.text('Movies')).first;
+  final roles = LineupTheme.of(
+    tester.element(find.byType(UpstreamChannelSetupView)),
+  );
+  expect(tester.widget<Text>(label).style!.color, roles.onFocus);
+}
+
 Future<void> _pump(
   WidgetTester tester,
-  _SetupController controller, {
+  LineupController controller, {
   VoidCallback? onView,
   VoidCallback? onAdd,
   bool androidTv = false,
@@ -2664,11 +3249,33 @@ Future<void> _pump(
         LineupThemeName.emberSteel,
         androidTv: androidTv,
       ),
-      home: UpstreamChannelSetupView(
-        controller: controller,
-        onViewLineup: onView,
-        onAddCustomChannel: onAdd,
+      home: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) => UpstreamChannelSetupView(
+          controller: controller,
+          onViewLineup: onView,
+          onAddCustomChannel: onAdd,
+        ),
       ),
+    ),
+  );
+  await tester.pump();
+}
+
+Future<void> _pumpRetainedSetup(
+  WidgetTester tester,
+  LineupController controller,
+  GlobalKey<_RetainedSetupHostState> hostKey,
+) async {
+  tester.view
+    ..physicalSize = const Size(1920, 1080)
+    ..devicePixelRatio = 2;
+  await tester.pumpWidget(
+    MaterialApp(
+      builder: (context, child) =>
+          LineupCanvas.builder(context, LineupFocusScope(child: child!)),
+      theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+      home: _RetainedSetupHost(key: hostKey, controller: controller),
     ),
   );
   await tester.pump();
@@ -2689,6 +3296,52 @@ Future<void> _advanceToReview(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+class _RetainedSetupHost extends StatefulWidget {
+  const _RetainedSetupHost({required this.controller, super.key});
+
+  final LineupController controller;
+
+  @override
+  State<_RetainedSetupHost> createState() => _RetainedSetupHostState();
+}
+
+class _RetainedSetupHostState extends State<_RetainedSetupHost> {
+  bool _inactive = false;
+  final supportFocus = FocusNode(debugLabel: 'Visible Support owner');
+
+  void hide() {
+    setState(() => _inactive = true);
+    supportFocus.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    supportFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    children: [
+      Offstage(
+        offstage: _inactive,
+        child: ExcludeFocus(
+          excluding: _inactive,
+          child: UpstreamChannelSetupView(controller: widget.controller),
+        ),
+      ),
+      Align(
+        alignment: Alignment.topRight,
+        child: TextButton(
+          focusNode: supportFocus,
+          onPressed: () {},
+          child: const Text('Support owner'),
+        ),
+      ),
+    ],
+  );
+}
+
 Future<void> _openPlaybackControls(WidgetTester tester) async {
   await _advanceToConfigure(tester);
   await tester.tap(find.byKey(const ValueKey('configure-section-1')));
@@ -2703,6 +3356,164 @@ Finder _setupField<T>(String label) => find.descendant(
     (widget) => widget is DropdownButtonFormField<T>,
   ),
 );
+
+Future<
+  ({LineupController controller, _BoundaryStore store, _BoundaryPlex plex})
+>
+_createBoundarySetup() async {
+  final store = _BoundaryStore(
+    initial: const PersistedState(
+      profileId: 'owner',
+      selectedServerByProfile: {'owner': 'server'},
+    ),
+  );
+  final plex = _BoundaryPlex();
+  final controller = LineupController(
+    store: store,
+    credentials: MemoryCredentialStore(accountToken: 'account-token'),
+    plex: plex,
+  );
+  await controller.initialize();
+  expect(controller.stage, SetupStage.channelSetup);
+  return (controller: controller, store: store, plex: plex);
+}
+
+final _boundaryServer = PlexServer(
+  id: 'server',
+  name: 'Boundary server',
+  connections: [
+    PlexConnection(
+      uri: Uri.parse('https://boundary.invalid'),
+      local: true,
+      relay: false,
+    ),
+  ],
+);
+
+const _boundaryLibrary = PlexLibrary(
+  id: 'movies',
+  title: 'Movies',
+  type: PlexLibraryType.movie,
+);
+
+final _boundaryMediaItem = PlexMediaItem(
+  id: 'boundary-movie',
+  title: 'Boundary movie',
+  type: 'movie',
+  duration: const Duration(minutes: 30),
+  libraryId: 'movies',
+  parts: [PlexMediaPart(path: '/boundary/movie')],
+);
+
+class _BoundaryStore extends MemoryAppStore {
+  _BoundaryStore({required PersistedState initial}) : super(initial: initial);
+
+  Completer<void> saveStarted = Completer<void>();
+  Completer<void>? _saveGate;
+  bool _failBlockedSave = false;
+  int saveCalls = 0;
+
+  void blockNext({required bool fail}) {
+    saveStarted = Completer<void>();
+    _saveGate = Completer<void>();
+    _failBlockedSave = fail;
+  }
+
+  void releaseBlockedSave() => _saveGate!.complete();
+
+  @override
+  Future<void> save(PersistedState value) async {
+    saveCalls++;
+    final gate = _saveGate;
+    if (gate != null) {
+      saveStarted.complete();
+      await gate.future;
+      _saveGate = null;
+      final fail = _failBlockedSave;
+      _failBlockedSave = false;
+      if (fail) throw StateError('synthetic boundary save failure');
+    }
+    await super.save(value);
+  }
+}
+
+class _BoundaryPlex extends PlexClient {
+  _BoundaryPlex()
+    : super(
+        clientIdentifier: 'lineup-desktop-boundary-client',
+        httpClient: testPlexHttpClient(),
+      );
+
+  Completer<PlexLibraryScan>? scanGate;
+  final scanStarted = Completer<void>();
+
+  @override
+  Future<PlexAccount> account(String token) async => const PlexAccount(
+    id: 'owner',
+    name: 'Owner',
+    email: 'owner@example.invalid',
+  );
+
+  @override
+  Future<List<PlexHomeUser>> homeUsers(String token) async => const [
+    PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+  ];
+
+  @override
+  Future<List<PlexServerAccess>> discoverServers(String token) async => [
+    PlexServerAccess(server: _boundaryServer, token: 'pms-token'),
+  ];
+
+  @override
+  Future<PlexConnection> selectConnection(
+    PlexServer server,
+    String token,
+  ) async => server.connections.single;
+
+  @override
+  Future<List<PlexLibrary>> libraries(Uri server, String token) async => const [
+    _boundaryLibrary,
+  ];
+
+  @override
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    void Function(PlexLibraryScanPhase phase)? onPhase,
+    Future<void>? cancelled,
+  }) async {
+    onPhase?.call(PlexLibraryScanPhase.items);
+    if (!scanStarted.isCompleted) scanStarted.complete();
+    final gate = scanGate;
+    if (gate != null) return gate.future;
+    return PlexLibraryScan(
+      items: [
+        for (var index = 0; index < 5; index++)
+          PlexMediaItem(
+            id: 'movie-$index',
+            title: 'Movie $index',
+            type: 'movie',
+            libraryId: 'movies',
+            duration: const Duration(minutes: 30),
+            parts: [PlexMediaPart(path: '/synthetic/movie-$index')],
+          ),
+      ],
+    );
+  }
+
+  @override
+  Future<PlexPlaylistCatalog> playlists(
+    Uri server,
+    String token, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+    void Function(PlexPlaylistProgress)? onProgress,
+  }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
+}
 
 class _SetupController extends FixtureController {
   _SetupController({
@@ -2757,8 +3568,10 @@ class _SetupController extends FixtureController {
   Set<String> retry = const {};
   Set<String> committedIds = const {};
   int applyCalls = 0;
+  int commitCalls = 0;
   int footerRetries = 0;
   Completer<void>? applyGate;
+  Completer<void>? commitGate;
   Set<String>? rowRetryIds;
   Set<String>? rowRetryInventory;
 
@@ -2864,6 +3677,8 @@ class _SetupController extends FixtureController {
 
   @override
   Future<bool> commitLibraryScan(Set<String> readyIds) async {
+    commitCalls++;
+    if (commitGate != null) await commitGate!.future;
     committedIds = Set.unmodifiable(readyIds);
     fixtureActor.publishInventory(selectedLibraryIds: committedIds);
     fixtureActor.publishInventory(

@@ -22,10 +22,147 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final picker in ['profiles', 'servers']) {
+    for (final fail in [false, true]) {
+      testWidgets('NAV-I2 cancellable $picker real save fail=$fail', (
+        tester,
+      ) async {
+        final store = _ProfileRecoveryStore('picker')
+          ..state = PersistedState(
+            profileId: 'owner',
+            selectedServerByProfile: const {'owner': 'server'},
+            selectedLibraryIdsByProfileServer: const {
+              'owner': {
+                'server': ['movies'],
+              },
+            },
+            channelsByProfileServer: {
+              'owner': {
+                'server': [
+                  Channel(
+                    id: 'saved',
+                    number: 1,
+                    name: 'Saved channel',
+                    source: const LibrarySource(
+                      libraryId: 'movies',
+                      libraryType: PlexLibraryType.movie,
+                    ),
+                    playbackMode: PlaybackMode.sequential,
+                    anchor: DateTime.utc(2026),
+                    shuffleSeed: 1,
+                  ),
+                ],
+              },
+            },
+          );
+        final before = store.state.toJson();
+        final plex = _PickerBoundaryPlex();
+        final controller = LineupController(
+          store: store,
+          credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        expect(controller.stage, SetupStage.ready);
+        if (picker == 'profiles') {
+          controller.showProfiles();
+          expect(controller.profileSelectionCanCancel, isTrue);
+          expect(controller.profileSelectionOriginStage, SetupStage.ready);
+        } else {
+          controller.showServers();
+          expect(controller.serverSelectionCanCancel, isTrue);
+        }
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: true,
+            ),
+            home: UpstreamOnboardingView(
+              controller: controller,
+              onLogout: () async {},
+              openBrowser: () async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final state = tester.state<UpstreamOnboardingViewState>(
+          find.byType(UpstreamOnboardingView),
+        );
+        store.holdPickerSave = true;
+        final saves = store.saveCalls;
+        final selection = picker == 'profiles'
+            ? controller
+                  .selectProfile(controller.profiles.last)
+                  .then<void>((_) {})
+            : controller.selectServer(controller.servers.single);
+        await store.pickerSaveStarted.future;
+        await tester.pump();
+        expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
+        expect(controller.busy, isTrue);
+        expect(
+          picker == 'profiles'
+              ? controller.profileSelectionCanCancel
+              : controller.serverSelectionCanCancel,
+          isFalse,
+        );
+        expect(state.handleBack(), isTrue);
+        expect(state.handleBack(), isTrue);
+        expect(
+          controller.stage,
+          picker == 'profiles' ? SetupStage.profiles : SetupStage.servers,
+        );
+        expect(store.saveCalls, saves + 1);
+        expect(store.state.toJson(), before);
+        if (fail) {
+          store.gate.completeError(StateError('synthetic picker save failure'));
+        } else {
+          store.gate.complete();
+        }
+        await selection;
+        await tester.pumpAndSettle();
+        expect(store.saveCalls, saves + 1);
+        expect(controller.busy, isFalse);
+        expect(controller.canSwitchServer, isTrue);
+        if (fail) {
+          expect(store.state.toJson(), before);
+          expect(controller.profile?.id, 'owner');
+          expect(controller.server?.id, 'server');
+          expect(
+            picker == 'profiles'
+                ? controller.profileSelectionCanCancel
+                : controller.serverSelectionCanCancel,
+            isTrue,
+          );
+          if (picker == 'profiles') {
+            expect(controller.profileSelectionOriginStage, SetupStage.ready);
+          }
+          expect(state.handleBack(), isTrue);
+          await tester.pumpAndSettle();
+          expect(controller.stage, SetupStage.ready);
+        } else {
+          expect(controller.error, isNull);
+          expect(
+            controller.stage,
+            picker == 'profiles' ? SetupStage.servers : SetupStage.ready,
+          );
+          expect(controller.profileSelectionCanCancel, isFalse);
+          expect(controller.serverSelectionCanCancel, isFalse);
+          expect(
+            store.state.profileId,
+            picker == 'profiles' ? 'guest' : 'owner',
+          );
+        }
+      });
+    }
+  }
   for (final failure in [
     'connection',
     'libraries',
     'server save',
+    'server save success',
     'discovery',
     'wrong PIN',
     'profile save',
@@ -122,9 +259,19 @@ void main() {
         expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
         if (failure == 'server save') {
           expect(store.serverSaveStarted, isTrue);
+          final state = tester.state<UpstreamOnboardingViewState>(
+            find.byType(UpstreamOnboardingView),
+          );
+          expect(state.handleBack(), isTrue);
+          expect(controller.stage, SetupStage.servers);
           store.gate.completeError(StateError('synthetic save failure'));
         } else {
           expect(plex.gatedRequestStarted, isTrue);
+          final state = tester.state<UpstreamOnboardingViewState>(
+            find.byType(UpstreamOnboardingView),
+          );
+          expect(state.handleBack(), isTrue);
+          expect(controller.stage, SetupStage.servers);
           plex.gate.completeError(
             const PlexException(
               'server-unreachable',
@@ -143,7 +290,31 @@ void main() {
           expect(find.text('Synthetic server'), findsWidgets);
         }
         expect(find.text('Refresh servers'), findsOneWidget);
+      } else if (failure == 'server save success') {
+        expect(controller.stage, SetupStage.servers);
+        expect(controller.busy, isTrue);
+        expect(store.serverSaveStarted, isTrue);
+        final state = tester.state<UpstreamOnboardingViewState>(
+          find.byType(UpstreamOnboardingView),
+        );
+        expect(state.handleBack(), isTrue);
+        expect(controller.stage, SetupStage.servers);
+        store.gate.complete();
+        await tester.pumpAndSettle();
+        expect(controller.busy, isFalse);
+        expect(controller.error, isNull);
+        expect(controller.stage, SetupStage.channelSetup);
       } else if (['wrong PIN', 'profile save'].contains(failure)) {
+        if (failure == 'profile save') {
+          expect(store.profileSaveStarted, isTrue);
+          expect(controller.busy, isTrue);
+          final state = tester.state<UpstreamOnboardingViewState>(
+            find.byType(UpstreamOnboardingView),
+          );
+          expect(state.handleBack(), isTrue);
+          expect(controller.stage, SetupStage.profiles);
+          store.gate.completeError(StateError('synthetic profile failure'));
+        }
         await tester.pumpAndSettle();
         expect(controller.profile, isNull);
         expect(store.state.profileId, isNull);
@@ -360,6 +531,175 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
   }
+
+  testWidgets(
+    'NAV-I2 onboarding roots are side-effect-free and pickers cancel',
+    (tester) async {
+      final root = FixtureController(
+        scenario: const LineupScenario(stage: SetupStage.profiles),
+      );
+      addTearDown(root.dispose);
+      await show(tester, root, androidTv: true);
+      final rootState = tester.state<UpstreamOnboardingViewState>(
+        find.byType(UpstreamOnboardingView),
+      );
+      expect(rootState.handleBack(), isFalse);
+      expect(root.stage, SetupStage.profiles);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      final cancellable = _ServerController(
+        scenario: const LineupScenario(
+          stage: SetupStage.servers,
+          server: PlexServer(id: 'server', name: 'Server', connections: []),
+          servers: [PlexServer(id: 'server', name: 'Server', connections: [])],
+          profiles: [
+            PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
+          ],
+          serverSelectionOrigin: SetupStage.ready,
+        ),
+      );
+      addTearDown(cancellable.dispose);
+      await show(tester, cancellable, androidTv: true);
+      final state = tester.state<UpstreamOnboardingViewState>(
+        find.byType(UpstreamOnboardingView),
+      );
+      expect(state.handleBack(), isTrue);
+      expect(cancellable.stage, SetupStage.ready);
+      expect(cancellable.serverSelectionCanCancel, isFalse);
+    },
+  );
+
+  testWidgets('NAV-I2 submitting PIN Back is claimed by the PIN owner', (
+    tester,
+  ) async {
+    final controller = _PinController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: [
+          PlexHomeUser(id: 'profile', name: 'Protected', protected: true),
+        ],
+      ),
+    )..submitGate = Completer<void>();
+    addTearDown(controller.dispose);
+    await show(tester, controller, androidTv: true);
+    await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
+    await tester.pump();
+    for (final key in [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
+    await tester.pump();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    final state = tester.state<UpstreamOnboardingViewState>(
+      find.byType(UpstreamOnboardingView),
+    );
+    expect(state.handleBack(), isTrue);
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    controller.submitGate!.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('NAV-I2 desktop picker ignores non-Back navigation keys', (
+    tester,
+  ) async {
+    final cases = [
+      (
+        stage: SetupStage.profiles,
+        scenario: const LineupScenario(
+          stage: SetupStage.profiles,
+          profiles: [
+            PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
+          ],
+          profileSelectionOrigin: SetupStage.ready,
+        ),
+      ),
+      (
+        stage: SetupStage.servers,
+        scenario: const LineupScenario(
+          stage: SetupStage.servers,
+          servers: [PlexServer(id: 'server', name: 'Server', connections: [])],
+          serverSelectionOrigin: SetupStage.ready,
+        ),
+      ),
+    ];
+
+    for (final testCase in cases) {
+      final controller = FixtureController(scenario: testCase.scenario);
+      addTearDown(controller.dispose);
+      await show(tester, controller);
+      final navigation = tester
+          .widgetList<Focus>(find.byType(Focus))
+          .firstWhere(
+            (focus) => focus.focusNode?.debugLabel == 'Onboarding navigation',
+          )
+          .focusNode!;
+      navigation.requestFocus();
+      await tester.pump();
+
+      for (final key in [
+        LogicalKeyboardKey.tab,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.keyX,
+      ]) {
+        await tester.sendKeyEvent(key);
+        await tester.pump();
+      }
+      expect(controller.stage, testCase.stage);
+      expect(
+        testCase.stage == SetupStage.profiles
+            ? controller.profileSelectionCanCancel
+            : controller.serverSelectionCanCancel,
+        isTrue,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(controller.stage, SetupStage.ready);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('NAV-I2 Back retries failed secure linking cancellation', (
+    tester,
+  ) async {
+    final plex = _BackLinkPlex();
+    final controller = LineupController(
+      store: MemoryAppStore(),
+      credentials: MemoryCredentialStore(accountToken: 'account-token'),
+      plex: plex,
+      pinPollInterval: const Duration(hours: 1),
+    );
+    addTearDown(controller.dispose);
+    await controller.startLinking();
+    final browser = Completer<void>();
+    await show(tester, controller, browser: () => browser.future);
+    await tester.tap(find.text('Open browser'));
+    await tester.pump();
+
+    final state = tester.state<UpstreamOnboardingViewState>(
+      find.byType(UpstreamOnboardingView),
+    );
+    plex.cancelGate = Completer<void>();
+    expect(state.handleBack(), isTrue);
+    expect(state.handleBack(), isTrue);
+    await plex.cancelStarted.future;
+    expect(plex.cancelCalls, 1);
+    browser.complete();
+    plex.cancelGate!.complete();
+    await tester.pumpAndSettle();
+    expect(controller.stage, SetupStage.linking);
+    expect(controller.secureCancellationRequired, isTrue);
+
+    plex.failCancellation = false;
+    expect(state.handleBack(), isTrue);
+    await tester.pumpAndSettle();
+    expect(plex.cancelCalls, 2);
+    expect(controller.stage, SetupStage.welcome);
+  });
 
   testWidgets(
     'injected TV capability controls onboarding traversal on desktop',
@@ -1667,15 +2007,52 @@ void main() {
   });
 }
 
+class _BackLinkPlex extends PlexClient {
+  _BackLinkPlex()
+    : super(
+        clientIdentifier: 'lineup-desktop-link-boundary-client',
+        httpClient: testPlexHttpClient(),
+      );
+
+  final pin = PlexPin(
+    id: 17,
+    code: 'BOUNDARY',
+    expiresAt: DateTime.utc(2026, 10, 26),
+  );
+  final cancelStarted = Completer<void>();
+  Completer<void>? cancelGate;
+  bool failCancellation = true;
+  int cancelCalls = 0;
+
+  @override
+  Future<PlexPin> createPin() async => pin;
+
+  @override
+  Future<void> cancelPin(PlexPin value) async {
+    cancelCalls++;
+    if (!cancelStarted.isCompleted) cancelStarted.complete();
+    final gate = cancelGate;
+    if (gate != null) await gate.future;
+    if (failCancellation) {
+      throw const PlexException(
+        'server-unreachable',
+        'Synthetic cancellation failure.',
+      );
+    }
+  }
+}
+
 class _PinController extends FixtureController {
   _PinController({super.scenario});
 
   final submitted = <String>[];
   bool throwOnSubmit = false;
+  Completer<void>? submitGate;
 
   @override
   Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
     submitted.add(pin ?? '');
+    if (submitGate != null) await submitGate!.future;
     if (throwOnSubmit) throw StateError('private failure: $pin');
     fixtureActor.present(
       LineupPresentation(error: ('Incorrect PIN. Try again.',)),
@@ -1752,10 +2129,21 @@ class _ProfileRecoveryStore extends MemoryAppStore {
   final String failure;
   final gate = Completer<void>();
   bool serverSaveStarted = false;
+  bool profileSaveStarted = false;
+  bool holdPickerSave = false;
+  final pickerSaveStarted = Completer<void>();
+  int saveCalls = 0;
   @override
   Future<void> save(PersistedState value) async {
+    saveCalls++;
+    if (holdPickerSave) {
+      holdPickerSave = false;
+      pickerSaveStarted.complete();
+      await gate.future;
+    }
     if (failure == 'profile save') {
-      throw StateError('synthetic profile save failure');
+      profileSaveStarted = true;
+      await gate.future;
     }
     if (failure == 'server save' &&
         value.selectedServerByProfile['protected'] != null &&
@@ -1763,8 +2151,47 @@ class _ProfileRecoveryStore extends MemoryAppStore {
       serverSaveStarted = true;
       await gate.future;
     }
+    if (failure == 'server save success' &&
+        value.selectedServerByProfile['protected'] != null &&
+        state.profileId == 'protected') {
+      serverSaveStarted = true;
+      await gate.future;
+    }
     await super.save(value);
   }
+}
+
+class _PickerBoundaryPlex extends _ProfileRecoveryPlex {
+  _PickerBoundaryPlex() : super('none');
+
+  @override
+  Future<List<PlexHomeUser>> homeUsers(String token) async => const [
+    PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+    PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+  ];
+
+  @override
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress) onProgress,
+    void Function(PlexLibraryScanPhase)? onPhase,
+    Future<void>? cancelled,
+  }) async => PlexLibraryScan(
+    items: [
+      PlexMediaItem(
+        id: 'movie',
+        title: 'Movie',
+        type: 'movie',
+        libraryId: 'movies',
+        duration: const Duration(minutes: 30),
+        parts: [PlexMediaPart(path: '/synthetic/movie')],
+      ),
+    ],
+  );
 }
 
 class _ProfileRecoveryPlex extends PlexClient {

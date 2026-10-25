@@ -78,6 +78,7 @@ class SetupLibraryStep extends StatelessWidget {
     required this.onCommit,
     required this.onToggleLibrary,
     required this.onToggleAll,
+    this.entryFocusNode,
     this.onRequestLogout,
     super.key,
   });
@@ -92,6 +93,7 @@ class SetupLibraryStep extends StatelessWidget {
   final Future<void> Function(Set<String> ready) onCommit;
   final ValueChanged<String> onToggleLibrary;
   final VoidCallback onToggleAll;
+  final FocusNode? entryFocusNode;
   final Future<void> Function()? onRequestLogout;
 
   bool get _settled => switch (data.libraryScanStatus) {
@@ -251,6 +253,12 @@ class SetupLibraryStep extends StatelessWidget {
                   ),
                 FilledButton(
                   key: const ValueKey('setup-switch-server'),
+                  focusNode:
+                      roles.androidTv && !data.busy && data.canSwitchServer
+                      ? entryFocusNode
+                      : null,
+                  autofocus:
+                      roles.androidTv && !data.busy && data.canSwitchServer,
                   onPressed: data.canSwitchServer ? onSwitchServer : null,
                   child: const Text('Switch server'),
                 ),
@@ -258,6 +266,7 @@ class SetupLibraryStep extends StatelessWidget {
             )
           : scanning
           ? TextButton(
+              autofocus: roles.androidTv,
               onPressed: onCancelScan,
               child: actionLabel('Cancel scan'),
             )
@@ -448,6 +457,13 @@ class SetupLibraryStep extends StatelessWidget {
             FocusTraversalOrder(
               order: const NumericFocusOrder(0),
               child: TextButton(
+                focusNode:
+                    roles.androidTv &&
+                        data.libraryScanStatus != LibraryScanStatus.scanning &&
+                        editable
+                    ? entryFocusNode
+                    : null,
+                autofocus: roles.androidTv && editable,
                 style: const ButtonStyle(
                   padding: WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 8),
@@ -633,6 +649,20 @@ class SetupLibraryStep extends StatelessWidget {
               );
         return InkWell(
           key: ValueKey('library-row-${library.id}'),
+          focusNode:
+              tv &&
+                  index == 0 &&
+                  data.libraries.length == 1 &&
+                  data.libraryScanStatus != LibraryScanStatus.scanning &&
+                  !data.busy
+              ? entryFocusNode
+              : null,
+          autofocus:
+              tv &&
+              index == 0 &&
+              !data.busy &&
+              data.libraryScanStatus != LibraryScanStatus.scanning &&
+              data.libraries.length == 1,
           canRequestFocus: tv,
           excludeFromSemantics: !tv,
           onTap: data.busy ? null : () => onToggleLibrary(library.id),

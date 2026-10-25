@@ -56,12 +56,41 @@ class SetupReviewStep extends StatefulWidget {
 class _SetupReviewStepState extends State<SetupReviewStep> {
   late SetupReviewFilter _filter = widget.initialFilter;
   late final _search = TextEditingController(text: widget.initialSearch);
+  final _searchFocus = FocusNode(debugLabel: 'Setup review search');
 
   bool get _firstSetup => widget.review.base.isEmpty;
+
+  bool get _entryFocusIsEligible {
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return false;
+    if (!_searchFocus.canRequestFocus ||
+        _searchFocus.context?.mounted != true) {
+      return false;
+    }
+    if (_searchFocus.enclosingScope?.canRequestFocus == false) return false;
+    if (context.findAncestorWidgetOfExactType<Offstage>()?.offstage == true) {
+      return false;
+    }
+    if (context.findAncestorWidgetOfExactType<ExcludeFocus>()?.excluding ==
+        true) {
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_entryFocusIsEligible && LineupTheme.of(context).androidTv) {
+        _searchFocus.requestFocus();
+      }
+    });
+  }
 
   @override
   void dispose() {
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -632,6 +661,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                     child: FocusTraversalOrder(
                       order: const NumericFocusOrder(0),
                       child: LineupTextFieldActivation(
+                        focusNode: _searchFocus,
                         builder: (fieldContext, fieldFocus, finishEditing) =>
                             TextField(
                               onEditingComplete: finishEditing,

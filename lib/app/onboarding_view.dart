@@ -74,16 +74,17 @@ class UpstreamOnboardingView extends StatefulWidget {
   final FocusNode? menuFocusNode;
 
   @override
-  State<UpstreamOnboardingView> createState() => _UpstreamOnboardingViewState();
+  State<UpstreamOnboardingView> createState() => UpstreamOnboardingViewState();
 }
 
-class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
+class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     with WidgetsBindingObserver {
   Timer? _clock;
   final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
   final _profileReturnFocus = FocusNode(debugLabel: 'Return to profiles');
+  final _profilePinKey = GlobalKey<_ProfilePinStepState>();
   late bool _linkingStopped;
   late bool _wasLinking;
   late bool _busy;
@@ -247,26 +248,69 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     });
   }
 
+  /// Claims one contextual Back press for the active onboarding owner.
+  ///
+  /// A false result is deliberately side-effect-free: the shell may then
+  /// classify this screen as a legitimate first-run root. Pending work and a
+  /// temporarily unavailable child state are claimed so a press cannot race
+  /// an asynchronous owner or fall through to task backgrounding.
+  bool handleBack() {
+    final controller = widget.controller;
+    if (_pinUser != null) {
+      return _profilePinKey.currentState?.handleBack() ?? true;
+    }
+
+    switch (controller.stage) {
+      case SetupStage.welcome:
+        return controller.busy;
+      case SetupStage.linking:
+        if (controller.busy) return true;
+        unawaited(controller.cancelLinking());
+        return true;
+      case SetupStage.profiles:
+        if (controller.profileSelectionCanCancel) {
+          controller.cancelProfileSelection();
+          _focusNavigation();
+          return true;
+        }
+        return controller.busy;
+      case SetupStage.servers:
+        if (!controller.canSwitchServer) return true;
+        if (controller.serverSelectionCanCancel) {
+          controller.cancelServerSelection();
+          _focusNavigation();
+          return true;
+        }
+        return controller.busy;
+      case SetupStage.channelSetup || SetupStage.ready:
+        return false;
+    }
+  }
+
+  // Preserve the pre-NAV desktop PopScope/shortcut behavior. The shared TV
+  // shell calls handleBack() directly; desktop has no new implicit linking or
+  // root-exit policy in this leaf.
   void _handleBack() {
     if (_pinUser != null) {
-      if (widget.controller.busy) return;
-      _returnFromPin();
+      _profilePinKey.currentState?.handleBack();
       return;
     }
     final controller = widget.controller;
-    var handled = false;
     if (controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel) {
       controller.cancelProfileSelection();
-      handled = true;
+      _focusNavigation();
     } else if (controller.stage == SetupStage.servers &&
         controller.serverSelectionCanCancel) {
       controller.cancelServerSelection();
-      handled = true;
-    }
-    if (handled) {
       _focusNavigation();
     }
+  }
+
+  bool _editableTextOwnsBackspace() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    return context?.widget is EditableText ||
+        context?.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
   void _focusNavigation() {
@@ -295,18 +339,26 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   }
 
   KeyEventResult _navigationKey(FocusNode _, KeyEvent event) {
-    if (event is! KeyDownEvent || _pinUser != null) {
+    if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
-    if (event.logicalKey == LogicalKeyboardKey.escape ||
-        event.logicalKey == LogicalKeyboardKey.goBack ||
-        event.logicalKey == LogicalKeyboardKey.backspace) {
-      final controller = widget.controller;
-      if (controller.profileSelectionCanCancel ||
-          controller.serverSelectionCanCancel) {
-        _handleBack();
-        return KeyEventResult.handled;
-      }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.backspace && _editableTextOwnsBackspace()) {
+      return KeyEventResult.ignored;
+    }
+    final contextualBack =
+        key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.backspace;
+    if (!contextualBack) return KeyEventResult.ignored;
+    if (_androidTv) {
+      return handleBack() ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
+    if (_pinUser == null &&
+        (widget.controller.profileSelectionCanCancel ||
+            widget.controller.serverSelectionCanCancel)) {
+      _handleBack();
+      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
@@ -330,12 +382,13 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         onKeyEvent: _navigationKey,
         child: CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
-            // At the Android root an unavailable Back action must bubble to
-            // the shell so it can background the task.
-            if (!AndroidBackScope.claims(context) ||
-                _pinUser != null ||
-                widget.controller.profileSelectionCanCancel ||
-                widget.controller.serverSelectionCanCancel) ...{
+            // Desktop keeps its existing shortcut path. TV routes these keys
+            // through the leaf adapter above and the shared shell fallback.
+            if (!roles.androidTv &&
+                (!AndroidBackScope.claims(context) ||
+                    _pinUser != null ||
+                    widget.controller.profileSelectionCanCancel ||
+                    widget.controller.serverSelectionCanCancel)) ...{
               const SingleActivator(LogicalKeyboardKey.escape): _handleBack,
               const SingleActivator(LogicalKeyboardKey.goBack): _handleBack,
               const SingleActivator(LogicalKeyboardKey.backspace): _handleBack,
@@ -1154,18 +1207,21 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     });
   }
 
-  Widget _profilePin({required Key key}) => _ProfilePinStep(
+  Widget _profilePin({required Key key}) => KeyedSubtree(
     key: key,
-    user: _pinUser!,
-    accountOrigin: widget.accountOrigin,
-    profileOriginIsReady:
-        widget.controller.profileSelectionOriginStage == SetupStage.ready,
-    onBack: _returnFromPin,
-    onAccepted: () {
-      if (mounted) setState(() => _pinUser = null);
-    },
-    onSubmit: (pin) => widget.controller.selectProfile(_pinUser!, pin: pin),
-    error: () => widget.controller.error,
+    child: _ProfilePinStep(
+      key: _profilePinKey,
+      user: _pinUser!,
+      accountOrigin: widget.accountOrigin,
+      profileOriginIsReady:
+          widget.controller.profileSelectionOriginStage == SetupStage.ready,
+      onBack: _returnFromPin,
+      onAccepted: () {
+        if (mounted) setState(() => _pinUser = null);
+      },
+      onSubmit: (pin) => widget.controller.selectProfile(_pinUser!, pin: pin),
+      error: () => widget.controller.error,
+    ),
   );
 }
 
@@ -1694,6 +1750,12 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
   final _keyboardFocus = FocusNode(debugLabel: 'Profile PIN keyboard owner');
   final _firstDigitFocus = FocusNode(debugLabel: 'Profile PIN digit 1');
 
+  bool handleBack() {
+    if (_submitting) return true;
+    widget.onBack();
+    return true;
+  }
+
   @override
   void dispose() {
     _keyboardFocus.dispose();
@@ -1782,8 +1844,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
     }
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      if (!_submitting) widget.onBack();
-      return KeyEventResult.handled;
+      return handleBack() ? KeyEventResult.handled : KeyEventResult.ignored;
     }
     return KeyEventResult.ignored;
   }
@@ -1795,7 +1856,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
     return PopScope(
       canPop: AndroidBackScope.claims(context),
       onPopInvokedWithResult: (_, _) {
-        if (!AndroidBackScope.claims(context) && !_submitting) widget.onBack();
+        if (!AndroidBackScope.claims(context)) handleBack();
       },
       child: Focus(
         key: const Key('profile-pin-keyboard-owner'),
@@ -1817,7 +1878,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: LineupInlineLink(
-                      onPressed: _submitting ? null : widget.onBack,
+                      onPressed: _submitting ? null : handleBack,
                       child: Text(
                         widget.accountOrigin && widget.profileOriginIsReady
                             ? '‹ Settings · Account'
@@ -1949,7 +2010,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   ),
                   SizedBox(height: 20),
                   TextButton(
-                    onPressed: _submitting ? null : widget.onBack,
+                    onPressed: _submitting ? null : handleBack,
                     child: const Text('Cancel'),
                   ),
                 ],
