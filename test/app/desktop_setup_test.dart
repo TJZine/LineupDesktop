@@ -685,6 +685,65 @@ void main() {
       },
     );
   }
+  for (final tv in [false, true]) {
+    testWidgets(
+      'Configure entry gives TV first rail focus without an extra key TV=$tv',
+      (tester) async {
+        final controller = _SetupController();
+        try {
+          await tester.runAsync(loadPinnedTestFonts);
+          await _pump(tester, controller, androidTv: tv);
+          await tester.pumpAndSettle();
+          Future<void> activate(Finder button) async {
+            final label = find
+                .descendant(of: button, matching: find.byType(Text))
+                .first;
+            for (
+              var i = 0;
+              i < 80 && !Focus.of(tester.element(label)).hasFocus;
+              i++
+            ) {
+              await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+              await tester.pumpAndSettle();
+            }
+            expect(Focus.of(tester.element(label)).hasFocus, isTrue);
+            await tester.sendKeyEvent(LogicalKeyboardKey.select);
+            await tester.pumpAndSettle();
+          }
+
+          void expectEntry() {
+            final rail = find.byKey(const ValueKey('configure-section-0'));
+            final label = find.descendant(
+              of: rail,
+              matching: find.text('Channel sources'),
+            );
+            expect(Focus.of(tester.element(label)).hasPrimaryFocus, tv);
+            if (tv) {
+              final button = tester.widget<TextButton>(
+                find.descendant(of: rail, matching: find.byType(TextButton)),
+              );
+              expect(
+                button.style!.backgroundColor!.resolve({WidgetState.focused}),
+                LineupTheme.of(tester.element(rail)).focusedSurface,
+              );
+            }
+          }
+
+          await activate(find.byKey(const ValueKey('scan-selected-libraries')));
+          expectEntry();
+          await activate(find.byKey(const ValueKey('review-channels')));
+          expect(find.text('Back to configure'), findsOneWidget);
+          await activate(find.widgetWithText(TextButton, 'Back to configure'));
+          expectEntry();
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+          tester.view.reset();
+        }
+      },
+    );
+  }
   for (final existing in [false, true]) {
     testWidgets(
       'TV Setup has a fixed footer and an initially complete Review row existing=$existing',
@@ -707,7 +766,10 @@ void main() {
           );
           final reviewButton = find.byKey(const ValueKey('review-channels'));
           final footerBounds = tester.getRect(reviewButton);
-          expect(footerBounds.bottom, lessThanOrEqualTo(513));
+          expect(
+            footerBounds.bottom,
+            inInclusiveRange(540 - 48 * .5, 540 - 24 * .5),
+          );
           await tester.drag(configuration, const Offset(0, -3000));
           await tester.pumpAndSettle();
           expect(tester.getRect(reviewButton), footerBounds);

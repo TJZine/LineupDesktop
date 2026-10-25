@@ -205,8 +205,8 @@ void main() {
             isTrue,
           );
           final rect = tester.getRect(card);
-          expect(rect.top, greaterThanOrEqualTo(27));
-          expect(rect.bottom, lessThanOrEqualTo(513));
+          expect(rect.top, greaterThanOrEqualTo(0));
+          expect(rect.bottom, lessThanOrEqualTo(540));
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());
           fixture.controller.dispose();

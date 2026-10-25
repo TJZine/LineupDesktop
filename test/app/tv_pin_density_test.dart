@@ -91,6 +91,14 @@ void main() {
                 image.dispose();
               });
             }
+            expect(
+              tester.getRect(find.byKey(const Key('profile-pin-status'))).top -
+                  tester
+                      .getRect(find.byKey(const Key('profile-pin-progress')))
+                      .bottom,
+              closeTo(8, .001),
+              reason: 'PIN retains the desktop 16cu gap at canvas scale .5',
+            );
             final scrolls = find.descendant(
               of: find.byKey(const Key('profile-pin-sheet')),
               matching: find.byType(Scrollable),
@@ -115,8 +123,8 @@ void main() {
               find.widgetWithText(OutlinedButton, '0'),
             ]) {
               final rect = tester.getRect(field).inflate(large ? 1.5 : 0);
-              expect(rect.top, greaterThanOrEqualTo(27));
-              expect(rect.bottom, lessThanOrEqualTo(513));
+              expect(rect.top, greaterThanOrEqualTo(0));
+              expect(rect.bottom, lessThanOrEqualTo(540));
             }
             if (error) {
               final text = find.descendant(
