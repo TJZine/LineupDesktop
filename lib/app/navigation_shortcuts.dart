@@ -35,7 +35,12 @@ ShellDestination? navigationShortcutDestination(LogicalKeyboardKey key) {
 /// order, without injecting a hardware event or tracking a prior press. Product
 /// actions remain shared with the existing logical Back key path.
 class AndroidBackScope extends StatefulWidget {
-  const AndroidBackScope({required this.child, super.key});
+  const AndroidBackScope({
+    required this.child,
+    this.onUnhandledBack,
+    super.key,
+  });
+  final bool Function()? onUnhandledBack;
   final Widget child;
 
   static bool claims(BuildContext context) =>
@@ -52,12 +57,29 @@ class _AndroidBackScopeState extends State<AndroidBackScope> {
   void _background() =>
       unawaited(_platform.invokeMethod<bool>('moveTaskToBack'));
 
+  void _dispatchUnhandledBack() {
+    if (widget.onUnhandledBack?.call() != true) _background();
+  }
+
   KeyEventResult _key(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.goBack) {
+    final key = event.logicalKey;
+    final contextual =
+        key == LogicalKeyboardKey.goBack ||
+        (widget.onUnhandledBack != null &&
+            (key == LogicalKeyboardKey.escape ||
+                key == LogicalKeyboardKey.backspace));
+    if (!contextual || event is KeyUpEvent) return KeyEventResult.ignored;
+    final context = FocusManager.instance.primaryFocus?.context;
+    if (key == LogicalKeyboardKey.backspace &&
+        (context?.widget is EditableText ||
+            context?.findAncestorWidgetOfExactType<EditableText>() != null)) {
       return KeyEventResult.ignored;
     }
-    _background();
+    if (event is KeyRepeatEvent && widget.onUnhandledBack != null) {
+      return KeyEventResult.handled;
+    }
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    _dispatchUnhandledBack();
     return KeyEventResult.handled;
   }
 
@@ -79,9 +101,8 @@ class _AndroidBackScopeState extends State<AndroidBackScope> {
         }
         if (node == _focus) break;
       }
-    } else {
-      _background();
     }
+    _dispatchUnhandledBack();
   }
 
   @override

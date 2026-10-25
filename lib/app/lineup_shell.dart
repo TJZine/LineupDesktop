@@ -50,7 +50,23 @@ class _LineupShellState extends State<LineupShell> {
   ShellDestination? _settingsReturnDestination;
   late final GuideController _guide;
   late final PlayerCoordinator _player;
-  final _playerKey = GlobalKey();
+  final _playerKey = GlobalKey<PlayerViewState>();
+  final _onboardingKey = GlobalKey<UpstreamOnboardingViewState>();
+  GlobalKey<UpstreamChannelSetupViewState> _setupKey =
+      GlobalKey<UpstreamChannelSetupViewState>();
+  bool _retainSetup = false;
+  (String?, String?, String?, int)? _suspendedSetupScope;
+  late _TvLocation _tvLocation = widget.initialMediaPath == null
+      ? const _TvHome()
+      : const _TvPlayer();
+  int _routeIntent = 0;
+
+  (String?, String?, String?, int) get _scopeStamp => (
+    widget.controller.account?.id,
+    widget.controller.profile?.id,
+    widget.controller.server?.id,
+    widget.controller.contentGeneration,
+  );
   final _channelsKey = GlobalKey<ChannelsViewState>();
   final _guideFocus = FocusNode(debugLabel: 'Guide');
   final _channelsFocus = FocusNode(debugLabel: 'Channels');
@@ -83,6 +99,9 @@ class _LineupShellState extends State<LineupShell> {
   void initState() {
     super.initState();
     _lastStage = widget.controller.stage;
+    _retainSetup =
+        _lastStage == SetupStage.channelSetup &&
+        !widget.controller.restoringSavedLineup;
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
     if (defaultTargetPlatform != TargetPlatform.android) {
       _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
@@ -137,11 +156,47 @@ class _LineupShellState extends State<LineupShell> {
     final stage = widget.controller.stage;
     final returnedToApp =
         _lastStage != SetupStage.ready && stage == SetupStage.ready;
+    if (widget.androidTv) {
+      if (_lastStage != stage) _routeIntent++;
+      if (_lastStage == SetupStage.channelSetup &&
+          (stage == SetupStage.servers || stage == SetupStage.profiles) &&
+          _setupKey.currentState != null) {
+        _suspendedSetupScope = _scopeStamp;
+      }
+      if (_suspendedSetupScope case final stamp?) {
+        if (stamp != _scopeStamp ||
+            (stage != SetupStage.channelSetup &&
+                stage != SetupStage.servers &&
+                stage != SetupStage.profiles)) {
+          // Retire before a successful scope publication can bind an old draft.
+          _retireSetup();
+          _tvLocation = const _TvHome();
+          _destination = ShellDestination.guide;
+        } else if (stage == SetupStage.channelSetup) {
+          _suspendedSetupScope = null;
+        }
+      }
+      if (stage == SetupStage.channelSetup &&
+          !widget.controller.restoringSavedLineup) {
+        _retainSetup = true;
+      }
+      if (stage == SetupStage.ready || stage == SetupStage.welcome) {
+        _retireSetup();
+      }
+      if (stage == SetupStage.welcome) {
+        _tvLocation = const _TvHome();
+        _destination = ShellDestination.guide;
+      }
+    }
     _lastStage = stage;
     if (returnedToApp && _onboardingSupport) {
       _onboardingSupport = false;
       _destination = ShellDestination.settings;
-      _settingsReturnDestination ??= ShellDestination.guide;
+      if (widget.androidTv) {
+        _tvLocation = _tvSettings;
+      } else {
+        _settingsReturnDestination ??= ShellDestination.guide;
+      }
     }
     if (stage == SetupStage.welcome) _onboardingFromAccount = false;
     if (_appMenu != null &&
@@ -179,8 +234,106 @@ class _LineupShellState extends State<LineupShell> {
     super.dispose();
   }
 
-  Future<void> _select(ShellDestination destination) async {
+  void _retireSetup() {
+    if (_retainSetup) _setupKey = GlobalKey<UpstreamChannelSetupViewState>();
+    _retainSetup = false;
+    _suspendedSetupScope = null;
+  }
+
+  _TvWatch get _tvWatch => _tvLocation.watch;
+  _TvSettings get _tvSettings => switch (_tvLocation) {
+    final _TvSettings location => location,
+    _TvDiagnostics(:final settings) => settings,
+    final _TvChannels location => _TvSettings(location),
+    final _TvWatch location => _TvSettings(location),
+  };
+
+  _TvLocation _tvOpen(ShellDestination destination) => switch (destination) {
+    ShellDestination.guide =>
+      _hasPlaybackSurface ? const _TvBrowse() : const _TvHome(),
+    ShellDestination.player => const _TvPlayer(),
+    ShellDestination.channels => _TvChannels(_tvWatch),
+    ShellDestination.settings => _tvSettings,
+    ShellDestination.diagnostics => _TvDiagnostics(_tvSettings),
+  };
+
+  _TvLocation _validTvLocation(_TvLocation location) {
+    if (_hasPlaybackSurface) return location;
+    return switch (location) {
+      _TvPlayer() || _TvBrowse() => const _TvHome(),
+      _TvChannels(:final origin) => _TvChannels(
+        _validTvLocation(origin) as _TvWatch,
+      ),
+      _TvSettings(:final origin) => _TvSettings(_validTvLocation(origin)),
+      _TvDiagnostics(:final settings) => _TvDiagnostics(
+        _validTvLocation(settings) as _TvSettings,
+      ),
+      _TvHome() => location,
+    };
+  }
+
+  bool _handleTvBack() {
+    if (_appMenu != null) {
+      _closeAppMenu();
+      return true;
+    }
+    if (_licensesOpen) {
+      _licensesKey.currentState?.back();
+      return true;
+    }
+    if (_onboardingSupport) {
+      setState(() => _onboardingSupport = false);
+      return true;
+    }
+    if (_selectionPending) return true;
+    final controller = widget.controller;
+    if (controller.stage != SetupStage.ready) {
+      if (controller.restoringSavedLineup) return !controller.canSwitchServer;
+      if (controller.stage == SetupStage.channelSetup) {
+        return _setupKey.currentState?.handleBack() ?? true;
+      }
+      return _onboardingKey.currentState?.handleBack() ?? true;
+    }
+    switch (_tvLocation) {
+      case _TvHome():
+        return false;
+      case _TvPlayer():
+        if (_playerKey.currentState case final state?) {
+          return state.handleBack();
+        }
+      case _TvBrowse():
+        _returnTv(const _TvPlayer());
+        return true;
+      case _TvChannels(:final origin):
+        final state = _channelsKey.currentState;
+        if (state == null) break;
+        if (!state.handleBack()) _returnTv(origin);
+        return true;
+      case _TvSettings(:final origin):
+        _returnTv(origin);
+        return true;
+      case _TvDiagnostics(:final settings):
+        _settingsCategory = SettingsCategory.support;
+        _returnTv(settings);
+        return true;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+    return true;
+  }
+
+  void _returnTv(_TvLocation location) {
+    final valid = _validTvLocation(location);
+    unawaited(_select(valid.destination, tvLocation: valid));
+  }
+
+  Future<void> _select(
+    ShellDestination destination, {
+    _TvLocation? tvLocation,
+  }) async {
     if (_selectionPending) return;
+    final proposed = widget.androidTv
+        ? tvLocation ?? _tvOpen(destination)
+        : null;
     if (widget.controller.stage != SetupStage.ready &&
         !await _leaveOnboardingForRoute()) {
       return;
@@ -193,11 +346,15 @@ class _LineupShellState extends State<LineupShell> {
       _closeLicenses();
     }
     if (destination == _destination &&
+        (proposed == null || proposed == _tvLocation) &&
         !(destination == ShellDestination.channels &&
             (_channelsKey.currentState?.studioOpen ?? false))) {
       if (_appMenu != null) _closeAppMenu();
       return;
     }
+    final intent = ++_routeIntent;
+    final stage = widget.controller.stage;
+    final scope = _scopeStamp;
     _selectionPending = true;
     try {
       if (_destination == ShellDestination.channels &&
@@ -205,8 +362,14 @@ class _LineupShellState extends State<LineupShell> {
               Future.value(true)))) {
         return;
       }
-      if (!mounted) return;
-      if (widget.controller.stage == SetupStage.ready) {
+      if (!mounted ||
+          (widget.androidTv &&
+              (intent != _routeIntent ||
+                  stage != widget.controller.stage ||
+                  scope != _scopeStamp))) {
+        return;
+      }
+      if (!widget.androidTv && widget.controller.stage == SetupStage.ready) {
         if (destination == ShellDestination.settings &&
             _destination != ShellDestination.settings &&
             _destination != ShellDestination.diagnostics) {
@@ -224,16 +387,19 @@ class _LineupShellState extends State<LineupShell> {
               : ShellDestination.guide;
         }
       }
-      if (destination == ShellDestination.guide) {
+      final committed = proposed == null ? null : _validTvLocation(proposed);
+      final routeDestination = committed?.destination ?? destination;
+      if (routeDestination == ShellDestination.guide) {
         _player.showFullGuide();
       } else if (_player.overlay == PlayerOverlay.fullGuide) {
         _player.closeOverlay();
       }
       setState(() {
         _licensesOpen = false;
-        _destination = destination;
+        if (committed != null) _tvLocation = committed;
+        _destination = routeDestination;
         _player.setPlayerDestinationVisible(
-          destination == ShellDestination.player,
+          routeDestination == ShellDestination.player,
         );
         _appMenu = null;
       });
@@ -246,13 +412,18 @@ class _LineupShellState extends State<LineupShell> {
   bool get _hasPlaybackSurface =>
       _player.hasPlaybackIntent || _player.error != null;
 
-  ShellDestination? get _settingsBackDestination =>
-      _settingsReturnDestination == ShellDestination.player &&
-          !_hasPlaybackSurface
+  ShellDestination? get _settingsBackDestination => widget.androidTv
+      ? _validTvLocation(_tvSettings.origin).destination
+      : _settingsReturnDestination == ShellDestination.player &&
+            !_hasPlaybackSurface
       ? ShellDestination.guide
       : _settingsReturnDestination;
 
   void _returnFromSettings() {
+    if (widget.androidTv) {
+      _returnTv(_tvSettings.origin);
+      return;
+    }
     final destination = _settingsBackDestination;
     if (destination != null) unawaited(_select(destination));
   }
@@ -296,7 +467,16 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _restoreRouteFocus() {
-    if (!mounted) return;
+    if (!mounted ||
+        widget.controller.stage != SetupStage.ready ||
+        _appMenu != null ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    if (widget.androidTv && _destination == ShellDestination.channels) {
+      _channelsKey.currentState?.restoreNavigationFocus();
+      return;
+    }
     final target = switch (_destination) {
       ShellDestination.guide => _guideFocus,
       ShellDestination.channels => _channelsFocus,
@@ -354,7 +534,8 @@ class _LineupShellState extends State<LineupShell> {
           invoker != null &&
           invoker.parent != null &&
           invoker.context?.mounted == true &&
-          invoker.canRequestFocus) {
+          invoker.canRequestFocus &&
+          invoker.ancestors.every((node) => node.descendantsAreFocusable)) {
         invoker.requestFocus();
       } else {
         _restoreRouteFocus();
@@ -456,6 +637,25 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   KeyEventResult _globalKey(FocusNode _, KeyEvent event) {
+    final backKey = {
+      LogicalKeyboardKey.escape,
+      LogicalKeyboardKey.backspace,
+      LogicalKeyboardKey.goBack,
+    }.contains(event.logicalKey);
+    if (widget.androidTv && backKey) {
+      final editing = FocusManager.instance.primaryFocus?.context;
+      if (event.logicalKey == LogicalKeyboardKey.backspace &&
+          (editing?.widget is EditableText ||
+              editing?.findAncestorWidgetOfExactType<EditableText>() != null)) {
+        return KeyEventResult.ignored;
+      }
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        return KeyEventResult.ignored;
+      }
+      if (event is KeyRepeatEvent) return KeyEventResult.handled;
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      return _handleTvBack() ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
         FocusManager.instance.primaryFocus?.context
@@ -528,14 +728,29 @@ class _LineupShellState extends State<LineupShell> {
   Future<void> _completeSetup() async {
     widget.controller.completeChannelSetup();
     _onboardingFromAccount = false;
-    await _select(ShellDestination.channels);
+    await _select(
+      ShellDestination.channels,
+      tvLocation: widget.androidTv ? const _TvChannels(_TvHome()) : null,
+    );
   }
 
   Future<void> _completeSetupAndAdd() async {
     widget.controller.completeChannelSetup();
     _onboardingFromAccount = false;
-    await _select(ShellDestination.channels);
+    await _select(
+      ShellDestination.channels,
+      tvLocation: widget.androidTv ? const _TvChannels(_TvHome()) : null,
+    );
+    final intent = _routeIntent;
+    final scope = _scopeStamp;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.controller.stage != SetupStage.ready ||
+          _destination != ShellDestination.channels ||
+          (widget.androidTv &&
+              (intent != _routeIntent || scope != _scopeStamp))) {
+        return;
+      }
       _channelsKey.currentState?.openNew();
     });
   }
@@ -785,9 +1000,44 @@ class _LineupShellState extends State<LineupShell> {
 
   @override
   Widget build(BuildContext context) {
-    final child = _buildShell(context);
+    Widget child = _buildShell(context);
+    if (widget.androidTv) {
+      final visibleSetup =
+          widget.controller.stage == SetupStage.channelSetup &&
+          !widget.controller.restoringSavedLineup &&
+          !_onboardingSupport;
+      child = Stack(
+        fit: StackFit.expand,
+        children: [
+          if (_retainSetup)
+            Offstage(
+              offstage: !visibleSetup,
+              child: ExcludeFocus(
+                excluding: !visibleSetup,
+                child: ExcludeSemantics(
+                  excluding: !visibleSetup,
+                  child: TickerMode(
+                    enabled: visibleSetup,
+                    child: UpstreamChannelSetupView(
+                      key: _setupKey,
+                      controller: widget.controller,
+                      onRequestLogout: _requestLogout,
+                      onViewLineup: _completeSetup,
+                      onAddCustomChannel: _completeSetupAndAdd,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (!visibleSetup) child,
+        ],
+      );
+    }
     return defaultTargetPlatform == TargetPlatform.android
-        ? AndroidBackScope(child: child)
+        ? AndroidBackScope(
+            onUnhandledBack: widget.androidTv ? _handleTvBack : null,
+            child: child,
+          )
         : child;
   }
 
@@ -824,13 +1074,17 @@ class _LineupShellState extends State<LineupShell> {
       final onboarding = controller.restoringSavedLineup
           ? LineupRestoreView(controller: controller)
           : controller.stage == SetupStage.channelSetup
-          ? UpstreamChannelSetupView(
-              controller: controller,
-              onRequestLogout: _requestLogout,
-              onViewLineup: _completeSetup,
-              onAddCustomChannel: _completeSetupAndAdd,
-            )
+          ? widget.androidTv
+                ? const SizedBox.shrink()
+                : UpstreamChannelSetupView(
+                    key: _setupKey,
+                    controller: controller,
+                    onRequestLogout: _requestLogout,
+                    onViewLineup: _completeSetup,
+                    onAddCustomChannel: _completeSetupAndAdd,
+                  )
           : UpstreamOnboardingView(
+              key: _onboardingKey,
               controller: controller,
               onLogout: _logout,
               onRequestLogout: _requestLogout,
@@ -876,6 +1130,7 @@ class _LineupShellState extends State<LineupShell> {
       controller: _player,
       focusNode: _playerFocus,
       openGuide: () => unawaited(_select(ShellDestination.guide)),
+      onBackToGuide: widget.androidTv ? () => _returnTv(const _TvHome()) : null,
       openMenu: _openAppMenu,
     );
     final hasPlaybackSurface = _hasPlaybackSurface;
@@ -888,6 +1143,7 @@ class _LineupShellState extends State<LineupShell> {
       watchingChannelId: _player.watchingChannelId,
       focusNode: _guideFocus,
       onClose: _closeGuide,
+      onBack: widget.androidTv ? _handleTvBack : null,
       onOpenMenu: _openAppMenu,
       pictureInPicture: guideHasPicture
           ? PlayerSurface(controller: _player, showErrors: true)
@@ -960,14 +1216,18 @@ class _LineupShellState extends State<LineupShell> {
         playback: _player.diagnosticPlaybackSnapshot,
         onRecordingSettings: () {
           _settingsCategory = SettingsCategory.support;
-          unawaited(_select(ShellDestination.settings));
+          widget.androidTv
+              ? _returnTv(_tvSettings)
+              : unawaited(_select(ShellDestination.settings));
         },
         focusNode: _diagnosticsFocus,
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
         onBack: () {
           _settingsCategory = SettingsCategory.support;
-          unawaited(_select(ShellDestination.settings));
+          widget.androidTv
+              ? _returnTv(_tvSettings)
+              : unawaited(_select(ShellDestination.settings));
         },
       ),
       ShellDestination.player => playerView,
@@ -1046,6 +1306,66 @@ class _LineupShellState extends State<LineupShell> {
       ),
     );
   }
+}
+
+// Finite TV parents: only watch locations may sit beneath Channels; Settings
+// may additionally retain Channels. Returning consumes this parent, never pushes.
+sealed class _TvLocation {
+  const _TvLocation();
+  ShellDestination get destination;
+  _TvWatch get watch;
+}
+
+sealed class _TvWatch extends _TvLocation {
+  const _TvWatch();
+  @override
+  _TvWatch get watch => this;
+}
+
+final class _TvHome extends _TvWatch {
+  const _TvHome();
+  @override
+  ShellDestination get destination => ShellDestination.guide;
+}
+
+final class _TvPlayer extends _TvWatch {
+  const _TvPlayer();
+  @override
+  ShellDestination get destination => ShellDestination.player;
+}
+
+final class _TvBrowse extends _TvWatch {
+  const _TvBrowse();
+  @override
+  ShellDestination get destination => ShellDestination.guide;
+}
+
+final class _TvChannels extends _TvLocation {
+  const _TvChannels(this.origin);
+  final _TvWatch origin;
+  @override
+  ShellDestination get destination => ShellDestination.channels;
+  @override
+  _TvWatch get watch => origin;
+}
+
+final class _TvSettings extends _TvLocation {
+  const _TvSettings(this.origin)
+    : assert(origin is _TvWatch || origin is _TvChannels);
+  final _TvLocation origin;
+  @override
+  ShellDestination get destination => ShellDestination.settings;
+  @override
+  _TvWatch get watch => origin.watch;
+}
+
+final class _TvDiagnostics extends _TvLocation {
+  const _TvDiagnostics(this.settings);
+  final _TvSettings settings;
+  @override
+  ShellDestination get destination => ShellDestination.diagnostics;
+  @override
+  _TvWatch get watch => settings.watch;
 }
 
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {

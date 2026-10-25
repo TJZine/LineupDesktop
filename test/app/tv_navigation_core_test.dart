@@ -1,0 +1,990 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/app/channel_setup_view.dart';
+import 'package:lineup_desktop/app/channels_view.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
+import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/lineup_shell.dart';
+import 'package:lineup_desktop/app/onboarding_view.dart';
+import 'package:lineup_desktop/persistence/app_store.dart';
+import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/player_view.dart';
+import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
+
+import '../support/ui_fixture.dart';
+
+void main() {
+  var backgrounds = 0;
+  late FocusNode outside;
+  const platform = MethodChannel('lineup/platform');
+  setUp(() {
+    outside = FocusNode(debugLabel: 'Outside Android shell');
+    backgrounds = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(platform, (call) async {
+          if (call.method == 'moveTaskToBack') backgrounds++;
+          return true;
+        });
+  });
+  tearDown(() {
+    outside.dispose();
+    debugDefaultTargetPlatformOverride = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(platform, null);
+  });
+
+  void androidTest(String name, WidgetTesterCallback body) {
+    testWidgets(name, (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        await body(tester);
+      } finally {
+        FocusManager.instance.applyFocusChangesIfNeeded();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
+  Future<void> back(WidgetTester tester, {bool settle = true}) async {
+    await tester.binding.handlePopRoute();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+  }
+
+  Future<void> strand(WidgetTester tester) async {
+    outside.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(outside));
+  }
+
+  for (final stage in [
+    SetupStage.welcome,
+    SetupStage.profiles,
+    SetupStage.servers,
+    SetupStage.channelSetup,
+  ]) {
+    androidTest('idle first-run $stage is a true root after stranded focus', (
+      tester,
+    ) async {
+      final fixture = UiFixture(
+        androidTv: true,
+        scenario: LineupScenario(stage: stage),
+      );
+      await tester.pumpWidget(
+        Focus(focusNode: outside, child: fixture.build()),
+      );
+      await tester.pumpAndSettle();
+      await strand(tester);
+      await back(tester);
+      expect(backgrounds, 1);
+      expect(fixture.controller.stage, stage);
+      expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  for (final failed in [false, true]) {
+    androidTest(
+      '${failed ? 'error recovery' : 'stopped'} Player utility return uses current surface predicate',
+      (tester) async {
+        final native = FixturePlayer.preloaded()
+          ..emit(
+            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+          );
+        final fixture = UiFixture(
+          androidTv: true,
+          player: native,
+          scenario: const LineupScenario(stage: SetupStage.ready),
+        );
+        await tester.pumpWidget(
+          Focus(focusNode: outside, child: fixture.build()),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Player');
+        final player = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pumpAndSettle();
+        expect(find.byType(SettingsView), findsOneWidget);
+        if (failed) {
+          native.emit(
+            const PlayerStatus(
+              state: PlayerState.error,
+              message: 'Synthetic failure',
+              recoverable: true,
+            ),
+          );
+        } else {
+          await player.stop();
+        }
+        await tester.pumpAndSettle();
+        expect(player.hasPlaybackIntent, isFalse);
+        expect(player.error, failed ? isNotNull : isNull);
+        final stops = native.stops;
+        await back(tester, settle: !failed);
+        expect(find.byType(PlayerView), failed ? findsOneWidget : findsNothing);
+        if (failed) {
+          expect(player.overlay.name, 'error');
+          await back(tester, settle: !failed);
+          expect(find.byType(PlayerView), findsOneWidget);
+          expect(player.overlay.name, 'none');
+          await back(tester, settle: !failed);
+        }
+        expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+        expect(backgrounds, 0);
+        await back(tester, settle: !failed);
+        expect(backgrounds, 1);
+        expect(native.stops, stops);
+        expect(native.loads, isEmpty);
+        expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  androidTest(
+    'real Applying with stranded focus never backgrounds or starts a second save',
+    (tester) async {
+      final f = await _setup();
+      await _pump(tester, f.controller, outside);
+      _scanButton(tester).onPressed!();
+      await tester.pumpAndSettle();
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+          .onPressed!();
+      await tester.pumpAndSettle();
+      f.store.block();
+      final saves = f.store.calls;
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('apply-reviewed-lineup')),
+          )
+          .onPressed!();
+      await f.store.started.future;
+      await tester.pump();
+      await strand(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(backgrounds, 0);
+      expect(f.store.calls, saves + 1);
+      expect(find.text('Creating your lineup…'), findsOneWidget);
+      f.store.release();
+      await tester.pumpAndSettle();
+      expect(f.store.calls, saves + 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.controller.dispose();
+    },
+  );
+
+  androidTest(
+    'stranded Channels manual picker unwinds locally before dirty guard and watch parent',
+    (tester) async {
+      final fixture = UiFixture(
+        androidTv: true,
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            Channel(
+              id: 'manual',
+              number: 1,
+              name: 'Manual',
+              source: const ManualSource([
+                ChannelItem(
+                  id: 'existing',
+                  title: 'Existing',
+                  duration: Duration(minutes: 30),
+                ),
+              ]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: DateTime.utc(2026),
+              shuffleSeed: 1,
+            ),
+          ],
+          availableMedia: [
+            PlexMediaItem(
+              id: 'new',
+              title: 'New item',
+              type: 'movie',
+              libraryId: 'movies',
+              duration: const Duration(minutes: 30),
+              parts: [PlexMediaPart(path: '/synthetic/new')],
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        Focus(focusNode: outside, child: fixture.build()),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await tester.tap(find.byKey(const ValueKey('channel-row-manual')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('studio-name')),
+        findsOneWidget,
+        reason: 'row consumer opened Studio',
+      );
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Kept manual draft',
+      );
+      await tester.tap(find.byKey(const Key('studio-manual-browse-stage')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Select'));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('studio-result-new')));
+      await tester.pump();
+      await tester.tap(find.text('Show selected'));
+      await tester.pumpAndSettle();
+      await strand(tester);
+      await back(tester);
+      expect(find.text('Back to results'), findsNothing);
+      expect(find.text('Show selected'), findsOneWidget);
+      expect(find.text('Discard changes?'), findsNothing);
+      await strand(tester);
+      await back(tester);
+      expect(find.text('Show selected'), findsNothing);
+      expect(find.text('Discard changes?'), findsNothing);
+      await strand(tester);
+      await back(tester);
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('studio-name')))
+            .controller!
+            .text,
+        'Kept manual draft',
+      );
+      expect(backgrounds, 0);
+      expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+      expect(fixture.player.loads, isEmpty);
+      expect(fixture.player.stops, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final action in ['View lineup', 'Add a custom channel']) {
+    androidTest('completion $action rebases a prior Player origin to Home', (
+      tester,
+    ) async {
+      final f = await _setup();
+      f.controller.completeChannelSetup();
+      await _pump(
+        tester,
+        f.controller,
+        outside,
+        player: FixturePlayer()
+          ..emit(
+            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+          ),
+      );
+      await openDestination(tester, 'Player');
+      await f.controller.enterChannelSetup();
+      await tester.pumpAndSettle();
+      _scanButton(tester).onPressed!();
+      await tester.pumpAndSettle();
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+          .onPressed!();
+      await tester.pumpAndSettle();
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('apply-reviewed-lineup')),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+      final saves = f.store.calls;
+      await tester.tap(find.text(action));
+      await tester.pumpAndSettle();
+      expect(f.controller.stage, SetupStage.ready);
+      expect(find.byType(UpstreamChannelSetupView), findsNothing);
+      expect(find.byType(ChannelsView), findsOneWidget);
+      if (action == 'Add a custom channel') {
+        expect(find.byKey(const Key('studio-name')), findsOneWidget);
+        await back(tester);
+      }
+      await back(tester);
+      expect(find.byType(PlayerView), findsNothing);
+      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(backgrounds, 0);
+      await back(tester);
+      expect(backgrounds, 1);
+      expect(f.store.calls, saves);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.controller.dispose();
+    });
+  }
+
+  androidTest('stranded Channels returns Home and Home backgrounds once', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      androidTv: true,
+      scenario: const LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(Focus(focusNode: outside, child: fixture.build()));
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await strand(tester);
+    await back(tester);
+    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(backgrounds, 0);
+    await strand(tester);
+    await back(tester);
+    expect(backgrounds, 1);
+    expect(fixture.player.loads, isEmpty);
+    expect(fixture.player.stops, 0);
+    expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  androidTest(
+    'Browse survives Channels Settings Diagnostics and Licenses detours',
+    (tester) async {
+      final fixture = UiFixture(
+        androidTv: true,
+        player: FixturePlayer()
+          ..emit(
+            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+          ),
+        scenario: const LineupScenario(stage: SetupStage.ready),
+      );
+      await tester.pumpWidget(
+        Focus(focusNode: outside, child: fixture.build()),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Player');
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await openDestination(tester, 'Settings');
+      await tester.tap(find.text('Support'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Open Licenses'));
+      await tester.tap(find.text('Open Licenses'));
+      await tester.pumpAndSettle();
+      await strand(tester);
+      await back(tester);
+      expect(find.text('Open Licenses'), findsOneWidget);
+      await tester.tap(find.text('Open Diagnostics'));
+      await tester.pumpAndSettle();
+      await back(tester);
+      expect(find.text('Open Diagnostics'), findsOneWidget);
+      await back(tester);
+      expect(find.byType(ChannelsView), findsOneWidget);
+      final focus = FocusManager.instance.primaryFocus!;
+      expect(focus.context?.mounted, isTrue);
+      expect(
+        focus.context?.findAncestorWidgetOfExactType<ChannelsView>(),
+        isNotNull,
+      );
+      await back(tester);
+      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      await back(tester);
+      expect(find.byType(PlayerView), findsOneWidget);
+      await back(tester);
+      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      await back(tester);
+      expect(backgrounds, 1);
+      expect(fixture.player.loads, isEmpty);
+      expect(fixture.player.stops, 0);
+      expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final key in [
+    LogicalKeyboardKey.goBack,
+    LogicalKeyboardKey.escape,
+    LogicalKeyboardKey.backspace,
+  ]) {
+    androidTest(
+      'held $key makes one transition; empty editing Backspace stays local',
+      (tester) async {
+        final fixture = UiFixture(
+          androidTv: true,
+          scenario: const LineupScenario(stage: SetupStage.ready),
+        );
+        await tester.pumpWidget(
+          Focus(focusNode: outside, child: fixture.build()),
+        );
+        await tester.pumpAndSettle();
+        final search = find.byKey(const Key('guide-channel-search'));
+        await tester.tap(search);
+        await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+        await tester.pumpAndSettle();
+        expect(backgrounds, 0);
+        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+        await openDestination(tester, 'Channels');
+        await tester.sendKeyDownEvent(
+          key,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+        await tester.sendKeyRepeatEvent(
+          key,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pumpAndSettle();
+        await tester.sendKeyUpEvent(
+          key,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pumpAndSettle();
+        expect(backgrounds, 0);
+        await tester.sendKeyEvent(key, physicalKey: PhysicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(backgrounds, 1);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  androidTest('dirty Studio denial and stranded Back retain route and draft', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      androidTv: true,
+      scenario: const LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(Focus(focusNode: outside, child: fixture.build()));
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.text('Create a custom channel'));
+    await tester.pumpAndSettle();
+    final name = find.byKey(const Key('studio-name'));
+    await tester.enterText(name, 'Kept draft');
+    await openDestination(tester, 'Settings');
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsView), findsNothing);
+    expect(tester.widget<TextFormField>(name).controller!.text, 'Kept draft');
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    await strand(tester);
+    await back(tester);
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+    await strand(tester);
+    await back(tester);
+    expect(find.text('Discard changes?'), findsOneWidget);
+    expect(backgrounds, 0);
+    await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChannelsView), findsOneWidget);
+    await back(tester);
+    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  androidTest('stranded Player Sleep and drawer unwind before Home', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      androidTv: true,
+      player: FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
+      scenario: const LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(Focus(focusNode: outside, child: fixture.build()));
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Player');
+    final player = tester
+        .widget<PlayerView>(find.byType(PlayerView))
+        .controller;
+    player.showOsd();
+    player.showSleepTimer();
+    await tester.pumpAndSettle();
+    await strand(tester);
+    await back(tester);
+    expect(player.sleepPickerOpen, isFalse);
+    expect(player.overlay.name, 'osd');
+    player.showTracks(PlayerTrackType.subtitle);
+    await tester.pumpAndSettle();
+    await strand(tester);
+    await back(tester);
+    expect(player.overlay.name, 'osd');
+    await back(tester);
+    expect(player.overlay.name, 'none');
+    await back(tester);
+    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(backgrounds, 0);
+    await back(tester);
+    expect(backgrounds, 1);
+    expect(fixture.player.loads, isEmpty);
+    expect(fixture.player.stops, 0);
+    expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  androidTest(
+    'scope retirement while dirty guard awaits cannot commit proposed Settings',
+    (tester) async {
+      final fixture = UiFixture(
+        androidTv: true,
+        scenario: const LineupScenario(stage: SetupStage.ready),
+      );
+      await tester.pumpWidget(
+        Focus(focusNode: outside, child: fixture.build()),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await tester.tap(find.text('Create a custom channel'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Obsolete route intent',
+      );
+      await openDestination(tester, 'Settings');
+      expect(find.text('Discard changes?'), findsOneWidget);
+      fixture.controller.fixtureActor.replaceConnection(null);
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsView), findsNothing);
+      expect(find.byKey(const Key('studio-name')), findsOneWidget);
+      expect(backgrounds, 0, reason: 'modal owns native route request');
+      // The denied intent keeps its menu. A fresh Settings action is guarded.
+      await tester.tap(find.text('Settings').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+      fixture.controller.fixtureActor.publishInventory();
+      await tester.pump();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsView), findsNothing);
+      expect(find.byType(ChannelsView), findsOneWidget);
+      expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  androidTest(
+    'stranded submitting PIN stays with current PIN owner and preserves Setup draft',
+    (tester) async {
+      final f = await _setup();
+      await _pump(tester, f.controller, outside);
+      final element = tester.element(find.byType(UpstreamChannelSetupView));
+      await tester.tap(find.byKey(const ValueKey('library-row-movies')));
+      await tester.tap(find.text('Switch server'));
+      await tester.pumpAndSettle();
+      f.controller.showProfiles();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('profile-card-protected')));
+      await tester.pumpAndSettle();
+      f.plex.pinGate = Completer<void>();
+      final saves = f.store.calls;
+      for (final key in [
+        LogicalKeyboardKey.digit1,
+        LogicalKeyboardKey.digit2,
+        LogicalKeyboardKey.digit3,
+        LogicalKeyboardKey.digit4,
+      ]) {
+        await tester.sendKeyEvent(key);
+      }
+      await tester.pump();
+      expect(f.plex.pinCalls, 1);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await strand(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+      expect(f.controller.stage, SetupStage.profiles);
+      expect(f.plex.pinCalls, 1);
+      expect(f.store.calls, saves);
+      expect(backgrounds, 0);
+      f.plex.pinGate!.complete();
+      await tester.pumpAndSettle();
+      await back(tester);
+      expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
+      expect(f.controller.stage, SetupStage.profiles);
+      await back(tester);
+      expect(f.controller.stage, SetupStage.servers);
+      await back(tester);
+      expect(f.controller.stage, SetupStage.channelSetup);
+      expect(
+        tester.element(find.byType(UpstreamChannelSetupView)),
+        same(element),
+      );
+      expect(_scanButton(tester).onPressed, isNull);
+      expect(f.store.calls, saves);
+      expect(backgrounds, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.controller.dispose();
+    },
+  );
+
+  androidTest(
+    'same-scope picker cancel retains configured options without saving the excursion',
+    (tester) async {
+      final f = await _setup();
+      await _pump(tester, f.controller, outside);
+      final element = tester.element(find.byType(UpstreamChannelSetupView));
+      _scanButton(tester).onPressed!();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+      await tester.pumpAndSettle();
+      final minimum = find.byKey(const ValueKey('rules-minimum'));
+      await tester.ensureVisible(minimum);
+      await tester.tap(minimum);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('10').last);
+      await tester.pumpAndSettle();
+      expect(tester.widget<DropdownButton<int>>(minimum).value, 10);
+      await back(tester);
+      final saves = f.store.calls;
+      await tester.tap(find.text('Switch server'));
+      await tester.pumpAndSettle();
+      await back(tester);
+      expect(
+        tester.element(find.byType(UpstreamChannelSetupView)),
+        same(element),
+      );
+      expect(f.store.calls, saves);
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('continue-ready-libraries')),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+      expect(tester.widget<DropdownButton<int>>(minimum).value, 10);
+      expect(backgrounds, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.controller.dispose();
+    },
+  );
+
+  androidTest(
+    'same-scope server and profile cancel retains actual Setup element and unchecked draft',
+    (tester) async {
+      final f = await _setup();
+      await _pump(tester, f.controller, outside);
+      final finder = find.byType(UpstreamChannelSetupView);
+      final element = tester.element(finder);
+      final state = tester.state(finder);
+      await tester.tap(find.byKey(const ValueKey('library-row-movies')));
+      expect(
+        tester
+            .widget<InkWell>(find.byKey(const ValueKey('library-row-movies')))
+            .onTap,
+        isNotNull,
+      );
+      final saves = f.store.calls;
+      await tester.tap(find.text('Switch server'));
+      await tester.pumpAndSettle();
+      expect(find.byType(UpstreamChannelSetupView), findsNothing);
+      expect(find.byType(UpstreamOnboardingView), findsOneWidget);
+      final visibleFocus = FocusManager.instance.primaryFocus;
+      expect(
+        visibleFocus?.context
+            ?.findAncestorWidgetOfExactType<UpstreamChannelSetupView>(),
+        isNull,
+      );
+      f.controller.showProfiles();
+      await tester.pumpAndSettle();
+      await back(tester);
+      expect(f.controller.stage, SetupStage.servers);
+      await back(tester);
+      expect(f.controller.stage, SetupStage.channelSetup);
+      expect(tester.element(finder), same(element));
+      expect(tester.state(finder), same(state));
+      expect(
+        _scanButton(tester).onPressed,
+        isNull,
+        reason: 'unchecked draft is retained',
+      );
+      expect(f.store.calls, saves);
+      expect(backgrounds, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.controller.dispose();
+    },
+  );
+
+  for (final fail in [true, false]) {
+    androidTest(
+      'real same-ID server save ${fail ? 'failure retains' : 'success retires'} suspended Setup',
+      (tester) async {
+        final f = await _setup();
+        await _pump(tester, f.controller, outside);
+        final finder = find.byType(UpstreamChannelSetupView);
+        final element = tester.element(finder);
+        await tester.tap(find.byKey(const ValueKey('library-row-movies')));
+        await tester.tap(find.text('Switch server'));
+        await tester.pumpAndSettle();
+        final saves = f.store.calls;
+        final generation = f.controller.contentGeneration;
+        f.store.block(fail: fail);
+        final selection = f.controller.selectServer(f.controller.server!);
+        await f.store.started.future;
+        await tester.pump();
+        await strand(tester);
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(backgrounds, 0);
+        expect(f.controller.stage, SetupStage.servers);
+        expect(f.store.calls, saves + 1);
+        f.store.release();
+        await selection;
+        await tester.pumpAndSettle();
+        if (fail) {
+          expect(f.controller.contentGeneration, generation);
+          await back(tester);
+          expect(tester.element(finder), same(element));
+          expect(_scanButton(tester).onPressed, isNull);
+        } else {
+          expect(f.controller.contentGeneration, greaterThan(generation));
+          expect(f.controller.stage, SetupStage.channelSetup);
+          expect(tester.element(finder), isNot(same(element)));
+          expect(_scanButton(tester).onPressed, isNotNull);
+        }
+        expect(f.store.calls, saves + 1);
+        expect(backgrounds, 0);
+        await tester.pumpWidget(const SizedBox.shrink());
+        f.controller.dispose();
+      },
+    );
+  }
+
+  androidTest(
+    'real held library commit and Applying consume focused and stranded Back exactly once',
+    (tester) async {
+      final f = await _setup();
+      await _pump(tester, f.controller, outside);
+      final element = tester.element(find.byType(UpstreamChannelSetupView));
+      f.store.block();
+      final saves = f.store.calls;
+      _scanButton(tester).onPressed!();
+      await f.store.started.future;
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await strand(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(backgrounds, 0);
+      expect(f.store.calls, saves + 1);
+      f.store.release();
+      await tester.pumpAndSettle();
+      expect(
+        tester.element(find.byType(UpstreamChannelSetupView)),
+        same(element),
+      );
+      expect(find.text('Shape your lineup'), findsOneWidget);
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+          .onPressed!();
+      await tester.pumpAndSettle();
+      f.store.block();
+      final applySaves = f.store.calls;
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('apply-reviewed-lineup')),
+          )
+          .onPressed!();
+      await f.store.started.future;
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await strand(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(backgrounds, 0);
+      expect(find.text('Creating your lineup…'), findsOneWidget);
+      expect(f.store.calls, applySaves + 1);
+      f.store.release();
+      await tester.pumpAndSettle();
+      await back(tester);
+      expect(f.controller.stage, SetupStage.ready);
+      expect(find.byType(ChannelsView), findsOneWidget);
+      expect(f.store.calls, applySaves + 1);
+      await back(tester);
+      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      await back(tester);
+      expect(backgrounds, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.controller.dispose();
+    },
+  );
+}
+
+FilledButton _scanButton(WidgetTester tester) => tester.widget<FilledButton>(
+  find.byKey(const ValueKey('scan-selected-libraries')),
+);
+
+Future<void> _pump(
+  WidgetTester tester,
+  LineupController controller,
+  FocusNode outside, {
+  FixturePlayer? player,
+}) async {
+  await tester.pumpWidget(
+    Focus(
+      focusNode: outside,
+      child: MaterialApp(
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          largeFocusIndicators: false,
+          androidTv: true,
+        ),
+        builder: LineupCanvas.builder,
+        home: LineupShell(
+          player: player ?? FixturePlayer(),
+          controller: controller,
+          androidTv: true,
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<({LineupController controller, _Store store, _Plex plex})>
+_setup() async {
+  final store = _Store();
+  final plex = _Plex();
+  final controller = LineupController(
+    store: store,
+    credentials: MemoryCredentialStore(accountToken: 'synthetic-token'),
+    plex: plex,
+  );
+  await controller.initialize();
+  expect(controller.stage, SetupStage.channelSetup);
+  return (controller: controller, store: store, plex: plex);
+}
+
+class _Store extends MemoryAppStore {
+  _Store()
+    : super(
+        initial: const PersistedState(
+          profileId: 'owner',
+          selectedServerByProfile: {'owner': 'server'},
+        ),
+      );
+  int calls = 0;
+  Completer<void>? gate;
+  Completer<void> started = Completer<void>();
+  bool failure = false;
+  void block({bool fail = false}) {
+    gate = Completer<void>();
+    started = Completer<void>();
+    failure = fail;
+  }
+
+  void release() => gate!.complete();
+  @override
+  Future<void> save(PersistedState value) async {
+    calls++;
+    if (gate case final held?) {
+      started.complete();
+      await held.future;
+      gate = null;
+      if (failure) throw StateError('synthetic save failure');
+    }
+    await super.save(value);
+  }
+}
+
+final _server = PlexServer(
+  id: 'server',
+  name: 'Synthetic server',
+  connections: [
+    PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: true,
+      relay: false,
+    ),
+  ],
+);
+
+class _Plex extends PlexClient {
+  _Plex()
+    : super(
+        clientIdentifier: 'lineup-navigation-test-client',
+        httpClient: testPlexHttpClient(),
+      );
+  Completer<void>? pinGate;
+  int pinCalls = 0;
+  @override
+  Future<String> switchHomeUser(String token, String id, String? pin) async {
+    pinCalls++;
+    if (pinGate case final gate?) await gate.future;
+    throw const PlexException('pin-invalid', 'Synthetic PIN failure.');
+  }
+
+  @override
+  Future<PlexAccount> account(String token) async => const PlexAccount(
+    id: 'owner',
+    name: 'Owner',
+    email: 'owner@example.invalid',
+  );
+  @override
+  Future<List<PlexHomeUser>> homeUsers(String token) async => const [
+    PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+    PlexHomeUser(id: 'other', name: 'Other', protected: false),
+    PlexHomeUser(id: 'protected', name: 'Protected', protected: true),
+  ];
+  @override
+  Future<List<PlexServerAccess>> discoverServers(String token) async => [
+    PlexServerAccess(server: _server, token: 'synthetic-pms-token'),
+  ];
+  @override
+  Future<PlexConnection> selectConnection(
+    PlexServer server,
+    String token,
+  ) async => server.connections.single;
+  @override
+  Future<List<PlexLibrary>> libraries(Uri server, String token) async => const [
+    PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+  ];
+  @override
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    void Function(PlexLibraryScanPhase phase)? onPhase,
+    Future<void>? cancelled,
+  }) async => PlexLibraryScan(
+    items: [
+      for (var i = 0; i < 5; i++)
+        PlexMediaItem(
+          id: 'movie-$i',
+          title: 'Movie $i',
+          type: 'movie',
+          libraryId: 'movies',
+          duration: const Duration(minutes: 30),
+          parts: [PlexMediaPart(path: '/synthetic/movie-$i')],
+        ),
+    ],
+  );
+  @override
+  Future<PlexPlaylistCatalog> playlists(
+    Uri server,
+    String token, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+    void Function(PlexPlaylistProgress)? onProgress,
+  }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
+}

@@ -53,6 +53,94 @@ void main() {
   }
 
   testWidgets(
+    'final Back callback runs once for focused and stranded dispatch',
+    (tester) async {
+      var calls = 0;
+      var backgrounds = 0;
+      var claim = true;
+      final outside = FocusNode(debugLabel: 'Outside root Back');
+      final inside = FocusNode(debugLabel: 'Inside root Back');
+      addTearDown(outside.dispose);
+      addTearDown(inside.dispose);
+      const platform = MethodChannel('lineup/platform');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(platform, (
+        _,
+      ) async {
+        backgrounds++;
+        return true;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          platform,
+          null,
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Focus(
+            focusNode: outside,
+            child: AndroidBackScope(
+              onUnhandledBack: () {
+                calls++;
+                return claim;
+              },
+              child: Focus(
+                focusNode: inside,
+                autofocus: true,
+                child: const SizedBox(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(inside.hasPrimaryFocus, isTrue);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(calls, 1);
+      expect(backgrounds, 0);
+      outside.requestFocus();
+      await tester.pump();
+      expect(outside.hasPrimaryFocus, isTrue);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(calls, 2);
+      expect(backgrounds, 0);
+      claim = false;
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(calls, 3);
+      expect(backgrounds, 1);
+      inside.requestFocus();
+      await tester.pump();
+      for (final key in [
+        LogicalKeyboardKey.goBack,
+        LogicalKeyboardKey.escape,
+        LogicalKeyboardKey.backspace,
+      ]) {
+        final before = calls;
+        await tester.sendKeyDownEvent(
+          key,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pump();
+        await tester.sendKeyRepeatEvent(
+          key,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.sendKeyUpEvent(
+          key,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pump();
+        expect(calls, before + 1);
+      }
+      expect(backgrounds, 4);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'Android root Back uses focused key ownership or backgrounds once',
     (tester) async {
       var backgrounded = 0;

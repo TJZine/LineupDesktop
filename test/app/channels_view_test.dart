@@ -81,6 +81,10 @@ void main() {
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
+      expect(backgrounded, 0);
+      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
       expect(backgrounded, 1);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());

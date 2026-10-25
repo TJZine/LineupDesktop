@@ -306,7 +306,7 @@ void main() {
       );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
-      await _keys(tester, [_back, _down, _select]);
+      await _keys(tester, [LogicalKeyboardKey.contextMenu, _down, _select]);
       expect(find.byKey(const Key('channels-search')), findsOneWidget);
       await _keys(tester, [_down, _left, _left, _left, _left]);
       final activation = tester.widget<LineupTextFieldActivation>(
@@ -355,7 +355,6 @@ void main() {
     final libraryFooter = find.byKey(const ValueKey('setup-switch-server'));
     final footerBounds = tester.getRect(libraryFooter);
     expect(footerBounds.bottom, inInclusiveRange(540 - 48 * .5, 540 - 24 * .5));
-    await _keys(tester, [_down]);
     _focusedIn(tester, find.widgetWithText(TextButton, 'Select all'));
     await _keys(tester, [_select]);
     expect(find.text('0 of 8 selected'), findsOneWidget);
@@ -575,7 +574,8 @@ void main() {
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    await _keys(tester, [_down, _down]);
+    _focusedIn(tester, find.widgetWithText(TextButton, 'Select all'));
+    await _keys(tester, [_down]);
     _focusedIn(tester, find.byKey(const ValueKey('library-row-failed')));
     await _keys(tester, [_down]);
     _focusedIn(tester, find.byKey(const ValueKey('retry-library-failed')));

@@ -15,6 +15,7 @@ import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/golden_test_support.dart';
@@ -236,6 +237,7 @@ void main() {
               ),
             );
             await tester.pumpAndSettle();
+            await _awaitLogoAlphaValidation(tester);
             expect(
               find.byKey(
                 Key(
@@ -1075,6 +1077,7 @@ void _stabilityTests() {
                   ),
                 );
                 await tester.pumpAndSettle();
+                await _awaitLogoAlphaValidation(tester);
                 expect(
                   find.byKey(const Key('guide-clear-logo')),
                   findsOneWidget,
@@ -1181,4 +1184,27 @@ void _expectCompletePlaybackTask(
     expect(state.position.maxScrollExtent, closeTo(0, .1));
     expect(state.position.pixels, closeTo(0, .1));
   }
+}
+
+// Intrinsic image precache does not complete the separate visible-alpha decode.
+// Wait for that actual validation, including terminal fallback, before measuring.
+Future<void> _awaitLogoAlphaValidation(WidgetTester tester) async {
+  final validations = tester
+      .widgetList<FutureBuilder<Rect?>>(
+        find.descendant(
+          of: find.byType(ClearLogoImage),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is FutureBuilder<Rect?>,
+          ),
+        ),
+      )
+      .map((builder) => builder.future)
+      .whereType<Future<Rect?>>()
+      .toList();
+  await tester.runAsync(() async {
+    for (final validation in validations) {
+      await validation;
+    }
+  });
+  await tester.pumpAndSettle();
 }

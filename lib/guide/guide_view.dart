@@ -315,6 +315,7 @@ class GuideView extends StatefulWidget {
     required this.onClose,
     required this.onTune,
     this.onOpenMenu,
+    this.onBack,
     this.onSetUpChannels,
     this.showIdleArtwork = false,
     this.pictureInPicture,
@@ -327,6 +328,7 @@ class GuideView extends StatefulWidget {
 
   final GuideController controller;
   final LineupMenuCallback onClose;
+  final bool Function()? onBack;
   final Future<void> Function(String channelId) onTune;
   final LineupMenuCallback? onOpenMenu;
   final Widget? pictureInPicture;
@@ -671,6 +673,14 @@ class _GuideViewState extends State<GuideView>
     }
     if (_searchFocus.hasFocus && !commandModified) {
       return KeyEventResult.ignored;
+    }
+    final contextualBack =
+        key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.backspace ||
+        key == LogicalKeyboardKey.goBack;
+    if (contextualBack && widget.onBack != null) {
+      if (event is KeyRepeatEvent) return KeyEventResult.handled;
+      return widget.onBack!() ? KeyEventResult.handled : KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.backspace ||

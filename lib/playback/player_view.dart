@@ -28,17 +28,19 @@ class PlayerView extends StatefulWidget {
     required this.controller,
     required this.openGuide,
     this.openMenu,
+    this.onBackToGuide,
     this.focusNode,
     super.key,
   });
 
   final PlayerCoordinator controller;
   final VoidCallback openGuide;
+  final VoidCallback? onBackToGuide;
   final LineupMenuCallback? openMenu;
   final FocusNode? focusNode;
 
   @override
-  State<PlayerView> createState() => _PlayerViewState();
+  State<PlayerView> createState() => PlayerViewState();
 }
 
 enum _PlayerControl {
@@ -53,7 +55,7 @@ enum _PlayerControl {
   moreInfo,
 }
 
-class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
+class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   final _trackDisplays = PlayerTrackDisplayCache();
   late PlayerOverlay _renderedOverlay;
   late int _bottomPanelGeneration;
@@ -332,6 +334,27 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     widget.controller.handlePointerActivity();
   }
 
+  bool handleBack() {
+    final controller = widget.controller;
+    if (controller.sleepPickerOpen) {
+      controller.closeSleepPicker();
+      _restoreSleepFocus();
+      return true;
+    }
+    return _executeKey(
+          resolvePlayerKey(
+            LogicalKeyboardKey.goBack,
+            overlay: controller.overlay,
+            androidTv: _androidTv,
+            dvr: controller.lineup.settings.dvrControlsEnabled,
+            unsupported: controller.status.state == PlayerState.unsupported,
+            initialPress: true,
+            hasProgram: false,
+          ),
+        ) !=
+        KeyEventResult.ignored;
+  }
+
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -340,6 +363,15 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       return KeyEventResult.ignored;
     }
     final controller = widget.controller;
+    if (_androidTv &&
+        {
+          LogicalKeyboardKey.goBack,
+          LogicalKeyboardKey.escape,
+          LogicalKeyboardKey.backspace,
+        }.contains(event.logicalKey)) {
+      if (event is KeyRepeatEvent) return KeyEventResult.handled;
+      return handleBack() ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
     if (_androidTv && !controller.sleepPickerOpen) {
       final key = event.logicalKey;
       final overlay = controller.overlay;
@@ -462,7 +494,10 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         return KeyEventResult.ignored;
       case PlayerAction.consumed:
         break;
-      case PlayerAction.backToGuide || PlayerAction.openGuide:
+      case PlayerAction.backToGuide:
+        controller.showFullGuide();
+        (widget.onBackToGuide ?? widget.openGuide)();
+      case PlayerAction.openGuide:
         controller.showFullGuide();
         widget.openGuide();
       case PlayerAction.collapseNowPlaying || PlayerAction.closeOverlay:

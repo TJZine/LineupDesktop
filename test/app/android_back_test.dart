@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/player_view.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -35,6 +37,53 @@ void main() {
       }
     });
   }
+
+  androidTest('TV Channels returns Home before one root background', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      androidTv: true,
+      scenario: const LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(backgrounded, 0);
+    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(backgrounded, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  androidTest('TV explicit Browse consumes its Player return once', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      androidTv: true,
+      player: FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
+      scenario: const LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerView), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(backgrounded, 1);
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   androidTest('welcome backgrounds and Support returns before backgrounding', (
     tester,

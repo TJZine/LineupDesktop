@@ -18,6 +18,7 @@ import '../support/golden_test_support.dart';
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('lineup/platform');
+  var backgrounds = 0;
   setUpAll(() async {
     await loadPinnedTestFonts();
     await rootBundle.loadString('assets/licenses/index.txt');
@@ -41,9 +42,14 @@ void main() {
   }
 
   setUp(() {
+    backgrounds = 0;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
       call,
     ) async {
+      if (call.method == 'moveTaskToBack') {
+        backgrounds++;
+        return true;
+      }
       if (call.method == 'listLicenseDocuments') {
         return [
           {'id': 'info', 'path': 'BUILD-INFO.txt', 'bytes': 10},
@@ -153,8 +159,18 @@ void main() {
       expect(find.text('Inter'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await escape(tester);
+      expect(find.byType(LicensesView), findsNothing);
+      expect(find.text('Open Licenses'), findsOneWidget);
+      expect(backgrounds, 0);
       await escape(tester);
+      expect(
+        find.text('Your Plex library, scheduled like television'),
+        findsOneWidget,
+      );
+      expect(fixture.controller.stage, SetupStage.welcome);
+      expect(backgrounds, 0);
       await escape(tester);
+      expect(backgrounds, 1);
       expect(fixture.controller.stage, SetupStage.welcome);
       expect(fixture.controller.fixtureStore.savedStates, isEmpty);
     } finally {

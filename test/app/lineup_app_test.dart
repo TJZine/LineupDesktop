@@ -562,7 +562,11 @@ void main() {
       scenario: LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(
-      LineupBootstrap(player: _FakePlayer(), controller: controller),
+      LineupBootstrap(
+        player: _FakePlayer(),
+        controller: controller,
+        androidTv: false,
+      ),
     );
     await tester.pumpAndSettle();
 
