@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/channels_view.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/focus_ink.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -674,51 +675,221 @@ void main() {
     },
   );
 
+  for (final profiles in [false, true]) {
+    androidTest(
+      'same-scope ${profiles ? 'profile' : 'server'} cancel restores actionable retained Setup',
+      (tester) async {
+        final f = await _setup();
+        final native = FixturePlayer();
+        await _pump(tester, f.controller, outside, player: native);
+        final finder = find.byType(UpstreamChannelSetupView);
+        final element = tester.element(finder);
+        final state = tester.state(finder);
+        final row = find.byKey(const ValueKey('library-row-movies'));
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        expect(_scanButton(tester).onPressed, isNull);
+        final saves = f.store.calls;
+        final loads = native.loads.length;
+        final stops = native.stops;
+        final switcher = find.byKey(const ValueKey('setup-switch-server'));
+        Focus.of(
+          tester.element(
+            find.descendant(of: switcher, matching: find.text('Switch server')),
+          ),
+        ).requestFocus();
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(f.controller.stage, SetupStage.servers);
+        expect(find.byType(UpstreamChannelSetupView), findsNothing);
+        expect(find.byType(UpstreamOnboardingView), findsOneWidget);
+        if (profiles) {
+          // Public controller boundary: the optional Profiles excursion.
+          f.controller.showProfiles();
+          await tester.pumpAndSettle();
+          await back(tester);
+          expect(f.controller.stage, SetupStage.servers);
+        }
+        await back(tester);
+        expect(f.controller.stage, SetupStage.channelSetup);
+        expect(tester.element(finder), same(element));
+        expect(tester.state(finder), same(state));
+        expect(_scanButton(tester).onPressed, isNull);
+        final node = tester.widget<InkWell>(row).focusNode!;
+        expect(node.hasPrimaryFocus, isTrue);
+        expect(node.canRequestFocus, isTrue);
+        expect(node.context?.mounted, isTrue);
+        expect(
+          tester
+              .getRect(row)
+              .overlaps(
+                Offset.zero &
+                    tester.view.physicalSize / tester.view.devicePixelRatio,
+              ),
+          isTrue,
+        );
+        final ink = find
+            .ancestor(of: row, matching: find.byType(LineupFocusInk))
+            .first;
+        expect(tester.widget<LineupFocusInk>(ink).focused, isTrue);
+        final label = find
+            .descendant(of: row, matching: find.text('Movies'))
+            .first;
+        final roles = LineupTheme.of(tester.element(finder));
+        expect(tester.widget<Text>(label).style!.color, roles.onFocus);
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(
+          _scanButton(tester).onPressed,
+          isNotNull,
+          reason: 'immediate Select toggles the retained unchecked library',
+        );
+        expect(node.hasPrimaryFocus, isTrue);
+        expect(node.canRequestFocus, isTrue);
+        expect(node.context?.mounted, isTrue);
+        expect(f.store.calls, saves);
+        expect(native.loads.length, loads);
+        expect(native.stops, stops);
+        expect(backgrounds, 0);
+        await tester.pumpWidget(const SizedBox.shrink());
+        f.controller.dispose();
+      },
+    );
+  }
+
   androidTest(
-    'same-scope server and profile cancel retains actual Setup element and unchecked draft',
+    'empty Libraries return paints recovery and immediate Select reopens picker',
     (tester) async {
-      final f = await _setup();
-      await _pump(tester, f.controller, outside);
-      final finder = find.byType(UpstreamChannelSetupView);
-      final element = tester.element(finder);
-      final state = tester.state(finder);
-      await tester.tap(find.byKey(const ValueKey('library-row-movies')));
-      expect(
-        tester
-            .widget<InkWell>(find.byKey(const ValueKey('library-row-movies')))
-            .onTap,
-        isNotNull,
-      );
+      final f = await _setup(empty: true);
+      final native = FixturePlayer();
+      await _pump(tester, f.controller, outside, player: native);
+      final setup = tester.element(find.byType(UpstreamChannelSetupView));
       final saves = f.store.calls;
-      await tester.tap(find.text('Switch server'));
+      final loads = native.loads.length;
+      final stops = native.stops;
+      final switcher = find.byKey(const ValueKey('setup-switch-server'));
+      final node = tester.widget<FilledButton>(switcher).focusNode!;
+      expect(node.hasPrimaryFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
-      expect(find.byType(UpstreamChannelSetupView), findsNothing);
-      expect(find.byType(UpstreamOnboardingView), findsOneWidget);
-      final visibleFocus = FocusManager.instance.primaryFocus;
-      expect(
-        visibleFocus?.context
-            ?.findAncestorWidgetOfExactType<UpstreamChannelSetupView>(),
-        isNull,
-      );
-      f.controller.showProfiles();
-      await tester.pumpAndSettle();
-      await back(tester);
       expect(f.controller.stage, SetupStage.servers);
       await back(tester);
-      expect(f.controller.stage, SetupStage.channelSetup);
-      expect(tester.element(finder), same(element));
-      expect(tester.state(finder), same(state));
       expect(
-        _scanButton(tester).onPressed,
-        isNull,
-        reason: 'unchecked draft is retained',
+        tester.element(find.byType(UpstreamChannelSetupView)),
+        same(setup),
       );
+      expect(node.hasPrimaryFocus, isTrue);
+      expect(node.context?.mounted, isTrue);
+      expect(node.canRequestFocus, isTrue);
+      expect(tester.widget<FilledButton>(switcher).onPressed, isNotNull);
+      final roles = LineupTheme.of(tester.element(switcher));
+      expect(
+        tester
+            .widget<Material>(
+              find
+                  .descendant(of: switcher, matching: find.byType(Material))
+                  .first,
+            )
+            .color,
+        roles.focusedSurface,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(f.controller.stage, SetupStage.servers);
+      expect(find.byType(UpstreamOnboardingView), findsOneWidget);
       expect(f.store.calls, saves);
+      expect(native.loads.length, loads);
+      expect(native.stops, stops);
       expect(backgrounds, 0);
       await tester.pumpWidget(const SizedBox.shrink());
       f.controller.dispose();
     },
   );
+
+  androidTest(
+    'unrendered picker round trip preserves the current Setup focus',
+    (tester) async {
+      final f = await _setup();
+      await _pump(tester, f.controller, outside);
+      final switcher = find.byKey(const ValueKey('setup-switch-server'));
+      final label = find.descendant(
+        of: switcher,
+        matching: find.text('Switch server'),
+      );
+      final node = Focus.of(tester.element(label));
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      expect(node.hasPrimaryFocus, isTrue);
+      f.controller.showServers();
+      f.controller.cancelServerSelection();
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus, same(node));
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(f.controller.stage, SetupStage.servers);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.controller.dispose();
+    },
+  );
+
+  for (final modal in [false, true]) {
+    androidTest(
+      'pending Setup resume yields to ${modal ? 'modal' : 'new picker'} owner',
+      (tester) async {
+        final f = await _setup();
+        await _pump(tester, f.controller, outside);
+        await tester.tap(find.text('Switch server'));
+        await tester.pumpAndSettle();
+        // Public controller boundary, deliberately before the resume frame.
+        f.controller.cancelServerSelection();
+        final dialogFocus = FocusNode(debugLabel: 'Superseding dialog');
+        if (modal) {
+          unawaited(
+            showDialog<void>(
+              context: tester.element(find.byType(LineupShell)),
+              builder: (context) => AlertDialog(
+                actions: [
+                  TextButton(
+                    focusNode: dialogFocus,
+                    autofocus: true,
+                    onPressed: () {},
+                    child: const Text('Dialog owner'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          f.controller.showServers();
+        }
+        await tester.pumpAndSettle();
+        final owner = FocusManager.instance.primaryFocus;
+        expect(owner, isNotNull);
+        expect(owner!.context?.mounted, isTrue);
+        expect(owner.canRequestFocus, isTrue);
+        if (modal) {
+          expect(owner, same(dialogFocus));
+        } else {
+          expect(
+            owner.context
+                ?.findAncestorWidgetOfExactType<UpstreamOnboardingView>(),
+            isNotNull,
+          );
+        }
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(owner));
+        expect(
+          owner.context
+              ?.findAncestorWidgetOfExactType<UpstreamChannelSetupView>(),
+          isNull,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        dialogFocus.dispose();
+        f.controller.dispose();
+      },
+    );
+  }
 
   for (final fail in [true, false]) {
     androidTest(
@@ -751,6 +922,14 @@ void main() {
           await back(tester);
           expect(tester.element(finder), same(element));
           expect(_scanButton(tester).onPressed, isNull);
+          final row = find.byKey(const ValueKey('library-row-movies'));
+          expect(
+            tester.widget<InkWell>(row).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+          await tester.pumpAndSettle();
+          expect(_scanButton(tester).onPressed, isNotNull);
         } else {
           expect(f.controller.contentGeneration, greaterThan(generation));
           expect(f.controller.stage, SetupStage.channelSetup);
@@ -858,10 +1037,11 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
-Future<({LineupController controller, _Store store, _Plex plex})>
-_setup() async {
+Future<({LineupController controller, _Store store, _Plex plex})> _setup({
+  bool empty = false,
+}) async {
   final store = _Store();
-  final plex = _Plex();
+  final plex = _Plex(empty: empty);
   final controller = LineupController(
     store: store,
     credentials: MemoryCredentialStore(accountToken: 'synthetic-token'),
@@ -917,11 +1097,12 @@ final _server = PlexServer(
 );
 
 class _Plex extends PlexClient {
-  _Plex()
+  _Plex({this.empty = false})
     : super(
         clientIdentifier: 'lineup-navigation-test-client',
         httpClient: testPlexHttpClient(),
       );
+  final bool empty;
   Completer<void>? pinGate;
   int pinCalls = 0;
   @override
@@ -953,9 +1134,15 @@ class _Plex extends PlexClient {
     String token,
   ) async => server.connections.single;
   @override
-  Future<List<PlexLibrary>> libraries(Uri server, String token) async => const [
-    PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-  ];
+  Future<List<PlexLibrary>> libraries(Uri server, String token) async => empty
+      ? const []
+      : const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ];
   @override
   Future<PlexLibraryScan> scanLibrary(
     Uri server,

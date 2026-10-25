@@ -174,6 +174,7 @@ class _LineupShellState extends State<LineupShell> {
           _destination = ShellDestination.guide;
         } else if (stage == SetupStage.channelSetup) {
           _suspendedSetupScope = null;
+          _restoreResumedSetupFocus();
         }
       }
       if (stage == SetupStage.channelSetup &&
@@ -232,6 +233,38 @@ class _LineupShellState extends State<LineupShell> {
     _licensesMenuFocus.dispose();
     _openLicensesFocus.dispose();
     super.dispose();
+  }
+
+  bool get _setupVisible =>
+      widget.controller.stage == SetupStage.channelSetup &&
+      !widget.controller.restoringSavedLineup &&
+      !_onboardingSupport;
+
+  void _restoreResumedSetupFocus() {
+    final key = _setupKey;
+    final state = key.currentState;
+    // A synchronous picker round trip that never hid Setup needs no recovery.
+    if (state == null ||
+        state.context.findAncestorWidgetOfExactType<Offstage>()?.offstage !=
+            true) {
+      return;
+    }
+    final scope = _scopeStamp;
+    final intent = _routeIntent;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_retainSetup ||
+          !_setupVisible ||
+          _appMenu != null ||
+          _licensesOpen ||
+          intent != _routeIntent ||
+          scope != _scopeStamp ||
+          key != _setupKey ||
+          !identical(key.currentState, state)) {
+        return;
+      }
+      state.restoreNavigationFocus();
+    });
   }
 
   void _retireSetup() {
@@ -1002,10 +1035,7 @@ class _LineupShellState extends State<LineupShell> {
   Widget build(BuildContext context) {
     Widget child = _buildShell(context);
     if (widget.androidTv) {
-      final visibleSetup =
-          widget.controller.stage == SetupStage.channelSetup &&
-          !widget.controller.restoringSavedLineup &&
-          !_onboardingSupport;
+      final visibleSetup = _setupVisible;
       child = Stack(
         fit: StackFit.expand,
         children: [

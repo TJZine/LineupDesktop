@@ -127,14 +127,25 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     _libraryFocusCallbackScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _libraryFocusCallbackScheduled = false;
-      if (_libraryEntryTargetIsEnabled && _libraryEntryFocusIsEligible) {
-        _libraryEntryFocus.requestFocus();
-      }
+      restoreNavigationFocus();
     });
   }
 
+  /// Restores the existing Libraries entry after a retained navigation return.
+  /// The shell calls this only once its subtree is visible again.
+  void restoreNavigationFocus() {
+    if (_libraryEntryTargetIsEnabled && _libraryEntryFocusIsEligible) {
+      _libraryEntryFocus.requestFocus();
+    }
+  }
+
   bool get _libraryEntryTargetIsEnabled {
-    if (!mounted || !_androidTv || _step != _SetupStep.libraries) return false;
+    if (!mounted ||
+        !_androidTv ||
+        _committingLibraries ||
+        _step != _SetupStep.libraries) {
+      return false;
+    }
     final controller = widget.controller;
     if (controller.libraryScanStatus == LibraryScanStatus.scanning) {
       return false;
