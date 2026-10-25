@@ -401,6 +401,8 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
     );
     return Focus(
+      // Route descendant Back keys without becoming a directional focus target.
+      canRequestFocus: false,
       onKeyEvent: _navigationKey,
       child: Scaffold(
         body: Material(

@@ -71,6 +71,186 @@ void main() {
     expect(FocusManager.instance.primaryFocus, same(outside));
   }
 
+  for (final textScale in [1.0, 1.15, 1.3]) {
+    for (final largeFocus in [false, true]) {
+      for (final railEnd in [false, true]) {
+        androidTest(
+          'Configure real remote ${railEnd ? 'rail end Down' : 'entry Right'} '
+          'keeps actionable focus text=$textScale large=$largeFocus',
+          (tester) async {
+            tester.view
+              ..physicalSize = const Size(1920, 1080)
+              ..devicePixelRatio = 2;
+            tester.platformDispatcher.textScaleFactorTestValue = textScale;
+            addTearDown(tester.view.reset);
+            addTearDown(
+              tester.platformDispatcher.clearTextScaleFactorTestValue,
+            );
+            final f = await _setup(libraryCount: 8);
+            addTearDown(f.controller.dispose);
+            await _pump(tester, f.controller, outside, largeFocus: largeFocus);
+            Future<void> key(LogicalKeyboardKey key) async {
+              await tester.sendKeyEvent(key);
+              await tester.pumpAndSettle();
+            }
+
+            // Actual Libraries entry and scan, without forcing focus or Tab.
+            for (
+              var i = 0;
+              i < 30 &&
+                  !identical(
+                    FocusManager.instance.primaryFocus?.context
+                        ?.findAncestorWidgetOfExactType<FilledButton>(),
+                    _scanButton(tester),
+                  );
+              i++
+            ) {
+              await key(LogicalKeyboardKey.arrowDown);
+            }
+            expect(
+              FocusManager.instance.primaryFocus?.context
+                  ?.findAncestorWidgetOfExactType<FilledButton>(),
+              same(_scanButton(tester)),
+            );
+            await key(LogicalKeyboardKey.select);
+            final saves = f.store.calls;
+            expect(find.text('Shape your lineup'), findsOneWidget);
+            void rail(int index) {
+              final label = find
+                  .descendant(
+                    of: find.byKey(ValueKey('configure-section-$index')),
+                    matching: find.byType(Text),
+                  )
+                  .first;
+              expect(Focus.of(tester.element(label)).hasPrimaryFocus, isTrue);
+            }
+
+            rail(0);
+            if (railEnd) {
+              await key(LogicalKeyboardKey.arrowDown);
+              rail(1);
+              await key(LogicalKeyboardKey.arrowDown);
+              rail(2);
+              await key(LogicalKeyboardKey.arrowDown);
+            } else {
+              await key(LogicalKeyboardKey.arrowRight);
+            }
+            final primary = FocusManager.instance.primaryFocus!;
+            final tile = primary.context!
+                .findAncestorWidgetOfExactType<CheckboxListTile>();
+            expect(
+              tile,
+              isNotNull,
+              reason: 'Primary focus: $primary; rect: ${primary.rect}',
+            );
+            final control = find.byWidget(tile!);
+            final ink = find
+                .ancestor(of: control, matching: find.byType(LineupFocusInk))
+                .first;
+            expect(tester.widget<LineupFocusInk>(ink).focused, isTrue);
+            final bounds = primary.rect;
+            expect(bounds.left, greaterThanOrEqualTo(0));
+            expect(bounds.top, greaterThanOrEqualTo(0));
+            expect(bounds.right, lessThanOrEqualTo(960));
+            expect(bounds.bottom, lessThanOrEqualTo(540));
+            final title = find
+                .descendant(of: control, matching: find.byType(Text))
+                .first;
+            final label = tester.widget<Text>(title).data!;
+            final before = tile.value!;
+            await key(LogicalKeyboardKey.select);
+            expect(
+              tester
+                  .widget<CheckboxListTile>(
+                    find.widgetWithText(CheckboxListTile, label),
+                  )
+                  .value,
+              !before,
+            );
+            // Restore the draft before walking to its enabled Review action.
+            await key(LogicalKeyboardKey.select);
+            expect(
+              tester
+                  .widget<CheckboxListTile>(
+                    find.widgetWithText(CheckboxListTile, label),
+                  )
+                  .value,
+              before,
+            );
+            // Repeat Down remains among actionable descendants, never the router.
+            await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+            for (var i = 0; i < 3; i++) {
+              await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowDown);
+              await tester.pumpAndSettle();
+            }
+            await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+            await tester.pumpAndSettle();
+            final listener = Focus.of(
+              tester.element(
+                find.descendant(
+                  of: find.byType(UpstreamChannelSetupView),
+                  matching: find.byType(Scaffold),
+                ),
+              ),
+            );
+            expect(FocusManager.instance.primaryFocus, isNot(same(listener)));
+            final review = find.byKey(const ValueKey('review-channels'));
+            final backToLibraries = find.widgetWithText(
+              TextButton,
+              'Back to libraries',
+            );
+            bool footerFocused() {
+              final context = FocusManager.instance.primaryFocus?.context;
+              final button =
+                  context?.findAncestorWidgetOfExactType<FilledButton>() ??
+                  context?.findAncestorWidgetOfExactType<TextButton>();
+              return identical(button, tester.widget(review)) ||
+                  identical(button, tester.widget(backToLibraries));
+            }
+
+            for (var i = 0; i < 30 && !footerFocused(); i++) {
+              await key(LogicalKeyboardKey.arrowDown);
+            }
+            expect(footerFocused(), isTrue);
+            if (!identical(
+              FocusManager.instance.primaryFocus?.context
+                  ?.findAncestorWidgetOfExactType<FilledButton>(),
+              tester.widget(review),
+            )) {
+              await key(LogicalKeyboardKey.arrowRight);
+            }
+            expect(
+              FocusManager.instance.primaryFocus?.context
+                  ?.findAncestorWidgetOfExactType<FilledButton>(),
+              same(tester.widget(review)),
+            );
+            await key(LogicalKeyboardKey.select);
+            expect(
+              find.byKey(const ValueKey('channel-setup-review-search')),
+              findsOneWidget,
+            );
+            // The non-focusable ancestor must still receive descendant Back.
+            await key(LogicalKeyboardKey.escape);
+            rail(0);
+            await key(LogicalKeyboardKey.escape);
+            expect(
+              find.byKey(const ValueKey('library-selection-list')),
+              findsOneWidget,
+            );
+            expect(
+              FocusManager.instance.primaryFocus?.debugLabel,
+              'Setup libraries entry',
+            );
+            expect(f.store.calls, saves);
+            expect(backgrounds, 0);
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox.shrink());
+          },
+        );
+      }
+    }
+  }
+
   for (final stage in [
     SetupStage.welcome,
     SetupStage.profiles,
@@ -1015,6 +1195,7 @@ Future<void> _pump(
   LineupController controller,
   FocusNode outside, {
   FixturePlayer? player,
+  bool largeFocus = false,
 }) async {
   await tester.pumpWidget(
     Focus(
@@ -1022,7 +1203,7 @@ Future<void> _pump(
       child: MaterialApp(
         theme: LineupTheme.forName(
           LineupThemeName.emberSteel,
-          largeFocusIndicators: false,
+          largeFocusIndicators: largeFocus,
           androidTv: true,
         ),
         builder: LineupCanvas.builder,
@@ -1039,9 +1220,10 @@ Future<void> _pump(
 
 Future<({LineupController controller, _Store store, _Plex plex})> _setup({
   bool empty = false,
+  int libraryCount = 1,
 }) async {
   final store = _Store();
-  final plex = _Plex(empty: empty);
+  final plex = _Plex(empty: empty, libraryCount: libraryCount);
   final controller = LineupController(
     store: store,
     credentials: MemoryCredentialStore(accountToken: 'synthetic-token'),
@@ -1097,12 +1279,13 @@ final _server = PlexServer(
 );
 
 class _Plex extends PlexClient {
-  _Plex({this.empty = false})
+  _Plex({this.empty = false, this.libraryCount = 1})
     : super(
         clientIdentifier: 'lineup-navigation-test-client',
         httpClient: testPlexHttpClient(),
       );
   final bool empty;
+  final int libraryCount;
   Completer<void>? pinGate;
   int pinCalls = 0;
   @override
@@ -1136,12 +1319,13 @@ class _Plex extends PlexClient {
   @override
   Future<List<PlexLibrary>> libraries(Uri server, String token) async => empty
       ? const []
-      : const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
+      : [
+          for (var i = 0; i < libraryCount; i++)
+            PlexLibrary(
+              id: i == 0 ? 'movies' : 'movies-$i',
+              title: i == 0 ? 'Movies' : 'Movies $i',
+              type: PlexLibraryType.movie,
+            ),
         ];
   @override
   Future<PlexLibraryScan> scanLibrary(
