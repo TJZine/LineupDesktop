@@ -120,10 +120,7 @@ mixin _StudioFilterControls<T extends StatefulWidget> on State<T> {
     mediaType: _currentMediaType,
     search: _currentSearch,
     includeWatched: _includeWatched,
-    onCancel: () {
-      _picker.close();
-      _restoreFilterFocus(key);
-    },
+    onCancel: _cancelPendingFilter,
     onApply: (values) {
       _picker.close();
       _filtersChanged(() {
@@ -145,6 +142,14 @@ mixin _StudioFilterControls<T extends StatefulWidget> on State<T> {
             ?.requestFocus();
       }
     });
+  }
+
+  bool _cancelPendingFilter() {
+    final key = _picker.activeKey;
+    if (key == null) return false;
+    _picker.close();
+    _restoreFilterFocus(key);
+    return true;
   }
 
   @override

@@ -16,6 +16,7 @@ class _StudioManualEditor extends StatefulWidget {
     required this.sourceExplanation,
     required this.onChanged,
     required this.onSelectionPendingChanged,
+    super.key,
   });
   final ManualRundown rundown;
   final _StudioInventory inventory;
@@ -144,6 +145,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   void _cancelSelection() {
     setState(_clearSelection);
     widget.onSelectionPendingChanged(false);
+  }
+
+  bool cancelPendingChoice() {
+    if (_showBrowseSelected) {
+      _setShowBrowseSelected(false);
+      return true;
+    }
+    if (_browseSelecting) {
+      _cancelSelection();
+      return true;
+    }
+    return false;
   }
 
   Widget _pendingHint() => Semantics(

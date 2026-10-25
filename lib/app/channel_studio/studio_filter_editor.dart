@@ -13,6 +13,7 @@ class _StudioFilterEditor extends StatefulWidget {
     required this.sourceExplanation,
     required this.programmingError,
     required this.onChanged,
+    super.key,
   });
   final ChannelStudioDraft draft;
   final _StudioInventory inventory;

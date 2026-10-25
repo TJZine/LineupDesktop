@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/app/channels_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -18,6 +19,195 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('Channels Back unwinds local layers before background fallback', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    const platform = MethodChannel('lineup/platform');
+    var backgrounded = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(platform, (call) async {
+          expect(call.method, 'moveTaskToBack');
+          backgrounded++;
+          return true;
+        });
+    try {
+      await tester.pumpWidget(
+        UiFixture(
+          androidTv: true,
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [_channel('back', 2, 'Back channel')],
+          ),
+        ).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      final channelsState = tester.state<ChannelsViewState>(
+        find.byType(ChannelsView),
+      );
+
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+      expect(channelsState.handleBack(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.text('Select'), findsOneWidget);
+      expect(backgrounded, 0);
+
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('channel-row-back')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1 selected'));
+      await tester.pumpAndSettle();
+      expect(find.text('Selected channels'), findsOneWidget);
+      expect(channelsState.handleBack(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.text('Selected channels'), findsNothing);
+      expect(find.byKey(const Key('channels-search')), findsOneWidget);
+      expect(backgrounded, 0);
+
+      expect(channelsState.handleBack(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.text('Select'), findsOneWidget);
+      expect(backgrounded, 0);
+
+      await tester.tap(find.text('Reorder channels'));
+      await tester.pumpAndSettle();
+      expect(channelsState.handleBack(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.text('Reorder channels'), findsOneWidget);
+      expect(backgrounded, 0);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(backgrounded, 1);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(platform, null);
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets(
+    'selected-only Back restores search focus for an empty filtered projection',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      const platform = MethodChannel('lineup/platform');
+      var backgrounded = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(platform, (call) async {
+            expect(call.method, 'moveTaskToBack');
+            backgrounded++;
+            return true;
+          });
+      final controller = _RecordingDirectoryController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel('first', 1, 'First'),
+            _channel('second', 2, 'Second'),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      try {
+        await tester.pumpWidget(
+          UiFixture(controller: controller, androidTv: true).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        final channelsState = tester.state<ChannelsViewState>(
+          find.byType(ChannelsView),
+        );
+
+        await tester.tap(find.text('Select'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('channel-row-first')));
+        await tester.pumpAndSettle();
+        final search = find.byKey(const Key('channels-search'));
+        await tester.enterText(search, 'no matching channel');
+        await tester.pumpAndSettle();
+        final selectedSummary = find.text('1 selected · 1 outside this view');
+        await tester.tap(selectedSummary);
+        await tester.pumpAndSettle();
+        expect(find.text('Selected channels'), findsOneWidget);
+        expect(find.byKey(const ValueKey('channel-row-first')), findsOneWidget);
+
+        final rowFocus = tester
+            .widgetList<Focus>(find.byType(Focus))
+            .map((widget) => widget.focusNode)
+            .whereType<FocusNode>()
+            .firstWhere((node) => node.debugLabel == 'Open First');
+        rowFocus.requestFocus();
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(rowFocus));
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.goBack,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selected channels'), findsNothing);
+        expect(
+          tester.widget<TextField>(search).controller!.text,
+          'no matching channel',
+        );
+        expect(find.text('1 selected · 1 outside this view'), findsOneWidget);
+        final searchFocus = tester
+            .widgetList<Focus>(find.byType(Focus))
+            .map((widget) => widget.focusNode)
+            .whereType<FocusNode>()
+            .firstWhere((node) => node.debugLabel == 'Search channels');
+        expect(FocusManager.instance.primaryFocus, same(searchFocus));
+        expect(searchFocus.context, isNotNull);
+        expect(searchFocus.parent, isNotNull);
+        expect(searchFocus.canRequestFocus, isTrue);
+        expect(backgrounded, 0);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'TV text field editor',
+        );
+        await tester.enterText(search, '');
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+        await tester.pump();
+        expect(find.text('Cancel'), findsOneWidget);
+        expect(backgrounded, 0);
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.goBack,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Cancel'), findsOneWidget);
+        expect(backgrounded, 0);
+
+        searchFocus.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pump();
+        expect(find.text('Cancel'), findsOneWidget);
+        expect(backgrounded, 0);
+
+        expect(channelsState.handleBack(), isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('Select'), findsOneWidget);
+        expect(backgrounded, 0);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(platform, null);
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
   for (final large in [false, true]) {
     testWidgets(
       'TV deletion dialog reads every selected name before cancel or confirm (large focus $large)',
@@ -779,6 +969,264 @@ void main() {
     await tester.tap(find.text('Cancel'));
   });
 
+  for (final (label, batch, deletedName, expectedFocus) in [
+    ('batch middle', true, 'Third', 'Open Fourth'),
+    ('single end', false, 'Fourth', 'Open Third'),
+  ]) {
+    testWidgets('$label deletion restores the ordered adjacent survivor', (
+      tester,
+    ) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = _RecordingDirectoryController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel('first', 1, 'First'),
+            _channel('second', 2, 'Second'),
+            _channel('third', 3, 'Third'),
+            _channel('fourth', 4, 'Fourth'),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+
+      if (batch) {
+        await tester.tap(find.text('Select'));
+        await tester.pumpAndSettle();
+        final row = find.text(deletedName);
+        await tester.scrollUntilVisible(
+          row,
+          300,
+          scrollable: find.byType(Scrollable).last,
+        );
+        await tester.tap(
+          find.byKey(ValueKey('channel-row-${deletedName.toLowerCase()}')),
+        );
+        await tester.pumpAndSettle();
+        final deleteFinder = find.widgetWithText(
+          OutlinedButton,
+          'Delete selected',
+        );
+        final deleteButton = tester.widget<OutlinedButton>(deleteFinder);
+        final deleteFocus = Focus.of(
+          tester.element(find.text('Delete selected')),
+        );
+        deleteFocus.requestFocus();
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(deleteFocus));
+        deleteButton.onPressed!();
+      } else {
+        final actions = find.byTooltip('Actions for $deletedName');
+        await tester.scrollUntilVisible(
+          actions,
+          300,
+          scrollable: find.byType(Scrollable).last,
+        );
+        await tester.tap(actions);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Delete…'));
+      }
+      await tester.pumpAndSettle();
+
+      final confirmFinder = find.widgetWithText(
+        FilledButton,
+        batch ? 'Delete 1 channel' : 'Delete channel',
+      );
+      final confirm = tester.widget<FilledButton>(confirmFinder);
+      final confirmFocus = Focus.of(
+        tester.element(
+          find.text(batch ? 'Delete 1 channel' : 'Delete channel'),
+        ),
+      );
+      confirmFocus.requestFocus();
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(confirmFocus));
+      confirm.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(controller.deleted.single.name, deletedName);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, expectedFocus);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('channel'), findsWidgets);
+    });
+  }
+
+  testWidgets(
+    'filtered middle deletion restores the nearest visible survivor',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = _RecordingDirectoryController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel('first', 1, 'First'),
+            _channel('second', 2, 'Second'),
+            _channel('third', 3, 'Third'),
+            _channel('fourth', 4, 'Fourth'),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+      final third = find.text('Third');
+      await tester.scrollUntilVisible(
+        third,
+        300,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.tap(find.byKey(const ValueKey('channel-row-third')));
+      await tester.pumpAndSettle();
+      final search = find.byKey(const Key('channels-search'));
+      await tester.enterText(search, 'Fourth');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1 selected · 1 outside this view'));
+      await tester.pumpAndSettle();
+      final deleteFinder = find.widgetWithText(
+        OutlinedButton,
+        'Delete selected',
+      );
+      final deleteButton = tester.widget<OutlinedButton>(deleteFinder);
+      final deleteFocus = Focus.of(
+        tester.element(find.text('Delete selected')),
+      );
+      deleteFocus.requestFocus();
+      await tester.pump();
+      deleteButton.onPressed!();
+      await tester.pumpAndSettle();
+      final confirmFinder = find.widgetWithText(
+        FilledButton,
+        'Delete 1 channel',
+      );
+      final confirm = tester.widget<FilledButton>(confirmFinder);
+      final confirmFocus = Focus.of(
+        tester.element(find.text('Delete 1 channel')),
+      );
+      confirmFocus.requestFocus();
+      await tester.pump();
+      confirm.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(controller.channels.map((channel) => channel.name), [
+        'First',
+        'Second',
+        'Fourth',
+      ]);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Open Fourth');
+      expect(tester.widget<TextField>(search).controller!.text, 'Fourth');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Fourth'), findsWidgets);
+    },
+  );
+
+  testWidgets('Back during delayed deletion preserves conflict scope', (
+    tester,
+  ) async {
+    final controller = _RecordingDirectoryController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel('first', 1, 'First'),
+          _channel('second', 2, 'Second'),
+        ],
+      ),
+    )..pendingDelete = Completer<void>();
+    controller.deleteFailure = const ChannelStateConflictException();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    final channelsState = tester.state<ChannelsViewState>(
+      find.byType(ChannelsView),
+    );
+    await tester.tap(find.text('Select'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('First'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete selected'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete 1 channel'));
+    await tester.pump();
+    expect(controller.deleteCalls, 1);
+    expect(controller.deleteRequests.single.map((channel) => channel.id), [
+      'first',
+    ]);
+
+    expect(channelsState.handleBack(), isTrue);
+    expect(controller.deleteCalls, 1);
+    expect(await channelsState.requestLeave(), isFalse);
+    expect(controller.deleteCalls, 1);
+    expect(controller.deleted.map((channel) => channel.id), ['first']);
+    expect(controller.channels, hasLength(2));
+
+    controller.pendingDelete!.complete();
+    await tester.pumpAndSettle();
+    expect(controller.deleteCalls, 1);
+    expect(find.textContaining('changed'), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(controller.deleted.map((channel) => channel.id), ['first']);
+  });
+
+  testWidgets('Back during delayed reorder preserves the conflict preview', (
+    tester,
+  ) async {
+    final controller = _RecordingDirectoryController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel('first', 1, 'First'),
+          _channel('second', 2, 'Second'),
+        ],
+      ),
+    )..pendingReorder = Completer<void>();
+    controller.reorderFailure = const ChannelStateConflictException();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    final channelsState = tester.state<ChannelsViewState>(
+      find.byType(ChannelsView),
+    );
+    await tester.tap(find.text('Reorder channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Move Second up'));
+    await tester.pump();
+    await tester.tap(find.text('Save order'));
+    await tester.pump();
+    expect(controller.reorderCalls, 1);
+    expect(controller.reorderRequests.single, ['second', 'first']);
+
+    expect(channelsState.handleBack(), isTrue);
+    expect(controller.reorderCalls, 1);
+    expect(await channelsState.requestLeave(), isFalse);
+    expect(controller.reorderCalls, 1);
+    expect(controller.orderedIds, ['second', 'first']);
+    expect(controller.channels.map((channel) => channel.number), [1, 2]);
+
+    controller.pendingReorder!.complete();
+    await tester.pumpAndSettle();
+    expect(controller.reorderCalls, 1);
+    expect(find.textContaining('lineup changed'), findsOneWidget);
+    expect(find.text('Reorder channels'), findsOneWidget);
+    expect(controller.orderedIds, ['second', 'first']);
+  });
+
   testWidgets('removed focused row restores focus to a surviving channel', (
     tester,
   ) async {
@@ -956,14 +1404,28 @@ class _RecordingDirectoryController extends FixtureController {
 
   Completer<void>? pendingDelete;
   Completer<void>? pendingReorder;
+  Object? deleteFailure;
+  Object? reorderFailure;
+  int deleteCalls = 0;
+  int reorderCalls = 0;
+  final deleteRequests = <List<Channel>>[];
+  final reorderRequests = <List<String>>[];
   List<Channel> deleted = const [];
   List<Channel> reorderBase = const [];
   List<String> orderedIds = const [];
 
   @override
   Future<void> deleteChannels({required List<Channel> expectedChannels}) async {
+    deleteCalls++;
+    deleteRequests.add(List.unmodifiable(expectedChannels));
     deleted = List.unmodifiable(expectedChannels);
     await pendingDelete?.future;
+    if (deleteFailure case final failure?) {
+      deleteFailure = null;
+      // The fixture injects arbitrary failures to exercise propagation.
+      // ignore: only_throw_errors
+      throw failure;
+    }
     final ids = expectedChannels.map((channel) => channel.id).toSet();
     fixtureActor.replaceChannels(
       channels.where((channel) => !ids.contains(channel.id)).toList(),
@@ -976,8 +1438,16 @@ class _RecordingDirectoryController extends FixtureController {
     required List<Channel> expectedLineup,
     required List<String> orderedChannelIds,
   }) async {
+    reorderCalls++;
+    reorderRequests.add(List.unmodifiable(orderedChannelIds));
     reorderBase = List.unmodifiable(expectedLineup);
     orderedIds = List.unmodifiable(orderedChannelIds);
     await pendingReorder?.future;
+    if (reorderFailure case final failure?) {
+      reorderFailure = null;
+      // The fixture injects arbitrary failures to exercise propagation.
+      // ignore: only_throw_errors
+      throw failure;
+    }
   }
 }
