@@ -783,6 +783,41 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<bool> tune(String channelId) => _tune(channelId);
 
+  /// Opens an already playing Guide channel without disturbing its session.
+  /// Eligibility is decided synchronously: no stale identity can survive an
+  /// await between checking ownership and returning control to the shell.
+  Future<bool> activateFromGuide(String channelId) {
+    final active = _active;
+    final load = _activeLoad;
+    final now = _clock();
+    if (active != null &&
+        load != null &&
+        _ownsLoad(load) &&
+        !_tuning &&
+        _error == null &&
+        !_scopeCleanupPending &&
+        _nativeStopOperation == null &&
+        _authorizationRecovery == null &&
+        _advancingGeneration == null &&
+        !load.pending &&
+        !load.replacing &&
+        !displayHoldActive &&
+        identical(load.request, active.request) &&
+        _contentGeneration == lineup.contentGeneration &&
+        active.channel?.id == channelId &&
+        watchingChannelId == channelId &&
+        (_sleepDeadline == null || now.isBefore(_sleepDeadline!))) {
+      final current = guide.currentProgram(channelId, now);
+      if (current != null &&
+          active.program.isCurrentAt(now) &&
+          current.id == active.program.id &&
+          current.scheduled.end == active.program.scheduled.end) {
+        return Future.value(true);
+      }
+    }
+    return _tune(channelId);
+  }
+
   Future<bool> _tune(
     String channelId, {
     GuideProgram? endedProgram,

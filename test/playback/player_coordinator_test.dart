@@ -27,6 +27,274 @@ import '../support/test_doubles.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  group('Guide activation ownership', () {
+    test(
+      'different channel and explicit tune still replace playback',
+      () async {
+        final f = _ContinuationFixture();
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        expect(await f.coordinator.activateFromGuide('channel-b'), isTrue);
+        expect(f.lineup.playbackRequests, 2);
+        expect(f.player.loads, hasLength(2));
+        expect(f.player.stops, 1);
+        await f.coordinator.tune('channel-b');
+        expect(f.lineup.playbackRequests, 3);
+        expect(f.player.loads, hasLength(3));
+        expect(f.player.stops, 2);
+      },
+    );
+
+    for (final state in [
+      PlayerState.idle,
+      PlayerState.loading,
+      PlayerState.ready,
+      PlayerState.stopped,
+      PlayerState.unsupported,
+      PlayerState.error,
+    ]) {
+      test('$state cannot reuse a selected channel', () async {
+        final f = _ContinuationFixture();
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        f.player.emitStatus(state, generation: f.player.loadGenerations.last);
+        await Future<void>.delayed(Duration.zero);
+        expect(await f.coordinator.activateFromGuide('channel-0'), isTrue);
+        expect(f.lineup.playbackRequests, 2);
+        expect(f.player.loads, hasLength(2));
+        expect(f.player.stops, 1);
+      });
+    }
+
+    test(
+      'selected channel without active playback acquires its first request',
+      () async {
+        final f = _ContinuationFixture();
+        addTearDown(f.close);
+        expect(f.lineup.currentChannelId, 'channel-0');
+        expect(await f.coordinator.activateFromGuide('channel-0'), isTrue);
+        expect(f.lineup.playbackRequests, 1);
+        expect(f.player.loads, hasLength(1));
+      },
+    );
+
+    test('explicit stop requires a fresh request', () async {
+      final f = _ContinuationFixture();
+      addTearDown(f.close);
+      await f.coordinator.tune('channel-0');
+      await f.coordinator.stop();
+      expect(await f.coordinator.activateFromGuide('channel-0'), isTrue);
+      expect(f.lineup.playbackRequests, 2);
+      expect(f.player.loads, hasLength(2));
+      expect(f.player.stops, 1);
+    });
+
+    for (final seconds in [-1, 120, 360]) {
+      test(
+        'clock offset $seconds catches up to the actual occurrence',
+        () async {
+          final f = _ContinuationFixture();
+          addTearDown(f.close);
+          await f.coordinator.tune('channel-0');
+          final initial = f.coordinator.currentProgram!;
+          f.now = f.now.add(Duration(seconds: seconds));
+          expect(await f.coordinator.activateFromGuide('channel-0'), isTrue);
+          expect(f.lineup.playbackRequests, 2);
+          expect(f.player.loads, hasLength(2));
+          expect(f.player.stops, 1);
+          expect(f.coordinator.currentProgram!.id, isNot(initial.id));
+          if (seconds == 360) {
+            expect(
+              f.coordinator.currentProgram!.scheduled.item.id,
+              initial.scheduled.item.id,
+            );
+          }
+        },
+      );
+    }
+
+    test('same occurrence id with a changed end cannot reuse', () async {
+      final f = _ContinuationFixture();
+      addTearDown(f.close);
+      await f.coordinator.tune('channel-0');
+      final initial = f.coordinator.currentProgram!;
+      f.guide.endAdjustment = const Duration(seconds: 1);
+      expect(await f.coordinator.activateFromGuide('channel-0'), isTrue);
+      expect(f.lineup.playbackRequests, 2);
+      expect(f.player.loads, hasLength(2));
+      expect(f.coordinator.currentProgram!.id, initial.id);
+      expect(
+        f.coordinator.currentProgram!.scheduled.end,
+        isNot(initial.scheduled.end),
+      );
+    });
+
+    for (final change in ['content', 'schedule']) {
+      test('$change retirement waits for cleanup and acquires anew', () async {
+        final native = _BlockingStopEventPlayer();
+        final f = _ContinuationFixture(player: native);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        if (change == 'content') {
+          f.lineup.changeContentScope();
+        } else {
+          f.lineup.replaceChannels([
+            for (final channel in f.lineup.channels)
+              Channel(
+                id: channel.id,
+                number: channel.number,
+                name: channel.name,
+                source: channel.source,
+                playbackMode: channel.playbackMode,
+                anchor: channel.anchor.add(const Duration(seconds: 1)),
+                shuffleSeed: channel.shuffleSeed,
+              ),
+          ]);
+        }
+        await native.stopStarted.future;
+        final activation = f.coordinator.activateFromGuide('channel-0');
+        await Future<void>.delayed(Duration.zero);
+        expect(f.lineup.playbackRequests, 1);
+        expect(f.player.loads, hasLength(1));
+        native.releaseStop.complete();
+        expect(await activation, isTrue);
+        expect(f.lineup.playbackRequests, 2);
+        expect(f.player.loads, hasLength(2));
+      });
+    }
+
+    test('background and disposed admission stay inert', () async {
+      final f = _ContinuationFixture(androidTv: true);
+      addTearDown(f.close);
+      await f.coordinator.tune('channel-0');
+      await f.coordinator.setApplicationForeground(false);
+      expect(await f.coordinator.activateFromGuide('channel-0'), isFalse);
+      expect(f.lineup.playbackRequests, 1);
+      expect(f.player.loads, hasLength(1));
+      expect(f.player.stops, 1);
+      f.coordinator.dispose();
+      f.disposed = true;
+      expect(await f.coordinator.activateFromGuide('channel-0'), isFalse);
+      expect(f.lineup.playbackRequests, 1);
+      expect(f.player.loads, hasLength(1));
+    });
+
+    test(
+      'pending explicit stop finishes before the replacement load',
+      () async {
+        final native = _BlockingStopEventPlayer();
+        final f = _ContinuationFixture(player: native);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        final stop = f.coordinator.stop();
+        await native.stopStarted.future;
+        final activation = f.coordinator.activateFromGuide('channel-0');
+        await Future<void>.delayed(Duration.zero);
+        expect(f.lineup.playbackRequests, 1);
+        native.releaseStop.complete();
+        await stop;
+        expect(await activation, isTrue);
+        expect(f.lineup.playbackRequests, 2);
+        expect(f.player.loads, hasLength(2));
+      },
+    );
+
+    test('in-flight initial load is superseded through normal tune', () async {
+      final native = _BlockingEventPlayer();
+      final f = _ContinuationFixture(player: native);
+      addTearDown(f.close);
+      final initial = f.coordinator.tune('channel-0');
+      await native.firstLoadStarted.future;
+      final activation = f.coordinator.activateFromGuide('channel-0');
+      native.releaseFirstLoad.complete();
+      expect(await initial, isFalse);
+      expect(await activation, isTrue);
+      expect(f.lineup.playbackRequests, 2);
+      expect(f.player.loads, hasLength(2));
+      expect(f.player.stops, 1);
+    });
+
+    test(
+      'in-flight replacement is superseded rather than reusing old media',
+      () async {
+        final native = _BlockingSecondLoadPlayer();
+        final f = _ContinuationFixture(player: native);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        final replacement = f.coordinator.tune('channel-b');
+        await native.secondLoadStarted.future;
+        final activation = f.coordinator.activateFromGuide('channel-0');
+        native.releaseSecondLoad.complete();
+        expect(await replacement, isFalse);
+        expect(await activation, isTrue);
+        expect(f.lineup.playbackRequests, 3);
+        expect(f.player.loads, hasLength(3));
+        expect(f.coordinator.currentChannel!.id, 'channel-0');
+      },
+    );
+
+    test('authorization recovery cannot reuse the rejected session', () async {
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        blockAuthorizationRecovery: true,
+      );
+      final f = _ContinuationFixture(lineupController: lineup);
+      addTearDown(f.close);
+      await f.coordinator.tune('channel-0');
+      f.player.emitError(
+        generation: f.player.loadGenerations.last,
+        recoverable: true,
+        failureCode: 'http_error',
+        httpStatus: 401,
+      );
+      await lineup.recoveryStarted.future;
+      final activation = f.coordinator.activateFromGuide('channel-0');
+      lineup.finishRecovery.complete();
+      expect(await activation, isTrue);
+      expect(lineup.playbackRequests, 2);
+      expect(f.player.loads, hasLength(2));
+      expect(f.player.stops, 1);
+    });
+
+    test(
+      'pending multipart transition is replaced by current scheduled playback',
+      () async {
+        final native = _BlockingSecondLoadPlayer();
+        final f = _ContinuationFixture(
+          player: native,
+          parts: _parts(
+            first: const Duration(seconds: 60),
+            second: const Duration(seconds: 60),
+          ),
+        );
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        f.endNaturally();
+        await native.secondLoadStarted.future;
+        final activation = f.coordinator.activateFromGuide('channel-0');
+        native.releaseSecondLoad.complete();
+        expect(await activation, isTrue);
+        expect(f.lineup.playbackRequests, 2);
+        expect(f.player.loads, hasLength(3));
+        expect(f.player.stops, 1);
+      },
+    );
+
+    test('expired sleep takes priority over same live occurrence', () async {
+      final f = _ContinuationFixture();
+      addTearDown(f.close);
+      await f.coordinator.tune('channel-0');
+      f.coordinator.setSleepTimer(const Duration(seconds: 10));
+      f.now = f.now.add(const Duration(seconds: 10));
+      expect(await f.coordinator.activateFromGuide('channel-0'), isFalse);
+      expect(f.lineup.playbackRequests, 1);
+      expect(f.player.loads, hasLength(1));
+      expect(f.player.stops, 1);
+      expect(f.coordinator.status.state, PlayerState.stopped);
+      expect(f.coordinator.sleepDeadline, isNull);
+    });
+  });
+
   group('Android background lifecycle', () {
     test(
       'inactive is inert; background stops once and resumes current schedule',
@@ -8303,6 +8571,7 @@ class _ContinuationGuide extends GuideController {
   _ContinuationGuide({required super.lineup, required super.clock})
     : super(loadSchedule: (channel) async => _schedule(channel));
   String? resolution;
+  Duration? endAdjustment;
 
   @override
   Future<GuideProgram?> ensureCurrentProgram(String channelId) async {
@@ -8316,7 +8585,20 @@ class _ContinuationGuide extends GuideController {
     if (at != null && resolution == 'same successor') {
       return super.currentProgram(channelId);
     }
-    return super.currentProgram(channelId, at);
+    final program = super.currentProgram(channelId, at);
+    if (program == null || endAdjustment == null) return program;
+    final scheduled = program.scheduled;
+    return GuideProgram(
+      channelId: channelId,
+      scheduled: ScheduledProgram(
+        item: scheduled.item,
+        start: scheduled.start,
+        end: scheduled.end.add(endAdjustment!),
+        elapsed: scheduled.elapsed,
+        index: scheduled.index,
+        loop: scheduled.loop,
+      ),
+    );
   }
 }
 

@@ -332,7 +332,9 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Future<void> _tuneFromGuide(String channelId) async {
-    final tuning = _player.tune(channelId);
+    final tuning = widget.androidTv
+        ? _player.activateFromGuide(channelId)
+        : _player.tune(channelId);
     await _select(ShellDestination.player);
     await tuning;
   }
