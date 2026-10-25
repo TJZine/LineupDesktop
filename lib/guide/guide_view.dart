@@ -20,6 +20,7 @@ import 'guide_playback_placeholder.dart';
 
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
+const _guidePictureAspectRatio = 16 / 9;
 
 class GuideLayoutPolicy {
   const GuideLayoutPolicy._({
@@ -2070,11 +2071,18 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
         if (picture != null) ...[
           SizedBox(
             width: widget.pictureWidth,
-            child: Align(
-              child: AspectRatio(
-                key: const Key('guide-picture-in-picture'),
-                aspectRatio: 16 / 9,
-                child: pictureContent,
+            child: CustomPaint(
+              painter: LineupTheme.of(context).androidTv
+                  ? _PictureSurroundPainter(
+                      color: LineupTheme.of(context).deepBackground,
+                    )
+                  : null,
+              child: Align(
+                child: AspectRatio(
+                  key: const Key('guide-picture-in-picture'),
+                  aspectRatio: _guidePictureAspectRatio,
+                  child: pictureContent,
+                ),
               ),
             ),
           ),
@@ -2107,6 +2115,33 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
       ],
     );
   }
+}
+
+/// Paint the unused TV picture column without closing the native video hole.
+/// The centered contain fit is the same geometry as Align + AspectRatio above.
+class _PictureSurroundPainter extends CustomPainter {
+  const _PictureSurroundPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pictureSize = applyBoxFit(
+      BoxFit.contain,
+      const Size(_guidePictureAspectRatio, 1),
+      size,
+    ).destination;
+    final aperture = Alignment.center.inscribe(pictureSize, Offset.zero & size);
+    final surround = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Offset.zero & size)
+      ..addRect(aperture);
+    canvas.drawPath(surround, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_PictureSurroundPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _CornerMaskPainter extends CustomPainter {
