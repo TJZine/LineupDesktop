@@ -423,6 +423,7 @@ class ClearLogoImage extends StatefulWidget {
     this.maximumSize,
     this.minimumVisibleSize,
     this.maximumVisibleHeight,
+    this.validateVisibleAlpha = false,
     super.key,
   });
 
@@ -438,6 +439,11 @@ class ClearLogoImage extends StatefulWidget {
   /// Existing consumers retain their original contain scale when omitted.
   final double? maximumVisibleHeight;
 
+  /// Validates that the decoded logo has visible alpha without changing its
+  /// contain geometry. Cropping and minimum-size checks remain opt-in through
+  /// their existing parameters.
+  final bool validateVisibleAlpha;
+
   @override
   State<ClearLogoImage> createState() => _ClearLogoImageState();
 }
@@ -451,6 +457,8 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.bytes != widget.bytes) {
       _intrinsicSize = null;
+      _visibleFraction = null;
+    } else if (oldWidget.validateVisibleAlpha != widget.validateVisibleAlpha) {
       _visibleFraction = null;
     }
   }
@@ -493,7 +501,9 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
             ),
           );
           final minimum = widget.minimumVisibleSize;
-          if (minimum == null && widget.maximumVisibleHeight == null) {
+          if (!widget.validateVisibleAlpha &&
+              minimum == null &&
+              widget.maximumVisibleHeight == null) {
             return image();
           }
           return FutureBuilder<Rect?>(
@@ -503,6 +513,11 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
               if (visible.connectionState != ConnectionState.done ||
                   fraction == null) {
                 return widget.fallback;
+              }
+              if (widget.validateVisibleAlpha &&
+                  minimum == null &&
+                  widget.maximumVisibleHeight == null) {
+                return image();
               }
               var fitted = applyBoxFit(
                 BoxFit.contain,

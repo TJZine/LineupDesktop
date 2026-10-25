@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
@@ -23,6 +24,7 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 
 import '../support/ui_fixture.dart' show FixturePlayer;
+import '../support/golden_test_support.dart' show loadPinnedTestFonts;
 import '../support/test_doubles.dart';
 
 import 'package:lineup_desktop/plex/plex_client.dart';
@@ -40,6 +42,7 @@ final _wideLogoPng = base64Decode(
 final _narrowLogoPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAABQAAASwCAAAAADeIDU6AAAAWElEQVR4nO3IMQEAAAwCIPuX1gILsANO0kOklFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSinl1xx/t2e0Ivf9MAAAAABJRU5ErkJggg==',
 );
+const _artI1LogoColor = Color(0xFF19E6D4);
 
 void main() {
   for (final platform in [
@@ -2689,6 +2692,12 @@ void main() {
     expect(find.byKey(const Key('guide-info-backdrop')), findsOneWidget);
     expect(find.byKey(const Key('guide-clear-logo')), findsOneWidget);
     expect(find.bySemanticsLabel('Signal House logo'), findsOneWidget);
+    expect(
+      tester
+          .widget<ClearLogoImage>(find.byType(ClearLogoImage))
+          .validateVisibleAlpha,
+      isFalse,
+    );
     expect(lineup.artworkLoads, 3);
     final background = tester.widget<AnimatedContainer>(
       find.byKey(const Key('guide-info-dynamic-background')),
@@ -2697,6 +2706,161 @@ void main() {
       (background.decoration! as BoxDecoration).gradient,
       isA<LinearGradient>(),
     );
+  });
+
+  for (final (surface, androidTv, padded) in [
+    ('desktop', false, false),
+    ('desktop', false, true),
+    ('tv', true, false),
+    ('tv', true, true),
+  ]) {
+    testWidgets(
+      'ART-I1 $surface ${padded ? 'padded' : 'regular'} Guide raster evidence',
+      (tester) async {
+        await tester.runAsync(loadPinnedTestFonts);
+        final now = DateTime(2026, 8, 13, 12, 47);
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = const Size(1600, 900);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final logo = await _artI1LogoPng(tester, padded: padded);
+        final lineup = _Lineup(
+          1,
+          artworkBytes: logo,
+          anchor: now.subtract(const Duration(hours: 1)),
+        );
+        addTearDown(lineup.dispose);
+        lineup.fixtureActor.replaceChannels([
+          Channel(
+            id: 'channel',
+            number: 7,
+            name: 'Drama Seven',
+            source: ManualSource([
+              ChannelItem(
+                id: 'episode',
+                title: 'The Arrival',
+                showTitle: 'Signal House',
+                duration: const Duration(hours: 24),
+                clearLogo: Uri.parse('/clear-logo'),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: now.subtract(const Duration(hours: 1)),
+            shuffleSeed: 7,
+          ),
+        ]);
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        addTearDown(guide.dispose);
+        final focus = FocusNode();
+        addTearDown(focus.dispose);
+        const boundaryKey = Key('art-i1-guide-boundary');
+
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: boundaryKey,
+            child: MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: androidTv,
+              ),
+              builder: LineupCanvas.builder,
+              home: GuideView(
+                controller: guide,
+                focusNode: focus,
+                pictureInPicture: const ColoredBox(color: Colors.black),
+                onClose: (_, _) {},
+                onTune: (_) async {},
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        await tester.pump();
+        focus.requestFocus();
+        await tester.pump();
+        final capture = await _waitForArtI1GuideRaster(tester, boundaryKey);
+        expect(
+          find.byKey(const Key('guide-clear-logo-fallback')),
+          findsNothing,
+        );
+        expect(capture.visibleBounds, isNotNull);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('TV Guide keeps the title for a decoded transparent clear logo', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1600, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final transparentLogo = await _transparentLogoPng(tester);
+    final lineup = _Lineup(1, artworkBytes: transparentLogo);
+    addTearDown(lineup.dispose);
+    lineup.fixtureActor.replaceChannels([
+      Channel(
+        id: 'channel',
+        number: 7,
+        name: 'Drama Seven',
+        source: ManualSource([
+          ChannelItem(
+            id: 'episode',
+            title: 'The Arrival',
+            showTitle: 'Signal House',
+            duration: const Duration(hours: 24),
+            poster: Uri.parse('/poster'),
+            clearLogo: Uri.parse('/clear-logo'),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        shuffleSeed: 7,
+      ),
+    ]);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: (_, _) {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => precacheImage(
+        MemoryImage(transparentLogo),
+        tester.element(find.byType(GuideView)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('guide-clear-logo')), findsNothing);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('guide-clear-logo-fallback')))
+          .data,
+      'Signal House',
+    );
+    expect(tester.takeException(), isNull);
   });
 
   for (final (description, bytes) in [
@@ -4442,6 +4606,112 @@ class _Lineup extends LineupController {
     artworkLoads++;
     return artworkLoader == null ? artworkBytes : await artworkLoader!(path);
   }
+}
+
+Future<Uint8List> _transparentLogoPng(WidgetTester tester) async {
+  final bytes = await tester.runAsync(() async {
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(600, 120);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    return data!.buffer.asUint8List();
+  });
+  return bytes!;
+}
+
+Future<Uint8List> _artI1LogoPng(
+  WidgetTester tester, {
+  required bool padded,
+}) async {
+  final bytes = await tester.runAsync(() async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      padded
+          ? const Rect.fromLTWH(140, 20, 320, 80)
+          : const Rect.fromLTWH(0, 0, 600, 120),
+      Paint()..color = _artI1LogoColor,
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(600, 120);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    return data!.buffer.asUint8List();
+  });
+  return bytes!;
+}
+
+class _ArtI1GuideRaster {
+  const _ArtI1GuideRaster({required this.visibleBounds});
+
+  final Rect visibleBounds;
+}
+
+Future<_ArtI1GuideRaster> _waitForArtI1GuideRaster(
+  WidgetTester tester,
+  Key boundaryKey,
+) async {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 40)),
+    );
+    await tester.pump();
+    if (find.byKey(const Key('guide-clear-logo')).evaluate().isEmpty) continue;
+    final capture = await tester.runAsync(() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(boundaryKey),
+      );
+      final image = await boundary.toImage();
+      try {
+        final rgba = (await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
+        final bounds = _artI1VisibleBounds(rgba, image.width, image.height);
+        if (bounds == null) return null;
+        return _ArtI1GuideRaster(visibleBounds: bounds);
+      } finally {
+        image.dispose();
+      }
+    });
+    if (capture != null) return capture;
+  }
+  throw TestFailure('Timed out waiting for the displayed ART-I1 logo frame');
+}
+
+Rect? _artI1VisibleBounds(ByteData rgba, int width, int height) {
+  var left = width;
+  var right = -1;
+  var top = height;
+  var bottom = -1;
+  for (var y = 0; y < height; y++) {
+    for (var x = 0; x < width; x++) {
+      final offset = (y * width + x) * 4;
+      final red = rgba.getUint8(offset);
+      final green = rgba.getUint8(offset + 1);
+      final blue = rgba.getUint8(offset + 2);
+      final alpha = rgba.getUint8(offset + 3);
+      if (alpha >= 240 &&
+          (red - 25).abs() < 24 &&
+          (green - 230).abs() < 24 &&
+          (blue - 212).abs() < 24) {
+        left = math.min(left, x);
+        right = math.max(right, x);
+        top = math.min(top, y);
+        bottom = math.max(bottom, y);
+      }
+    }
+  }
+  if (right < left || bottom < top) return null;
+  return Rect.fromLTRB(
+    left.toDouble(),
+    top.toDouble(),
+    (right + 1).toDouble(),
+    (bottom + 1).toDouble(),
+  );
 }
 
 class _CountingGuideController extends GuideController {

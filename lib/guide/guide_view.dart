@@ -3575,6 +3575,7 @@ class _ProgramDetails extends StatelessWidget {
                     imageKey: const Key('guide-clear-logo'),
                     fallback: title,
                     semanticLabel: '${item.showTitle ?? item.title} logo',
+                    validateVisibleAlpha: roles.androidTv,
                   ),
                 ),
               )
