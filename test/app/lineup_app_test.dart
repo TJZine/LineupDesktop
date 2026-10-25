@@ -71,10 +71,16 @@ void main() {
         );
         await tester.pumpAndSettle();
         final menu = drawn(find.byKey(const Key('immersive-app-menu')));
-        expect(menu.left, greaterThanOrEqualTo(48));
-        expect(menu.top, greaterThanOrEqualTo(27));
-        expect(menu.right, lessThanOrEqualTo(912));
-        expect(menu.bottom, lessThanOrEqualTo(513));
+        expect(menu.left, greaterThanOrEqualTo(8));
+        expect(menu.top, greaterThanOrEqualTo(8));
+        expect(menu.right, lessThanOrEqualTo(952));
+        if (route == 'Player') {
+          // Player keeps its desktop 96cu gutter; shell menus use 16cu.
+          expect(menu.right, closeTo(912, .001));
+        } else {
+          expect(menu.left, closeTo(8, .001));
+        }
+        expect(menu.bottom, lessThanOrEqualTo(532));
         if (route == 'Settings') {
           await tester.sendKeyEvent(LogicalKeyboardKey.escape);
           await tester.pumpAndSettle();

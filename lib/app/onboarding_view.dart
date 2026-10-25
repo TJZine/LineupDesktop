@@ -1791,9 +1791,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
   @override
   Widget build(BuildContext context) {
     final androidTv = LineupTheme.of(context).androidTv;
-    // Desktop geometry needs 9cu of additional headroom for the complete
-    // two-line-name task and Large Focus at 1.3x inside TV's safe area.
-    final gap = androidTv ? 13.0 : 16.0;
+    const gap = 16.0;
     return PopScope(
       canPop: AndroidBackScope.claims(context),
       onPopInvokedWithResult: (_, _) {

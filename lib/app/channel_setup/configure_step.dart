@@ -176,6 +176,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                 child: LineupNavigationRow(
                   selected: widget.section == index,
                   key: ValueKey('configure-section-$index'),
+                  autofocus: LineupTheme.of(context).androidTv && index == 0,
                   onPressed: () => widget.onSectionChanged(index),
                   child: Text(labels[index]),
                 ),

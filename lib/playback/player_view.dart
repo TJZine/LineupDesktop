@@ -1435,7 +1435,6 @@ class _Osd extends StatelessWidget {
                               maxHeight: math.max(
                                 80,
                                 size.height -
-                                    (roles.androidTv ? safe.vertical : 0) -
                                     (wrapActions ? 280 : 190) -
                                     (dvrControlsEnabled ? 40 : 0) +
                                     // The additive compact More info action must

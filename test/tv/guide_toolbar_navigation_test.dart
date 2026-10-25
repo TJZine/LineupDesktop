@@ -229,7 +229,7 @@ void main() {
 
   for (final window in const [Size(960, 540), Size(1920, 1080)]) {
     testWidgets(
-      'TV Guide receives safe constraints and displays five full rows: $window',
+      'TV Guide fills the screen and displays five full rows: $window',
       (tester) async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         tester.view
@@ -242,11 +242,8 @@ void main() {
           await _settle(tester);
           final guide = find.byKey(const Key('classic-guide'));
           final rect = _drawnRect(tester, guide);
-          expect(rect.left, closeTo(window.width * .05, .001));
-          expect(rect.top, closeTo(window.height * .05, .001));
-          expect(rect.right, closeTo(window.width * .95, .001));
-          expect(rect.bottom, closeTo(window.height * .95, .001));
-          expect(tester.getSize(guide), const Size(1728, 972));
+          expect(rect, Offset.zero & window);
+          expect(tester.getSize(guide), const Size(1920, 1080));
           expect(MediaQuery.paddingOf(tester.element(guide)), EdgeInsets.zero);
           for (var i = 0; i < 5; i++) {
             final channel = find.bySemanticsLabel(

@@ -147,10 +147,10 @@ void main() {
             for (final control in controls) {
               final bounds = drawn(control)
                   .inflate(2); // Includes the 3cu large-focus outer stroke.
-              expect(bounds.left, greaterThanOrEqualTo(48));
-              expect(bounds.top, greaterThanOrEqualTo(27));
-              expect(bounds.right, lessThanOrEqualTo(912));
-              expect(bounds.bottom, lessThanOrEqualTo(513));
+              expect(bounds.left, greaterThanOrEqualTo(0));
+              expect(bounds.top, greaterThanOrEqualTo(0));
+              expect(bounds.right, lessThanOrEqualTo(960));
+              expect(bounds.bottom, lessThanOrEqualTo(540));
             }
             for (final element in find.byType(Scrollable).evaluate()) {
               expect(
@@ -354,7 +354,7 @@ void main() {
     await tester.pumpAndSettle();
     final libraryFooter = find.byKey(const ValueKey('setup-switch-server'));
     final footerBounds = tester.getRect(libraryFooter);
-    expect(footerBounds.bottom, lessThanOrEqualTo(513));
+    expect(footerBounds.bottom, inInclusiveRange(540 - 48 * .5, 540 - 24 * .5));
     await _keys(tester, [_down]);
     _focusedIn(tester, find.widgetWithText(TextButton, 'Select all'));
     await _keys(tester, [_select]);

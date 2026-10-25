@@ -20,6 +20,8 @@ void main() {
       late MediaQueryData outer;
       late MediaQueryData consumed;
       late MediaQueryData nested;
+      late EdgeInsets contentInsets;
+      late EdgeInsets fullInsets;
       var taps = 0;
       await tester.pumpWidget(
         MaterialApp(
@@ -40,6 +42,10 @@ void main() {
           home: Builder(
             builder: (context) {
               outer = MediaQuery.of(context);
+              contentInsets = LineupCanvas.contentInsets(
+                context,
+                minimum: const EdgeInsets.all(48),
+              );
               return SafeArea(
                 child: Builder(
                   builder: (context) {
@@ -48,6 +54,7 @@ void main() {
                       child: Builder(
                         builder: (context) {
                           nested = MediaQuery.of(context);
+                          fullInsets = LineupCanvas.fullSafeInsetsOf(context);
                           return Stack(
                             children: [
                               Positioned(
@@ -76,11 +83,7 @@ void main() {
       expect(scale, closeTo(window.height / 1080, 1e-12));
       expect(outer.size, window / scale);
       expect(outer.size.height, 1080);
-      expect(
-        outer.padding,
-        EdgeInsets.fromLTRB(100, window.height * .05, window.width * .05, 80) /
-            scale,
-      );
+      expect(outer.padding, const EdgeInsets.fromLTRB(100, 4, 8, 80) / scale);
       expect(
         outer.viewPadding,
         const EdgeInsets.fromLTRB(100, 4, 8, 80) / scale,
@@ -88,11 +91,18 @@ void main() {
       expect(outer.viewInsets, const EdgeInsets.only(bottom: 150) / scale);
       expect(outer.systemGestureInsets, const EdgeInsets.all(6) / scale);
       expect(outer.textScaler.scale(18), closeTo(23.4, .001));
+      expect(
+        contentInsets,
+        EdgeInsets.fromLTRB(100 / scale, 48, 48, 80 / scale),
+      );
+      expect(fullInsets, outer.padding);
       expect(consumed.padding, EdgeInsets.zero);
       expect(nested.padding, EdgeInsets.zero);
+      expect(nested.viewInsets, outer.viewInsets);
+      expect(nested.systemGestureInsets, outer.systemGestureInsets);
       expect(
         tester.getTopLeft(find.byKey(const Key('safe-target'))),
-        Offset(100, window.height * .05),
+        const Offset(100, 4),
       );
       await tester.tap(find.byKey(const Key('safe-target')));
       expect(taps, 1);

@@ -34,7 +34,7 @@ class LineupCanvas extends StatelessWidget {
         math.max(a.bottom, b.bottom),
       );
 
-  /// Original canvas safe margin for background paint that extends beyond a
+  /// Real platform padding for background paint that extends beyond a
   /// SafeArea. Content still uses MediaQuery.padding, which SafeArea consumes.
   static EdgeInsets fullSafeInsetsOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_CanvasSafeInsets>()?.insets ??
@@ -53,15 +53,7 @@ class LineupCanvas extends StatelessWidget {
         if (window.isEmpty || !window.isFinite) return const SizedBox.shrink();
         final scale = scaleFor(window, androidTv: androidTv);
         final canvas = window / scale;
-        final padding = androidTv
-            ? _maximumInsets(
-                media.padding,
-                EdgeInsets.symmetric(
-                  horizontal: window.width * .05,
-                  vertical: window.height * .05,
-                ),
-              )
-            : media.padding;
+        final padding = media.padding;
         return ClipRect(
           child: OverflowBox(
             alignment: Alignment.topLeft,
