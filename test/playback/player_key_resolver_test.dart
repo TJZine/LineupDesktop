@@ -11,6 +11,7 @@ typedef _Case = ({
   bool unsupported,
   bool initialPress,
   bool hasProgram,
+  bool tvOsdAtBottom,
   PlayerAction? action,
   String? digit,
 });
@@ -25,6 +26,7 @@ void main() {
     bool unsupported = false,
     bool initialPress = true,
     bool hasProgram = true,
+    bool tvOsdAtBottom = false,
     String? digit,
   }) {
     for (final key in keys) {
@@ -35,6 +37,7 @@ void main() {
         unsupported: unsupported,
         initialPress: initialPress,
         hasProgram: hasProgram,
+        tvOsdAtBottom: tvOsdAtBottom,
         action: action,
         digit: digit,
       ));
@@ -73,6 +76,7 @@ void main() {
     PlayerAction.miniGuideDown,
     PlayerAction.tuneMiniGuide,
     PlayerAction.showOsd,
+    PlayerAction.openMenu,
     PlayerAction.showSleepTimer,
   };
 
@@ -455,6 +459,7 @@ void main() {
         unsupported: c.unsupported,
         initialPress: false,
         hasProgram: c.hasProgram,
+        tvOsdAtBottom: c.tvOsdAtBottom,
         action: c.action,
         digit: c.digit,
       ));
@@ -489,9 +494,21 @@ void main() {
               unsupported: c.unsupported,
               initialPress: c.initialPress,
               hasProgram: c.hasProgram,
+              tvOsdAtBottom: c.tvOsdAtBottom,
             );
             final expectedAction = !tv && tvAliases.contains(c.key)
                 ? PlayerAction.ignored
+                : tv && c.key == LogicalKeyboardKey.contextMenu
+                ? PlayerAction.openMenu
+                : tv &&
+                      c.key == LogicalKeyboardKey.arrowDown &&
+                      (c.overlay == PlayerOverlay.none ||
+                          c.overlay == PlayerOverlay.osd)
+                ? c.overlay == PlayerOverlay.none
+                      ? PlayerAction.showOsd
+                      : c.tvOsdAtBottom && c.hasProgram
+                      ? PlayerAction.showNowPlaying
+                      : PlayerAction.consumed
                 : c.action;
             if (c.digit != null) {
               expect(
@@ -516,7 +533,11 @@ void main() {
           }
           expect(
             actions,
-            containsAll(PlayerAction.values),
+            containsAll(
+              PlayerAction.values.where(
+                (action) => tv || action != PlayerAction.openMenu,
+              ),
+            ),
             reason: 'Every executor action has behavioral table evidence.',
           );
         } finally {
@@ -525,6 +546,77 @@ void main() {
       });
     }
   }
+
+  test('M1 TV Menu and compact details intents are state-specific', () {
+    PlayerCommand resolve(
+      LogicalKeyboardKey key, {
+      required PlayerOverlay overlay,
+      bool hasProgram = true,
+      bool tvOsdAtBottom = false,
+      bool initialPress = true,
+    }) => resolvePlayerKey(
+      key,
+      overlay: overlay,
+      androidTv: true,
+      dvr: true,
+      unsupported: false,
+      initialPress: initialPress,
+      hasProgram: hasProgram,
+      tvOsdAtBottom: tvOsdAtBottom,
+    );
+
+    for (final overlay in [
+      PlayerOverlay.none,
+      PlayerOverlay.osd,
+      PlayerOverlay.nowPlaying,
+    ]) {
+      expect(
+        resolve(LogicalKeyboardKey.contextMenu, overlay: overlay),
+        PlayerAction.openMenu,
+      );
+    }
+    expect(
+      resolve(LogicalKeyboardKey.arrowDown, overlay: PlayerOverlay.none),
+      PlayerAction.showOsd,
+    );
+    expect(
+      resolve(
+        LogicalKeyboardKey.arrowDown,
+        overlay: PlayerOverlay.none,
+        hasProgram: false,
+      ),
+      PlayerAction.showOsd,
+    );
+    expect(
+      resolve(LogicalKeyboardKey.arrowDown, overlay: PlayerOverlay.osd),
+      PlayerAction.consumed,
+    );
+    expect(
+      resolve(
+        LogicalKeyboardKey.arrowDown,
+        overlay: PlayerOverlay.osd,
+        tvOsdAtBottom: true,
+      ),
+      PlayerAction.showNowPlaying,
+    );
+    expect(
+      resolve(
+        LogicalKeyboardKey.arrowDown,
+        overlay: PlayerOverlay.osd,
+        tvOsdAtBottom: true,
+        hasProgram: false,
+      ),
+      PlayerAction.consumed,
+    );
+    expect(
+      resolve(LogicalKeyboardKey.keyI, overlay: PlayerOverlay.none),
+      PlayerAction.showNowPlaying,
+    );
+    expect(
+      resolve(LogicalKeyboardKey.info, overlay: PlayerOverlay.nowPlaying),
+      PlayerAction.showOsdFromInfo,
+    );
+  });
 
   for (final dvr in [false, true]) {
     for (final unsupported in [false, true]) {

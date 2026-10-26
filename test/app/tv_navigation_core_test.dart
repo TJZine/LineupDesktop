@@ -15,6 +15,7 @@ import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
@@ -462,21 +463,15 @@ void main() {
     },
   );
 
-  for (final action in ['View lineup', 'Add a custom channel']) {
+  for (final action in ['Open guide', 'Add a custom channel']) {
     androidTest('completion $action rebases a prior Player origin to Home', (
       tester,
     ) async {
       final f = await _setup();
       f.controller.completeChannelSetup();
-      await _pump(
-        tester,
-        f.controller,
-        outside,
-        player: FixturePlayer()
-          ..emit(
-            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
-          ),
-      );
+      final native = FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
+      await _pump(tester, f.controller, outside, player: native);
       await openDestination(tester, 'Player');
       await f.controller.enterChannelSetup();
       await tester.pumpAndSettle();
@@ -497,22 +492,234 @@ void main() {
       await tester.pumpAndSettle();
       expect(f.controller.stage, SetupStage.ready);
       expect(find.byType(UpstreamChannelSetupView), findsNothing);
-      expect(find.byType(ChannelsView), findsOneWidget);
       if (action == 'Add a custom channel') {
+        expect(find.byType(ChannelsView), findsOneWidget);
         expect(find.byKey(const Key('studio-name')), findsOneWidget);
         await back(tester);
+        expect(find.byType(ChannelsView), findsOneWidget);
+        await back(tester);
+      } else {
+        expect(find.byType(GuideView), findsOneWidget);
       }
-      await back(tester);
       expect(find.byType(PlayerView), findsNothing);
       expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
       expect(backgrounds, 0);
       await back(tester);
       expect(backgrounds, 1);
+      expect(native.loads, isEmpty);
+      expect(native.stops, 0);
       expect(f.store.calls, saves);
       await tester.pumpWidget(const SizedBox.shrink());
       f.controller.dispose();
     });
   }
+
+  androidTest('first TV completion opens Guide through terminal Back', (
+    tester,
+  ) async {
+    final f = await _setup();
+    final native = FixturePlayer();
+    await _pump(tester, f.controller, outside, player: native);
+    _scanButton(tester).onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('apply-reviewed-lineup')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+
+    final saves = f.store.calls;
+    expect(find.text('Open guide'), findsOneWidget);
+    await back(tester);
+    expect(f.controller.stage, SetupStage.ready);
+    expect(find.byType(GuideView), findsOneWidget);
+    expect(backgrounds, 0);
+    expect(f.store.calls, saves);
+    expect(native.loads, isEmpty);
+    expect(native.stops, 0);
+    await back(tester);
+    expect(backgrounds, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    f.controller.dispose();
+  });
+
+  androidTest('first TV completion primary opens Guide without saving', (
+    tester,
+  ) async {
+    final f = await _setup();
+    final native = FixturePlayer();
+    await _pump(tester, f.controller, outside, player: native);
+    _scanButton(tester).onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('apply-reviewed-lineup')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+
+    final saves = f.store.calls;
+    expect(find.text('Open guide'), findsOneWidget);
+    await tester.tap(find.text('Open guide'));
+    await tester.pumpAndSettle();
+    expect(f.controller.stage, SetupStage.ready);
+    expect(find.byType(GuideView), findsOneWidget);
+    expect(backgrounds, 0);
+    expect(f.store.calls, saves);
+    expect(native.loads, isEmpty);
+    expect(native.stops, 0);
+    await back(tester);
+    expect(backgrounds, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    f.controller.dispose();
+  });
+
+  androidTest('TV no-change Review opens Guide without saving', (tester) async {
+    final f = await _setup();
+    final native = FixturePlayer();
+    await _pump(tester, f.controller, outside, player: native);
+    _scanButton(tester).onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('apply-reviewed-lineup')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open guide'));
+    await tester.pumpAndSettle();
+
+    await f.controller.enterChannelSetup();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('continue-ready-libraries')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+
+    final saves = f.store.calls;
+    expect(find.text('Your lineup is already up to date'), findsOneWidget);
+    expect(find.text('Open guide'), findsOneWidget);
+    expect(find.text('View lineup'), findsNothing);
+    await tester.tap(find.text('Open guide'));
+    await tester.pumpAndSettle();
+    expect(f.controller.stage, SetupStage.ready);
+    expect(find.byType(GuideView), findsOneWidget);
+    expect(f.store.calls, saves);
+    expect(native.loads, isEmpty);
+    expect(native.stops, 0);
+    expect(backgrounds, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+    f.controller.dispose();
+  });
+
+  androidTest('TV no-change Review terminal Back opens Guide without saving', (
+    tester,
+  ) async {
+    final f = await _setup();
+    final native = FixturePlayer();
+    await _pump(tester, f.controller, outside, player: native);
+    _scanButton(tester).onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('apply-reviewed-lineup')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open guide'));
+    await tester.pumpAndSettle();
+
+    await f.controller.enterChannelSetup();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('continue-ready-libraries')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+
+    final saves = f.store.calls;
+    expect(find.text('Your lineup is already up to date'), findsOneWidget);
+    final openGuideCount = find.text('Open guide').evaluate().length;
+    final viewLineupCount = find.text('View lineup').evaluate().length;
+    await back(tester);
+    expect(f.controller.stage, SetupStage.ready);
+    expect(find.byType(GuideView), findsOneWidget);
+    expect(backgrounds, 0);
+    expect(f.store.calls, saves);
+    expect(native.loads, isEmpty);
+    expect(native.stops, 0);
+    // The label assertion remains useful after N2's copy update, while the
+    // route assertion above is independent of that composition seam.
+    expect(openGuideCount, 1);
+    expect(viewLineupCount, 0);
+    await back(tester);
+    expect(backgrounds, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    f.controller.dispose();
+  });
+
+  androidTest('TV regeneration terminal Back opens Guide without saving', (
+    tester,
+  ) async {
+    final f = await _setup();
+    f.controller.completeChannelSetup();
+    final native = FixturePlayer()
+      ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
+    await _pump(tester, f.controller, outside, player: native);
+    await openDestination(tester, 'Player');
+    await f.controller.enterChannelSetup();
+    await tester.pumpAndSettle();
+    _scanButton(tester).onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('apply-reviewed-lineup')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+
+    final saves = f.store.calls;
+    expect(find.text('Open guide'), findsOneWidget);
+    await back(tester);
+    expect(f.controller.stage, SetupStage.ready);
+    expect(find.byType(GuideView), findsOneWidget);
+    expect(backgrounds, 0);
+    expect(f.store.calls, saves);
+    expect(native.loads, isEmpty);
+    expect(native.stops, 0);
+    await back(tester);
+    expect(backgrounds, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    f.controller.dispose();
+  });
 
   androidTest('stranded Channels returns Home and Home backgrounds once', (
     tester,
@@ -1174,11 +1381,11 @@ void main() {
       await tester.pumpAndSettle();
       await back(tester);
       expect(f.controller.stage, SetupStage.ready);
-      expect(find.byType(ChannelsView), findsOneWidget);
+      expect(find.byType(GuideView), findsOneWidget);
+      expect(backgrounds, 0);
       expect(f.store.calls, applySaves + 1);
       await back(tester);
       expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
-      await back(tester);
       expect(backgrounds, 1);
       await tester.pumpWidget(const SizedBox.shrink());
       f.controller.dispose();

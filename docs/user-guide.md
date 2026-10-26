@@ -413,16 +413,26 @@ navigation, so the D-pad can reach the next control.
 
 | Remote button | Action |
 | --- | --- |
-| Select | With video focused, show the OSD and focus Subtitles or the last-used action; otherwise activate the focused control |
+| Select | With the Player controls hidden, show the compact OSD; otherwise activate the focused control |
 | Left / Right | Move through focused Player actions; seek only with DVR enabled and video focused |
-| Up / Down | From the OSD action row, open Mini Guide / Now Playing; in Now Playing, move between Close and the actions |
+| Up / Down | Hidden Player: Up opens Mini Guide and Down shows the compact OSD; from the compact OSD action row, Down expands details when a program exists; in expanded details, move within the details |
 | Channel Up / Channel Down | Player: previous/next channel; Mini Guide: move seven channels; Guide: move a visible page, like Page Up / Page Down |
 | Guide | Open the full Guide from Player; in Guide, follow its Close Guide action |
-| Info / Menu | Player: expand Now Playing, or collapse it to the OSD when already open; Menu in Guide opens the Lineup menu; other screens use their focused control's context action when available |
+| Info | Player: expand details from hidden or compact OSD; collapse expanded details to compact OSD; with no current program, show the compact OSD |
+| Menu | Open the Lineup menu from Player or Guide |
 | Play/Pause, Rewind, Fast Forward | Existing Player transport actions when DVR playback controls are enabled |
 | Number buttons | Enter a channel number in Player, then Select to confirm |
 
-Guide and Info depend on the remote; Fire TV remotes may not provide them.
+Guide and Info depend on the remote; Fire TV remotes provide Menu but may not
+provide Guide or Info. In Channel Review, Right from a channel row or disclosure
+header jumps to the footer's enabled primary action, or **Back to configure** if
+that action is disabled, and Up returns to the remembered row. The TV hint is
+**Press right on any channel to jump here**. Moving between regions does not
+apply, save, change consent, or clear the query.
+
+When lineup generation completes on TV, **Open guide** goes to Guide. **Add a
+custom channel** goes to Studio; desktop keeps its existing View lineup action.
+
 Up from the Guide's first channel row enters the nearest toolbar control; Down
 returns to the selected grid cell. Player action keys reset the OSD timeout;
 auto-hide returns focus to video. Closing a track drawer or sleep picker returns

@@ -363,6 +363,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       return KeyEventResult.ignored;
     }
     final controller = widget.controller;
+    var tvOsdAtBottom = false;
     if (_androidTv &&
         {
           LogicalKeyboardKey.goBack,
@@ -419,6 +420,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
             .firstOrNull
             ?.key;
         if (focused != null) {
+          tvOsdAtBottom = overlay == PlayerOverlay.osd;
           // Let the focused button's ActivateIntent own Select, rather than
           // the desktop Enter shortcut that collapses Now Playing.
           if (key == LogicalKeyboardKey.select ||
@@ -473,6 +475,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         dvr: controller.lineup.settings.dvrControlsEnabled,
         unsupported: controller.status.state == PlayerState.unsupported,
         initialPress: event is KeyDownEvent,
+        tvOsdAtBottom: tvOsdAtBottom,
         commandPressed:
             defaultTargetPlatform == TargetPlatform.macOS &&
             HardwareKeyboard.instance.isMetaPressed,
@@ -500,6 +503,11 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       case PlayerAction.openGuide:
         controller.showFullGuide();
         widget.openGuide();
+      case PlayerAction.openMenu:
+        final openMenu = widget.openMenu;
+        if (openMenu == null) return KeyEventResult.ignored;
+        controller.closeSleepPicker();
+        openMenu(_menuFocus.context ?? context, _menuFocus);
       case PlayerAction.collapseNowPlaying || PlayerAction.closeOverlay:
         final restoreSleep = controller.sleepPickerOpen;
         command == PlayerAction.collapseNowPlaying
@@ -524,7 +532,10 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         unawaited(controller.nextChannel());
       case PlayerAction.tuneMiniGuide:
         unawaited(controller.tuneMiniGuideSelection());
-      case PlayerAction.showOsd || PlayerAction.showOsdFromInfo:
+      case PlayerAction.showOsd:
+        controller.showOsd();
+        if (_androidTv) _focusTvAction(first: true);
+      case PlayerAction.showOsdFromInfo:
         controller.showOsd();
       case PlayerAction.togglePlayback:
         unawaited(controller.togglePlayback());

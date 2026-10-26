@@ -288,7 +288,11 @@ void main() {
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
-      LineupBootstrap(player: _FakePlayer(), controller: controller),
+      LineupBootstrap(
+        player: _FakePlayer(),
+        controller: controller,
+        androidTv: false,
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));

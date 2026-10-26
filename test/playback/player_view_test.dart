@@ -1035,6 +1035,9 @@ void main() {
         await key(LogicalKeyboardKey.goBack);
         expect(root.hasPrimaryFocus, isTrue);
         await key(LogicalKeyboardKey.arrowDown);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowDown);
         expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
         focused('subtitles');
         await key(LogicalKeyboardKey.arrowUp);
@@ -1107,6 +1110,138 @@ void main() {
       }
     });
   }
+
+  testWidgets('M1 TV Menu stays on the shell callback and Down expands once', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 2;
+    final root = FocusNode();
+    addTearDown(root.dispose);
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    final invokerContexts = <BuildContext>[];
+    final invokerFocus = <FocusNode>[];
+    final menuCalls = <int>[];
+    await fixture.player.tune('channel');
+    fixture.player.closeOverlay();
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(
+            controller: fixture.player,
+            focusNode: root,
+            openGuide: () {},
+            openMenu: (context, focus) {
+              invokerContexts.add(context);
+              invokerFocus.add(focus);
+              menuCalls.add(menuCalls.length);
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final initialCommands = fixture.native.transportCommands;
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.none);
+      expect(menuCalls, [0]);
+      expect(invokerContexts.single.findRenderObject(), isA<RenderBox>());
+      expect(invokerFocus.single.debugLabel, 'Player Lineup menu');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, isNotNull);
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(menuCalls, [0, 1]);
+      expect(invokerContexts.last.findRenderObject(), isA<RenderBox>());
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(menuCalls, [0, 1, 2]);
+      expect(fixture.native.transportCommands, initialCommands);
+
+      // Minimize and hide the Player, then verify ordinary Select reveals only
+      // compact OSD. The next Down is the deliberate details transition.
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      fixture.player.closeOverlay();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      expect(fixture.native.transportCommands, initialCommands);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+      tester.view.reset();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('M1 Menu opens the mounted Lineup menu from hidden TV Player', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 2;
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    fixture.lineup.fixtureActor.present(
+      const LineupPresentation(stage: SetupStage.ready),
+    );
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: LineupShell(
+            player: fixture.native,
+            controller: fixture.lineup,
+            initialMediaPath: '/synthetic.mp4',
+            androidTv: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+      expect(find.text('Plex account'), findsOneWidget);
+      await tester.sendKeyEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+      tester.view.reset();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   for (final window in const [Size(960, 540), Size(1920, 1080)]) {
     for (final dvr in [false, true]) {
       for (final padding in const [

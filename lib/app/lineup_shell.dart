@@ -762,8 +762,8 @@ class _LineupShellState extends State<LineupShell> {
     widget.controller.completeChannelSetup();
     _onboardingFromAccount = false;
     await _select(
-      ShellDestination.channels,
-      tvLocation: widget.androidTv ? const _TvChannels(_TvHome()) : null,
+      widget.androidTv ? ShellDestination.guide : ShellDestination.channels,
+      tvLocation: widget.androidTv ? const _TvHome() : null,
     );
   }
 

@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import '../support/committed_state_matchers.dart';
 
 import 'dart:async';
@@ -9,7 +12,8 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/rendering.dart'
+    show RenderImage, RenderParagraph, RenderRepaintBoundary;
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
@@ -27,6 +31,150 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  const reviewEvidence = String.fromEnvironment('REVIEW_EVIDENCE');
+  for (final scale in [1.0, 1.3]) {
+    testWidgets('R1 full production Review hint render at TV $scale', (
+      tester,
+    ) async {
+      await tester.runAsync(loadPinnedTestFonts);
+      final controller = _SetupController();
+      addTearDown(controller.dispose);
+      await _pump(
+        tester,
+        controller,
+        androidTv: true,
+        reviewRenderScale: scale,
+      );
+      await _advanceToReview(tester);
+      // Asset decoding runs outside the fake test clock. pumpAndSettle alone
+      // can finish before the header Image receives its first decoded frame.
+      final logo = find.descendant(
+        of: find.byType(LineupTopBar),
+        matching: find.byType(Image),
+      );
+      expect(logo, findsOneWidget);
+      await tester.runAsync(
+        () => precacheImage(
+          tester.widget<Image>(logo).image,
+          tester.element(logo),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final logoRender = tester.renderObject<RenderImage>(
+        find.descendant(of: logo, matching: find.byType(RawImage)),
+      );
+      expect(
+        logoRender.image,
+        isNotNull,
+        reason: 'Capture requires the actual decoded brand mark, not its slot',
+      );
+      expect(logoRender.image!.width, greaterThan(0));
+      expect(logoRender.image!.height, greaterThan(0));
+      expect(tester.getRect(logo).isEmpty, isFalse);
+      final row = find
+          .byWidgetPredicate(
+            (widget) =>
+                widget.key is ValueKey<String> &&
+                (widget.key! as ValueKey<String>).value.startsWith(
+                  'review-channel-',
+                ),
+          )
+          .first;
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      Focus.of(
+        tester.element(
+          find.descendant(of: row, matching: find.byType(Text)).first,
+        ),
+      ).requestFocus();
+      await tester.pumpAndSettle();
+      final hint = find.byKey(const ValueKey('review-footer-hint'));
+      expect(hint, findsOneWidget);
+      expect(
+        find.text('Press right on any channel to jump here'),
+        findsOneWidget,
+      );
+      final paragraph = tester.renderObject<RenderParagraph>(hint);
+      expect(
+        paragraph
+            .getBoxesForSelection(
+              TextSelection(
+                baseOffset: 0,
+                extentOffset: paragraph.text.toPlainText().length,
+              ),
+            )
+            .map((box) => box.top)
+            .toSet()
+            .length,
+        1,
+      );
+      expect(paragraph.didExceedMaxLines, isFalse);
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const ValueKey('review-page-raster')),
+      );
+      await tester.runAsync(() async {
+        final raster = await boundary.toImage(pixelRatio: 2);
+        final bytes = await raster.toByteData(format: ui.ImageByteFormat.png);
+        File(
+          '$reviewEvidence/review-full-tv-$scale${scale == 1.3 ? '-large' : ''}.png',
+        ).writeAsBytesSync(bytes!.buffer.asUint8List());
+        raster.dispose();
+      });
+    }, skip: reviewEvidence.isEmpty);
+  }
+
+  testWidgets(
+    'R1 real controller saves and review choices stay unchanged across region keys',
+    (tester) async {
+      final fixture = await _createBoundarySetup();
+      addTearDown(fixture.controller.dispose);
+      await _pump(tester, fixture.controller, androidTv: true);
+      await _advanceToReview(tester);
+      final search = find.byKey(const ValueKey('channel-setup-review-search'));
+      await tester.enterText(search, 'Recently');
+      await tester.pumpAndSettle();
+      final row = find
+          .byWidgetPredicate(
+            (widget) =>
+                widget.key is ValueKey<String> &&
+                (widget.key! as ValueKey<String>).value.startsWith(
+                  'review-channel-',
+                ),
+          )
+          .first;
+      await tester.ensureVisible(row);
+      final node = Focus.of(
+        tester.element(
+          find.descendant(of: row, matching: find.byType(Text)).first,
+        ),
+      );
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      final saves = fixture.store.saveCalls;
+      final channels = fixture.controller.channels;
+      for (var i = 0; i < 2; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(
+          Focus.of(tester.element(find.text('Create lineup'))).hasPrimaryFocus,
+          isTrue,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        expect(node.hasPrimaryFocus, isTrue);
+      }
+      expect(fixture.store.saveCalls, saves);
+      expect(fixture.controller.channels, channels);
+      expect(tester.widget<TextField>(search).controller!.text, 'Recently');
+      expect(find.text('Review your first lineup'), findsOneWidget);
+      debugPrint(
+        'R1 real controller navigation saveDelta=${fixture.store.saveCalls - saves} query=retained lineup=unchanged',
+      );
+    },
+  );
+
   testWidgets('NAV-I2 Applying Back is claimed without duplicate apply', (
     tester,
   ) async {
@@ -3237,17 +3385,32 @@ Future<void> _pump(
   VoidCallback? onView,
   VoidCallback? onAdd,
   bool androidTv = false,
+  double? reviewRenderScale,
 }) async {
   tester.view
     ..physicalSize = androidTv ? const Size(1920, 1080) : const Size(1280, 720)
     ..devicePixelRatio = androidTv ? 2 : 1;
   await tester.pumpWidget(
     MaterialApp(
-      builder: (context, child) =>
-          LineupCanvas.builder(context, LineupFocusScope(child: child!)),
+      builder: (context, child) => reviewRenderScale == null
+          ? LineupCanvas.builder(context, LineupFocusScope(child: child!))
+          : RepaintBoundary(
+              key: const ValueKey('review-page-raster'),
+              child: MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(reviewRenderScale),
+                  disableAnimations: true,
+                ),
+                child: LineupCanvas.builder(
+                  context,
+                  LineupFocusScope(child: child!),
+                ),
+              ),
+            ),
       theme: LineupTheme.forName(
         LineupThemeName.emberSteel,
         androidTv: androidTv,
+        largeFocusIndicators: reviewRenderScale == 1.3,
       ),
       home: ListenableBuilder(
         listenable: controller,

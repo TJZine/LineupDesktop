@@ -253,27 +253,47 @@ abstract final class LineupTheme {
   }) {
     final basePalette = _palette(name);
     final tvFillFocus = androidTv;
-    final tvFocusSurface = name == LineupThemeName.directv
-        ? basePalette.focusedSurface
-        : const Color(0xFFE9DCC3);
+    final tvFocus = switch (name) {
+      LineupThemeName.slatePine => (
+        fill: const Color(0xFFD3DECF),
+        inset: const Color(0xFFC1CFBC),
+        secondary: const Color(0xFF2F3B30),
+        muted: const Color(0xFF4A574B),
+        border: const Color(0xFFA8C49E),
+      ),
+      LineupThemeName.swiss => (
+        fill: const Color(0xFFC6EEDB),
+        inset: const Color(0xFFB0E0C8),
+        secondary: const Color(0xFF22372D),
+        muted: const Color(0xFF41554B),
+        border: const Color(0xFF6EE7B7),
+      ),
+      _ => (
+        fill: name == LineupThemeName.directv
+            ? basePalette.focusedSurface
+            : const Color(0xFFE9DCC3),
+        inset: const Color(0xFFD7C7A8),
+        secondary: const Color(0xFF3B3226),
+        muted: const Color(0xFF5B5141),
+        border: name == LineupThemeName.directv
+            ? const Color(0xFFFFCC00)
+            : const Color(0xFFF0D39A),
+      ),
+    };
     final palette = basePalette.copyWith(
-      focusedSurface: tvFillFocus ? tvFocusSurface : basePalette.focusedSurface,
+      focusedSurface: tvFillFocus ? tvFocus.fill : basePalette.focusedSurface,
       focusedInsetSurface: tvFillFocus
-          ? const Color(0xFFD7C7A8)
+          ? tvFocus.inset
           : basePalette.focusedInsetSurface,
       focusedText: tvFillFocus
           ? const Color(0xFF090806)
           : basePalette.focusedText,
       onFocus: tvFillFocus ? const Color(0xFF090806) : basePalette.onFocus,
       focusSecondaryText: tvFillFocus
-          ? const Color(0xFF3B3226)
+          ? tvFocus.secondary
           : basePalette.focusSecondaryText,
-      focusMutedText: tvFillFocus
-          ? const Color(0xFF5B5141)
-          : basePalette.focusMutedText,
-      focusBorder: tvFillFocus
-          ? const Color(0xFFF0D39A)
-          : basePalette.focusBorder,
+      focusMutedText: tvFillFocus ? tvFocus.muted : basePalette.focusMutedText,
+      focusBorder: tvFillFocus ? tvFocus.border : basePalette.focusBorder,
       focusBorderWidth: largeFocusIndicators ? 5 : 3,
       largeFocusIndicators: largeFocusIndicators,
       androidTv: androidTv,

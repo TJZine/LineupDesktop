@@ -14,6 +14,7 @@ enum PlayerAction implements PlayerCommand {
   backToGuide(false),
   collapseNowPlaying(false),
   closeOverlay(false),
+  openMenu(false),
   commitChannelNumber(false),
   openGuide(true),
   miniGuideUp(false),
@@ -95,11 +96,17 @@ PlayerCommand resolvePlayerKey(
   required bool unsupported,
   required bool initialPress,
   required bool hasProgram,
+  bool tvOsdAtBottom = false,
   // macOS only: Command chords belong to the app menu and system, so no
   // Player action may claim them. Ctrl handling is unchanged.
   bool commandPressed = false,
 }) {
   if (commandPressed) return PlayerAction.ignored;
+  // Android TV's Menu key is a shell action, not the optional Info command.
+  // Resolve it before the shared TV aliases turn contextMenu into keyI.
+  if (androidTv && key == LogicalKeyboardKey.contextMenu) {
+    return PlayerAction.openMenu;
+  }
   key = androidTvKeyAlias(key, androidTv: androidTv) ?? key;
   if (_backKeys.contains(key)) {
     return switch (overlay) {
@@ -214,6 +221,12 @@ PlayerCommand resolvePlayerKey(
   }
   if (key == LogicalKeyboardKey.arrowDown &&
       (overlay == PlayerOverlay.none || overlay == PlayerOverlay.osd)) {
+    if (androidTv) {
+      if (overlay == PlayerOverlay.none) return PlayerAction.showOsd;
+      return tvOsdAtBottom && hasProgram
+          ? PlayerAction.showNowPlaying
+          : PlayerAction.consumed;
+    }
     return hasProgram
         ? PlayerAction.showNowPlaying
         : PlayerAction.showOsdFromInfo;

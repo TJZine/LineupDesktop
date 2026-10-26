@@ -139,27 +139,54 @@ void main() {
     expect(directv.focusedSurface, const Color(0xFFFFCC00));
     expect(directv.focusedInsetSurface, const Color(0xFFD7C7A8));
     expect(directv.onFocus, const Color(0xFF090806));
-    expect(directv.focusBorder, const Color(0xFFF0D39A));
+    expect(directv.focusBorder, const Color(0xFFFFCC00));
   });
 
-  test('every Android TV palette follows the focus treatment matrix', () {
+  test('every Android TV palette follows the approved per-theme roles', () {
+    const expected = {
+      LineupThemeName.emberSteel: [
+        0xFFE9DCC3,
+        0xFFD7C7A8,
+        0xFF3B3226,
+        0xFF5B5141,
+        0xFFF0D39A,
+      ],
+      LineupThemeName.slatePine: [
+        0xFFD3DECF,
+        0xFFC1CFBC,
+        0xFF2F3B30,
+        0xFF4A574B,
+        0xFFA8C49E,
+      ],
+      LineupThemeName.swiss: [
+        0xFFC6EEDB,
+        0xFFB0E0C8,
+        0xFF22372D,
+        0xFF41554B,
+        0xFF6EE7B7,
+      ],
+      LineupThemeName.directv: [
+        0xFFFFCC00,
+        0xFFD7C7A8,
+        0xFF3B3226,
+        0xFF5B5141,
+        0xFFFFCC00,
+      ],
+    };
     for (final name in LineupThemeName.values) {
       final roles = LineupTheme.forName(
         name,
         androidTv: true,
       ).extension<LineupThemeRoles>()!;
       expect(roles.focusTreatment, LineupFocusTreatment.fill);
-      expect(
+      expect([
         roles.focusedSurface,
-        name == LineupThemeName.directv
-            ? const Color(0xFFFFCC00)
-            : const Color(0xFFE9DCC3),
-      );
-      expect(roles.focusedInsetSurface, const Color(0xFFD7C7A8));
+        roles.focusedInsetSurface,
+        roles.focusSecondaryText,
+        roles.focusMutedText,
+        roles.focusBorder,
+      ], expected[name]!.map(Color.new).toList());
       expect(roles.onFocus, const Color(0xFF090806));
-      expect(roles.focusSecondaryText, const Color(0xFF3B3226));
-      expect(roles.focusMutedText, const Color(0xFF5B5141));
-      expect(roles.focusBorder, const Color(0xFFF0D39A));
     }
   });
 

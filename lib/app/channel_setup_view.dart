@@ -193,6 +193,11 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       return true;
     }
     if (_step == _SetupStep.review) {
+      final review = _review;
+      if (_androidTv && review != null && !review.counts.hasChanges) {
+        _viewLineupFromBack();
+        return true;
+      }
       _backToConfigure();
       return true;
     }

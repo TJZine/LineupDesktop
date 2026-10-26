@@ -527,21 +527,21 @@ void main() {
         _focusedIn(tester, find.byKey(const ValueKey('back-to-configure')));
         expect(tester.getRect(footer), footerBounds);
         if (existing) {
-          await _keys(tester, [_up]);
-          _focusedIn(
-            tester,
-            find.byKey(const ValueKey('channel-setup-replace-confirmation')),
-          );
+          // R1 returns from the footer to the last read row, bypassing the
+          // consent leaf that was already exercised with Down and Select.
           await _keys(tester, [_up]);
           _focusedIn(
             tester,
             find.byKey(const ValueKey('review-channel-review-99')),
           );
+          expect(consent, isTrue);
+          expect(applyCalls, 0);
         }
         for (var i = channels.length; i >= 1; i--) {
           await _keys(tester, [_up]);
           _focusedIn(tester, find.byKey(ValueKey('review-channel-review-$i')));
         }
+        expect(consent, existing ? isTrue : isNull);
         expect(applyCalls, 0);
       },
     );

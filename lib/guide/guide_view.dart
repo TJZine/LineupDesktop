@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
+    show TargetPlatform, defaultTargetPlatform, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -40,6 +40,7 @@ class GuideLayoutPolicy {
     Size size, {
     required bool hasPicture,
     double textScale = 1,
+    double? numberColumnWidth,
     double? timeHeaderHeight,
     double? tvControlsHeight,
     double tvRowFloor = 0,
@@ -93,7 +94,10 @@ class GuideLayoutPolicy {
     final showcaseHeight = tvControlsHeight == null
         ? math.max(0.0, pictureAllocation - showcaseHeightAdjustment)
         : math.min(
-            math.max(tvInformationHeight, tvPictureMinimum.height),
+            math.max(
+              height - 1080 + 324,
+              math.max(tvInformationHeight, tvPictureMinimum.height),
+            ),
             math.max(0.0, available - minimumRowHeight * minimumRows),
           );
     final rowHeight = math.max(
@@ -104,38 +108,36 @@ class GuideLayoutPolicy {
         ? math.min(324.0, pictureAllocation)
         : showcaseHeight;
     final widthBudget = math.max(0.0, width - 360 - 12 - 40);
-    final identityFraction =
-        _GuideInformationLayout.identityFlex(
-          height: showcaseHeight - 28,
-          compactLogo: showcaseHeight < 180 * textScale,
-          enlarged: textScale > 1,
-        ) /
-        10;
     final pictureWidth = tvControlsHeight == null
         ? (hasPicture
               ? math.min(pictureHeight * 16 / 9, widthBudget)
               : pictureHeight * 16 / 9)
         : math.max(
-            tvPictureMinimum.width,
+            0.0,
             math.min(
               pictureHeight * 16 / 9,
               math.min(
                 width * .32,
-                width - 12 - 40 - 32 - tvIdentityWidth / identityFraction,
+                width - 12 - 40 - 32 - tvIdentityWidth - 400 * textScale,
               ),
             ),
           );
+    final baseRailWidth =
+        (width >= 1800
+            ? 300
+            : width >= 1100
+            ? 208
+            : 176) *
+        textScale.clamp(1, 1.5);
+    final previousNumberWidth = baseRailWidth < 180 ? 40 : 48;
+    final railGrowth = numberColumnWidth == null
+        ? 0.0
+        : numberColumnWidth + 14 * textScale - previousNumberWidth;
     return GuideLayoutPolicy._(
       compact: compact,
       timeHeaderHeight: timeHeaderHeight ?? 38 * textScale,
       padding: padding,
-      channelRailWidth:
-          (width >= 1800
-              ? 300
-              : width >= 1100
-              ? 208
-              : 176) *
-          textScale.clamp(1, 1.5),
+      channelRailWidth: baseRailWidth + railGrowth,
       showcaseHeight: showcaseHeight,
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
@@ -391,6 +393,41 @@ class _GuideViewState extends State<GuideView>
   })?
   _tvMetricsKey;
   _TvGuideSchema? _tvSchema;
+
+  Set<int> _railNumbers = {};
+  ({TextScaler scaler, TextDirection direction, TextStyle style})?
+  _railMetricsKey;
+  double _numberColumnWidth = 0;
+
+  double _measureNumberColumn(BuildContext context) {
+    final numbers = widget.controller.lineup.channels
+        .map((c) => c.number)
+        .toSet();
+    final key = (
+      scaler: MediaQuery.textScalerOf(context),
+      direction: Directionality.of(context),
+      style: DefaultTextStyle.of(context).style.copyWith(
+        fontFamily: 'Inter',
+        fontSize: 28,
+        fontWeight: FontWeight.w500,
+        fontFeatures: const [ui.FontFeature.tabularFigures()],
+      ),
+    );
+    if (!setEquals(numbers, _railNumbers) || key != _railMetricsKey) {
+      _railNumbers = numbers;
+      _railMetricsKey = key;
+      final largest = numbers.fold<int>(99, math.max);
+      final painter = TextPainter(
+        text: TextSpan(text: '$largest', style: key.style),
+        textScaler: key.scaler,
+        textDirection: key.direction,
+        maxLines: 1,
+      )..layout();
+      _numberColumnWidth = painter.width.ceilToDouble();
+      painter.dispose();
+    }
+    return _numberColumnWidth;
+  }
 
   @override
   void initState() {
@@ -1008,6 +1045,7 @@ class _GuideViewState extends State<GuideView>
                                 itemCount: channels.length,
                                 itemBuilder: (context, index) => _GuideRow(
                                   channel: channels[index],
+                                  numberColumnWidth: _numberColumnWidth,
                                   watchingChannelId: widget.watchingChannelId,
                                   controller: widget.controller,
                                   railWidth: policy.channelRailWidth,
@@ -1111,9 +1149,11 @@ class _GuideViewState extends State<GuideView>
             color: Colors.transparent,
             child: LayoutBuilder(
               builder: (context, outer) {
+                final numberWidth = _measureNumberColumn(context);
                 var policy = GuideLayoutPolicy.forSize(
                   outer.biggest,
                   hasPicture: widget.pictureInPicture != null,
+                  numberColumnWidth: numberWidth,
                   textScale: MediaQuery.textScalerOf(context).scale(1),
                   timeHeaderHeight: _TimeHeader.requiredHeight(
                     context,
@@ -1152,6 +1192,7 @@ class _GuideViewState extends State<GuideView>
                   policy = GuideLayoutPolicy.forSize(
                     outer.biggest,
                     hasPicture: widget.pictureInPicture != null,
+                    numberColumnWidth: numberWidth,
                     textScale: key.scaler.scale(1),
                     timeHeaderHeight: policy.timeHeaderHeight,
                     tvControlsHeight: controls.height,
@@ -2088,6 +2129,9 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
                     )
                   : null,
               child: Align(
+                alignment: LineupTheme.of(context).androidTv
+                    ? Alignment.topLeft
+                    : Alignment.center,
                 child: AspectRatio(
                   key: const Key('guide-picture-in-picture'),
                   aspectRatio: _guidePictureAspectRatio,
@@ -2128,7 +2172,7 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
 }
 
 /// Paint the unused TV picture column without closing the native video hole.
-/// The centered contain fit is the same geometry as Align + AspectRatio above.
+/// The top-aligned contain fit matches Align + AspectRatio above.
 class _PictureSurroundPainter extends CustomPainter {
   const _PictureSurroundPainter({required this.color});
 
@@ -2141,7 +2185,10 @@ class _PictureSurroundPainter extends CustomPainter {
       const Size(_guidePictureAspectRatio, 1),
       size,
     ).destination;
-    final aperture = Alignment.center.inscribe(pictureSize, Offset.zero & size);
+    final aperture = Alignment.topLeft.inscribe(
+      pictureSize,
+      Offset.zero & size,
+    );
     final surround = Path()
       ..fillType = PathFillType.evenOdd
       ..addRect(Offset.zero & size)
@@ -2329,6 +2376,7 @@ class _GuideRow extends StatelessWidget {
     required this.controller,
     required this.watchingChannelId,
     required this.railWidth,
+    required this.numberColumnWidth,
     required this.showProvenance,
     required this.hideSchedule,
     required this.onTune,
@@ -2340,6 +2388,7 @@ class _GuideRow extends StatelessWidget {
   final GuideController controller;
   final String? watchingChannelId;
   final double railWidth;
+  final double numberColumnWidth;
   final bool showProvenance;
   final bool hideSchedule;
   final Future<void> Function(String channelId) onTune;
@@ -2418,9 +2467,12 @@ class _GuideRow extends StatelessWidget {
                   child: Row(
                     children: [
                       SizedBox(
-                        width: railWidth < 180 ? 40 : 48,
+                        width: numberColumnWidth,
                         child: Text(
                           '${channel.number}',
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          softWrap: false,
                           style: TextStyle(
                             color: focusChannelRail
                                 ? roles.focusedText
@@ -2432,6 +2484,9 @@ class _GuideRow extends StatelessWidget {
                             ],
                           ),
                         ),
+                      ),
+                      SizedBox(
+                        width: 14 * MediaQuery.textScalerOf(context).scale(1),
                       ),
                       Expanded(
                         child: LayoutBuilder(
@@ -2460,7 +2515,9 @@ class _GuideRow extends StatelessWidget {
                                 .style
                                 .copyWith(
                                   fontSize: showProvenance ? 16 : 14,
-                                  color: roles.mutedText,
+                                  color: focusChannelRail && roles.androidTv
+                                      ? roles.focusMutedText
+                                      : roles.mutedText,
                                 );
                             final supportHeight = _textHeight(
                               supportStyle,
@@ -2477,13 +2534,9 @@ class _GuideRow extends StatelessWidget {
                                                 : 0)) /
                                         lineHeight)
                                     .floor()
-                                    .clamp(1, 1000);
-                            final nameHeight = painter.height.ceilToDouble();
+                                    .clamp(1, 2);
                             painter.dispose();
-                            final showSupport =
-                                (tunedChannel || showSource) &&
-                                nameHeight + supportHeight <=
-                                    constraints.maxHeight;
+                            final showSupport = tunedChannel || showSource;
                             return Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2507,7 +2560,11 @@ class _GuideRow extends StatelessWidget {
                                               Icon(
                                                 Icons.play_arrow_rounded,
                                                 size: 14,
-                                                color: roles.secondaryText,
+                                                color:
+                                                    focusChannelRail &&
+                                                        roles.androidTv
+                                                    ? roles.focusSecondaryText
+                                                    : roles.secondaryText,
                                               ),
                                               SizedBox(width: 4),
                                               Flexible(
@@ -2517,7 +2574,12 @@ class _GuideRow extends StatelessWidget {
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                   style: supportStyle.copyWith(
-                                                    color: roles.secondaryText,
+                                                    color:
+                                                        focusChannelRail &&
+                                                            roles.androidTv
+                                                        ? roles
+                                                              .focusSecondaryText
+                                                        : roles.secondaryText,
                                                   ),
                                                 ),
                                               ),
