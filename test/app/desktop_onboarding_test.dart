@@ -2017,7 +2017,7 @@ class _BackLinkPlex extends PlexClient {
   final pin = PlexPin(
     id: 17,
     code: 'BOUNDARY',
-    expiresAt: DateTime.utc(2026, 10, 26),
+    expiresAt: DateTime.now().add(const Duration(minutes: 4)),
   );
   final cancelStarted = Completer<void>();
   Completer<void>? cancelGate;

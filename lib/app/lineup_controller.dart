@@ -2092,6 +2092,63 @@ class LineupController extends ChangeNotifier {
     );
   }
 
+  Future<List<PlexCastMember>?> castForItem(
+    String itemId, {
+    Future<void>? cancelled,
+  }) async {
+    final serverId = server?.id;
+    final selectedConnection = connection;
+    if (serverId == null || selectedConnection == null || itemId.isEmpty) {
+      return null;
+    }
+    final scope = _authorizationScope;
+    final abort = Completer<void>();
+    var finished = false;
+    if (cancelled != null) {
+      unawaited(
+        cancelled.then((_) {
+          if (!finished && !abort.isCompleted) abort.complete();
+        }),
+      );
+    }
+    bool current() =>
+        !abort.isCompleted &&
+        _isCurrentAuthorizationScope(scope) &&
+        server?.id == serverId &&
+        _logoutFuture == null;
+    try {
+      final request = _withPmsAuthorization(_epoch, serverId, (
+        token,
+        refreshedConnection,
+      ) {
+        if (!current()) {
+          throw const PlexException(
+            'authorization-unavailable',
+            'Cast session ended.',
+          );
+        }
+        return plex.itemCast(
+          (refreshedConnection ?? selectedConnection).uri,
+          token,
+          itemId,
+          cancelled: abort.future,
+        );
+      });
+      // A shared refresh may serve other callers. Release this caller promptly
+      // on retirement, and let current() prevent its retry after refresh.
+      final cast = await Future.any<List<PlexCastMember>?>([
+        request,
+        abort.future.then((_) => null),
+      ]);
+      return current() ? cast : null;
+    } catch (_) {
+      if (!current()) return null;
+      rethrow;
+    } finally {
+      finished = true;
+    }
+  }
+
   Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     final serverId = server?.id;
     final selectedConnection = connection;

@@ -49,6 +49,7 @@ Recent events:
 2026-10-15T11:59:00.000Z plex-library: Some collections could not be loaded
 2026-10-15T11:59:00.000Z plex-library: Collection discovery unavailable
 2026-10-15T11:59:00.000Z plex-library: Library scan timing
+2026-10-15T11:59:00.000Z plex: Cast enrichment
 2026-10-15T11:59:00.000Z plex: Cast portrait unavailable
 2026-10-15T11:59:00.000Z guide: Guide current program wait timed out
 2026-10-15T11:59:00.000Z guide: Guide schedule load timed out
@@ -72,6 +73,7 @@ const _eventPairs = <(String, String)>[
   ('plex-library', 'Some collections could not be loaded'),
   ('plex-library', 'Collection discovery unavailable'),
   ('plex-library', 'Library scan timing'),
+  ('plex', 'Cast enrichment'),
   ('plex', 'Cast portrait unavailable'),
   ('guide', 'Guide current program wait timed out'),
   ('guide', 'Guide schedule load timed out'),
@@ -136,6 +138,42 @@ DiagnosticSupportSnapshot _snapshot(List<DiagnosticEntry> events) =>
     );
 
 void main() {
+  test('cast diagnostics admit only fixed enums in storage and export', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    addTearDown(diagnostics.dispose);
+    for (final outcome in ['requested', 'enriched', 'noRicherData', 'failed']) {
+      diagnostics.add(DiagnosticEvent.castEnrichment, {'castOutcome': outcome});
+      expect(diagnostics.entries.last.context, {'castOutcome': outcome});
+    }
+    for (final failure in ['auth', 'timeout', 'transport', 'shape']) {
+      diagnostics.add(DiagnosticEvent.castEnrichment, {
+        'castOutcome': 'failed',
+        'castFailure': failure,
+      });
+      expect(diagnostics.entries.last.context['castFailure'], failure);
+    }
+    diagnostics.add(DiagnosticEvent.castEnrichment, {
+      'castOutcome': 'private-name',
+      'castFailure': 'https://private.invalid',
+      'itemId': 'private',
+    });
+    expect(diagnostics.entries.last.context, isEmpty);
+    final report = diagnostics.buildSupportReport(
+      _snapshot(diagnostics.entries),
+    );
+    expect(report, contains('castOutcome=noRicherData'));
+    expect(report, isNot(contains('private')));
+    final forged = diagnostics.buildSupportReport(
+      _snapshot([
+        DiagnosticEntry(DateTime.utc(2026), 'plex', 'Cast enrichment', {
+          'castOutcome': 'private-name',
+          'castFailure': 'private',
+        }),
+      ]),
+    );
+    expect(forged, isNot(contains('private')));
+  });
+
   test(
     'fixed support report bytes validate every event and forged context',
     () {

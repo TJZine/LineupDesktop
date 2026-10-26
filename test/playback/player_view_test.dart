@@ -23,6 +23,7 @@ import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -41,6 +42,93 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  testWidgets(
+    'visible cast surfaces share the hydrated shelf, semantics, and TV More info',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 24),
+          summary: 'Short synopsis.',
+          cast: [
+            ChannelCastMember(name: 'Catalog Actor', role: 'Catalog role'),
+          ],
+        ),
+      );
+      final pending = Completer<List<PlexCastMember>?>();
+      fixture.lineup.castHandler = (_) => pending.future;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await fixture.player.tune('channel');
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+      expect(find.byKey(const Key('player-osd-title')), findsOneWidget);
+      expect(fixture.lineup.castRequests, isEmpty);
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+      expect(fixture.lineup.castRequests, ['program']);
+      expect(find.text('Catalog Actor'), findsOneWidget);
+      expect(find.byKey(const Key('player-more-info')), findsNothing);
+      pending.complete(const [
+        PlexCastMember(
+          name: 'Detail Lead',
+          role: 'Lead',
+          thumbPath: '/hydrated/lead',
+        ),
+        PlexCastMember(name: 'Catalog Actor', role: 'Detail role'),
+        PlexCastMember(name: 'Detail Third'),
+        PlexCastMember(name: 'Detail Fourth'),
+        PlexCastMember(name: 'Detail Fifth', role: 'Guest'),
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.text('Detail Lead'), findsOneWidget);
+      expect(
+        find.byKey(const Key('player-now-playing-cast-portrait-0')),
+        findsOneWidget,
+      );
+      expect(
+        fixture.lineup.artworkRequests,
+        contains(Uri.parse('/hydrated/lead')),
+      );
+      expect(find.text('Detail Fourth'), findsOneWidget);
+      expect(find.text('Detail Fifth'), findsNothing);
+      expect(
+        find.bySemanticsLabel(
+          RegExp('Cast: Detail Lead as Lead, Catalog Actor as Detail role'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('player-more-info')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('player-more-info')));
+      await tester.pumpAndSettle();
+      expect(find.text('Detail Fifth'), findsOneWidget);
+      expect(find.text('Guest'), findsOneWidget);
+      expect(fixture.lineup.castRequests, ['program']);
+      expect(
+        fixture.player.currentProgram!.scheduled.item.cast.single.name,
+        'Catalog Actor',
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
   for (final size in [
     const Size(1280, 720),
     const Size(1920, 1080),
@@ -7760,6 +7848,17 @@ class _Fixture {
 }
 
 class _Lineup extends LineupController {
+  Future<List<PlexCastMember>?> Function(String)? castHandler;
+  final castRequests = <String>[];
+  @override
+  Future<List<PlexCastMember>?> castForItem(
+    String itemId, {
+    Future<void>? cancelled,
+  }) async {
+    castRequests.add(itemId);
+    return castHandler?.call(itemId);
+  }
+
   _Lineup(
     int channelCount, {
     LineupScenario? scenario,

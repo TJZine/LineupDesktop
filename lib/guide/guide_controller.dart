@@ -10,6 +10,8 @@ import '../channels/channel_artwork.dart';
 import '../channels/scheduler.dart';
 import '../diagnostics/diagnostics.dart';
 import '../settings/lineup_settings.dart';
+import '../plex/plex_models.dart';
+import 'cast_view.dart';
 
 typedef GuideScheduleLoader = Future<ScheduleIndex> Function(Channel channel);
 
@@ -87,6 +89,12 @@ class GuideRowData {
 }
 
 class GuideController extends ChangeNotifier {
+  static const maximumCachedCastEntries = 16;
+  static const castFailureRetryInterval = Duration(seconds: 60);
+  final LinkedHashMap<String, _CastEntry> _cast = LinkedHashMap();
+  final Queue<_CastEntry> _pendingCast = Queue();
+  int _activeCastLoads = 0;
+
   static const maximumCachedArtworkEntries = 12;
   static const maximumConcurrentArtworkLoads = 4;
 
@@ -301,6 +309,109 @@ class GuideController extends ChangeNotifier {
   }
 
   Set<String> get availableLibraryIds => _availableLibraryIds;
+
+  /// Called only by a visible cast surface. Scheduling and activation do no IO.
+  CastView castFor(GuideProgram program) {
+    final item = program.scheduled.item;
+    final fallback = CastView(item.cast);
+    if (_disposed) return fallback;
+    var entry = _cast.remove(item.id);
+    if (entry != null) {
+      _cast[item.id] = entry;
+      if (entry.failedAt == null ||
+          _clock().difference(entry.failedAt!) < castFailureRetryInterval) {
+        return entry.view ?? fallback;
+      }
+      _cast.remove(item.id);
+      entry.retire();
+    }
+    if (_cast.length >= maximumCachedCastEntries) {
+      final evictable = _cast.entries
+          .where((entry) => entry.value.complete)
+          .firstOrNull;
+      // Keep pending entries pinned so repeated builds cannot duplicate IO.
+      if (evictable == null) return fallback;
+      _cast.remove(evictable.key)?.retire();
+    }
+    entry = _CastEntry(item, _generation);
+    _cast[item.id] = entry;
+    _pendingCast.add(entry);
+    // Do not notify diagnostics or start authorization while a widget builds.
+    scheduleMicrotask(_pumpCast);
+    return fallback;
+  }
+
+  void _pumpCast() {
+    if (_disposed) return;
+    while (_activeCastLoads < 2 && _pendingCast.isNotEmpty) {
+      final entry = _pendingCast.removeFirst();
+      if (!identical(_cast[entry.item.id], entry)) continue;
+      _activeCastLoads++;
+      unawaited(_loadCast(entry));
+    }
+  }
+
+  Future<void> _loadCast(_CastEntry entry) async {
+    bool current() =>
+        !_disposed &&
+        entry.generation == _generation &&
+        identical(_cast[entry.item.id], entry);
+    void diagnostic(String outcome, [String? failure]) {
+      lineup.diagnostics.add(DiagnosticEvent.castEnrichment, {
+        'castOutcome': outcome,
+        'castFailure': ?failure,
+      });
+    }
+
+    try {
+      diagnostic('requested');
+      final detail = await lineup.castForItem(
+        entry.item.id,
+        cancelled: entry.abort.future,
+      );
+      if (!current()) return;
+      if (detail == null) {
+        // Retired or unavailable authorization is not a successful empty cast.
+        // Keep the fallback and space later surface-driven admission without
+        // recording a terminal outcome for the retired result.
+        entry.failedAt = _clock();
+        return;
+      }
+      final merged = mergeCast(entry.item.cast, detail);
+      final before = entry.item.cast;
+      final after = merged.cast;
+      final richer =
+          before.length != after.length ||
+          Iterable<int>.generate(before.length).any(
+            (i) =>
+                before[i].name != after[i].name ||
+                before[i].role != after[i].role ||
+                before[i].portrait != after[i].portrait,
+          );
+      entry.view = richer ? merged : CastView(before);
+      diagnostic(richer ? 'enriched' : 'noRicherData');
+    } catch (error) {
+      if (!current()) return;
+      entry.failedAt = _clock();
+      final failure = error is PlexException
+          ? switch (error.code) {
+              'auth-required' ||
+              'auth-invalid' ||
+              'access-denied' ||
+              'authorization-unavailable' => 'auth',
+              'network-timeout' => 'timeout',
+              'cast-detail-invalid' || 'parse-error' => 'shape',
+              _ => 'transport',
+            }
+          : 'transport';
+      diagnostic('failed', failure);
+    } finally {
+      entry.complete = true;
+      _activeCastLoads--;
+      if (current()) notifyListeners();
+      _pumpCast();
+    }
+  }
 
   Future<Uint8List?> artworkFor(
     GuideProgram program, [
@@ -1027,7 +1138,14 @@ class GuideController extends ChangeNotifier {
     } else {
       _reprojectCachedRows(preserveErrors: preserveErrors);
     }
-    if (clearSchedules) _artwork.clear();
+    if (clearSchedules) {
+      _artwork.clear();
+      for (final entry in _cast.values) {
+        entry.retire();
+      }
+      _cast.clear();
+      _pendingCast.clear();
+    }
     if (clearSchedules) {
       for (final request in _pendingArtwork) {
         if (!request.completer.isCompleted) request.completer.complete(null);
@@ -1162,6 +1280,11 @@ class GuideController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    for (final entry in _cast.values) {
+      entry.retire();
+    }
+    _cast.clear();
+    _pendingCast.clear();
     _pendingProgramFocus = null;
     _failedChannelIds.clear();
     _retryingChannelIds.clear();
@@ -1274,3 +1397,19 @@ Set<String> _sourceLibraryIds(ContentSource source) => switch (source) {
   },
   ManualSource() || PlaylistSource() => const {},
 };
+
+class _CastEntry {
+  _CastEntry(this.item, this.generation);
+
+  final ChannelItem item;
+  final int generation;
+  final abort = Completer<void>();
+
+  void retire() {
+    if (!abort.isCompleted) abort.complete();
+  }
+
+  CastView? view;
+  DateTime? failedAt;
+  bool complete = false;
+}

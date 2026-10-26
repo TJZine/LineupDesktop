@@ -349,6 +349,34 @@ class PlexClient {
     return null;
   }
 
+  Future<List<PlexCastMember>> itemCast(
+    Uri server,
+    String token,
+    String ratingKey, {
+    Future<void>? cancelled,
+  }) async {
+    const invalid = PlexException(
+      'cast-detail-invalid',
+      'Plex returned invalid cast detail.',
+    );
+    if (ratingKey.trim().isEmpty) throw invalid;
+    final uri = server
+        .resolve('/library/metadata/')
+        .replace(pathSegments: ['library', 'metadata', ratingKey]);
+    final json = await _serverJson(uri, token, cancelled: cancelled);
+    final container = json['MediaContainer'];
+    if (container is! Map) throw invalid;
+    final rows = container['Metadata'];
+    if (rows is! List || rows.length != 1) throw invalid;
+    final row = rows.single;
+    if (row is! Map ||
+        _optionalId(row['ratingKey']) != ratingKey ||
+        (row['Role'] != null && row['Role'] is! List)) {
+      throw invalid;
+    }
+    return _castMembers(row['Role']);
+  }
+
   Future<List<PlexLibrary>> libraries(Uri server, String token) async {
     final json = await _serverJson(server.resolve('/library/sections'), token);
     const invalid = PlexException(
@@ -1639,19 +1667,34 @@ List<String> _personNames(Object? raw) {
 
 List<PlexCastMember> _castMembers(Object? raw) {
   final members = <PlexCastMember>[];
-  final names = <String>{};
+  final names = <String, int>{};
   for (final value in _optionalList(raw)) {
     if (value is! Map) continue;
     final name = _optionalText(value['tag']);
-    if (name == null || !names.add(name.toLowerCase())) continue;
-    members.add(
-      PlexCastMember(
-        name: name,
-        role: _optionalText(value['role']),
-        thumbPath: canonicalPlexCastPortraitText(_optionalText(value['thumb'])),
-      ),
+    if (name == null) continue;
+    final portrait = canonicalPlexCastPortraitText(
+      _optionalText(value['thumb']),
     );
-    if (members.length == maxRichCastMembers) break;
+    final index = names[name.toLowerCase()];
+    if (index != null) {
+      final first = members[index];
+      if (first.thumbPath == null && portrait != null) {
+        members[index] = PlexCastMember(
+          name: first.name,
+          role: first.role,
+          thumbPath: portrait,
+        );
+      }
+    } else if (members.length < maxRichCastMembers) {
+      names[name.toLowerCase()] = members.length;
+      members.add(
+        PlexCastMember(
+          name: name,
+          role: _optionalText(value['role']),
+          thumbPath: portrait,
+        ),
+      );
+    }
   }
   return List.unmodifiable(members);
 }

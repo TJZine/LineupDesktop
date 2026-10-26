@@ -1666,6 +1666,7 @@ class _NowPlaying extends StatelessWidget {
     final program = controller.currentProgram;
     if (program == null) return const SizedBox.shrink();
     final item = program.scheduled.item;
+    final cast = controller.guide.castFor(program).cast;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
     final dense = size.height < 900;
@@ -1675,7 +1676,7 @@ class _NowPlaying extends StatelessWidget {
     final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
     final episode = _episodeLabel(item);
     final (:editorial, :badges) = _nowPlayingFacts(controller, program);
-    final castFacts = item.cast
+    final castFacts = cast
         .map(
           (member) => member.role == null
               ? member.name
@@ -1895,8 +1896,7 @@ class _NowPlaying extends StatelessWidget {
                                   ),
                                 ],
                                 if (roles.androidTv &&
-                                    (summaryClamped ||
-                                        item.cast.length > 4)) ...[
+                                    (summaryClamped || cast.length > 4)) ...[
                                   const SizedBox(height: 8),
                                   TextButton(
                                     key: const Key('player-more-info'),
@@ -1913,11 +1913,11 @@ class _NowPlaying extends StatelessWidget {
                                     child: const Text('More info'),
                                   ),
                                 ],
-                                if (item.cast.isNotEmpty) ...[
+                                if (cast.isNotEmpty) ...[
                                   const SizedBox(height: 14),
                                   _NowPlayingCast(
                                     controller: controller,
-                                    cast: item.cast,
+                                    cast: cast,
                                     dense: dense,
                                   ),
                                 ],
@@ -3702,6 +3702,7 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
   @override
   Widget build(BuildContext context) {
     final item = widget.program.scheduled.item;
+    final cast = widget.controller.guide.castFor(widget.program).cast;
     final (:editorial, :badges) = _nowPlayingFacts(
       widget.controller,
       widget.program,
@@ -3856,7 +3857,7 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
                                                     ),
                                               ),
                                             ],
-                                            if (item.cast.isNotEmpty) ...[
+                                            if (cast.isNotEmpty) ...[
                                               const SizedBox(height: 24),
                                               Text(
                                                 'Cast',
@@ -3870,7 +3871,7 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
                                               ),
                                               for (
                                                 var i = 0;
-                                                i < item.cast.length;
+                                                i < cast.length;
                                                 i++
                                               )
                                                 Padding(
@@ -3886,8 +3887,8 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
                                                         CrossAxisAlignment
                                                             .stretch,
                                                     children: [
-                                                      Text(item.cast[i].name),
-                                                      if (item.cast[i].role
+                                                      Text(cast[i].name),
+                                                      if (cast[i].role
                                                           case final role?)
                                                         Text(
                                                           role,
