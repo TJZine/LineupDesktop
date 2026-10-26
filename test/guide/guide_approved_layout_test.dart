@@ -10,8 +10,10 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
+import 'package:lineup_desktop/guide/guide_playback_placeholder.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/golden_test_support.dart';
@@ -39,6 +41,50 @@ void main() {
           closeTo(before.channelRailWidth - previousNumber, .0001),
         );
       });
+    }
+  }
+  for (final scale in [1.0, 1.15, 1.3]) {
+    for (final large in [false, true]) {
+      testWidgets(
+        'TV constrained picture preserves placeholder minimum scale=$scale large=$large',
+        (tester) async {
+          await tester.runAsync(loadPinnedTestFonts);
+          late Size minimum;
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: true,
+                largeFocusIndicators: large,
+              ),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Builder(
+                builder: (context) {
+                  minimum = GuidePlaybackPlaceholder.minimumSize(context);
+                  return const SizedBox();
+                },
+              ),
+            ),
+          );
+          // At this width the identity/synopsis budget is smaller than Retry's
+          // state-independent aperture; a zero floor allowed it to shrink below that minimum.
+          final policy = GuideLayoutPolicy.forSize(
+            const Size(1200, 1080),
+            hasPicture: true,
+            textScale: scale,
+            tvControlsHeight: 56,
+            tvIdentityWidth: 600,
+            tvPictureMinimum: minimum,
+          );
+          expect(minimum.width, greaterThan(0));
+          expect(policy.pictureWidth, minimum.width);
+          expect(tester.takeException(), isNull);
+        },
+      );
     }
   }
   final output = Platform.environment['GUIDE_CAPTURE'];
@@ -107,7 +153,9 @@ void main() {
             lineup: lineup,
             clock: () => DateTime(2026, 10, 25, 6, 40),
             loadSchedule: (c) async => buildSchedule(
-              (c.source as ManualSource).items,
+              (channels.firstWhere((channel) => channel.id == c.id).source
+                      as ManualSource)
+                  .items,
               mode: c.playbackMode,
               seed: c.shuffleSeed,
             ),
@@ -199,6 +247,19 @@ void main() {
             'information': rect('guide-information-area'),
             'identity': rect('guide-program-identity'),
             'synopsis': rect('guide-program-synopsis'),
+            'numberColumnWidth': tester.getSize(find.text('1').first).width,
+            'nameWidth': tester.getSize(find.text(names.first)).width,
+            'railWidth': tester
+                .getSize(
+                  find
+                      .ancestor(
+                        of: find.text('1').first,
+                        matching: find.byType(AnimatedContainer),
+                      )
+                      .first,
+                )
+                .width,
+            'libraryPicker': rect('guide-library-picker'),
             'rows': tester.widget<ListView>(list).itemExtent,
             'list': rect('guide-schedule-list'),
             'numberLines': {for (final n in numbers) '$n': lines('$n')},
@@ -291,6 +352,96 @@ void main() {
           }
           if (!baseline) {
             final numberWidth = tester.getSize(find.text('1').first).width;
+            final nameWidth = tester.getSize(find.text(names.first)).width;
+            if (tv) {
+              guide.focusProgram(guide.currentProgram('c3')!);
+              guide.moveHorizontal(-1);
+              await tester.pumpAndSettle();
+              final owner = FocusManager.instance.primaryFocus;
+              for (final name in LineupThemeName.values) {
+                theme.value = name;
+                await tester.pumpAndSettle();
+                expect(
+                  tester.element(find.byType(GuideView)),
+                  same(mountedGuide),
+                );
+                expect(FocusManager.instance.primaryFocus, same(owner));
+                final watching = find.text('Watching');
+                final roles = LineupTheme.of(tester.element(watching));
+                expect(
+                  tester.widget<Text>(watching).style!.color,
+                  roles.focusSecondaryText,
+                );
+                expect(
+                  tester
+                      .widget<Icon>(find.byIcon(Icons.play_arrow_rounded))
+                      .color,
+                  roles.focusSecondaryText,
+                );
+                final rail = tester.widget<AnimatedContainer>(
+                  find
+                      .ancestor(
+                        of: watching,
+                        matching: find.byType(AnimatedContainer),
+                      )
+                      .first,
+                );
+                expect(
+                  (rail.decoration! as BoxDecoration).color,
+                  roles.focusedSurface,
+                );
+                expect(tester.getSize(find.text('1').first).width, numberWidth);
+                expect(rect('guide-picture-in-picture'), metrics['picture']);
+              }
+              final header = tester.widget<LineupTopBar>(
+                find.byType(LineupTopBar),
+              );
+              header.menuFocusNode!.requestFocus();
+              await tester.pumpAndSettle();
+              final headerOwner = FocusManager.instance.primaryFocus;
+              final lockup = tester.element(find.text('LINEUP'));
+              for (final name in LineupThemeName.values) {
+                theme.value = name;
+                await tester.pumpAndSettle();
+                expect(FocusManager.instance.primaryFocus, same(headerOwner));
+                expect(tester.element(find.text('LINEUP')), same(lockup));
+                final roles = LineupTheme.forName(
+                  name,
+                  androidTv: true,
+                  largeFocusIndicators: large,
+                ).extension<LineupThemeRoles>()!;
+                final scoped = LineupTheme.of(lockup);
+                expect(scoped.primarySurface, roles.focusedInsetSurface);
+                expect(scoped.primaryText, roles.onFocus);
+                expect(scoped.secondaryText, roles.focusSecondaryText);
+                expect(scoped.mutedText, roles.focusMutedText);
+                final buttonFinder = find
+                    .ancestor(
+                      of: find.text('LINEUP'),
+                      matching: find.byType(TextButton),
+                    )
+                    .first;
+                final material = tester.widget<Material>(
+                  find
+                      .descendant(
+                        of: buttonFinder,
+                        matching: find.byType(Material),
+                      )
+                      .first,
+                );
+                expect(material.color, roles.focusedSurface);
+                expect(
+                  tester.widget<Text>(find.text('LINEUP')).style!.color,
+                  roles.onFocus,
+                );
+                expect(
+                  (material.shape! as OutlinedBorder).side,
+                  large
+                      ? BorderSide(color: roles.focusBorder, width: 3)
+                      : BorderSide.none,
+                );
+              }
+            }
             guide.setSearchQuery('Northern');
             await tester.pumpAndSettle();
             expect(
@@ -309,6 +460,33 @@ void main() {
               numberWidth,
               reason: 'Hiding provenance must not change the column',
             );
+            final original = channels.first;
+            lineup.fixtureActor.replaceChannels([
+              Channel(
+                id: original.id,
+                number: original.number,
+                name: original.name,
+                source: const LibrarySource(
+                  libraryId: 'library',
+                  libraryType: PlexLibraryType.show,
+                ),
+                playbackMode: original.playbackMode,
+                anchor: original.anchor,
+                shuffleSeed: original.shuffleSeed,
+              ),
+              ...channels.skip(1),
+            ]);
+            await tester.pumpAndSettle();
+            guide.setLibraryFilter('library');
+            await tester.pumpAndSettle();
+            expect(guide.channels, hasLength(1));
+            expect(
+              tester.getSize(find.text('1').first).width,
+              numberWidth,
+              reason: 'Library filtering must retain the whole-lineup column',
+            );
+            guide.setLibraryFilter(null);
+            await tester.pumpAndSettle();
             for (final maximum in [999, 1]) {
               await lineup.deleteChannels(
                 expectedChannels: lineup.channels
@@ -333,6 +511,11 @@ void main() {
                 reason: 'Column follows lineup numbers with a two-digit floor',
               );
               measure.dispose();
+              expect(
+                tester.getSize(find.text(names.first)).width,
+                closeTo(nameWidth, .01),
+                reason: 'The name budget stays constant for lineups up to 99, 999 and 1000',
+              );
             }
           }
           if (!baseline) {

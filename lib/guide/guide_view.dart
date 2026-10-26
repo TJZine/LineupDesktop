@@ -21,6 +21,8 @@ import 'guide_playback_placeholder.dart';
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
 const _guidePictureAspectRatio = 16 / 9;
+const _guideReferencePictureHeight = 324.0;
+const _guideSynopsisWidthFloor = 400.0;
 
 class GuideLayoutPolicy {
   const GuideLayoutPolicy._({
@@ -82,7 +84,7 @@ class GuideLayoutPolicy {
     final compactPictureHeight =
         pictureAvailable * 0.3 + pictureRoundingAllowance;
     final referencePictureHeight =
-        height - 1080 + 324 + pictureRoundingAllowance;
+        height - 1080 + _guideReferencePictureHeight + pictureRoundingAllowance;
     final pictureAllocation = math.max(
       0.0,
       math.min(
@@ -95,7 +97,7 @@ class GuideLayoutPolicy {
         ? math.max(0.0, pictureAllocation - showcaseHeightAdjustment)
         : math.min(
             math.max(
-              height - 1080 + 324,
+              height - 1080 + _guideReferencePictureHeight,
               math.max(tvInformationHeight, tvPictureMinimum.height),
             ),
             math.max(0.0, available - minimumRowHeight * minimumRows),
@@ -105,7 +107,7 @@ class GuideLayoutPolicy {
       (available - showcaseHeight) / minimumRows,
     );
     final pictureHeight = tvControlsHeight == null
-        ? math.min(324.0, pictureAllocation)
+        ? math.min(_guideReferencePictureHeight, pictureAllocation)
         : showcaseHeight;
     final widthBudget = math.max(0.0, width - 360 - 12 - 40);
     final pictureWidth = tvControlsHeight == null
@@ -113,12 +115,17 @@ class GuideLayoutPolicy {
               ? math.min(pictureHeight * 16 / 9, widthBudget)
               : pictureHeight * 16 / 9)
         : math.max(
-            0.0,
+            tvPictureMinimum.width,
             math.min(
               pictureHeight * 16 / 9,
               math.min(
                 width * .32,
-                width - 12 - 40 - 32 - tvIdentityWidth - 400 * textScale,
+                width -
+                    12 -
+                    40 -
+                    32 -
+                    tvIdentityWidth -
+                    _guideSynopsisWidthFloor * textScale,
               ),
             ),
           );
