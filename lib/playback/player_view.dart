@@ -507,7 +507,40 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         final openMenu = widget.openMenu;
         if (openMenu == null) return KeyEventResult.ignored;
         controller.closeSleepPicker();
-        openMenu(_menuFocus.context ?? context, _menuFocus);
+        final menuContext = _menuFocus.context;
+        final menuVisible =
+            controller.overlay == PlayerOverlay.osd ||
+            controller.overlay == PlayerOverlay.nowPlaying;
+        // FocusNode retains its last context after the animated OSD retires.
+        // Hidden/reader menus belong to the live Player, not that old button.
+        final menuBox = menuVisible && menuContext?.mounted == true
+            ? menuContext!.findRenderObject()
+            : null;
+        if (_menuFocus.parent != null &&
+            _menuFocus.canRequestFocus &&
+            menuBox is RenderBox &&
+            menuBox.attached &&
+            menuBox.hasSize) {
+          openMenu(menuContext!, _menuFocus);
+        } else {
+          final readerScope = switch (controller.overlay) {
+            PlayerOverlay.audioTracks ||
+            PlayerOverlay.subtitleTracks ||
+            PlayerOverlay.programInfo =>
+              FocusManager.instance.primaryFocus?.enclosingScope,
+            _ => null,
+          };
+          // Return through the current reader's history: restoring the full
+          // Player root strands arrows outside the drawer. The scope also
+          // survives a track row retiring while the shell menu is open.
+          final returnToReader =
+              readerScope != null &&
+              readerScope.parent != null &&
+              readerScope.context?.mounted == true &&
+              readerScope.canRequestFocus &&
+              readerScope.ancestors.contains(_rootFocus);
+          openMenu(context, returnToReader ? readerScope : _rootFocus);
+        }
       case PlayerAction.collapseNowPlaying || PlayerAction.closeOverlay:
         final restoreSleep = controller.sleepPickerOpen;
         command == PlayerAction.collapseNowPlaying
@@ -3311,6 +3344,8 @@ class _Tracks extends StatefulWidget {
 }
 
 class _TracksState extends State<_Tracks> {
+  final _focusScope = FocusScopeNode(debugLabel: 'Track reader');
+  final _closeFocus = FocusNode(debugLabel: 'Track reader Close');
   final _scrollController = ScrollController();
   final _selectedRowKey = GlobalKey();
   late final int? _initialSelectedTrackId;
@@ -3318,6 +3353,7 @@ class _TracksState extends State<_Tracks> {
   @override
   void initState() {
     super.initState();
+    _focusScope.addListener(_restoreRetiredTrackFocus);
     _initialSelectedTrackId = widget.controller.tracks
         .where((track) => track.type == widget.type && track.selected)
         .firstOrNull
@@ -3331,8 +3367,23 @@ class _TracksState extends State<_Tracks> {
     });
   }
 
+  void _restoreRetiredTrackFocus() {
+    if (!_focusScope.hasPrimaryFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // The menu returns through scope history. If native tracks retired its
+      // last row, give the still-open reader a stable, actionable fallback.
+      if (mounted &&
+          _focusScope.hasPrimaryFocus &&
+          _closeFocus.canRequestFocus) {
+        _closeFocus.requestFocus();
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _focusScope.dispose();
+    _closeFocus.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -3354,6 +3405,7 @@ class _TracksState extends State<_Tracks> {
     )!;
     return _PlaybackDrawer(
       controller: widget.controller,
+      focusScope: _focusScope,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3366,6 +3418,7 @@ class _TracksState extends State<_Tracks> {
                 ),
               ),
               TextButton(
+                focusNode: _closeFocus,
                 autofocus:
                     tracks.isEmpty && widget.type != PlayerTrackType.subtitle,
                 onPressed: widget.controller.closeOverlay,
@@ -3945,8 +3998,13 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
 }
 
 class _PlaybackDrawer extends StatelessWidget {
-  const _PlaybackDrawer({required this.controller, required this.child});
+  const _PlaybackDrawer({
+    required this.controller,
+    required this.child,
+    this.focusScope,
+  });
   final PlayerCoordinator controller;
+  final FocusScopeNode? focusScope;
   final Widget child;
 
   @override
@@ -3968,6 +4026,7 @@ class _PlaybackDrawer extends StatelessWidget {
         return Align(
           alignment: Alignment.centerRight,
           child: FocusScope(
+            node: focusScope,
             child: Container(
               key: const Key('playback-options-fade'),
               width: railWidth + fadeWidth,

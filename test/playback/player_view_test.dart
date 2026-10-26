@@ -1154,7 +1154,7 @@ void main() {
       expect(fixture.player.overlay, PlayerOverlay.none);
       expect(menuCalls, [0]);
       expect(invokerContexts.single.findRenderObject(), isA<RenderBox>());
-      expect(invokerFocus.single.debugLabel, 'Player Lineup menu');
+      expect(invokerFocus.single, same(root));
 
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
@@ -1195,52 +1195,307 @@ void main() {
     }
   });
 
-  testWidgets('M1 Menu opens the mounted Lineup menu from hidden TV Player', (
-    tester,
-  ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    tester.view
-      ..physicalSize = const Size(1920, 1080)
-      ..devicePixelRatio = 2;
-    final fixture = _Fixture(PlayerState.playing, richProgram: true);
-    fixture.lineup.fixtureActor.present(
-      const LineupPresentation(stage: SetupStage.ready),
+  for (final hasProgram in [true, false]) {
+    testWidgets(
+      'M1 mounted menu survives TV OSD retirement program=$hasProgram',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 2;
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richProgram: true,
+          tracks: const [
+            PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+          ],
+        );
+        fixture.lineup.fixtureActor.present(
+          const LineupPresentation(stage: SetupStage.ready),
+        );
+        Future<void> key(LogicalKeyboardKey value) async {
+          await tester.sendKeyEvent(
+            value,
+            physicalKey: value == LogicalKeyboardKey.goBack
+                ? PhysicalKeyboardKey.escape
+                : null,
+          );
+          await tester.pumpAndSettle();
+        }
+
+        try {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: true,
+              ),
+              builder: LineupCanvas.builder,
+              home: LineupShell(
+                player: fixture.native,
+                controller: fixture.lineup,
+                initialMediaPath: '/synthetic.mp4',
+                androidTv: true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final player = tester
+              .widget<PlayerView>(find.byType(PlayerView))
+              .controller;
+          if (hasProgram) {
+            final tuning = player.tune('channel');
+            await tester.pumpAndSettle();
+            expect(await tuning, isTrue);
+            expect(player.currentProgram, isNotNull);
+          } else {
+            expect(player.currentProgram, isNull);
+          }
+          fixture.native.emitState(PlayerState.playing);
+          await tester.pumpAndSettle();
+          // Establish hidden playback through actual Back, then exercise both
+          // ordinary compact reveals and fully retire their animated OSD subtree.
+          await key(LogicalKeyboardKey.goBack);
+          final initialCommands = fixture.native.transportCommands;
+          final initialLoads = fixture.native.loadCalls;
+          final store = fixture.lineup.store as MemoryAppStore;
+          final initialSaves = store.savedStates.length;
+          for (final reveal in [
+            LogicalKeyboardKey.arrowDown,
+            LogicalKeyboardKey.select,
+          ]) {
+            await key(reveal);
+            expect(player.overlay, PlayerOverlay.osd);
+            expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+            await key(LogicalKeyboardKey.goBack);
+            expect(player.overlay, PlayerOverlay.none);
+            expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+            expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+            await key(LogicalKeyboardKey.contextMenu);
+            expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+            expect(find.text('Plex account'), findsOneWidget);
+            expect(player.overlay, PlayerOverlay.none);
+            await key(LogicalKeyboardKey.goBack);
+            expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+            expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+          }
+
+          // A live OSD menu button remains the keyboard invoker when visible.
+          await key(LogicalKeyboardKey.select);
+          await key(LogicalKeyboardKey.contextMenu);
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await key(LogicalKeyboardKey.goBack);
+          expect(player.overlay, PlayerOverlay.osd);
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Player Lineup menu',
+          );
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(
+            player.overlay,
+            hasProgram ? PlayerOverlay.nowPlaying : PlayerOverlay.osd,
+          );
+          await key(LogicalKeyboardKey.contextMenu);
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await key(LogicalKeyboardKey.goBack);
+          expect(
+            player.overlay,
+            hasProgram ? PlayerOverlay.nowPlaying : PlayerOverlay.osd,
+          );
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Player Lineup menu',
+          );
+          // Track readers have no OSD invoker, even while its retiring button
+          // context is still retained by the shared FocusNode.
+          await key(LogicalKeyboardKey.arrowLeft);
+          await key(LogicalKeyboardKey.arrowLeft);
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Player audio',
+          );
+          await key(LogicalKeyboardKey.select);
+          expect(player.overlay, PlayerOverlay.audioTracks);
+          await key(LogicalKeyboardKey.contextMenu);
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await key(LogicalKeyboardKey.goBack);
+          expect(player.overlay, PlayerOverlay.audioTracks);
+          expect(
+            tester
+                .widget<PlayerView>(find.byType(PlayerView))
+                .focusNode!
+                .hasFocus,
+            isTrue,
+          );
+          expect(fixture.native.transportCommands, initialCommands);
+          expect(fixture.native.loadCalls, initialLoads);
+          expect(store.savedStates.length, initialSaves);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+          tester.view.reset();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
     );
-    try {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: LineupTheme.forName(
-            LineupThemeName.emberSteel,
-            androidTv: true,
-          ),
-          builder: LineupCanvas.builder,
-          home: LineupShell(
-            player: fixture.native,
-            controller: fixture.lineup,
-            initialMediaPath: '/synthetic.mp4',
-            androidTv: true,
-          ),
+  }
+
+  for (final reader in [
+    PlayerOverlay.audioTracks,
+    PlayerOverlay.subtitleTracks,
+    PlayerOverlay.programInfo,
+  ]) {
+    testWidgets('M1 mounted reader remains usable after menu: $reader', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 24),
+          summary: List.filled(100, 'A synthetic long synopsis.').join(' '),
         ),
+        tracks: const [
+          PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+          PlayerTrack(id: 2, type: PlayerTrackType.audio, selected: false),
+          PlayerTrack(id: 11, type: PlayerTrackType.subtitle, selected: true),
+          PlayerTrack(id: 12, type: PlayerTrackType.subtitle, selected: false),
+        ],
       );
-      await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
-      expect(find.text('Plex account'), findsOneWidget);
-      await tester.sendKeyEvent(
-        LogicalKeyboardKey.goBack,
-        physicalKey: PhysicalKeyboardKey.escape,
-      );
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
-      expect(tester.takeException(), isNull);
-    } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      fixture.dispose();
-      tester.view.reset();
-      debugDefaultTargetPlatformOverride = null;
-    }
-  });
+      Future<void> key(LogicalKeyboardKey value) async {
+        await tester.sendKeyEvent(
+          value,
+          physicalKey: value == LogicalKeyboardKey.goBack
+              ? PhysicalKeyboardKey.escape
+              : null,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      bool rowFocused(String key) {
+        final element = tester.element(find.byKey(Key(key)));
+        return Focus.of(element).hasFocus;
+      }
+
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: true,
+            ),
+            builder: LineupCanvas.builder,
+            home: LineupShell(
+              player: fixture.native,
+              controller: fixture.lineup,
+              initialMediaPath: '/synthetic.mp4',
+              androidTv: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final player = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        final tuning = player.tune('channel');
+        await tester.pumpAndSettle();
+        expect(await tuning, isTrue);
+        fixture.native.emitState(PlayerState.playing);
+        await tester.pumpAndSettle();
+        final commands = fixture.native.transportCommands;
+        final loads = fixture.native.loadCalls;
+        final store = fixture.lineup.store as MemoryAppStore;
+        final saves = store.savedStates.length;
+        await key(LogicalKeyboardKey.info);
+        expect(player.overlay, PlayerOverlay.nowPlaying);
+        if (reader == PlayerOverlay.programInfo) {
+          await key(LogicalKeyboardKey.arrowUp);
+          await key(LogicalKeyboardKey.select);
+        } else {
+          if (reader == PlayerOverlay.audioTracks) {
+            await key(LogicalKeyboardKey.arrowRight);
+          }
+          await key(LogicalKeyboardKey.select);
+        }
+        expect(player.overlay, reader);
+        final primary = FocusManager.instance.primaryFocus;
+        await key(LogicalKeyboardKey.contextMenu);
+        expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+        await key(LogicalKeyboardKey.goBack);
+        expect(player.overlay, reader);
+        if (reader == PlayerOverlay.programInfo) {
+          expect(FocusManager.instance.primaryFocus, same(primary));
+          final scroll = tester
+              .widget<SingleChildScrollView>(
+                find.byKey(const Key('player-more-info-scroll')),
+              )
+              .controller!;
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(scroll.offset, greaterThan(0));
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(scroll.offset, 0);
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'More info Close',
+          );
+          await key(LogicalKeyboardKey.select);
+          expect(player.overlay, PlayerOverlay.nowPlaying);
+          expect(fixture.native.selectedTracks, isEmpty);
+        } else {
+          final type = reader == PlayerOverlay.audioTracks
+              ? PlayerTrackType.audio
+              : PlayerTrackType.subtitle;
+          final secondId = type == PlayerTrackType.audio ? 2 : 12;
+          expect(
+            rowFocused('playback-track-${type.name}-${secondId - 1}'),
+            isTrue,
+          );
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(rowFocused('playback-track-${type.name}-$secondId'), isTrue);
+          await key(LogicalKeyboardKey.select);
+          expect(fixture.native.selectedTracks, [(type, secondId)]);
+          // Refresh real native track data while the menu hides its invoker.
+          // All rows of this type retire; Close/Off remains a live fallback.
+          await key(LogicalKeyboardKey.contextMenu);
+          fixture.native.emitTracks(const []);
+          await tester.pumpAndSettle();
+          await key(LogicalKeyboardKey.goBack);
+          expect(player.overlay, reader);
+          expect(player.tracks, isEmpty);
+          if (type == PlayerTrackType.audio) {
+            await key(LogicalKeyboardKey.select);
+            expect(player.overlay, PlayerOverlay.nowPlaying);
+          } else {
+            // The retired row falls back to Close; Down reaches Off.
+            await key(LogicalKeyboardKey.arrowDown);
+            expect(rowFocused('playback-track-off'), isTrue);
+            await key(LogicalKeyboardKey.select);
+            expect(fixture.native.selectedTracks, [
+              (type, secondId),
+              (type, null),
+            ]);
+          }
+        }
+        expect(fixture.native.transportCommands, commands);
+        expect(fixture.native.loadCalls, loads);
+        expect(store.savedStates.length, saves);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
 
   for (final window in const [Size(960, 540), Size(1920, 1080)]) {
     for (final dvr in [false, true]) {
@@ -8123,6 +8378,13 @@ class _Lineup extends LineupController {
   }
 
   @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    (channel.source as ManualSource).items,
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+  );
+
+  @override
   LineupPlaybackRequest playbackFor(String itemId) =>
       LineupPlaybackRequest.parts([
         LineupPlaybackPart(uri: Uri.parse('lineup-test://$itemId')),
@@ -8437,6 +8699,7 @@ class _Native implements NativePlayer {
         duration: duration,
         telemetry: telemetry,
         tracks: _tracks,
+        generation: lastLoadGeneration,
       ),
     );
   }
