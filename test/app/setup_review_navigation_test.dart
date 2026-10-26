@@ -145,7 +145,7 @@ void main() {
   );
 
   testWidgets(
-    'stable ID survives reorder; filtered and removed fallback uses original order; empty returns Search',
+    'filtered fallback uses original order, preceding tie, then Search',
     (tester) async {
       final fixture = _Fixture()..review = _review(updated: 92);
       await fixture.pump(tester);
@@ -154,20 +154,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
-      fixture.review = _review(updated: 92, moved: 92);
+      fixture.filter = SetupReviewFilter.unchanged;
       await fixture.pump(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
-      expect(_readNode(tester, _row(92)).hasPrimaryFocus, isTrue);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pumpAndSettle();
-      fixture.search = 'Test channel 9'; // remembered name no longer matches
-      await fixture.pump(tester);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-      await tester.pumpAndSettle();
-      // Original order after reordering puts 92 last; nearest survivor is 99.
-      expect(_readNode(tester, _row(99)).hasPrimaryFocus, isTrue);
-      expect(fixture.search, 'Test channel 9');
+      expect(_readNode(tester, _row(91)).hasPrimaryFocus, isTrue);
+      expect(fixture.filter, SetupReviewFilter.unchanged);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
       fixture.search = 'no matches';
@@ -180,10 +172,113 @@ void main() {
       );
       expect(fixture.search, 'no matches');
       expect(fixture.actions, 0);
+    },
+  );
 
-      fixture.search = '';
-      fixture.review = _review();
+  testWidgets('no-memory Up traverses to last row; return memory is consumed', (
+    tester,
+  ) async {
+    final fixture = _Fixture();
+    await fixture.pump(tester);
+    await _reveal(tester, _row(184));
+    // Direct footer entry has no remembered row. Normal Up traversal must
+    // select the last row, even when no row has ever owned focus.
+    _back(tester).requestFocus();
+    await tester.pumpAndSettle();
+    expect(_back(tester).hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(_readNode(tester, _row(184)).hasPrimaryFocus, isTrue);
+
+    await _reveal(tester, _row(92));
+    _readNode(tester, _row(92)).requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(_readNode(tester, _row(92)).hasPrimaryFocus, isTrue);
+    await _reveal(tester, _row(184));
+    _back(tester).requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(_readNode(tester, _row(184)).hasPrimaryFocus, isTrue);
+    expect(fixture.actions, 0);
+  });
+
+  testWidgets('held Right and Up do not remember, reveal or refocus', (
+    tester,
+  ) async {
+    final fixture = _Fixture();
+    await fixture.pump(tester);
+    await _reveal(tester, _row(92));
+    final node = _readNode(tester, _row(92));
+    node.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(_primary(tester).hasPrimaryFocus, isTrue);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(node.hasPrimaryFocus, isTrue);
+    // Keep Up held, enter the footer again, and move the viewport. A repeat
+    // must not start another return or run ordinary traversal.
+    _back(tester).requestFocus();
+    await tester.pumpAndSettle();
+    _scroll(tester).jumpTo(_scroll(tester).maxScrollExtent);
+    await tester.pumpAndSettle();
+    final offset = _scroll(tester).pixels;
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(_back(tester).hasPrimaryFocus, isTrue);
+    expect(_scroll(tester).pixels, offset);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+
+    await _reveal(tester, _row(92));
+    final freshNode = _readNode(tester, _row(92));
+    freshNode.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    freshNode
+        .requestFocus(); // another path out of the footer clears the memory
+    await tester.pumpAndSettle();
+    final rowOffset = _scroll(tester).pixels;
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(freshNode.hasPrimaryFocus, isTrue);
+    expect(_scroll(tester).pixels, rowOffset);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    expect(fixture.actions, 0);
+  });
+
+  testWidgets(
+    'leaving footer and new review clear memory; recalculation prunes scopes',
+    (tester) async {
+      final fixture = _Fixture();
       await fixture.pump(tester);
+      await _reveal(tester, _row(92));
+      final removedScope = _rowScope(tester, _row(92));
+      _readNode(tester, _row(92)).requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      final search = find.byKey(const ValueKey('channel-setup-review-search'));
+      await _reveal(tester, search);
+      tester.widget<TextField>(search).focusNode!.requestFocus();
+      await tester.pumpAndSettle();
+      await _reveal(tester, _row(184));
+      final retainedScope = _rowScope(tester, _row(184));
+      _back(tester).requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(_readNode(tester, _row(184)).hasPrimaryFocus, isTrue);
+
       await _reveal(tester, _row(92));
       _readNode(tester, _row(92)).requestFocus();
       await tester.pumpAndSettle();
@@ -191,10 +286,45 @@ void main() {
       await tester.pumpAndSettle();
       fixture.review = _review(omit: 92);
       await fixture.pump(tester);
+      expect(removedScope.context?.mounted, isNot(true));
+      expect(() => removedScope.addListener(() {}), throwsFlutterError);
+      await _reveal(tester, _row(184));
+      expect(_rowScope(tester, _row(184)), same(retainedScope));
+      _back(tester).requestFocus();
+      await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
-      expect(_readNode(tester, _row(91)).hasPrimaryFocus, isTrue);
+      expect(_readNode(tester, _row(184)).hasPrimaryFocus, isTrue);
       expect(fixture.actions, 0);
+    },
+  );
+
+  testWidgets(
+    'region moves skip ineligible targets and cancel obsolete reveals',
+    (tester) async {
+      final fixture = _Fixture();
+      await fixture.pump(tester);
+      await _reveal(tester, _row(92));
+      _readNode(tester, _row(92)).requestFocus();
+      await tester.pumpAndSettle();
+      _primary(tester).canRequestFocus = false;
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(_back(tester).hasPrimaryFocus, isTrue);
+      _scroll(tester).jumpTo(_scroll(tester).maxScrollExtent);
+      await tester.pumpAndSettle();
+      // A return starts asynchronously; leaving the footer before its next frame
+      // must prevent it from stealing focus or continuing to scroll.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      _back(tester).unfocus(disposition: UnfocusDisposition.scope);
+      FocusManager.instance.applyFocusChangesIfNeeded();
+      await tester.pumpAndSettle();
+      expect(_footerFocused(tester), isFalse);
+      expect(find.byKey(const ValueKey('review-footer-hint')), findsNothing);
+      expect(fixture.actions, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -314,6 +444,9 @@ Future<void> _reveal(WidgetTester tester, Finder row) async {
 FocusNode _readNode(WidgetTester tester, Finder row) => Focus.of(
   tester.element(find.descendant(of: row, matching: find.byType(Text)).first),
 );
+FocusNode _rowScope(WidgetTester tester, Finder row) => _readNode(tester, row)
+    .ancestors
+    .firstWhere((node) => node.debugLabel?.startsWith('Review row ') == true);
 FocusNode _back(WidgetTester tester) => tester
     .widget<TextButton>(find.byKey(const ValueKey('back-to-configure')))
     .focusNode!;

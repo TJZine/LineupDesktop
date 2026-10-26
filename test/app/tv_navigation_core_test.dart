@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
+import 'package:lineup_desktop/app/channel_setup/review_step.dart';
 import 'package:lineup_desktop/app/channels_view.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/focus_ink.dart';
@@ -629,58 +630,88 @@ void main() {
     f.controller.dispose();
   });
 
-  androidTest('TV no-change Review terminal Back opens Guide without saving', (
-    tester,
-  ) async {
-    final f = await _setup();
-    final native = FixturePlayer();
-    await _pump(tester, f.controller, outside, player: native);
-    _scanButton(tester).onPressed!();
-    await tester.pumpAndSettle();
-    tester
-        .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
-        .onPressed!();
-    await tester.pumpAndSettle();
-    tester
-        .widget<FilledButton>(
-          find.byKey(const ValueKey('apply-reviewed-lineup')),
-        )
-        .onPressed!();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Open guide'));
-    await tester.pumpAndSettle();
+  androidTest(
+    'TV no-change Review Back preserves Configure state then Open guide exits once',
+    (tester) async {
+      final f = await _setup();
+      final native = FixturePlayer();
+      await _pump(tester, f.controller, outside, player: native);
+      _scanButton(tester).onPressed!();
+      await tester.pumpAndSettle();
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+          .onPressed!();
+      await tester.pumpAndSettle();
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('apply-reviewed-lineup')),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open guide'));
+      await tester.pumpAndSettle();
 
-    await f.controller.enterChannelSetup();
-    await tester.pumpAndSettle();
-    tester
-        .widget<FilledButton>(
-          find.byKey(const ValueKey('continue-ready-libraries')),
-        )
-        .onPressed!();
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('review-channels')));
-    await tester.pumpAndSettle();
+      await f.controller.enterChannelSetup();
+      await tester.pumpAndSettle();
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('continue-ready-libraries')),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('review-channels')));
+      await tester.pumpAndSettle();
 
-    final saves = f.store.calls;
-    expect(find.text('Your lineup is already up to date'), findsOneWidget);
-    final openGuideCount = find.text('Open guide').evaluate().length;
-    final viewLineupCount = find.text('View lineup').evaluate().length;
-    await back(tester);
-    expect(f.controller.stage, SetupStage.ready);
-    expect(find.byType(GuideView), findsOneWidget);
-    expect(backgrounds, 0);
-    expect(f.store.calls, saves);
-    expect(native.loads, isEmpty);
-    expect(native.stops, 0);
-    // The label assertion remains useful after N2's copy update, while the
-    // route assertion above is independent of that composition seam.
-    expect(openGuideCount, 1);
-    expect(viewLineupCount, 0);
-    await back(tester);
-    expect(backgrounds, 1);
-    await tester.pumpWidget(const SizedBox.shrink());
-    f.controller.dispose();
-  });
+      final saves = f.store.calls;
+      expect(find.text('Your lineup is already up to date'), findsOneWidget);
+      final search = find.byKey(const ValueKey('channel-setup-review-search'));
+      await tester.enterText(search, 'channel');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      final filter = find.ancestor(
+        of: find.textContaining(RegExp(r'^[0-9]+ Unchanged$')),
+        matching: find.byType(TextButton),
+      );
+      await tester.ensureVisible(filter);
+      await tester.tap(filter);
+      await tester.pumpAndSettle();
+      final before = tester.widget<SetupReviewStep>(
+        find.byType(SetupReviewStep),
+      );
+      expect(before.initialSearch, 'channel');
+      expect(before.initialFilter, SetupReviewFilter.unchanged);
+      await back(tester);
+      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.byType(GuideView), findsNothing);
+      expect(backgrounds, 0);
+      expect(f.store.calls, saves);
+      // Review again through the real Configure action. Mode, projection and
+      // consent remain the same; neither Back nor region navigation saves.
+      await tester.tap(find.byKey(const ValueKey('review-channels')));
+      await tester.pumpAndSettle();
+      final after = tester.widget<SetupReviewStep>(
+        find.byType(SetupReviewStep),
+      );
+      expect(after.review.mode, before.review.mode);
+      expect(after.initialSearch, before.initialSearch);
+      expect(after.initialFilter, before.initialFilter);
+      expect(after.removalConfirmed, before.removalConfirmed);
+      expect(find.text('Open guide'), findsOneWidget);
+      expect(find.text('View lineup'), findsNothing);
+      expect(f.store.calls, saves);
+      await tester.tap(find.text('Open guide'));
+      await tester.pumpAndSettle();
+      expect(f.controller.stage, SetupStage.ready);
+      expect(find.byType(GuideView), findsOneWidget);
+      expect(f.store.calls, saves);
+      expect(native.loads, isEmpty);
+      expect(native.stops, 0);
+      await back(tester);
+      expect(backgrounds, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.controller.dispose();
+    },
+  );
 
   androidTest('TV regeneration terminal Back opens Guide without saving', (
     tester,

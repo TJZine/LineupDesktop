@@ -99,10 +99,31 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         event is KeyUpEvent) {
       return KeyEventResult.ignored;
     }
+    if (event is! KeyDownEvent) return KeyEventResult.handled;
+    final target = [
+      if (_primaryEnabled) _primaryFocus,
+      _backFocus,
+    ].where(_canFocus).firstOrNull;
+    if (target == null) return KeyEventResult.ignored;
     _revealGeneration++;
     _rememberRow(id);
-    (_primaryEnabled ? _primaryFocus : _backFocus).requestFocus();
+    target.requestFocus();
     return KeyEventResult.handled;
+  }
+
+  bool _canFocus(FocusNode node) =>
+      node.canRequestFocus && node.context?.mounted == true;
+
+  void _clearReturn() {
+    _returnId = null;
+    _returnOrder = const [];
+  }
+
+  void _footerFocusChanged(bool focused) {
+    if (!focused) {
+      _revealGeneration++;
+      _clearReturn();
+    }
   }
 
   String? _returnTarget(List<SetupReviewEntry> entries) {
@@ -126,17 +147,24 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     final generation = ++_revealGeneration;
     final entries = _visibleEntries;
     final id = _returnTarget(entries);
+    final offset = _returnOffset;
+    // Consume before moving focus. Footer exit cancels pending reveals, but
+    // cannot erase the snapshot used by this return.
+    _clearReturn();
     if (id == null) {
-      _searchFocus.requestFocus();
-      await Scrollable.ensureVisible(_searchFocus.context!);
+      if (_canFocus(_searchFocus)) {
+        _searchFocus.requestFocus();
+        await Scrollable.ensureVisible(_searchFocus.context!);
+      }
       return;
     }
+    if (!_rosterScroll.hasClients) return;
     final targetIndex = entries.indexWhere((entry) => entry.channel.id == id);
     final positions = {
       for (var i = 0; i < entries.length; i++) entries[i].channel.id: i,
     };
     _rosterScroll.jumpTo(
-      _returnOffset.clamp(0, _rosterScroll.position.maxScrollExtent),
+      offset.clamp(0, _rosterScroll.position.maxScrollExtent),
     );
     // A sliver may have disposed the return row while focus was in the footer.
     // Walk viewport-sized chunks until it is built; row heights can vary with
@@ -149,7 +177,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         return;
       }
       final scope = _rowScopes[id];
-      final target = scope?.traversalDescendants.firstOrNull;
+      final target = scope?.traversalDescendants.where(_canFocus).firstOrNull;
       if (target?.context?.mounted == true) {
         target!.requestFocus();
         await Scrollable.ensureVisible(target.context!, alignment: .5);
@@ -180,6 +208,8 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     if (event.logicalKey != LogicalKeyboardKey.arrowUp || event is KeyUpEvent) {
       return KeyEventResult.ignored;
     }
+    if (event is! KeyDownEvent) return KeyEventResult.handled;
+    if (_returnId == null) return KeyEventResult.ignored;
     unawaited(_returnToRoster());
     return KeyEventResult.handled;
   }
@@ -230,6 +260,17 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   @override
   void didUpdateWidget(covariant SetupReviewStep oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.review, widget.review)) {
+      _revealGeneration++;
+      _clearReturn();
+      final ids = widget.review.entries
+          .map((entry) => entry.channel.id)
+          .toSet();
+      for (final id
+          in _rowScopes.keys.where((id) => !ids.contains(id)).toList()) {
+        _rowScopes.remove(id)!.dispose();
+      }
+    }
     if (oldWidget.initialFilter != widget.initialFilter) {
       _filter = widget.initialFilter;
     }
@@ -251,6 +292,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         canRequestFocus: false,
         skipTraversal: true,
         onKeyEvent: LineupTheme.of(context).androidTv ? _footerKey : null,
+        onFocusChange: _footerFocusChanged,
         child: SetupFooter(
           configuration: true,
           leading: [
@@ -1000,9 +1042,6 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         canRequestFocus: false,
         skipTraversal: true,
         onKeyEvent: (_, event) => _rowKey(entry.channel.id, event),
-        onFocusChange: (focused) {
-          if (focused) _rememberRow(entry.channel.id);
-        },
         child: LineupRowSurface(
           selected: false,
           child: Builder(

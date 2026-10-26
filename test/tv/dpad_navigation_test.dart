@@ -527,8 +527,13 @@ void main() {
         _focusedIn(tester, find.byKey(const ValueKey('back-to-configure')));
         expect(tester.getRect(footer), footerBounds);
         if (existing) {
-          // R1 returns from the footer to the last read row, bypassing the
-          // consent leaf that was already exercised with Down and Select.
+          // Without a Right shortcut, Up keeps ordinary traversal through the
+          // consent leaf before reaching the final read row.
+          await _keys(tester, [_up]);
+          _focusedIn(
+            tester,
+            find.byKey(const ValueKey('channel-setup-replace-confirmation')),
+          );
           await _keys(tester, [_up]);
           _focusedIn(
             tester,
