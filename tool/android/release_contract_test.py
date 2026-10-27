@@ -30,6 +30,19 @@ class ReleaseContractTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'OnBackInvokedCallback'):
                 manifest.check(invalid)
 
+    def test_report_parsing_ignores_build_warnings(self):
+        report = '\n'.join((
+            'w: file:///opt/flutter/packages/flutter_tools/gradle/src/main/kotlin/Deeplink.kt:13:5 Deprecated',
+            'releaseRuntimeClasspath - Runtime classpath of /release.',
+            '+--- androidx.media3:media3-exoplayer:1.8.0',
+            '|    \\--- androidx.annotation:annotation:1.3.0 -> 1.9.1',
+            '\\--- project :flutter_secure_storage',
+        ))
+        self.assertEqual(generator.parse_report(report), [
+            ('androidx.annotation', 'annotation', '1.9.1'),
+            ('androidx.media3', 'media3-exoplayer', '1.8.0'),
+        ])
+
     def test_release_refuses_notice_drift_before_packaging(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -40,7 +53,7 @@ class ReleaseContractTest(unittest.TestCase):
             android = root / 'android'
             android.mkdir()
             wrapper = android / 'gradlew'
-            wrapper.write_text('#!/bin/sh\necho io.flutter:flutter_embedding_release:1.0.0\n')
+            wrapper.write_text('#!/bin/sh\necho "+--- io.flutter:flutter_embedding_release:1.0.0"\n')
             wrapper.chmod(0o755)
             source = android / 'app/src/main'
             source.mkdir(parents=True)
@@ -55,7 +68,7 @@ class ReleaseContractTest(unittest.TestCase):
             flutter.write_text("#!/bin/sh\necho '{\"frameworkVersion\":\"fixture\"}'\n")
             flutter.chmod(0o755)
             assets = source / 'assets'
-            generator.generate('io.flutter:flutter_embedding_release:1.0.0', assets, [], sdk, None, 'fixture')
+            generator.generate('+--- io.flutter:flutter_embedding_release:1.0.0', assets, [], sdk, None, 'fixture')
             notice = assets / 'licenses/flutter/Flutter-SDK-LICENSE.txt'
             notice.write_text('stale SDK terms\n')
             result = subprocess.run(['bash', str(tools / 'build-release.sh')],
@@ -72,7 +85,7 @@ class ReleaseContractTest(unittest.TestCase):
             sdk.mkdir()
             (sdk / 'LICENSE').write_text('Exact SDK terms\n')
             output = root / 'assets'
-            args = ('io.flutter:flutter_embedding_release:1.0.0', output, [], sdk, None, 'fixture')
+            args = ('+--- io.flutter:flutter_embedding_release:1.0.0', output, [], sdk, None, 'fixture')
             generator.generate(*args)
             def snapshot():
                 return {p.relative_to(output): p.read_bytes() for p in output.rglob('*') if p.is_file()}

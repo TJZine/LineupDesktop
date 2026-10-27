@@ -36,6 +36,11 @@ COORDINATE = re.compile(
     r"(?P<artifact>[A-Za-z0-9_][A-Za-z0-9_.-]*):"
     r"(?P<version>[A-Za-z0-9][A-Za-z0-9_.+\-]*)"
 )
+# Gradle prints each resolved dependency as a ``+---``/``\---`` tree entry.
+# Other output, such as Kotlin warnings ``file:///…/Deeplink.kt:13:5``
+# emitted while a clean host compiles Flutter's Gradle plugin, is not a
+# coordinate.
+TREE_ENTRY = re.compile(r"^[|\s]*[+\\]--- ")
 XML_NS = {"m": "http://maven.apache.org/POM/4.0.0"}
 ARTIFACT_NOTICE = re.compile(
     r"(?:^|/)NOTICE(?:\.[A-Za-z0-9._-]+)?$",
@@ -53,6 +58,8 @@ def parse_report(text: str) -> list[tuple[str, str, str]]:
     """Return unique resolved external coordinates from Gradle's report."""
     coordinates: set[tuple[str, str, str]] = set()
     for line in text.splitlines():
+        if not TREE_ENTRY.match(line):
+            continue
         # ``project :foo`` entries are not published runtime coordinates.
         if "project :" in line:
             continue
