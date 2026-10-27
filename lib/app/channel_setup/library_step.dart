@@ -443,48 +443,64 @@ class SetupLibraryStep extends StatelessWidget {
         ? false
         : null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+      padding: const EdgeInsets.fromLTRB(0, 0, 8, 16),
       child: Row(
         children: [
-          if (libraries.length > 1) ...[
-            _checkbox(
-              key: const ValueKey('select-all-libraries'),
-              skipTraversal: roles.androidTv,
-              tristate: true,
-              value: value,
-              onChanged: editable ? (_) => onToggleAll() : null,
-            ),
+          if (libraries.length > 1)
             FocusTraversalOrder(
               order: const NumericFocusOrder(0),
-              child: TextButton(
-                focusNode:
-                    roles.androidTv &&
-                        data.libraryScanStatus != LibraryScanStatus.scanning &&
-                        editable
-                    ? entryFocusNode
-                    : null,
-                autofocus: roles.androidTv && editable,
-                style: const ButtonStyle(
-                  padding: WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                ),
-                onPressed: editable ? onToggleAll : null,
-                child: Builder(
-                  builder: (context) {
-                    final ink = LineupTheme.of(context);
-                    return Text(
-                      'Select all',
-                      style: summaryStyle.copyWith(
-                        fontSize: 16,
-                        color: editable ? ink.secondaryText : ink.mutedText,
+              // One focus target covers the checkbox and its label, matching
+              // the library rows. The button carries the tri-state semantics.
+              child: MergeSemantics(
+                child: Semantics(
+                  checked: value ?? false,
+                  mixed: value == null,
+                  child: TextButton(
+                    focusNode:
+                        roles.androidTv &&
+                            data.libraryScanStatus !=
+                                LibraryScanStatus.scanning &&
+                            editable
+                        ? entryFocusNode
+                        : null,
+                    autofocus: roles.androidTv && editable,
+                    style: const ButtonStyle(
+                      padding: WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 8),
                       ),
-                    );
-                  },
+                    ),
+                    onPressed: editable ? onToggleAll : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _checkbox(
+                          key: const ValueKey('select-all-libraries'),
+                          skipTraversal: true,
+                          tristate: true,
+                          value: value,
+                          onChanged: editable ? (_) => onToggleAll() : null,
+                        ),
+                        const SizedBox(width: 8),
+                        Builder(
+                          builder: (context) {
+                            final ink = LineupTheme.of(context);
+                            return Text(
+                              'Select all',
+                              style: summaryStyle.copyWith(
+                                fontSize: 16,
+                                color: editable
+                                    ? ink.secondaryText
+                                    : ink.mutedText,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ],
           const Spacer(),
           Text(
             '$selected of ${libraries.length} selected',
@@ -607,7 +623,7 @@ class SetupLibraryStep extends StatelessWidget {
         );
         final content = narrow
             ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   _checkbox(
                     value: selected,
@@ -631,7 +647,7 @@ class SetupLibraryStep extends StatelessWidget {
                 ],
               )
             : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   _checkbox(
                     value: selected,
@@ -678,7 +694,9 @@ class SetupLibraryStep extends StatelessWidget {
             order: NumericFocusOrder(index * 2 + 1),
             child: Semantics(
               checked: selected,
-              child: LineupRowSurface(selected: selected, child: row),
+              // The checkbox alone shows checked state; the surface carries
+              // focus and hover only.
+              child: LineupRowSurface(selected: false, child: row),
             ),
           )
         : row;

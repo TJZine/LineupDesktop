@@ -1451,9 +1451,11 @@ void main() {
     addTearDown(controller.dispose);
     await show(tester, controller);
 
+    // Being first in the list does not promote a server's action.
+    expect(find.byType(FilledButton), findsNothing);
     expect(
       tester
-          .getSemantics(find.widgetWithText(FilledButton, 'Connect'))
+          .getSemantics(find.widgetWithText(OutlinedButton, 'Connect'))
           .getSemanticsData()
           .label,
       'Connect to Test server',
@@ -1465,7 +1467,7 @@ void main() {
     await tester.pump();
     expect(
       tester
-          .getSemantics(find.widgetWithText(FilledButton, 'Connecting…'))
+          .getSemantics(find.widgetWithText(OutlinedButton, 'Connecting…'))
           .getSemanticsData()
           .label,
       'Connecting…',
@@ -1478,7 +1480,7 @@ void main() {
     await tester.pump();
     expect(
       tester
-          .getSemantics(find.widgetWithText(FilledButton, 'Retry'))
+          .getSemantics(find.widgetWithText(OutlinedButton, 'Retry'))
           .getSemanticsData()
           .label,
       'Retry',
@@ -1575,8 +1577,13 @@ void main() {
             ),
           )
           .height,
-      44,
+      56,
     );
+    expect(
+      tester.getSize(find.widgetWithText(OutlinedButton, 'Connect')).height,
+      tester.getSize(find.widgetWithText(FilledButton, 'Continue')).height,
+    );
+    expect(find.byType(LineupCompactControls), findsNothing);
     expect(find.text('‹ Settings · Account'), findsOneWidget);
     expect(find.text('Not measured yet'), findsOneWidget);
     expect(find.text('Direct remote · 126 ms'), findsOneWidget);

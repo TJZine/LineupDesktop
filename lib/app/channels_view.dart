@@ -516,8 +516,10 @@ class ChannelsViewState extends State<ChannelsView> {
                       final menuTheme = LineupTheme.of(context).androidTv
                           ? Theme.of(context)
                           : null;
+                      // The selection-mode checkbox alone shows checked
+                      // state; the row surface carries focus and hover only.
                       return LineupRowSurface(
-                        selected: _selectedIds.contains(channel.id),
+                        selected: false,
                         child: Builder(
                           builder: (context) {
                             final focusedTv =

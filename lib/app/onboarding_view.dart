@@ -1066,9 +1066,6 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             child: _ServerCard(
               server: server,
               current: widget.controller.server?.id == server.id,
-              primary: widget.controller.server == null
-                  ? widget.controller.servers.first.id == server.id
-                  : widget.controller.server?.id == server.id,
               connection: widget.controller.server?.id == server.id
                   ? widget.controller.connection
                   : null,
@@ -1572,7 +1569,6 @@ class _ServerCard extends StatelessWidget {
     required this.current,
     required this.connection,
     required this.onPressed,
-    required this.primary,
     this.pending = false,
     this.previouslyUsed = false,
     this.error,
@@ -1581,7 +1577,6 @@ class _ServerCard extends StatelessWidget {
   final bool current;
   final PlexConnection? connection;
   final VoidCallback? onPressed;
-  final bool primary;
   final bool pending;
   final bool previouslyUsed;
   final String? error;
@@ -1650,16 +1645,16 @@ class _ServerCard extends StatelessWidget {
     final trailing = MergeSemantics(
       child: Semantics(
         label: actionLabel,
-        child: primary
+        // Only continuing with the connected server is emphasized; list
+        // position never promotes a row.
+        child: current
             ? FilledButton(
                 onPressed: onPressed,
                 child: ExcludeSemantics(child: Text(buttonLabel)),
               )
-            : LineupCompactControls(
-                child: OutlinedButton(
-                  onPressed: onPressed,
-                  child: ExcludeSemantics(child: Text(buttonLabel)),
-                ),
+            : OutlinedButton(
+                onPressed: onPressed,
+                child: ExcludeSemantics(child: Text(buttonLabel)),
               ),
       ),
     );

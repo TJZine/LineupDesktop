@@ -19,6 +19,60 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final androidTv in [true, false]) {
+    testWidgets(
+      'bulk-selected channel rows show checked state on the checkbox only (TV: $androidTv)',
+      (tester) async {
+        await tester.pumpWidget(
+          UiFixture(
+            androidTv: androidTv,
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              channels: [
+                _channel('first', 1, 'First'),
+                _channel('second', 2, 'Second'),
+              ],
+            ),
+          ).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        await tester.tap(find.text('Select'));
+        await tester.pumpAndSettle();
+        final row = find.byKey(const ValueKey('channel-row-first'));
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+
+        expect(
+          tester
+              .widget<Checkbox>(
+                find.descendant(of: row, matching: find.byType(Checkbox)),
+              )
+              .value,
+          isTrue,
+        );
+        final roles = LineupTheme.of(tester.element(row));
+        final surface =
+            tester
+                    .widget<Container>(
+                      find
+                          .descendant(
+                            of: find.ancestor(
+                              of: row,
+                              matching: find.byType(LineupRowSurface),
+                            ),
+                            matching: find.byType(Container),
+                          )
+                          .first,
+                    )
+                    .decoration!
+                as BoxDecoration;
+        expect(surface.color, isNot(roles.selectedSurface));
+        expect((surface.border! as Border).left.color, Colors.transparent);
+      },
+    );
+  }
+
   testWidgets('Channels Back unwinds local layers before background fallback', (
     tester,
   ) async {

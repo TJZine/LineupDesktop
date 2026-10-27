@@ -394,6 +394,149 @@ void main() {
     _expectLibraryEntryPaint(tester);
   });
 
+  for (final androidTv in [true, false]) {
+    testWidgets(
+      'library Select all is one target covering its checkbox (TV: $androidTv)',
+      (tester) async {
+        final controller = _SetupController();
+        addTearDown(controller.dispose);
+        await _pump(tester, controller, androidTv: androidTv);
+        await tester.pumpAndSettle();
+
+        final selectAll = find.widgetWithText(TextButton, 'Select all');
+        final checkbox = find.byKey(const ValueKey('select-all-libraries'));
+        expect(
+          find.descendant(of: selectAll, matching: checkbox),
+          findsOneWidget,
+        );
+        final buttonRect = tester.getRect(selectAll);
+        expect(
+          buttonRect.expandToInclude(tester.getRect(checkbox)),
+          buttonRect,
+        );
+        final checkboxElement = tester.element(checkbox);
+        bool insideCheckbox(FocusNode node) {
+          final context = node.context;
+          if (context == null) return false;
+          if (identical(context, checkboxElement)) return true;
+          var inside = false;
+          context.visitAncestorElements((element) {
+            inside = identical(element, checkboxElement);
+            return !inside;
+          });
+          return inside;
+        }
+
+        expect(
+          FocusManager.instance.rootScope.traversalDescendants.where(
+            insideCheckbox,
+          ),
+          isEmpty,
+        );
+
+        final semantics = tester.ensureSemantics();
+        var data = tester.getSemantics(selectAll).getSemanticsData();
+        expect(data.label, 'Select all');
+        expect(data.flagsCollection.isButton, isTrue);
+        expect(data.flagsCollection.isChecked, CheckedState.isTrue);
+        await tester.tap(find.text('Shows'));
+        await tester.pump();
+        expect(tester.widget<Checkbox>(checkbox).value, isNull);
+        data = tester.getSemantics(selectAll).getSemanticsData();
+        expect(data.label, 'Select all');
+        expect(data.flagsCollection.isChecked, CheckedState.mixed);
+        semantics.dispose();
+
+        if (androidTv) {
+          final node = tester.widget<TextButton>(selectAll).focusNode!;
+          expect(node.hasPrimaryFocus, isTrue);
+          final roles = LineupTheme.of(tester.element(selectAll));
+          final fill = find
+              .descendant(of: selectAll, matching: find.byType(Material))
+              .first;
+          expect(tester.widget<Material>(fill).color, roles.focusedSurface);
+          expect(
+            tester.getRect(fill).expandToInclude(tester.getRect(checkbox)),
+            tester.getRect(fill),
+          );
+        }
+      },
+    );
+  }
+
+  testWidgets(
+    'TV checked library rows show checked state on the checkbox only',
+    (tester) async {
+      final controller = _SetupController();
+      addTearDown(controller.dispose);
+      await _pump(tester, controller, androidTv: true);
+      await tester.pumpAndSettle();
+      final roles = LineupTheme.of(
+        tester.element(find.byType(UpstreamChannelSetupView)),
+      );
+      final row = find.byKey(const ValueKey('library-row-movies'));
+      BoxDecoration surface() =>
+          tester
+                  .widget<Container>(
+                    find
+                        .descendant(
+                          of: find.ancestor(
+                            of: row,
+                            matching: find.byType(LineupRowSurface),
+                          ),
+                          matching: find.byType(Container),
+                        )
+                        .first,
+                  )
+                  .decoration!
+              as BoxDecoration;
+
+      expect(
+        tester
+            .widget<Checkbox>(
+              find.descendant(of: row, matching: find.byType(Checkbox)),
+            )
+            .value,
+        isTrue,
+      );
+      expect(surface().color, isNot(roles.selectedSurface));
+      expect(surface().color, isNot(roles.focusedSurface));
+      expect((surface().border! as Border).left.color, Colors.transparent);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      final rowContent = find
+          .descendant(of: row, matching: find.byType(Padding))
+          .first;
+      expect(Focus.of(tester.element(rowContent)).hasPrimaryFocus, isTrue);
+      expect(surface().color, roles.focusedSurface);
+      expect((surface().border! as Border).left.color, Colors.transparent);
+    },
+  );
+
+  testWidgets('library row checkbox, name, and type share a vertical center', (
+    tester,
+  ) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(const ValueKey('library-row-shows'));
+    final checkbox = tester.getCenter(
+      find.descendant(of: row, matching: find.byType(Checkbox)),
+    );
+    final name = tester.getCenter(
+      find.descendant(of: row, matching: find.text('Shows')),
+    );
+    final type = tester.getCenter(
+      find.descendant(of: row, matching: find.text('TV Shows')),
+    );
+    expect(name.dy, closeTo(checkbox.dy, 1));
+    expect(type.dy, closeTo(checkbox.dy, 1));
+    expect(type.dx, greaterThan(name.dx));
+  });
+
   testWidgets('NAV-I2 review entry yields to a modal opened before its frame', (
     tester,
   ) async {
