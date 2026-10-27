@@ -436,9 +436,18 @@ it is not a manifest of the signed app/package's library hashes.
 
 ```sh
 flutter config --enable-macos-desktop
+flutter config --enable-macos-arm64-only
 dart tool/macos/build_app.dart run
 dart tool/macos/build_app.dart build --release
 ```
+
+The app ships arm64 only. With the stock Flutter engine, release and profile
+builds are otherwise universal: `App.framework`, `FlutterMacOS.framework` and
+the `objective_c` native asset gain x86_64 slices that the arm64 Runner and
+libmpv runtime lack, and the native-asset verification fails with "Main
+executable lacks bundled architecture". `--enable-macos-arm64-only` is a
+per-user Flutter setting; CI sets it before the app build. The verified local
+engine (`--root`) is already arm64 only.
 
 Use `tool/macos/build_app.dart` for macOS application builds and runs, including
 CI and audit candidates. It passes the same identity defines as the Windows

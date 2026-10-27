@@ -154,7 +154,12 @@ jobs:
         run: tool/macos/mpv-runtime-embed-test.sh
       - name: Build macOS application with the prepared runtime
         shell: bash
-        run: dart tool/macos/build_app.dart build --release
+        run: |
+          set -euo pipefail
+          # The app ships arm64 only; the stock engine otherwise builds
+          # universal frameworks that fail native-asset verification.
+          flutter config --enable-macos-arm64-only
+          dart tool/macos/build_app.dart build --release
       - name: Run NativePlayerTests in Debug without code signing
         shell: bash
         run: |
