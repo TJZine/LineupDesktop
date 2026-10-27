@@ -1144,19 +1144,46 @@ class PlexClient {
     ]);
   }
 
+  /// Fetches program artwork from the selected server. With [width] and
+  /// [height], the server's photo transcoder returns the artwork scaled to
+  /// cover that physical-pixel box (`minSize=1`) without upscaling, so a
+  /// display slot never receives fewer pixels than it paints nor a 4K
+  /// original it would only discard.
   Future<Uint8List> artwork(
     Uri server,
     String token,
     Uri path, {
+    int? width,
+    int? height,
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
-    if (canonicalPlexArtworkPath(path) == null) {
+    final sized = width != null || height != null;
+    if (canonicalPlexArtworkPath(path) == null ||
+        (sized &&
+            (width == null ||
+                height == null ||
+                width < 1 ||
+                width > 4096 ||
+                height < 1 ||
+                height > 4096))) {
       throw const PlexException(
         'artwork-unavailable',
         'Program artwork is unavailable.',
       );
     }
-    final uri = server.resolveUri(path);
+    final uri = sized
+        ? server
+              .resolve('/photo/:/transcode')
+              .replace(
+                queryParameters: {
+                  'width': '$width',
+                  'height': '$height',
+                  'minSize': '1',
+                  'upscale': '0',
+                  'url': path.toString(),
+                },
+              )
+        : server.resolveUri(path);
     if (!_isSameServerUri(server, uri)) {
       throw const PlexException(
         'artwork-unavailable',

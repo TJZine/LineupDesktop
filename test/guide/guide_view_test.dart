@@ -1314,12 +1314,15 @@ void main() {
       expect(lineup.artworkLoads, 2);
       pending['/backdrop-1']!.complete(_wideLogoPng);
       await tester.pumpAndSettle();
-      await tester.runAsync(
-        () => precacheImage(
-          MemoryImage(_wideLogoPng),
-          tester.element(find.byType(GuideView)),
-        ),
-      );
+      await tester.runAsync(() async {
+        for (final key in ['guide-idle-backdrop', 'guide-info-backdrop']) {
+          final finder = find.byKey(Key(key));
+          await precacheImage(
+            tester.widget<Image>(finder).image,
+            tester.element(finder),
+          );
+        }
+      });
       await tester.pumpAndSettle();
       pending['/backdrop-0']!.complete(_tinyPng);
       await tester.pumpAndSettle();
@@ -1329,11 +1332,10 @@ void main() {
       final info = tester.widget<Image>(
         find.byKey(const Key('guide-info-backdrop')),
       );
-      expect((idle.image as MemoryImage).bytes, same(_wideLogoPng));
-      expect(
-        (info.image as MemoryImage).bytes,
-        same((idle.image as MemoryImage).bytes),
-      );
+      MemoryImage source(Image image) =>
+          (image.image as CoverResizeImage).imageProvider as MemoryImage;
+      expect(source(idle).bytes, same(_wideLogoPng));
+      expect(source(info).bytes, same(source(idle).bytes));
       expect(find.text('Select to watch · Channel 1'), findsOneWidget);
       final switcher = find.descendant(
         of: find.byKey(const Key('guide-picture-in-picture')),
@@ -2716,6 +2718,157 @@ void main() {
       isA<LinearGradient>(),
     );
   });
+
+  testWidgets('TV focus moves reuse Guide control measurements', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final lineup = _Lineup(6);
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: (_, _) {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final measured = debugGuideControlsMeasureCount;
+    final focused = guide.focusedChannelId;
+    for (var move = 0; move < 3; move++) {
+      guide.moveVertical(1);
+      await tester.pump();
+    }
+    expect(guide.focusedChannelId, isNot(focused));
+    expect(debugGuideControlsMeasureCount, measured);
+
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpAndSettle();
+    expect(debugGuideControlsMeasureCount, greaterThan(measured));
+    final rescaled = debugGuideControlsMeasureCount;
+    guide.moveVertical(-1);
+    await tester.pump();
+    expect(debugGuideControlsMeasureCount, rescaled);
+  });
+
+  for (final tv in [true, false]) {
+    testWidgets('backdrop transcode and decode follow painted slots '
+        '(${tv ? 'TV 1920x1080 at DPR 2' : 'desktop 1280x800 at DPR 1'})', (
+      tester,
+    ) async {
+      final ratio = tv ? 2.0 : 1.0;
+      tester.view
+        ..physicalSize = tv ? const Size(1920, 1080) : const Size(1280, 800)
+        ..devicePixelRatio = ratio;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final lineup = _Lineup(
+        1,
+        artworkBytes: _wideLogoPng,
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+            preferClearLogos: false,
+            reduceMotion: true,
+          ),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      lineup.fixtureActor.replaceChannels([
+        Channel(
+          id: 'channel',
+          number: 7,
+          name: 'Drama Seven',
+          source: ManualSource([
+            ChannelItem(
+              id: 'episode',
+              title: 'The Arrival',
+              duration: const Duration(hours: 24),
+              backdrop: Uri.parse('/backdrop'),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: 7,
+        ),
+      ]);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: tv),
+          home: GuideView(
+            controller: guide,
+            showIdleArtwork: true,
+            pictureInPicture: const Text('Choose a channel to watch'),
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Physical pixels actually painted, through the canvas transform.
+      Size painted(String key) {
+        final box = tester.renderObject<RenderBox>(find.byKey(Key(key)));
+        final rect = MatrixUtils.transformRect(
+          box.getTransformTo(null),
+          Offset.zero & box.size,
+        );
+        return Size(rect.width * ratio, rect.height * ratio);
+      }
+
+      const bucket = CoverResizeImage.bucket;
+      final slots = <Size>[];
+      for (final key in ['guide-idle-backdrop', 'guide-info-backdrop']) {
+        final slot = painted(key);
+        slots.add(slot);
+        final decode =
+            tester.widget<Image>(find.byKey(Key(key))).image
+                as CoverResizeImage;
+        // Never below the painted size, at most one bucket above it.
+        expect(decode.width, greaterThanOrEqualTo(slot.width.floor()));
+        expect(decode.width, lessThan(slot.width + bucket));
+        expect(decode.height, greaterThanOrEqualTo(slot.height.floor()));
+        expect(decode.height, lessThan(slot.height + bucket));
+        expect(decode.width % bucket, 0);
+        expect(decode.height % bucket, 0);
+      }
+      if (tv) {
+        // Canvas scale 0.5 x DPR 2: one physical pixel per canvas pixel,
+        // so the information backdrop is far below a 3840x2160 original.
+        expect(slots.last.width, lessThan(1920));
+        expect(slots.last.height, lessThan(400));
+      }
+      final (path, width, height) = lineup.programArtworkSizes.single;
+      expect(path, '/backdrop');
+      final widest = slots.map((s) => s.width).reduce(math.max);
+      final tallest = slots.map((s) => s.height).reduce(math.max);
+      expect(width, greaterThanOrEqualTo(widest.floor()));
+      expect(width, lessThan(widest + bucket));
+      expect(height, greaterThanOrEqualTo(tallest.floor()));
+      expect(height, lessThan(tallest + bucket));
+    });
+  }
 
   for (final (surface, androidTv, padded) in [
     ('desktop', false, false),
@@ -4610,10 +4763,22 @@ class _Lineup extends LineupController {
   final Future<Uint8List?> Function(Uri)? artworkLoader;
   int artworkLoads = 0;
 
+  final programArtworkSizes = <(String, int, int)>[];
+
   @override
   Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     artworkLoads++;
     return artworkLoader == null ? artworkBytes : await artworkLoader!(path);
+  }
+
+  @override
+  Future<Uint8List?> programArtworkForPath(
+    Uri path, {
+    required int width,
+    required int height,
+  }) {
+    programArtworkSizes.add((path.path, width, height));
+    return artworkForPath(path);
   }
 }
 

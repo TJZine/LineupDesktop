@@ -2193,16 +2193,21 @@ class _PlayerArtwork extends StatelessWidget {
             semanticLabel: semanticLabel,
             excludeFromSemantics: semanticLabel == null,
           )
-        : Image.memory(
-            snapshot.data!,
-            key: imageKey,
-            fit: fit,
-            gaplessPlayback: false,
-            semanticLabel: semanticLabel,
-            excludeFromSemantics: semanticLabel == null,
-            frameBuilder: (context, child, frame, synchronous) =>
-                synchronous || frame != null ? child : fallback,
-            errorBuilder: (_, _, _) => fallback,
+        : LayoutBuilder(
+            builder: (context, slot) => Image(
+              // Decode covering the painted slot, not the original artwork.
+              image: fit == BoxFit.cover
+                  ? CoverResizeImage.forSlot(context, snapshot.data!, slot)
+                  : MemoryImage(snapshot.data!),
+              key: imageKey,
+              fit: fit,
+              gaplessPlayback: false,
+              semanticLabel: semanticLabel,
+              excludeFromSemantics: semanticLabel == null,
+              frameBuilder: (context, child, frame, synchronous) =>
+                  synchronous || frame != null ? child : fallback,
+              errorBuilder: (_, _, _) => fallback,
+            ),
           ),
   );
 }

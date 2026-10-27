@@ -40,6 +40,18 @@ class LineupCanvas extends StatelessWidget {
       context.dependOnInheritedWidgetOfExactType<_CanvasSafeInsets>()?.insets ??
       MediaQuery.paddingOf(context);
 
+  /// Canvas-to-window scale applied by the nearest [LineupCanvas], or 1 when
+  /// the subtree is not hosted by one.
+  static double scaleOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_CanvasSafeInsets>()?.scale ??
+      1;
+
+  /// Physical pixels per canvas pixel: the device pixel ratio times the canvas
+  /// scale. Decode and transcode sizes use this so artwork matches the pixels
+  /// actually painted, not the unscaled canvas.
+  static double physicalPixelRatioOf(BuildContext context) =>
+      MediaQuery.devicePixelRatioOf(context) * scaleOf(context);
+
   static Widget builder(BuildContext context, Widget? child) =>
       LineupCanvas(child: child ?? const SizedBox.shrink());
 
@@ -75,6 +87,7 @@ class LineupCanvas extends StatelessWidget {
                 ),
                 child: _CanvasSafeInsets(
                   insets: padding / scale,
+                  scale: scale,
                   child: LineupFocusScope(child: child),
                 ),
               ),
@@ -87,10 +100,15 @@ class LineupCanvas extends StatelessWidget {
 }
 
 class _CanvasSafeInsets extends InheritedWidget {
-  const _CanvasSafeInsets({required this.insets, required super.child});
+  const _CanvasSafeInsets({
+    required this.insets,
+    required this.scale,
+    required super.child,
+  });
   final EdgeInsets insets;
+  final double scale;
 
   @override
   bool updateShouldNotify(_CanvasSafeInsets oldWidget) =>
-      insets != oldWidget.insets;
+      insets != oldWidget.insets || scale != oldWidget.scale;
 }

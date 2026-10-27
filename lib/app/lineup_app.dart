@@ -18,6 +18,23 @@ import 'lineup_shell.dart';
 const _requiredEngineFailureMessage =
     'The required Lineup DirectComposition Flutter engine is not active.';
 
+/// Decoded-image cache budget on Android TV (default Flutter budget: 100 MB).
+///
+/// The Guide's image working set at 1920x1080 physical is about 5 MB: the
+/// information backdrop decodes to cover 1344x384 (1344x756x4 = 4.1 MB) and
+/// the idle picture to cover 576x384 (683x384x4 = 1.0 MB). Clear logos use
+/// their own bounded cache. 48 MB keeps roughly nine recently focused
+/// programs' backdrops warm and still admits one unresized 3840x2160 decode
+/// (33.2 MB) from a consumer that cannot cover-resize, while bounding the
+/// cache well below the default on a 1.7 GB device under memory pressure.
+const androidTvImageCacheBytes = 48 << 20;
+
+/// Applies the platform's decoded-image cache budget. Desktop keeps Flutter's
+/// default.
+void configureImageCache(ImageCache cache, {required bool androidTv}) {
+  if (androidTv) cache.maximumSizeBytes = androidTvImageCacheBytes;
+}
+
 class LineupStartup extends StatefulWidget {
   const LineupStartup({required this.createBootstrap, super.key});
 

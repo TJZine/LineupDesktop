@@ -1633,6 +1633,60 @@ void main() {
     },
   );
 
+  test('transcoded backdrops are keyed by size and never reuse portraits or originals', () async {
+    final lineup = _ArtworkLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(lineup: lineup);
+    addTearDown(guide.dispose);
+    final start = DateTime.utc(2026);
+    final backdrop = Uri.parse('/library/metadata/1/art/2');
+    final program = GuideProgram(
+      channelId: 'channel',
+      scheduled: ScheduledProgram(
+        item: ChannelItem(
+          id: 'item',
+          title: 'Fixture',
+          duration: const Duration(hours: 1),
+          backdrop: backdrop,
+        ),
+        start: start,
+        end: start.add(const Duration(hours: 1)),
+        elapsed: Duration.zero,
+        index: 0,
+        loop: 0,
+      ),
+    );
+
+    final first = guide.backdropFor(program, width: 1344, height: 384);
+    final cached = guide.backdropFor(program, width: 1344, height: 384);
+    final larger = guide.backdropFor(program, width: 1920, height: 448);
+    final original = guide.artworkFor(program, GuideArtworkKind.backdrop);
+    final portraitSized = guide.artworkForPath(
+      backdrop,
+      width: 1344,
+      height: 384,
+    );
+    await _settle();
+
+    expect(identical(first, cached), isTrue);
+    expect(identical(first, larger), isFalse);
+    expect(identical(first, original), isFalse);
+    expect(identical(first, portraitSized), isFalse);
+    expect(lineup.programArtworkSizes, [
+      (path: backdrop, width: 1344, height: 384),
+      (path: backdrop, width: 1920, height: 448),
+    ]);
+    expect(lineup.artworkSizes, [
+      (width: null, height: null),
+      (width: 1344, height: 384),
+    ]);
+    lineup.completeArtwork();
+    expect(
+      await Future.wait([first, larger, original, portraitSized]),
+      everyElement(isNotNull),
+    );
+  });
+
   test('production schedules use the persistent catalog worker', () async {
     final channel = Channel(
       id: 'library-channel',
@@ -2669,6 +2723,20 @@ class _ArtworkLineup extends _TestLineup {
     artworkSizes.add((width: width, height: height));
     final handler = artworkHandler;
     if (handler != null) return handler(path);
+    final completer = Completer<Uint8List?>();
+    _artwork.add(completer);
+    return completer.future;
+  }
+
+  final programArtworkSizes = <({Uri path, int width, int height})>[];
+
+  @override
+  Future<Uint8List?> programArtworkForPath(
+    Uri path, {
+    required int width,
+    required int height,
+  }) {
+    programArtworkSizes.add((path: path, width: width, height: height));
     final completer = Completer<Uint8List?>();
     _artwork.add(completer);
     return completer.future;

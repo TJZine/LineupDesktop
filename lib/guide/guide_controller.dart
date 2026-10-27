@@ -95,6 +95,11 @@ class GuideController extends ChangeNotifier {
   final Queue<_CastEntry> _pendingCast = Queue();
   int _activeCastLoads = 0;
 
+  // Encoded bytes for about four focused programs (poster, backdrop, logo).
+  // Backdrops arrive server-resized to their slot, so a 1344x756 Guide
+  // backdrop is a few hundred KB rather than a multi-MB 4K original; posters
+  // and logos stay original (posters feed the colour sample, logos keep
+  // their alpha). Every entry remains bounded at 4 MiB by PlexClient.
   static const maximumCachedArtworkEntries = 12;
   static const maximumConcurrentArtworkLoads = 4;
 
@@ -428,6 +433,26 @@ class GuideController extends ChangeNotifier {
     return _artworkForPath(path, '${item.id}|${kind.name}|$path');
   }
 
+  /// The program backdrop transcoded by the server to cover [width] x
+  /// [height] physical pixels. Each size is a distinct cache entry.
+  Future<Uint8List?> backdropFor(
+    GuideProgram program, {
+    required int width,
+    required int height,
+  }) {
+    if (_disposed) return Future.value();
+    final item = program.scheduled.item;
+    final path = item.backdrop;
+    if (path == null || path.toString().isEmpty) return Future.value();
+    return _artworkForPath(
+      path,
+      '${item.id}|${GuideArtworkKind.backdrop.name}|${width}x$height|$path',
+      width: width,
+      height: height,
+      transcode: true,
+    );
+  }
+
   Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) {
     if (_disposed || path.toString().isEmpty) return Future.value();
     final key = width == null && height == null
@@ -441,6 +466,7 @@ class GuideController extends ChangeNotifier {
     String key, {
     int? width,
     int? height,
+    bool transcode = false,
   }) {
     final existing = _artwork.remove(key);
     if (existing != null) {
@@ -455,6 +481,7 @@ class GuideController extends ChangeNotifier {
       _generation,
       width: width,
       height: height,
+      transcode: transcode,
     );
     _artwork[key] = request;
     _pendingArtwork.add(request);
@@ -489,11 +516,17 @@ class GuideController extends ChangeNotifier {
     try {
       Uint8List? value;
       try {
-        value = await lineup.artworkForPath(
-          request.path,
-          width: request.width,
-          height: request.height,
-        );
+        value = request.transcode
+            ? await lineup.programArtworkForPath(
+                request.path,
+                width: request.width!,
+                height: request.height!,
+              )
+            : await lineup.artworkForPath(
+                request.path,
+                width: request.width,
+                height: request.height,
+              );
       } catch (_) {
         value = null;
       }
@@ -1330,6 +1363,7 @@ class _ArtworkRequest {
     this.generation, {
     this.width,
     this.height,
+    this.transcode = false,
   });
 
   final String key;
@@ -1338,6 +1372,9 @@ class _ArtworkRequest {
   final int generation;
   final int? width;
   final int? height;
+
+  /// Program artwork resized by the server rather than a cast portrait.
+  final bool transcode;
 }
 
 bool _channelEquals(Channel left, Channel right) =>

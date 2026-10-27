@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
+import 'lineup_canvas.dart';
 import 'lineup_focus.dart';
 
 export 'lineup_controls.dart';
@@ -395,6 +396,139 @@ Future<bool> confirmDestructiveAction(
     ) ??
     false;
 
+/// Decodes [imageProvider] no larger than needed to cover a [width] x
+/// [height] physical-pixel slot with [BoxFit.cover], preserving aspect ratio
+/// and never upscaling. Unlike [ResizeImage], the target depends on the
+/// intrinsic aspect ratio, so a wide slot never receives a softer decode.
+@immutable
+class CoverResizeImage extends ImageProvider<CoverResizeImageKey> {
+  const CoverResizeImage(
+    this.imageProvider, {
+    required this.width,
+    required this.height,
+  }) : assert(width > 0 && height > 0);
+
+  /// Decode bucket in physical pixels. Rounding the slot up to it keeps a
+  /// resizing desktop window from decoding on every frame, and is never
+  /// smaller than the painted slot.
+  static const bucket = 64;
+
+  /// A cover-decoded provider for [bytes] laid out in [constraints] (canvas
+  /// pixels), or a plain [MemoryImage] unless the slot is tight. A loose slot
+  /// sizes an image from its intrinsic pixels, which resizing would change.
+  static ImageProvider forSlot(
+    BuildContext context,
+    Uint8List bytes,
+    BoxConstraints constraints,
+  ) {
+    final memory = MemoryImage(bytes);
+    final slot = constraints.biggest;
+    if (!constraints.isTight || slot.isEmpty || !slot.isFinite) return memory;
+    final ratio = LineupCanvas.physicalPixelRatioOf(context);
+    int physical(double extent) =>
+        ((extent * ratio).ceil() / bucket).ceil() * bucket;
+    return CoverResizeImage(
+      memory,
+      width: physical(slot.width),
+      height: physical(slot.height),
+    );
+  }
+
+  /// The proportional decode size that covers [width] x [height], capped at
+  /// the intrinsic size.
+  static ui.TargetImageSize targetSize(
+    int intrinsicWidth,
+    int intrinsicHeight,
+    int width,
+    int height,
+  ) {
+    final scale = math.min(
+      1.0,
+      math.max(width / intrinsicWidth, height / intrinsicHeight),
+    );
+    return ui.TargetImageSize(
+      width: math.min(intrinsicWidth, (intrinsicWidth * scale).ceil()),
+      height: math.min(intrinsicHeight, (intrinsicHeight * scale).ceil()),
+    );
+  }
+
+  final ImageProvider imageProvider;
+  final int width;
+  final int height;
+
+  @override
+  Future<CoverResizeImageKey> obtainKey(ImageConfiguration configuration) {
+    Completer<CoverResizeImageKey>? completer;
+    SynchronousFuture<CoverResizeImageKey>? result;
+    unawaited(
+      imageProvider.obtainKey(configuration).then((Object key) {
+        final value = CoverResizeImageKey._(key, width, height);
+        if (completer == null) {
+          result = SynchronousFuture(value);
+        } else {
+          completer.complete(value);
+        }
+      }),
+    );
+    if (result != null) return result!;
+    completer = Completer<CoverResizeImageKey>();
+    return completer.future;
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    CoverResizeImageKey key,
+    ImageDecoderCallback decode,
+  ) {
+    Future<ui.Codec> decodeCover(
+      ui.ImmutableBuffer buffer, {
+      ui.TargetImageSizeCallback? getTargetSize,
+    }) {
+      assert(getTargetSize == null);
+      return decode(
+        buffer,
+        getTargetSize: (intrinsicWidth, intrinsicHeight) =>
+            targetSize(intrinsicWidth, intrinsicHeight, width, height),
+      );
+    }
+
+    final completer = imageProvider.loadImage(key._providerKey, decodeCover);
+    completer.addEphemeralErrorListener((_, _) {
+      scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
+    });
+    return completer;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is CoverResizeImage &&
+      other.imageProvider == imageProvider &&
+      other.width == width &&
+      other.height == height;
+
+  @override
+  int get hashCode => Object.hash(imageProvider, width, height);
+}
+
+@immutable
+class CoverResizeImageKey {
+  const CoverResizeImageKey._(this._providerKey, this.width, this.height);
+
+  final Object _providerKey;
+  final int width;
+  final int height;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CoverResizeImageKey &&
+      other._providerKey == _providerKey &&
+      other.width == width &&
+      other.height == height;
+
+  @override
+  int get hashCode => Object.hash(_providerKey, width, height);
+}
+
 bool clearLogoIsUsable(Size intrinsicSize, BoxConstraints constraints) {
   if (!intrinsicSize.width.isFinite ||
       !intrinsicSize.height.isFinite ||
@@ -515,12 +649,14 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
         if (_request != null) _reset();
         return widget.fallback;
       }
-      final dpr = MediaQuery.devicePixelRatioOf(context);
+      // Canvas pixels are scaled by LineupCanvas before reaching the window,
+      // so decode at the painted physical size, not canvas size x DPR.
+      final ratio = LineupCanvas.physicalPixelRatioOf(context);
       final request = (
         bytes: widget.bytes,
-        width: _pixelBucket(constraints.maxWidth * dpr),
-        height: _pixelBucket(constraints.maxHeight * dpr),
-        pixelRatio: dpr,
+        width: _pixelBucket(constraints.maxWidth * ratio),
+        height: _pixelBucket(constraints.maxHeight * ratio),
+        pixelRatio: ratio,
       );
       if (request != _request) _load(request);
       final raster = _raster;

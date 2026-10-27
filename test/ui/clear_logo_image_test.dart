@@ -4,7 +4,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 void main() {
   tearDown(debugResetClearLogoCache);
@@ -193,6 +196,52 @@ void main() {
     expect(highDpr.width, greaterThan(resized.width));
     await tester.pumpWidget(const SizedBox.shrink());
     expect(highDpr.debugDisposed, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('TV canvas scale bounds the decode at painted physical size', (
+    tester,
+  ) async {
+    // Fire TV: 1920x1080 window at DPR 2 is a 960x540 logical view that
+    // LineupCanvas scales by 0.5 to its 1920x1080 canvas, so one canvas pixel
+    // paints one physical pixel.
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final bytes = await _solidLogoBytes(tester, size: const Size(1600, 320));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        builder: LineupCanvas.builder,
+        home: Align(
+          alignment: Alignment.centerLeft,
+          child: ClearLogoImage(
+            bytes,
+            maximumSize: const Size(420, 84),
+            imageKey: const Key('accepted-logo'),
+            fallback: const Text('Readable title'),
+          ),
+        ),
+      ),
+    );
+    final context = tester.element(find.byType(ClearLogoImage));
+    expect(LineupCanvas.scaleOf(context), 0.5);
+    expect(LineupCanvas.physicalPixelRatioOf(context), 1);
+    await _waitForImageDecode(tester);
+    final image = tester
+        .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+        .image!;
+    // Contained in the 8-pixel bucket of 420x84 physical pixels (416x80).
+    // Previously canvas size x DPR: 840x168, four times the painted pixels.
+    expect((image.width, image.height), (400, 80));
+    // Geometry is unchanged: the logo still fills the canvas slot.
+    expect(
+      tester.getSize(find.byKey(const Key('accepted-logo'))),
+      const Size(420, 84),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
     expect(tester.takeException(), isNull);
   });
 

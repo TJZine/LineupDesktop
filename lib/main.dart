@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kReleaseMode;
 import 'package:flutter/material.dart';
 
 import 'app/lineup_app.dart';
@@ -17,6 +18,10 @@ void nativeRunnerLifecycleTestMain() {
 
 void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
+  configureImageCache(
+    PaintingBinding.instance.imageCache,
+    androidTv: defaultTargetPlatform == TargetPlatform.android,
+  );
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);

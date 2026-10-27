@@ -2149,6 +2149,31 @@ class LineupController extends ChangeNotifier {
     }
   }
 
+  /// Program artwork transcoded by the selected server to cover [width] x
+  /// [height] physical pixels. Unsized program artwork and cast portraits use
+  /// [artworkForPath].
+  Future<Uint8List?> programArtworkForPath(
+    Uri path, {
+    required int width,
+    required int height,
+  }) async {
+    final serverId = server?.id;
+    if (serverId == null || connection == null || path.toString().isEmpty) {
+      return null;
+    }
+    return _withPmsAuthorization(
+      _epoch,
+      serverId,
+      (token, refreshedConnection) => plex.artwork(
+        (refreshedConnection ?? connection!).uri,
+        token,
+        path,
+        width: width,
+        height: height,
+      ),
+    );
+  }
+
   Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     final serverId = server?.id;
     final selectedConnection = connection;

@@ -24,6 +24,9 @@ const _guidePictureAspectRatio = 16 / 9;
 const _guideReferencePictureHeight = 324.0;
 const _guideSynopsisWidthFloor = 400.0;
 
+/// A width and height in physical pixels.
+typedef _PixelSize = ({int width, int height});
+
 class GuideLayoutPolicy {
   const GuideLayoutPolicy._({
     required this.compact,
@@ -1190,7 +1193,7 @@ class _GuideViewState extends State<GuideView>
                       reserveLogo: key.logos,
                     );
                   }
-                  final controls = _GuideControlsMetrics.measure(
+                  final controls = _GuideControlsMetrics.resolve(
                     context,
                     widget.controller,
                     outer.maxWidth - _guideEdgeContentInset * 2,
@@ -1383,6 +1386,26 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
+/// Every input [_GuideControlsMetrics.measure] reads, so a focus-only rebuild
+/// reuses the previous measurement instead of laying out its text again.
+typedef _GuideControlsKey = ({
+  TextTheme textTheme,
+  TextButtonThemeData textButtonTheme,
+  IconButtonThemeData iconButtonTheme,
+  TextDirection direction,
+  Size size,
+  TextScaler scaler,
+  TextStyle controlStyle,
+  String nowLabel,
+  String? libraryLabel,
+  double width,
+  double railWidth,
+});
+
+/// Counts real [_GuideControlsMetrics] measurements for memoization tests.
+@visibleForTesting
+int debugGuideControlsMeasureCount = 0;
+
 /// Measured fixed controls and label text determine both wrapping and its
 /// vertical budget. Desktop retains its established layout policy.
 class _GuideControlsMetrics {
@@ -1390,26 +1413,71 @@ class _GuideControlsMetrics {
   final bool wrap;
   final double height;
 
-  factory _GuideControlsMetrics.measure(
+  // The Guide policy and the controls row measure the same inputs each
+  // build; one remembered result serves both until an input changes.
+  static _GuideControlsKey? _lastKey;
+  static _GuideControlsMetrics? _last;
+
+  static _GuideControlsMetrics resolve(
+    BuildContext context,
+    GuideController controller,
+    double width,
+    double railWidth,
+  ) {
+    final key = _keyFor(context, controller, width, railWidth);
+    if (key != _lastKey) {
+      _last = _GuideControlsMetrics.measure(context, key);
+      _lastKey = key;
+    }
+    return _last!;
+  }
+
+  static _GuideControlsKey _keyFor(
     BuildContext context,
     GuideController controller,
     double width,
     double railWidth,
   ) {
     final theme = Theme.of(context);
-    final direction = Directionality.of(context);
-    final controlHeight = GuideLayoutPolicy.controlHeight(
-      MediaQuery.sizeOf(context),
-      textScale: MediaQuery.textScalerOf(context).scale(1),
+    final selected = controller.libraryFilterId;
+    return (
+      textTheme: theme.textTheme,
+      textButtonTheme: theme.textButtonTheme,
+      iconButtonTheme: theme.iconButtonTheme,
+      direction: Directionality.of(context),
+      size: MediaQuery.sizeOf(context),
+      scaler: MediaQuery.textScalerOf(context),
+      controlStyle: _GuideControls.controlStyle(context),
+      nowLabel: _guideNowLabel(controller),
+      libraryLabel: selected == null
+          ? null
+          : _libraryName(controller, selected),
+      width: width,
+      railWidth: railWidth,
     );
-    final style = _GuideControls.controlStyle(context);
+  }
+
+  factory _GuideControlsMetrics.measure(
+    BuildContext context,
+    _GuideControlsKey key,
+  ) {
+    debugGuideControlsMeasureCount++;
+    final theme = Theme.of(context);
+    final direction = key.direction;
+    final width = key.width;
+    final railWidth = key.railWidth;
+    final controlHeight = GuideLayoutPolicy.controlHeight(
+      key.size,
+      textScale: key.scaler.scale(1),
+    );
+    final style = key.controlStyle;
     final button = theme.textButtonTheme.style!;
     final buttonStyle = button.textStyle!.resolve({})!;
     final buttonPadding = button.padding!.resolve({})!.resolve(direction);
     final minimum = button.minimumSize!.resolve({})!;
     final now = Size(
       _textWidth(
-        _guideNowLabel(controller),
+        key.nowLabel,
         buttonStyle,
         MediaQuery.textScalerOf(context),
         direction,
@@ -1451,8 +1519,7 @@ class _GuideControlsMetrics {
         math.max(minimum.height, now.height + buttonPadding.vertical),
       ),
     );
-    final selected = controller.libraryFilterId;
-    final label = selected == null ? null : _libraryName(controller, selected);
+    final label = key.libraryLabel;
     final labelStyle = theme.textTheme.bodyMedium!.copyWith(fontSize: 16);
     final remaining = width - railWidth - 8 - 340 - 8 - navigationWidth;
     var wrap = remaining < 0;
@@ -1901,7 +1968,7 @@ class _GuideControls extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final measured = roles.androidTv
-              ? _GuideControlsMetrics.measure(
+              ? _GuideControlsMetrics.resolve(
                   context,
                   controller,
                   constraints.maxWidth,
@@ -1988,35 +2055,114 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
   Color? _dynamicColor;
   int _artworkToken = 0;
 
+  /// Transcoded backdrop size requested for the current program, in physical
+  /// pixels, or null when no backdrop is shown. Grows only, so a shrinking
+  /// window keeps its sharper copy and decode resizes it down.
+  _PixelSize? _backdropSize;
+
   @override
   void dispose() {
     _artworkToken++;
     super.dispose();
   }
 
-  void _ensureArtwork(GuideProgram? program) {
+  /// The physical-pixel box a backdrop must cover to fill both the idle
+  /// picture and the information area, matching the Row laid out in [build].
+  _PixelSize _backdropNeed(BuildContext context, BoxConstraints constraints) {
+    final height = constraints.maxHeight;
+    final hasPicture = widget.showIdleArtwork || widget.picture != null;
+    final picture = hasPicture
+        ? applyBoxFit(
+            BoxFit.contain,
+            const Size(_guidePictureAspectRatio, 1),
+            Size(widget.pictureWidth, height),
+          ).destination
+        : Size.zero;
+    final bleed = LineupTheme.of(context).androidTv
+        ? LineupCanvas.fullSafeInsetsOf(context)
+        : EdgeInsets.zero;
+    final details =
+        constraints.maxWidth -
+        (hasPicture ? widget.pictureWidth + 12 : -bleed.left) +
+        bleed.right;
+    final ratio = LineupCanvas.physicalPixelRatioOf(context);
+    int physical(double extent) {
+      final pixels = (extent * ratio).ceil();
+      final bucket = CoverResizeImage.bucket;
+      return math.max(bucket, (pixels / bucket).ceil() * bucket);
+    }
+
+    return (
+      width: physical(math.max(details, picture.width)),
+      height: physical(math.max(height, picture.height)),
+    );
+  }
+
+  void _ensureArtwork(GuideProgram? program, _PixelSize backdropNeed) {
     final settings = widget.controller.lineup.settings;
     final item = program?.scheduled.item;
     final artworkKey = program == null
         ? null
         : '${program.id}|${widget.controller.lineup.contentGeneration}|${item?.showThumb}|${item?.poster}|${item?.backdrop}|${item?.clearLogo}|${settings.guideInfoBackgroundMode.name}|${settings.preferClearLogos}|${widget.showIdleArtwork}';
-    if (artworkKey == _artworkProgramId) return;
+    if (artworkKey == _artworkProgramId) {
+      if (program != null) _growBackdrop(program, backdropNeed);
+      return;
+    }
     _artworkProgramId = artworkKey;
     _backdrop = null;
     _clearLogo = null;
     _dynamicColor = null;
+    _backdropSize = null;
     final token = ++_artworkToken;
     if (program == null) return;
-    unawaited(_loadArtwork(program, token));
+    if (settings.guideInfoBackgroundMode == GuideInfoBackgroundMode.artwork ||
+        widget.showIdleArtwork) {
+      _backdropSize = backdropNeed;
+    }
+    unawaited(_loadArtwork(program, token, _backdropSize));
   }
 
-  Future<void> _loadArtwork(GuideProgram program, int token) async {
+  void _growBackdrop(GuideProgram program, _PixelSize need) {
+    final current = _backdropSize;
+    if (current == null ||
+        (need.width <= current.width && need.height <= current.height)) {
+      return;
+    }
+    final size = (
+      width: math.max(need.width, current.width),
+      height: math.max(need.height, current.height),
+    );
+    _backdropSize = size;
+    final token = _artworkToken;
+    unawaited(
+      widget.controller
+          .backdropFor(program, width: size.width, height: size.height)
+          .then((bytes) {
+            if (!mounted ||
+                token != _artworkToken ||
+                _backdropSize != size ||
+                bytes == null) {
+              return;
+            }
+            setState(() => _backdrop = bytes);
+          }),
+    );
+  }
+
+  Future<void> _loadArtwork(
+    GuideProgram program,
+    int token,
+    _PixelSize? backdropSize,
+  ) async {
     final settings = widget.controller.lineup.settings;
     final artwork = await Future.wait([
       widget.controller.artworkFor(program),
-      if (settings.guideInfoBackgroundMode == GuideInfoBackgroundMode.artwork ||
-          widget.showIdleArtwork)
-        widget.controller.artworkFor(program, GuideArtworkKind.backdrop)
+      if (backdropSize != null)
+        widget.controller.backdropFor(
+          program,
+          width: backdropSize.width,
+          height: backdropSize.height,
+        )
       else
         Future<Uint8List?>.value(),
       if (settings.preferClearLogos)
@@ -2038,7 +2184,9 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(builder: _build);
+
+  Widget _build(BuildContext context, BoxConstraints constraints) {
     final controller = widget.controller;
     final channel = controller.focusedChannel;
     final focusedProgram = controller.focusedProgram;
@@ -2050,7 +2198,7 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
                 selectedProgram?.channelId == channel.id
             ? selectedProgram
             : null);
-    _ensureArtwork(program);
+    _ensureArtwork(program, _backdropNeed(context, constraints));
     final idlePicture =
         widget.showIdleArtwork && _backdrop != null && channel != null;
     final picture = widget.showIdleArtwork
@@ -2061,30 +2209,40 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
             child: idlePicture
                 ? KeyedSubtree(
                     key: ValueKey(_artworkProgramId),
-                    child: Image.memory(
-                      _backdrop!,
-                      key: const Key('guide-idle-backdrop'),
-                      fit: BoxFit.cover,
-                      excludeFromSemantics: true,
-                      errorBuilder: (_, _, _) =>
-                          widget.picture ?? const SizedBox.shrink(),
-                      frameBuilder: (context, image, frame, synchronous) =>
-                          Stack(
-                            key: const Key('guide-idle-artwork'),
-                            fit: StackFit.expand,
-                            children: [
-                              image,
-                              ColoredBox(
-                                color: Colors.black.withValues(alpha: .6),
-                              ),
-                              Center(
-                                child: Text(
-                                  'Select to watch · ${channel.name}',
-                                  textAlign: TextAlign.center,
+                    child: LayoutBuilder(
+                      builder: (context, slot) => Image(
+                        // AnimatedSwitcher loosens the slot, but the
+                        // frameBuilder's expanding Stack paints the image
+                        // at the full picture size.
+                        image: CoverResizeImage.forSlot(
+                          context,
+                          _backdrop!,
+                          BoxConstraints.tight(slot.biggest),
+                        ),
+                        key: const Key('guide-idle-backdrop'),
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        excludeFromSemantics: true,
+                        errorBuilder: (_, _, _) =>
+                            widget.picture ?? const SizedBox.shrink(),
+                        frameBuilder: (context, image, frame, synchronous) =>
+                            Stack(
+                              key: const Key('guide-idle-artwork'),
+                              fit: StackFit.expand,
+                              children: [
+                                image,
+                                ColoredBox(
+                                  color: Colors.black.withValues(alpha: .6),
                                 ),
-                              ),
-                            ],
-                          ),
+                                Center(
+                                  child: Text(
+                                    'Select to watch · ${channel.name}',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ),
+                      ),
                     ),
                   )
                 : KeyedSubtree(
@@ -3401,14 +3559,16 @@ class _Details extends StatelessWidget {
             if (backgroundMode == GuideInfoBackgroundMode.artwork &&
                 backdrop != null) ...[
               Positioned.fill(
-                child: Image.memory(
-                  backdrop!,
-                  key: const Key('guide-info-backdrop'),
-                  fit: BoxFit.cover,
-                  alignment: Alignment.centerRight,
-                  gaplessPlayback: true,
-                  excludeFromSemantics: true,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                child: LayoutBuilder(
+                  builder: (context, slot) => Image(
+                    image: CoverResizeImage.forSlot(context, backdrop!, slot),
+                    key: const Key('guide-info-backdrop'),
+                    fit: BoxFit.cover,
+                    alignment: Alignment.centerRight,
+                    gaplessPlayback: true,
+                    excludeFromSemantics: true,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
                 ),
               ),
               Positioned.fill(

@@ -2833,6 +2833,19 @@ void main() {
       expect(plex.artworkServer, controller.connection!.uri);
       expect(plex.artworkPath, Uri.parse('/show/art'));
       expect(plex.artworkToken, 'pms-token');
+      expect(plex.artworkSize, isNull);
+
+      final sized = await controller.programArtworkForPath(
+        Uri.parse('/show/backdrop'),
+        width: 1344,
+        height: 384,
+      );
+
+      expect(sized, Uint8List.fromList([1, 2, 3]));
+      expect(plex.artworkServer, controller.connection!.uri);
+      expect(plex.artworkPath, Uri.parse('/show/backdrop'));
+      expect(plex.artworkToken, 'pms-token');
+      expect(plex.artworkSize, (width: 1344, height: 384));
     },
   );
 
@@ -9703,6 +9716,7 @@ class _FakePlex extends PlexClient {
   int librariesCalls = 0;
   Uri? artworkServer;
   Uri? artworkPath;
+  ({int? width, int? height})? artworkSize;
   String? artworkToken;
 
   @override
@@ -9891,10 +9905,15 @@ class _FakePlex extends PlexClient {
     Uri server,
     String token,
     Uri path, {
+    int? width,
+    int? height,
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
     artworkServer = server;
     artworkPath = path;
+    artworkSize = width == null && height == null
+        ? null
+        : (width: width, height: height);
     artworkToken = token;
     final handler = artworkHandler;
     if (handler != null) return handler(server, token, path);
