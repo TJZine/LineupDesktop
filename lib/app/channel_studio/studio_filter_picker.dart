@@ -176,13 +176,19 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
               SizedBox(height: 4),
               Text(widget.libraryTitle, style: _studioSupportStyle(context)),
               SizedBox(height: 8),
-              TextField(
-                controller: _filterPickerSearch,
+              LineupTextFieldActivation(
                 focusNode: _filterPickerFocus,
-                autofocus: true,
-                style: _studioBodyStyle(context),
-                decoration: const InputDecoration(hintText: 'Search values'),
-                onChanged: (_) => setState(() {}),
+                builder: (fieldContext, fieldFocus, finishEditing) => TextField(
+                  controller: _filterPickerSearch,
+                  focusNode: fieldFocus,
+                  // TV arrival focuses the navigation node (initState) without
+                  // editing; autofocus would grant the editor a keyboard.
+                  autofocus: !LineupTheme.of(fieldContext).androidTv,
+                  onEditingComplete: finishEditing,
+                  style: _studioBodyStyle(fieldContext),
+                  decoration: const InputDecoration(hintText: 'Search values'),
+                  onChanged: (_) => setState(() {}),
+                ),
               ),
               Wrap(
                 spacing: 8,

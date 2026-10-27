@@ -5346,6 +5346,8 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('channel-row-manual-back')));
         await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const Key('studio-name')), 'Dirty');
+        // Close TV editing first; an open editor consumes Back to finish.
+        await tester.testTextInput.receiveAction(TextInputAction.done);
         await tester.pump();
         await tester.tap(find.byKey(const Key('studio-manual-browse-stage')));
         await tester.pumpAndSettle();
@@ -5737,6 +5739,222 @@ void main() {
       }
     },
   );
+
+  group('Studio text fields use TV navigation and Select editing', () {
+    final tvTheme = LineupTheme.forName(
+      LineupThemeName.emberSteel,
+      androidTv: true,
+    );
+
+    _studioTvTest('station name and number edit only after Select', (
+      tester,
+    ) async {
+      final controller = _RecordingSaveController(
+        scenario: _studioGenreScenario(),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.createCustom, theme: tvTheme),
+      );
+      await _settleAirCheck(tester);
+      final name = find.byKey(const Key('studio-name'));
+      final number = find.byKey(const Key('studio-number'));
+      _studioFieldNavigation(tester, name).requestFocus();
+      await tester.pumpAndSettle();
+      _expectStudioFieldNavigating(tester, name);
+
+      // Arrows pass through closed fields; arrival never opens the keyboard.
+      await _studioKey(tester, LogicalKeyboardKey.arrowRight);
+      _expectStudioFieldNavigating(tester, number);
+      await _studioKey(tester, LogicalKeyboardKey.arrowLeft);
+      _expectStudioFieldNavigating(tester, name);
+
+      await _studioKey(tester, LogicalKeyboardKey.select);
+      _expectStudioFieldEditing(tester, name);
+      tester.testTextInput.enterText('');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(_fieldText(tester, 'studio-name'), isEmpty);
+      _expectStudioFieldNavigating(tester, name);
+
+      // TextFormField validation still runs and returns to navigation focus.
+      await tester.ensureVisible(find.text('Save channel'));
+      await tester.tap(find.text('Save channel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a channel name.'), findsOneWidget);
+      expect(controller.saved, isNull);
+      _expectStudioFieldNavigating(tester, name);
+    });
+
+    _studioTvTest('manual browse search edits only after Select', (
+      tester,
+    ) async {
+      final channel = _channel(
+        id: 'manual',
+        number: 1,
+        name: 'Manual',
+        source: ManualSource([channelItemFor(_media('one'))]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [channel],
+          availableMedia: [_media('one'), _media('two')],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: channel,
+          theme: tvTheme,
+        ),
+      );
+      await _settleAirCheck(tester);
+      await _selectStudioStage(tester, 'studio-manual-browse-stage');
+      await tester.pumpAndSettle();
+      final search = find.byKey(const Key('studio-search'));
+      final navigation = _studioFieldNavigation(tester, search);
+      navigation.requestFocus();
+      await tester.pumpAndSettle();
+      await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+      expect(navigation.hasFocus, isFalse);
+      expect(tester.testTextInput.isVisible, isFalse);
+      await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+      _expectStudioFieldNavigating(tester, search);
+
+      await _studioKey(tester, LogicalKeyboardKey.select);
+      _expectStudioFieldEditing(tester, search);
+      tester.testTextInput.enterText('two');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-result-two')), findsOneWidget);
+      await _studioKey(tester, LogicalKeyboardKey.escape);
+      _expectStudioFieldNavigating(tester, search);
+      await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+      expect(navigation.hasFocus, isFalse);
+    });
+
+    _studioTvTest('filter picker opens on navigation focus without keyboard', (
+      tester,
+    ) async {
+      final controller = _RecordingSaveController(
+        scenario: _studioGenreScenario(),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.createCustom, theme: tvTheme),
+      );
+      await _settleAirCheck(tester);
+      await _openStudioFilter(tester, 'genre');
+      final picker = find.byKey(const Key('studio-filter-picker-genre'));
+      final search = find.descendant(
+        of: picker,
+        matching: find.byType(TextField),
+      );
+      _expectStudioFieldNavigating(tester, search);
+      await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+      expect(_studioFieldNavigation(tester, search).hasFocus, isFalse);
+      await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+      _expectStudioFieldNavigating(tester, search);
+
+      await _studioKey(tester, LogicalKeyboardKey.select);
+      _expectStudioFieldEditing(tester, search);
+      // Escape first closes editing, then the existing picker shortcut cancels.
+      await _studioKey(tester, LogicalKeyboardKey.escape);
+      _expectStudioFieldNavigating(tester, search);
+      expect(picker, findsOneWidget);
+      await _studioKey(tester, LogicalKeyboardKey.escape);
+      expect(picker, findsNothing);
+    });
+  });
+
+  testWidgets('desktop Studio fields still edit directly on focus', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController(
+      scenario: _studioGenreScenario(),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await _settleAirCheck(tester);
+    final name = find.byKey(const Key('studio-name'));
+    _studioEditable(tester, name).widget.focusNode.requestFocus();
+    await tester.pumpAndSettle();
+    _expectStudioFieldEditing(tester, name);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Channel name');
+
+    await _openStudioFilter(tester, 'genre');
+    _expectStudioFieldEditing(
+      tester,
+      find.descendant(
+        of: find.byKey(const Key('studio-filter-picker-genre')),
+        matching: find.byType(TextField),
+      ),
+    );
+  });
+}
+
+void _studioTvTest(String name, WidgetTesterCallback body) {
+  testWidgets(name, (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await body(tester);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+}
+
+LineupScenario _studioGenreScenario() => LineupScenario(
+  libraries: const [
+    PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+  ],
+  selectedLibraryIds: {'movies'},
+  availableMedia: [
+    _media('drama', libraryId: 'movies', genres: ['Drama']),
+    _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+  ],
+);
+
+Future<void> _studioKey(WidgetTester tester, LogicalKeyboardKey key) async {
+  await tester.sendKeyEvent(key);
+  await tester.pumpAndSettle();
+}
+
+EditableTextState _studioEditable(WidgetTester tester, Finder field) =>
+    tester.state<EditableTextState>(
+      find.descendant(of: field, matching: find.byType(EditableText)),
+    );
+
+FocusNode _studioFieldNavigation(WidgetTester tester, Finder field) => tester
+    .widget<LineupTextFieldActivation>(
+      find.ancestor(
+        of: field,
+        matching: find.byType(LineupTextFieldActivation),
+      ),
+    )
+    .focusNode!;
+
+void _expectStudioFieldNavigating(WidgetTester tester, Finder field) {
+  expect(
+    _studioFieldNavigation(tester, field).hasPrimaryFocus,
+    isTrue,
+    reason: 'primary=${FocusManager.instance.primaryFocus}',
+  );
+  expect(_studioEditable(tester, field).widget.focusNode.hasFocus, isFalse);
+  expect(tester.testTextInput.isVisible, isFalse);
+}
+
+void _expectStudioFieldEditing(WidgetTester tester, Finder field) {
+  expect(
+    _studioEditable(tester, field).widget.focusNode.hasPrimaryFocus,
+    isTrue,
+    reason: 'primary=${FocusManager.instance.primaryFocus}',
+  );
+  expect(tester.testTextInput.isVisible, isTrue);
 }
 
 double _studioScrollOffset(WidgetTester tester) => tester

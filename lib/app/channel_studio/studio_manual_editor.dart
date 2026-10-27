@@ -278,15 +278,20 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
           else if (!_manualRundown) ...[
             LineupField(
               label: 'Search',
-              child: TextField(
-                key: const Key('studio-search'),
-                controller: _search,
+              child: LineupTextFieldActivation(
                 focusNode: _searchFocus,
                 enabled: !_saving,
-                decoration: const InputDecoration(
-                  hintText: 'Search title or show title',
+                builder: (fieldContext, fieldFocus, finishEditing) => TextField(
+                  key: const Key('studio-search'),
+                  controller: _search,
+                  focusNode: fieldFocus,
+                  onEditingComplete: finishEditing,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                    hintText: 'Search title or show title',
+                  ),
+                  onChanged: (_) => _browseChanged(),
                 ),
-                onChanged: (_) => _browseChanged(),
               ),
             ),
             SizedBox(height: 12),
@@ -485,19 +490,25 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             TextFieldTapRegion(
               child: Stack(
                 children: [
-                  TextField(
-                    key: const Key('studio-rundown-search'),
-                    controller: _rundownSearch,
+                  LineupTextFieldActivation(
                     focusNode: _rundownSearchFocus,
-                    decoration: InputDecoration(
-                      hintText: 'Search channel programs',
-                      // Retain InputDecorator's suffix slot, but keep the
-                      // action outside the native text field's leaf semantics.
-                      suffixIcon: rundownQuery.isEmpty
-                          ? null
-                          : const SizedBox.shrink(),
-                    ),
-                    onChanged: (_) => setState(() {}),
+                    builder: (fieldContext, fieldFocus, finishEditing) =>
+                        TextField(
+                          key: const Key('studio-rundown-search'),
+                          controller: _rundownSearch,
+                          focusNode: fieldFocus,
+                          onEditingComplete: finishEditing,
+                          decoration: InputDecoration(
+                            hintText: 'Search channel programs',
+                            // Retain InputDecorator's suffix slot, but keep the
+                            // action outside the native text field's leaf
+                            // semantics.
+                            suffixIcon: rundownQuery.isEmpty
+                                ? null
+                                : const SizedBox.shrink(),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
                   ),
                   if (rundownQuery.isNotEmpty)
                     PositionedDirectional(
@@ -945,12 +956,16 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
         height: (size.height - viewInsets.vertical - 200).clamp(0.0, 380),
         child: Column(
           children: [
-            TextField(
-              key: const Key('move-program-search'),
-              controller: _search,
-              autofocus: true,
-              decoration: InputDecoration(hintText: 'Search programs'),
-              onChanged: (_) => setState(() {}),
+            LineupTextFieldActivation(
+              builder: (fieldContext, fieldFocus, finishEditing) => TextField(
+                key: const Key('move-program-search'),
+                controller: _search,
+                focusNode: fieldFocus,
+                autofocus: !LineupTheme.of(fieldContext).androidTv,
+                onEditingComplete: finishEditing,
+                decoration: InputDecoration(hintText: 'Search programs'),
+                onChanged: (_) => setState(() {}),
+              ),
             ),
             SizedBox(height: 8),
             Expanded(

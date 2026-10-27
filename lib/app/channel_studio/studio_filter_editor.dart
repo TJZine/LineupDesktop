@@ -89,13 +89,17 @@ class _StudioFilterEditorState extends State<_StudioFilterEditor>
         widget.inventoryStatus,
         LineupField(
           label: 'Search',
-          child: TextField(
-            key: const Key('studio-library-search'),
-            controller: _librarySearch,
-            decoration: const InputDecoration(
-              hintText: 'Search title or show title',
+          child: LineupTextFieldActivation(
+            builder: (fieldContext, fieldFocus, finishEditing) => TextField(
+              key: const Key('studio-library-search'),
+              controller: _librarySearch,
+              focusNode: fieldFocus,
+              onEditingComplete: finishEditing,
+              decoration: const InputDecoration(
+                hintText: 'Search title or show title',
+              ),
+              onChanged: (_) => setState(() {}),
             ),
-            onChanged: (_) => setState(() {}),
           ),
         ),
         SizedBox(height: 12),
