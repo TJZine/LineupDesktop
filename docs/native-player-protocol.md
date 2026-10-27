@@ -492,7 +492,11 @@ the coordinator's join/user-seek policy or desktop behavior.
 Presentation uses a default-z-order native video `SurfaceView`, native
 `SubtitleView`, then Flutter with both transparent background and surface render
 mode. The rectangle is logical top-left × scale, with aspect fit including pixel
-aspect ratio; zero size hides presentation while retaining media. It persists
+aspect ratio; zero size hides presentation while retaining media. A zero rectangle
+hides the video `SurfaceView` itself (releasing its surface; Media3 reattaches on
+show), never only its container: a visible 0x0 SurfaceView skips surface updates
+on Android 11/12, so backgrounding would orphan its layer and later loads would
+render black. It persists
 across loads/stops. Native views have no input or accessibility ownership.
 Fullscreen is always observed true, including after a false request; Flutter
 owns the approved TV control adaptation. Display matching validates revisions

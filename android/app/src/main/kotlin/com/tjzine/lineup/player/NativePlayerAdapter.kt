@@ -156,7 +156,6 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
         val r = rectangle
         val width = pixels(r.width * r.scale)
         val height = pixels(r.height * r.scale)
-        view.visibility = if (width == 0 || height == 0) View.INVISIBLE else View.VISIBLE
         view.layoutParams =
             FrameLayout.LayoutParams(width, height, Gravity.TOP or Gravity.LEFT).apply {
                 leftMargin = pixels(r.left * r.scale)
@@ -172,6 +171,15 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                 else fitHeight = (width / aspect).roundToInt()
             }
         }
+        // Hide the SurfaceView itself, not only its container. A VISIBLE SurfaceView
+        // laid out at 0x0 skips its surface updates (Android 11/12), so a window
+        // stop/start while the player is hidden would orphan its SurfaceControl;
+        // later loads then render into an offscreen layer (black picture, audio
+        // and subtitles intact). Hiding it releases the surface while it still has
+        // a frame; Media3 detaches and reattaches through the SurfaceHolder.
+        val shown = fitWidth > 0 && fitHeight > 0
+        view.visibility = if (shown) View.VISIBLE else View.INVISIBLE
+        video.visibility = if (shown) View.VISIBLE else View.INVISIBLE
         video.layoutParams = FrameLayout.LayoutParams(fitWidth, fitHeight, Gravity.CENTER)
         subtitles.layoutParams = FrameLayout.LayoutParams(fitWidth, fitHeight, Gravity.CENTER)
     }
