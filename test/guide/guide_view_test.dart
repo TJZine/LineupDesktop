@@ -45,6 +45,8 @@ final _narrowLogoPng = base64Decode(
 const _artI1LogoColor = Color(0xFF19E6D4);
 
 void main() {
+  tearDown(debugResetClearLogoCache);
+
   for (final platform in [
     TargetPlatform.android,
     TargetPlatform.windows,

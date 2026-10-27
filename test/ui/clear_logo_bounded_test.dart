@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 
 void main() {
+  tearDown(debugResetClearLogoCache);
+
   for (final padded in [false, true]) {
     testWidgets(
       'every frame has fallback or the validated bounded logo ($padded)',

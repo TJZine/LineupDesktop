@@ -476,13 +476,17 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
   void _load(_ClearLogoRequest request) {
     _reset();
     _request = request;
+    final entry = _clearLogoCacheEntry(request);
+    if (entry.completed) {
+      // Called from build before `_raster` is read, so no setState is needed.
+      _raster = entry.cloneRaster();
+      return;
+    }
     final generation = _generation;
     unawaited(
-      _decodeClearLogo(request).then((raster) {
-        if (!mounted || generation != _generation) {
-          raster?.image.dispose();
-          return;
-        }
+      entry.done.then((_) {
+        if (!mounted || generation != _generation) return;
+        final raster = entry.cloneRaster();
         if (raster != null) setState(() => _raster = raster);
       }),
     );
@@ -593,6 +597,91 @@ class _ClearLogoRaster {
   final Rect visibleFraction;
 }
 
+const _clearLogoCacheCapacity = 8;
+
+/// One decoded (or failed) logo for a bytes object and pixel bucket. The cache
+/// owns [raster]'s master image; mounted states only ever hold clones of it.
+class _ClearLogoCacheEntry {
+  _ClearLogoCacheEntry(this.bytes, this.width, this.height);
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
+  late final Future<void> done;
+  _ClearLogoRaster? raster;
+  bool completed = false;
+
+  /// Set when the cache was reset while this decode was in flight.
+  bool dropped = false;
+
+  _ClearLogoRaster? cloneRaster() {
+    final master = raster;
+    if (master == null) return null;
+    return _ClearLogoRaster(
+      master.image.clone(),
+      master.intrinsicSize,
+      master.visibleFraction,
+    );
+  }
+}
+
+// Least recently used first. Bytes are matched by identity, never by content.
+final List<_ClearLogoCacheEntry> _clearLogoCache = [];
+
+_ClearLogoCacheEntry _clearLogoCacheEntry(_ClearLogoRequest request) {
+  final index = _clearLogoCache.indexWhere(
+    (entry) =>
+        identical(entry.bytes, request.bytes) &&
+        entry.width == request.width &&
+        entry.height == request.height,
+  );
+  if (index >= 0) {
+    final entry = _clearLogoCache.removeAt(index);
+    _clearLogoCache.add(entry);
+    return entry;
+  }
+  final entry = _ClearLogoCacheEntry(
+    request.bytes,
+    request.width,
+    request.height,
+  );
+  entry.done = _decodeClearLogo(request).then((raster) {
+    entry.completed = true;
+    if (entry.dropped) {
+      raster?.image.dispose();
+      return;
+    }
+    entry.raster = raster;
+  });
+  _clearLogoCache.add(entry);
+  _evictClearLogos();
+  return entry;
+}
+
+// Runs only on insertion, which happens during build. Waiters clone in the
+// microtasks that follow a decode, so every completed entry has been cloned
+// before it can be evicted here.
+void _evictClearLogos() {
+  while (_clearLogoCache.length > _clearLogoCacheCapacity) {
+    final index = _clearLogoCache.indexWhere((entry) => entry.completed);
+    if (index < 0) return; // Never evict an in-flight decode.
+    _clearLogoCache.removeAt(index).raster?.image.dispose();
+  }
+}
+
+@visibleForTesting
+void debugResetClearLogoCache() {
+  for (final entry in _clearLogoCache) {
+    if (entry.completed) {
+      entry.raster?.image.dispose();
+      entry.raster = null;
+    } else {
+      entry.dropped = true;
+    }
+  }
+  _clearLogoCache.clear();
+}
+
 Future<_ClearLogoRaster?> _decodeClearLogo(_ClearLogoRequest request) async {
   ui.ImmutableBuffer? buffer;
   ui.ImageDescriptor? descriptor;
@@ -638,7 +727,7 @@ Future<_ClearLogoRaster?> _decodeClearLogo(_ClearLogoRequest request) async {
       math.min(image.height, bottom + 2) / image.height,
     );
     final result = _ClearLogoRaster(image, intrinsicSize, fraction);
-    image = null; // The mounted state now owns this validated image handle.
+    image = null; // The caller now owns this validated image handle.
     return result;
   } catch (_) {
     return null;

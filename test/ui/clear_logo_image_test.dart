@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 
 void main() {
+  tearDown(debugResetClearLogoCache);
+
   testWidgets(
     'OSD rejects tiny visible, tall, empty and broken title artwork',
     (tester) async {
@@ -191,6 +193,105 @@ void main() {
     expect(highDpr.width, greaterThan(resized.width));
     await tester.pumpWidget(const SizedBox.shrink());
     expect(highDpr.debugDisposed, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('remounting the same bytes and slot paints on the first frame', (
+    tester,
+  ) async {
+    final bytes = await _solidLogoBytes(tester);
+    await _show(tester, bytes);
+    final first = tester
+        .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+        .image!;
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(first.debugDisposed, isTrue);
+
+    await tester.pumpWidget(_logoApp(bytes));
+    expect(find.byKey(const Key('accepted-logo')), findsOneWidget);
+    expect(find.text('Readable title'), findsNothing);
+    final remounted = tester
+        .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+        .image!;
+    expect(remounted.debugDisposed, isFalse);
+    expect(remounted, isNot(same(first)));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a cached empty logo falls back immediately on remount', (
+    tester,
+  ) async {
+    final bytes = await _transparentLogoBytes(tester);
+    await _show(tester, bytes);
+    expect(find.text('Readable title'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    await tester.pumpWidget(_logoApp(bytes));
+    expect(find.text('Readable title'), findsOneWidget);
+    expect(find.byType(RawImage), findsNothing);
+    await _waitForImageDecode(tester);
+    expect(find.text('Readable title'), findsOneWidget);
+    expect(find.byType(RawImage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('eviction disposes cached masters but not mounted clones', (
+    tester,
+  ) async {
+    const pink = Color(0xFFFA2A8A);
+    final mounted = await _rasterLogoBytes(
+      tester,
+      color: pink,
+      visible: const Rect.fromLTWH(0, 0, 600, 120),
+    );
+    Widget pair(Uint8List other) => MaterialApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: RepaintBoundary(
+          key: const Key('logo-boundary'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClearLogoImage(
+                mounted,
+                maximumSize: const Size(420, 84),
+                imageKey: const Key('accepted-logo'),
+                fallback: const Text('Readable title'),
+              ),
+              ClearLogoImage(
+                other,
+                maximumSize: const Size(420, 84),
+                imageKey: const Key('other-logo'),
+                fallback: const Text('Other title'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final first = await _solidLogoBytes(tester);
+    await tester.pumpWidget(pair(first));
+    await _waitForImageDecode(tester);
+    final handle = tester
+        .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+        .image!;
+    // Mounted logo plus nine others exceed the capacity of eight, so the
+    // least recently used entry (the mounted logo's) is evicted.
+    for (var i = 0; i < 9; i++) {
+      await tester.pumpWidget(pair(await _solidLogoBytes(tester)));
+      await _waitForImageDecode(tester);
+      expect(find.byKey(const Key('other-logo')), findsOneWidget);
+    }
+    expect(handle.debugDisposed, isFalse);
+    expect(
+      tester.widget<RawImage>(find.byKey(const Key('accepted-logo'))).image,
+      same(handle),
+    );
+    expect(
+      _containsLogoColor(await _captureRenderedLogo(tester), pink),
+      isTrue,
+    );
     expect(tester.takeException(), isNull);
   });
 

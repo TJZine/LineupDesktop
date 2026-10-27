@@ -42,6 +42,8 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  tearDown(debugResetClearLogoCache);
+
   testWidgets(
     'visible cast surfaces share the hydrated shelf, semantics, and TV More info',
     (tester) async {
