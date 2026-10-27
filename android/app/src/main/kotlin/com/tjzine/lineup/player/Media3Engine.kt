@@ -25,7 +25,9 @@ internal class Media3Engine(
     private val subtitles: SubtitleView,
     private val sizeChanged: (VideoSize) -> Unit,
     private val keepScreenOn: (Boolean) -> Unit,
-    createPlayer: (Context) -> ExoPlayer = { ExoPlayer.Builder(it).build() },
+    createPlayer: (Context) -> ExoPlayer = {
+        ExoPlayer.Builder(it).setLoadControl(PlaybackMemory.loadControl(it)).build()
+    },
 ) : PlayerEngine {
     // The default builder owns an exclusive playback thread. Media3 quits it only
     // after releaseInternal finishes renderer/source teardown. Keep that public
@@ -95,12 +97,7 @@ internal class Media3Engine(
             listener.failure("source_open_error")
             return
         }
-        val network =
-            OkHttpClient.Builder()
-                .followRedirects(false)
-                .followSslRedirects(false)
-                .addInterceptor(OriginPolicy())
-                .build()
+        val network = MediaHttp.forLoad()
         client = network
         val source = OkHttpDataSource.Factory(network)
         if (media.token != null)
@@ -308,8 +305,9 @@ internal class Media3Engine(
         } finally {
             keepScreenOn(false)
         }
-        // Closing an idle TLS connection can write close_notify. Never perform this
-        // IO on the application looper or reply to stop/dispose before it completes.
+        // Cancelling an in-flight call closes its socket (TLS close_notify). Never
+        // perform this IO on the application looper or reply to stop/dispose before
+        // it completes. Idle connections stay in the shared pool (see MediaHttp).
         // A release timeout fails this attempt even if teardown finishes meanwhile.
         // A later retry observes the same thread; it never calls release() again.
         val timedOutThisAttempt = firstAttempt && releaseTimedOut
@@ -328,7 +326,6 @@ internal class Media3Engine(
             val networkSuccess =
                 try {
                     closingNetwork?.dispatcher?.cancelAll()
-                    closingNetwork?.connectionPool?.evictAll()
                     true
                 } catch (_: Exception) {
                     false
