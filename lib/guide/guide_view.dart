@@ -3654,7 +3654,10 @@ class _ProgramDetails extends StatelessWidget {
                     imageKey: const Key('guide-clear-logo'),
                     fallback: title,
                     semanticLabel: '${item.showTitle ?? item.title} logo',
-                    validateVisibleAlpha: roles.androidTv,
+                    maximumSize: Size(
+                      compactLogo || dense ? 280 : 420,
+                      logoHeight,
+                    ),
                   ),
                 ),
               )

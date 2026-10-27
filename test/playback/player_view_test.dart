@@ -2257,8 +2257,8 @@ void main() {
           await _settleNowPlayingArtwork(tester);
           final logo = find.byKey(const Key('player-now-playing-logo'));
           expect(logo, findsOneWidget, reason: '$size text$textScale');
-          final image = tester.widget<Image>(logo);
-          expect(image.image, MemoryImage(bytes!));
+          final image = tester.widget<RawImage>(logo);
+          expect(image.image, isNotNull);
           final visibleLogo = find
               .ancestor(of: logo, matching: find.byType(ClearLogoImage))
               .first;
@@ -6963,7 +6963,10 @@ void main() {
     );
     expect(fixture.lineup.artworkRequests, hasLength(2));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
-    expect(find.byType(Image), findsNWidgets(2));
+    expect(
+      find.byType(Image),
+      findsOneWidget,
+    ); // Poster; the logo owns a RawImage.
     expect(
       find.text('S2 E6 · 60 min · 2026 · Drama · Adventure'),
       findsOneWidget,

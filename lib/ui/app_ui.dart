@@ -423,7 +423,6 @@ class ClearLogoImage extends StatefulWidget {
     this.maximumSize,
     this.minimumVisibleSize,
     this.maximumVisibleHeight,
-    this.validateVisibleAlpha = false,
     super.key,
   });
 
@@ -439,29 +438,60 @@ class ClearLogoImage extends StatefulWidget {
   /// Existing consumers retain their original contain scale when omitted.
   final double? maximumVisibleHeight;
 
-  /// Validates that the decoded logo has visible alpha without changing its
-  /// contain geometry. Cropping and minimum-size checks remain opt-in through
-  /// their existing parameters.
-  final bool validateVisibleAlpha;
-
   @override
   State<ClearLogoImage> createState() => _ClearLogoImageState();
 }
 
+typedef _ClearLogoRequest = ({
+  Uint8List bytes,
+  int width,
+  int height,
+  double pixelRatio,
+});
+
 class _ClearLogoImageState extends State<ClearLogoImage> {
-  Future<Size?>? _intrinsicSize;
-  Future<Rect?>? _visibleFraction;
+  _ClearLogoRequest? _request;
+  _ClearLogoRaster? _raster;
+  int _generation = 0;
+
+  void _reset() {
+    _generation++;
+    _request = null;
+    _raster?.image.dispose();
+    _raster = null;
+  }
 
   @override
   void didUpdateWidget(covariant ClearLogoImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.bytes != widget.bytes) {
-      _intrinsicSize = null;
-      _visibleFraction = null;
-    } else if (oldWidget.validateVisibleAlpha != widget.validateVisibleAlpha) {
-      _visibleFraction = null;
-    }
+    if (!identical(oldWidget.bytes, widget.bytes)) _reset();
   }
+
+  @override
+  void dispose() {
+    _reset();
+    super.dispose();
+  }
+
+  void _load(_ClearLogoRequest request) {
+    _reset();
+    _request = request;
+    final generation = _generation;
+    unawaited(
+      _decodeClearLogo(request).then((raster) {
+        if (!mounted || generation != _generation) {
+          raster?.image.dispose();
+          return;
+        }
+        if (raster != null) setState(() => _raster = raster);
+      }),
+    );
+  }
+
+  // Round down so every bucket still fits the current slot. Changes within a
+  // bucket only relayout the existing raster, avoiding repeated decodes.
+  static int _pixelBucket(double pixels) =>
+      math.max(1, (pixels / 8).floor() * 8);
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -475,129 +505,116 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
                 widget.maximumSize!.height,
               ),
             );
-      return FutureBuilder<Size?>(
-        future: _intrinsicSize ??= _decodeImageSize(
-          widget.bytes,
-          createLocalImageConfiguration(context),
-        ),
-        builder: (context, snapshot) {
-          final size = snapshot.data;
-          if (snapshot.connectionState != ConnectionState.done ||
-              size == null ||
-              !clearLogoIsUsable(size, constraints)) {
-            return widget.fallback;
-          }
-          Widget image() => ConstrainedBox(
-            constraints: constraints,
-            child: Image.memory(
-              widget.bytes,
-              key: widget.imageKey,
-              fit: BoxFit.contain,
-              alignment: Alignment.centerLeft,
-              gaplessPlayback: true,
-              semanticLabel: widget.semanticLabel,
-              excludeFromSemantics: widget.excludeFromSemantics,
-              errorBuilder: (_, _, _) => widget.fallback,
-            ),
-          );
-          final minimum = widget.minimumVisibleSize;
-          if (!widget.validateVisibleAlpha &&
-              minimum == null &&
-              widget.maximumVisibleHeight == null) {
-            return image();
-          }
-          return FutureBuilder<Rect?>(
-            future: _visibleFraction ??= _decodeVisibleFraction(widget.bytes),
-            builder: (context, visible) {
-              final fraction = visible.data;
-              if (visible.connectionState != ConnectionState.done ||
-                  fraction == null) {
-                return widget.fallback;
-              }
-              if (widget.validateVisibleAlpha &&
-                  minimum == null &&
-                  widget.maximumVisibleHeight == null) {
-                return image();
-              }
-              var fitted = applyBoxFit(
-                BoxFit.contain,
-                size,
-                constraints.biggest,
-              ).destination;
-              final visibleCap = widget.maximumVisibleHeight;
-              if (visibleCap != null &&
-                  fitted.height * fraction.height > visibleCap) {
-                fitted *= visibleCap / (fitted.height * fraction.height);
-              }
-              if (minimum != null &&
-                  (fitted.width * fraction.width < minimum.width ||
-                      fitted.height * fraction.height < minimum.height)) {
-                return widget.fallback;
-              }
-              return SizedBox(
-                width: fitted.width * fraction.width,
-                height: fitted.height * fraction.height,
-                child: Stack(
-                  children: [
-                    Positioned(
-                      left: -fitted.width * fraction.left,
-                      top: -fitted.height * fraction.top,
-                      width: fitted.width,
-                      height: fitted.height,
-                      child: image(),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+      if (!constraints.hasBoundedWidth ||
+          !constraints.hasBoundedHeight ||
+          constraints.biggest.isEmpty) {
+        if (_request != null) _reset();
+        return widget.fallback;
+      }
+      final dpr = MediaQuery.devicePixelRatioOf(context);
+      final request = (
+        bytes: widget.bytes,
+        width: _pixelBucket(constraints.maxWidth * dpr),
+        height: _pixelBucket(constraints.maxHeight * dpr),
+        pixelRatio: dpr,
       );
-    },
-  );
-}
-
-Future<Size?> _decodeImageSize(
-  Uint8List bytes,
-  ImageConfiguration configuration,
-) {
-  final completer = Completer<Size?>();
-  final stream = MemoryImage(bytes).resolve(configuration);
-  late final ImageStreamListener listener;
-  listener = ImageStreamListener(
-    (info, _) {
-      final size = Size(
-        info.image.width.toDouble(),
-        info.image.height.toDouble(),
-      );
-      try {
-        completer.complete(size);
-      } finally {
-        try {
-          info.dispose();
-        } finally {
-          stream.removeListener(listener);
+      if (request != _request) _load(request);
+      final raster = _raster;
+      if (raster == null ||
+          !clearLogoIsUsable(raster.intrinsicSize, constraints)) {
+        return widget.fallback;
+      }
+      final fraction = raster.visibleFraction;
+      var fitted = applyBoxFit(
+        BoxFit.contain,
+        raster.intrinsicSize,
+        constraints.biggest,
+      ).destination;
+      final crop =
+          widget.minimumVisibleSize != null ||
+          widget.maximumVisibleHeight != null;
+      if (crop) {
+        final cap = widget.maximumVisibleHeight;
+        if (cap != null && fitted.height * fraction.height > cap) {
+          fitted *= cap / (fitted.height * fraction.height);
+        }
+        final minimum = widget.minimumVisibleSize;
+        if (minimum != null &&
+            (fitted.width * fraction.width < minimum.width ||
+                fitted.height * fraction.height < minimum.height)) {
+          return widget.fallback;
         }
       }
-    },
-    onError: (_, _) {
-      completer.complete();
-      stream.removeListener(listener);
+      Widget image = ConstrainedBox(
+        constraints: constraints,
+        child: RawImage(
+          key: widget.imageKey,
+          image: raster.image,
+          // Preserve the original contain geometry independently of decode size.
+          width: fitted.width,
+          height: fitted.height,
+          fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
+        ),
+      );
+      if (!widget.excludeFromSemantics) {
+        image = Semantics(
+          container: widget.semanticLabel != null,
+          image: true,
+          label: widget.semanticLabel ?? '',
+          child: image,
+        );
+      }
+      if (!crop) return image;
+      return SizedBox(
+        width: fitted.width * fraction.width,
+        height: fitted.height * fraction.height,
+        child: Stack(
+          children: [
+            Positioned(
+              left: -fitted.width * fraction.left,
+              top: -fitted.height * fraction.top,
+              width: fitted.width,
+              height: fitted.height,
+              child: image,
+            ),
+          ],
+        ),
+      );
     },
   );
-  stream.addListener(listener);
-  return completer.future;
 }
 
-Future<Rect?> _decodeVisibleFraction(Uint8List bytes) async {
+class _ClearLogoRaster {
+  const _ClearLogoRaster(this.image, this.intrinsicSize, this.visibleFraction);
+
+  final ui.Image image;
+  final Size intrinsicSize;
+  final Rect visibleFraction;
+}
+
+Future<_ClearLogoRaster?> _decodeClearLogo(_ClearLogoRequest request) async {
+  ui.ImmutableBuffer? buffer;
+  ui.ImageDescriptor? descriptor;
   ui.Codec? codec;
   ui.Image? image;
   try {
-    codec = await ui.instantiateImageCodec(
-      bytes,
-      targetWidth: 512,
-      targetHeight: 512,
-      allowUpscaling: false,
+    buffer = await ui.ImmutableBuffer.fromUint8List(request.bytes);
+    descriptor = await ui.ImageDescriptor.encoded(buffer);
+    final intrinsicSize = Size(
+      descriptor.width.toDouble(),
+      descriptor.height.toDouble(),
+    );
+    final scale = math.min(
+      1.0,
+      math.min(
+        request.width / descriptor.width,
+        request.height / descriptor.height,
+      ),
+    );
+    codec = await descriptor.instantiateCodec(
+      targetWidth: math.max(1, (descriptor.width * scale).floor()),
+      targetHeight: math.max(1, (descriptor.height * scale).floor()),
     );
     image = (await codec.getNextFrame()).image;
     final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
@@ -614,16 +631,21 @@ Future<Rect?> _decodeVisibleFraction(Uint8List bytes) async {
       }
     }
     if (right < left || bottom < top) return null;
-    return Rect.fromLTRB(
+    final fraction = Rect.fromLTRB(
       math.max(0, left - 1) / image.width,
       math.max(0, top - 1) / image.height,
       math.min(image.width, right + 2) / image.width,
       math.min(image.height, bottom + 2) / image.height,
     );
+    final result = _ClearLogoRaster(image, intrinsicSize, fraction);
+    image = null; // The mounted state now owns this validated image handle.
+    return result;
   } catch (_) {
     return null;
   } finally {
     image?.dispose();
     codec?.dispose();
+    descriptor?.dispose();
+    buffer?.dispose();
   }
 }

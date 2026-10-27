@@ -15,7 +15,6 @@ import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
-import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/golden_test_support.dart';
@@ -237,7 +236,10 @@ void main() {
               ),
             );
             await tester.pumpAndSettle();
-            await _awaitLogoAlphaValidation(tester);
+            await _awaitLogoArtwork(
+              tester,
+              fallback: configuration.name.contains('fallback'),
+            );
             expect(
               find.byKey(
                 Key(
@@ -1077,7 +1079,7 @@ void _stabilityTests() {
                   ),
                 );
                 await tester.pumpAndSettle();
-                await _awaitLogoAlphaValidation(tester);
+                await _awaitLogoArtwork(tester);
                 expect(
                   find.byKey(const Key('guide-clear-logo')),
                   findsOneWidget,
@@ -1186,25 +1188,26 @@ void _expectCompletePlaybackTask(
   }
 }
 
-// Intrinsic image precache does not complete the separate visible-alpha decode.
-// Wait for that actual validation, including terminal fallback, before measuring.
-Future<void> _awaitLogoAlphaValidation(WidgetTester tester) async {
-  final validations = tester
-      .widgetList<FutureBuilder<Rect?>>(
-        find.descendant(
-          of: find.byType(ClearLogoImage),
-          matching: find.byWidgetPredicate(
-            (widget) => widget is FutureBuilder<Rect?>,
-          ),
-        ),
-      )
-      .map((builder) => builder.future)
-      .whereType<Future<Rect?>>()
-      .toList();
-  await tester.runAsync(() async {
-    for (final validation in validations) {
-      await validation;
+Future<void> _awaitLogoArtwork(
+  WidgetTester tester, {
+  bool fallback = false,
+}) async {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 40)),
+    );
+    await tester.pumpAndSettle();
+    if (!fallback &&
+        find.byKey(const Key('guide-clear-logo')).evaluate().isNotEmpty) {
+      return;
     }
-  });
-  await tester.pumpAndSettle();
+    // Rejected tall artwork has the same geometry during loading and after
+    // rejection. Give the engine its complete real-time settling window.
+  }
+  expect(
+    find.byKey(
+      Key(fallback ? 'guide-clear-logo-fallback' : 'guide-clear-logo'),
+    ),
+    findsOneWidget,
+  );
 }

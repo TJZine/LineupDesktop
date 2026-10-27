@@ -2689,14 +2689,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 40)),
+      );
+      await tester.pumpAndSettle();
+      if (find.byKey(const Key('guide-clear-logo')).evaluate().isNotEmpty) {
+        break;
+      }
+    }
     expect(find.byKey(const Key('guide-info-backdrop')), findsOneWidget);
     expect(find.byKey(const Key('guide-clear-logo')), findsOneWidget);
     expect(find.bySemanticsLabel('Signal House logo'), findsOneWidget);
     expect(
-      tester
-          .widget<ClearLogoImage>(find.byType(ClearLogoImage))
-          .validateVisibleAlpha,
-      isFalse,
+      tester.widget<RawImage>(find.byKey(const Key('guide-clear-logo'))).image,
+      isNotNull,
     );
     expect(lineup.artworkLoads, 3);
     final background = tester.widget<AnimatedContainer>(

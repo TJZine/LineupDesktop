@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -82,134 +81,33 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets(
-    'visible alpha validation is opt-in and preserves padded logo rendering',
-    (tester) async {
-      final transparent = await _transparentLogoBytes(tester);
-      await _show(
-        tester,
-        transparent,
-        minimumVisibleSize: null,
-        validateVisibleAlpha: false,
-      );
-      expect(find.byKey(const Key('accepted-logo')), findsOneWidget);
-      expect(find.text('Readable title'), findsNothing);
-
-      await _show(
-        tester,
-        transparent,
-        minimumVisibleSize: null,
-        validateVisibleAlpha: true,
-      );
-      expect(find.byKey(const Key('accepted-logo')), findsNothing);
-      expect(find.text('Readable title'), findsOneWidget);
-
-      final padded = await _rasterLogoBytes(
-        tester,
-        visible: const Rect.fromLTWH(160, 20, 280, 80),
-      );
-      await _show(
-        tester,
-        padded,
-        minimumVisibleSize: null,
-        validateVisibleAlpha: false,
-      );
-      final desktopRender = await _captureRenderedLogo(tester);
-      await _show(
-        tester,
-        padded,
-        minimumVisibleSize: null,
-        validateVisibleAlpha: true,
-      );
-      final tvRender = await _captureRenderedLogo(tester);
-
-      expect(
-        tester.getSize(find.byKey(const Key('accepted-logo'))),
-        const Size(420, 84),
-      );
-      expect(tvRender, orderedEquals(desktopRender));
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'visible alpha validation does not publish a replaced logo result',
-    (tester) async {
-      final first = await _transparentLogoBytes(tester);
-      final replacement = await _solidLogoBytes(tester);
-      await tester.pumpWidget(
-        _logoApp(first, minimumVisibleSize: null, validateVisibleAlpha: true),
-      );
-      await tester.pumpWidget(
-        _logoApp(
-          replacement,
-          minimumVisibleSize: null,
-          validateVisibleAlpha: true,
-        ),
-      );
-      await _waitForImageDecode(tester);
-
-      final image = tester.widget<Image>(
-        find.byKey(const Key('accepted-logo')),
-      );
-      expect((image.image as MemoryImage).bytes, same(replacement));
-      expect(find.text('Readable title'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets('visible alpha validation awaits the terminal transparent result', (
+  testWidgets('desktop rejects empty alpha and keeps padded contain geometry', (
     tester,
   ) async {
-    final transparent = await _transparentLogoBytes(tester);
-    await tester.pumpWidget(
-      _logoApp(
-        transparent,
-        minimumVisibleSize: null,
-        validateVisibleAlpha: true,
-      ),
+    await _show(
+      tester,
+      await _transparentLogoBytes(tester),
+      minimumVisibleSize: null,
     );
-    final alphaFuture = await _waitForVisibleFractionFuture(tester);
-    final transparentAlphaFutureCaptured = alphaFuture != null;
-    expect(transparentAlphaFutureCaptured, isTrue);
-    final visibleFraction = await tester.runAsync(() => alphaFuture!);
-
-    expect(visibleFraction, isNull);
-    await tester.pump();
-    final transparentFallbackFrame = find
-        .text('Readable title')
-        .evaluate()
-        .isNotEmpty;
     expect(find.byKey(const Key('accepted-logo')), findsNothing);
-    expect(transparentFallbackFrame, isTrue);
-
-    await tester.pumpWidget(
-      _logoApp(
-        Uint8List.fromList(const [1, 2, 3]),
-        minimumVisibleSize: null,
-        validateVisibleAlpha: true,
-      ),
+    expect(find.text('Readable title'), findsOneWidget);
+    final padded = await _rasterLogoBytes(
+      tester,
+      visible: const Rect.fromLTWH(160, 20, 280, 80),
     );
-    await _waitForImageDecode(tester);
-    expect(find.byKey(const Key('accepted-logo')), findsNothing);
-    final intrinsicFailureAlpha = await _waitForVisibleFractionFuture(tester);
-    final intrinsicFailureAlphaFuture = intrinsicFailureAlpha != null;
-    final intrinsicFailureFallbackFrame = find
-        .text('Readable title')
-        .evaluate()
-        .isNotEmpty;
-    expect(intrinsicFailureFallbackFrame, isTrue);
-    expect(intrinsicFailureAlphaFuture, isFalse);
-    debugPrint(
-      'ART-I1-R2 trace '
-      'transparentAlphaFutureCaptured=$transparentAlphaFutureCaptured '
-      'transparentAlphaResult=${visibleFraction == null ? 'null' : 'non-null'} '
-      'intrinsicFailureAlphaFuture=$intrinsicFailureAlphaFuture '
-      'fallbackFrame=$transparentFallbackFrame '
-      'intrinsicFailureFallbackFrame=$intrinsicFailureFallbackFrame',
+    await _show(tester, padded, minimumVisibleSize: null);
+    expect(
+      tester.getSize(find.byKey(const Key('accepted-logo'))),
+      const Size(420, 84),
     );
-    expect(tester.takeException(), isNull);
+    expect(
+      _containsLogoColor(await _captureRenderedLogo(tester), Colors.white),
+      isTrue,
+    );
   });
+
   testWidgets(
-    'visible alpha validation records replacement fallback and warm cache',
+    'replacement never publishes stale artwork, including warm bytes',
     (tester) async {
       final first = await _rasterLogoBytes(
         tester,
@@ -221,237 +119,91 @@ void main() {
         color: const Color(0xFF2AFA8A),
         visible: const Rect.fromLTWH(0, 0, 600, 120),
       );
-      await _show(
-        tester,
-        first,
-        minimumVisibleSize: null,
-        validateVisibleAlpha: true,
+      await _show(tester, first, minimumVisibleSize: null);
+      final previous = tester
+          .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+          .image!;
+      await tester.pumpWidget(
+        _logoApp(Uint8List.fromList(first), minimumVisibleSize: null),
+      );
+      expect(find.text('Readable title'), findsOneWidget);
+      await tester.pumpWidget(_logoApp(replacement, minimumVisibleSize: null));
+      expect(find.text('Readable title'), findsOneWidget);
+      expect(previous.debugDisposed, isTrue);
+      await _waitForImageDecode(tester);
+      expect(
+        _containsLogoColor(
+          await _captureRenderedLogo(tester),
+          const Color(0xFF2AFA8A),
+        ),
+        isTrue,
       );
       expect(
         _containsLogoColor(
           await _captureRenderedLogo(tester),
           const Color(0xFFFA2A8A),
         ),
-        isTrue,
-      );
-
-      final warmFirst = Uint8List.fromList(first);
-      await tester.pumpWidget(
-        _logoApp(
-          warmFirst,
-          minimumVisibleSize: null,
-          validateVisibleAlpha: true,
-        ),
-      );
-      final lateAlphaFuture = await _waitForVisibleFractionFuture(tester);
-      expect(lateAlphaFuture, isNotNull);
-      var lateAlphaCompletedBeforeReplacement = false;
-      unawaited(
-        lateAlphaFuture!.then((_) {
-          lateAlphaCompletedBeforeReplacement = true;
-        }),
-      );
-
-      await tester.pumpWidget(
-        _logoApp(
-          replacement,
-          minimumVisibleSize: null,
-          validateVisibleAlpha: true,
-        ),
-      );
-      await tester.pump();
-      final pendingPixels = await _captureRenderedLogo(tester);
-      final lateAlphaCompletedBeforeReplacementSnapshot =
-          lateAlphaCompletedBeforeReplacement;
-      expect(find.byKey(const Key('accepted-logo')), findsNothing);
-      expect(find.text('Readable title'), findsOneWidget);
-      expect(
-        _containsLogoColor(pendingPixels, const Color(0xFFFA2A8A)),
         isFalse,
       );
-
-      var lateAlphaCompletionObservedAfterReplacement = false;
-      final lateAlphaResult = await tester.runAsync(() async {
-        final result = await lateAlphaFuture;
-        lateAlphaCompletionObservedAfterReplacement = true;
-        return result;
-      });
-      final lateAObservedAfterReplacement =
-          !lateAlphaCompletedBeforeReplacementSnapshot &&
-          lateAlphaCompletionObservedAfterReplacement;
-      final replacementAlphaFuture = await _waitForVisibleFractionFuture(
-        tester,
-      );
-      expect(replacementAlphaFuture, isNotNull);
-      final replacementVisibleFraction = await tester.runAsync(
-        () => replacementAlphaFuture!,
-      );
-      await _waitForAcceptedLogo(tester, replacement);
-      expect(lateAlphaResult, isNotNull);
-      expect(replacementVisibleFraction, isNotNull);
-      expect(find.text('Readable title'), findsNothing);
-      final replacementPixels = await _captureRenderedLogo(tester);
-      expect(
-        _containsLogoColor(replacementPixels, const Color(0xFF2AFA8A)),
-        isTrue,
-      );
-
-      await tester.pumpWidget(
-        _logoApp(
-          warmFirst,
-          minimumVisibleSize: null,
-          validateVisibleAlpha: true,
-        ),
-      );
-      final warmAlphaFuture = await _waitForVisibleFractionFuture(tester);
-      expect(warmAlphaFuture, isNotNull);
-      expect(await tester.runAsync(() => warmAlphaFuture!), isNotNull);
-      await _waitForAcceptedLogo(tester, warmFirst);
+      await _show(tester, first, minimumVisibleSize: null);
       expect(
         _containsLogoColor(
           await _captureRenderedLogo(tester),
           const Color(0xFFFA2A8A),
         ),
         isTrue,
-      );
-      debugPrint(
-        'ART-I1-R2 trace alphaAStarted=true '
-        'alphaACompletedBeforeReplacement=$lateAlphaCompletedBeforeReplacementSnapshot '
-        'alphaACompletedAfterReplacement=$lateAlphaCompletionObservedAfterReplacement '
-        'lateAObservedAfterReplacement=$lateAObservedAfterReplacement '
-        'replacementPendingFallback=true replacementAlphaCompleted=true '
-        'replacementFrame=true warmCacheAlphaCompleted=true',
       );
       expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('intrinsic logo probing releases a cold image handle', (
+  testWidgets('size buckets and DPR own and release their raster handles', (
     tester,
   ) async {
-    final referenceHandles = await _measureColdReferenceHandles(
-      tester,
-      await _solidLogoBytes(tester, size: const Size(620, 120)),
-    );
     final bytes = await _solidLogoBytes(tester);
-    final stream = MemoryImage(bytes).resolve(const ImageConfiguration());
-    ImageInfo? captured;
-    late final ImageStreamListener listener;
-    listener = ImageStreamListener((info, _) {
-      if (captured != null) {
-        info.dispose();
-      } else {
-        captured = info;
-      }
-    });
-    stream.addListener(listener);
-    var listenerRemoved = false;
-    try {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Align(
-            alignment: Alignment.centerLeft,
-            child: ClearLogoImage(
-              bytes,
-              maximumSize: const Size(420, 84),
-              minimumVisibleSize: const Size(96, 28),
-              imageKey: const Key('accepted-logo'),
-              fallback: const Text('Readable title'),
-            ),
-          ),
-        ),
-      );
-      for (var i = 0; i < 4; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 40)),
-        );
-        await tester.pump();
-      }
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-      stream.removeListener(listener);
-      listenerRemoved = true;
-      await _clearImageCache(tester);
-
-      expect(captured, isNotNull);
-      expect(
-        captured!.image.debugGetOpenHandleStackTraces()!.length,
-        referenceHandles,
-      );
-    } finally {
-      if (!listenerRemoved) stream.removeListener(listener);
-      captured?.dispose();
-      await _clearImageCache(tester);
-    }
+    await _show(tester, bytes);
+    final first = tester
+        .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+        .image!;
+    await tester.pumpWidget(_logoApp(bytes, maximumSize: const Size(421, 85)));
+    expect(
+      tester.widget<RawImage>(find.byKey(const Key('accepted-logo'))).image,
+      same(first),
+    );
+    await tester.pumpWidget(_logoApp(bytes, maximumSize: const Size(300, 60)));
+    expect(find.text('Readable title'), findsOneWidget);
+    expect(first.debugDisposed, isTrue);
+    await _waitForImageDecode(tester);
+    final resized = tester
+        .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+        .image!;
+    expect(resized.width, lessThanOrEqualTo(300));
+    expect(resized.height, lessThanOrEqualTo(60));
+    await tester.pumpWidget(
+      _logoApp(bytes, maximumSize: const Size(300, 60), dpr: 2),
+    );
+    expect(resized.debugDisposed, isTrue);
+    expect(find.text('Readable title'), findsOneWidget);
+    await _waitForImageDecode(tester);
+    final highDpr = tester
+        .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+        .image!;
+    expect(highDpr.width, greaterThan(resized.width));
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(highDpr.debugDisposed, isTrue);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'intrinsic logo probing releases cached handles across replacement',
-    (tester) async {
-      final referenceHandles = await _measureColdReferenceHandles(
-        tester,
-        await _solidLogoBytes(tester, size: const Size(620, 120)),
-      );
-      final firstBytes = await _solidLogoBytes(tester);
-      final replacementBytes = await _solidLogoBytes(
-        tester,
-        size: const Size(480, 120),
-      );
-      await _show(tester, firstBytes);
-      final captured = await _captureImageInfo(firstBytes);
-      try {
-        await _show(tester, replacementBytes);
-        await _show(tester, firstBytes);
-        await _show(tester, replacementBytes);
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump();
-        await _clearImageCache(tester);
-
-        expect(
-          captured.image.debugGetOpenHandleStackTraces()!.length,
-          referenceHandles,
-        );
-      } finally {
-        captured.dispose();
-        await _clearImageCache(tester);
-      }
-    },
-  );
-}
-
-Future<int> _measureColdReferenceHandles(
-  WidgetTester tester,
-  Uint8List bytes,
-) async {
-  final stream = MemoryImage(bytes).resolve(const ImageConfiguration());
-  ImageInfo? captured;
-  late final ImageStreamListener listener;
-  listener = ImageStreamListener((info, _) {
-    if (captured != null) {
-      info.dispose();
-    } else {
-      captured = info;
-    }
+  testWidgets('unmounting an in-flight decode cannot publish later', (
+    tester,
+  ) async {
+    final bytes = await _solidLogoBytes(tester, size: const Size(3800, 1000));
+    await tester.pumpWidget(_logoApp(bytes));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _waitForImageDecode(tester);
+    expect(find.byType(RawImage), findsNothing);
+    expect(tester.takeException(), isNull);
   });
-  stream.addListener(listener);
-  var listenerRemoved = false;
-  try {
-    for (var i = 0; i < 4 && captured == null; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 40)),
-      );
-      await tester.pump();
-    }
-    expect(captured, isNotNull);
-    stream.removeListener(listener);
-    listenerRemoved = true;
-    await _clearImageCache(tester);
-    return captured!.image.debugGetOpenHandleStackTraces()!.length;
-  } finally {
-    if (!listenerRemoved) stream.removeListener(listener);
-    captured?.dispose();
-    await _clearImageCache(tester);
-  }
 }
 
 Future<Uint8List> _solidLogoBytes(
@@ -489,46 +241,17 @@ Future<Uint8List> _rasterLogoBytes(
   return bytes!;
 }
 
-Future<ImageInfo> _captureImageInfo(Uint8List bytes) async {
-  final stream = MemoryImage(bytes).resolve(const ImageConfiguration());
-  final delivered = Completer<ImageInfo>();
-  late final ImageStreamListener listener;
-  listener = ImageStreamListener((info, _) {
-    if (delivered.isCompleted) {
-      info.dispose();
-    } else {
-      delivered.complete(info);
-    }
-  });
-  stream.addListener(listener);
-  try {
-    return await delivered.future;
-  } finally {
-    stream.removeListener(listener);
-  }
-}
-
-Future<void> _clearImageCache(WidgetTester tester) async {
-  PaintingBinding.instance.imageCache
-    ..clear()
-    ..clearLiveImages();
-  await tester.pump();
-  await tester.pump();
-}
-
 Future<void> _show(
   WidgetTester tester,
   Uint8List bytes, {
   double? maximumVisibleHeight,
   Size? minimumVisibleSize = const Size(96, 28),
-  bool validateVisibleAlpha = false,
 }) async {
   await tester.pumpWidget(
     _logoApp(
       bytes,
       minimumVisibleSize: minimumVisibleSize,
       maximumVisibleHeight: maximumVisibleHeight,
-      validateVisibleAlpha: validateVisibleAlpha,
     ),
   );
   await _waitForImageDecode(tester);
@@ -538,72 +261,36 @@ Widget _logoApp(
   Uint8List bytes, {
   double? maximumVisibleHeight,
   Size? minimumVisibleSize = const Size(96, 28),
-  bool validateVisibleAlpha = false,
+  Size maximumSize = const Size(420, 84),
+  double dpr = 1,
 }) => MaterialApp(
-  home: Align(
-    alignment: Alignment.centerLeft,
-    child: RepaintBoundary(
-      key: const Key('logo-boundary'),
-      child: ClearLogoImage(
-        bytes,
-        maximumSize: const Size(420, 84),
-        minimumVisibleSize: minimumVisibleSize,
-        maximumVisibleHeight: maximumVisibleHeight,
-        validateVisibleAlpha: validateVisibleAlpha,
-        imageKey: const Key('accepted-logo'),
-        fallback: const Text('Readable title'),
+  home: MediaQuery(
+    data: MediaQueryData(devicePixelRatio: dpr),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: RepaintBoundary(
+        key: const Key('logo-boundary'),
+        child: ClearLogoImage(
+          bytes,
+          maximumSize: maximumSize,
+          minimumVisibleSize: minimumVisibleSize,
+          maximumVisibleHeight: maximumVisibleHeight,
+          imageKey: const Key('accepted-logo'),
+          fallback: const Text('Readable title'),
+        ),
       ),
     ),
   ),
 );
 
 Future<void> _waitForImageDecode(WidgetTester tester) async {
-  // Image decoding happens on the engine outside the fake widget-test clock.
+  // The engine decoder runs outside the fake widget-test clock.
   for (var i = 0; i < 4; i++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 40)),
     );
     await tester.pump();
   }
-}
-
-Future<Future<Rect?>?> _waitForVisibleFractionFuture(
-  WidgetTester tester,
-) async {
-  for (var i = 0; i < 20; i++) {
-    final builders = tester.widgetList<FutureBuilder<Rect?>>(
-      find.byType(FutureBuilder<Rect?>),
-    );
-    for (final builder in builders) {
-      if (builder.future != null) return builder.future;
-    }
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 40)),
-    );
-    await tester.pump();
-  }
-  return null;
-}
-
-Future<void> _waitForAcceptedLogo(
-  WidgetTester tester,
-  Uint8List expectedBytes,
-) async {
-  for (var i = 0; i < 20; i++) {
-    final finder = find.byKey(const Key('accepted-logo'));
-    if (finder.evaluate().isNotEmpty) {
-      final image = tester.widget<Image>(finder);
-      if (image.image is MemoryImage &&
-          identical((image.image as MemoryImage).bytes, expectedBytes)) {
-        return;
-      }
-    }
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 40)),
-    );
-    await tester.pump();
-  }
-  throw TestFailure('Timed out waiting for the replacement logo frame');
 }
 
 bool _containsLogoColor(Uint8List rgba, Color expected) {
