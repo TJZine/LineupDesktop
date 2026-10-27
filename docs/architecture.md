@@ -221,7 +221,8 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
 
 ## Implemented now
 
-- Root Flutter project targeting only macOS and Windows.
+- Root Flutter project targeting Windows, macOS and Android TV / Android-based
+  Fire OS.
 - Application bootstrap, a compact shared visual vocabulary, responsive page,
   section, notice, empty-state and confirmation primitives, focus-aware
   Material controls, semantic labels, navigation shell, and explicit startup
@@ -240,7 +241,7 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
   Channels, Settings and Diagnostics, and an immersive shell for Guide and
   Player. The immersive Lineup menu calls the same route owner; it is not a
   second navigation system.
-- The Dart native-player seam. Windows and macOS use the method-channel
+- The Dart native-player seam. Windows, macOS and Android use the method-channel
   backend; other platforms use an explicit unsupported backend that never
   reports successful playback.
 - A Windows C++ libmpv owner, native child presentation, command/property/event

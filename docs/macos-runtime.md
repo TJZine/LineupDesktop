@@ -288,7 +288,9 @@ an empty output directory, ending with `verify (arm64): passed`. A second
   output directory, the repository path, `$HOME`, `/Users/`, `/private/tmp`,
   or `/var/folders` (or `/private/var/folders`).
 - No dylib imports `dlopen`.
-- The minimum macOS version is 12.0.
+- The binaries' minimum macOS version is 12.0, the preserved beta candidate's
+  deployment target. The supported minimum is macOS 14 Sonoma
+  ([port decision](macos-port-plan.md#3-decisions)).
 - FFmpeg: `FFMPEG_LICENSE "LGPL version 2.1 or later"`, `CONFIG_GPL`,
   `CONFIG_VERSION3`, and `CONFIG_NONFREE` are 0, and the protocol set is exact.
 - mpv: `HAVE_GPL 0`, with no excluded features.

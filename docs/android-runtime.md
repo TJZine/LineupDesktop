@@ -16,8 +16,8 @@ register the desktop `lineup/app_menu` handler.
 The Dart composition root selects the existing native-player protocol on Android.
 The Kotlin adapter uses Media3 for media/OS mechanisms while the shared Dart
 coordinator retains playback and scheduling policy. Packages and bundled font
-notices work offline; Android native-runtime notices are added
-with the packaging unit. Android hides the Windows HDR-matching toggle and
+notices work offline, and Android native-runtime notices are generated into the
+APK assets (see [Release packaging and runtime notices](#release-packaging-and-runtime-notices)). Android hides the Windows HDR-matching toggle and
 exposes Settings during onboarding and the Licenses row under Support.
 
 ## Playback adapter

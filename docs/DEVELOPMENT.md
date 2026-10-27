@@ -122,9 +122,11 @@ Additional targets cover native correlation and shutdown:
   against installed candidate assets. A retained blank-widget Dart entry point
   avoids opening user state or credentials through the application bootstrap.
 
-All are `EXCLUDE_FROM_ALL`; CI explicitly selects `native_playback_state_test`,
-`player_core_contract_test`, and `encodable_value_conversion_test`. These tests
-do not require a live engine or the patched engine:
+All are `EXCLUDE_FROM_ALL`. Of these, CI explicitly selects `native_playback_state_test`,
+`player_core_contract_test`, and `encodable_value_conversion_test` (alongside
+`track_list_encoder`, `display_dynamic_range` and `display_guardian`), and runs
+`native_player_contract_test` as described below; `runner_lifecycle_test` is not
+in CI. The first three tests do not require a live engine or the patched engine:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target player_core_contract_test encodable_value_conversion_test
@@ -801,8 +803,8 @@ manifest, Windows patches, affected source/process fixtures and consumer scripts
 and workflow changes select `engine-required`; package-only changes select only
 the application/package job. Ordinary `lib/` or `windows/` product edits alone do
 not select them. Manual dispatch or an unavailable comparison base selects both.
-The current push filter does not automatically run `platform/macos`; use a PR or
-an explicitly authorized manual run for hosted proof.
+Pushes to `main` and to `platform/**` branches run CI automatically; other
+branches need a PR or an explicitly authorized manual run for hosted proof.
 
 The engine-test matrix has separate Debug and Release jobs, each with its own
 sync, fresh unittest-enabled recipe build and 180-minute budget. Each runs full

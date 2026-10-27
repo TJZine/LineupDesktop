@@ -35,7 +35,7 @@ the native media/platform boundary deliberately narrow.
   studio, actor, and director strategies
 - Custom channels built from an entire library or hand-picked media
 - Classic picture-in-picture Guide layout with a responsive schedule surface
-- Native Windows and macOS playback with an OSD, mini Guide, channel entry, seeking,
+- Native Windows, macOS and Android TV playback with an OSD, mini Guide, channel entry, seeking,
   track selection, sleep timer, and fullscreen controls
 - Four themes, reduced motion, larger focus indicators, and optional DVR
   playback controls
@@ -46,8 +46,8 @@ the native media/platform boundary deliberately narrow.
 | Platform | Current status |
 | --- | --- |
 | Windows 10/11 x64 | Primary target. Flutter UI, libmpv playback, native video presentation, and portable packaging are implemented. Final real-hardware and release acceptance remains pending. |
-| macOS, Apple Silicon | Native libmpv playback, Guide/PiP, HDR presentation and Mac integration are implemented for development/private testing. Deployment target is macOS 12; runtime coverage is recorded on macOS 27. Older-OS and signed-distribution acceptance remain open. |
-| Android TV / Android-based Fire TV | Requested future targets; no host/player adapter or device proof exists yet. |
+| macOS, Apple Silicon | Native libmpv playback, Guide/PiP, HDR presentation and Mac integration are implemented for development/private testing. The supported minimum is macOS 14 Sonoma; the preserved beta candidate still builds with a macOS 12 deployment target, and runtime coverage is recorded on macOS 27. Sonoma hardware validation and signed distribution remain open. |
+| Android TV / Google TV / Android-based Fire TV | Sideloaded APK (Android 9+, 32- and 64-bit ARM) with a Kotlin Media3 player adapter and a D-pad interface following the [TV UI decisions](docs/design/tv-ui-decisions.md). Signed builds run on a Fire TV Stick 4K Max (Fire OS 8). Real-media, HDR/Dolby Vision, subtitle, CEC/sleep and couch acceptance remain pending. Vega OS Fire TV devices cannot run APKs. See [Android runtime](docs/android-runtime.md). |
 | Apple TV | Feasibility research only; no tvOS implementation. |
 | Linux | Not currently targeted. |
 
