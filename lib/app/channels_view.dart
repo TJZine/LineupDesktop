@@ -473,8 +473,10 @@ class ChannelsViewState extends State<ChannelsView> {
                         () => FocusNode(debugLabel: 'Open ${channel.name}'),
                       );
                       rowFocus.debugLabel = 'Open ${channel.name}';
+                      // The selection-mode checkbox alone shows checked
+                      // state; the row surface carries focus and hover only.
                       return LineupRowSurface(
-                        selected: _selectedIds.contains(channel.id),
+                        selected: false,
                         child: Material(
                           key: ValueKey('channel-row-${channel.id}'),
                           color: Colors.transparent,

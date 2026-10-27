@@ -6,11 +6,63 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
 
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'bulk-selected channel rows show checked state on the checkbox only',
+    (tester) async {
+      await tester.pumpWidget(
+        UiFixture(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('first', 1, 'First'),
+              _channel('second', 2, 'Second'),
+            ],
+          ),
+        ).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+      final row = find.byKey(const ValueKey('channel-row-first'));
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Checkbox>(
+              find.descendant(of: row, matching: find.byType(Checkbox)),
+            )
+            .value,
+        isTrue,
+      );
+      final roles = LineupTheme.of(tester.element(row));
+      final surface =
+          tester
+                  .widget<Container>(
+                    find
+                        .descendant(
+                          of: find.ancestor(
+                            of: row,
+                            matching: find.byType(LineupRowSurface),
+                          ),
+                          matching: find.byType(Container),
+                        )
+                        .first,
+                  )
+                  .decoration!
+              as BoxDecoration;
+      expect(surface.color, isNot(roles.selectedSurface));
+      expect((surface.border! as Border).left.color, Colors.transparent);
+    },
+  );
+
   testWidgets('directory exposes search, management actions and channel rows', (
     tester,
   ) async {
