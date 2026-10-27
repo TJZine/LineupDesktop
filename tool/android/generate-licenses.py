@@ -7,6 +7,10 @@ exception is Flutter's locally published engine artifacts, whose POMs do not
 carry license metadata; those are covered by the exact Flutter SDK LICENSE
 file selected by ``--flutter-root``. Unknown metadata fails closed instead of
 guessing a common license.
+
+NOTICE files shipped inside dependency JARs are read from the Gradle cache.
+``--gradle-project`` downloads those JARs in the same Gradle run; a
+``--dependency-report`` caller must ensure the cache already holds them.
 """
 
 from __future__ import annotations
@@ -279,28 +283,58 @@ def flutter_root_from_args(value: str | None) -> Path | None:
     return None
 
 
+# ``:app:dependencies`` resolves only POMs. On a clean Gradle home the JARs that
+# carry NOTICE files (for example OkHttp's publicsuffix NOTICE) would be absent,
+# so the same run also downloads the configuration's JAR artifacts. AAR-only
+# modules have no JAR artifact and are skipped by the lenient view.
+RESOLVE_JARS_INIT_SCRIPT = """\
+allprojects { project ->
+    if (project.path != ':app') return
+    project.tasks.register('lineupResolveRuntimeJars') {
+        def configurationName = project.findProperty('lineupConfiguration')
+        doLast {
+            def view = project.configurations.getByName(configurationName).incoming.artifactView {
+                lenient = true
+                attributes {
+                    attribute(Attribute.of('artifactType', String), 'jar')
+                }
+            }
+            view.files.files
+        }
+    }
+}
+"""
+
+
 def run_gradle_report(project: Path, configuration: str) -> str:
     wrapper = project / "gradlew"
     if not wrapper.is_file():
         raise GenerationError(f"Gradle wrapper not found: {wrapper}")
-    command = [
-        str(wrapper),
-        ":app:dependencies",
-        "--configuration",
-        configuration,
-        "--no-daemon",
-    ]
-    try:
-        result = subprocess.run(
-            command,
-            cwd=project,
-            check=True,
-            capture_output=True,
-            text=True,
-            env={**os.environ, "GRADLE_OPTS": "-Dorg.gradle.daemon=false"},
-        )
-    except (OSError, subprocess.CalledProcessError) as error:
-        raise GenerationError(f"Gradle dependency report failed: {error}") from error
+    with tempfile.TemporaryDirectory(prefix="lineup-licenses-") as directory:
+        init_script = Path(directory) / "resolve-runtime-jars.init.gradle"
+        init_script.write_text(RESOLVE_JARS_INIT_SCRIPT, encoding="utf-8")
+        command = [
+            str(wrapper),
+            "--init-script",
+            str(init_script),
+            ":app:dependencies",
+            "--configuration",
+            configuration,
+            ":app:lineupResolveRuntimeJars",
+            f"-PlineupConfiguration={configuration}",
+            "--no-daemon",
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                cwd=project,
+                check=True,
+                capture_output=True,
+                text=True,
+                env={**os.environ, "GRADLE_OPTS": "-Dorg.gradle.daemon=false"},
+            )
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise GenerationError(f"Gradle dependency report failed: {error}") from error
     return result.stdout + result.stderr
 
 
@@ -500,7 +534,10 @@ def main() -> int:
         "--gradle-cache",
         action="append",
         type=Path,
-        default=[Path.home() / ".gradle/caches/modules-2/files-2.1"],
+        default=[
+            Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
+            / "caches/modules-2/files-2.1"
+        ],
     )
     parser.add_argument("--flutter-root")
     parser.add_argument("--flutter-version", default="unknown")

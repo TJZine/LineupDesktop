@@ -20,20 +20,15 @@ if [[ -z "$version_line" ]]; then
 fi
 read -r version_name version_code <<< "$version_line"
 
-report="$(mktemp "${TMPDIR:-/tmp}/lineup-android-release-dependencies.XXXXXX")"
 cert_report="$(mktemp "${TMPDIR:-/tmp}/lineup-android-release-certificates.XXXXXX")"
-cleanup() { rm -f "$report" "$cert_report"; }
+cleanup() { rm -f "$cert_report"; }
 trap cleanup EXIT
-
-(
-  cd "$root/android"
-  ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon
-) > "$report"
 
 python3 "$root/tool/android/check-manifest.py" "$root/android/app/src/main/AndroidManifest.xml"
 
+# The generator runs Gradle itself so the NOTICE-bearing JARs are downloaded.
 python3 "$root/tool/android/generate-licenses.py" --check \
-  --dependency-report "$report" \
+  --gradle-project "$root/android" \
   --output "$root/android/app/src/main/assets" \
   --flutter-root "$flutter_root" \
   --flutter-version "$(flutter --version --machine | python3 -c 'import json,sys; print(json.load(sys.stdin)["frameworkVersion"])')" \
