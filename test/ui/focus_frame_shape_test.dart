@@ -22,37 +22,41 @@ void main() {
     final large = ValueNotifier(false);
     addTearDown(large.dispose);
     await tester.pumpWidget(
-      ValueListenableBuilder<bool>(
-        valueListenable: large,
-        builder: (context, enabled, _) => MaterialApp(
-          theme: LineupTheme.forName(
-            LineupThemeName.emberSteel,
-            formFactor: profileFor(true).formFactor,
-            largeFocusIndicators: enabled,
-          ),
-          builder: LineupCanvas.builder,
-          home: Scaffold(
-            body: Column(
-              children: [
-                TextButton(
-                  autofocus: true,
-                  onPressed: () {},
-                  child: const Text('Start'),
-                ),
-                LineupToggleSurface(
-                  child: SwitchListTile(
-                    value: enabled,
-                    title: const Text('Large focus indicators'),
-                    onChanged: (value) => large.value = value,
+      DeviceProfileScope(
+        profile: tvProfile,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: large,
+          builder: (context, enabled, _) => MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(true).formFactor,
+              largeFocusIndicators: enabled,
+            ),
+            builder: LineupCanvas.builder,
+            home: Scaffold(
+              body: Column(
+                children: [
+                  TextButton(
+                    autofocus: true,
+                    onPressed: () {},
+                    child: const Text('Start'),
                   ),
-                ),
-              ],
+                  LineupToggleSurface(
+                    child: SwitchListTile(
+                      value: enabled,
+                      title: const Text('Large focus indicators'),
+                      onChanged: (value) => large.value = value,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.byType(LineupRowSurface), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     final element = tester.element(find.byType(SwitchListTile));
