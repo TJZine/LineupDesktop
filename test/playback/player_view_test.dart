@@ -44,6 +44,281 @@ final _extremeWideArtwork = base64Decode(
 void main() {
   tearDown(debugResetClearLogoCache);
 
+  for (final tv in [false, true]) {
+    for (final reduceMotion in [false, true]) {
+      testWidgets('channel tag motion tv=$tv reduceMotion=$reduceMotion', (
+        tester,
+      ) async {
+        await tester.runAsync(loadPinnedTestFonts);
+        await tester.binding.setSurfaceSize(
+          tv ? const Size(960, 540) : const Size(1920, 1080),
+        );
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final fixture = _Fixture(
+          PlayerState.playing,
+          overlayTimeout: const Duration(minutes: 1),
+        );
+        final captureKey = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: tv,
+              ),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(disableAnimations: reduceMotion),
+                child: LineupCanvas(child: child!),
+              ),
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final tag = find.byKey(const Key('player-osd-channel-bug'));
+        expect(tag, findsNothing);
+        fixture.player.showOsd();
+        await tester.pump();
+        final entryTops = <double>[];
+        for (var frame = 0; frame <= 4; frame++) {
+          if (frame > 0) await tester.pump(const Duration(microseconds: 87500));
+          final opacity = _channelTagOpacity(tester);
+          if (frame == 0) expect(opacity, 0);
+          if (frame > 0 && frame < 4) {
+            expect(opacity, allOf(greaterThan(0), lessThan(1)));
+          }
+          entryTops.add(_drawnRect(tester, tag).top);
+          await _captureChannelTag(
+            tester,
+            captureKey,
+            'tv-$tv-reduce-$reduceMotion-entry-$frame',
+            tv: tv,
+          );
+        }
+        expect(_channelTagOpacity(tester), 1);
+        final restingTop = entryTops.last;
+        expect(
+          entryTops.first,
+          closeTo(
+            restingTop -
+                (reduceMotion
+                    ? 0
+                    : tv
+                    ? 6
+                    : 12),
+            .01,
+          ),
+        );
+        for (final top in entryTops.take(4)) {
+          if (reduceMotion) {
+            expect(top, restingTop);
+          } else {
+            expect(top, lessThan(restingTop));
+          }
+        }
+        expect(tester.getSemantics(tag).label, 'Channel 7, Channel');
+        fixture.player.closeOverlay();
+        await tester.pump();
+        for (var frame = 0; frame <= 4; frame++) {
+          if (frame > 0) await tester.pump(const Duration(microseconds: 87500));
+          if (frame < 4) {
+            final opacity = _channelTagOpacity(tester);
+            if (frame == 0) expect(opacity, 1);
+            if (frame > 0) expect(opacity, allOf(greaterThan(0), lessThan(1)));
+            final top = _drawnRect(tester, tag).top;
+            expect(
+              top,
+              reduceMotion ? restingTop : lessThanOrEqualTo(restingTop),
+            );
+            if (!reduceMotion && frame > 0) expect(top, lessThan(restingTop));
+          } else {
+            expect(tag, findsNothing);
+          }
+          await _captureChannelTag(
+            tester,
+            captureKey,
+            'tv-$tv-reduce-$reduceMotion-exit-$frame',
+            tv: tv,
+          );
+        }
+        await fixture.player.tune('channel');
+        fixture.player.closeOverlay();
+        fixture.native.emitState(PlayerState.playing);
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+        expect(_channelTagOpacity(tester), 1);
+        await _captureChannelTag(
+          tester,
+          captureKey,
+          'tv-$tv-reduce-$reduceMotion-tune-window',
+          tv: tv,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }, semanticsEnabled: true);
+    }
+  }
+
+  for (final dismissAfterPlaying in [false, true]) {
+    testWidgets(
+      'channel tag gets four seconds from playing, dismissAfterPlaying=$dismissAfterPlaying',
+      (tester) async {
+        final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+        final captureKey = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              builder: LineupCanvas.builder,
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await fixture.player.tune('channel-1');
+        fixture.native.emitState(PlayerState.loading);
+        if (!dismissAfterPlaying) fixture.player.closeOverlay();
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        expect(fixture.player.channelTagWindowActive, isFalse);
+        expect(fixture.player.busyLabel, isNotNull);
+        expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+        fixture.native.emitState(PlayerState.playing);
+        await tester.pump();
+        if (dismissAfterPlaying) fixture.player.closeOverlay();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(fixture.player.channelTagWindowActive, isTrue);
+        expect(_channelTagOpacity(tester), 1);
+        expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+        await _captureChannelTag(
+          tester,
+          captureKey,
+          'tune-window-dismiss-$dismissAfterPlaying',
+        );
+        await tester.pump(const Duration(milliseconds: 3649));
+        expect(fixture.player.channelTagWindowActive, isTrue);
+        fixture.native.emitState(
+          PlayerState.playing,
+        ); // Repeated playing never renews it.
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(fixture.player.channelTagWindowActive, isFalse);
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'channel tag follows OSD without restarting during the tune window',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        overlayTimeout: const Duration(minutes: 1),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await fixture.player.tune('channel');
+      fixture.player.closeOverlay();
+      await tester.pumpAndSettle();
+      fixture.native.emitState(PlayerState.playing);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 175));
+      final halfway = _channelTagOpacity(tester);
+      expect(halfway, allOf(greaterThan(0), lessThan(1)));
+      final tag = find.byKey(const Key('player-osd-channel-bug'));
+      final element = tester.element(tag);
+      fixture.player.showOsd();
+      await tester.pump();
+      expect(_channelTagOpacity(tester), halfway);
+      expect(tester.element(tag), same(element));
+      await tester.pump(const Duration(milliseconds: 175));
+      expect(_channelTagOpacity(tester), 1);
+      await tester.pump(const Duration(seconds: 4));
+      expect(fixture.player.channelTagWindowActive, isFalse);
+      expect(tag, findsOneWidget);
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+      expect(_channelTagOpacity(tester), 1);
+      fixture.player.closeOverlay();
+      await tester.pumpAndSettle();
+      expect(tag, findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('channel tag suppression applies during the tune window', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    final suppressors = <VoidCallback>[
+      () => fixture.player.appendChannelDigit('9'),
+      () {
+        fixture.player.showNowPlaying();
+        fixture.player.showProgramInfo();
+      },
+      fixture.player.showMiniGuide,
+      fixture.player.showFullGuide,
+      () => fixture.player.showTracks(PlayerTrackType.audio),
+      () => fixture.player.showTracks(PlayerTrackType.subtitle),
+      () => fixture.native.emitState(PlayerState.error),
+    ];
+    for (final suppress in suppressors) {
+      await fixture.player.tune('channel');
+      fixture.native.emitState(PlayerState.playing);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
+      suppress();
+      await tester.pump();
+      await tester
+          .pump(); // Deliver native events and paint, without advancing time.
+      expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+    }
+    await fixture.player.tune('channel');
+    fixture.native.emitState(PlayerState.playing);
+    await tester.pumpAndSettle();
+    fixture.player.appendChannelDigit('9');
+    await fixture.player.commitChannelNumber();
+    fixture.player.showOsd();
+    await tester.pump();
+    expect(fixture.player.notice, isNotNull);
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+    // Busy suppression, independently of the overlay and notice timeout.
+    await fixture.player.tune('channel');
+    fixture.native.emitState(PlayerState.playing);
+    await tester.pumpAndSettle();
+    fixture.native.emitState(PlayerState.buffering);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(fixture.player.busyLabel, isNotNull);
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets(
     'visible cast surfaces share the hydrated shelf, semantics, and TV More info',
     (tester) async {
@@ -4702,43 +4977,55 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets('Reduce Motion settles player overlays in one pump', (
-    tester,
-  ) async {
-    final fixture = _Fixture(PlayerState.playing);
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: LineupCanvas(child: child!),
+  testWidgets(
+    'Reduce Motion settles panels in one pump while the channel tag fades',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: LineupCanvas(child: child!),
+          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
+      );
 
-    fixture.player.showOsd();
-    await tester.pump();
+      fixture.player.showOsd();
+      await tester.pump();
 
-    final switcher = tester.widget<AnimatedSwitcher>(
-      find.byType(AnimatedSwitcher),
-    );
-    expect(switcher.duration, Duration.zero);
-    expect(switcher.reverseDuration, Duration.zero);
-    expect(tester.hasRunningAnimations, isFalse);
-    expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
+      final switcher = tester.widget<AnimatedSwitcher>(
+        find.byType(AnimatedSwitcher),
+      );
+      expect(switcher.duration, Duration.zero);
+      expect(switcher.reverseDuration, Duration.zero);
+      expect(
+        find.bySemanticsLabel(RegExp('Playback controls')),
+        findsOneWidget,
+      );
 
-    fixture.player.closeOverlay();
-    await tester.pump();
-    fixture.player.showMiniGuide();
-    await tester.pump();
-    expect(switcher.duration, Duration.zero);
-    expect(switcher.reverseDuration, Duration.zero);
-    expect(tester.hasRunningAnimations, isFalse);
-    expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
+      final panel = find.byKey(const Key('player-osd-surface'));
+      final fade = tester.widget<FadeTransition>(
+        find.ancestor(of: panel, matching: find.byType(FadeTransition)).first,
+      );
+      final slide = tester.widget<SlideTransition>(
+        find.ancestor(of: panel, matching: find.byType(SlideTransition)).first,
+      );
+      expect(fade.opacity.value, 1);
+      expect(slide.position.value, Offset.zero);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
-  });
+      fixture.player.closeOverlay();
+      await tester.pump();
+      fixture.player.showMiniGuide();
+      await tester.pump();
+      expect(switcher.duration, Duration.zero);
+      expect(switcher.reverseDuration, Duration.zero);
+      expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 
   testWidgets(
     'reopened OSD rejects outgoing focus loss and keeps focused semantics',
@@ -8041,7 +8328,11 @@ void main() {
       for (var frame = 0; frame < 4; frame++) {
         await tester.pump();
       }
-      expect(tester.hasRunningAnimations, isFalse);
+      final panel = find.byKey(const Key('player-now-playing-surface'));
+      final fade = tester.widget<FadeTransition>(
+        find.ancestor(of: panel, matching: find.byType(FadeTransition)).first,
+      );
+      expect(fade.opacity.value, 1);
       expect(
         find.byKey(const Key('player-now-playing-surface')),
         findsOneWidget,
@@ -8881,4 +9172,35 @@ Future<void> _expectInfoPaint(
       greaterThan(pixels['body']!.take(3).reduce((a, b) => a + b)),
     );
   }
+}
+
+double _channelTagOpacity(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('player-osd-channel-bug')),
+            matching: find.byType(Opacity),
+          )
+          .first,
+    )
+    .opacity;
+
+Future<void> _captureChannelTag(
+  WidgetTester tester,
+  GlobalKey key,
+  String name, {
+  bool tv = false,
+}) async {
+  final directory = Platform.environment['CHANNEL_TAG_CAPTURE'];
+  if (directory == null) return;
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: tv ? 2 : 1);
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(directory).create(recursive: true);
+    await File('$directory/$name.png')
+        .writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
 }

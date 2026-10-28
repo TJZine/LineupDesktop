@@ -673,6 +673,17 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       bottomPanel ? PlayerOverlay.osd : overlay,
       bottomPanel ? _bottomPanelGeneration : presentationGeneration,
     ));
+    final insets = _PlayerInsets.of(context);
+    final channel = controller.currentChannel;
+    final channelTagSuppressed =
+        channel == null ||
+        controller.notice != null ||
+        controller.busyLabel != null ||
+        controller.error != null ||
+        (!bottomPanel && overlay != PlayerOverlay.none);
+    final showChannelTag =
+        !channelTagSuppressed &&
+        (bottomPanel || controller.channelTagWindowActive);
     final transitionDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : _overlayTransitionDuration;
@@ -843,6 +854,25 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
+                  Positioned(
+                    top: insets.top,
+                    right: insets.right,
+                    child: _AnimatedChannelBug(
+                      visible: showChannelTag,
+                      suppressed: channelTagSuppressed,
+                      duration: _overlayTransitionDuration,
+                      child: channel == null
+                          ? const SizedBox.shrink()
+                          : _OverlayTextTheme(
+                              child: _ChannelBug(
+                                key: const Key('player-osd-channel-bug'),
+                                channel: channel,
+                                controller: controller,
+                                osdPresentation: true,
+                              ),
+                            ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -977,6 +1007,74 @@ class _BottomPanelExpansion extends StatelessWidget {
         );
 }
 
+/// The panel and tag share their resting insets, independently of motion.
+class _PlayerInsets {
+  const _PlayerInsets(this.safe, this.left, this.right, this.top);
+
+  factory _PlayerInsets.of(BuildContext context) {
+    final horizontal = (MediaQuery.sizeOf(context).width * 0.05)
+        .clamp(24.0, 96.0)
+        .toDouble();
+    final tv = LineupTheme.of(context).androidTv;
+    final safe = tv
+        ? LineupCanvas.contentInsets(
+            context,
+            minimum: EdgeInsets.symmetric(horizontal: horizontal, vertical: 24),
+          )
+        : EdgeInsets.zero;
+    return _PlayerInsets(
+      safe,
+      tv ? safe.left : horizontal,
+      tv ? safe.right : horizontal,
+      tv ? safe.top : 24,
+    );
+  }
+
+  final EdgeInsets safe;
+  final double left;
+  final double right;
+  final double top;
+}
+
+class _AnimatedChannelBug extends StatelessWidget {
+  const _AnimatedChannelBug({
+    required this.visible,
+    required this.suppressed,
+    required this.duration,
+    required this.child,
+  });
+
+  final bool visible;
+  final bool suppressed;
+  final Duration duration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return IgnorePointer(
+      child: ExcludeSemantics(
+        excluding: !visible,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: visible ? 1 : 0),
+          duration: duration,
+          curve: visible ? Curves.easeOut : Curves.easeIn,
+          child: child,
+          // Suppression replaces the tag immediately (notably the status bug
+          // in the same corner). Ordinary dismissal retains its fade and rise.
+          builder: (context, value, child) =>
+              suppressed || (value == 0 && !visible)
+              ? const SizedBox.shrink()
+              : Transform.translate(
+                  offset: Offset(0, reduceMotion ? 0 : -12 * (1 - value)),
+                  child: Opacity(opacity: value, child: child),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Osd extends StatelessWidget {
   const _Osd({
     required this.trackDisplays,
@@ -1004,23 +1102,14 @@ class _Osd extends StatelessWidget {
     final displays = trackDisplays.forTracks(controller.tracks);
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final horizontalInset = (size.width * 0.05).clamp(24.0, 96.0).toDouble();
-    final safe = roles.androidTv
-        ? LineupCanvas.contentInsets(
-            context,
-            minimum: EdgeInsets.symmetric(
-              horizontal: horizontalInset,
-              vertical: 24,
-            ),
-          )
-        : EdgeInsets.zero;
-    final leftInset = roles.androidTv ? safe.left : horizontalInset;
-    final rightInset = roles.androidTv ? safe.right : horizontalInset;
+    final insets = _PlayerInsets.of(context);
+    final safe = insets.safe;
+    final leftInset = insets.left;
+    final rightInset = insets.right;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
     final bottomInset = roles.androidTv
         ? math.max(12.0, safe.bottom) + (dvrControlsEnabled ? 40 : 0)
         : 12.0 + (dvrControlsEnabled ? 40 : 0);
-    final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
     final scheduleTiming =
@@ -1581,19 +1670,6 @@ class _Osd extends StatelessWidget {
             ),
           ),
         ),
-        if (channel != null &&
-            controller.notice == null &&
-            controller.busyLabel == null)
-          Positioned(
-            top: roles.androidTv ? safe.top : 24,
-            right: rightInset,
-            child: _ChannelBug(
-              key: const Key('player-osd-channel-bug'),
-              channel: channel,
-              controller: controller,
-              osdPresentation: true,
-            ),
-          ),
         if (controller.sleepPickerOpen)
           _SleepTimerPicker(
             controller: controller,

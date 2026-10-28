@@ -27,6 +27,103 @@ import '../support/test_doubles.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets(
+    'channel tag window rejects stale tunes, continuations and duplicate playing',
+    (tester) async {
+      final f = _ContinuationFixture();
+      addTearDown(f.close);
+      await f.coordinator.tune('channel-b');
+      final firstGeneration = f.player.loadGenerations.last;
+      f.player.emitStatus(PlayerState.ready, generation: firstGeneration);
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      f.player.emitStatus(PlayerState.playing, generation: firstGeneration);
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isTrue);
+      await tester.pump(const Duration(seconds: 4));
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      f.player.emitStatus(PlayerState.playing, generation: firstGeneration);
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      f.endNaturally();
+      await tester.pump();
+      expect(f.player.loads, hasLength(2));
+      f.player.emitStatus(
+        PlayerState.ready,
+        generation: f.player.loadGenerations.last,
+      );
+      await tester.pump();
+      f.player.emitStatus(
+        PlayerState.playing,
+        generation: f.player.loadGenerations.last,
+      );
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      await f.coordinator.tune('channel-0');
+      f.player.emitStatus(PlayerState.playing, generation: firstGeneration);
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      f.player.emitStatus(
+        PlayerState.playing,
+        generation: f.player.loadGenerations.last,
+      );
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isTrue);
+      await f.coordinator.retry();
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      f.player.emitStatus(
+        PlayerState.playing,
+        generation: f.player.loadGenerations.last,
+      );
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isTrue);
+      await f.coordinator.stop();
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      f.coordinator.dispose();
+      f.disposed = true;
+    },
+  );
+
+  testWidgets(
+    'channel tag window covers initial media, channel step and foreground resume',
+    (tester) async {
+      final f = _ContinuationFixture(androidTv: true);
+      addTearDown(f.close);
+      await f.coordinator.loadInitialMedia(Uri.parse('file:///synthetic.mp4'));
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      f.player.emitStatus(
+        PlayerState.playing,
+        generation: f.player.loadGenerations.last,
+      );
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isTrue);
+      final step = f.coordinator.nextChannel();
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      await tester.pump(const Duration(milliseconds: 250));
+      await step;
+      f.player.emitStatus(
+        PlayerState.playing,
+        generation: f.player.loadGenerations.last,
+      );
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isTrue);
+      await f.coordinator.setApplicationForeground(false);
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      await f.coordinator.setApplicationForeground(true);
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+      f.player.emitStatus(
+        PlayerState.playing,
+        generation: f.player.loadGenerations.last,
+      );
+      await tester.pump();
+      expect(f.coordinator.channelTagWindowActive, isTrue);
+      f.coordinator.dispose();
+      f.disposed = true;
+      await tester.pump(const Duration(seconds: 5));
+      expect(f.coordinator.channelTagWindowActive, isFalse);
+    },
+  );
+
   group('Guide activation ownership', () {
     test(
       'different channel and explicit tune still replace playback',
@@ -817,6 +914,7 @@ void main() {
         f.coordinator.diagnosticPlaybackSnapshot.displayReport,
         p.displayReport,
       );
+      f.coordinator.dispose();
     },
   );
 
@@ -976,6 +1074,7 @@ void main() {
       );
       expect(p.tracks, isEmpty);
       expect(f.coordinator.displayHoldActive, isTrue);
+      expect(f.coordinator.channelTagWindowActive, isFalse);
       expect(p.plays, 0);
       if (finish == 'no video') {
         p.emitStatus(
@@ -1008,6 +1107,7 @@ void main() {
         }
       }
       expect(f.coordinator.displayHoldActive, isFalse);
+      expect(f.coordinator.channelTagWindowActive, isTrue);
       expect(p.plays, 1);
       f.coordinator.dispose();
     });
@@ -2441,6 +2541,7 @@ void main() {
       final beforeOverlay = notifications;
       coordinator.showMiniGuide();
       expect(notifications, beforeOverlay + 1);
+      coordinator.dispose();
     },
   );
 
