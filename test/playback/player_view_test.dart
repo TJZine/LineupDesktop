@@ -4374,19 +4374,19 @@ void main() {
           home: PlayerView(controller: item.fixture.player, openGuide: () {}),
         ),
       );
+      await tester.pumpAndSettle();
       if (item.logo) {
-        await tester.runAsync(
-          () => precacheImage(
-            MemoryImage(logoBytes),
-            tester.element(find.byType(PlayerView)),
-          ),
-        );
+        // ClearLogoImage decodes its own raster outside the fake test clock;
+        // precaching MemoryImage does not wait for that work to finish.
+        final elapsed = Stopwatch()..start();
+        while (find.byKey(const Key('player-osd-logo')).evaluate().isEmpty &&
+            elapsed.elapsed < const Duration(seconds: 5)) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+        }
       }
-      await tester.pumpAndSettle();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 80)),
-      );
-      await tester.pumpAndSettle();
       expect(
         find.byKey(const Key('player-osd-logo')),
         item.logo ? findsOneWidget : findsNothing,
