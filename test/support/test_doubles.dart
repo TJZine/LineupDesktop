@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -64,6 +65,7 @@ class MemoryCredentialStore implements CredentialStore {
 
 class FakeNativePlayer implements NativePlayer {
   FakeNativePlayer({
+    PlayerCapabilities? capabilities,
     PlayerStatus? initialStatus,
     this.position = Duration.zero,
     this.duration = Duration.zero,
@@ -81,7 +83,10 @@ class FakeNativePlayer implements NativePlayer {
        tracks = List.unmodifiable(initialTracks),
        displayReport =
            initialDisplayReport ?? const DisplayMatchingReport.initial(),
-       _eventGeneration = initialGeneration;
+       _eventGeneration = initialGeneration {
+    this.capabilities =
+        capabilities ?? PlayerCapabilities.forHost(defaultTargetPlatform);
+  }
 
   final bool emitLoadingOnLoad;
   int? _eventGeneration;
@@ -98,6 +103,8 @@ class FakeNativePlayer implements NativePlayer {
   List<PlayerTrack> tracks;
   @override
   DisplayMatchingReport displayReport;
+  @override
+  late PlayerCapabilities capabilities;
 
   final loads = <Uri>[];
   final loadPlexTokens = <String?>[];

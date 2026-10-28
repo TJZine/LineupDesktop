@@ -64,7 +64,16 @@ internal class NativePlayerController(private val host: PlayerHost) {
                         )
                     }
                     drainEvents()
-                    reply.success(mapOf("clientApiVersion" to 1))
+                    val replyValue =
+                        mapOf(
+                            "clientApiVersion" to 1,
+                            "capabilities" to
+                                mapOf(
+                                    "displayMatching" to false,
+                                    "fullscreen" to "fixed",
+                                ),
+                        )
+                    reply.success(replyValue)
                 }
                 "dispose" -> dispose(reply)
                 else -> {
