@@ -8,6 +8,9 @@ abstract interface class NativePlayer {
   List<PlayerTrack> get tracks;
   DisplayMatchingReport get displayReport;
 
+  /// Latest observed window state; false before native initialization.
+  bool get fullscreen;
+
   /// A hot broadcast stream of player state snapshots.
   ///
   /// Implementations must allow multiple simultaneous listeners. Events
@@ -20,12 +23,21 @@ abstract interface class NativePlayer {
   /// them independent from [events] and allow multiple listeners.
   Stream<DisplayMatchingReport> get displayReports;
 
+  /// Hot broadcast observations of native fullscreen, independent of media.
+  /// Native initialization publishes a snapshot, including an already-fullscreen
+  /// window. Command completion must not overwrite a newer observation.
+  Stream<bool> get fullscreenChanges;
+
   Future<void> initialize();
 
   /// Loads [media] for the caller's optional [generation].
   ///
   /// [generation] identifies the current load and may be projected on emitted
   /// events so callers can reject stale work.
+  ///
+  /// [startPosition] requests a non-negative, nonexact initial join using
+  /// per-file `start` and `hr-seek=no`. Explicit [seek] calls remain authoritative.
+  /// A null position leaves the backend's ordinary beginning-of-file behavior.
   ///
   /// [plexToken] is sensitive authentication material. Implementations that
   /// perform network media loads must require HTTPS and send it only as an
@@ -40,12 +52,18 @@ abstract interface class NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   });
   Future<void> setDisplayMatching(DisplayMatchingRequest request);
   Future<void> play();
   Future<void> pause();
-  Future<void> seek(Duration position);
+
+  /// Completes on command acceptance, not on an observed playback landing.
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact});
   Future<void> setVideoRect(PlayerVideoRect rect);
+
+  /// Requests a transition. A user change may supersede its target; follow
+  /// [fullscreenChanges] for the actual state rather than reasserting intent.
   Future<void> setFullscreen(bool fullscreen);
 
   /// Requests a track change and completes after native command execution.
@@ -65,6 +83,10 @@ abstract interface class NativePlayer {
   Future<void> stop();
   Future<void> dispose();
 }
+
+/// Keyframe seeks use mpv's backward preference, including its beginning-of-file
+/// fallback when no preceding keyframe exists. Exact is for explicit user seeks.
+enum SeekMode { exact, keyframes }
 
 enum DisplayMatchingState { hdr, sdr, unknown }
 

@@ -22,11 +22,23 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+dependency_overrides:
+  objective_c:
+    path: third_party/objective_c
+
+hooks:
+  user_defines:
+    objective_c:
+      macos_target_version: 12
+
 flutter:
   uses-material-design: true
   assets:
     - assets/branding/lineup-logo-mark.png
     - assets/branding/lineup-wordmark.png
+    - assets/fonts/instrumentsans/OFL.txt
+    - assets/fonts/inter/OFL.txt
+    - assets/licenses/
   fonts:
     - family: Instrument Sans
       fonts:

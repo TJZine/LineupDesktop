@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -50,6 +52,117 @@ void main() {
       });
     }
   }
+
+  testWidgets('native app menu openSettings opens Settings when ready', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      player: FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    _expectDestination('Guide');
+
+    await _sendAppMenu(tester, 'openSettings');
+    _expectDestination('Settings');
+  });
+
+  testWidgets('native app menu openSettings is ignored before setup is ready', (
+    tester,
+  ) async {
+    const active = PlexHomeUser(id: 'a', name: 'Active', protected: false);
+    const other = PlexHomeUser(id: 'b', name: 'Other', protected: false);
+    // A cancellable picker is the one non-ready state where _select would
+    // otherwise cancel the picker and navigate.
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profile: active,
+        profiles: const [active, other],
+        profileSelectionOrigin: SetupStage.ready,
+      ),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    expect(fixture.controller.stage, SetupStage.profiles);
+    expect(fixture.controller.profileSelectionCanCancel, isTrue);
+
+    await _sendAppMenu(tester, 'openSettings');
+    expect(fixture.controller.stage, SetupStage.profiles);
+    expect(find.byKey(const Key('settings-app-menu')), findsNothing);
+  });
+
+  testWidgets('native app menu openSettings does not act under a dialog', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          Channel(
+            id: 'one',
+            number: 1,
+            name: 'One',
+            source: ManualSource([
+              ChannelItem(
+                id: 'one-program',
+                title: 'One program',
+                duration: const Duration(minutes: 30),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 1,
+            builderKey: 'generated:one',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await _routeShortcut(tester, 1);
+    _expectDestination('Channels');
+    final actions = find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+    );
+    await tester.ensureVisible(actions);
+    await tester.tap(actions);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cancel'), findsOneWidget);
+
+    await _sendAppMenu(tester, 'openSettings');
+    expect(find.text('Cancel'), findsOneWidget);
+    _expectDestination('Channels');
+    expect(find.byKey(const Key('settings-app-menu')), findsNothing);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cancel'), findsNothing);
+    _expectDestination('Channels');
+  });
+
+  testWidgets('native app menu openSettings closes an open Lineup menu', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      player: FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
+      scenario: LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+
+    await _sendAppMenu(tester, 'openSettings');
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+    _expectDestination('Settings');
+  });
 
   testWidgets(
     'route chords from a focused Studio field retain the leave guard',
@@ -303,6 +416,192 @@ void main() {
     await openDestination(tester, 'Settings');
     expect(find.text('Player controls auto-hide'), findsOneWidget);
   });
+
+  for (final expireInSettings in [false, true]) {
+    for (final useEscape in [false, true]) {
+      testWidgets(
+        'Settings ${useEscape ? "Escape" : "Back"} returns to Guide '
+        'after sleep expiry ${expireInSettings ? "in Settings" : "in Player"}',
+        (tester) async {
+          final nativePlayer = FixturePlayer()
+            ..emit(
+              const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+            );
+          final fixture = UiFixture(
+            player: nativePlayer,
+            scenario: LineupScenario(stage: SetupStage.ready),
+          );
+          await tester.pumpWidget(fixture.build());
+          await tester.pumpAndSettle();
+          await _routeShortcut(tester, 4);
+          final player = tester
+              .widget<PlayerView>(find.byType(PlayerView))
+              .controller;
+          player.setSleepTimer(const Duration(seconds: 5));
+
+          if (expireInSettings) {
+            await _sendAppMenu(tester, 'openSettings');
+            expect(find.text('‹ Back to Player'), findsOneWidget);
+          }
+          await tester.pump(const Duration(seconds: 5));
+          await tester.pumpAndSettle();
+          expect(nativePlayer.stops, 1);
+          expect(player.status.message, 'Playback stopped by timer');
+          if (!expireInSettings) {
+            await _sendAppMenu(tester, 'openSettings');
+          }
+          expect(find.byType(PlayerSurface), findsNothing);
+          expect(find.text('‹ Back to Guide'), findsOneWidget);
+
+          if (useEscape) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          } else {
+            await tester.tap(find.text('‹ Back to Guide'));
+          }
+          await tester.pumpAndSettle();
+          _expectDestination('Guide');
+          expect(find.byKey(const Key('settings-app-menu')), findsNothing);
+          expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+          await _sendAppMenu(tester, 'openSettings');
+          expect(find.text('‹ Back to Guide'), findsOneWidget);
+        },
+      );
+    }
+  }
+
+  for (final invocation in ['Close', 'Escape', 'root-focus semantics Close']) {
+    testWidgets('Guide $invocation opens the menu on the first '
+        'action after sleep expiry', (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        final nativePlayer = FixturePlayer()
+          ..emit(
+            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+          );
+        final fixture = UiFixture(
+          player: nativePlayer,
+          scenario: LineupScenario(stage: SetupStage.ready),
+        );
+        await tester.pumpWidget(fixture.build());
+        await tester.pumpAndSettle();
+        await _routeShortcut(tester, 4);
+        final player = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        player.setSleepTimer(const Duration(seconds: 5));
+        await _routeShortcut(tester, 0);
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+        expect(nativePlayer.stops, 1);
+        expect(player.status.message, 'Playback stopped by timer');
+        expect(find.byType(PlayerSurface), findsNothing);
+        final loads = List<Uri>.of(nativePlayer.loads);
+
+        if (invocation == 'Escape') {
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        } else if (invocation == 'root-focus semantics Close') {
+          FocusManager.instance.rootScope.requestScopeFocus();
+          FocusManager.instance.applyFocusChangesIfNeeded();
+          expect(
+            FocusManager.instance.primaryFocus,
+            FocusManager.instance.rootScope,
+          );
+          expect(FocusManager.instance.primaryFocus!.context, isNull);
+          final close = tester.getSemantics(find.byTooltip('Close Guide'));
+          expect(
+            close.getSemanticsData().hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+          close.owner!.performAction(close.id, SemanticsAction.tap);
+        } else {
+          await tester.tap(find.byTooltip('Close Guide'));
+        }
+        await tester.pumpAndSettle();
+
+        final menu = find.byKey(const Key('immersive-app-menu'));
+        expect(menu, findsOneWidget);
+        _expectDestination('Guide');
+        expect(find.byType(PlayerView), findsNothing);
+        expect(nativePlayer.loads, orderedEquals(loads));
+        expect(
+          tester
+              .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
+              .onPressed,
+          isNull,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<Card>()
+              ?.key,
+          const Key('immersive-app-menu'),
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        _expectDestination('Channels');
+        expect(menu, findsNothing);
+        expect(nativePlayer.loads, orderedEquals(loads));
+      } finally {
+        semantics.dispose();
+      }
+    });
+  }
+
+  for (final useEscape in [false, true]) {
+    testWidgets(
+      'Guide ${useEscape ? "Escape" : "Close"} uses live playback before rebuild',
+      (tester) async {
+        final nativePlayer = FixturePlayer()
+          ..emit(
+            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+          );
+        final fixture = UiFixture(
+          player: nativePlayer,
+          scenario: LineupScenario(stage: SetupStage.ready),
+        );
+        await tester.pumpWidget(fixture.build());
+        await tester.pumpAndSettle();
+        await _routeShortcut(tester, 4);
+        final player = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        await _routeShortcut(tester, 0);
+        final close = tester.widget<IconButton>(
+          find.byWidgetPredicate(
+            (widget) => widget is IconButton && widget.tooltip == 'Close Guide',
+          ),
+        );
+        expect(find.byType(PlayerSurface), findsOneWidget);
+        final loads = List<Uri>.of(nativePlayer.loads);
+
+        await player.stop();
+        expect(player.hasPlaybackIntent, isFalse);
+        expect(player.error, isNull);
+        // Deliberately do not pump: this Guide callback was built while playback
+        // was still available, but the routing decision must read current facts.
+        if (useEscape) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        } else {
+          close.onPressed!();
+        }
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+        _expectDestination('Guide');
+        expect(
+          tester
+              .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
+              .onPressed,
+          isNull,
+        );
+        expect(nativePlayer.loads, orderedEquals(loads));
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   for (final (index, name) in [(0, 'Guide'), (1, 'Channels'), (4, 'Player')]) {
     testWidgets('Settings keeps $name origin through Diagnostics and menu', (
@@ -763,4 +1062,14 @@ void _expectDestination(String destination) {
     _ => throw ArgumentError.value(destination),
   };
   expect(finder, findsOneWidget);
+}
+
+Future<void> _sendAppMenu(WidgetTester tester, String method) async {
+  const codec = StandardMethodCodec();
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    'lineup/app_menu',
+    codec.encodeMethodCall(MethodCall(method)),
+    (_) {},
+  );
+  await tester.pumpAndSettle();
 }

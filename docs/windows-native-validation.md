@@ -189,40 +189,20 @@ if ((Test-Path -LiteralPath $MpvRoot) -and
 & .\tool\windows\prepare-mpv.ps1 -Destination $MpvRoot
 $env:LINEUP_MPV_ROOT = $MpvRoot
 
-$Metadata = Import-PowerShellDataFile -LiteralPath `
-  (Join-Path $Repo 'tool\windows\build-metadata.psd1')
-
-if ((git -C $FlutterRoot rev-parse HEAD).Trim() -ne
-    $Metadata.FlutterFrameworkRevision) {
-  throw 'Flutter framework revision does not match repository metadata.'
-}
-
-$EngineVersion = Join-Path $FlutterRoot 'bin\internal\engine.version'
-if ((Get-Content -Raw -LiteralPath $EngineVersion).Trim() -ne
-    $Metadata.FlutterEngineRevision) {
-  throw 'Flutter engine revision does not match repository metadata.'
-}
-
-$PatchPath = Join-Path $Repo $Metadata.FlutterEnginePatchPath
-if ((Get-FileHash -Algorithm SHA256 -LiteralPath $PatchPath).Hash -ne
-    $Metadata.FlutterEnginePatchSha256) {
-  throw 'Flutter engine patch hash does not match repository metadata.'
-}
-
-& git -C $FlutterRoot apply --reverse --check $PatchPath
-if ($LASTEXITCODE) {
-  throw 'The exact repository-owned Flutter engine patch is not applied.'
-}
-
 $EngineSource = Join-Path $FlutterRoot 'engine\src'
-if (-not (Test-Path -LiteralPath $EngineSource)) {
-  throw 'Flutter engine source is not provisioned.'
+foreach ($mode in @('debug', 'release')) {
+  python tool/flutter_engine/desktop_accessibility.py verify `
+    --flutter-root $FlutterRoot --platform windows --architecture x64 --mode $mode `
+    --output-name "lineup_ax_${mode}_x64"
+  if ($LASTEXITCODE) { throw "Combined engine verification failed: $mode" }
 }
+
 ```
 
 This campaign uses both debug and release local-engine configurations. Build
 them with Development's provisioning commands when they are not already current;
-the release wrapper also refreshes its selected engine before packaging.
+changed engine inputs require a fresh recipe build. The release wrapper verifies
+its selected output before and after Flutter; it does not refresh it.
 
 ## 5. Local SDR smoke test
 
@@ -231,8 +211,8 @@ Use a non-sensitive local SDR sample before signing in to Plex:
 ```powershell
 Set-Location $Repo
 flutter run -d windows `
-  --local-engine=host_debug `
-  --local-engine-host=host_debug `
+  --local-engine=lineup_ax_debug_x64 `
+  --local-engine-host=lineup_ax_debug_x64 `
   --local-engine-src-path=$EngineSource `
   --dart-entrypoint-args="--media=$SdrSample"
 ```
@@ -249,8 +229,8 @@ Launch without a local-media argument:
 ```powershell
 Set-Location $Repo
 flutter run -d windows `
-  --local-engine=host_debug `
-  --local-engine-host=host_debug `
+  --local-engine=lineup_ax_debug_x64 `
+  --local-engine-host=lineup_ax_debug_x64 `
   --local-engine-src-path=$EngineSource
 ```
 
@@ -352,7 +332,7 @@ operator's task authorization.
 
 ## 8. Portable package acceptance
 
-From a clean worktree and configured `host_release` engine build directory:
+From a clean worktree and verified `lineup_ax_release_x64` engine output:
 
 ```powershell
 Set-Location $Repo

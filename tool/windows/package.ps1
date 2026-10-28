@@ -69,8 +69,8 @@ try {
 } catch {
   Throw-PackageFailure 'build-provenance-mismatch' 'Release build provenance is not valid JSON.'
 }
-if ($buildMarker.schemaVersion -ne 1) {
-  Throw-PackageFailure 'build-provenance-mismatch' 'Release build provenance has an unsupported schema.'
+if ($buildMarker.schemaVersion -ne 2) {
+  Throw-PackageFailure 'build-provenance-mismatch' 'Release build provenance requires schema 2. Rebuild with tool/windows/build-release.ps1.'
 }
 function Get-BuildMarkerValue {
   param([Parameter(Mandatory)] [string] $Name)
@@ -85,21 +85,19 @@ function Get-BuildMarkerValue {
 $buildSourceCommit = Get-BuildMarkerValue 'sourceCommit'
 $buildFlutterFramework = Get-BuildMarkerValue 'flutterFramework'
 $buildFlutterEngine = Get-BuildMarkerValue 'flutterEngine'
-$buildFlutterPatch = Get-BuildMarkerValue 'flutterEnginePatch'
-$buildFlutterPatchSha256 = Get-BuildMarkerValue 'flutterEnginePatchSha256'
-$buildPatchedManagerSha256 = Get-BuildMarkerValue 'flutterPatchedManagerSha256'
 $expectedBuildProvenance = @{
   sourceCommit = $sourceCommit
   flutterFramework = $metadata.FlutterFrameworkRevision
   flutterEngine = $metadata.FlutterEngineRevision
-  flutterEnginePatch = $metadata.FlutterEnginePatchPath
-  flutterEnginePatchSha256 = $metadata.FlutterEnginePatchSha256
-  flutterPatchedManagerSha256 = $metadata.FlutterPatchedManagerSha256
 }
 foreach ($entry in $expectedBuildProvenance.GetEnumerator()) {
   if ((Get-BuildMarkerValue $entry.Key) -ne $entry.Value) {
     Throw-PackageFailure 'build-provenance-mismatch' "Release build provenance does not match $($entry.Key)."
   }
+}
+
+try { Assert-WindowsEngineReceipt -Receipt $buildMarker.combinedEngine } catch {
+  Throw-PackageFailure 'build-provenance-mismatch' $_.Exception.Message
 }
 
 $markedArtifacts = [System.Collections.Generic.Dictionary[string, string]]::new(
@@ -135,6 +133,19 @@ foreach ($relative in $buildInputs) {
   if ($actualHash -ne $markedArtifacts[$relative]) {
     Throw-PackageFailure 'build-artifact-mismatch' "Release build artifact changed after provenance was recorded: $relative."
   }
+}
+
+if ($markedArtifacts['flutter_windows.dll'] -ne $buildMarker.combinedEngine.binarySha256) {
+  Throw-PackageFailure 'build-provenance-mismatch' 'Bundled engine DLL does not match the combined engine receipt.'
+}
+
+$engineReceiptPath = Join-Path $BuildDirectory 'data/lineup-engine-receipt.json'
+try {
+  $artifactReceipt = Get-Content -Raw -LiteralPath $engineReceiptPath | ConvertFrom-Json -ErrorAction Stop
+  if (($artifactReceipt | ConvertTo-Json -Depth 10 -Compress) -cne
+    ($buildMarker.combinedEngine | ConvertTo-Json -Depth 10 -Compress)) { throw 'Receipt differs.' }
+} catch {
+  Throw-PackageFailure 'build-provenance-mismatch' 'Combined engine receipt differs from its hashed build artifact.'
 }
 
 $runtime = Join-Path $BuildDirectory 'libmpv-2.dll'
@@ -275,9 +286,7 @@ $vcVersions = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') | ForE
   "source-dirty=$($sourceDirty.ToString().ToLowerInvariant())",
   "flutter-framework=$buildFlutterFramework",
   "flutter-engine=$buildFlutterEngine",
-  "flutter-engine-patch=$buildFlutterPatch",
-  "flutter-engine-patch-sha256=$buildFlutterPatchSha256",
-  "flutter-patched-manager-sha256=$buildPatchedManagerSha256",
+  "combined-engine=$($buildMarker.combinedEngine | ConvertTo-Json -Depth 10 -Compress)",
   "mpv=$($metadata.MpvVersion)",
   "ffmpeg=$($metadata.FfmpegVersion)",
   "libplacebo=$($metadata.LibplaceboVersion)",

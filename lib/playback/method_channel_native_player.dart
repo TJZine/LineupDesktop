@@ -44,6 +44,9 @@ class MethodChannelNativePlayer implements NativePlayer {
   final _displayReports = StreamController<DisplayMatchingReport>.broadcast(
     sync: true,
   );
+  final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
+  bool _fullscreen = false;
+  int _nativeEventEpoch = 0;
   final Duration _loadTimeout;
   final Duration _stopTimeout;
   final Duration _trackTimeout;
@@ -95,6 +98,12 @@ class MethodChannelNativePlayer implements NativePlayer {
   Stream<DisplayMatchingReport> get displayReports => _displayReports.stream;
 
   @override
+  bool get fullscreen => _fullscreen;
+
+  @override
+  Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;
+
+  @override
   Future<void> initialize() => _serializeLifecycle(() async {
     if (_initialized) return;
     _displayRevision = 0;
@@ -105,10 +114,17 @@ class MethodChannelNativePlayer implements NativePlayer {
       );
     }
     _handlerOwner = this;
-    _channel.setMethodCallHandler(_handleNativeCall);
+    _fullscreen = false;
+    final eventEpoch = ++_nativeEventEpoch;
+    _channel.setMethodCallHandler((call) async {
+      if (eventEpoch != _nativeEventEpoch) return;
+      await _handleNativeCall(call);
+    });
     try {
       await _invokeNative<Object?>('initialize');
     } catch (_) {
+      _fullscreen = false;
+      ++_nativeEventEpoch;
       if (identical(_handlerOwner, this)) {
         _channel.setMethodCallHandler(null);
         _handlerOwner = null;
@@ -125,7 +141,14 @@ class MethodChannelNativePlayer implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
+    if (startPosition != null && startPosition < Duration.zero) {
+      throw const PlayerUnavailable(
+        'The initial playback position must be non-negative.',
+        failureCode: 'invalid_argument',
+      );
+    }
     if (plexToken != null &&
         (media.scheme.toLowerCase() != 'https' ||
             !media.hasAuthority ||
@@ -166,6 +189,9 @@ class MethodChannelNativePlayer implements NativePlayer {
         'plexToken': plexToken,
         'loadId': loadId,
         'startPaused': startPaused,
+        if (startPosition != null)
+          'startSeconds':
+              startPosition.inMicroseconds / Duration.microsecondsPerSecond,
       });
       final failure = await completion;
       if (failure != null) {
@@ -218,9 +244,11 @@ class MethodChannelNativePlayer implements NativePlayer {
   Future<void> pause() => _invoke('pause');
 
   @override
-  Future<void> seek(Duration position) => _invoke('seek', {
-    'seconds': position.inMicroseconds / Duration.microsecondsPerSecond,
-  });
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) =>
+      _invoke('seek', {
+        'seconds': position.inMicroseconds / Duration.microsecondsPerSecond,
+        'mode': mode.name,
+      });
 
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) => _invoke('setVideoRect', {
@@ -335,6 +363,8 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   @override
   Future<void> dispose() => _serializeLifecycle(() async {
+    _fullscreen = false;
+    ++_nativeEventEpoch;
     final stop = _pendingStop;
     if (stop != null && !stop.$2.isCompleted) {
       stop.$2.completeError(
@@ -404,6 +434,17 @@ class MethodChannelNativePlayer implements NativePlayer {
     if (call.method != 'event') return;
     if (call.arguments is! Map) return;
     final event = Map<Object?, Object?>.from(call.arguments as Map);
+    if (event['type'] == 'fullscreen') {
+      final observed = event['fullscreen'];
+      // The current owner includes initialization. The captured handler epoch
+      // rejects callbacks from disposed/failed lifetimes before reaching here.
+      if (!identical(_handlerOwner, this) || observed is! bool) {
+        return;
+      }
+      _fullscreen = observed;
+      if (!_fullscreenChanges.isClosed) _fullscreenChanges.add(observed);
+      return;
+    }
     if (event['type'] == 'stopResult') {
       final pending = _pendingStop;
       if (pending == null ||
@@ -478,6 +519,9 @@ class MethodChannelNativePlayer implements NativePlayer {
       'error' => PlayerState.error,
       _ => PlayerState.idle,
     };
+    if (state == PlayerState.playing && event['paused'] is bool) {
+      _paused = event['paused']! as bool;
+    }
     final failureCode = switch (event['failureCode']) {
       final String code => _normalizedPlaybackFailureCode(code),
       _ => null,
@@ -541,7 +585,7 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   static String _nativeCommandFailureMessage(String code) => switch (code) {
     'required_engine_unavailable' =>
-      'The required Windows video engine is unavailable.',
+      'The required video engine is unavailable.',
     'initialize_failed' => 'The native player could not initialize.',
     'dispose_in_progress' => 'The native player is shutting down.',
     'not_initialized' => 'The native player is not initialized.',

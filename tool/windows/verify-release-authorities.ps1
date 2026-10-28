@@ -54,65 +54,99 @@ function Assert-WindowsReleaseAuthorities {
     }
     . $owner
 
+    # Validate the portable receipt against the real canonical inputs without an
+    # engine checkout. Full schema/artifact packaging controls run on Windows CI.
+    $repository = Get-LineupRepository
+    $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
+    $pins = [ordered]@{}
+    foreach ($name in @('tool/flutter_version.json', 'tool/windows/build-metadata.psd1')) {
+      $pins[$name] = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository $name)).Hash.ToLowerInvariant()
+    }
+    $patches = @($metadata.FlutterEnginePatchPath, 'tool/flutter_engine/0002-desktop-accessibility.patch',
+      'tool/flutter_engine/0004-windows-test-fixtures.patch') | ForEach-Object {
+      @{ path = $_; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository $_)).Hash.ToLowerInvariant() }
+    }
+    $validReceipt = @{
+      outputName = 'lineup_ax_release_x64'; mode = 'release'; architecture = 'x64'
+      provenanceSha256 = 'a' * 64; binarySha256 = 'b' * 64
+      recipe = @{
+        frameworkRevision = $metadata.FlutterFrameworkRevision; engineVersion = $metadata.FlutterEngineRevision
+        pinSha256 = $pins; patches = @($patches)
+        manifestSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repository 'tool/flutter_engine/desktop-accessibility.json')).Hash.ToLowerInvariant()
+      }
+    } | ConvertTo-Json -Depth 10
+    Assert-WindowsEngineReceipt ($validReceipt | ConvertFrom-Json)
+    foreach ($probe in @('order', 'missing', 'manifest', 'provenance', 'binary', 'mode', 'pin')) {
+      $receipt = $validReceipt | ConvertFrom-Json
+      switch ($probe) {
+        'order' { $receipt.recipe.patches = @($receipt.recipe.patches[1], $receipt.recipe.patches[0], $receipt.recipe.patches[2]) }
+        'missing' { $receipt.recipe.patches = @($receipt.recipe.patches[0]) }
+        'manifest' { $receipt.recipe.manifestSha256 = '0' * 64 }
+        'provenance' { $receipt.provenanceSha256 = 'invalid' }
+        'binary' { $receipt.binarySha256 = 'invalid' }
+        'mode' { $receipt.mode = 'debug' }
+        'pin' { $receipt.recipe.pinSha256.'tool/flutter_version.json' = '0' * 64 }
+      }
+      $expectedError = switch ($probe) {
+        'order' { 'patch order/hash mismatch' }
+        'missing' { 'all three ordered canonical patches' }
+        'manifest' { 'manifest mismatch' }
+        'pin' { 'pin mismatch' }
+        default { 'receipt identity' }
+      }
+      Assert-AuthorityRejected { Assert-WindowsEngineReceipt $receipt } $expectedError
+      Assert-WindowsEngineReceipt ($validReceipt | ConvertFrom-Json)
+    }
+
+    # Execute the real adapter against a controlled process boundary. Python
+    # temporary-Git fixtures own exact combined source policy; this tests checked
+    # invocation/JSON/output rejection without duplicating that policy in PS.
     $flutter = Join-Path $directory 'flutter'
-    New-Item -ItemType Directory -Path (Join-Path $flutter 'bin/internal') -Force | Out-Null
-    $manager = Join-Path $flutter 'manager.txt'
-    $engine = Join-Path $flutter 'bin/internal/engine.version'
-    [IO.File]::WriteAllText($manager, "original`n")
-    [IO.File]::WriteAllText($engine, "engine-pin`n")
-    [IO.File]::WriteAllText((Join-Path $flutter 'other.txt'), "unchanged`n")
-    Invoke-AuthorityFixtureGit $flutter @('init', '--quiet')
-    Invoke-AuthorityFixtureGit $flutter @('config', 'core.autocrlf', 'false')
-    Invoke-AuthorityFixtureGit $flutter @('add', '.')
-    Invoke-AuthorityFixtureGit $flutter @('-c', 'user.name=Lineup fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'fixture')
-    $head = Invoke-AuthorityFixtureGit $flutter @('rev-parse', '--verify', 'HEAD')
-    [IO.File]::WriteAllText($manager, "patched`n")
-    $patch = Join-Path $directory 'manager.patch'
-    $diff = Invoke-AuthorityFixtureGit $flutter @('diff', '--', 'manager.txt')
-    [IO.File]::WriteAllText($patch, ($diff -join "`n") + "`n")
-    Invoke-AuthorityFixtureGit $flutter @('checkout', '--', 'manager.txt')
-    Invoke-AuthorityFixtureGit $flutter @('apply', $patch)
-    $metadata = @{
-      FlutterFrameworkRevision = $head
-      FlutterEngineRevision = 'engine-pin'
-      FlutterManagerPath = 'manager.txt'
-      FlutterPatchedManagerSha256 = Get-NormalizedTextSha256 $manager
+    $expectedBinary = Join-Path $flutter 'engine/src/out/lineup_ax_debug_x64/flutter_windows.dll'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $expectedBinary) -Force | Out-Null
+    $env:LINEUP_ADAPTER_ROOT = $flutter
+    $env:LINEUP_ADAPTER_BINARY = $expectedBinary
+    $env:LINEUP_ADAPTER_SCENARIO = 'valid'
+    function python {
+      if ($args[1] -cne 'verify' -or ($args -join '|') -notlike '*--platform|windows|--architecture|x64|--mode|debug|--output-name|lineup_ax_debug_x64') {
+        throw 'Adapter changed its fixed invocation.'
+      }
+      $global:LASTEXITCODE = if ($env:LINEUP_ADAPTER_SCENARIO -eq 'failure') { 23 } else { 0 }
+      if ($env:LINEUP_ADAPTER_SCENARIO -eq 'malformed') { return 'not JSON' }
+      $name = if ($env:LINEUP_ADAPTER_SCENARIO -eq 'wrong-output') { 'host_debug' } else { 'lineup_ax_debug_x64' }
+      @{
+        kind = 'verified-local-desktop-accessibility'; platform = 'windows'; architecture = 'x64'; mode = 'debug'
+        outputName = $name; flutterRoot = $env:LINEUP_ADAPTER_ROOT
+        engineSource = Join-Path $env:LINEUP_ADAPTER_ROOT 'engine/src'
+        binary = $env:LINEUP_ADAPTER_BINARY; binarySha256 = 'a' * 64; provenanceSha256 = 'b' * 64
+        recipe = @{ fixture = $true }
+      } | ConvertTo-Json -Depth 10 -Compress
     }
-    $check = { Assert-PinnedFlutterCheckout -Root $flutter -Metadata $metadata -PatchPath $patch }
-    & $check
+    $location = (Get-Location).Path
     $preference = $PSNativeCommandUseErrorActionPreference
-    foreach ($nativePreference in @($false, $true)) {
-      $PSNativeCommandUseErrorActionPreference = $nativePreference
-      & $check
-      $metadata.FlutterFrameworkRevision = '0' * 40
-      Assert-AuthorityRejected $check 'pinned framework revision'
-      $metadata.FlutterFrameworkRevision = $head
-      [IO.File]::WriteAllText($engine, "wrong-engine`n")
-      Assert-AuthorityRejected $check 'required engine revision'
-      Invoke-AuthorityFixtureGit $flutter @('checkout', '--', 'bin/internal/engine.version')
-      [IO.File]::WriteAllText((Join-Path $flutter 'other.txt'), "changed`n")
-      Assert-AuthorityRejected $check 'only the repository-owned engine patch'
-      Invoke-AuthorityFixtureGit $flutter @('checkout', '--', 'other.txt')
-      [IO.File]::WriteAllText($manager, "wrong bytes`n")
-      Assert-AuthorityRejected $check 'pinned result'
-      [IO.File]::WriteAllText($manager, "patched`n")
-      $wrongPatch = Join-Path $directory 'wrong.patch'
-      [IO.File]::WriteAllText($wrongPatch, [IO.File]::ReadAllText($patch).Replace('+patched', '+other'))
-      Assert-AuthorityRejected { Assert-PinnedFlutterCheckout -Root $flutter -Metadata $metadata -PatchPath $wrongPatch } 'exact repository-owned Flutter engine patch'
-      Assert-AuthorityRejected { Assert-PinnedFlutterCheckout -Root $directory -Metadata $metadata -PatchPath $patch } 'git rev-parse'
-      if ($PSNativeCommandUseErrorActionPreference -ne $nativePreference) { throw 'Checkout verifier changed native error preference.' }
-      & $check
+    Get-VerifiedWindowsEngine -Root $flutter -Mode debug | Out-Null
+    foreach ($scenario in @(@{ Name = 'failure'; Error = 'Exit code 23' },
+        @{ Name = 'malformed'; Error = 'invalid JSON' }, @{ Name = 'wrong-output'; Error = 'wrong output' })) {
+      $env:LINEUP_ADAPTER_SCENARIO = $scenario.Name
+      Assert-AuthorityRejected { Get-VerifiedWindowsEngine -Root $flutter -Mode debug } $scenario.Error
+      if ((Get-Location).Path -ne $location -or $preference -ne $PSNativeCommandUseErrorActionPreference) {
+        throw 'Adapter changed caller location or native error preference.'
+      }
+      $env:LINEUP_ADAPTER_SCENARIO = 'valid'
+      Get-VerifiedWindowsEngine -Root $flutter -Mode debug | Out-Null
     }
-    Invoke-AuthorityFixtureGit $flutter @('checkout', '--', 'manager.txt')
-    Assert-AuthorityRejected $check 'only the repository-owned engine patch'
-    Invoke-AuthorityFixtureGit $flutter @('apply', $patch)
-    & $check
-    $PSNativeCommandUseErrorActionPreference = $preference
-    [IO.File]::WriteAllText($manager, "patched`r`n")
-    if ((Get-NormalizedTextSha256 $manager) -ne $metadata.FlutterPatchedManagerSha256) { throw 'Manager normalization changed.' }
-    [IO.File]::WriteAllText($manager, "patched`n")
-    & $check
-    Write-Host 'Package identity/path and pinned patched-checkout authority controls passed (real temporary Git/patch fixtures).'
+    # A failed verifier must prevent even Flutter cache preparation.
+    $launch = Get-LineupLaunchInput -EngineSource (Join-Path $flutter 'engine/src') -MpvRoot $directory -BoundParameters @{}
+    function Invoke-NativeChecked { throw 'Flutter reached after failed verifier.' }
+    foreach ($scenario in @(@{ Name = 'failure'; Error = 'Exit code 23' },
+        @{ Name = 'malformed'; Error = 'invalid JSON' }, @{ Name = 'wrong-output'; Error = 'wrong output' })) {
+      $env:LINEUP_ADAPTER_SCENARIO = $scenario.Name
+      Assert-AuthorityRejected { Invoke-LineupLaunch -Launch $launch } $scenario.Error
+      if ((Get-Location).Path -ne $location) { throw 'Failed verification lost launch cleanup.' }
+    }
+    Remove-Item Function:python
+    Remove-Item Env:LINEUP_ADAPTER_ROOT, Env:LINEUP_ADAPTER_BINARY, Env:LINEUP_ADAPTER_SCENARIO
+    Write-Host 'Package identity/path and checked combined-engine adapter controls passed.'
   } finally {
     . $owner
     if (Test-Path -LiteralPath $directory) { Remove-Item -LiteralPath $directory -Recurse -Force }

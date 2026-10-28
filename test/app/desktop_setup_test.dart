@@ -21,6 +21,88 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  testWidgets('library Select all is one target covering its checkbox', (
+    tester,
+  ) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await tester.pumpAndSettle();
+
+    final selectAll = find.widgetWithText(TextButton, 'Select all');
+    final checkbox = find.byKey(const ValueKey('select-all-libraries'));
+    expect(find.descendant(of: selectAll, matching: checkbox), findsOneWidget);
+    final buttonRect = tester.getRect(selectAll);
+    expect(buttonRect.expandToInclude(tester.getRect(checkbox)), buttonRect);
+    final checkboxElement = tester.element(checkbox);
+    bool insideCheckbox(FocusNode node) {
+      final context = node.context;
+      if (context == null) return false;
+      if (identical(context, checkboxElement)) return true;
+      var inside = false;
+      context.visitAncestorElements((element) {
+        inside = identical(element, checkboxElement);
+        return !inside;
+      });
+      return inside;
+    }
+
+    expect(
+      FocusManager.instance.rootScope.traversalDescendants.where(
+        insideCheckbox,
+      ),
+      isEmpty,
+    );
+
+    final semantics = tester.ensureSemantics();
+    var data = tester.getSemantics(selectAll).getSemanticsData();
+    expect(data.label, 'Select all');
+    expect(data.flagsCollection.isButton, isTrue);
+    expect(data.flagsCollection.isChecked, CheckedState.isTrue);
+    await tester.tap(find.text('Shows'));
+    await tester.pump();
+    expect(tester.widget<Checkbox>(checkbox).value, isNull);
+    data = tester.getSemantics(selectAll).getSemanticsData();
+    expect(data.label, 'Select all');
+    expect(data.flagsCollection.isChecked, CheckedState.mixed);
+    semantics.dispose();
+  });
+
+  for (final width in [1280.0, 560.0]) {
+    testWidgets(
+      'library row checkbox, name, and type share a vertical center (${width.toInt()}px)',
+      (tester) async {
+        final controller = _SetupController();
+        addTearDown(controller.dispose);
+        await _pump(tester, controller);
+        tester.view.physicalSize = Size(width, 720);
+        await tester.pumpAndSettle();
+
+        final row = find
+            .ancestor(of: find.text('Shows'), matching: find.byType(InkWell))
+            .first;
+        final checkbox = tester.getCenter(
+          find.descendant(of: row, matching: find.byType(Checkbox)),
+        );
+        final name = tester.getCenter(
+          find.descendant(of: row, matching: find.text('Shows')),
+        );
+        final type = tester.getCenter(
+          find.descendant(of: row, matching: find.text('TV Shows')),
+        );
+        if (width >= 1280) {
+          expect(name.dy, closeTo(checkbox.dy, 1));
+          expect(type.dy, closeTo(checkbox.dy, 1));
+        } else {
+          // Narrow rows stack the type under the name; the stack is centered
+          // on the checkbox.
+          expect((name.dy + type.dy) / 2, closeTo(checkbox.dy, 1));
+        }
+        expect(type.dx, greaterThan(name.dx));
+      },
+    );
+  }
+
   testWidgets('empty library recovery exposes quiet Sign out', (tester) async {
     final controller = _SetupController(
       scenario: LineupScenario(libraries: const []),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -1634,6 +1635,61 @@ void main() {
     expect(controller.settings.theme, theme);
   });
 
+  testWidgets('future state format refuses startup without touching state', (
+    tester,
+  ) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'lineup-bootstrap-future-format',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final stateFile = File('${directory.path}/state.json');
+    final originalBytes = utf8.encode(
+      '${jsonEncode({...const PersistedState().toJson(), 'formatVersion': 2})}\n',
+    );
+    final backupBytes = [0x73, 0x61, 0x66, 0x65];
+    stateFile.writeAsBytesSync(originalBytes);
+    File('${stateFile.path}.pre-desktop-ui').writeAsBytesSync(backupBytes);
+    final store = _PreparedFileAppStore(directory);
+    await tester.runAsync(store.prepare);
+    final credentials = _CountingCredentials(accountToken: 'sentinel-token');
+    final controller = LineupController(
+      store: store,
+      credentials: credentials,
+      plex: PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'This build is too old to open your saved data. Your saved data was '
+        'left intact. Update Lineup Desktop and try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Restart the app'), findsNothing);
+    expect(credentials.accountReads, 0);
+    expect(credentials.profileReads, 0);
+    expect(store.saveCalls, 0);
+    expect(stateFile.readAsBytesSync(), originalBytes);
+    expect(
+      File('${stateFile.path}.pre-desktop-ui').readAsBytesSync(),
+      backupBytes,
+    );
+    expect(
+      directory.listSync().where(
+        (entry) => entry.path.contains('state.json.corrupt-'),
+      ),
+      isEmpty,
+    );
+  });
+
   testWidgets('pre-existing quarantine directory survives startup recovery', (
     tester,
   ) async {
@@ -2068,6 +2124,7 @@ class _PreparedFileAppStore extends FileAppStore {
 
   AppStoreLoadResult? _result;
   Object? _error;
+  var saveCalls = 0;
 
   Future<void> prepare() async {
     try {
@@ -2083,6 +2140,31 @@ class _PreparedFileAppStore extends FileAppStore {
     // ignore: only_throw_errors
     if (_error case final error?) throw error;
     return _result!;
+  }
+
+  @override
+  Future<void> save(PersistedState state) {
+    saveCalls++;
+    return super.save(state);
+  }
+}
+
+class _CountingCredentials extends MemoryCredentialStore {
+  _CountingCredentials({super.accountToken});
+
+  var accountReads = 0;
+  var profileReads = 0;
+
+  @override
+  Future<String?> readAccountToken() async {
+    accountReads++;
+    return super.readAccountToken();
+  }
+
+  @override
+  Future<String?> readProfileToken(String profileId) async {
+    profileReads++;
+    return super.readProfileToken(profileId);
   }
 }
 
@@ -2116,6 +2198,7 @@ class _DelayedLoadPlayer extends _FakePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     await super.load(
       media,

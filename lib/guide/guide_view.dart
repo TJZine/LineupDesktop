@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
 import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
@@ -290,7 +293,7 @@ class GuideView extends StatefulWidget {
   });
 
   final GuideController controller;
-  final VoidCallback onClose;
+  final LineupMenuCallback onClose;
   final Future<void> Function(String channelId) onTune;
   final LineupMenuCallback? onOpenMenu;
   final Widget? pictureInPicture;
@@ -313,6 +316,16 @@ class _GuideViewState extends State<GuideView>
   final _menuFocus = FocusNode(debugLabel: 'Guide Lineup menu');
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
+  // TooltipVisibility replaces each tooltip's child when the menu opens.
+  // Keep these invokers alive so closing the menu can restore exact focus.
+  final _closeFocus = FocusNode(debugLabel: 'Close Guide');
+  final _earlierFocus = FocusNode(debugLabel: 'Guide earlier');
+  final _nowFocus = FocusNode(debugLabel: 'Guide now');
+  final _laterFocus = FocusNode(debugLabel: 'Guide later');
+  final _clearSearchFocus = FocusNode(debugLabel: 'Guide clear search');
+  final _removeLibraryFilterFocus = FocusNode(
+    debugLabel: 'Guide remove library filter',
+  );
   final _searchController = TextEditingController();
   late String _observedSearchQuery;
   late int _searchContentGeneration;
@@ -368,6 +381,12 @@ class _GuideViewState extends State<GuideView>
     _menuFocus.dispose();
     _guideFocus.dispose();
     _searchFocus.dispose();
+    _closeFocus.dispose();
+    _earlierFocus.dispose();
+    _nowFocus.dispose();
+    _laterFocus.dispose();
+    _clearSearchFocus.dispose();
+    _removeLibraryFilterFocus.dispose();
     _searchController
       ..removeListener(_searchChanged)
       ..dispose();
@@ -572,8 +591,14 @@ class _GuideViewState extends State<GuideView>
         keyboard.isControlPressed ||
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
+    // Let macOS redispatch Control-Command-F to the native fullscreen menu.
+    final nativeFullscreenChord =
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        keyboard.isControlPressed &&
+        keyboard.isMetaPressed;
     if (key == LogicalKeyboardKey.keyF &&
-        (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+        commandModifier(keyboard) &&
+        !nativeFullscreenChord) {
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
@@ -585,7 +610,15 @@ class _GuideViewState extends State<GuideView>
         key == LogicalKeyboardKey.goBack ||
         (key == LogicalKeyboardKey.keyG && !commandModified) ||
         key == LogicalKeyboardKey.f2) {
-      widget.onClose();
+      final primary = FocusManager.instance.primaryFocus;
+      final invoker =
+          primary != null &&
+              primary.parent != null &&
+              primary.context?.mounted == true &&
+              primary.canRequestFocus
+          ? primary
+          : node;
+      widget.onClose(invoker.context ?? context, invoker);
       return KeyEventResult.handled;
     }
     if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
@@ -645,6 +678,7 @@ class _GuideViewState extends State<GuideView>
     onClose: widget.onClose,
     onOpenMenu: widget.onOpenMenu,
     menuFocus: _menuFocus,
+    closeFocus: _closeFocus,
   );
 
   Widget _showcase(GuideLayoutPolicy policy) => SizedBox(
@@ -674,6 +708,11 @@ class _GuideViewState extends State<GuideView>
             railWidth: policy.channelRailWidth,
             searchController: _searchController,
             searchFocus: _searchFocus,
+            earlierFocus: _earlierFocus,
+            nowFocus: _nowFocus,
+            laterFocus: _laterFocus,
+            clearSearchFocus: _clearSearchFocus,
+            removeLibraryFilterFocus: _removeLibraryFilterFocus,
             onSearchKey: _searchKey,
           ),
         ),
@@ -967,13 +1006,15 @@ class _Toolbar extends StatelessWidget {
     required this.onClose,
     required this.onOpenMenu,
     required this.menuFocus,
+    required this.closeFocus,
   });
   final GuideController controller;
   final String? watchingChannelId;
   final bool compact;
-  final VoidCallback onClose;
+  final LineupMenuCallback onClose;
   final LineupMenuCallback? onOpenMenu;
   final FocusNode menuFocus;
+  final FocusNode closeFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -1025,14 +1066,17 @@ class _Toolbar extends StatelessWidget {
               style: supportingStyle.copyWith(color: roles.mutedText),
             ),
           SizedBox(width: 8),
-          IconButton(
-            tooltip: 'Close Guide',
-            onPressed: onClose,
-            constraints: enlargedControls
-                ? BoxConstraints(minWidth: 48, minHeight: 48)
-                : null,
-            iconSize: 24,
-            icon: const Icon(Icons.close),
+          Builder(
+            builder: (invokerContext) => IconButton(
+              tooltip: 'Close Guide',
+              focusNode: closeFocus,
+              onPressed: () => onClose(invokerContext, closeFocus),
+              constraints: enlargedControls
+                  ? BoxConstraints(minWidth: 48, minHeight: 48)
+                  : null,
+              iconSize: 24,
+              icon: const Icon(Icons.close, semanticLabel: 'Close Guide'),
+            ),
           ),
         ],
       ),
@@ -1047,6 +1091,11 @@ class _GuideControls extends StatelessWidget {
     required this.railWidth,
     required this.searchController,
     required this.searchFocus,
+    required this.earlierFocus,
+    required this.nowFocus,
+    required this.laterFocus,
+    required this.clearSearchFocus,
+    required this.removeLibraryFilterFocus,
     required this.onSearchKey,
   });
 
@@ -1054,6 +1103,11 @@ class _GuideControls extends StatelessWidget {
   final double railWidth;
   final TextEditingController searchController;
   final FocusNode searchFocus;
+  final FocusNode earlierFocus;
+  final FocusNode nowFocus;
+  final FocusNode laterFocus;
+  final FocusNode clearSearchFocus;
+  final FocusNode removeLibraryFilterFocus;
   final FocusOnKeyEventCallback onSearchKey;
 
   Future<void> _saveHours(BuildContext context, int hours) async {
@@ -1172,9 +1226,13 @@ class _GuideControls extends StatelessWidget {
               ),
               IconButton(
                 tooltip: 'Remove library filter',
+                focusNode: removeLibraryFilterFocus,
                 onPressed: () => controller.setLibraryFilter(null),
                 iconSize: 17,
-                icon: const Icon(Icons.close),
+                icon: const Icon(
+                  Icons.close,
+                  semanticLabel: 'Remove library filter',
+                ),
               ),
             ],
           );
@@ -1193,31 +1251,61 @@ class _GuideControls extends StatelessWidget {
       height: controlHeight,
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: searchController,
-        builder: (context, value, child) => Focus(
-          onKeyEvent: onSearchKey,
-          child: TextField(
-            key: const Key('guide-channel-search'),
-            style: searchStyle,
-            textAlignVertical: TextAlignVertical.center,
-            controller: searchController,
-            focusNode: searchFocus,
-            decoration: InputDecoration(
-              hintText: 'Search channels',
-              hintStyle: searchStyle.copyWith(color: roles.mutedText),
-              isDense: true,
-              constraints: BoxConstraints.tightFor(height: controlHeight),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: searchVerticalPadding,
-              ),
-              suffixIcon: value.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear search',
-                      onPressed: searchController.clear,
-                      icon: Icon(Icons.close, size: 17),
+        builder: (context, value, child) => TextFieldTapRegion(
+          child: Stack(
+            children: [
+              Focus(
+                onKeyEvent: onSearchKey,
+                child: TextField(
+                  key: const Key('guide-channel-search'),
+                  style: searchStyle,
+                  textAlignVertical: TextAlignVertical.center,
+                  controller: searchController,
+                  focusNode: searchFocus,
+                  decoration: InputDecoration(
+                    hintText: 'Search channels',
+                    hintStyle: searchStyle.copyWith(color: roles.mutedText),
+                    isDense: true,
+                    constraints: BoxConstraints.tightFor(height: controlHeight),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: searchVerticalPadding,
                     ),
-            ),
+                    // Reserve the suffix slot while keeping its action outside
+                    // the native text field's leaf semantics and key handler.
+                    suffixIcon: value.text.isEmpty
+                        ? null
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+              if (value.text.isNotEmpty)
+                PositionedDirectional(
+                  end: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: Theme.of(context).visualDensity
+                      .effectiveConstraints(
+                        const BoxConstraints(
+                          minWidth: kMinInteractiveDimension,
+                        ),
+                      )
+                      .minWidth,
+                  child: IconButton(
+                    tooltip: 'Clear search',
+                    focusNode: clearSearchFocus,
+                    onPressed: () {
+                      searchController.clear();
+                      searchFocus.requestFocus();
+                    },
+                    icon: Icon(
+                      Icons.close,
+                      size: 17,
+                      semanticLabel: 'Clear search',
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -1235,43 +1323,58 @@ class _GuideControls extends StatelessWidget {
       children: [
         IconButton(
           key: const Key('guide-earlier'),
+          focusNode: earlierFocus,
           tooltip: 'Earlier by 30 minutes',
           onPressed: controller.canBrowseEarlier
               ? () => controller.moveWindow(-1)
               : null,
           iconSize: 24,
-          icon: const Icon(Icons.chevron_left),
+          icon: const Icon(
+            Icons.chevron_left,
+            semanticLabel: 'Earlier by 30 minutes',
+          ),
         ),
-        Tooltip(
-          message: returnToLive ? 'Return to live' : 'Now',
-          excludeFromSemantics: true,
-          child: TextButton(
-            key: const Key('guide-now'),
-            style: returnToLive
-                ? LineupTheme.buttonStyle(
-                    roles,
-                    LineupButtonTier.secondary,
-                  ).copyWith(
-                    shape: WidgetStatePropertyAll(
-                      RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+        // Give this tooltip its own origin. Merging sibling portal identifiers
+        // into one ancestor can leave the overlay outside accessibility traversal.
+        Semantics(
+          container: true,
+          explicitChildNodes: true,
+          child: Tooltip(
+            message: returnToLive ? 'Return to live' : 'Now',
+            excludeFromSemantics: true,
+            child: TextButton(
+              key: const Key('guide-now'),
+              focusNode: nowFocus,
+              style: returnToLive
+                  ? LineupTheme.buttonStyle(
+                      roles,
+                      LineupButtonTier.secondary,
+                    ).copyWith(
+                      shape: WidgetStatePropertyAll(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                    ),
-                  )
-                : null,
-            onPressed: controller.playToNow,
-            child: Text(
-              nowLabel,
-              semanticsLabel: returnToLive ? 'Return to live' : null,
+                    )
+                  : null,
+              onPressed: controller.playToNow,
+              child: Text(
+                nowLabel,
+                semanticsLabel: returnToLive ? 'Return to live' : null,
+              ),
             ),
           ),
         ),
         IconButton(
           key: const Key('guide-later'),
+          focusNode: laterFocus,
           tooltip: 'Later by 30 minutes',
           onPressed: () => controller.moveWindow(1),
           iconSize: 24,
-          icon: const Icon(Icons.chevron_right),
+          icon: const Icon(
+            Icons.chevron_right,
+            semanticLabel: 'Later by 30 minutes',
+          ),
         ),
         SizedBox(width: 8),
         DropdownButtonHideUnderline(

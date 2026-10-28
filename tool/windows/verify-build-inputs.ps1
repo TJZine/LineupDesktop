@@ -36,8 +36,8 @@ function Assert-BuildInputWiring {
 function Assert-WindowsBuildInputContracts {
   param([string] $LauncherPath, [string] $ReleasePath)
 
-  Assert-BuildInputWiring $LauncherPath @('Get-LineupRepository', 'Get-LineupLaunchInput', 'Assert-PinnedFlutterCheckout', 'Invoke-LineupLaunch')
-  Assert-BuildInputWiring $ReleasePath @('Get-LineupRepository', 'Get-LineupReleaseInput', 'Assert-PinnedFlutterCheckout', 'Invoke-LineupReleaseBuild')
+  Assert-BuildInputWiring $LauncherPath @('Get-LineupRepository', 'Get-LineupLaunchInput', 'Invoke-LineupLaunch')
+  Assert-BuildInputWiring $ReleasePath @('Get-LineupRepository', 'Get-LineupReleaseInput', 'Get-VerifiedWindowsEngine', 'Invoke-LineupReleaseBuild')
   $owner = Join-Path $PSScriptRoot 'build-inputs.ps1'
   $directory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
   function Assert-Arguments {
@@ -66,7 +66,7 @@ function Assert-WindowsBuildInputContracts {
 . (Join-Path -ChildPath 'build-inputs.ps1' -Path ($PSScriptRoot))
 $renamedRepository = (Get-LineupRepository)
 $renamedLaunch = (Get-LineupLaunchInput -MpvRoot ($MpvRoot) -EngineSource ($EngineSource) -BoundParameters $PSBoundParameters -MediaPath $MediaPath)
-(Invoke-LineupLaunch -Ninja ($ninja) -Launch $renamedLaunch)
+(Invoke-LineupLaunch -Launch $renamedLaunch)
 '@ | Set-Content -LiteralPath $wiringFixture
     $launchContracts = @('Get-LineupRepository', 'Get-LineupLaunchInput', 'Invoke-LineupLaunch')
     Assert-BuildInputWiring $wiringFixture $launchContracts
@@ -81,8 +81,8 @@ $renamedLaunch = (Get-LineupLaunchInput -MpvRoot ($MpvRoot) -EngineSource ($Engi
     $mpv = Join-Path $directory 'mpv root'
     New-Item -ItemType Directory -Path $engine, $mpv -Force | Out-Null
     $engine = Resolve-RequiredPath $engine EngineSource Container
-    $expectedLaunch = @('run', '-d', 'windows', '--local-engine=host_debug',
-      '--local-engine-host=host_debug', "--local-engine-src-path=$engine")
+    $expectedLaunch = @('run', '-d', 'windows', '--local-engine=lineup_ax_debug_x64',
+      '--local-engine-host=lineup_ax_debug_x64', "--local-engine-src-path=$engine")
     $launch = Get-LineupLaunchInput -EngineSource $engine -MpvRoot $mpv -BoundParameters @{}
     Assert-Arguments $launch.Arguments $expectedLaunch
     $withMedia = Get-LineupLaunchInput -EngineSource $engine -MpvRoot $mpv -BoundParameters @{ MediaPath = $media } -MediaPath $media
@@ -112,8 +112,8 @@ $renamedLaunch = (Get-LineupLaunchInput -MpvRoot ($MpvRoot) -EngineSource ($Engi
       . $fixtureOwner
       $release = Get-LineupReleaseInput -EngineSource $engine
       if ($release.Repository -ne $root -or $release.SourceCommit -cne $commit) { throw 'Release identity escaped its canonical repository.' }
-      Assert-Arguments $release.Arguments @('build', 'windows', '--local-engine=host_release',
-        '--local-engine-host=host_release', "--local-engine-src-path=$engine",
+      Assert-Arguments $release.Arguments @('build', 'windows', '--local-engine=lineup_ax_release_x64',
+        '--local-engine-host=lineup_ax_release_x64', "--local-engine-src-path=$engine",
         "--dart-define=LINEUP_VERSION=$($scenario.Label)", "--dart-define=LINEUP_BUILD=$($scenario.Build)@$commit")
       Assert-Rejected { Get-LineupReleaseInput -EngineSource $engine -PubspecPath $media } 'independently supplied pubspec'
       Assert-Rejected { Get-LineupReleaseInput -EngineSource $engine -SourceCommit ('0' * 40) } 'independently supplied commit'
@@ -163,15 +163,9 @@ Add-Content -LiteralPath $env:LINEUP_TEST_LOG -Value ($args | ConvertTo-Json -Co
 if ($args[0] -eq 'precache') { exit 0 }
 exit ([int] $env:LINEUP_TEST_EXIT)
 '@ | Set-Content -LiteralPath $flutterFixture
-    $ninjaFixture = Join-Path $directory 'ninja fixture.ps1'
-    @'
-if ($args.Count -ne 2 -or $args[0] -ne '-C' -or $args[1] -ne $env:LINEUP_EXPECTED_OUTPUT) { exit 91 }
-Add-Content -LiteralPath $env:LINEUP_TEST_LOG -Value 'ninja'
-exit ([int] $env:LINEUP_NINJA_EXIT)
-'@ | Set-Content -LiteralPath $ninjaFixture
     $child = Join-Path $directory 'launch child.ps1'
     @'
-param($Owner, $Engine, $Mpv, $Flutter, $Ninja, $Log, [int] $Code, [int] $NinjaCode, $ExistingMpv)
+param($Owner, $Engine, $Mpv, $Flutter, $Log, [int] $Code, $ExistingMpv)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 . $Owner
@@ -183,32 +177,32 @@ $env:LINEUP_EXPECTED_MPV = $launch.MpvRoot
 $env:LINEUP_EXPECTED_OUTPUT = $launch.EngineOutput
 $env:LINEUP_TEST_LOG = $Log
 $env:LINEUP_TEST_EXIT = "$Code"
-$env:LINEUP_NINJA_EXIT = "$NinjaCode"
+function Get-VerifiedWindowsEngine { param($Root, $Mode)
+  if ($Mode -ne 'debug') { throw 'Wrong launcher verification mode.' }
+  Add-Content -LiteralPath $env:LINEUP_TEST_LOG -Value 'verify'
+}
 if ($ExistingMpv -eq 'true') { $env:LINEUP_MPV_ROOT = 'original value' } else { Remove-Item Env:LINEUP_MPV_ROOT -ErrorAction SilentlyContinue }
 $originalLocation = (Get-Location).Path
-try { Invoke-LineupLaunch -Launch $launch -Ninja $Ninja } finally {
+try { Invoke-LineupLaunch -Launch $launch } finally {
   $restored = if ($ExistingMpv -eq 'true') { $env:LINEUP_MPV_ROOT -eq 'original value' } else { -not (Test-Path Env:LINEUP_MPV_ROOT) }
   if (-not $restored -or (Get-Location).Path -ne $originalLocation -or -not $PSNativeCommandUseErrorActionPreference) { exit 92 }
   Add-Content -LiteralPath $Log -Value 'cleanup'
 }
 '@ | Set-Content -LiteralPath $child
-    foreach ($scenario in @(@{ Exit = 0; Ninja = 0; Existing = 'true' },
-        @{ Exit = 23; Ninja = 0; Existing = 'false' }, @{ Exit = 0; Ninja = 24; Existing = 'true' })) {
+    foreach ($scenario in @(@{ Exit = 0; Existing = 'true' },
+        @{ Exit = 23; Existing = 'false' })) {
       $log = Join-Path $directory ([Guid]::NewGuid().ToString() + '.log')
       $nativePreference = $PSNativeCommandUseErrorActionPreference
       $PSNativeCommandUseErrorActionPreference = $false
       try {
-        & $runtime -NoProfile -File $child $owner $engine $mpv $flutterFixture $ninjaFixture $log $scenario.Exit $scenario.Ninja $scenario.Existing
+        & $runtime -NoProfile -File $child $owner $engine $mpv $flutterFixture $log $scenario.Exit $scenario.Existing
         $status = $LASTEXITCODE
       } finally { $PSNativeCommandUseErrorActionPreference = $nativePreference }
       $lines = @(Get-Content -LiteralPath $log)
-      if ($lines[-1] -ne 'cleanup' -or ($scenario.Ninja -eq 0 -and $status -ne $scenario.Exit) -or
-        ($scenario.Ninja -ne 0 -and ($status -eq 0 -or $lines.Count -ne 3))) { throw 'Canonical launch exit, ordering or cleanup failed.' }
-      if ($scenario.Ninja -eq 0) {
-        if ($lines.Count -ne 4 -or $lines[1] -ne 'ninja') { throw 'Launch operation order changed.' }
-        Assert-Arguments @($lines[0] | ConvertFrom-Json) @('precache', '--windows')
-        Assert-Arguments @($lines[2] | ConvertFrom-Json) $expectedLaunch
-      }
+      if ($lines[-1] -ne 'cleanup' -or $status -ne $scenario.Exit) { throw 'Canonical launch exit or cleanup failed.' }
+      if ($lines.Count -ne 4 -or $lines[0] -ne 'verify') { throw 'Launch operation order changed.' }
+      Assert-Arguments @($lines[1] | ConvertFrom-Json) @('precache', '--windows')
+      Assert-Arguments @($lines[2] | ConvertFrom-Json) $expectedLaunch
     }
     $literalChild = Join-Path $directory 'literal child.ps1'
     @'

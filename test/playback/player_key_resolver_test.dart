@@ -488,4 +488,39 @@ void main() {
       reason: 'Every executor action has behavioral table evidence.',
     );
   });
+
+  test('a pressed Command key leaves every key unresolved for the menu', () {
+    for (final key in [
+      LogicalKeyboardKey.keyK,
+      LogicalKeyboardKey.keyF,
+      LogicalKeyboardKey.keyC,
+      LogicalKeyboardKey.space,
+      LogicalKeyboardKey.escape,
+    ]) {
+      expect(
+        resolvePlayerKey(
+          key,
+          overlay: PlayerOverlay.none,
+          dvr: true,
+          unsupported: false,
+          initialPress: true,
+          hasProgram: true,
+          commandPressed: true,
+        ),
+        PlayerAction.ignored,
+        reason: key.keyLabel,
+      );
+    }
+    expect(
+      resolvePlayerKey(
+        LogicalKeyboardKey.keyK,
+        overlay: PlayerOverlay.none,
+        dvr: true,
+        unsupported: false,
+        initialPress: true,
+        hasProgram: true,
+      ),
+      PlayerAction.togglePlayback,
+    );
+  });
 }

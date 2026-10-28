@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../playback/native_player.dart';
+import '../persistence/app_store.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
+// Only the Windows backend reports required_engine_unavailable (its
+// DirectComposition engine variant); the macOS backend never does.
 const _requiredEngineFailureMessage =
     'The required Lineup DirectComposition Flutter engine is not active.';
 
@@ -45,7 +48,10 @@ class _LineupStartupState extends State<LineupStartup> {
           ),
           builder: LineupCanvas.builder,
           home: snapshot.hasError
-              ? const _StartupFailureBody(requiredEngineFailure: false)
+              ? const _StartupFailureBody(
+                  requiredEngineFailure: false,
+                  unsupportedStateFormatFailure: false,
+                )
               : const _StartupProgress(),
         );
       },
@@ -189,6 +195,8 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
               requiredEngineFailure:
                   error is PlayerUnavailable &&
                   error.failureCode == 'required_engine_unavailable',
+              unsupportedStateFormatFailure:
+                  error is UnsupportedStateFormatException,
             );
           }
           if (snapshot.connectionState != ConnectionState.done &&
@@ -276,9 +284,13 @@ class _StartupProgress extends StatelessWidget {
 }
 
 class _StartupFailureBody extends StatelessWidget {
-  const _StartupFailureBody({required this.requiredEngineFailure});
+  const _StartupFailureBody({
+    required this.requiredEngineFailure,
+    required this.unsupportedStateFormatFailure,
+  });
 
   final bool requiredEngineFailure;
+  final bool unsupportedStateFormatFailure;
 
   @override
   Widget build(BuildContext context) {
@@ -308,6 +320,10 @@ class _StartupFailureBody extends StatelessWidget {
                   Text(
                     requiredEngineFailure
                         ? _requiredEngineFailureMessage
+                        : unsupportedStateFormatFailure
+                        ? 'This build is too old to open your saved data. '
+                              'Your saved data was left intact. Update '
+                              'Lineup Desktop and try again.'
                         : 'Restart the app. If the problem continues, report '
                               'the startup failure.',
                     textAlign: TextAlign.center,

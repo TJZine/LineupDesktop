@@ -400,31 +400,47 @@ class SetupLibraryStep extends StatelessWidget {
         ? false
         : null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+      padding: const EdgeInsets.fromLTRB(0, 0, 8, 16),
       child: Row(
         children: [
-          if (libraries.length > 1) ...[
-            _checkbox(
-              key: const ValueKey('select-all-libraries'),
-              tristate: true,
-              value: value,
-              onChanged: editable ? (_) => onToggleAll() : null,
-            ),
-            TextButton(
-              style: const ButtonStyle(
-                padding: WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 8),
+          if (libraries.length > 1)
+            // One focus target covers the checkbox and its label. The button
+            // carries the tri-state semantics.
+            MergeSemantics(
+              child: Semantics(
+                checked: value ?? false,
+                mixed: value == null,
+                child: TextButton(
+                  style: const ButtonStyle(
+                    padding: WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                  onPressed: editable ? onToggleAll : null,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _checkbox(
+                        key: const ValueKey('select-all-libraries'),
+                        skipTraversal: true,
+                        tristate: true,
+                        value: value,
+                        onChanged: editable ? (_) => onToggleAll() : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Select all',
+                        style: summaryStyle.copyWith(
+                          color: editable
+                              ? roles.secondaryText
+                              : roles.mutedText,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              onPressed: editable ? onToggleAll : null,
-              child: Text(
-                'Select all',
-                style: summaryStyle.copyWith(
-                  color: editable ? roles.secondaryText : roles.mutedText,
-                ),
-              ),
             ),
-          ],
           const Spacer(),
           Text(
             '$selected of ${libraries.length} selected',
@@ -441,6 +457,7 @@ class SetupLibraryStep extends StatelessWidget {
     required ValueChanged<bool?>? onChanged,
     bool tristate = false,
     double width = 48,
+    bool skipTraversal = false,
     String? semanticLabel,
   }) {
     final checkbox = Checkbox(
@@ -452,7 +469,9 @@ class SetupLibraryStep extends StatelessWidget {
     return SizedBox(
       width: width,
       height: 48,
-      child: semanticLabel == null
+      child: skipTraversal
+          ? ExcludeFocus(child: ExcludeSemantics(child: checkbox))
+          : semanticLabel == null
           ? checkbox
           : Semantics(label: semanticLabel, child: checkbox),
     );
@@ -540,7 +559,7 @@ class SetupLibraryStep extends StatelessWidget {
         );
         final content = narrow
             ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   _checkbox(
                     value: selected,
@@ -563,7 +582,7 @@ class SetupLibraryStep extends StatelessWidget {
                 ],
               )
             : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   _checkbox(
                     value: selected,

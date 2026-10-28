@@ -1,0 +1,17 @@
+Lineup Desktop: do not build the GPL-licensed aarch64 CRC assembly.
+
+libavutil/aarch64/crc.S carries a GPL-2.0+ header (in FFmpeg 9.0.2 and in
+FFmpeg master). The build also passes --disable-arm-crc --disable-pmull
+--disable-eor3, so libavutil/aarch64/crc.h (LGPL) never references it and
+libavutil uses its portable C CRC code.
+
+--- a/libavutil/aarch64/Makefile
++++ b/libavutil/aarch64/Makefile
+@@ -2,7 +2,6 @@
+         aarch64/float_dsp_init.o                                      \
+         aarch64/tx_float_init.o                                       \
+ 
+-ARMV8-OBJS += aarch64/crc.o
+ 
+ NEON-OBJS += aarch64/float_dsp_neon.o                                 \
+              aarch64/tx_float_neon.o                                  \

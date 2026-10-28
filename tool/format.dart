@@ -78,6 +78,10 @@ Future<int> _format({required bool check}) async {
         ..sort();
   final files = <String>[];
   for (final path in paths) {
+    if (path.startsWith('third_party/objective_c/') &&
+        path != 'third_party/objective_c/hook/build.dart') {
+      continue;
+    }
     final nativePath = path.split('/').join(Platform.pathSeparator);
     final file = File('$root${Platform.pathSeparator}$nativePath');
     if (await file.exists()) {

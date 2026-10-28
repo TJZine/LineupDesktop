@@ -148,6 +148,40 @@ void main() {
     },
   );
 
+  test('macOS support report states OS-managed HDR output', () {
+    final d = Diagnostics();
+    final snapshot = d.snapshot(
+      reportTime: DateTime.utc(2026),
+      timeZone: 'UTC',
+      appVersion: '1.0',
+      appBuild: '1',
+      platform: 'macOS',
+      plexServerSelected: false,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(
+        state: PlayerState.paused,
+        receivedTelemetry: PlayerTelemetry(
+          targetGamma: 'gamma2.2',
+          targetPrimaries: 'bt.709',
+          targetPixelFormat: 'rgb10a2',
+        ),
+      ),
+    );
+    final report = d.buildSupportReport(snapshot);
+    expect(report, contains('Platform: macOS'));
+    expect(report, contains('HDR output: Managed by macOS'));
+    expect(report, contains('Renderer output: gamma2.2 · bt.709 · rgb10a2'));
+    expect(
+      report,
+      contains(
+        'macOS manages HDR output; Lineup does not change display modes.',
+      ),
+    );
+    expect(report, isNot(contains('Windows display')));
+    expect(report, isNot(contains('HDR matching')));
+    expect(report, isNot(contains('reported by Windows')));
+  });
+
   test('display and renderer support facts are normalized independently', () {
     final d = Diagnostics();
     final snapshot = d.snapshot(

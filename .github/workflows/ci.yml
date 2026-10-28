@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, flutter-mvp]
+    branches: [main, 'platform/**']
   pull_request:
   workflow_dispatch:
 
@@ -28,6 +28,8 @@ jobs:
           channel: stable
           cache: true
       - run: dart tool/check_toolchain.dart
+      - name: Run portable engine tooling fixtures (platform skips visible)
+        run: python3 tool/flutter_engine/desktop_accessibility_test.py
       - run: flutter pub get
       - run: dart tool/format.dart --check
       - run: flutter analyze
@@ -36,9 +38,9 @@ jobs:
           TZ: America/New_York
 
   build-macos:
-    name: Verify macOS alpha surface and build macOS
+    name: Verify macOS portable/native build
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -48,12 +50,196 @@ jobs:
           flutter-version: 3.47.7
           channel: stable
           cache: true
-      - run: dart tool/check_toolchain.dart
-      - name: Run required Guide alpha checks
+      - name: Verify pinned Flutter toolchain
+        shell: bash
+        run: dart tool/check_toolchain.dart
+      - name: Run full portable macOS suite including required Guide alpha
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          dart tool/format.dart --check
+          flutter analyze
+          TZ=America/New_York flutter test
+      - name: Prepare macOS runtime build prerequisites
+        shell: bash
         env:
-          TZ: America/New_York
-        run: flutter test test/app/guide_opacity_test.dart
-      - run: flutter build macos
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          set -euo pipefail
+
+          host_arch="$(uname -m)"
+          if [[ "$host_arch" != arm64 ]]; then
+            echo "This job requires an arm64 macOS runner; found $host_arch." >&2
+            exit 1
+          fi
+
+          command -v brew >/dev/null || {
+            echo "Required build tool is unavailable: brew" >&2
+            exit 1
+          }
+
+          missing_formulas=()
+          command -v meson >/dev/null || missing_formulas+=(meson)
+          command -v ninja >/dev/null || missing_formulas+=(ninja)
+          command -v pkg-config >/dev/null || missing_formulas+=(pkgconf)
+          command -v cmake >/dev/null || missing_formulas+=(cmake)
+          command -v ffmpeg >/dev/null || missing_formulas+=(ffmpeg)
+          if ((${#missing_formulas[@]})); then
+            echo "Installing missing Homebrew formulas: ${missing_formulas[*]}"
+            brew install "${missing_formulas[@]}"
+          fi
+
+          for tool in meson ninja pkg-config cmake ffmpeg python3 git curl shasum xcrun xcodebuild; do
+            command -v "$tool" >/dev/null || {
+              echo "Required build tool is unavailable: $tool" >&2
+              exit 1
+            }
+          done
+          echo "Host architecture: $host_arch"
+          echo "Selected Xcode: $(xcode-select -p)"
+          xcodebuild -version
+          echo "macOS SDK: $(xcrun --sdk macosx --show-sdk-version)"
+      - name: Build and verify pinned arm64 macOS libmpv runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool/macos/build-mpv.sh --arch arm64
+          runtime="$GITHUB_WORKSPACE/build/macos-runtime/dist/arm64"
+          test -f "$runtime/include/mpv/client.h"
+          test -f "$runtime/lib/libmpv.2.dylib"
+          echo "LINEUP_MPV_RUNTIME=$runtime" >> "$GITHUB_ENV"
+          echo "Prepared LINEUP_MPV_RUNTIME=$runtime"
+      - name: Run required macOS authenticated-reference proof (no skip)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for tool in python3 ffmpeg ffprobe openssl cmake git; do
+            command -v "$tool" >/dev/null || {
+              echo "Required authenticated-reference tool is unavailable: $tool" >&2
+              exit 1
+            }
+          done
+          for tool in /usr/bin/clang++ /usr/bin/lipo /usr/bin/otool; do
+            [[ -x "$tool" ]] || {
+              echo "Required macOS tool is unavailable: $tool" >&2
+              exit 1
+            }
+          done
+          : "${FLUTTER_ROOT:?FLUTTER_ROOT is not set by flutter-action}"
+          [[ -d "$FLUTTER_ROOT" ]] || {
+            echo "Pinned Flutter root is not a directory: $FLUTTER_ROOT" >&2
+            exit 1
+          }
+          : "${LINEUP_MPV_RUNTIME:?LINEUP_MPV_RUNTIME was not exported by runtime provisioning}"
+          [[ -d "$LINEUP_MPV_RUNTIME" ]] || {
+            echo "Prepared macOS runtime is not a directory: $LINEUP_MPV_RUNTIME" >&2
+            exit 1
+          }
+          : "${RUNNER_TEMP:?RUNNER_TEMP is not set}"
+          reference_output="$(mktemp -d "$RUNNER_TEMP/lineup-authenticated-reference.XXXXXX")"
+          [[ -z "$(ls -A "$reference_output")" ]] || {
+            echo "Authenticated-reference output directory is not empty: $reference_output" >&2
+            exit 1
+          }
+          python3 tool/macos/authenticated-reference/run.py \
+            --flutter-root "$FLUTTER_ROOT" \
+            --runtime "$LINEUP_MPV_RUNTIME" \
+            --output-dir "$reference_output" \
+            --ffmpeg "$(command -v ffmpeg)" \
+            --openssl "$(command -v openssl)"
+      - name: Run macOS runtime embed integration check
+        shell: bash
+        run: tool/macos/mpv-runtime-embed-test.sh
+      - name: Build macOS application with the prepared runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The app ships arm64 only; the stock engine otherwise builds
+          # universal frameworks that fail native-asset verification.
+          flutter config --enable-macos-arm64-only
+          dart tool/macos/build_app.dart build --release
+      - name: Run NativePlayerTests in Debug without code signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project macos/Runner.xcodeproj \
+            -scheme NativePlayerTests \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath "$RUNNER_TEMP/lineup-native-tests" \
+            CODE_SIGNING_ALLOWED=NO
+
+  macos-player-core:
+    name: Verify macOS shared player core contracts
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Acquire headers from the pinned mpv source
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in git cmake ctest; do
+            command -v "$tool" >/dev/null || {
+              echo "Required tool is unavailable: $tool" >&2
+              exit 1
+            }
+          done
+
+          # shellcheck source=../../tool/macos/mpv-runtime.lock
+          source tool/macos/mpv-runtime.lock
+          : "${MPV_GIT:?MPV_GIT is missing from the runtime lock}"
+          : "${MPV_COMMIT:?MPV_COMMIT is missing from the runtime lock}"
+
+          mpv_source="$RUNNER_TEMP/lineup-mpv-source"
+          git init --quiet "$mpv_source"
+          git -C "$mpv_source" remote add origin "$MPV_GIT"
+          git -C "$mpv_source" fetch --no-tags --depth 1 origin "$MPV_COMMIT"
+          git -C "$mpv_source" checkout --quiet --detach "$MPV_COMMIT"
+
+          actual_commit="$(git -C "$mpv_source" rev-parse HEAD)"
+          if [[ "$actual_commit" != "$MPV_COMMIT" ]]; then
+            echo "Fetched mpv commit $actual_commit, expected $MPV_COMMIT." >&2
+            exit 1
+          fi
+          mpv_header="$mpv_source/include/mpv/client.h"
+          if [[ ! -f "$mpv_header" ]]; then
+            echo "Pinned mpv source has no expected header: $mpv_header" >&2
+            exit 1
+          fi
+          echo "Using mpv source $MPV_GIT at $actual_commit"
+          echo "LINEUP_MPV_INCLUDE_DIR=$mpv_source/include" >> "$GITHUB_ENV"
+      - name: Configure shared player core in Debug mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$RUNNER_TEMP/lineup-player-core-build"
+          cmake -S native/player_core -B "$build_dir" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DLINEUP_MPV_INCLUDE_DIR="$LINEUP_MPV_INCLUDE_DIR"
+      - name: Build shared player core contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/lineup-player-core-build" \
+            --config Debug \
+            --target track_list_encoder_test native_playback_state_test player_core_contract_test \
+            --parallel 2
+      - name: Run shared player core contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$RUNNER_TEMP/lineup-player-core-build"
+          for native_test in track_list_encoder native_playback_state player_core_contract; do
+            ctest --test-dir "$build_dir" -C Debug \
+              -R "^${native_test}$" \
+              --output-on-failure --no-tests=error --parallel 1 --timeout 60
+          done
 
   windows-release-policy:
     name: Verify Windows release policy
@@ -81,6 +267,8 @@ jobs:
           channel: stable
           cache: true
       - run: dart tool/check_toolchain.dart
+      - name: Run Windows engine tooling fixtures (native Mac skips visible)
+        run: python tool/flutter_engine/desktop_accessibility_test.py
       - name: Verify portable UI on Windows
         run: >-
           flutter test
@@ -96,11 +284,50 @@ jobs:
           & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
           $env:LINEUP_MPV_ROOT = $mpvRoot
           flutter build windows
-          cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test native_playback_state_test display_dynamic_range_test display_guardian_test
-          foreach ($nativeTest in @('track_list_encoder', 'native_playback_state', 'display_dynamic_range')) {
+          cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test native_playback_state_test player_core_contract_test encodable_value_conversion_test display_dynamic_range_test display_guardian_test native_player_contract_test
+          foreach ($nativeTest in @('track_list_encoder', 'native_playback_state', 'player_core_contract', 'encodable_value_conversion', 'display_dynamic_range')) {
             ctest --test-dir .\build\windows\x64 -C Release -R "^${nativeTest}$" --output-on-failure --no-tests=error --parallel 1 --timeout 30
           }
           ctest --test-dir .\build\windows\x64 -C Release -R '^display_guardian$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
+          $vulkanRoot = Join-Path $env:RUNNER_TEMP 'lineup-ci-vulkan'
+          & .\tool\windows\prepare-ci-vulkan.ps1 -Destination $vulkanRoot
+          # Fixture generators only: never copied into the application/package.
+          # Versioned archive and publisher checksum: https://www.gyan.dev/ffmpeg/builds/
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP 'lineup-reference-tools'
+          $fixtureArchive = Join-Path $env:RUNNER_TEMP 'lineup-reference-tools.zip'
+          Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip' -OutFile $fixtureArchive -ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 180
+          if ((Get-FileHash -Algorithm SHA256 -LiteralPath $fixtureArchive).Hash -ne '60F467265B1E312373DBCD92200C2618A74850F98D3D078E94296BB3FA2047BA') {
+            throw 'SHA-256 mismatch for the pinned authenticated-reference fixture tools.'
+          }
+          Expand-Archive -LiteralPath $fixtureArchive -DestinationPath $fixtureRoot
+          $fixtureBin = Join-Path $fixtureRoot 'ffmpeg-9.0.2-essentials_build/bin'
+          foreach ($fixtureTool in @('ffmpeg.exe', 'ffprobe.exe')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $fixtureBin $fixtureTool) -PathType Leaf)) {
+              throw "Missing authenticated-reference fixture tool: $fixtureTool"
+            }
+          }
+          cmake --build .\build\windows\x64 --config Release --target authenticated_reference_test
+          $originalPath = $env:PATH
+          $env:PATH = "$fixtureBin;$vulkanRoot;$originalPath"
+          try {
+            ctest --test-dir .\build\windows\x64 -C Release -R '^native_player_contract$' --output-on-failure --no-tests=error --parallel 1 --timeout 60
+          } catch {
+            $testFailure = $_
+            try {
+              & .\tool\windows\diagnose-native-startup.ps1 -Executable (Join-Path $env:GITHUB_WORKSPACE 'build/windows/x64/runner/Release/native_player_contract_test.exe')
+            } catch {
+              Write-Warning "Native startup diagnostics failed: $($_.Exception.Message)"
+            }
+            throw $testFailure
+          } finally {
+            $env:PATH = $originalPath
+          }
+          $env:PATH = "$fixtureBin;$vulkanRoot;$originalPath"
+          try {
+            ctest --test-dir .\build\windows\x64 -C Release -R '^authenticated_reference$' --output-on-failure --no-tests=error --parallel 1 --timeout 180
+          } finally {
+            $env:PATH = $originalPath
+          }
 
   release-inputs:
     name: Detect Windows release inputs
@@ -159,7 +386,7 @@ jobs:
           fi
 
           changed_files="$(git diff --name-only "$base" "$head")"
-          if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_engine/apply\.ps1)$' <<<"$changed_files" ||
+          if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_version\.json|tool/flutter_engine/(apply\.ps1|desktop_accessibility(_test)?\.py|desktop-accessibility\.json|0002-desktop-accessibility\.patch|0004-windows-test-fixtures\.patch)|tool/windows/(build-inputs|run|build-release|verify-build-inputs|verify-release-authorities)\.ps1|\.github/workflows/ci\.yml)$' <<<"$changed_files" ||
              grep -Fxq "$ENGINE_PATCH_PATH" <<<"$changed_files"; then
             engine_required=true
           else
@@ -173,6 +400,131 @@ jobs:
           fi
           echo "engine-required=$engine_required" >> "$GITHUB_OUTPUT"
           echo "package-required=$package_required" >> "$GITHUB_OUTPUT"
+
+  windows-engine-tests:
+    name: Combined Windows engine tests (${{ matrix.mode }})
+    needs: [release-inputs, windows-release-policy]
+    if: needs.release-inputs.outputs.engine-required == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [debug, release]
+    env:
+      ENGINE_MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate exact Flutter and engine sources and build the patched engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          function Invoke-DependencyDownload {
+            param(
+              [string] $Name,
+              [scriptblock] $Download,
+              [scriptblock] $BeforeRetry = {}
+            )
+
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              try {
+                & $Download
+                return
+              } catch [System.Management.Automation.NativeCommandExitException] {
+                if ($attempt -eq 3) { throw }
+                $delay = 5 * $attempt
+                Write-Warning "$Name failed (attempt $attempt/3); retrying in $delay seconds."
+                & $BeforeRetry
+                Start-Sleep -Seconds $delay
+              }
+            }
+          }
+
+          $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'tool/windows/build-metadata.psd1')
+          $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
+          $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
+          # Clone retries discard only their partial checkout in this job's temp directory.
+          Invoke-DependencyDownload -Name 'Flutter source clone' -Download {
+            git clone --filter=blob:none https://github.com/flutter/flutter.git $flutterSource
+          } -BeforeRetry {
+            if (Test-Path -LiteralPath $flutterSource) {
+              Remove-Item -LiteralPath $flutterSource -Recurse -Force
+            }
+          }
+          # A filtered clone may download missing blobs during checkout.
+          Invoke-DependencyDownload -Name 'Pinned Flutter checkout' -Download {
+            git -C $flutterSource checkout $metadata.FlutterFrameworkRevision
+          }
+          if ((git -C $flutterSource rev-parse HEAD).Trim() -ne $metadata.FlutterFrameworkRevision) {
+            throw 'Flutter did not resolve to the pinned framework revision.'
+          }
+          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne $metadata.FlutterStandardGclientBlob) {
+            throw 'Pinned Flutter standard.gclient blob does not match.'
+          }
+          Copy-Item -LiteralPath (Join-Path $flutterSource 'engine\scripts\standard.gclient') -Destination (Join-Path $flutterSource '.gclient')
+          Invoke-DependencyDownload -Name 'depot_tools clone' -Download {
+            git clone --depth 1 --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          } -BeforeRetry {
+            if (Test-Path -LiteralPath $depotTools) {
+              Remove-Item -LiteralPath $depotTools -Recurse -Force
+            }
+          }
+          Invoke-DependencyDownload -Name 'Pinned depot_tools fetch' -Download {
+            git -C $depotTools fetch --depth 1 origin $metadata.DepotToolsRevision
+          }
+          git -C $depotTools checkout --detach $metadata.DepotToolsRevision
+          if ((git -C $depotTools rev-parse HEAD).Trim() -ne $metadata.DepotToolsRevision) {
+            throw 'depot_tools did not resolve to the pinned revision.'
+          }
+          $env:PATH = "$depotTools;$env:PATH"
+          Invoke-DependencyDownload -Name 'depot_tools bootstrap' -Download {
+            & (Join-Path $depotTools 'bootstrap\win_tools.bat')
+          }
+          $env:DEPOT_TOOLS_UPDATE = '0'
+          $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $env:WINDOWSSDKDIR = "${env:ProgramFiles(x86)}\Windows Kits\10"
+          # Keep the pinned toolchain for subsequent verification and application build.
+          $depotTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          @(
+            "DEPOT_TOOLS_UPDATE=$env:DEPOT_TOOLS_UPDATE"
+            "DEPOT_TOOLS_WIN_TOOLCHAIN=$env:DEPOT_TOOLS_WIN_TOOLCHAIN"
+            "GYP_MSVS_OVERRIDE_PATH=$env:GYP_MSVS_OVERRIDE_PATH"
+            "WINDOWSSDKDIR=$env:WINDOWSSDKDIR"
+          ) | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Set-Location $flutterSource
+          # gclient resumes the existing partial dependency sync; do not retry the build.
+          Invoke-DependencyDownload -Name 'Flutter engine dependency sync' -Download {
+            gclient sync --no-history
+          }
+          & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
+          $ninja = (Get-Command ninja.exe -CommandType Application).Source
+          python "$env:GITHUB_WORKSPACE/tool/flutter_engine/desktop_accessibility.py" build `
+            --flutter-root $flutterSource --platform windows --architecture x64 --mode $env:ENGINE_MODE `
+            --ninja $ninja --gclient (Join-Path $depotTools 'gclient.bat') --jobs 2
+      - name: Run representative controls, full suites and failure attribution
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
+          $ninja = (Get-Command ninja.exe -CommandType Application).Source
+          $results = Join-Path $env:RUNNER_TEMP "lineup-engine-results-$env:ENGINE_MODE"
+          python ./tool/flutter_engine/desktop_accessibility.py windows-tests `
+            --flutter-root $flutterSource --platform windows --architecture x64 --mode $env:ENGINE_MODE `
+            --ninja $ninja --jobs 2 --results $results
+          Get-Content -Raw -LiteralPath (Join-Path $results 'summary.json') >> $env:GITHUB_STEP_SUMMARY
+      - name: Retain full-suite and same-mode baseline test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-engine-tests-${{ matrix.mode }}
+          path: ${{ runner.temp }}/lineup-engine-results-${{ matrix.mode }}
+          if-no-files-found: warn
 
   build-windows-engine:
     name: Build patched Flutter engine and package
@@ -263,24 +615,24 @@ jobs:
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           $env:WINDOWSSDKDIR = "${env:ProgramFiles(x86)}\Windows Kits\10"
+          # Keep the pinned toolchain for subsequent verification and application build.
+          $depotTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          @(
+            "DEPOT_TOOLS_UPDATE=$env:DEPOT_TOOLS_UPDATE"
+            "DEPOT_TOOLS_WIN_TOOLCHAIN=$env:DEPOT_TOOLS_WIN_TOOLCHAIN"
+            "GYP_MSVS_OVERRIDE_PATH=$env:GYP_MSVS_OVERRIDE_PATH"
+            "WINDOWSSDKDIR=$env:WINDOWSSDKDIR"
+          ) | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Set-Location $flutterSource
           # gclient resumes the existing partial dependency sync; do not retry the build.
           Invoke-DependencyDownload -Name 'Flutter engine dependency sync' -Download {
             gclient sync --no-history
           }
           & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
-          Set-Location (Join-Path $flutterSource 'engine\src')
-          python .\flutter\tools\gn `
-            --runtime-mode=release `
-            --no-enable-unittests `
-            --no-build-embedder-examples
-          . (Join-Path $env:GITHUB_WORKSPACE 'tool/windows/ninja-diagnostics.ps1')
-          Write-LineupNinjaDiagnostics -BuildDirectory 'out/host_release' -Stage 'workflow-before' -InspectCommand
-          try {
-            ninja -C out\host_release -d explain
-          } finally {
-            Write-LineupNinjaDiagnostics -BuildDirectory 'out/host_release' -Stage 'workflow-after'
-          }
+          $ninja = (Get-Command ninja.exe -CommandType Application).Source
+          python "$env:GITHUB_WORKSPACE/tool/flutter_engine/desktop_accessibility.py" build `
+            --flutter-root $flutterSource --platform windows --architecture x64 --mode release `
+            --ninja $ninja --gclient (Join-Path $depotTools 'gclient.bat') --jobs 2
       - name: Compile Lineup against the patched engine
         shell: pwsh
         run: |
@@ -375,10 +727,34 @@ jobs:
             try {
               $marker = Get-Content -Raw -LiteralPath $buildMarker | ConvertFrom-Json
               $marker.($probe.Property) = $probe.Value
-              $marker | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $buildMarker -Encoding ascii
+              $marker | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $buildMarker -Encoding ascii
               try {
                 & .\tool\windows\package.ps1 -Destination "build/package/$($probe.Name)"
                 throw "Packaging unexpectedly accepted $($probe.Name)."
+              } catch {
+                if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-provenance-mismatch') { throw }
+              }
+            } finally {
+              [IO.File]::WriteAllBytes($buildMarker, $markerBytes)
+            }
+          }
+          foreach ($probe in @('schema1', 'reordered-patches', 'missing-ax', 'missing-fixture', 'fixture-hash', 'manifest', 'provenance', 'dll')) {
+            try {
+              $marker = Get-Content -Raw -LiteralPath $buildMarker | ConvertFrom-Json
+              switch ($probe) {
+                'schema1' { $marker.schemaVersion = 1 }
+                'reordered-patches' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[1], $marker.combinedEngine.recipe.patches[0], $marker.combinedEngine.recipe.patches[2]) }
+                'missing-ax' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[0]) }
+                'missing-fixture' { $marker.combinedEngine.recipe.patches = @($marker.combinedEngine.recipe.patches[0], $marker.combinedEngine.recipe.patches[1]) }
+                'fixture-hash' { $marker.combinedEngine.recipe.patches[2].sha256 = '0' * 64 }
+                'manifest' { $marker.combinedEngine.recipe.manifestSha256 = '0' * 64 }
+                'provenance' { $marker.combinedEngine.provenanceSha256 = '0' * 64 }
+                'dll' { $marker.combinedEngine.binarySha256 = '0' * 64 }
+              }
+              $marker | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $buildMarker -Encoding ascii
+              try {
+                & .\tool\windows\package.ps1 -Destination "build/package/combined-$probe"
+                throw "Packaging accepted combined receipt probe $probe."
               } catch {
                 if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-provenance-mismatch') { throw }
               }

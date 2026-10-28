@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart'
@@ -40,6 +42,74 @@ final _narrowLogoPng = base64Decode(
 );
 
 void main() {
+  testWidgets('Guide toolbar icons expose explicit accessible names', (
+    tester,
+  ) async {
+    final lineup = _Lineup(1);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: LineupCanvas.builder,
+        home: GuideView(
+          controller: guide,
+          onClose: (_, _) {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final label in [
+      'Close Guide',
+      'Earlier by 30 minutes',
+      'Later by 30 minutes',
+    ]) {
+      final node = tester.getSemantics(find.byTooltip(label));
+      expect(node.label, label);
+      expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
+    }
+    final later = tester.getSemantics(find.byTooltip('Later by 30 minutes'));
+    expect(later.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    final search = find.byKey(const Key('guide-channel-search'));
+    await tester.enterText(search, 'Channel');
+    await tester.pumpAndSettle();
+    final clear = find.byTooltip('Clear search');
+    void expectExposedClearButton() {
+      final buttons = tester.semantics.simulatedAccessibilityTraversal().where(
+        (node) =>
+            node.label == 'Clear search' &&
+            node.getSemanticsData().flagsCollection.isButton &&
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+      );
+      expect(buttons, hasLength(1));
+      for (
+        var ancestor = buttons.single.parent;
+        ancestor != null;
+        ancestor = ancestor.parent
+      ) {
+        expect(
+          ancestor.getSemanticsData().flagsCollection.isTextField,
+          isFalse,
+          reason: 'macOS exposes native text fields as leaves',
+        );
+      }
+    }
+
+    expectExposedClearButton();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(clear));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear search'), findsOneWidget);
+    expectExposedClearButton();
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, semanticsEnabled: true);
   test('full-bleed layout and row snapping use the whole viewport', () {
     for (final size in const [
       Size(1280, 720),
@@ -100,7 +170,7 @@ void main() {
             home: GuideView(
               controller: guide,
               pictureInPicture: const SizedBox.expand(),
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -201,7 +271,7 @@ void main() {
             ),
             home: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -299,7 +369,7 @@ void main() {
               home: GuideView(
                 controller: guide,
                 pictureInPicture: NativeVideoSurface(player: player),
-                onClose: () {},
+                onClose: (_, _) {},
                 onTune: (_) async {},
               ),
             ),
@@ -423,7 +493,7 @@ void main() {
               home: GuideView(
                 controller: guide,
                 pictureInPicture: const ColoredBox(color: Colors.black),
-                onClose: () {},
+                onClose: (_, _) {},
                 onTune: (_) async {},
               ),
             ),
@@ -561,7 +631,7 @@ void main() {
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -661,7 +731,7 @@ void main() {
             home: GuideView(
               controller: guide,
               pictureInPicture: const ColoredBox(color: Colors.black),
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -748,7 +818,7 @@ void main() {
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -826,7 +896,7 @@ void main() {
             home: GuideView(
               controller: guide,
               pictureInPicture: const ColoredBox(color: Colors.black),
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -950,7 +1020,7 @@ void main() {
             builder: LineupCanvas.builder,
             home: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -1011,7 +1081,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
             onSetUpChannels: () => setups++,
           ),
@@ -1065,7 +1135,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
           watchingChannelId: 'channel-0',
         ),
@@ -1132,7 +1202,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
             showIdleArtwork: true,
             pictureInPicture: const Text('Choose a channel to watch'),
@@ -1275,7 +1345,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -1311,7 +1381,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -1355,7 +1425,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -1400,7 +1470,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -1490,7 +1560,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -1577,7 +1647,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -1639,7 +1709,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -1728,7 +1798,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -1796,7 +1866,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           watchingChannelId: lineup.currentChannelId,
           onTune: (_) async => tunes++,
         ),
@@ -1928,7 +1998,7 @@ void main() {
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
             onOpenPlayer: () {},
-            onClose: () => closes++,
+            onClose: (_, _) => closes++,
             onTune: (_) async => tunes++,
           ),
         ),
@@ -2014,7 +2084,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () => closes++,
+          onClose: (_, _) => closes++,
           onTune: (_) async {},
         ),
       ),
@@ -2096,7 +2166,7 @@ void main() {
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2214,7 +2284,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (id) async => tuned.add(id),
           ),
         ),
@@ -2307,7 +2377,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2384,7 +2454,7 @@ void main() {
           home: GuideView(
             controller: guide,
             pictureInPicture: const SizedBox.expand(),
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -2444,7 +2514,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2508,7 +2578,7 @@ void main() {
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2580,7 +2650,7 @@ void main() {
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -2633,7 +2703,7 @@ void main() {
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2682,7 +2752,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -2722,7 +2792,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (id) async => tunes.add(id),
         ),
       ),
@@ -2783,7 +2853,7 @@ void main() {
             home: Scaffold(
               body: GuideView(
                 controller: guide,
-                onClose: () {},
+                onClose: (_, _) {},
                 onTune: (_) async {},
               ),
             ),
@@ -2847,7 +2917,7 @@ void main() {
             builder: LineupCanvas.builder,
             home: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -2937,7 +3007,7 @@ void main() {
                 builder: (_, visible, _) => visible
                     ? GuideView(
                         controller: guide,
-                        onClose: () {},
+                        onClose: (_, _) {},
                         onTune: (_) async {},
                       )
                     : const Center(child: Text('Other route')),
@@ -2993,7 +3063,7 @@ void main() {
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       );
@@ -3090,7 +3160,7 @@ void main() {
             builder: LineupCanvas.builder,
             home: GuideView(
               controller: guide,
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -3254,7 +3324,7 @@ void main() {
             child: GuideView(
               controller: guide,
               focusNode: grid,
-              onClose: () => closes++,
+              onClose: (_, _) => closes++,
               onTune: (_) async => tunes++,
               onOpenMenu: (_, _) => menus++,
             ),
@@ -3441,7 +3511,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -3507,6 +3577,94 @@ void main() {
     },
   );
 
+  testWidgets('Guide find chord uses Command on macOS and Ctrl elsewhere', (
+    tester,
+  ) async {
+    final lineup = _Lineup(3);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final search = find.byKey(const Key('guide-channel-search'));
+    var findReachedParent = false;
+    Future<bool> searchFocusedAfterChord(
+      LogicalKeyboardKey modifier, {
+      bool withControl = false,
+    }) async {
+      findReachedParent = false;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: Focus(
+            canRequestFocus: false,
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.keyF) {
+                findReachedParent = true;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: GuideView(
+              controller: guide,
+              onClose: (_, _) {},
+              onTune: (_) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final program = guide.currentProgram(lineup.channels.first.id)!;
+      await tester.tap(find.byKey(ValueKey(program.id)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+      if (withControl) {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      }
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(modifier);
+      if (withControl) {
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      }
+      await tester.pump();
+      return tester.widget<TextField>(search).focusNode!.hasFocus;
+    }
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      expect(
+        await searchFocusedAfterChord(LogicalKeyboardKey.controlLeft),
+        isFalse,
+      );
+      expect(
+        await searchFocusedAfterChord(LogicalKeyboardKey.metaLeft),
+        isTrue,
+      );
+      expect(
+        await searchFocusedAfterChord(
+          LogicalKeyboardKey.metaLeft,
+          withControl: true,
+        ),
+        isFalse,
+        reason: 'Control-Command-F belongs to native fullscreen',
+      );
+      expect(findReachedParent, isTrue);
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      expect(
+        await searchFocusedAfterChord(LogicalKeyboardKey.metaLeft),
+        isFalse,
+      );
+      expect(
+        await searchFocusedAfterChord(LogicalKeyboardKey.controlLeft),
+        isTrue,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,
   ) async {
@@ -3536,7 +3694,7 @@ void main() {
           },
           child: GuideView(
             controller: guide,
-            onClose: () => closes++,
+            onClose: (_, _) => closes++,
             onTune: (_) async => tunes++,
           ),
         ),
@@ -3570,6 +3728,7 @@ void main() {
     await tester.tap(find.byTooltip('Clear search'));
     await tester.pump();
     expect(find.byTooltip('Clear search'), findsNothing);
+    expect(tester.widget<TextField>(search).focusNode!.hasPrimaryFocus, isTrue);
 
     guide.setSearchQuery('CHANNEL 1');
     await tester.pump();
@@ -3630,7 +3789,7 @@ void main() {
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -3688,7 +3847,7 @@ void main() {
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
-            onClose: () {},
+            onClose: (_, _) {},
             onTune: (_) async {},
           ),
         ),
@@ -3748,7 +3907,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -3812,7 +3971,7 @@ void main() {
             home: GuideView(
               controller: guide,
               pictureInPicture: const ColoredBox(color: Colors.black),
-              onClose: () {},
+              onClose: (_, _) {},
               onTune: (_) async {},
             ),
           ),
@@ -3846,7 +4005,7 @@ void main() {
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -3867,7 +4026,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -3901,7 +4060,7 @@ void main() {
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),
@@ -3933,7 +4092,11 @@ void main() {
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
       builder: LineupCanvas.builder,
-      home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
+      home: GuideView(
+        controller: guide,
+        onClose: (_, _) {},
+        onTune: (_) async {},
+      ),
     );
 
     tester.view
@@ -3993,7 +4156,11 @@ void main() {
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
       builder: LineupCanvas.builder,
-      home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
+      home: GuideView(
+        controller: guide,
+        onClose: (_, _) {},
+        onTune: (_) async {},
+      ),
     );
     void expectFocusedRowVisible() {
       final list = tester.widget<ListView>(
@@ -4073,7 +4240,7 @@ void main() {
         builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),

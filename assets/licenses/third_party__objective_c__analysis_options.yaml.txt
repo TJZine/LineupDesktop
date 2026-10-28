@@ -1,0 +1,15 @@
+include: ../../analysis_options.yaml
+
+analyzer:
+  exclude:
+    - pubspec.yaml
+    - lib/**
+    - test/**
+    - example/**
+    - benchmark/**
+    - tool/**
+
+linter:
+  rules:
+    avoid_print: false
+    only_throw_errors: false

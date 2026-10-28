@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -49,6 +50,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   var _sleepAnchor = LayerLink();
   Timer? _visibleClockTimer;
   var _appActive = true;
+  var _focusRecoveryScheduled = false;
   var _keyboardInput = false;
   final _internalRootFocus = FocusNode(debugLabel: 'Player root');
   FocusNode get _rootFocus => widget.focusNode ?? _internalRootFocus;
@@ -61,12 +63,14 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
+    FocusManager.instance.addListener(_scheduleFocusRecovery);
     _syncVisibleClockTimer();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
+    FocusManager.instance.removeListener(_scheduleFocusRecovery);
     WidgetsBinding.instance.removeObserver(this);
     _visibleClockTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
@@ -82,13 +86,66 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (_appActive == active) return;
     setState(() => _appActive = active);
     _syncVisibleClockTimer();
-    if (active) unawaited(widget.controller.checkSleepDeadline());
+    if (active) {
+      unawaited(widget.controller.checkSleepDeadline());
+      _scheduleFocusRecovery();
+    }
+  }
+
+  bool get _canOwnFocus =>
+      mounted &&
+      _appActive &&
+      widget.controller.overlay != PlayerOverlay.fullGuide &&
+      _rootFocus.parent != null &&
+      _rootFocus.canRequestFocus &&
+      ModalRoute.of(context)?.isCurrent == true;
+
+  bool get _focusStrandedAbovePlayer {
+    final primary = FocusManager.instance.primaryFocus;
+    return primary == null ||
+        (primary is FocusScopeNode && _rootFocus.ancestors.contains(primary));
+  }
+
+  void _scheduleFocusRecovery() {
+    if (!mounted ||
+        !_appActive ||
+        _focusRecoveryScheduled ||
+        !_focusStrandedAbovePlayer) {
+      return;
+    }
+    _focusRecoveryScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusRecoveryScheduled = false;
+      // Modal/menu focus and pending autofocus must settle first. Reclaim only
+      // empty focus or an ancestor scope, never a control or another route.
+      if (_canOwnFocus && _focusStrandedAbovePlayer) {
+        _rootFocus.requestFocus();
+      }
+    });
+    // Focus loss and resume need not otherwise schedule a frame.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _changed() {
     if (!mounted) return;
     _syncVisibleClockTimer();
     final nextOverlay = widget.controller.overlay;
+    final retiringBottomPanel =
+        (_renderedOverlay == PlayerOverlay.osd ||
+            _renderedOverlay == PlayerOverlay.nowPlaying) &&
+        nextOverlay != PlayerOverlay.osd &&
+        nextOverlay != PlayerOverlay.nowPlaying;
+    if (retiringBottomPanel &&
+        _canOwnFocus &&
+        _rootFocus.hasFocus &&
+        FocusManager.instance.primaryFocus?.context
+                ?.findAncestorWidgetOfExactType<_Osd>()
+                ?.controller ==
+            widget.controller) {
+      // Keep ownership across retirement before another key can arrive. Reactive
+      // scope recovery alone can run too late for a following channel digit.
+      _rootFocus.requestFocus();
+    }
     final bottomPanelChanged =
         _renderedOverlay != nextOverlay &&
         (_renderedOverlay == PlayerOverlay.osd ||
@@ -203,6 +260,9 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         dvr: controller.lineup.settings.dvrControlsEnabled,
         unsupported: controller.status.state == PlayerState.unsupported,
         initialPress: event is KeyDownEvent,
+        commandPressed:
+            defaultTargetPlatform == TargetPlatform.macOS &&
+            HardwareKeyboard.instance.isMetaPressed,
         hasProgram:
             event.logicalKey == LogicalKeyboardKey.arrowDown &&
                 (controller.overlay == PlayerOverlay.none ||
@@ -356,7 +416,16 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                       alignment: Alignment.center,
                       children: [
                         for (final child in previousChildren)
-                          ExcludeFocus(child: ExcludeSemantics(child: child)),
+                          ExcludeFocus(
+                            child: ExcludeSemantics(
+                              // Dispose tooltip overlays with their retiring
+                              // semantics origin, before further label updates.
+                              child: TooltipVisibility(
+                                visible: false,
+                                child: child,
+                              ),
+                            ),
+                          ),
                         ?currentChild,
                       ],
                     ),
@@ -643,6 +712,8 @@ class _Osd extends StatelessWidget {
       (track) => track.type == PlayerTrackType.subtitle,
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
+    final sliderInteractive =
+        controller.duration > Duration.zero && !unsupported;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
     final expanded = !LineupLayout.isCompactWidth(size.width);
     final horizontal = size.width >= 1200 && size.height >= 640;
@@ -660,15 +731,14 @@ class _Osd extends StatelessWidget {
               },
         padding: null,
         iconSize: 28,
-        icon: const Icon(Icons.skip_previous),
+        icon: const Icon(
+          Icons.skip_previous,
+          semanticLabel: 'Previous channel',
+        ),
       ),
       IconButton(
         style: actionStyle,
-        tooltip:
-            (controller.displayHoldActive ||
-                controller.status.state == PlayerState.playing)
-            ? 'Pause'
-            : 'Play',
+        tooltip: controller.playbackToggleWillPause ? 'Pause' : 'Play',
         onPressed: unsupported
             ? null
             : () {
@@ -678,10 +748,8 @@ class _Osd extends StatelessWidget {
         padding: null,
         iconSize: 36,
         icon: Icon(
-          (controller.displayHoldActive ||
-                  controller.status.state == PlayerState.playing)
-              ? Icons.pause
-              : Icons.play_arrow,
+          controller.playbackToggleWillPause ? Icons.pause : Icons.play_arrow,
+          semanticLabel: controller.playbackToggleWillPause ? 'Pause' : 'Play',
         ),
       ),
       IconButton(
@@ -695,7 +763,7 @@ class _Osd extends StatelessWidget {
               },
         padding: null,
         iconSize: 28,
-        icon: const Icon(Icons.skip_next),
+        icon: const Icon(Icons.skip_next, semanticLabel: 'Next channel'),
       ),
     ];
     final selectedAudio = controller.tracks
@@ -791,7 +859,7 @@ class _Osd extends StatelessWidget {
             },
             padding: null,
             iconSize: 20,
-            icon: const Icon(Icons.menu),
+            icon: const Icon(Icons.menu, semanticLabel: 'Lineup menu'),
           ),
         ),
       IconButton(
@@ -807,6 +875,9 @@ class _Osd extends StatelessWidget {
         iconSize: 20,
         icon: Icon(
           controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+          semanticLabel: controller.fullscreen
+              ? 'Exit full screen'
+              : 'Full screen',
         ),
       ),
     ];
@@ -1016,23 +1087,30 @@ class _Osd extends StatelessWidget {
                 ),
               ),
               if (dvrControlsEnabled)
-                SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 4,
-                    activeTrackColor: Colors.transparent,
-                    inactiveTrackColor: Colors.transparent,
-                    thumbShape: SliderComponentShape.noThumb,
-                    overlayShape: SliderComponentShape.noOverlay,
-                  ),
-                  child: Slider(
-                    value: sliderPosition,
-                    max: sliderMax,
-                    onChanged:
-                        controller.duration <= Duration.zero || unsupported
-                        ? null
-                        : (value) => controller.seekTo(
-                            Duration(milliseconds: value.round()),
-                          ),
+                // Keep the Slider portal and its origin under the same fade,
+                // semantics exclusion and retirement ancestry.
+                Overlay.wrap(
+                  // An interactivity flip replaces Slider's semantics group;
+                  // remount its portal too so its new parent receives its data.
+                  key: ValueKey(sliderInteractive),
+                  clipBehavior: Clip.none,
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 4,
+                      activeTrackColor: Colors.transparent,
+                      inactiveTrackColor: Colors.transparent,
+                      thumbShape: SliderComponentShape.noThumb,
+                      overlayShape: SliderComponentShape.noOverlay,
+                    ),
+                    child: Slider(
+                      value: sliderPosition,
+                      max: sliderMax,
+                      onChanged: sliderInteractive
+                          ? (value) => controller.seekTo(
+                              Duration(milliseconds: value.round()),
+                            )
+                          : null,
+                    ),
                   ),
                 ),
             ],
@@ -1351,54 +1429,65 @@ class _NowPlaying extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (size.width >= 700 && size.height >= 500) ...[
-                      SizedBox(
-                        key: const Key('player-now-playing-poster'),
-                        width: posterWidth,
-                        height: math.min(posterWidth * 1.5, maxHeight - 64),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: posterPath == null
-                              ? _ArtworkFallback(roles: roles)
-                              : _PlayerArtwork(
-                                  key: ValueKey((
-                                    artworkIdentity,
-                                    GuideArtworkKind.poster,
-                                    posterPath,
-                                  )),
-                                  future: controller.guide.artworkFor(program),
-                                  fit: BoxFit.cover,
-                                  fallback: _ArtworkFallback(roles: roles),
-                                ),
+                      ExcludeSemantics(
+                        child: SizedBox(
+                          key: const Key('player-now-playing-poster'),
+                          width: posterWidth,
+                          height: math.min(posterWidth * 1.5, maxHeight - 64),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: posterPath == null
+                                ? _ArtworkFallback(roles: roles)
+                                : _PlayerArtwork(
+                                    key: ValueKey((
+                                      artworkIdentity,
+                                      GuideArtworkKind.poster,
+                                      posterPath,
+                                    )),
+                                    future: controller.guide.artworkFor(
+                                      program,
+                                    ),
+                                    fit: BoxFit.cover,
+                                    fallback: _ArtworkFallback(roles: roles),
+                                  ),
+                          ),
                         ),
                       ),
                       SizedBox(width: dense ? 24 : 32),
                     ],
                     Expanded(
-                      child: ExcludeSemantics(
-                        child: SingleChildScrollView(
-                          key: const Key('player-now-playing-details'),
-                          primary: false,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (controller.lineup.settings.preferClearLogos &&
-                                  logoPath != null)
-                                _NowPlayingIdentity(
-                                  key: ValueKey((
-                                    artworkIdentity,
-                                    GuideArtworkKind.clearLogo,
-                                    logoPath,
-                                  )),
-                                  controller: controller,
-                                  program: program,
-                                  compact: dense,
-                                )
-                              else
-                                _NowPlayingTitle(item: item, compact: dense),
-                              if (editorial.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
+                      child: SingleChildScrollView(
+                        key: const Key('player-now-playing-details'),
+                        primary: false,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // The summary owns these visual facts. Keep the cast
+                            // tooltip origins outside any semantics exclusion.
+                            ExcludeSemantics(
+                              child:
+                                  controller.lineup.settings.preferClearLogos &&
+                                      logoPath != null
+                                  ? _NowPlayingIdentity(
+                                      key: ValueKey((
+                                        artworkIdentity,
+                                        GuideArtworkKind.clearLogo,
+                                        logoPath,
+                                      )),
+                                      controller: controller,
+                                      program: program,
+                                      compact: dense,
+                                    )
+                                  : _NowPlayingTitle(
+                                      item: item,
+                                      compact: dense,
+                                    ),
+                            ),
+                            if (editorial.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              ExcludeSemantics(
+                                child: Text(
                                   editorial,
                                   key: const Key(
                                     'player-now-playing-editorial',
@@ -1410,10 +1499,12 @@ class _NowPlaying extends StatelessWidget {
                                     dense: dense,
                                   ),
                                 ),
-                              ],
-                              if (badges.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                Wrap(
+                              ),
+                            ],
+                            if (badges.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              ExcludeSemantics(
+                                child: Wrap(
                                   key: const Key('player-now-playing-badges'),
                                   spacing: 8,
                                   runSpacing: 8,
@@ -1422,10 +1513,12 @@ class _NowPlaying extends StatelessWidget {
                                       _NowPlayingBadge(label: badge),
                                   ],
                                 ),
-                              ],
-                              if (item.summary case final summary?) ...[
-                                const SizedBox(height: 12),
-                                ConstrainedBox(
+                              ),
+                            ],
+                            if (item.summary case final summary?) ...[
+                              const SizedBox(height: 12),
+                              ExcludeSemantics(
+                                child: ConstrainedBox(
                                   constraints: const BoxConstraints(
                                     maxWidth: 900,
                                   ),
@@ -1443,17 +1536,17 @@ class _NowPlaying extends StatelessWidget {
                                         ),
                                   ),
                                 ),
-                              ],
-                              if (item.cast.isNotEmpty) ...[
-                                const SizedBox(height: 14),
-                                _NowPlayingCast(
-                                  controller: controller,
-                                  cast: item.cast,
-                                  dense: dense,
-                                ),
-                              ],
+                              ),
                             ],
-                          ),
+                            if (item.cast.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              _NowPlayingCast(
+                                controller: controller,
+                                cast: item.cast,
+                                dense: dense,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
@@ -1931,23 +2024,25 @@ class _NowPlayingCastColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox.square(
-          key: ValueKey('player-now-playing-cast-portrait-$index'),
-          dimension: diameter,
-          child: ClipOval(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: roles.elevatedSurface,
-                border: Border.all(color: roles.subtleBorder),
-                shape: BoxShape.circle,
+        ExcludeSemantics(
+          child: SizedBox.square(
+            key: ValueKey('player-now-playing-cast-portrait-$index'),
+            dimension: diameter,
+            child: ClipOval(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: roles.elevatedSurface,
+                  border: Border.all(color: roles.subtleBorder),
+                  shape: BoxShape.circle,
+                ),
+                child: portrait == null
+                    ? _CastFallback(index: index, roles: roles)
+                    : _CastPortrait(
+                        portrait: portrait,
+                        controller: controller,
+                        fallback: _CastFallback(index: index, roles: roles),
+                      ),
               ),
-              child: portrait == null
-                  ? _CastFallback(index: index, roles: roles)
-                  : _CastPortrait(
-                      portrait: portrait,
-                      controller: controller,
-                      fallback: _CastFallback(index: index, roles: roles),
-                    ),
             ),
           ),
         ),
@@ -1957,13 +2052,15 @@ class _NowPlayingCastColumn extends StatelessWidget {
           child: Tooltip(
             message: member.name,
             excludeFromSemantics: true,
-            child: Text(
-              displayName,
-              key: ValueKey('player-now-playing-cast-name-$index'),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.start,
-              style: nameStyle,
+            child: ExcludeSemantics(
+              child: Text(
+                displayName,
+                key: ValueKey('player-now-playing-cast-name-$index'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.start,
+                style: nameStyle,
+              ),
             ),
           ),
         ),
@@ -1973,14 +2070,17 @@ class _NowPlayingCastColumn extends StatelessWidget {
             width: width,
             child: Tooltip(
               message: role,
-              child: Text(
-                role,
-                key: ValueKey('player-now-playing-cast-role-$index'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.start,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: roles.secondaryText, fontSize: 14),
+              excludeFromSemantics: true,
+              child: ExcludeSemantics(
+                child: Text(
+                  role,
+                  key: ValueKey('player-now-playing-cast-role-$index'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.start,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: roles.secondaryText, fontSize: 14),
+                ),
               ),
             ),
           ),
@@ -2245,7 +2345,11 @@ class _MiniGuide extends StatelessWidget {
                                     padding: EdgeInsets.zero,
                                     onPressed: () =>
                                         controller.moveMiniGuide(-1),
-                                    icon: Icon(Icons.arrow_upward, size: 24),
+                                    icon: Icon(
+                                      Icons.arrow_upward,
+                                      size: 24,
+                                      semanticLabel: 'Previous channel',
+                                    ),
                                   ),
                                   IconButton(
                                     tooltip: 'Next channel',
@@ -2256,7 +2360,11 @@ class _MiniGuide extends StatelessWidget {
                                     padding: EdgeInsets.zero,
                                     onPressed: () =>
                                         controller.moveMiniGuide(1),
-                                    icon: Icon(Icons.arrow_downward, size: 24),
+                                    icon: Icon(
+                                      Icons.arrow_downward,
+                                      size: 24,
+                                      semanticLabel: 'Next channel',
+                                    ),
                                   ),
                                 ],
                               ),
@@ -2965,35 +3073,34 @@ class _TracksState extends State<_Tracks> {
                                                       ? _selectedRowKey
                                                       : null,
                                                   color: Colors.transparent,
-                                                  child: Semantics(
-                                                    label: pending
-                                                        ? '$semanticLabel Pending.'
-                                                        : semanticLabel,
-                                                    button: true,
-                                                    selected: selected,
-                                                    onTap: selectTrack,
-                                                    excludeSemantics: true,
-                                                    child: LineupRowSurface(
+                                                  child: Tooltip(
+                                                    message: tooltip,
+                                                    excludeFromSemantics: true,
+                                                    child: Semantics(
+                                                      label: pending
+                                                          ? '$semanticLabel Pending.'
+                                                          : semanticLabel,
+                                                      button: true,
                                                       selected: selected,
-                                                      child: ListTile(
-                                                        key: Key(
-                                                          off
-                                                              ? 'playback-track-off'
-                                                              : 'playback-track-${widget.type.name}-${track!.id}',
-                                                        ),
-                                                        autofocus: selected,
+                                                      onTap: selectTrack,
+                                                      excludeSemantics: true,
+                                                      child: LineupRowSurface(
                                                         selected: selected,
-                                                        minTileHeight: null,
-                                                        contentPadding:
-                                                            EdgeInsets.symmetric(
-                                                              horizontal: 12,
-                                                              vertical: 8,
-                                                            ),
-                                                        title: Tooltip(
-                                                          message: tooltip,
-                                                          excludeFromSemantics:
-                                                              true,
-                                                          child: Text(
+                                                        child: ListTile(
+                                                          key: Key(
+                                                            off
+                                                                ? 'playback-track-off'
+                                                                : 'playback-track-${widget.type.name}-${track!.id}',
+                                                          ),
+                                                          autofocus: selected,
+                                                          selected: selected,
+                                                          minTileHeight: null,
+                                                          contentPadding:
+                                                              EdgeInsets.symmetric(
+                                                                horizontal: 12,
+                                                                vertical: 8,
+                                                              ),
+                                                          title: Text(
                                                             title,
                                                             maxLines: 3,
                                                             overflow:
@@ -3010,47 +3117,49 @@ class _TracksState extends State<_Tracks> {
                                                                           .w500,
                                                                 ),
                                                           ),
-                                                        ),
-                                                        subtitle:
-                                                            metadata.isEmpty
-                                                            ? null
-                                                            : Text(
-                                                                metadataText,
-                                                                maxLines: 3,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                                softWrap: true,
-                                                                style: textTheme
-                                                                    .bodyMedium
-                                                                    ?.copyWith(
-                                                                      color:
-                                                                          supportingText,
-                                                                    ),
-                                                              ),
-                                                        trailing: SizedBox(
-                                                          width: 30,
-                                                          child: Center(
-                                                            child: pending
-                                                                ? SizedBox.square(
-                                                                    dimension:
-                                                                        18,
-                                                                    child: CircularProgressIndicator(
-                                                                      strokeWidth:
-                                                                          2,
-                                                                    ),
-                                                                  )
-                                                                : selected
-                                                                ? Icon(
-                                                                    Icons.check,
-                                                                    color: roles
-                                                                        .progressFill,
-                                                                    size: 24,
-                                                                  )
-                                                                : const SizedBox.shrink(),
+                                                          subtitle:
+                                                              metadata.isEmpty
+                                                              ? null
+                                                              : Text(
+                                                                  metadataText,
+                                                                  maxLines: 3,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                  softWrap:
+                                                                      true,
+                                                                  style: textTheme
+                                                                      .bodyMedium
+                                                                      ?.copyWith(
+                                                                        color:
+                                                                            supportingText,
+                                                                      ),
+                                                                ),
+                                                          trailing: SizedBox(
+                                                            width: 30,
+                                                            child: Center(
+                                                              child: pending
+                                                                  ? SizedBox.square(
+                                                                      dimension:
+                                                                          18,
+                                                                      child: CircularProgressIndicator(
+                                                                        strokeWidth:
+                                                                            2,
+                                                                      ),
+                                                                    )
+                                                                  : selected
+                                                                  ? Icon(
+                                                                      Icons
+                                                                          .check,
+                                                                      color: roles
+                                                                          .progressFill,
+                                                                      size: 24,
+                                                                    )
+                                                                  : const SizedBox.shrink(),
+                                                            ),
                                                           ),
+                                                          onTap: selectTrack,
                                                         ),
-                                                        onTap: selectTrack,
                                                       ),
                                                     ),
                                                   ),

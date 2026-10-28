@@ -1,0 +1,50 @@
+diff --git a/engine/src/build/toolchain/mac/BUILD.gn b/engine/src/build/toolchain/mac/BUILD.gn
+index a3dfd6f2..226c0eb7 100644
+--- a/engine/src/build/toolchain/mac/BUILD.gn
++++ b/engine/src/build/toolchain/mac/BUILD.gn
+@@ -13,6 +13,10 @@ import("//build/toolchain/rbe.gni")
+ import("//build/toolchain/toolchain.gni")
+ 
+ declare_args() {
++  # Opt in when the pinned LLVM linker cannot parse the host Xcode SDK's TAPI.
++  # Keep the pinned compiler; select the matching Xcode linker explicitly.
++  mac_use_apple_linker = false
++
+   # This controls whether whole module optimization is enabled when building
+   # Swift modules. If enabled, the compiler will compile the module as one
+   # unit, generating just one single object file. Otherwise, it will generate
+@@ -225,9 +229,7 @@ template("mac_toolchain") {
+       # The list of outputs and partial_outputs change whether the whole
+       # module optimization is enabled or not.
+       if (swift_whole_module_optimization) {
+-        outputs += [
+-          "$_output_dir/{{module_name}}.swiftconstvalues",
+-        ]
++        outputs += [ "$_output_dir/{{module_name}}.swiftconstvalues" ]
+       } else {
+         outputs += [ "$_output_dir/{{module_name}}.priors" ]
+         partial_outputs += [
+@@ -493,6 +495,11 @@ mac_toolchain("clang_x64") {
+   cxx = "${cxx_prefix}${prefix}/clang++"
+   objc = "${objc_prefix}${prefix}/clang++"
+   ld = "${link_prefix}${prefix}/clang++"
++  if (mac_use_apple_linker && !is_ios) {
++    assert(mac_host_toolchain_path != "",
++           "Apple linker requires the Xcode toolchain.")
++    ld += " --ld-path=\"${mac_host_toolchain_path}/usr/bin/ld\""
++  }
+   is_clang = true
+ 
+   sysroot_rel = rebase_path(mac_sdk_path, root_build_dir)
+@@ -511,6 +518,11 @@ mac_toolchain("clang_arm64") {
+   cxx = "${cxx_prefix}${prefix}/clang++"
+   objc = "${objc_prefix}${prefix}/clang++"
+   ld = "${link_prefix}${prefix}/clang++"
++  if (mac_use_apple_linker && !is_ios) {
++    assert(mac_host_toolchain_path != "",
++           "Apple linker requires the Xcode toolchain.")
++    ld += " --ld-path=\"${mac_host_toolchain_path}/usr/bin/ld\""
++  }
+   is_clang = true
+ 
+   sysroot_rel = rebase_path(mac_sdk_path, root_build_dir)

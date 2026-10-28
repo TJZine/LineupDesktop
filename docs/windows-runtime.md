@@ -32,7 +32,7 @@ a rebuilt archive under the existing provenance identity.
 
 | Component | Provenance | Package policy |
 | --- | --- | --- |
-| Flutter Windows engine | Flutter 3.47.7 framework `abaf9c523780a608bd46686fd5e53740a07077f8`, engine `deb287481e3ce9468f3434937ced4240a70539ca`, plus the repository-owned DirectComposition patch | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
+| Flutter Windows engine | Flutter 3.47.7 framework `abaf9c523780a608bd46686fd5e53740a07077f8`, engine `deb287481e3ce9468f3434937ced4240a70539ca`, plus the repository-owned DirectComposition, desktop AX and native test-fixture patches | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
 | flutter_secure_storage_windows | Version 4.2.2 from the locked Dart dependency graph | BSD-3-Clause; its notice is generated into Flutter `NOTICES.Z`. |
 | Microsoft Visual C++ runtime | Retail x64 VC143 runtime matching the build toolset | Microsoft redistributable code. A portable package uses unmodified app-local retail DLLs from `VC/Redist`; never include debug/nonredistributable files. |
 | Khronos Vulkan loader | `vulkan-1.dll` supplied by the installed GPU driver or Vulkan Runtime | System prerequisite. The selected libmpv DLL imports the loader even though Lineup selects D3D11. The portable package records this requirement instead of copying a machine-specific display-driver file. |
@@ -40,14 +40,34 @@ a rebuilt archive under the existing provenance identity.
 
 `tool/windows/build-release.ps1` creates the packaging-eligible Windows build.
 It accepts only a clean Git source tree, validates the exact patched Flutter
-source, refreshes and selects the configured `host_release` engine, and writes
-an artifact-bound marker
-containing the source and engine identities plus hashes for every build input
+source and selects the freshly provisioned, verified `lineup_ax_release_x64`
+engine without an incremental refresh. It writes a schema-2 artifact-bound marker
+containing canonical pin/manifest hashes, all three ordered Windows patch identities, engine
+provenance/DLL digests and hashes for every build input
 copied into the package. `tool/windows/package.ps1` requires that marker,
 rechecks it against the clean current commit and pinned metadata, and rejects
 stale identities or modified build artifacts before creating output.
 `BUILD-INFO.txt` and `BUILD-PROVENANCE.json` preserve that verified identity in
 the portable package.
+
+## CI-only Vulkan loader
+
+`tool/windows/prepare-ci-vulkan.ps1` stages the official LunarG non-installer
+[components ZIP](https://sdk.lunarg.com/sdk/download/1.4.335.0/windows/VulkanRT-X64-1.4.335.0-Components.zip),
+version `1.4.335.0`, under a new directory in the Windows job's `RUNNER_TEMP`.
+The [official download inventory](https://vulkan.lunarg.com/sdk/files.json)
+publishes archive SHA-256
+`4F856DA356FFB1C16FBFC792CAE70F6E6873680E6B62BC132B9D7131CBC97FE2`.
+The helper extracts only the AMD64 `vulkan-1.dll` (SHA-256
+`5C42CA8EA4BC43EE17FFE8FCDAFBA36E377C2AF29722CB09F400C24D9D80FB73`)
+and the included MIT/Apache-2.0 license text. The loader exports all Vulkan
+functions imported by the pinned libmpv and imports Windows system libraries.
+
+CI adds this directory to its process `PATH` around the required native player
+contract CTest and restores `PATH` even on failure. It installs no runtime,
+changes no system settings, and copies nothing into the application or package.
+This is a CI prerequisite; the system-loader requirement and physical release
+acceptance below still apply.
 
 ## Vulkan-loader release gate
 

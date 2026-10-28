@@ -61,7 +61,7 @@ block unrelated portable work; report the specific unverified scenario.
 | Dart policy, models, async work | Pinned Flutter SDK; focused tests plus the relevant full format/analyze/test checks below | Deterministic contracts; no Xcode application build or Windows engine provisioning required |
 | Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the required alpha suite and optional local visual checks below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
 | Persistence or credentials | Controller/store/transport failure, rollback, scope-isolation, and secret-flow tests named in [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Deterministic recovery/currentness; OS credential storage and physical filesystem behavior need platform observation |
-| macOS development app | Xcode and macOS setup below; `flutter run -d macos` or `flutter build macos` as relevant | Development UI/runtime or build evidence; the macOS player explicitly reports unsupported playback |
+| macOS development app and player | Xcode, the libmpv runtime (`LINEUP_MPV_RUNTIME`), and macOS setup below; `dart tool/macos/build_app.dart build`, the `RunnerTests` XCTests, and the real-protocol harness as relevant | Build, conversion/rect contract, and protocol-flow evidence; visual layering, HDR output, and fullscreen need a physical observation on a visible display |
 | Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing, repository-derived release inputs, production launch/exit contracts with fixture platform executables, and pinned policy inputs; no native Windows or package execution proof |
 | Native player contract / C++ integration | Dart adapter/coordinator tests, lifetime/currentness inspection, Windows C++ toolchain and prepared libmpv; `flutter build windows` | Contract and stock-engine compile/link proof; not a runnable or packageable Lineup player |
 | Patched engine / portable package | Full Windows provisioning below; release wrapper and [package acceptance](windows-native-validation.md#8-portable-package-acceptance) | Artifact-bound build/package checks; launch, media, HDR, layering, fullscreen, input, and support claims require [physical Windows acceptance](windows-native-validation.md) |
@@ -95,19 +95,26 @@ engine or physical HDR changes; they do not establish media or presentation
 acceptance.
 
 The assertion-based `track_list_encoder_test` exercises the real encoder,
-not the app. After configuring the Windows build with the prerequisites below,
-run:
+not the app. It is defined with the shared player core in
+`native/player_core/`, which the Windows runner build includes. After
+configuring the Windows build with the prerequisites below, run:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test
 ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
 ```
 
-Three additional targets cover native correlation and shutdown:
+Additional targets cover native correlation and shutdown:
 
 - `native_playback_state_test` exercises the actual worker-owned correlation
   state, including replacement, redirects, retirement, and observed idle.
-- `native_player_contract_test` drives the production parser, command queue,
+- `player_core_contract_test` drives the shared core's parser, command queue,
+  bounds, event projection and eviction, token header, and worker lifecycle
+  through fake libmpv operations. It needs mpv headers but not libmpv.
+- `encodable_value_conversion_test` checks the Windows adapter's conversion
+  between Flutter codec values and the core's neutral values, including
+  unchanged event bytes.
+- `native_player_contract_test` drives the Windows adapter, codec, parser, command queue,
   load-to-state handoff, event projection, and real libmpv worker through a
   bounded HWND/message pump. Test-local DLL responses make selected load
   command/query outcomes deterministic; lifecycle scenarios use the real DLL.
@@ -115,11 +122,30 @@ Three additional targets cover native correlation and shutdown:
   against installed candidate assets. A retained blank-widget Dart entry point
   avoids opening user state or credentials through the application bootstrap.
 
-All are `EXCLUDE_FROM_ALL`; only `native_playback_state_test` is selected by
-CI. The state test does not require a live engine. The player-contract and
-runner-lifecycle targets remain explicit local checks. Build/install the
-candidate with the pinned patched engine and prepared libmpv first for those
-checks, then build the targets and run their CTests:
+All are `EXCLUDE_FROM_ALL`; CI explicitly selects `native_playback_state_test`,
+`player_core_contract_test`, and `encodable_value_conversion_test`. These tests
+do not require a live engine or the patched engine:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target player_core_contract_test encodable_value_conversion_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^(player_core_contract|encodable_value_conversion)$' --output-on-failure --timeout 45
+```
+
+CI also builds and runs `native_player_contract_test` against the stock
+Flutter DLL and prepared libmpv. The Windows job stages a hash-pinned official
+LunarG Vulkan loader under `RUNNER_TEMP` and adds it to the process `PATH` only
+for that CTest, restoring `PATH` afterward. This supplies a loader, not a GPU
+driver or physical playback acceptance; see [CI provenance](windows-runtime.md#ci-only-vulkan-loader).
+If its CTest fails, CI runs
+`tool/windows/diagnose-native-startup.ps1` against the exact test executable
+before reporting the original failure. The diagnostic prints the built DLL
+hashes, PE imports, and named Windows loader results; it installs no runtime
+and does not turn a failed test into a pass.
+
+For local player-contract checks, build Windows with prepared libmpv first.
+The runner-lifecycle target remains an explicit local check and additionally
+requires the installed candidate with the pinned patched engine. Then build
+the targets and run their CTests:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target native_playback_state_test native_player_contract_test runner_lifecycle_test
@@ -132,14 +158,17 @@ application's installed `data` directory. Stock-engine compilation does not
 provide the runner test's required composition marker. Keep encoder and
 authenticated-reference checks as distinct obligations.
 
-The state component is also portable with a C++17 compiler:
+The shared player core and its encoder, state, and contract tests are portable.
+On macOS with Homebrew mpv headers (`/opt/homebrew/include` by default, or set
+`-DLINEUP_MPV_INCLUDE_DIR=<dir>`):
 
 ```sh
-clang++ -std=c++17 -Wall -Wextra -Werror -pedantic windows/runner/native_playback_state_test.cpp -o /tmp/lineup-native-playback-state-test
-/tmp/lineup-native-playback-state-test
+cmake -S native/player_core -B build/player_core
+cmake --build build/player_core
+ctest --test-dir build/player_core --output-on-failure
 ```
 
-Portable state proof does not compile or execute the Windows parser/runner.
+Portable core proof does not compile or execute the Windows adapter/runner.
 Blank-widget runner proof does not establish physical media, HDR, composition,
 input, or package acceptance. Queue pressure preferentially removes property
 events; an all-non-property saturated queue can evict an old acknowledgment,
@@ -150,8 +179,9 @@ close while work is pending.
 
 The gated `authenticated_reference_test` target compiles the production native
 player and drives its existing method channel against the exact prepared DLL.
-It is `EXCLUDE_FROM_ALL`, with no CI gate change. Python 3, an FFmpeg executable
-with the `libx264` encoder and DASH muxer, and OpenSSL are required. Put them on
+It is `EXCLUDE_FROM_ALL` for application builds and explicitly selected by CI.
+Python 3, FFmpeg with the `libx264` encoder and DASH muxer, FFprobe, and OpenSSL
+are required. Put them on
 PATH before running CTest; Python is resolved when the test runs, so ordinary
 application configuration and builds do not require it. The runner also recognizes
 Git for Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
@@ -175,6 +205,12 @@ waits, socket operations and server joins are bounded; an overall 150-second
 runner deadline leaves cleanup time before CTest's 180-second timeout.
 Only normalized request counts, token-presence booleans and playback outcomes
 are emitted. Servers, media, keys and certificates are removed after each run.
+Both omitted-start and nonzero-start profiles run the full reference matrix.
+The latter supplies `startSeconds: 3.5` through the production load channel
+against a six-second fixture whose actual one-second keyframe index is checked
+with FFprobe. The starting position alone cannot count as playback progress.
+CI provisions checksum-pinned fixture tools only in the job's temporary
+directory; they are not application/runtime inputs.
 The [dated reference mitigation record](libmpv-authenticated-reference-investigation.md#2026-10-03-mitigation-disable-reference-following)
 records the before/after evidence and source-audit limits. To reproduce the
 negative comparison locally, remove only the two reference-hardening options,
@@ -345,15 +381,217 @@ Player layouts and separate approval for structural proposals.
 For macOS application builds/runs, install Xcode and its command-line tools on
 macOS 12 or newer. Resolve relevant Xcode/macOS warnings from `flutter doctor`;
 those application prerequisites do not gate unrelated Dart checks. The
-application currently targets macOS 12.0. macOS is a development surface; native
-playback is not yet implemented. See [the protocol](native-player-protocol.md) and
-the [macOS backlog](open-obligations.md#macos-media-backlog).
+preserved application currently has a macOS 12.0 build deployment target on Apple
+silicon (arm64 only). The October 22 product support target is macOS 14 Sonoma
+and later, pending V-06 native validation; the lower build setting is not a
+macOS 12/13 support promise. See the port plan for current evidence and limits.
+macOS is not yet a release platform; the port plan is
+[macos-port-plan.md](macos-port-plan.md). The macOS player implements
+[the protocol](native-player-protocol.md) with the Objective-C++ adapter in
+`macos/Runner/NativePlayer/` on the shared core in `native/player_core/`.
+
+### libmpv runtime
+
+The Runner links the prepared LGPL libmpv runtime (the S2 build with the
+`CAMetalLayer` `--wid` embedding patch) and embeds its `lib/*.dylib` files into
+`Contents/Frameworks`, signed with the app's identity. Its complete `licenses/`
+and `patches/` trees plus raw `BUILD-INFO.txt` are embedded byte-for-byte under
+`Contents/Resources/LineupNativeRuntime`. This dedicated subtree is replaced as
+one owned unit; unrelated app resources are preserved. Required resource inputs
+must exist and be nonempty, with no source/destination symlinks or special files.
+An incomplete runtime fails the build before publication. The runtime location
+is the single build setting `LINEUP_MPV_RUNTIME`, defined in
+`macos/Runner/Configs/NativePlayer.xcconfig`. It defaults to
+`build/macos-runtime/dist/arm64` in the repository. The build fails early, with
+a message naming the path, when `include/mpv/client.h` or `lib/libmpv.2.dylib`
+is missing. To use a runtime elsewhere, either set it in the environment of
+the build:
+
+```sh
+LINEUP_MPV_RUNTIME=/path/to/macos-runtime/arm64 \
+  dart tool/macos/build_app.dart build --release
+```
+
+or write `LINEUP_MPV_RUNTIME = /path/to/macos-runtime/arm64` in the untracked
+`macos/Runner/Configs/NativePlayer.local.xcconfig`, which takes precedence over
+the environment. Runtime provisioning, pinning, and App Store signing are
+package R1 of the port plan.
+
+The embed integration test exercises ownership/migration, signing failures,
+complete resource file sets/bytes, removal of obsolete notices, copy/publication
+failure and retry, path boundaries, and a minimal real Mach-O ad-hoc signed app:
+
+```sh
+LINEUP_MPV_RUNTIME="$PWD/build/macos-runtime/dist/arm64" \
+  tool/macos/mpv-runtime-embed-test.sh
+```
+
+The supplied runtime is copied into an isolated temporary fixture app and
+verified byte-for-byte for resources; source hashes must remain unchanged.
+Without `LINEUP_MPV_RUNTIME`, the deterministic fixture and Mach-O checks still
+run. This does not rebuild a Flutter app or establish team signing, sandbox,
+App Store/legal approval, an in-app Licenses surface, or source archive hosting.
+Bundled `BUILD-INFO.txt` records **prepared, pre-signing** library identities;
+it is not a manifest of the signed app/package's library hashes.
 
 ```sh
 flutter config --enable-macos-desktop
-flutter run -d macos
-flutter build macos
+flutter config --enable-macos-arm64-only
+dart tool/macos/build_app.dart run
+dart tool/macos/build_app.dart build --release
 ```
+
+The app ships arm64 only. With the stock Flutter engine, release and profile
+builds are otherwise universal: `App.framework`, `FlutterMacOS.framework` and
+the `objective_c` native asset gain x86_64 slices that the arm64 Runner and
+libmpv runtime lack, and the native-asset verification fails with "Main
+executable lacks bundled architecture". `--enable-macos-arm64-only` is a
+per-user Flutter setting; CI sets it before the app build. The verified local
+engine (`--root`) is already arm64 only.
+
+Use `tool/macos/build_app.dart` for macOS application builds and runs, including
+CI and audit candidates. It passes the same identity defines as the Windows
+release build: `LINEUP_VERSION` is the version name in `pubspec.yaml`, and
+`LINEUP_BUILD` is its numeric build number followed by `@` and the full Git HEAD
+commit. Diagnostics and its copied export read these defines directly; there is
+no platform identity fallback. Missing or ambiguous metadata fails the build.
+The wrapper owns version/build inputs and rejects identity overrides and
+`--dart-define-from-file`; other Flutter options and inline defines are forwarded.
+It uses the selected Flutter from PATH, which must satisfy the pinned toolchain
+check above. Local dirty builds are allowed, but their HEAD identifies the base
+commit only: record the dirty source state separately, and do not claim an exact
+committed candidate until rebuilding from the committed tree. This identity is
+not a release/package provenance or signing assertion.
+
+### Opt-in desktop accessibility engine
+
+The M-04 accessibility repair is an explicitly selected local engine candidate.
+Ordinary stock builds above do not include it. Follow the [engine patch and
+provenance instructions](../tool/flutter_engine/README.md#desktop-accessibility-candidate)
+for isolated provisioning, exact source/dependency verification, a fresh engine
+build and the macOS wrapper's verified selection options. The verified flow
+requires clean committed application inputs and checks compiled Dart/assets as
+well as the embedded engine. It does not establish an actually loaded engine,
+native notification recovery, spoken usefulness or physical input acceptance.
+The [existing M-04 report](handoffs/macos-post-audit-fix-report.md#one-final-human-checklist)
+remains the single human acceptance checklist. Windows engine compatibility and
+application/package acceptance are separate gates. Windows launch/release consumers
+now require the combined verified DirectComposition/AX recipe described below;
+implemented CI jobs do not establish executed Windows acceptance.
+
+### Native unit tests
+
+`macos/RunnerTests` holds unhosted XCTests for Foundation/`Value`
+conversion, video geometry, fullscreen requests/observations, and runner/native
+shutdown. Fullscreen tests drive the real adapter/core event codec from
+controlled window notifications, including initial/reinitialized snapshots,
+user changes superseding requests, deadlines and disposal gating.
+The shutdown tests use the real adapter and core with controlled libmpv worker
+operations and window/application boundaries; they do not launch Flutter or
+establish physical playback. Use the generated Flutter configuration from an
+application build and the accepted `LINEUP_MPV_RUNTIME` setting:
+
+```sh
+dart tool/macos/build_app.dart build --debug
+xcodebuild test -project macos/Runner.xcodeproj -scheme NativePlayerTests \
+  -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath /tmp/lineup-native-tests CODE_SIGNING_ALLOWED=NO
+```
+
+The independent scheme builds only the unhosted tests. The normal suite skips
+one process-exit probe intentionally. Run it separately against that test
+bundle to observe the real five-second timeout policy:
+
+```sh
+LINEUP_SHUTDOWN_TIMEOUT_PROBE=1 xcrun xctest \
+  -XCTest NativeShutdownTests/testRealTimeoutExitProbe \
+  /tmp/lineup-native-tests/Build/Products/Debug/RunnerTests.xctest
+```
+
+That probe must exit **1** after logging `native shutdown exceeded five
+seconds; exiting with failure`; exit 0, an XCTest assertion/skip, or an external
+watchdog killing it is not a pass. Its worker is deliberately held inside
+`terminate_destroy`. The production deadline calls `_Exit(EXIT_FAILURE)`
+without destructor cleanup, additional blocking waits, or releasing the live
+layer. Other lifecycle tests cover main-loop progress, retained output/owners,
+Flutter approval, repeated close/quit, concurrent Dart disposal, and both sides
+of the completion/deadline race. Real playback quit/close still needs observation
+with the current app and accepted runtime.
+
+### macOS authenticated-reference proof
+
+The standalone runner uses the production macOS adapter, Flutter method codec,
+shared core, and the selected real libmpv runtime. It does not build or launch a
+Flutter app/engine. Only injected test operations set the fixture CA and null
+video/audio outputs; production initialization and authenticated load options
+supply the security policy. No certificate is added to system trust.
+
+From the repository root, with Xcode, CMake, Python 3, OpenSSL, FFprobe and an
+FFmpeg fixture generator (with libx264 and DASH muxing) available:
+
+```sh
+python3 tool/macos/authenticated-reference/run.py \
+  --flutter-root /path/to/the/pinned/flutter \
+  --runtime "$PWD/build/macos-runtime/dist/arm64" \
+  --output-dir /tmp/lineup-authenticated-reference
+```
+
+Use an empty/new output directory. The script checks the pinned Flutter
+revision, runtime lock/BUILD-INFO, patch and dylib hashes, architecture and link
+closure; the child also verifies loaded image locations. CMake output, redacted
+child logs, source/artifact identities, and `report.json` remain in that
+folder. Certificates and media fixtures are temporary. Captured stdout/stderr
+containing the synthetic secret fail the run; raw diagnostics are not printed.
+Missing prerequisites, certificate setup, malformed child outcomes, timeouts,
+and empty/partial matrices fail rather than skip. A malformed child outcome
+reports the fixed case name, child exit status/signal, and field-validation
+category without printing child output or arguments. Exit 0 requires the complete
+reference matrix with both omitted and nonzero initial start, including all
+sensitivity controls. Nonzero-start positives verify the fixture's actual
+keyframe index and require playback advancement after the matched initial
+restart; the position jump alone cannot satisfy progress.
+
+The matrix covers ordinary MP4/MKV progress without a later rejection; HLS
+same-origin/hostname/port/master/key, DASH, playlist, EDL, CUE, MOV, concat,
+IMF, VobSub and redirect failures with zero playback progress; required-option
+refusal before network IO; and wrong-CA rejection before HTTP. Redirects target
+separate real HTTPS and plaintext HTTP listeners, both included in the secondary
+request/token/URL audit. SDP is a bounded observation. Available
+FFmpeg demuxers are reported: an absent format's rejection proves fail-closed
+behavior, not traversal of its parser. Isolated negative controls deliberately
+allow references, disable TLS verification, send a token-bearing plaintext HTTP
+request, or inject an error after successful progress. The last control must
+fail both positive and ordinary-negative media classification. Those overrides
+are never used in production-policy cases. This proves headless synthetic
+adapter/core/runtime behavior; sandbox/hardened signing, real Plex, visible
+playback, supported CPUs and minimum-macOS acceptance remain separate.
+
+### Real-protocol harness
+
+`test_driver/macos_native_harness.dart` is the synthetic `ui_harness.dart`
+composition with the real `MethodChannelNativePlayer` and local media. The app
+is sandboxed, so it can read media only inside its container. Copy test media
+there and pass absolute paths separated by `|`:
+
+```sh
+media="$HOME/Library/Containers/com.tjzine.lineupDesktop/Data/tmp/lineup-media"
+mkdir -p "$media" && cp sdr.mp4 hdr10.mp4 "$media/"
+dart tool/macos/build_app.dart build --debug -t test_driver/macos_native_harness.dart \
+  "--dart-define=LINEUP_HARNESS_MEDIA=$media/sdr.mp4|$media/hdr10.mp4" \
+  --dart-define=LINEUP_HARNESS_EXERCISE=true
+LINEUP_PRESENTATION_LOG=1 \
+  "build/macos/Build/Products/Debug/Lineup Desktop.app/Contents/MacOS/Lineup Desktop"
+```
+
+Channel N plays media N modulo the list. With `LINEUP_HARNESS_EXERCISE=true`
+the harness loads each file in turn through the real player, with seek,
+volume, track selection, fullscreen, and video rectangle changes on the
+first, then stops. It prints every call outcome, state, telemetry change, and
+display report with a `[harness]` prefix, and never prints media paths.
+`LINEUP_PRESENTATION_LOG=1` makes the adapter log the video layer's color
+space, EDR, EDR metadata, drawable size, visibility, and the screen's EDR
+headroom whenever they change. Neither is evidence of visual correctness.
+HDR judgments need a physical observation on an unlocked, visible display.
 
 ## Windows native player
 
@@ -393,7 +631,7 @@ package machines also need a GPU driver or Vulkan Runtime providing
 When the pinned runtime changes, provision it into a fresh unique destination;
 do not reuse or overwrite an older prepared directory. Rebuild the Lineup
 application against the new runtime. When the pinned Flutter SDK or engine
-changes, reprovision its patched `host_debug` and `host_release` outputs
+changes, reprovision its patched `lineup_ax_debug_x64` and `lineup_ax_release_x64` outputs
 before launching or packaging; the older SDK outputs cannot be reused.
 
 ### Patched engine provisioning
@@ -430,11 +668,15 @@ Copy-Item .\engine\scripts\standard.gclient .\.gclient
 gclient sync --no-history
 C:\path\to\LineupDesktop\tool\flutter_engine\apply.ps1 -FlutterRoot (Get-Location)
 
-Set-Location engine\src
-python .\flutter\tools\gn --runtime-mode=debug
-ninja -C out\host_debug
-python .\flutter\tools\gn --runtime-mode=release
-ninja -C out\host_release
+Set-Location C:\path\to\LineupDesktop
+$ninja = (Get-Command ninja.exe -CommandType Application).Source
+foreach ($mode in @('debug', 'release')) {
+  python tool/flutter_engine/desktop_accessibility.py build `
+    --flutter-root C:\path\to\flutter --platform windows --architecture x64 --mode $mode `
+    --ninja $ninja --gclient C:\path\to\depot_tools\gclient.bat --jobs 2
+  if ($LASTEXITCODE) { throw "Fresh combined engine build failed: $mode" }
+}
+
 ```
 
 See the [engine patch contract](../tool/flutter_engine/README.md) for source
@@ -451,7 +693,7 @@ existing app normally before launching a different development candidate.
 Guardian mode dispatch occurs before instance enforcement and initializes no
 Flutter engine or window.
 
-After the one-time prerequisites and patched `host_debug` setup above, the
+After the one-time prerequisites and patched `lineup_ax_debug_x64` setup above, the
 small PowerShell launcher reuses those exact local-engine outputs. Configure
 the two machine-specific paths once as user environment values, and set them
 in the current session as well:
@@ -484,17 +726,19 @@ For the existing local-media entry point, pass an existing file explicitly:
 pwsh -File .\tool\windows\run.ps1 -MediaPath 'C:\path\to\sdr-sample.mp4'
 ```
 
-The launcher validates Windows, the required paths, the pinned Flutter
-framework/engine revisions, the repository patch and applied manager source,
-and the prepared libmpv inputs. It requires `engine\src\out\host_debug\build.ninja`
-and runs incremental Ninja before `flutter run`, so changed patched-engine
-source is not silently stale. It does not run GN, provision engine sources,
-apply the patch, or use an arbitrary `flutter` on `PATH`; missing provisioning
-is a setup error with a link back to the commands above. If the pinned
-Flutter checkout lacks its Windows SDK cache, the launcher runs that
-checkout's `bin\flutter.bat precache --windows` once; it never changes a
-different SDK cache. Uncommitted Lineup application edits are allowed for
-development, while the release wrapper below still requires a clean checkout.
+The launcher validates Windows, required paths and prepared libmpv inputs, then
+calls the Python recipe to verify the exact combined sources, evaluated dependency
+graph, toolchain, configuration, provenance and consumed engine/host artifacts in
+`engine\src\out\lineup_ax_debug_x64` before any Flutter invocation. It selects
+that explicit output with the isolated checkout's `bin\flutter.bat`. If the
+checkout lacks its stock Windows SDK cache, it prepares that cache with
+`precache --windows`; it never copies local engine binaries over stock artifacts.
+Uncommitted Lineup application edits remain allowed for development.
+
+There is no automatic Ninja refresh. Changed engine sources, canonical inputs,
+dependencies, toolchain, configuration or artifacts require a fresh multi-hour
+recipe build. Preserve the previous app/engine pair and provision a new output
+explicitly; the recipe rejects preexisting outputs instead of blessing them.
 
 Update the saved paths after moving or reprovisioning the Flutter engine or
 libmpv directory. The launcher restores the caller's current directory and
@@ -502,7 +746,7 @@ libmpv directory. The launcher restores the caller's current directory and
 
 ### Portable package
 
-After the one-time prerequisites, patched `host_release` setup, and a clean
+After the one-time prerequisites, patched `lineup_ax_release_x64` setup, and a clean
 Lineup checkout (no tracked changes or non-ignored untracked files), build and
 package the portable application:
 
@@ -532,14 +776,20 @@ not an installer or a public-release claim; launch, media, and hardware
 acceptance still require the physical-Windows procedure in
 [Windows Native Acceptance](windows-native-validation.md).
 
-The release wrapper validates the clean Lineup checkout, exact framework and
-engine revisions, and exact patched manager source, refreshes the configured
-`host_release` engine with Ninja, and selects that output for Flutter. After
-Flutter succeeds, it writes
-`LINEUP-BUILD-PROVENANCE.json` beside the executable with hashes for every
-build input copied into the portable package. `tool/windows/package.ps1`
-requires that marker, rechecks it against the clean current commit and pinned
-engine metadata, and rejects stale markers or modified build artifacts.
+The release wrapper requires a clean committed Lineup checkout and verifies the
+selected `lineup_ax_release_x64` immediately before and after the application build.
+It compares the bundled engine DLL with that selection and writes schema-2
+`LINEUP-BUILD-PROVENANCE.json`, including source/framework/engine identities,
+canonical pin/manifest hashes, ordered DirectComposition/AX/test-fixture patch hashes, selected
+output/mode/architecture, provenance and DLL digests, and the complete packaged
+application artifact map. A sanitized engine receipt in
+`data/lineup-engine-receipt.json` is also bound by that map. Local receipts record
+the wrapper's execution; they do not attest against hostile local modification.
+
+Packaging rechecks the clean current commit, canonical recipe, receipt and full
+artifact map without needing the engine checkout. Schema-1 receipts are rejected
+with a rebuild instruction. Preserve the complete previous application/engine/
+receipt pair for rollback; never relabel an older artifact as combined.
 
 ## CI evidence
 
@@ -547,18 +797,41 @@ engine metadata, and rejects stale markers or modified build artifacts.
 Linux, the required macOS alpha suite and an application build on macOS, portable
 PowerShell release-policy validation, and focused widget tests plus a
 stock-engine C++/CMake application build on Windows Server 2022 followed by
-the existing encoder, playback-state, display-controller, and guardian CTests.
+the encoder, playback-state, shared-core, codec-conversion, display-controller,
+guardian, player-contract and authenticated-reference CTests.
 The native suites use real contract assertions and controlled fixtures; the
-guardian includes Win32 subprocess coverage. The player-contract,
-runner-lifecycle, and authenticated-reference CTests remain separate explicit
-checks and are not selected by CI.
+guardian includes Win32 subprocess coverage. The player contract loads the
+pinned runtime with a CI-only Vulkan loader. The reference matrix uses temporary
+synthetic HTTPS fixtures and null audio/video outputs. The runner-lifecycle
+CTest remains a separate explicit check, outside CI.
 
-The expensive patched-engine/package job is conditional on engine and direct
-package-policy inputs selected by `release-inputs`. Ordinary `lib/` or
-`windows/` source edits alone do not select it. Manual workflow dispatch and an
-unavailable comparison baseline also select the full job. When selected, it
-verifies the pinned source/configuration/patch, builds `host_release`, invokes
-the release wrapper, and exercises artifact/provenance/license/package rejection
-checks. Inspect which jobs actually ran before describing a green CI result.
-CI does not launch the application; runtime markers and native presentation
-still require physical Windows acceptance.
+The expensive jobs are conditional on `release-inputs`. Canonical pins, verifier,
+manifest, Windows patches, affected source/process fixtures and consumer scripts,
+and workflow changes select `engine-required`; package-only changes select only
+the application/package job. Ordinary `lib/` or `windows/` product edits alone do
+not select them. Manual dispatch or an unavailable comparison base selects both.
+The current push filter does not automatically run `platform/macos`; use a PR or
+an explicitly authorized manual run for hosted proof.
+
+The engine-test matrix has separate Debug and Release jobs, each with its own
+sync, fresh unittest-enabled recipe build and 180-minute budget. Each runs full
+`common_cpp_unittests` and `flutter_windows_unittests`, requiring all ten common
+`AccessibilityBridgeTest.Recovery*` cases and the Windows native-identity and
+engine callback recovery cases to appear unskipped and pass. Other failures are
+rerun by exact name against a fresh same-mode DC-only baseline with the identical
+fixture patch on the same runner;
+only failures reproduced there qualify as recorded environment exclusions. A
+baseline pass, missing result, skipped required case or incomplete attribution
+blocks the job. The recipe reverifies the combined candidate after test targets.
+Available test XML/logs, per-suite exit/XML-completion records and a
+duration/count/exclusion summary are retained. Aborted or malformed/missing-XML
+runs retain a blocked summary and fail. Inspect the first actual runs for observed durations and any platform-only skips.
+
+The separate application/package job builds its own fresh verified Release
+output and exercises receipt/artifact/license/package rejection checks. Ordinary
+CI also runs the portable Python tooling fixtures and PowerShell process/policy
+fixtures. The canonical fixture migration requires fresh execution even where the
+earlier recipe passed Debug. The recorded earlier Release failure remains blocked;
+inspect which jobs ran before describing a green CI result. CI does not launch
+the application; runtime markers and native presentation still require physical
+Windows acceptance.

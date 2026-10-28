@@ -358,6 +358,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     DiagnosticSupportSnapshot snapshot,
     PlayerTelemetry? telemetry,
   ) {
+    final isMacOS = Diagnostics.isMacOSPlatform(snapshot.platform);
     return LayoutBuilder(
       builder: (context, constraints) {
         final roles = LineupTheme.of(context);
@@ -437,14 +438,18 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               ],
             ),
             SizedBox(height: 20),
-            _technicalFact(
-              'Windows display',
-              Diagnostics.windowsDisplayFact(snapshot.playback.displayReport),
-            ),
-            _technicalFact(
-              'HDR matching',
-              Diagnostics.hdrMatchingFact(snapshot.playback.displayReport),
-            ),
+            if (isMacOS)
+              _technicalFact('HDR output', Diagnostics.macOSHdrOutputFact)
+            else ...[
+              _technicalFact(
+                'Windows display',
+                Diagnostics.windowsDisplayFact(snapshot.playback.displayReport),
+              ),
+              _technicalFact(
+                'HDR matching',
+                Diagnostics.hdrMatchingFact(snapshot.playback.displayReport),
+              ),
+            ],
             _technicalFact(
               'Renderer output',
               Diagnostics.rendererOutputFact(telemetry),
@@ -467,7 +472,9 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             ),
             SizedBox(height: 16),
             Text(
-              "Display state is reported by Windows; it does not verify the TV's picture.",
+              isMacOS
+                  ? Diagnostics.macOSDisplayStateNote
+                  : Diagnostics.windowsDisplayStateNote,
               style: TextStyle(
                 color: LineupTheme.of(context).secondaryText,
                 fontSize: 14,

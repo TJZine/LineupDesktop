@@ -41,6 +41,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   final _search = TextEditingController();
   final _rundownSearch = TextEditingController();
   final _searchFocus = FocusNode(debugLabel: 'Search programming');
+  final _rundownSearchFocus = FocusNode(debugLabel: 'Search channel programs');
   final _rundownFocus = <ManualOccurrence, FocusNode>{};
   final _browseScroll = ScrollController();
   final _rundownScroll = ScrollController();
@@ -160,6 +161,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
     _search.dispose();
     _rundownSearch.dispose();
     _searchFocus.dispose();
+    _rundownSearchFocus.dispose();
     _browseScroll.dispose();
     _rundownScroll.dispose();
     for (final node in _rundownFocus.values) {
@@ -467,20 +469,50 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
               ),
             ),
           ] else ...[
-            TextField(
-              key: const Key('studio-rundown-search'),
-              controller: _rundownSearch,
-              decoration: InputDecoration(
-                hintText: 'Search channel programs',
-                suffixIcon: rundownQuery.isEmpty
-                    ? null
-                    : IconButton(
+            TextFieldTapRegion(
+              child: Stack(
+                children: [
+                  TextField(
+                    key: const Key('studio-rundown-search'),
+                    controller: _rundownSearch,
+                    focusNode: _rundownSearchFocus,
+                    decoration: InputDecoration(
+                      hintText: 'Search channel programs',
+                      // Retain InputDecorator's suffix slot, but keep the
+                      // action outside the native text field's leaf semantics.
+                      suffixIcon: rundownQuery.isEmpty
+                          ? null
+                          : const SizedBox.shrink(),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  if (rundownQuery.isNotEmpty)
+                    PositionedDirectional(
+                      end: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: Theme.of(context).visualDensity
+                          .effectiveConstraints(
+                            const BoxConstraints(
+                              minWidth: kMinInteractiveDimension,
+                            ),
+                          )
+                          .minWidth,
+                      child: IconButton(
                         tooltip: 'Clear channel program search',
-                        onPressed: () => setState(_rundownSearch.clear),
-                        icon: Icon(Icons.clear, size: 24),
+                        onPressed: () {
+                          setState(_rundownSearch.clear);
+                          _rundownSearchFocus.requestFocus();
+                        },
+                        icon: Icon(
+                          Icons.clear,
+                          size: 24,
+                          semanticLabel: 'Clear channel program search',
+                        ),
                       ),
+                    ),
+                ],
               ),
-              onChanged: (_) => setState(() {}),
             ),
             SizedBox(height: 8),
             Text(
@@ -636,7 +668,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
         IconButton(
           tooltip: 'Remove from channel',
           onPressed: _saving ? null : () => _removeManual(entry),
-          icon: const Icon(Icons.close),
+          icon: const Icon(Icons.close, semanticLabel: 'Remove from channel'),
         ),
       ],
     );

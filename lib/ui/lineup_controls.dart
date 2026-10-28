@@ -354,7 +354,7 @@ IconButton lineupArrowButton({
   onPressed: onPressed,
   tooltip: tooltip,
   focusNode: focusNode,
-  icon: Icon(icon),
+  icon: Icon(icon, semanticLabel: tooltip),
 );
 
 /// Reuses the child's real focus/traversal and adds selection plus a distinct ring.

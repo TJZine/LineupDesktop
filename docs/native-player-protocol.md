@@ -1,19 +1,20 @@
 # `lineup/native_player` protocol
 
 This document specifies the Dart/native boundary used by `NativePlayer`. The
-wire is platform-neutral even though the current native implementation uses
-libmpv and Windows presentation APIs. A future platform backend may implement
-the same Dart contract without copying the Windows implementation's private
-types.
+wire is platform-neutral. The Windows and macOS adapters implement it on the
+shared libmpv core in `native/player_core/`, each with its own presentation;
+neither copies the other's private types.
 
 The specification was cross-checked against:
 
 - `lib/playback/native_player.dart`
 - `lib/playback/method_channel_native_player.dart`
 - `lib/playback/unsupported_native_player.dart`
-- `windows/runner/native_player.cpp` and `.h`
-- `windows/runner/track_list_encoder.cpp`
+- `native/player_core/player_core.cpp` and `.h` (shared libmpv core)
+- `native/player_core/track_list_encoder.cpp`
+- `windows/runner/native_player.cpp` and `.h` (Windows adapter)
 - `windows/runner/display_dynamic_range.*`
+- `macos/Runner/NativePlayer/LineupNativePlayer.mm` (macOS adapter)
 
 ## Channel and call shape
 
@@ -37,12 +38,12 @@ The native result is `null` unless a result map is shown.
 | `initialize` | None | `{clientApiVersion: int}`. Errors: `required_engine_unavailable`, `initialize_failed`. Initialization advances the native lifecycle generation, resets display matching revision, and purges queued display events. |
 | `dispose` | None | `null` after the worker has finished. `dispose_in_progress` if another disposal is pending. Repeated disposal is successful. |
 | `setDisplayMatching` | `revision: int >= 0`, `session: bool`, `desired: "hdr"`, `"sdr"`, or `"unknown"` | `null`; `invalid_argument` for malformed data or a native revision that is not strictly increasing. Dart ignores a revision that is not newer before making the call. |
-| `load` | `uri: String`, 1–32,768 bytes; `loadId: int >= 0`; `plexToken: String?`, either null or 1–8,192 printable ASCII bytes from `0x21`–`0x7e`; `startPaused: bool?` | `null`; `invalid_argument`, `insecure_media_uri`, or `command_queue_full`. An authenticated load requires an HTTPS URI with an authority. |
+| `load` | `uri: String`, 1–32,768 bytes; `loadId: int >= 0`; `plexToken: String?`, either null or 1–8,192 printable ASCII bytes from `0x21`–`0x7e`; `startPaused: bool?`; `startSeconds: num?`, omitted or finite and >= 0 (explicit null is invalid) | `null`; `invalid_argument`, `insecure_media_uri`, or `command_queue_full`. An authenticated load requires an HTTPS URI with an authority. |
 | `play` | None | `null` or `command_queue_full`. |
 | `pause` | None | `null` or `command_queue_full`. |
-| `seek` | `seconds: num`, finite and >= 0 | `null`, `invalid_argument`, or `command_queue_full`. |
+| `seek` | `seconds: num`, finite and >= 0; `mode: "exact"` or `"keyframes"`, optional, default `"exact"` | `null`, `invalid_argument`, or `command_queue_full`. |
 | `stop` | `stopId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `stopResult`. |
-| `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The native implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
+| `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
 | `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
 | `setVolume` | `volume: num`, finite and 0–100 inclusive | `null`, `invalid_argument`, or `command_queue_full`. |
@@ -73,11 +74,46 @@ may synthesize higher-level policy codes; those are not native wire values.
 ## Native to Dart events
 
 Events are maps with a required `type` key. The Dart transport drops malformed
-events and events whose load identity is not current. A native lifecycle
+events and load-scoped events whose load identity is not current. `display`
+and `fullscreen` are player-scoped and parsed before load correlation. A native lifecycle
 generation is attached to queued events internally; during draining, events
 from an older native generation are dropped before invocation. The generation
 is not serialized as an event key. Dart projects its own active load generation
 onto `PlayerEvent` for coordinator currentness checks.
+
+### `fullscreen`
+
+`{type: "fullscreen", fullscreen: bool}` reports the actual completed window
+state. It has no `loadId` and is independent of playback, tracks, and stop.
+Both Windows and macOS emit an initial snapshot after successful native
+initialization (including an already-fullscreen window) and after completed
+native fullscreen changes, whatever initiated them. Native adapters use the
+core's bounded platform-event queue and drain the observation on the platform
+thread before replying, so the next serialized Dart toggle calculates its
+target from the observed window state. Native lifecycle generations change
+on initialization and disposal, not media loads. A failed transition emits no
+invented target state.
+
+Dart accepts only a bool payload during the channel owner's initializing or
+initialized lifetime. Disposal/failure retires the event handler epoch and
+resets its snapshot; late callbacks from a retired lifetime are ignored. The
+`NativePlayer.fullscreenChanges` stream is hot/broadcast with no replay;
+`fullscreen` retains the latest observation for a later subscriber (false
+before initialization). The coordinator reconciles this state and display
+matching without issuing another native request. Received observations,
+including one equal to the previous value, supersede an in-flight command's
+intent and any late success/error. Dart toggles remain serialized; cleanup
+retires their existing control epoch and exits fullscreen. A completed command
+can commit its target only if no newer observation or cleanup superseded it.
+Player-scoped observations remain meaningful across media/scope replacement;
+they cannot revive retired playback intent or a disposed coordinator.
+
+On macOS a completed AppKit transition settles waiting requests successfully
+with that published state even if the user changed their original target. It
+does not queue an automatic reverse transition toward stale intent. Missing
+windows, invalid arguments, failure to start, and transition deadlines keep
+their bounded error behavior. An already-matching request still succeeds
+immediately, including during a pending/active transition.
 
 ### `state`
 
@@ -90,6 +126,10 @@ Keys:
 - `message`: a bounded diagnostic/status string.
 - `loadId`: optional for load-scoped events; the initialization-ready `idle`
   event has no `loadId`.
+- `paused`: bool snapshot of the actual libmpv pause flag on file-readiness
+  `playing` events when the native query succeeds. It overrides the Dart load
+  intent cache; pause/resume can coalesce without a property notification. Raw
+  `playing` still completes load readiness even when this flag is true.
 - `failureCode`: present for an error state.
 - `httpStatus`: optional integer, used with `http_error` for 4xx/5xx status.
 
@@ -201,6 +241,63 @@ the pending load and retires its active ID. The caller's product generation is
 kept in Dart and projected onto `PlayerEvent`; it is not sent as a native
 argument.
 
+### Seeks
+
+Dart owns seek intent. Schedule/tune joins and ordinary authorization recovery
+joins pass an optional initial position in `load.startSeconds`; the existing
+schedule join omits it when elapsed is at most two seconds. The core supplies
+string-valued per-file `start` and `hr-seek=no` options in a `loadfile` node map
+at index -1. Authenticated header and redirect options share that map, without
+modifying URI bytes or weakening reference restrictions. Each coordinator load
+records its native initial target explicitly and omits its post-load join seek;
+status updates to the resume position cannot reintroduce that seek. Explicit
+user seeks select `exact`, including a seek
+that overrides a pending join, crosses parts, or immediately recovers that
+unfinished operation. Completing a user seek does not make later playback
+recovery joins exact. Sequential part loads preserve the current operation's
+intent; program rollover resolves the newly scheduled program normally.
+
+Explicit seek commands execute `absolute+exact` or `absolute+keyframes`.
+An exact command overrides the per-file `hr-seek=no` setting. In pinned mpv
+`3186d369f9f090cd1363be0ac46a037824b702c6`, absolute keyframe seeks use the
+backward demux preference, while positive relative seeks use `SEEK_FORWARD`.
+The lavf path uses FFmpeg's `AVSEEK_FLAG_BACKWARD`. This is a preference, not a
+strict no-overshoot guarantee: cached demux seeking can select the first later
+keyframe when no predecessor exists, and lavf retries without the backward flag
+if that seek fails. No exact fallback, admission pause, or extra retry is added.
+Existing `startPaused` display holds and explicit pause intent are unchanged.
+
+Seek command success means queue acceptance. The native worker emits a passive
+`seek landing` diagnostic for an executed, current-load seek command followed
+by a `SEEK`/`PLAYBACK_RESTART` pair. An initial `start` load instead opens a
+window only after its matching `START_FILE` and `FILE_LOADED`; the subsequent
+initial restart can produce one sample. A restart before either matching event
+cannot confirm the initial join. Both paths require `seeking=false` and a finite,
+non-negative native `time-pos`. Fields are load ID, mode, target, observed
+seconds, and signed `observed-target` offset; no URI, token, title, or raw mpv
+output is included. Initial joins report `mode=keyframes`.
+
+Samples expire ten seconds after native command execution. Replacement, stop,
+matching end/error, command failure, overflow, and stale load identity invalidate
+them. An older file's end cannot retire the new load's pending initial sample.
+Overlapping seek commands (including an exact user override) or duplicate seek
+notifications make samples ambiguous and suppress logging until the next load.
+A load/seek without its matching restart produces no landing diagnostic.
+Logging never changes playback, waits for completion, pauses, retries, or adds
+a seek.
+
+Classified mpv error logs are retained as detail for a later failed `END_FILE`.
+Their presence alone does not invalidate a matched restart: backend probing can
+fail and then recover with another output. Actual terminal and command errors
+still retire observations. A landing diagnostic reports position, not successful
+audio output or continued playback.
+
+This is a restart observation, not an exact per-request or first-frame PTS
+protocol: mpv supplies no seek request ID, and `time-pos` is sampled when the
+worker consumes the restart. It may include playback progress since landing.
+Dart keeps commanded resume intent separate from observed UI position and never
+treats a commanded target as landing evidence.
+
 ### Stops
 
 `stop()` immediately retires the Dart active load and settles pending load and
@@ -226,7 +323,7 @@ its report and media state on initialize/dispose.
 ## Queue capacity and eviction
 
 The native event queue holds 256 events. When it is full, the policy in
-`native_player.cpp:1254-1267` is:
+`PlayerCore::QueueEvent` in `native/player_core/player_core.cpp` is:
 
 1. Find and evict the oldest queued `property` event, regardless of the type
    of the incoming event.
@@ -250,7 +347,9 @@ Any platform implementation must preserve these obligations:
 3. Keep the rectangle across load and stop. Hide video for a zero rectangle or
    while minimized.
 4. Keep video passive: it has no hit-testing, focus, or accessibility surface.
-5. Complete `setFullscreen` only after the platform transition has completed.
+5. Complete a nonmatching `setFullscreen` request after the platform transition
+   has completed; an already-matching request succeeds immediately. Publish the
+   actual `fullscreen` observation, which may supersede the requested target.
 6. Enforce the token-safety contract documented on `NativePlayer.load`:
    HTTPS, scoped headers, no unsafe redirects, no logging, and no implicit
    unvalidated nested references.
@@ -271,9 +370,52 @@ policy and may be unavailable on another backend:
 A backend without equivalent information should report unavailable/unknown
 values truthfully (`DisplayMatchingSessionState.unavailable`, an appropriate
 `reason`, `route: none`, `activeColorMode: null` or `unknown`, and null
-telemetry facts) rather than fabricating Windows values. macOS currently uses
-the explicit unsupported backend; this document does not authorize a macOS
-media implementation.
+telemetry facts) rather than fabricating Windows values.
+
+## macOS backend
+
+`macos/Runner/NativePlayer/LineupNativePlayer.mm` implements this protocol on
+the shared core, with these platform-specific values:
+
+- `initialize` never returns `required_engine_unavailable`; the stock Flutter
+  macOS engine composites a transparent `FlutterView` over the video layer.
+- libmpv renders with `vo=gpu-next`, `gpu-api=vulkan`, `gpu-context=macvk`,
+  and `target-colorspace-hint=yes` into an adapter-owned `CAMetalLayer` passed
+  as `wid` (the runtime's embedding patch). HDR output is EDR on that layer,
+  selected by mpv from the content; there is no display mode switch.
+  The owned layer publishes MoltenVK's off-main color space, EDR, metadata,
+  pixel format, and drawable-size mutations immediately on the setter's
+  calling thread. This also covers teardown and threads that never acquire
+  another drawable; acquisition on another thread cannot publish that
+  transaction. Main-thread mutations retain normal AppKit transactions.
+- `setDisplayMatching` validates its arguments and the strictly increasing
+  revision exactly as above, returns `null`, and queues a `display` report
+  for that revision with `session: unavailable`, `observed: unknown`,
+  `outcome: failed`, `wrote: false`, `owned: false`,
+  `reason: unsupported_api`, `route: none`, and `activeColorMode: null`. This
+  is `DisplayMatchingReport.unavailable(revision: r)`.
+- `setVideoRect` places the video in logical points with a top-left origin
+  (a flipped host view) and ignores `scale`, because AppKit views are in
+  points; the layer's `contentsScale` and `drawableSize` follow the window's
+  backing scale. Video is hidden for a zero rectangle and while the window is
+  minimized or occluded; the layer keeps a non-empty frame while hidden.
+- `setFullscreen` uses the window's native fullscreen. Nonmatching requests
+  complete after AppKit reports the transition. It fails with `window_error`
+  when AppKit does not start the transition within one second or complete
+  the request within five. A request for the window's current state succeeds
+  immediately, even when a transition is running or pending. Completed AppKit
+  notifications publish the actual player-scoped state and settle waiting
+  requests without reversing a user change.
+- Closing the window or quitting starts asynchronous native disposal after
+  the existing close/Flutter quit approval. The window and video owners stay
+  alive while the main run loop handles wakeups. libmpv terminates on its
+  worker, then the platform thread joins and removes the layer before allowing
+  window/app teardown. Repeated close/quit requests coalesce, and a concurrent
+  Dart `dispose` keeps its reply. Runner shutdown rejects subsequent commands
+  except `dispose`, including reinitialization. If disposal does not finish
+  within five seconds, a fixed diagnostic is logged and the process exits with
+  failure without running destructors or removing a live worker's layer.
+  Synchronous shutdown is reserved for emergency/destructor cleanup.
 
 ## Dart/C++ differences recorded at this revision
 

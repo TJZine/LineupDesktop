@@ -1,7 +1,10 @@
 # Lineup Desktop Documentation
 
-Start with the current owner for the question. Dated audits and archived campaign
-results retain their original source, build and platform limits.
+Start with the current owner for the question. The October 20 reconciliation in
+[Open obligations](open-obligations.md) is the single unfinished-work register;
+the [Opus 5.5 handoff](handoffs/opus-5-5-core-readiness-handoff.md) supplies current
+core/macOS context and TV feasibility boundaries. Dated audits and archived
+campaign results retain their original source, build and platform limits.
 
 ## Choose a starting point
 
@@ -13,7 +16,7 @@ results retain their original source, build and platform limits.
 | Pending work or release planning | [Open obligations](open-obligations.md) | Current plans below; [August 23, 2026 product-parity audit](product-parity.md) for dated context |
 | Application, async, persistence or credential work | [Architecture](architecture.md) | Current source and linked owner tests |
 | UI, Guide, PiP or Studio | [Desktop UI specification](desktop-ui-design-spec.md) | [Interface system](../.interface-design/system.md), retained decision records, current source |
-| Native media protocol or macOS port planning | [Native-player protocol](native-player-protocol.md) | [Platform ownership](architecture.md#platform-neutral-native-player-protocol), [macOS backlog](open-obligations.md#macos-media-backlog) |
+| Native media protocol or macOS port planning | [Native-player protocol](native-player-protocol.md) | [Platform ownership](architecture.md#platform-neutral-native-player-protocol), [macOS backlog](open-obligations.md#macos-media-backlog), [macOS port plan](macos-port-plan.md) |
 | Windows media, runner or packaging | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Windows presentation](architecture.md#windows-presentation-and-ownership), [runtime provenance](windows-runtime.md), [physical acceptance](windows-native-validation.md) |
 | Security report | [Security Policy](../SECURITY.md) | Private reporting route; never include secrets in a public issue |
 
@@ -27,13 +30,14 @@ results retain their original source, build and platform limits.
   Windows mechanisms, data, source/schedule, async and privacy contracts.
 - [Native-player protocol](native-player-protocol.md): methods, events,
   correlation, lifetime, bounds, token safety and presentation obligations.
-  macOS is a development surface; native playback is not yet implemented.
+  Windows and macOS playback backends are implemented; neither implementation
+  alone establishes final platform/package acceptance. Other backends are absent.
 - [Windows Native Acceptance](windows-native-validation.md): exact-candidate
   physical-machine scenarios and safety requirements; a procedure, not proof.
 - [Windows Runtime Provenance](windows-runtime.md): pinned libmpv/FFmpeg sources,
   hashes, licenses, package policy and redistribution obligations.
 - [Open obligations](open-obligations.md): unfinished acceptance and product work,
-  the active F gate, macOS decisions, and full-commit campaign recovery.
+  deduplicated remaining platform gates, macOS/TV status and full-commit recovery.
 - [Agent entry](../AGENTS.md) and [project profile](../.agents/project.md): shared
   workflow routing and repository-specific constraints. `CLAUDE.md` imports the
   same entry; historical dispatch prompts are not current workflow policy.
@@ -68,6 +72,11 @@ and physical acceptance are different states.
 
 ## Active plans and investigations
 
+- [Direct Play stabilization status](open-obligations.md): current macOS private-beta
+  scope, data-format protection, Windows engine integration and remaining acceptance
+  gates. Implementation plans are local working documents, not shipped references.
+- [Approved Licenses design](handoffs/licenses-design-2026-10-21.md): in-app notices
+  presentation, implemented reader/source tooling and remaining candidate delivery gates.
 - [Code-quality implementation plan](code-quality-implementation-plan.md):
   portable packages and documentation consolidation (G) integrated and reviewed;
   native restoration work (F) merged for Windows testing, with validation still
@@ -107,8 +116,9 @@ and physical acceptance are different states.
 - [Code-quality execution](reviews/code-quality-2026-10-15/EXECUTION.md),
   [combined review](reviews/code-quality-2026-10-15/IMPLEMENTATION_COMBINED_REVIEW.md)
   and [final review](reviews/code-quality-2026-10-15/IMPLEMENTATION_FINAL_REVIEW.md):
-  attributed package histories and clear portable code-review closure; no F
-  integration or physical acceptance claim.
+  attributed package histories and clear portable code-review closure. Later F
+  integration and partial native CI supersede the old unmerged/unexecuted labels;
+  the current register retains outstanding lifecycle/physical/package gates.
 
 ## Historical material in Git
 

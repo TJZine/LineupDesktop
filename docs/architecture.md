@@ -16,8 +16,8 @@ Flutter/Dart application
     +-- narrow native player boundary
               |
               +-- C++ / libmpv
-              +-- Windows native video presentation
-              +-- DirectComposition integration
+              +-- Windows presentation / DirectComposition
+              +-- macOS presentation / MoltenVK / CAMetalLayer
 ```
 
 ## Accepted ownership
@@ -31,9 +31,10 @@ cross-feature asynchronous state graph justifies one mature state-management
 dependency.
 
 C++ is reserved for behavior that materially needs native ownership: libmpv
-lifetime and commands, decoded-frame presentation, Windows platform objects,
-DirectComposition, and native media telemetry. Native handles, mpv internals,
-and token-bearing URLs do not enter ordinary Flutter UI state.
+lifetime and commands, decoded-frame presentation, platform objects,
+DirectComposition on Windows, MoltenVK/CAMetalLayer on macOS, and native
+telemetry. Native handles, mpv internals, and token-bearing URLs do not enter
+ordinary Flutter UI state.
 
 ## Platform-neutral native player protocol
 
@@ -44,11 +45,18 @@ and fullscreen completion. `MethodChannelNativePlayer` owns transport;
 `createPlatformNativePlayer` selects the platform implementation. Dart owns playback
 policy; native backends implement media and platform mechanisms.
 
-macOS is a development surface; native playback is not yet implemented.
-A future backend must meet the protocol and the [macOS decision and presentation
-obligations](code-quality-implementation-plan.md#9-macos-strategy-and-deferred-port-backlog).
-The following section describes the current Windows implementation, not a
-requirement to copy Win32 mechanisms to another platform.
+The libmpv mechanics behind the protocol live in the platform-neutral
+[player core](../native/player_core/player_core.h): the mpv client lifetime,
+the bounded command queue and worker, load/stop/track correlation, the bounded
+event queue and generation filtering, token handling, and telemetry encoding.
+A platform adapter owns the channel and codec conversion, presentation, and
+window lifecycle; the Windows adapter is `windows/runner/native_player.*` and
+the macOS adapter is `macos/Runner/NativePlayer/LineupNativePlayer.*`.
+
+macOS is not yet a release platform; the [port plan](macos-port-plan.md) owns
+its decisions and remaining packages. The following section describes the
+Windows implementation, not a requirement to copy Win32 mechanisms to another
+platform. The macOS presentation is summarized after it.
 
 ## Windows presentation and ownership
 
@@ -149,8 +157,53 @@ OS shutdown that cuts recovery short. The runner destroys the native owner
 before the Flutter controller/messenger. Preserve this ordering when changing
 close or recreation; the destructor's five-second wait and termination fallback
 is emergency cleanup, not the normal path. See
-[native player lifetime](../windows/runner/native_player.cpp) and
+[native player lifetime](../native/player_core/player_core.cpp), the
+[Windows adapter](../windows/runner/native_player.cpp), and
 [runner message handling](../windows/runner/flutter_window.cpp).
+
+## macOS presentation and ownership
+
+The Swift runner (`macos/Runner/MainFlutterWindow.swift`) makes the window and
+the `FlutterViewController` background clear and installs a container view
+controller. Its flipped, passive, black video host view fills the content area
+below the transparent `FlutterView`. The Objective-C++ adapter owns a
+`PlayerCore` and implements its `CoreHost`:
+
+- **Output:** `PrepareOutput` adds a passive `CAMetalLayer`-backed view to the
+  host and passes the layer as `wid` with `gpu-next`, Vulkan (MoltenVK),
+  `macvk`, and `target-colorspace-hint=yes`. The runtime's embedding patch
+  renders into that layer and reads `drawableSize` each frame. MoltenVK sets
+  the layer's color space, EDR, and HDR metadata from libplacebo's swapchain
+  choice; the adapter does not drive HDR state.
+- **Rectangle:** logical top-left points map directly to the flipped host;
+  `contentsScale` and `drawableSize` follow the backing scale, with implicit
+  animations disabled. The layer is hidden for a zero rectangle and while the
+  window is minimized or occluded; a hidden layer also stops mpv rendering,
+  but not playback. The frame never becomes empty, because MoltenVK derives
+  the swapchain extent from the layer bounds even while it is hidden.
+- **Threads:** worker wakeups hop to the main queue through a weak adapter
+  reference; every core and AppKit call runs on the main thread.
+- **Fullscreen:** native `toggleFullScreen:`, completed from the window's
+  did-enter/did-exit notifications. A toggle AppKit does not start within one
+  second, or a request not settled within five, fails with `window_error`.
+- **Lifetime:** `AppDelegate` preserves `FlutterAppDelegate`'s quit approval
+  (including a Dart cancellation) before returning `terminateLater` and
+  starting native shutdown. `MainFlutterWindow.close()` defers the actual
+  close after the existing window delegate's approval; close-last-window
+  still quits. `LineupPlayerLifecycle` coalesces repeated runner requests.
+  The adapter starts `PlayerCore::BeginDispose()` and retains itself, the
+  window/Flutter controller, and video host while the main run loop services
+  worker wakeups. `ProcessWakeup()` joins after worker completion and releases
+  the output; only the core's resulting `disposed()` state permits close/quit
+  completion. An in-flight Dart `dispose` keeps its reply. Runner shutdown
+  permanently rejects reinitialization. After five seconds without completion,
+  a fixed diagnostic is logged and `_Exit(EXIT_FAILURE)` ends the process
+  without destructors, a second blocking wait, or live-layer teardown. This
+  is failed termination; the OS reclaims the resources. Synchronous `Shutdown()`
+  remains emergency/destructor cleanup only. Native fullscreen events and Dart
+  reconciliation are implemented; the exact platform acceptance stays attributed.
+- **Display matching:** always reported unavailable (`unsupported_api`), as
+  [the protocol](native-player-protocol.md#macos-backend) records.
 
 ## Implemented now
 
@@ -173,11 +226,17 @@ is emergency cleanup, not the normal path. See
   Channels, Settings and Diagnostics, and an immersive shell for Guide and
   Player. The immersive Lineup menu calls the same route owner; it is not a
   second navigation system.
-- The Dart native-player seam and an explicit macOS unsupported development
-  backend. It never reports successful playback.
+- The Dart native-player seam. Windows and macOS use the method-channel
+  backend; other platforms use an explicit unsupported backend that never
+  reports successful playback.
 - A Windows C++ libmpv owner, native child presentation, command/property/event
   channel, track projection, decoder/output and quality/HDR observations,
   fullscreen/resize/minimize handling, and clean recreation controls.
+- A macOS Objective-C++ adapter on that shared core, with host CAMetalLayer/
+  MoltenVK presentation, Mac menu/modifier integration, native fullscreen events,
+  asynchronous close/quit, self-built runtime embedding and generated notices.
+  Development/native evidence is recorded; signed release and older-OS acceptance
+  remain in [the current register](open-obligations.md).
 - A retained Flutter Guide with lazy fixed-extent rows, shared time geometry,
   distinct focus/selection/tuned/airing/hover treatment, bounded schedule and
   artwork caches, stale-result rejection, library filters, accessible
@@ -281,7 +340,7 @@ is emergency cleanup, not the normal path. See
   physical Windows acceptance.
   Preserve native header-buffer clearing after command execution and queue
   cleanup. See [Dart load validation](../lib/playback/method_channel_native_player.dart),
-  [native load options](../windows/runner/native_player.cpp), and the
+  [native load options](../native/player_core/player_core.cpp), and the
   [physical redirect scenarios](windows-native-validation.md#6-plex-end-to-end-campaign).
 - Profile and selected-server state remains scoped by Plex profile. The
   application controller serializes whole state mutations through
@@ -343,6 +402,10 @@ is emergency cleanup, not the normal path. See
   owner.
 - A pinned, repository-owned Flutter Windows DirectComposition patch with the
   adapted BSD notice and an exact runtime compatibility check.
+- An opt-in desktop accessibility engine repair with retained semantics, staged
+  AXTree publication and failed-update recovery. macOS source/build/artifact and
+  bounded native recovery are verified; stock SDKs remain untouched and combined
+  Windows engine/app integration is unfinished. [Recovery evidence](handoffs/macos-post-audit-fix-report.md).
 - Flutter format, analysis, tests, focused macOS golden verification and
   application builds, focused Windows widget tests, pinned LGPL libmpv
   application builds, conditional patched-engine builds, packaging rejection
@@ -475,6 +538,20 @@ decision. Exercise existing serialized state and failure/recovery behavior in
 [app_store_test.dart](../test/persistence/app_store_test.dart). Preserve strict
 validation of malformed data and the original bytes on recovery; do not add a
 generic migration framework without a current need.
+
+Today's unversioned file is state format 1. `FileAppStore` reserves the top-level
+`formatVersion` discriminator: an integer greater than 1 raises
+`UnsupportedStateFormatException` before strict schema parsing, migration or
+corruption recovery. Startup refuses to open the application before credential
+restoration or state writes and explains that the build is too old and saved data
+is intact. The original state and existing backup stay byte-for-byte unchanged;
+malformed markers retain the normal malformed-data recovery path. Current writers
+continue emitting the exact unversioned format. Every future schema-changing
+writer must emit the newer discriminator so guarded older builds can refuse it.
+Pre-guard binaries cannot acquire this protection; preserve current state
+separately before changing builds and set an explicit compatibility floor before
+the first format-2 writer ships. Do not distribute the preserved pre-guard
+application/engine pairs as beta candidates.
 
 Before the first refinement-schema rewrite, the store retains the original bytes
 in a sibling backup. Backup or migration IO failures propagate without classifying

@@ -6,11 +6,122 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
 
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'bulk-selected channel rows show checked state on the checkbox only',
+    (tester) async {
+      await tester.pumpWidget(
+        UiFixture(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('first', 1, 'First'),
+              _channel('second', 2, 'Second'),
+            ],
+          ),
+        ).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+      final row = find.byKey(const ValueKey('channel-row-first'));
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Checkbox>(
+              find.descendant(of: row, matching: find.byType(Checkbox)),
+            )
+            .value,
+        isTrue,
+      );
+      final roles = LineupTheme.of(tester.element(row));
+      final surface =
+          tester
+                  .widget<Container>(
+                    find
+                        .descendant(
+                          of: find.ancestor(
+                            of: row,
+                            matching: find.byType(LineupRowSurface),
+                          ),
+                          matching: find.byType(Container),
+                        )
+                        .first,
+                  )
+                  .decoration!
+              as BoxDecoration;
+      expect(surface.color, isNot(roles.selectedSurface));
+      expect((surface.border! as Border).left.color, Colors.transparent);
+    },
+  );
+
+  testWidgets('directory exposes search, management actions and channel rows', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_channel('first', 2, 'First')],
+      ),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+    await tester.pumpAndSettle();
+
+    void outsideTextField(SemanticsNode node) {
+      SemanticsNode? ancestor = node;
+      while (ancestor != null) {
+        expect(
+          ancestor.getSemanticsData().flagsCollection.isTextField,
+          isFalse,
+          reason: 'Directory controls must not be children of a text field',
+        );
+        ancestor = ancestor.parent;
+      }
+    }
+
+    final search = tester.getSemantics(
+      find.byKey(const Key('channels-search')),
+    );
+    expect(search.label, contains('Search channels'));
+    expect(search.getSemanticsData().flagsCollection.isTextField, isTrue);
+    for (final label in [
+      'Generate lineup',
+      'Add a custom channel',
+      'Select',
+      'Reorder channels',
+    ]) {
+      final node = tester.getSemantics(find.text(label).first);
+      expect(node.getSemanticsData().label, contains(label));
+      outsideTextField(node);
+      expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    }
+    for (final label in ['All', 'Custom', 'Generated']) {
+      final node = tester.getSemantics(find.text(label).first);
+      expect(node.getSemanticsData().label, label);
+      outsideTextField(node);
+    }
+    final row = tester.getSemantics(find.text('First'));
+    expect(row.label, contains('First'));
+    outsideTextField(row);
+    expect(row.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    final actions = tester.getSemantics(find.byTooltip('Actions for First'));
+    expect(actions.label, 'Actions for First');
+    outsideTextField(actions);
+    expect(actions.getSemanticsData().flagsCollection.isButton, isTrue);
+    expect(actions.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, semanticsEnabled: true);
   testWidgets(
     'selection survives search and batch delete receives the reviewed channels',
     (tester) async {

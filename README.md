@@ -18,14 +18,14 @@
 
 > [!IMPORTANT]
 > Lineup Desktop is under active development. There is no supported public
-> installer or release yet. Windows native playback is implemented, but final
-> physical-device, media-compatibility, HDR, packaging, and release acceptance
-> are still in progress.
+> installer or release yet. Windows and Apple Silicon macOS native playback are
+> implemented. Platform, signed-package and release acceptance remain incomplete;
+> see [the reconciled backlog](docs/open-obligations.md).
 
 Lineup Desktop turns a Plex library into a deterministic, television-style
 lineup. It combines channel creation, a responsive electronic program guide,
 and native desktop playback while keeping product behavior in Flutter/Dart and
-the Windows media boundary deliberately narrow.
+the native media/platform boundary deliberately narrow.
 
 ## Highlights
 
@@ -35,7 +35,7 @@ the Windows media boundary deliberately narrow.
   studio, actor, and director strategies
 - Custom channels built from an entire library or hand-picked media
 - Classic picture-in-picture Guide layout with a responsive schedule surface
-- Native Windows playback with an OSD, mini Guide, channel entry, seeking,
+- Native Windows and macOS playback with an OSD, mini Guide, channel entry, seeking,
   track selection, sleep timer, and fullscreen controls
 - Four themes, reduced motion, larger focus indicators, and optional DVR
   playback controls
@@ -46,7 +46,9 @@ the Windows media boundary deliberately narrow.
 | Platform | Current status |
 | --- | --- |
 | Windows 10/11 x64 | Primary target. Flutter UI, libmpv playback, native video presentation, and portable packaging are implemented. Final real-hardware and release acceptance remains pending. |
-| macOS 12 or newer | Portable Flutter UI, onboarding, channel management, Guide, settings, and secure-storage development flows build successfully. Native playback is not yet implemented; see [the protocol](docs/native-player-protocol.md). |
+| macOS, Apple Silicon | Native libmpv playback, Guide/PiP, HDR presentation and Mac integration are implemented for development/private testing. Deployment target is macOS 12; runtime coverage is recorded on macOS 27. Older-OS and signed-distribution acceptance remain open. |
+| Android TV / Android-based Fire TV | Requested future targets; no host/player adapter or device proof exists yet. |
+| Apple TV | Feasibility research only; no tvOS implementation. |
 | Linux | Not currently targeted. |
 
 See [Architecture](docs/architecture.md) for the ownership model and
@@ -74,8 +76,8 @@ build supplied by the maintainer and should verify its source commit and package
 hash before running it. Do not copy only the executable out of the portable
 package; the adjacent runtime files and `data` directory are required.
 
-Developers can build the portable Flutter application on macOS or the complete
-native player on Windows. Start with [Development](docs/DEVELOPMENT.md).
+Developers can build the native development player on macOS or Windows.
+Start with [Development](docs/DEVELOPMENT.md).
 
 ```sh
 flutter pub get
@@ -127,10 +129,12 @@ Electron/TypeScript/C# source is preserved on `electron-ui` at the immutable
 `bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline. `initial-build` is a
 later Flutter-replatform milestone; neither branch is a compatibility target.
 
-The principal remaining release work is physical Windows acceptance of native
-video composition, replacement playback, hardware decode, HDR behavior,
-fullscreen and high-DPI transitions, input/focus behavior, and the final
-portable package on clean test systems.
+The [single unfinished-work register](docs/open-obligations.md) separates known
+repairs, verification gaps, investigations, new features and release engineering.
+It includes Windows patched-engine/lifecycle/package acceptance, macOS signed
+distribution and older-OS compatibility, and explicitly deferred human checks.
+The [Opus 5.5 handoff](docs/handoffs/opus-5-5-core-readiness-handoff.md) describes
+core stabilization and bounded TV-platform feasibility work.
 
 ## License
 

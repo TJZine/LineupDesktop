@@ -1,8 +1,9 @@
 # Contributing to Lineup Desktop
 
 Lineup Desktop is a pre-release Flutter-native desktop application with a narrow
-Windows C++/libmpv boundary. Contributions should improve the current
-architecture rather than preserve the historical Electron implementation.
+shared C++/libmpv core and Windows/macOS platform adapters. Contributions should
+improve the current architecture rather than preserve the historical Electron
+implementation.
 
 Resolve the target and base from the current task, issue, or pull request
 metadata. Do not infer the active development target from an old branch name.
@@ -30,8 +31,8 @@ being investigated.
 [Architecture](docs/architecture.md#accepted-ownership) owns the current
 responsibility boundaries; the [project profile](.agents/project.md) maps
 source entry points and task-specific contracts. Flutter/Dart owns application
-and interaction policy. Native code owns libmpv and Windows platform mechanisms.
-Preserve the relevant behavior, security, lifetime, and data obligations when
+and interaction policy. Native code owns libmpv and the Windows/macOS platform
+mechanisms. Preserve the relevant behavior, security, lifetime, and data obligations when
 replacing an implementation. Historical structure is not a reason to retain
 duplicate policy or a displaced compatibility path.
 

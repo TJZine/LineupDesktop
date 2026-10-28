@@ -1,0 +1,173 @@
+diff --git a/video/out/vulkan/context_mac.m b/video/out/vulkan/context_mac.m
+index 559e361e8..c7ab48318 100644
+--- a/video/out/vulkan/context_mac.m
++++ b/video/out/vulkan/context_mac.m
+@@ -20,6 +20,9 @@
+ #include "video/out/gpu/context.h"
+ #include "osdep/mac/swift.h"
+ 
++#include "options/options.h"
++#include "video/out/vo.h"
++
+ #include "common.h"
+ #include "context.h"
+ #include "utils.h"
+@@ -27,26 +30,50 @@
+ struct priv {
+     struct mpvk_ctx vk;
+     MacCommon *vo_mac;
++    // Embedding: a host-owned CAMetalLayer passed through --wid. mpv renders
++    // into it and never creates a window, view, or app integration of its own.
++    CAMetalLayer *embed_layer;
++    CGSize embed_size;
+ };
+ 
++static bool is_embedded(struct priv *p)
++{
++    return p->embed_layer != nil;
++}
++
++static CGSize embed_drawable_size(struct priv *p)
++{
++    CGSize size = p->embed_layer.drawableSize;
++    return CGSizeMake(MPMAX(size.width, 1), MPMAX(size.height, 1));
++}
++
+ static void mac_vk_uninit(struct ra_ctx *ctx)
+ {
+     struct priv *p = ctx->priv;
+ 
+     ra_vk_ctx_uninit(ctx);
+     mpvk_uninit(&p->vk);
++    if (is_embedded(p)) {
++        [p->embed_layer release];
++        p->embed_layer = nil;
++        return;
++    }
+     [p->vo_mac uninit:ctx->vo];
+ }
+ 
+ static void mac_vk_swap_buffers(struct ra_ctx *ctx)
+ {
+     struct priv *p = ctx->priv;
++    if (is_embedded(p))
++        return;
+     [p->vo_mac swapBuffer];
+ }
+ 
+ static void mac_vk_get_vsync(struct ra_ctx *ctx, struct vo_vsync_info *info)
+ {
+     struct priv *p = ctx->priv;
++    if (is_embedded(p))
++        return;
+     [p->vo_mac fillVsyncWithInfo:info];
+ }
+ 
+@@ -58,6 +85,8 @@ static int mac_vk_color_depth(struct ra_ctx *ctx)
+ static bool mac_vk_check_visible(struct ra_ctx *ctx)
+ {
+     struct priv *p = ctx->priv;
++    if (is_embedded(p))
++        return !p->embed_layer.hidden;
+     return [p->vo_mac isVisible];
+ }
+ 
+@@ -75,15 +104,25 @@ static bool mac_vk_init(struct ra_ctx *ctx)
+     if (!mpvk_init(vk, ctx, VK_EXT_METAL_SURFACE_EXTENSION_NAME))
+         goto error;
+ 
+-    p->vo_mac = [[MacCommon alloc] init:ctx->vo];
+-    if (!p->vo_mac)
+-        goto error;
++    int64_t wid = ctx->vo->opts->WinID;
++    if (wid > 0) {
++        id candidate = (id)(intptr_t)wid;
++        if (![candidate isKindOfClass:[CAMetalLayer class]]) {
++            MP_MSG(ctx, msgl, "--wid must be a CAMetalLayer on macOS\n");
++            goto error;
++        }
++        p->embed_layer = [(CAMetalLayer *)candidate retain];
++    } else {
++        p->vo_mac = [[MacCommon alloc] init:ctx->vo];
++        if (!p->vo_mac)
++            goto error;
++    }
+ 
+     VkMetalSurfaceCreateInfoEXT mac_info = {
+         .sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
+         .pNext = NULL,
+         .flags = 0,
+-        .pLayer = p->vo_mac.layer,
++        .pLayer = is_embedded(p) ? p->embed_layer : p->vo_mac.layer,
+     };
+ 
+     struct ra_ctx_params params = {
+@@ -107,6 +146,10 @@ static bool mac_vk_init(struct ra_ctx *ctx)
+ error:
+     if (p->vo_mac)
+         [p->vo_mac uninit:ctx->vo];
++    if (p->embed_layer) {
++        [p->embed_layer release];
++        p->embed_layer = nil;
++    }
+     return false;
+ }
+ 
+@@ -114,6 +157,12 @@ static bool resize(struct ra_ctx *ctx)
+ {
+     struct priv *p = ctx->priv;
+ 
++    if (is_embedded(p)) {
++        p->embed_size = embed_drawable_size(p);
++        return ra_vk_ctx_resize(ctx, (int)p->embed_size.width,
++                                (int)p->embed_size.height);
++    }
++
+     if (!p->vo_mac.window) {
+         return false;
+     }
+@@ -125,6 +174,8 @@ static bool resize(struct ra_ctx *ctx)
+ static bool mac_vk_reconfig(struct ra_ctx *ctx)
+ {
+     struct priv *p = ctx->priv;
++    if (is_embedded(p))
++        return resize(ctx);
+     if (![p->vo_mac config:ctx->vo])
+         return false;
+ 
+@@ -136,6 +187,26 @@ static bool mac_vk_reconfig(struct ra_ctx *ctx)
+ static int mac_vk_control(struct ra_ctx *ctx, int *events, int request, void *arg)
+ {
+     struct priv *p = ctx->priv;
++    if (is_embedded(p)) {
++        switch (request) {
++        case VOCTRL_CHECK_EVENTS: {
++            // The host resizes the layer and sets drawableSize; mpv observes
++            // it once per frame instead of receiving window notifications.
++            CGSize size = embed_drawable_size(p);
++            if (!CGSizeEqualToSize(size, p->embed_size)) {
++                *events |= VO_EVENT_RESIZE;
++                if (!resize(ctx))
++                    return VO_ERROR;
++            }
++            return VO_TRUE;
++        }
++        case VOCTRL_GET_HIDPI_SCALE:
++            *(double *)arg = p->embed_layer.contentsScale;
++            return VO_TRUE;
++        default:
++            return VO_NOTIMPL;
++        }
++    }
+     int ret = [p->vo_mac control:ctx->vo events:events request:request data:arg];
+ 
+     if (*events & VO_EVENT_RESIZE) {
+@@ -149,6 +220,8 @@ static int mac_vk_control(struct ra_ctx *ctx, int *events, int request, void *ar
+ static void mac_vk_update_render_opts(struct ra_ctx *ctx)
+ {
+     struct priv *p = ctx->priv;
++    if (is_embedded(p))
++        return;
+     [p->vo_mac updateWithAlpha:ctx->opts.want_alpha];
+ }
+ 

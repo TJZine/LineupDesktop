@@ -473,8 +473,10 @@ class ChannelsViewState extends State<ChannelsView> {
                         () => FocusNode(debugLabel: 'Open ${channel.name}'),
                       );
                       rowFocus.debugLabel = 'Open ${channel.name}';
+                      // The selection-mode checkbox alone shows checked
+                      // state; the row surface carries focus and hover only.
                       return LineupRowSurface(
-                        selected: _selectedIds.contains(channel.id),
+                        selected: false,
                         child: Material(
                           key: ValueKey('channel-row-${channel.id}'),
                           color: Colors.transparent,
@@ -545,6 +547,11 @@ class ChannelsViewState extends State<ChannelsView> {
                                         tooltip: 'Actions for ${channel.name}',
                                         padding: EdgeInsets.all(8),
                                         iconSize: 24,
+                                        icon: Icon(
+                                          Icons.adaptive.more,
+                                          semanticLabel:
+                                              'Actions for ${channel.name}',
+                                        ),
                                         menuPadding: EdgeInsets.zero,
                                         onSelected: (action) =>
                                             switch (action) {
@@ -753,14 +760,18 @@ class ChannelsViewState extends State<ChannelsView> {
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
-        final search = TextField(
-          key: const Key('channels-search'),
-          enabled: !_saving,
-          controller: _search,
-          focusNode: _searchFocus,
-          style: _channelBodyStyle(context),
-          decoration: InputDecoration(hintText: 'Search by name or number'),
-          onChanged: (_) => setState(() {}),
+        final search = Semantics(
+          container: true,
+          label: 'Search channels',
+          child: TextField(
+            key: const Key('channels-search'),
+            enabled: !_saving,
+            controller: _search,
+            focusNode: _searchFocus,
+            style: _channelBodyStyle(context),
+            decoration: InputDecoration(hintText: 'Search by name or number'),
+            onChanged: (_) => setState(() {}),
+          ),
         );
         final wide = constraints.maxWidth >= 1200 && textScale < 1.4;
         if (wide) {

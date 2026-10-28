@@ -71,7 +71,7 @@ Future<void> _pumpGuide(WidgetTester tester, {required bool rich}) async {
           controller: guide,
           pictureInPicture: const SizedBox.expand(),
           playbackMessage: 'Synthetic player surface',
-          onClose: () {},
+          onClose: (_, _) {},
           onTune: (_) async {},
         ),
       ),

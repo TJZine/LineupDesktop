@@ -256,6 +256,7 @@ class _CountingPlayer extends FixturePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     commands.add('load');
     await super.load(media, plexToken: plexToken, generation: generation);
@@ -266,7 +267,10 @@ class _CountingPlayer extends FixturePlayer {
   @override
   Future<void> pause() async => commands.add('pause');
   @override
-  Future<void> seek(Duration position) async => commands.add('seek');
+  Future<void> seek(
+    Duration position, {
+    SeekMode mode = SeekMode.exact,
+  }) async => commands.add('seek');
   @override
   Future<void> stop() async => commands.add('stop');
   @override

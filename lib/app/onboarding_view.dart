@@ -58,6 +58,7 @@ class UpstreamOnboardingView extends StatefulWidget {
     this.openBrowser = openPlexLink,
     this.accountOrigin = false,
     this.onOpenMenu,
+    this.onOpenSettings,
     this.menuFocusNode,
     super.key,
   });
@@ -68,6 +69,7 @@ class UpstreamOnboardingView extends StatefulWidget {
   final Future<void> Function() openBrowser;
   final bool accountOrigin;
   final LineupMenuCallback? onOpenMenu;
+  final VoidCallback? onOpenSettings;
   final FocusNode? menuFocusNode;
 
   @override
@@ -268,8 +270,17 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               child: SafeArea(
                 child: Column(
                   children: [
-                    if (refinedStage)
+                    if (refinedStage || widget.onOpenSettings != null)
                       LineupTopBar(
+                        trailing: widget.onOpenSettings == null
+                            ? null
+                            : Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: widget.onOpenSettings,
+                                  child: const Text('Settings'),
+                                ),
+                              ),
                         menuKey: const ValueKey('onboarding-app-menu'),
                         onOpenMenu: widget.onOpenMenu,
                         menuFocusNode: widget.menuFocusNode,
@@ -896,9 +907,6 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             child: _ServerCard(
               server: server,
               current: widget.controller.server?.id == server.id,
-              primary: widget.controller.server == null
-                  ? widget.controller.servers.first.id == server.id
-                  : widget.controller.server?.id == server.id,
               connection: widget.controller.server?.id == server.id
                   ? widget.controller.connection
                   : null,
@@ -1380,7 +1388,6 @@ class _ServerCard extends StatelessWidget {
     required this.current,
     required this.connection,
     required this.onPressed,
-    required this.primary,
     this.pending = false,
     this.previouslyUsed = false,
     this.error,
@@ -1389,7 +1396,6 @@ class _ServerCard extends StatelessWidget {
   final bool current;
   final PlexConnection? connection;
   final VoidCallback? onPressed;
-  final bool primary;
   final bool pending;
   final bool previouslyUsed;
   final String? error;
@@ -1458,16 +1464,16 @@ class _ServerCard extends StatelessWidget {
     final trailing = MergeSemantics(
       child: Semantics(
         label: actionLabel,
-        child: primary
+        // Only continuing with the connected server is emphasized; list
+        // position never promotes a row.
+        child: current
             ? FilledButton(
                 onPressed: onPressed,
                 child: ExcludeSemantics(child: Text(buttonLabel)),
               )
-            : LineupCompactControls(
-                child: OutlinedButton(
-                  onPressed: onPressed,
-                  child: ExcludeSemantics(child: Text(buttonLabel)),
-                ),
+            : OutlinedButton(
+                onPressed: onPressed,
+                child: ExcludeSemantics(child: Text(buttonLabel)),
               ),
       ),
     );

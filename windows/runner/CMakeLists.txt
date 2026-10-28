@@ -15,7 +15,7 @@ add_executable(${BINARY_NAME} WIN32
   "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_guardian.cpp"
-  "track_list_encoder.cpp"
+  "encodable_value_conversion.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
@@ -94,19 +94,26 @@ target_include_directories(${BINARY_NAME} PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(${BINARY_NAME} PRIVATE "${LINEUP_MPV_LIBRARY}")
 set(LINEUP_MPV_RUNTIME_LIBRARY "${LINEUP_MPV_DLL}" PARENT_SCOPE)
 
-add_executable(track_list_encoder_test EXCLUDE_FROM_ALL
-  "track_list_encoder.cpp"
-  "track_list_encoder_test.cpp"
+# The shared player core. Its portable tests (track_list_encoder,
+# native_playback_state, player_core_contract) are defined there with the
+# same target and test names.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../native/player_core"
+  "${CMAKE_CURRENT_BINARY_DIR}/player_core")
+target_link_libraries(${BINARY_NAME} PRIVATE lineup_player_core_libmpv)
+
+add_executable(encodable_value_conversion_test EXCLUDE_FROM_ALL
+  "encodable_value_conversion.cpp"
+  "encodable_value_conversion_test.cpp"
 )
-apply_standard_settings(track_list_encoder_test)
-target_include_directories(track_list_encoder_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
-target_link_libraries(track_list_encoder_test PRIVATE flutter_wrapper_app)
-add_test(NAME track_list_encoder COMMAND track_list_encoder_test)
+apply_standard_settings(encodable_value_conversion_test)
+target_link_libraries(encodable_value_conversion_test PRIVATE
+  lineup_player_core flutter_wrapper_app)
+add_test(NAME encodable_value_conversion COMMAND encodable_value_conversion_test)
 
 add_executable(authenticated_reference_test EXCLUDE_FROM_ALL
   "authenticated_reference_test.cpp"
   "native_player.cpp"
-  "track_list_encoder.cpp"
+  "encodable_value_conversion.cpp"
   "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_guardian.cpp"
@@ -115,7 +122,8 @@ apply_standard_settings(authenticated_reference_test)
 target_compile_definitions(authenticated_reference_test PRIVATE "NOMINMAX")
 target_include_directories(authenticated_reference_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(authenticated_reference_test PRIVATE
-  flutter_wrapper_app "${LINEUP_MPV_LIBRARY}" "dwmapi.lib" "shell32.lib")
+  lineup_player_core_libmpv flutter_wrapper_app "${LINEUP_MPV_LIBRARY}"
+  "dwmapi.lib" "shell32.lib")
 add_custom_command(TARGET authenticated_reference_test POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${LINEUP_MPV_DLL}" "$<TARGET_FILE_DIR:authenticated_reference_test>")
@@ -127,16 +135,10 @@ add_test(NAME authenticated_reference
     -P "${CMAKE_SOURCE_DIR}/../tool/windows/run-authenticated-reference-test.cmake")
 set_tests_properties(authenticated_reference PROPERTIES TIMEOUT 180)
 
-add_executable(native_playback_state_test EXCLUDE_FROM_ALL
-  "native_playback_state_test.cpp"
-)
-apply_standard_settings(native_playback_state_test)
-add_test(NAME native_playback_state COMMAND native_playback_state_test)
-
 add_executable(native_player_contract_test EXCLUDE_FROM_ALL
   "native_player_contract_test.cpp"
   "native_player.cpp"
-  "track_list_encoder.cpp"
+  "encodable_value_conversion.cpp"
   "display_recovery.cpp"
   "display_dynamic_range.cpp"
   "display_guardian.cpp"
@@ -145,7 +147,8 @@ apply_standard_settings(native_player_contract_test)
 target_compile_definitions(native_player_contract_test PRIVATE "NOMINMAX")
 target_include_directories(native_player_contract_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(native_player_contract_test PRIVATE
-  flutter_wrapper_app "${LINEUP_MPV_LIBRARY}" "dwmapi.lib" "ole32.lib" "shell32.lib")
+  lineup_player_core_libmpv flutter_wrapper_app "${LINEUP_MPV_LIBRARY}"
+  "dwmapi.lib" "ole32.lib" "shell32.lib")
 add_custom_command(TARGET native_player_contract_test POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${LINEUP_MPV_DLL}" "$<TARGET_FILE_DIR:native_player_contract_test>")
@@ -156,7 +159,7 @@ add_executable(runner_lifecycle_test EXCLUDE_FROM_ALL
   "runner_lifecycle_test.cpp"
   "flutter_window.cpp"
   "native_player.cpp"
-  "track_list_encoder.cpp"
+  "encodable_value_conversion.cpp"
   "win32_window.cpp"
   "utils.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
@@ -169,7 +172,8 @@ target_compile_definitions(runner_lifecycle_test PRIVATE "NOMINMAX")
 target_include_directories(runner_lifecycle_test PRIVATE
   "${CMAKE_SOURCE_DIR}" "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(runner_lifecycle_test PRIVATE
-  flutter flutter_wrapper_app flutter_secure_storage_windows_plugin
+  lineup_player_core_libmpv flutter flutter_wrapper_app
+  flutter_secure_storage_windows_plugin
   "${LINEUP_MPV_LIBRARY}" "dwmapi.lib" "ole32.lib" "shell32.lib")
 add_dependencies(runner_lifecycle_test flutter_assemble)
 add_custom_command(TARGET runner_lifecycle_test POST_BUILD

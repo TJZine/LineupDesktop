@@ -75,6 +75,41 @@ void main() {
   );
 
   test(
+    'future format refuses without changing state or backup bytes',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-future-format',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final backupFile = File('${stateFile.path}.pre-desktop-ui');
+      final stateBytes = utf8.encode(
+        '${_encodedState(_canonicalJson()..['formatVersion'] = 2)}\n',
+      );
+      final backupBytes = [0x62, 0x61, 0x63, 0x6b, 0x75, 0x70];
+      await stateFile.writeAsBytes(stateBytes);
+      await backupFile.writeAsBytes(backupBytes);
+      final store = FileAppStore(directory);
+
+      for (var attempt = 0; attempt < 2; attempt++) {
+        await expectLater(
+          store.load(),
+          throwsA(
+            isA<UnsupportedStateFormatException>().having(
+              (error) => error.formatVersion,
+              'formatVersion',
+              2,
+            ),
+          ),
+        );
+        expect(await stateFile.readAsBytes(), stateBytes);
+        expect(await backupFile.readAsBytes(), backupBytes);
+        expect(await _quarantineContainers(directory), isEmpty);
+      }
+    },
+  );
+
+  test(
     'NF-16 unreadable identity propagates error without replacing identity',
     () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -915,6 +950,9 @@ void main() {
           ...const LineupSettings().toJson(),
           'theme': 'future-theme',
         },
+    ),
+    'malformed future format marker': _encodedState(
+      _canonicalJson()..['formatVersion'] = '2',
     ),
     'null manual items JSON': _encodedState(
       _canonicalJson()

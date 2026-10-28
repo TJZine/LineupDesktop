@@ -67,6 +67,30 @@ void main() {
     },
   );
 
+  test(
+    'exempts only foreign objective_c code and checks its owned hook',
+    () async {
+      final foreign = await source(
+        'third_party/objective_c/lib/foreign.dart',
+        'not Dart',
+      );
+      final hook = await source(
+        'third_party/objective_c/hook/build.dart',
+        'void main(){print(1);}',
+      );
+      final other = await source(
+        'third_party/other/code.dart',
+        'void main(){print(2);}',
+      );
+      expect((await run()).exitCode, 1);
+      expect((await run(check: false)).exitCode, 0);
+      expect(await foreign.readAsString(), 'not Dart');
+      expect(await hook.readAsString(), contains('  print(1);'));
+      expect(await other.readAsString(), contains('  print(2);'));
+      expect((await run()).exitCode, 0);
+    },
+  );
+
   test('tracked files stay covered even when an ignore rule matches', () async {
     final file = await source('lib/tracked.dart', 'void main() {}\n');
     await git(['add', 'lib/tracked.dart']);

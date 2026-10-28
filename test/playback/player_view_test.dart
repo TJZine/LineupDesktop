@@ -6,6 +6,8 @@ import 'dart:ui' show Tristate;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -39,6 +41,174 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  testWidgets('deferred tune transport name and icon agree with K', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      channelCount: 3,
+      dvrControlsEnabled: true,
+    );
+    addTearDown(fixture.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => LineupCanvas.builder(
+          context,
+          MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+        ),
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await fixture.player.tune('channel');
+    final step = fixture.player.nextChannel();
+    fixture.native._events.add(
+      PlayerEvent(
+        status: const PlayerStatus(
+          state: PlayerState.stopped,
+          message: 'Stopped',
+        ),
+        position: Duration.zero,
+        duration: Duration.zero,
+        telemetry: const PlayerTelemetry(),
+        tracks: const [],
+      ),
+    );
+    await tester.pump();
+    fixture.player.showOsd();
+    await tester.pump();
+    void expectToggle(String name, IconData icon) {
+      final button = find.byTooltip(name);
+      expect(button, findsOneWidget);
+      final semantics = tester.getSemantics(button);
+      expect(semantics.label, name);
+      expect(semantics.getSemanticsData().flagsCollection.isButton, isTrue);
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(of: button, matching: find.byType(Icon)),
+            )
+            .icon,
+        icon,
+      );
+    }
+
+    expectToggle('Pause', Icons.pause);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pump();
+    expectToggle('Play', Icons.play_arrow);
+    expect(fixture.native.transportCommands, 0);
+    // The visible button reverses K's pending intent without a native command.
+    await tester.tap(find.byTooltip('Play'));
+    await tester.pump();
+    expectToggle('Pause', Icons.pause);
+    expect(fixture.native.transportCommands, 0);
+    await tester.pump(const Duration(milliseconds: 250));
+    await step;
+    fixture.player.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, semanticsEnabled: true);
+
+  for (final tooltipsVisible in [true, false]) {
+    testWidgets(
+      'retiring OSD removes tooltips and preserves inherited visibility $tooltipsVisible',
+      (tester) async {
+        final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: TooltipVisibility(
+              visible: tooltipsVisible,
+              child: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        fixture.player.showOsd();
+        await tester.pumpAndSettle();
+        final pauseTooltip = find.byWidgetPredicate(
+          (widget) => widget is Tooltip && widget.message == 'Pause',
+        );
+        expect(
+          tester.state<TooltipState>(pauseTooltip).ensureTooltipVisible(),
+          tooltipsVisible,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          find.text('Pause'),
+          tooltipsVisible ? findsOneWidget : findsNothing,
+        );
+
+        fixture.player.closeOverlay();
+        await tester.pump();
+        expect(pauseTooltip, findsOneWidget);
+        expect(find.text('Pause'), findsNothing);
+        expect(
+          tester.state<TooltipState>(pauseTooltip).ensureTooltipVisible(),
+          isFalse,
+        );
+
+        fixture.player.showOsd();
+        await tester.pumpAndSettle();
+        expect(pauseTooltip, findsOneWidget);
+        expect(
+          tester.state<TooltipState>(pauseTooltip).ensureTooltipVisible(),
+          tooltipsVisible,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          find.text('Pause'),
+          tooltipsVisible ? findsOneWidget : findsNothing,
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'Player icon actions have accessible names in OSD and Now Playing',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      for (final overlay in [PlayerOverlay.osd, PlayerOverlay.nowPlaying]) {
+        if (overlay == PlayerOverlay.osd) {
+          fixture.player.showOsd();
+        } else {
+          fixture.player.showNowPlaying();
+        }
+        await tester.pumpAndSettle();
+        for (final label in [
+          'Previous channel',
+          'Pause',
+          'Next channel',
+          'Full screen',
+        ]) {
+          final node = tester.getSemantics(find.byTooltip(label));
+          expect(node.label, label, reason: '$overlay');
+          expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
+          expect(
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
   testWidgets(
     'presentation getters distinguish watching from selected and held state',
     (tester) async {
@@ -830,6 +1000,35 @@ void main() {
     },
   );
 
+  testWidgets(
+    'native fullscreen changes update OSD icon without another command',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing);
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Full screen'), findsOneWidget);
+      fixture.native.emitFullscreen(true);
+      await tester.pump();
+      expect(find.byTooltip('Exit full screen'), findsOneWidget);
+      expect(find.byIcon(Icons.fullscreen_exit), findsOneWidget);
+      fixture.native.emitFullscreen(false);
+      await tester.pump();
+      expect(find.byTooltip('Full screen'), findsOneWidget);
+      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
+      expect(fixture.native.fullscreenValues, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
   testWidgets('OSD menu and fullscreen actions close the picker first', (
     tester,
   ) async {
@@ -1117,6 +1316,48 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('macOS Command leaves Player keys for the app menu', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(
+          controller: fixture.player,
+          focusNode: focus,
+          openGuide: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    focus.requestFocus();
+    await tester.pump();
+
+    Future<int> fullscreenAfter({required bool command}) async {
+      final before = fixture.native.fullscreenValues.length;
+      if (command) await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      if (command) await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+      return fixture.native.fullscreenValues.length - before;
+    }
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      expect(await fullscreenAfter(command: true), 0);
+      expect(await fullscreenAfter(command: false), 1);
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      expect(await fullscreenAfter(command: true), 1);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('Player propagates Ctrl route repeats and keeps local keys', (
     tester,
   ) async {
@@ -1317,12 +1558,12 @@ void main() {
     );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
-    await tester.pump();
-    await tester.pump();
+    expect(fixture.player.currentChannel?.id, 'channel-1');
+    await tester.pump(const Duration(milliseconds: 250));
     expect(fixture.lineup.currentChannelId, 'channel-1');
     await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
-    await tester.pump();
-    await tester.pump();
+    expect(fixture.player.currentChannel?.id, 'channel');
+    await tester.pump(const Duration(milliseconds: 250));
     expect(fixture.lineup.currentChannelId, 'channel');
     final afterSurfing = fixture.native.transportCommands;
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
@@ -3441,6 +3682,24 @@ void main() {
       ),
       findsNothing,
     );
+    for (final tooltip in [
+      'Audio track: English — Original theatrical mix; Stereo; AAC',
+      'Audio track: Español; Latinoamérica; 5.1 surround; Dolby Digital Plus',
+    ]) {
+      await _showReachableTooltip(tester, tooltip);
+      final reachable = tester.semantics.simulatedAccessibilityTraversal();
+      expect(
+        reachable.where((node) => node.label == selectedLabel),
+        hasLength(1),
+      );
+      expect(
+        reachable.where((node) => node.label == alternateLabel),
+        hasLength(1),
+      );
+      Tooltip.dismissAllToolTips();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   }, semanticsEnabled: true);
@@ -3505,6 +3764,35 @@ void main() {
             .isSelected,
         Tristate.isTrue,
       );
+
+      for (final tooltip in [
+        'Subtitle track: English — Festival edition; SDH; SRT (text)',
+        'Subtitle track: English — Forced; PGS (image)',
+      ]) {
+        await _showReachableTooltip(tester, tooltip);
+        final reachable = tester.semantics.simulatedAccessibilityTraversal();
+        final confirmed = reachable.singleWhere(
+          (node) => node.label == confirmedLabel,
+        );
+        final pending = reachable.singleWhere(
+          (node) => node.label == '$requestedLabel Pending.',
+        );
+        expect(
+          confirmed.getSemanticsData().flagsCollection.isSelected,
+          Tristate.isTrue,
+        );
+        expect(
+          pending.getSemanticsData().flagsCollection.isSelected,
+          Tristate.isFalse,
+        );
+        expect(
+          pending.getSemanticsData().hasAction(SemanticsAction.tap),
+          isTrue,
+        );
+        Tooltip.dismissAllToolTips();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+      }
 
       final pendingNodeId = tester.getSemantics(pendingFinder).id;
       fixture.lineup.notifyListeners();
@@ -3572,6 +3860,18 @@ void main() {
     expect(data.flagsCollection.isButton, isTrue);
     expect(data.flagsCollection.isSelected, Tristate.isTrue);
     expect(data.hasAction(SemanticsAction.tap), isTrue);
+    await _showReachableTooltip(tester, 'Off');
+    final reachableOff = tester.semantics
+        .simulatedAccessibilityTraversal()
+        .singleWhere((node) => node.label == 'Select subtitle track: Off.');
+    expect(
+      reachableOff.getSemanticsData().flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
+    expect(
+      reachableOff.getSemanticsData().hasAction(SemanticsAction.tap),
+      isTrue,
+    );
     off.owner!.performAction(off.id, SemanticsAction.tap);
     await tester.pump();
     expect(fixture.native.selectedTracks, [(PlayerTrackType.subtitle, null)]);
@@ -5078,6 +5378,46 @@ void main() {
         ),
         findsOneWidget,
       );
+      final canonical = tester.semantics
+          .simulatedAccessibilityTraversal()
+          .singleWhere((node) => node.label.startsWith('Now playing.'))
+          .label;
+      final visualLabels = [
+        for (final member in cast.take(4)) ...[
+          member.name,
+          if (member.role != null) member.role!,
+        ],
+        tester
+            .widget<Text>(find.byKey(const Key('player-now-playing-title')))
+            .data!,
+        tester
+            .widget<Text>(find.byKey(const Key('player-now-playing-editorial')))
+            .data!,
+        tester
+            .widget<Text>(find.byKey(const Key('player-now-playing-summary')))
+            .data!,
+      ];
+      expect(
+        tester.semantics.simulatedAccessibilityTraversal().map(
+          (node) => node.label,
+        ),
+        isNot(anyElement(isIn(visualLabels))),
+      );
+      for (final message in [
+        'Alexander Maximilian Montgomery',
+        cast.first.role!,
+      ]) {
+        await _showReachableTooltip(tester, message);
+        expect(
+          tester.semantics.simulatedAccessibilityTraversal().where(
+            (node) => node.label == canonical,
+          ),
+          hasLength(1),
+        );
+        Tooltip.dismissAllToolTips();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+      }
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -6505,6 +6845,16 @@ class _Native implements NativePlayer {
   Stream<DisplayMatchingReport> get displayReports => _displayReports.stream;
   void emitDisplay(DisplayMatchingReport report) => _displayReports.add(report);
   @override
+  bool fullscreen = false;
+  final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
+  @override
+  Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;
+  void emitFullscreen(bool observed) {
+    fullscreen = observed;
+    if (!_fullscreenChanges.isClosed) _fullscreenChanges.add(observed);
+  }
+
+  @override
   Future<void> initialize() async {}
   @override
   Future<void> load(
@@ -6512,6 +6862,7 @@ class _Native implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     loadCalls++;
     if (failLoad) throw const PlayerUnavailable('synthetic load failure');
@@ -6566,7 +6917,7 @@ class _Native implements NativePlayer {
   }
 
   @override
-  Future<void> seek(Duration position) async {
+  Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) async {
     transportCommands++;
   }
 
@@ -6575,6 +6926,7 @@ class _Native implements NativePlayer {
   @override
   Future<void> setFullscreen(bool fullscreen) async {
     fullscreenValues.add(fullscreen);
+    emitFullscreen(fullscreen);
   }
 
   @override
@@ -6607,6 +6959,7 @@ class _Native implements NativePlayer {
   Future<void> dispose() async {
     await _events.close();
     await _displayReports.close();
+    await _fullscreenChanges.close();
   }
 }
 
@@ -6620,3 +6973,29 @@ Rect _drawnRect(WidgetTester tester, Finder finder) {
 
 Size _drawnSize(WidgetTester tester, Finder finder) =>
     _drawnRect(tester, finder).size;
+
+/// An excluded origin can still have a local node. Walk from the view's root
+/// through Flutter's accessibility traversal to prove the overlay is reachable.
+Future<void> _showReachableTooltip(WidgetTester tester, String message) async {
+  expect(
+    tester.semantics.simulatedAccessibilityTraversal().where(
+      (node) => node.label == message,
+    ),
+    isEmpty,
+  );
+  final tooltip = find.byWidgetPredicate(
+    (widget) => widget is Tooltip && widget.message == message,
+  );
+  expect(tooltip, findsOneWidget);
+  expect(tester.state<TooltipState>(tooltip).ensureTooltipVisible(), isTrue);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 200));
+  final overlay = tester.semantics.simulatedAccessibilityTraversal().where(
+    (node) => node.label == message,
+  );
+  expect(overlay, hasLength(1));
+  expect(
+    overlay.single.getSemanticsData().hasAction(SemanticsAction.tap),
+    isFalse,
+  );
+}

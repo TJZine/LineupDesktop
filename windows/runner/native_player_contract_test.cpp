@@ -66,7 +66,7 @@ void TestDestroy(mpv_handle* client) {
 
 namespace {
 WindowsNativePlayer::MpvOperations TestOperations() {
-  WindowsNativePlayer::MpvOperations operations;
+  auto operations = lineup::player::LibmpvOperations();
   operations.get_property = TestGetProperty;
   operations.set_property = TestSetProperty;
   operations.command = TestCommand;
@@ -90,7 +90,7 @@ struct WindowHarness {
                          reinterpret_cast<LONG_PTR>(create->lpCreateParams));
     }
     auto* harness = reinterpret_cast<WindowHarness*>(::GetWindowLongPtr(hwnd, GWLP_USERDATA));
-    if (harness && harness->player && harness->player->HandleWindowMessage(message)) return 0;
+    if (harness && harness->player && harness->player->HandleWindowMessage(message, wparam)) return 0;
     return ::DefWindowProc(hwnd, message, wparam, lparam);
   }
   WindowHarness() {
@@ -385,6 +385,30 @@ void Lifecycle(WindowHarness& window, WindowsNativePlayer& player,
   Reply init;
   messenger.Call("initialize", init);
   Check(init.successes == 1, "real production mpv initialization");
+  const auto observed_fullscreen = [&](bool value) {
+    return std::any_of(messenger.events.begin(), messenger.events.end(), [&](const Map& event) {
+      return Has(event, "type", Value("fullscreen")) &&
+             Has(event, "fullscreen", Value(value)) && event.size() == 2;
+    });
+  };
+  native_test::PumpUntil([&]() { return observed_fullscreen(false); },
+                        "initial fullscreen snapshot is player-scoped and typed");
+  for (const bool fullscreen : {true, false}) {
+    messenger.events.clear();
+    Reply changed;
+    messenger.Call("setFullscreen", changed, {{Value("fullscreen"), Value(fullscreen)}});
+    Check(changed.successes == 1 && changed.errors == 0,
+          "actual adapter fullscreen transition succeeds");
+    native_test::PumpUntil([&]() { return observed_fullscreen(fullscreen); },
+                          "completed fullscreen uses production platform-event codec");
+  }
+  messenger.events.clear();
+  Reply invalid_fullscreen;
+  messenger.Call("setFullscreen", invalid_fullscreen, {{Value("fullscreen"), Value(1)}});
+  Check(invalid_fullscreen.errors == 1, "fullscreen bool validation retained");
+  NativePlayerTestAccess::Drain(player);
+  Check(!observed_fullscreen(true) && !observed_fullscreen(false),
+        "invalid fullscreen command cannot invent an observation");
   Reply stop;
   messenger.Call("stop", stop, {{Value("stopId"), Value(int64_t{901})}});
   Check(stop.successes == 1, "worker stop acceptance");
@@ -422,9 +446,16 @@ void Lifecycle(WindowHarness& window, WindowsNativePlayer& player,
   Check(recreate.successes == 1, "same owner reinitializes after normal dispose");
   Check(!player.BeginWindowClose() && !player.TakeWindowCloseReady(),
         "close readiness waits for real worker and platform completion");
-  native_test::PumpUntil([&]() { return NativePlayerTestAccess::Disposed(player); }, "window close shutdown");
+  native_test::PumpUntil([&]() { return NativePlayerTestAccess::WindowCloseReady(player); },
+                        "window close acknowledgement");
+  Check(NativePlayerTestAccess::Disposed(player), "window close acknowledgement follows core shutdown");
   Check(player.TakeWindowCloseReady() && !player.TakeWindowCloseReady(), "close readiness consumed once");
+  // The acknowledgement may use the bounded timeout; immediate close also
+  // requires actual display release, independently of core disposal.
+  native_test::PumpUntil([&]() { return NativePlayerTestAccess::DisplayReleaseComplete(player); },
+                        "window close display release");
   Check(player.BeginWindowClose(), "disposed owner permits immediate close");
+  Check(player.BeginWindowClose(), "completed close remains immediate on repeated request");
 }
 }
 

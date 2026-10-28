@@ -104,6 +104,18 @@ class FakeNativePlayer implements NativePlayer {
   final loadGenerations = <int?>[];
   final loadStartPaused = <bool>[];
   final seeks = <Duration>[];
+  final seekModes = <SeekMode>[];
+  final loadStartPositions = <Duration?>[];
+  @override
+  bool fullscreen = false;
+  final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
+  @override
+  Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;
+  void emitFullscreen(bool observed) {
+    fullscreen = observed;
+    if (!_fullscreenChanges.isClosed) _fullscreenChanges.add(observed);
+  }
+
   final fullscreenValues = <bool>[];
   final selectedTracks = <(PlayerTrackType, int?)>[];
   final volumeValues = <double>[];
@@ -134,6 +146,7 @@ class FakeNativePlayer implements NativePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     loads.add(media);
     loadPlexTokens.add(plexToken);
@@ -141,6 +154,7 @@ class FakeNativePlayer implements NativePlayer {
     _eventGeneration = nextGeneration;
     loadGenerations.add(generation);
     loadStartPaused.add(startPaused);
+    loadStartPositions.add(startPosition);
     if (emitLoadingOnLoad) {
       _emitSnapshot(
         const PlayerStatus(state: PlayerState.loading, message: 'Loading'),
@@ -160,14 +174,19 @@ class FakeNativePlayer implements NativePlayer {
   Future<void> pause() async => pauseCalls++;
 
   @override
-  Future<void> seek(Duration value) async => seeks.add(value);
+  Future<void> seek(Duration value, {SeekMode mode = SeekMode.exact}) async {
+    seeks.add(value);
+    seekModes.add(mode);
+  }
 
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async => videoRects.add(rect);
 
   @override
-  Future<void> setFullscreen(bool fullscreen) async =>
-      fullscreenValues.add(fullscreen);
+  Future<void> setFullscreen(bool fullscreen) async {
+    fullscreenValues.add(fullscreen);
+    emitFullscreen(fullscreen);
+  }
 
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async =>
@@ -184,6 +203,7 @@ class FakeNativePlayer implements NativePlayer {
     disposed = true;
     await _events.close();
     await _displayReports.close();
+    await _fullscreenChanges.close();
   }
 
   void emit(

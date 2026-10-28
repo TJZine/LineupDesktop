@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -21,6 +23,124 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('Studio rundown icon actions expose accessible names', (
+    tester,
+  ) async {
+    const first = ChannelItem(
+      id: 'first',
+      title: 'First',
+      duration: Duration(minutes: 20),
+    );
+    const second = ChannelItem(
+      id: 'second',
+      title: 'Second',
+      duration: Duration(minutes: 20),
+    );
+    final channel = _channel(
+      id: 'manual',
+      number: 1,
+      name: 'Manual',
+      source: const ManualSource([first, second]),
+    );
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(channels: [channel]),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: channel),
+    );
+    await tester.pumpAndSettle();
+    for (final label in [
+      'Move First earlier in channel Manual',
+      'Move First later in channel Manual',
+      'Remove from channel',
+    ]) {
+      final node = tester.getSemantics(find.byTooltip(label).first);
+      expect(node.label, label);
+      expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
+    }
+    final move = tester.getSemantics(
+      find.byTooltip('Move First later in channel Manual'),
+    );
+    expect(move.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    await tester.enterText(
+      find.byKey(const Key('studio-rundown-search')),
+      'First',
+    );
+    await tester.pumpAndSettle();
+    final clearSearch = find.byTooltip('Clear channel program search');
+    final clearNode = tester.getSemantics(clearSearch);
+    expect(clearNode.label, 'Clear channel program search');
+    expect(clearNode.getSemanticsData().flagsCollection.isButton, isTrue);
+    expect(clearNode.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    final rundownSearch = find.byKey(const Key('studio-rundown-search'));
+    final rundownEditable = find.descendant(
+      of: rundownSearch,
+      matching: find.byType(EditableText),
+    );
+    final searchFocus = tester.widget<EditableText>(rundownEditable).focusNode;
+    void expectExposedClearButton() {
+      final traversedClearNode = tester.semantics
+          .simulatedAccessibilityTraversal()
+          .singleWhere(
+            (node) =>
+                node.label == 'Clear channel program search' &&
+                node.getSemanticsData().flagsCollection.isButton,
+          );
+      for (
+        var ancestor = traversedClearNode.parent;
+        ancestor != null;
+        ancestor = ancestor.parent
+      ) {
+        expect(
+          ancestor.getSemanticsData().flagsCollection.isTextField,
+          isFalse,
+          reason:
+              'macOS exposes native text fields as leaves, hiding descendants',
+        );
+      }
+    }
+
+    expectExposedClearButton();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(clearSearch));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear channel program search'), findsOneWidget);
+    expectExposedClearButton();
+    await mouse.removePointer();
+    expect(searchFocus.hasPrimaryFocus, isTrue);
+    await tester.tap(clearSearch);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('studio-rundown-search')))
+          .controller!
+          .text,
+      isEmpty,
+    );
+    expect(searchFocus.hasPrimaryFocus, isTrue);
+    expect(
+      find.byTooltip('Move First later in channel Manual'),
+      findsOneWidget,
+    );
+    expect(clearSearch, findsNothing);
+    await tester.enterText(rundownSearch, 'Second');
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    final clearIcon = find.descendant(
+      of: clearSearch,
+      matching: find.byType(Icon),
+    );
+    expect(Focus.of(tester.element(clearIcon)).hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(rundownSearch).controller!.text, isEmpty);
+    expect(clearSearch, findsNothing);
+    expect(searchFocus.hasPrimaryFocus, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, semanticsEnabled: true);
   testWidgets(
     'NF-12 conflict replacement clears browse undo and pending choices',
     (tester) async {
@@ -5729,6 +5849,7 @@ class _AgreementPlayer extends FixturePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     loaded = media;
     await super.load(media, plexToken: plexToken, generation: generation);
@@ -5994,6 +6115,7 @@ class _DelayedStudioPlayer extends FixturePlayer {
     String? plexToken,
     int? generation,
     bool startPaused = false,
+    Duration? startPosition,
   }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     started.complete();

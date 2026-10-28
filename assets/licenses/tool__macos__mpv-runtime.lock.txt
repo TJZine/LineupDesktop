@@ -1,0 +1,198 @@
+# Lineup Desktop macOS libmpv runtime pin file.
+#
+# Bash syntax, sourced by tool/macos/build-mpv.sh. Every component of the
+# shipped runtime is listed with its exact upstream source, its integrity pin
+# (SHA-256 of the release archive, or the full Git commit for Git sources), its
+# license as used here, and its configure flags. Changing any value here
+# changes the runtime identity; update docs/macos-runtime.md in the same commit.
+#
+# Policy: LGPL/permissive only, no GPL component, every shipped library is a
+# dynamic library with an @rpath install name. See docs/macos-runtime.md.
+
+LINEUP_RUNTIME_DEPLOYMENT_TARGET=12.0
+LINEUP_RUNTIME_ARCHS=(arm64)
+
+# --- Archive sources: NAME_VERSION, NAME_URL, NAME_SHA256, NAME_LICENSE ------
+
+OPENSSL_VERSION=3.5.9
+OPENSSL_URL=https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz
+OPENSSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
+OPENSSL_LICENSE=Apache-2.0
+# Library-only build. Providers are built in (no-module) and no engine or DSO
+# loading exists, so OpenSSL never loads code at runtime. OPENSSLDIR (and the
+# ENGINESDIR/MODULESDIR derived from the neutral install prefix) point into
+# /var/empty, which is empty and root-owned, so no system or third-party
+# openssl.cnf or CA directory is consulted; curl verifies peers through Apple
+# SecTrust.
+OPENSSL_FLAGS=(no-module no-engine no-dso no-legacy no-tests no-docs
+  no-ssl3 no-comp --openssldir=/var/empty/lineup-runtime/ssl)
+
+CURL_VERSION=8.23.0
+CURL_URL=https://curl.se/download/curl-8.23.0.tar.bz2
+CURL_SHA256=95b22eb32bf6d1fa6e3e9463bdb61cece3efc56d86576a9b3cbd428246a6d854
+CURL_LICENSE=curl
+# HTTP(S) only. OpenSSL for TLS, Apple SecTrust (added in curl 8.17.0) for
+# certificate verification against the macOS trust store. No compiled-in CA
+# bundle or CA path, so SecTrust is the only default trust source.
+CURL_FLAGS=(--with-openssl --with-apple-sectrust
+  --without-ca-bundle --without-ca-path --without-ca-fallback
+  --with-zlib --without-brotli --without-zstd --without-libpsl
+  --without-libidn2 --without-nghttp2 --without-nghttp3 --without-ngtcp2
+  --without-libssh2 --without-librtmp --without-gssapi
+  --disable-ldap --disable-ldaps --disable-ftp --disable-file --disable-dict
+  --disable-gopher --disable-imap --disable-pop3 --disable-smtp
+  --disable-telnet --disable-tftp --disable-rtsp --disable-mqtt --disable-smb
+  --disable-ipfs --disable-websockets --disable-manual --disable-docs
+  --disable-ntlm --disable-kerberos-auth --disable-negotiate-auth)
+
+LCMS2_VERSION=2.19.1
+LCMS2_URL=https://github.com/mm2/Little-CMS/releases/download/lcms2.19.1/lcms2-2.19.1.tar.gz
+LCMS2_SHA256=bfc54f7bab59fbc921012014a8032e4cba4abd46db47d46b76416a8c0b2815c8
+LCMS2_LICENSE=MIT
+# The fast-float and threaded plugins are GPL-3.0 and stay disabled.
+LCMS2_FLAGS=(-Dauto_features=disabled -Dtests=disabled -Dutils=false
+  -Dfastfloat=false -Dthreaded=false)
+
+DAV1D_VERSION=1.5.4
+DAV1D_URL=https://downloads.videolan.org/pub/videolan/dav1d/1.5.4/dav1d-1.5.4.tar.xz
+DAV1D_SHA256=686616b7c69eb88d44459391ab25cac13b6647a3b288835c5784e71c1514a5c5
+DAV1D_LICENSE=BSD-2-Clause
+DAV1D_FLAGS=(-Dauto_features=disabled -Denable_tools=false
+  -Denable_tests=false -Denable_examples=false -Denable_docs=false)
+
+FREETYPE_VERSION=2.15.0
+FREETYPE_URL=https://download.savannah.gnu.org/releases/freetype/freetype-2.15.0.tar.xz
+FREETYPE_SHA256=93cd47eb719c325107f2d3cf087d06299e944c3b48a40b55537302304dea1dd5
+# FreeType is dual-licensed FTL or GPL-2.0; Lineup uses it under the FTL.
+FREETYPE_LICENSE=FTL
+# harfbuzz is a combo option (not a feature), so it is disabled explicitly;
+# HarfBuzz links FreeType, not the other way round.
+FREETYPE_FLAGS=(-Dauto_features=disabled -Dzlib=system -Dharfbuzz=disabled
+  -Dmmap=enabled)
+
+FRIBIDI_VERSION=1.0.17
+FRIBIDI_URL=https://github.com/fribidi/fribidi/releases/download/v1.0.17/fribidi-1.0.17.tar.xz
+FRIBIDI_SHA256=6949dcde27d41cebad1fd741fcafc36d55a1020d2d872d4a6eb3914caabbada2
+FRIBIDI_LICENSE=LGPL-2.1-or-later
+FRIBIDI_FLAGS=(-Ddocs=false -Dbin=false -Dtests=false)
+
+HARFBUZZ_VERSION=14.6.0
+HARFBUZZ_URL=https://github.com/harfbuzz/harfbuzz/releases/download/14.6.0/harfbuzz-14.6.0.tar.xz
+HARFBUZZ_SHA256=d07a007327277708a2a73ae437887cdbaf282937f6d03ca5467723e9099af586
+HARFBUZZ_LICENSE=MIT
+# Only the shaping library. Features that default to enabled (not auto) are
+# switched off explicitly.
+HARFBUZZ_FLAGS=(-Dauto_features=disabled -Dfreetype=enabled -Dsubset=disabled
+  -Draster=disabled -Dvector=disabled -Dgpu=disabled -Dtests=disabled
+  -Dutilities=disabled)
+
+LIBASS_VERSION=0.17.5
+LIBASS_URL=https://github.com/libass/libass/releases/download/0.17.5/libass-0.17.5.tar.xz
+LIBASS_SHA256=2dca25c0e0c837ddf00b52011b3f82cac1e4ddd3ad018227806b0c2288864acc
+LIBASS_LICENSE=ISC
+# CoreText font provider; no fontconfig, no libunibreak.
+LIBASS_FLAGS=(--disable-fontconfig --enable-coretext --disable-libunibreak
+  --disable-directwrite --disable-test --disable-compare --disable-profile
+  --disable-fuzz)
+
+FFMPEG_VERSION=9.0.2
+FFMPEG_URL=https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+FFMPEG_SHA256=8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
+FFMPEG_LICENSE=LGPL-2.1-or-later
+# LGPL 2.1+ only (no gpl, version3 or nonfree). --disable-autodetect stops
+# configure from picking up anything not listed here.
+#
+# Networking: mpv opens HTTP(S), including HLS/DASH segments (nested opens),
+# through its libcurl stream, which verifies with Apple SecTrust. FFmpeg still
+# needs its http/https protocols registered, because its HLS demuxer validates
+# each segment URL's protocol by name before handing the open to mpv. Only
+# the protocols below are built. FFmpeg's https uses the same OpenSSL with
+# certificate verification on (FFmpeg's default) and no trust anchors, so any
+# HTTPS connection FFmpeg would make itself (header-free fallback opens,
+# curl-enabled=no) fails closed instead of connecting unverified.
+#
+# iconv stays off: mpv converts subtitle charsets itself, and FFmpeg 9.0.2
+# does not add -liconv to libavcodec when iconv is outside libc.
+FFMPEG_FLAGS=(--disable-gpl --disable-version3 --disable-nonfree
+  --disable-autodetect --disable-programs --disable-doc --disable-avdevice
+  --disable-debug --enable-pic
+  --enable-videotoolbox --enable-libdav1d --enable-zlib --enable-bzlib
+  --enable-pthreads --enable-network --enable-openssl --disable-protocols
+  --enable-protocol=file,crypto,data,http,https,httpproxy,tcp,tls
+  --disable-demuxer=rtsp,sdp,rtp,sap --disable-muxer=rtsp,sap,whip,rtp,rtp_mpegts
+  --disable-filter=perlin,codecview --disable-arm-crc --disable-pmull
+  --disable-eor3)
+# No GPL code: perlin.c (perlin video source) and qp_table.c (used by the
+# codecview debug filter) carry GPL headers, so those two filters are off;
+# the aarch64 AC-3 DSP and CRC assembly carry GPL headers too and are removed
+# by tool/macos/ffmpeg-patches/ (with the CRC extensions disabled above) in
+# favor of FFmpeg's portable C code. collect-notices.py fails the build if any
+# compiled file has a GPL-only header.
+# The RTP/RTSP/SAP/WHIP formats are disabled because they would pull in the
+# rtp, udp and dtls protocols (and SDP could open RTP directly).
+
+# glslang compiles libplacebo's GLSL to SPIR-V. It is a build-time static
+# library linked into libplacebo, not a separately shipped dylib. Its license
+# file also carries GPL-3.0 text with the Bison exception, which covers the
+# historical Bison parser skeleton and permits distribution under any terms.
+# Flagged for the legal review in docs/macos-runtime.md.
+GLSLANG_VERSION=16.6.0
+GLSLANG_URL=https://github.com/KhronosGroup/glslang/archive/refs/tags/16.6.0.tar.gz
+GLSLANG_SHA256=9c09b901149c729df745057dafa815278aaa101b84d2b6e14f16a42de52f97f2
+GLSLANG_LICENSE="BSD-3-Clause AND BSD-2-Clause AND MIT AND Apache-2.0 AND GPL-3.0-or-later WITH Bison-exception-2.2"
+GLSLANG_FLAGS=(-DBUILD_SHARED_LIBS=OFF -DENABLE_OPT=OFF -DENABLE_HLSL=OFF
+  -DENABLE_GLSLANG_BINARIES=OFF -DGLSLANG_TESTS=OFF -DBUILD_EXTERNAL=OFF
+  -DGLSLANG_ENABLE_INSTALL=ON)
+
+# --- Git sources: NAME_VERSION, NAME_GIT, NAME_COMMIT, NAME_LICENSE ----------
+
+MOLTENVK_VERSION=1.4.2
+MOLTENVK_GIT=https://github.com/KhronosGroup/MoltenVK.git
+MOLTENVK_COMMIT=db66022459ffb663aa2b50f6b018bc2e124f5edf
+MOLTENVK_LICENSE=Apache-2.0
+# MoltenVK's fetchDependencies clones its build dependencies at the commits in
+# its ExternalRevisions/ directory. The build script refuses to continue
+# unless they equal the commits below. Vulkan-Headers also supplies the headers
+# and vk.xml used by libplacebo and mpv. Statically compiled into
+# libMoltenVK: SPIRV-Cross (Apache-2.0 or MIT), SPIRV-Tools (Apache-2.0, its
+# disassembler and utilities), the SPIRV-Headers grammar tables (MIT-style
+# Khronos license), and cereal (BSD-3-Clause). Vulkan-Tools and Volk are
+# fetched by MoltenVK but not linked. All shipped notices are listed in
+# license_files in build-mpv.sh.
+MOLTENVK_EXTERNAL_REVISIONS=(
+  Vulkan-Headers=e3b1eec08173d6b825cd3ac88c885a63b621504a
+  SPIRV-Cross=6c09849fe88c48eaed08413aa022aaa136a3a057
+  SPIRV-Headers=29981f65241605e08b0ede4cfeb999fe3b723c6a
+  SPIRV-Tools=0d6fd73ca73830ccab5fa1f00ed5ed40124e2c55
+  Vulkan-Tools=8c66b352925cb771f793a4d3220b1321ae0febf1
+  Volk=776893306c5d3b22b6185b5d4a258b81d94572bf
+  cereal=a56bad8bbb770ee266e930c95d37fff2a5be7fea
+)
+
+LIBPLACEBO_VERSION=7.360.1
+LIBPLACEBO_GIT=https://code.videolan.org/videolan/libplacebo.git
+LIBPLACEBO_COMMIT=cee9b076f2c63104ccfd497fa79c39a867293ec4
+LIBPLACEBO_LICENSE=LGPL-2.1-or-later
+# dovi: Dolby Vision reshaping (libplacebo's own implementation; libdovi is
+# an optional Rust RPU parser that FFmpeg's built-in RPU parsing makes
+# unnecessary). glslang is linked statically (prefer_static).
+LIBPLACEBO_FLAGS=(-Dauto_features=disabled -Dprefer_static=true
+  -Dvulkan=enabled -Dvk-proc-addr=enabled -Dglslang=enabled -Dlcms=enabled
+  -Ddovi=enabled -Ddemos=false -Dtests=false -Dbench=false -Dfuzz=false)
+
+MPV_VERSION=0.41.0-1092-g3186d369f
+MPV_GIT=https://github.com/mpv-player/mpv.git
+MPV_COMMIT=3186d369f9f090cd1363be0ac46a037824b702c6
+MPV_LICENSE=LGPL-2.1-or-later
+# auto_features=disabled: only the features listed here can be enabled.
+MPV_FLAGS=(-Dauto_features=disabled -Dgpl=false -Dcplayer=false
+  -Dlibmpv=true -Dbuild-date=false -Dtests=false -Dfuzzers=false
+  -Dcocoa=enabled -Dswift-build=enabled -Dvulkan=enabled
+  -Dvideotoolbox-pl=enabled -Dcoreaudio=enabled -Davfoundation=enabled
+  -Dlibcurl=enabled -Dlcms2=enabled -Diconv=enabled -Dzlib=enabled
+  -Dvector=enabled -Dmacos-10-15-4-features=enabled
+  -Dmacos-11-features=enabled -Dmacos-11-3-features=enabled
+  -Dmacos-12-features=enabled -Dcplugins=disabled -Dlua=disabled
+  -Djavascript=disabled -Dgl=disabled -Dmacos-cocoa-cb=disabled
+  -Dmacos-media-player=disabled -Dmacos-touchbar=disabled
+  -Dmanpage-build=disabled -Dhtml-build=disabled -Dpdf-build=disabled)

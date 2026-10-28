@@ -17,6 +17,117 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
+  group('observed fullscreen', () {
+    late MethodChannelNativePlayer player;
+    setUp(() {
+      messenger.setMockMethodCallHandler(channel, (_) async => null);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+    });
+
+    test(
+      'strict player-scoped bool, broadcast snapshots without a load',
+      () async {
+        await player.initialize();
+        final first = <bool>[];
+        final second = <bool>[];
+        final a = player.fullscreenChanges.listen(first.add);
+        final b = player.fullscreenChanges.listen(second.add);
+        addTearDown(a.cancel);
+        addTearDown(b.cancel);
+        for (final invalid in [null, 0, 1, 'true', <Object>[]]) {
+          await _sendNativeEvent(messenger, {
+            'type': 'fullscreen',
+            'fullscreen': invalid,
+          });
+        }
+        await _sendNativeEvent(messenger, {'type': 'fullscreen'});
+        expect(first, isEmpty);
+        expect(player.fullscreen, isFalse);
+        await _sendNativeEvent(messenger, {
+          'type': 'fullscreen',
+          'fullscreen': true,
+          'loadId': -99,
+        });
+        expect(first, [true]);
+        expect(second, [true]);
+        expect(player.fullscreen, isTrue);
+        final late = <bool>[];
+        final c = player.fullscreenChanges.listen(late.add);
+        addTearDown(c.cancel);
+        expect(late, isEmpty);
+        await _sendNativeEvent(messenger, {
+          'type': 'fullscreen',
+          'fullscreen': false,
+        });
+        expect(first, [true, false]);
+        expect(second, [true, false]);
+        expect(late, [false]);
+      },
+    );
+
+    test('initializing accepts native snapshot; disposed lifetime rejects late events', () async {
+      final initialized = Completer<void>();
+      final disposed = Completer<void>();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'initialize') await initialized.future;
+        if (call.method == 'dispose') await disposed.future;
+        return null;
+      });
+      final observations = <bool>[];
+      final subscription = player.fullscreenChanges.listen(observations.add);
+      addTearDown(subscription.cancel);
+      final initialize = player.initialize();
+      await pumpEventQueue(times: 2);
+      await _sendNativeEvent(messenger, {
+        'type': 'fullscreen',
+        'fullscreen': true,
+      });
+      expect(player.fullscreen, isTrue);
+      initialized.complete();
+      await initialize;
+      final dispose = player.dispose();
+      await pumpEventQueue(times: 2);
+      await _sendNativeEvent(messenger, {
+        'type': 'fullscreen',
+        'fullscreen': true,
+      });
+      expect(player.fullscreen, isFalse);
+      expect(observations, [true]);
+      disposed.complete();
+      await dispose;
+      await player.initialize();
+      expect(player.fullscreen, isFalse);
+      await _sendNativeEvent(messenger, {
+        'type': 'fullscreen',
+        'fullscreen': true,
+      });
+      expect(observations, [true, true]);
+    });
+
+    test(
+      'late command success cannot change a fresher observed state',
+      () async {
+        final reply = Completer<void>();
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'setFullscreen') await reply.future;
+          return null;
+        });
+        await player.initialize();
+        final request = player.setFullscreen(true);
+        await pumpEventQueue(times: 2);
+        await _sendNativeEvent(messenger, {
+          'type': 'fullscreen',
+          'fullscreen': false,
+        });
+        reply.complete();
+        await request;
+        expect(player.fullscreen, isFalse);
+      },
+    );
+  });
+
   group('typed track snapshots', () {
     late MethodChannelNativePlayer player;
     late int loadId;
@@ -336,10 +447,16 @@ void main() {
       final load = player.load(
         Uri.parse('https://plex.example/media/sample.mp4'),
         plexToken: 'test-token',
+        startPosition: const Duration(microseconds: 18250001),
       );
       await Future<void>.delayed(Duration.zero);
       final loadId = calls.last.arguments!['loadId']! as int;
       expect(calls.last.arguments!['plexToken'], 'test-token');
+      expect(calls.last.arguments!['startSeconds'], 18.250001);
+      expect(
+        calls.last.arguments!['uri'],
+        'https://plex.example/media/sample.mp4',
+      );
 
       await _sendNativeEvent(messenger, {
         'type': 'property',
@@ -558,6 +675,57 @@ void main() {
 
       expect(player.status.state, PlayerState.paused);
       expect(player.status.message, 'Paused');
+    },
+  );
+
+  test(
+    'readiness observes a load hold resumed without a pause notification',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(
+        Uri.parse('file:///held.mp4'),
+        startPaused: true,
+      );
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments!['loadId']! as int;
+      // The unavailable display report releases the hold before readiness.
+      // mpv can coalesce pause true/false and send no new pause notification.
+      await player.play();
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+        'paused': false,
+      });
+      await load;
+      expect(player.status.state, PlayerState.playing);
+      expect(player.status.message, 'playing');
+
+      final pausedLoad = player.load(Uri.parse('file:///paused.mp4'));
+      await Future<void>.delayed(Duration.zero);
+      final pausedId = calls.last.arguments!['loadId']! as int;
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+        'paused': false,
+      });
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': pausedId,
+        'state': 'playing',
+        'paused': true,
+      });
+      await pausedLoad;
+      expect(player.status.state, PlayerState.paused);
     },
   );
 
@@ -799,6 +967,28 @@ void main() {
     },
   );
 
+  test('seek mode is explicit on the wire and defaults to exact', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final player = MethodChannelNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    calls.clear();
+    await player.seek(
+      const Duration(microseconds: 1250123),
+      mode: SeekMode.keyframes,
+    );
+    await player.seek(Duration.zero);
+    expect(calls.map((call) => call.arguments), [
+      {'seconds': 1.250123, 'mode': 'keyframes'},
+      {'seconds': 0.0, 'mode': 'exact'},
+    ]);
+  });
+
   test('dispatches the complete bounded outgoing command contract', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
@@ -873,7 +1063,7 @@ void main() {
       'setVolume',
       'stop',
     ]);
-    expect(calls[2].arguments, {'seconds': 1.25});
+    expect(calls[2].arguments, {'seconds': 1.25, 'mode': 'exact'});
     expect(calls[3].arguments, {
       'left': 12.0,
       'top': 34.0,
@@ -1095,6 +1285,69 @@ void main() {
     },
   );
 
+  test('missing required engine uses platform-neutral wording', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'play') {
+        throw PlatformException(code: 'required_engine_unavailable');
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = MethodChannelNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+
+    await expectLater(
+      player.play(),
+      throwsA(
+        isA<PlayerUnavailable>().having(
+          (error) => error.message,
+          'message',
+          'The required video engine is unavailable.',
+        ),
+      ),
+    );
+  });
+
+  test(
+    'initial start validates before dispatch and preserves zero as an option',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final media = Uri.parse('https://media.example/a%20b?quality=original');
+      await expectLater(
+        player.load(media, startPosition: const Duration(microseconds: -1)),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (e) => e.failureCode,
+            'failureCode',
+            'invalid_argument',
+          ),
+        ),
+      );
+      expect(calls.where((c) => c.method == 'load'), isEmpty);
+      final loaded = player.load(media, startPosition: Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      final call = calls.last;
+      expect(call.arguments['startSeconds'], 0.0);
+      expect(call.arguments['uri'], media.toString());
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'state': 'playing',
+        'loadId': call.arguments['loadId'],
+      });
+      await loaded;
+    },
+  );
+
   test('authenticated loads require an HTTPS authority in Dart', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
@@ -1129,6 +1382,7 @@ void main() {
     final loadCall = calls.singleWhere((call) => call.method == 'load');
     final loadId = loadCall.arguments!['loadId']! as int;
     expect(loadCall.arguments!['plexToken'], isNull);
+    expect(loadCall.arguments.containsKey('startSeconds'), isFalse);
     await _sendNativeEvent(messenger, {
       'type': 'state',
       'loadId': loadId,

@@ -5,3 +5,6 @@
 # Xcode-related
 **/dgph
 **/xcuserdata/
+
+# Local libmpv runtime override (see Runner/Configs/NativePlayer.xcconfig)
+Runner/Configs/NativePlayer.local.xcconfig
