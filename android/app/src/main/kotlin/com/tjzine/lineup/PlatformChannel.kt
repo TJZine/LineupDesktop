@@ -19,6 +19,7 @@ class PlatformChannel(
     private val keyboardVisibility: KeyboardVisibilityObserver,
     private val licenseResources: LicenseResources = LicenseResources(activity.assets),
     private val licenseExecutor: ExecutorService = Executors.newSingleThreadExecutor(),
+    private val deviceForm: DeviceForm = DeviceForm.detect(activity),
 ) : MethodChannel.MethodCallHandler, AutoCloseable {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val closed = AtomicBoolean(false)
@@ -30,7 +31,7 @@ class PlatformChannel(
                     result.error("invalid_arguments", "deviceProfile accepts no arguments.", null)
                     return
                 }
-                result.success(mapOf("formFactor" to DeviceForm.detect(activity).wireValue))
+                result.success(mapOf("formFactor" to deviceForm.wireValue))
             }
             "listLicenseDocuments" -> {
                 if (call.arguments != null) {

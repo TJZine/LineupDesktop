@@ -17,7 +17,7 @@ void nativeRunnerLifecycleTestMain() {
   runApp(const SizedBox.shrink());
 }
 
-Future<void> main(List<String> arguments) async {
+void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterError.onError = (details) {
@@ -36,7 +36,10 @@ Future<void> main(List<String> arguments) async {
     return true;
   };
 
-  final profile = await resolveDeviceProfile(host: defaultTargetPlatform);
+  final profile = resolveDeviceProfile(
+    host: defaultTargetPlatform,
+    arguments: arguments,
+  );
   if (kDebugMode) {
     debugPrint('Lineup device profile: ${profile.formFactor.name}');
   }

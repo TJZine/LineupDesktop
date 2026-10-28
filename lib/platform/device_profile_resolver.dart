@@ -1,38 +1,41 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import 'device_profile.dart';
 
-/// Called once by the process composition root, before building any widgets.
-/// Failure retains the shipped TV behavior and reports through Flutter's handler.
-Future<DeviceProfile> resolveDeviceProfile({
+/// Reads the native startup fact before building widgets, without platform IO.
+/// Missing or malformed Android arguments retain TV behavior and report an error.
+DeviceProfile resolveDeviceProfile({
   required TargetPlatform host,
-  MethodChannel channel = const MethodChannel('lineup/platform'),
-  Duration timeout = const Duration(seconds: 2),
-}) async {
+  required List<String> arguments,
+}) {
   if (host != TargetPlatform.android) return DeviceProfile.fallbackFor(host);
 
-  try {
-    final reply = await channel
-        .invokeMethod<Object?>('deviceProfile')
-        .timeout(timeout);
-    final formFactor = switch (reply) {
-      {'formFactor': 'tv'} => FormFactor.tv,
-      {'formFactor': 'handheld'} => FormFactor.handheld,
-      _ => throw const FormatException('Invalid Android device profile reply.'),
-    };
+  final formArguments = arguments
+      .where(
+        (argument) =>
+            argument == '--form-factor' ||
+            argument.startsWith('--form-factor='),
+      )
+      .toList(growable: false);
+  final formFactor = switch (formArguments) {
+    ['--form-factor=tv'] => FormFactor.tv,
+    ['--form-factor=handheld'] => FormFactor.handheld,
+    _ => null,
+  };
+  if (formFactor != null) {
     return DeviceProfile(host: host, formFactor: formFactor);
-  } catch (error, stack) {
-    FlutterError.reportError(
-      FlutterErrorDetails(
-        exception: error,
-        stack: stack,
-        library: 'Lineup device profile',
-        context: ErrorDescription('while resolving the Android form factor'),
-      ),
-    );
-    return DeviceProfile.fallbackFor(host);
   }
+
+  // Never include entrypoint arguments: other flags may carry private media.
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: const FormatException(
+        'Missing or invalid Android form-factor argument.',
+      ),
+      stack: StackTrace.current,
+      library: 'Lineup device profile',
+      context: ErrorDescription('while reading the Android form factor'),
+    ),
+  );
+  return DeviceProfile.fallbackFor(host);
 }
