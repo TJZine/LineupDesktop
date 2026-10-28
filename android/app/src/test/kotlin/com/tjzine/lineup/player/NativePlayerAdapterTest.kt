@@ -1,13 +1,17 @@
 package com.tjzine.lineup.player
 
 import android.app.Activity
+import android.graphics.Color
 import android.view.SurfaceView
 import android.view.View
+import androidx.media3.ui.CaptionStyleCompat
+import androidx.media3.ui.SubtitleView
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.StandardMethodCodec
 import java.nio.ByteBuffer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -70,6 +74,28 @@ class NativePlayerAdapterTest {
 
         messenger.call("setVideoRect", rect(960.0, 540.0))
         assertEquals(View.VISIBLE, video.visibility)
+        adapter.close()
+    }
+
+    @Test
+    fun textSubtitlesAreOutlinedWithoutABackgroundBox() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val adapter = NativePlayerAdapter(activity, Messenger())
+        val subtitles = (0 until adapter.view.childCount)
+            .map(adapter.view::getChildAt)
+            .filterIsInstance<SubtitleView>()
+            .single()
+        // SubtitleView has no style getter; read the field setStyle assigns.
+        val style = SubtitleView::class.java.getDeclaredField("style")
+            .apply { isAccessible = true }
+            .get(subtitles) as CaptionStyleCompat
+
+        assertEquals(Color.WHITE, style.foregroundColor)
+        assertEquals(Color.TRANSPARENT, style.backgroundColor)
+        assertEquals(Color.TRANSPARENT, style.windowColor)
+        assertEquals(CaptionStyleCompat.EDGE_TYPE_OUTLINE, style.edgeType)
+        assertEquals(Color.BLACK, style.edgeColor)
+        assertNull(style.typeface)
         adapter.close()
     }
 }
