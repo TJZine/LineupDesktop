@@ -25,6 +25,13 @@ class PlatformChannel(
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "deviceProfile" -> {
+                if (call.arguments != null) {
+                    result.error("invalid_arguments", "deviceProfile accepts no arguments.", null)
+                    return
+                }
+                result.success(mapOf("formFactor" to DeviceForm.detect(activity).wireValue))
+            }
             "listLicenseDocuments" -> {
                 if (call.arguments != null) {
                     result.error("invalid_arguments", "listLicenseDocuments accepts no arguments.", null)

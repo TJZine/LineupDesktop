@@ -20,6 +20,28 @@ notices work offline, and Android native-runtime notices are generated into the
 APK assets (see [Release packaging and runtime notices](#release-packaging-and-runtime-notices)). Android hides the Windows HDR-matching toggle and
 exposes Settings during onboarding and the Licenses row under Support.
 
+## Form factor
+
+The composition root resolves one immutable device profile before building the
+application. Android's no-argument `lineup/platform.deviceProfile` method
+returns `{formFactor: "tv" | "handheld"}`. Kotlin `DeviceForm.detect` is the
+single detection authority: television UI mode, the leanback system feature,
+or `amazon.hardware.fire_tv` means TV; all other cases mean handheld.
+Window size, rotation and docking do not reclassify the running application.
+Non-null method arguments are rejected with `invalid_arguments`.
+
+Dart waits at most two seconds. A timeout, platform exception or malformed
+reply is reported through `FlutterError.reportError` and retains the TV
+fallback. Debug builds log the resolved form factor. Other hosts retain their
+desktop profile without invoking the Android channel.
+
+The manifest no longer locks landscape. TV hardware retains its landscape
+orientation. Handheld orientation is temporarily unrestricted until the
+destination-specific Dart policy and approved handheld layouts are implemented.
+This detection baseline does not establish handheld UI acceptance. Fire OS
+detection is covered with a stubbed system feature in JVM tests; physical Fire
+TV and Android 9 TV detection remain acceptance checklist items.
+
 ## Playback adapter
 
 `MainActivity` composes native default-z-order video, a Media3 SubtitleView and
