@@ -84,9 +84,26 @@ class FakeNativePlayer implements NativePlayer {
        displayReport =
            initialDisplayReport ?? const DisplayMatchingReport.initial(),
        _eventGeneration = initialGeneration {
-    this.capabilities =
-        capabilities ?? PlayerCapabilities.forHost(defaultTargetPlatform);
+    this.capabilities = capabilities ?? _fakeDefaultCapabilities();
   }
+
+  static PlayerCapabilities _fakeDefaultCapabilities() => switch (
+    defaultTargetPlatform
+  ) {
+    TargetPlatform.windows => const PlayerCapabilities(
+      displayMatching: true,
+      fullscreen: PlayerFullscreenMode.window,
+    ),
+    TargetPlatform.macOS => const PlayerCapabilities(
+      displayMatching: false,
+      fullscreen: PlayerFullscreenMode.window,
+    ),
+    TargetPlatform.android => const PlayerCapabilities.unavailable(),
+    _ => const PlayerCapabilities(
+      displayMatching: false,
+      fullscreen: PlayerFullscreenMode.window,
+    ),
+  };
 
   final bool emitLoadingOnLoad;
   int? _eventGeneration;
