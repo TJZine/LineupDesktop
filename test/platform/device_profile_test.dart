@@ -38,6 +38,18 @@ void main() {
     tester,
   ) async {
     var builds = 0;
+    final desktopA = DeviceProfile(
+      host: TargetPlatform.macOS,
+      formFactor: FormFactor.desktop,
+    );
+    final desktopB = DeviceProfile(
+      host: TargetPlatform.macOS,
+      formFactor: FormFactor.desktop,
+    );
+    final tv = DeviceProfile(
+      host: TargetPlatform.android,
+      formFactor: FormFactor.tv,
+    );
     final child = Builder(
       builder: (context) {
         DeviceProfile.of(context);
@@ -47,34 +59,16 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const DeviceProfileScope(
-        profile: DeviceProfile(
-          host: TargetPlatform.macOS,
-          formFactor: FormFactor.desktop,
-        ),
-        child: SizedBox.shrink(),
-      ),
-    );
-    await tester.pumpWidget(
-      DeviceProfileScope(
-        profile: const DeviceProfile(
-          host: TargetPlatform.macOS,
-          formFactor: FormFactor.desktop,
-        ),
-        child: child,
-      ),
+      DeviceProfileScope(profile: desktopA, child: child),
     );
     expect(builds, 1);
 
     await tester.pumpWidget(
-      DeviceProfileScope(
-        profile: const DeviceProfile(
-          host: TargetPlatform.android,
-          formFactor: FormFactor.tv,
-        ),
-        child: child,
-      ),
+      DeviceProfileScope(profile: desktopB, child: child),
     );
+    expect(builds, 1);
+
+    await tester.pumpWidget(DeviceProfileScope(profile: tv, child: child));
     expect(builds, 2);
   });
 }
