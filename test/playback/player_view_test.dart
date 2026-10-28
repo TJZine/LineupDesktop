@@ -8631,6 +8631,8 @@ class _Native implements NativePlayer {
   void emitDisplay(DisplayMatchingReport report) => _displayReports.add(report);
   @override
   bool fullscreen = false;
+  @override
+  PlayerCapabilities capabilities = const PlayerCapabilities.unavailable();
   final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
   @override
   Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;
