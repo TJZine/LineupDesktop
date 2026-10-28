@@ -55,6 +55,78 @@ void main() {
       );
     },
   );
+  testWidgets('replacing the surface transfers bounds without hiding video', (
+    tester,
+  ) async {
+    final player = FakeNativePlayer();
+    Widget surface(String key, double width) => MaterialApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: width,
+          height: 100,
+          child: NativeVideoSurface(key: ValueKey(key), player: player),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(surface('player', 400));
+    await tester.pumpWidget(surface('guide', 200));
+    await tester.pumpWidget(surface('player', 400));
+
+    // Guide/Player replace widgets for the same native output. Disposing the
+    // old widget must not destroy that output between its two visible bounds.
+    expect(player.videoRects.map((rect) => rect.width), [400, 200, 400]);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(player.videoRects.last.width, 0);
+  });
+
+  testWidgets(
+    'changing players hides the old output and publishes the new one',
+    (tester) async {
+      final first = FakeNativePlayer();
+      final second = FakeNativePlayer();
+      Widget surface(NativePlayer player) =>
+          MaterialApp(home: NativeVideoSurface(player: player));
+
+      await tester.pumpWidget(surface(first));
+      await tester.pumpWidget(surface(second));
+      expect(first.videoRects.last.width, 0);
+      expect(second.videoRects.single.width, greaterThan(0));
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(second.videoRects.last.width, 0);
+    },
+  );
+
+  testWidgets('independent players keep their own surface ownership', (
+    tester,
+  ) async {
+    final first = FakeNativePlayer();
+    final second = FakeNativePlayer();
+    Widget surfaces(bool includeFirst) => MaterialApp(
+      home: Row(
+        children: [
+          if (includeFirst)
+            Expanded(
+              key: const ValueKey('first'),
+              child: NativeVideoSurface(player: first),
+            ),
+          Expanded(
+            key: const ValueKey('second'),
+            child: NativeVideoSurface(player: second),
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(surfaces(true));
+    await tester.pumpWidget(surfaces(false));
+    expect(first.videoRects.last.width, 0);
+    expect(second.videoRects.every((rect) => rect.width > 0), isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(second.videoRects.last.width, 0);
+  });
+
   for (final window in const [Size(1920, 1080), Size(3840, 2160)]) {
     for (final dpr in [1.0, 1.5, 2.0]) {
       testWidgets('accumulated video bounds at $window DPR $dpr', (

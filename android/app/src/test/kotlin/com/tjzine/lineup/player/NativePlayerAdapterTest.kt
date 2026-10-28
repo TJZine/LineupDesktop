@@ -19,7 +19,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, sdk = [30])
+@Config(manifest = Config.NONE, sdk = [30, 31])
 class NativePlayerAdapterTest {
     private class Messenger : BinaryMessenger {
         var handler: BinaryMessenger.BinaryMessageHandler? = null
@@ -72,6 +72,39 @@ class NativePlayerAdapterTest {
         assertEquals(View.INVISIBLE, adapter.view.visibility)
         assertEquals(View.INVISIBLE, video.visibility)
 
+        messenger.call("setVideoRect", rect(960.0, 540.0))
+        assertEquals(View.VISIBLE, video.visibility)
+        adapter.close()
+    }
+
+    @Test
+    fun visibleRouteRectanglesKeepTheSurfaceUntilPlaybackIsActuallyHidden() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val messenger = Messenger()
+        val adapter = NativePlayerAdapter(activity, messenger)
+        activity.setContentView(adapter.view)
+        val video = (0 until adapter.view.childCount)
+            .map(adapter.view::getChildAt)
+            .filterIsInstance<SurfaceView>()
+            .single()
+        messenger.call("initialize")
+
+        // Flutter transfers the same native output between Player and Guide.
+        // Only a real final hide sends zero; it must still release the view's
+        // surface before a hidden window stop/start, as required by 91528805.
+        repeat(10) {
+            for ((width, height) in listOf(960.0 to 540.0, 320.0 to 180.0)) {
+                messenger.call("setVideoRect", rect(width, height))
+                assertEquals(View.VISIBLE, adapter.view.visibility)
+                assertEquals(View.VISIBLE, video.visibility)
+                assertEquals((width * 2).toInt(), video.layoutParams.width)
+                assertEquals((height * 2).toInt(), video.layoutParams.height)
+                assertEquals(adapter.view, video.parent)
+            }
+        }
+        messenger.call("setVideoRect", rect(0.0, 0.0))
+        assertEquals(View.INVISIBLE, video.visibility)
+        adapter.releaseForBackground()
         messenger.call("setVideoRect", rect(960.0, 540.0))
         assertEquals(View.VISIBLE, video.visibility)
         adapter.close()
