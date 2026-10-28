@@ -308,13 +308,15 @@ internal class Media3Engine(
         // Cancelling an in-flight call closes its socket (TLS close_notify). Never
         // perform this IO on the application looper or reply to stop/dispose before
         // it completes. Idle connections stay in the shared pool (see MediaHttp).
-        // A release timeout fails this attempt even if teardown finishes meanwhile.
+        // Media3's blocking-call deadline is not the teardown fence: its queued
+        // release can finish just afterward. Wait for the actual playback thread
+        // even after that deadline, and acknowledge only once it has terminated.
         // A later retry observes the same thread; it never calls release() again.
         val timedOutThisAttempt = firstAttempt && releaseTimedOut
         val returned = releaseReturned
         cleanupExecutor.execute {
             val decoderSuccess =
-                if (returned && !timedOutThisAttempt) {
+                if (returned) {
                     try {
                         playbackThread.join(1000)
                         !playbackThread.isAlive
