@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -25,7 +27,7 @@ void main() {
         builder: (context, enabled, _) => MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
             largeFocusIndicators: enabled,
           ),
           builder: LineupCanvas.builder,
@@ -78,7 +80,7 @@ void main() {
         MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
             largeFocusIndicators: true,
           ),
           home: Builder(
@@ -149,7 +151,7 @@ void main() {
           MaterialApp(
             theme: LineupTheme.forName(
               name,
-              androidTv: true,
+              formFactor: profileFor(true).formFactor,
               largeFocusIndicators: true,
             ),
             home: Builder(
@@ -220,7 +222,7 @@ void main() {
           MaterialApp(
             theme: LineupTheme.forName(
               LineupThemeName.emberSteel,
-              androidTv: tv,
+              formFactor: profileFor(tv).formFactor,
               largeFocusIndicators: large,
             ),
             home: Builder(

@@ -39,12 +39,7 @@ void main() {
       await tester.runAsync(loadPinnedTestFonts);
       final controller = _SetupController();
       addTearDown(controller.dispose);
-      await _pump(
-        tester,
-        controller,
-        androidTv: true,
-        reviewRenderScale: scale,
-      );
+      await _pump(tester, controller, isTv: true, reviewRenderScale: scale);
       await _advanceToReview(tester);
       // Asset decoding runs outside the fake test clock. pumpAndSettle alone
       // can finish before the header Image receives its first decoded frame.
@@ -130,7 +125,7 @@ void main() {
     (tester) async {
       final fixture = await _createBoundarySetup();
       addTearDown(fixture.controller.dispose);
-      await _pump(tester, fixture.controller, androidTv: true);
+      await _pump(tester, fixture.controller, isTv: true);
       await _advanceToReview(tester);
       final search = find.byKey(const ValueKey('channel-setup-review-search'));
       await tester.enterText(search, 'Recently');
@@ -180,7 +175,7 @@ void main() {
   ) async {
     final controller = _SetupController()..applyGate = Completer<void>();
     addTearDown(controller.dispose);
-    await _pump(tester, controller, androidTv: true);
+    await _pump(tester, controller, isTv: true);
     await tester.pumpAndSettle();
     await _advanceToReview(tester);
     await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
@@ -203,7 +198,7 @@ void main() {
     var viewCalls = 0;
     final controller = _SetupController();
     addTearDown(controller.dispose);
-    await _pump(tester, controller, androidTv: true, onView: () => viewCalls++);
+    await _pump(tester, controller, isTv: true, onView: () => viewCalls++);
     await _advanceToReview(tester);
     await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
     await tester.pumpAndSettle();
@@ -221,7 +216,7 @@ void main() {
   ) async {
     final controller = _SetupController(blockScan: true);
     addTearDown(controller.dispose);
-    await _pump(tester, controller, androidTv: true);
+    await _pump(tester, controller, isTv: true);
     await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
     await controller.scanStarted.future;
 
@@ -242,7 +237,7 @@ void main() {
   ) async {
     final controller = _SetupController()..commitGate = Completer<void>();
     addTearDown(controller.dispose);
-    await _pump(tester, controller, androidTv: true);
+    await _pump(tester, controller, isTv: true);
     await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
     await tester.pump();
     expect(controller.commitCalls, 1);
@@ -305,7 +300,7 @@ void main() {
       scenario: const LineupScenario(libraries: []),
     );
     addTearDown(controller.dispose);
-    await _pump(tester, controller, androidTv: true);
+    await _pump(tester, controller, isTv: true);
     await tester.pumpAndSettle();
     final switchServer = find.byKey(const ValueKey('setup-switch-server'));
     final switchButton = tester.widget<FilledButton>(switchServer);
@@ -316,7 +311,7 @@ void main() {
     );
 
     controller.fixtureActor.present(const LineupPresentation(busy: true));
-    await _pump(tester, controller, androidTv: true);
+    await _pump(tester, controller, isTv: true);
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(switchServer).focusNode, isNull);
   });
@@ -327,7 +322,7 @@ void main() {
     for (final tv in [true, false]) {
       final controller = _SetupController(blockScan: true);
       addTearDown(controller.dispose);
-      await _pump(tester, controller, androidTv: tv);
+      await _pump(tester, controller, isTv: tv);
       await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
       await controller.scanStarted.future;
       await tester.pump();
@@ -346,7 +341,7 @@ void main() {
   ) async {
     final controller = _SetupController();
     addTearDown(controller.dispose);
-    await _pump(tester, controller, androidTv: true);
+    await _pump(tester, controller, isTv: true);
     await tester.pumpAndSettle();
 
     _expectLibraryEntryPaint(tester);
@@ -394,13 +389,13 @@ void main() {
     _expectLibraryEntryPaint(tester);
   });
 
-  for (final androidTv in [true, false]) {
+  for (final isTv in [true, false]) {
     testWidgets(
-      'library Select all is one target covering its checkbox (TV: $androidTv)',
+      'library Select all is one target covering its checkbox (TV: $isTv)',
       (tester) async {
         final controller = _SetupController();
         addTearDown(controller.dispose);
-        await _pump(tester, controller, androidTv: androidTv);
+        await _pump(tester, controller, isTv: isTv);
         await tester.pumpAndSettle();
 
         final selectAll = find.widgetWithText(TextButton, 'Select all');
@@ -447,7 +442,7 @@ void main() {
         expect(data.flagsCollection.isChecked, CheckedState.mixed);
         semantics.dispose();
 
-        if (androidTv) {
+        if (isTv) {
           final node = tester.widget<TextButton>(selectAll).focusNode!;
           expect(node.hasPrimaryFocus, isTrue);
           final roles = LineupTheme.of(tester.element(selectAll));
@@ -469,7 +464,7 @@ void main() {
     (tester) async {
       final controller = _SetupController();
       addTearDown(controller.dispose);
-      await _pump(tester, controller, androidTv: true);
+      await _pump(tester, controller, isTv: true);
       await tester.pumpAndSettle();
       final roles = LineupTheme.of(
         tester.element(find.byType(UpstreamChannelSetupView)),
@@ -542,7 +537,7 @@ void main() {
   ) async {
     final controller = _SetupController();
     addTearDown(controller.dispose);
-    await _pump(tester, controller, androidTv: true);
+    await _pump(tester, controller, isTv: true);
     await _advanceToConfigure(tester);
 
     final reviewButton = tester.widget<FilledButton>(
@@ -582,7 +577,7 @@ void main() {
     (tester) async {
       final controller = _SetupController(blockScan: true);
       addTearDown(controller.dispose);
-      await _pump(tester, controller, androidTv: true);
+      await _pump(tester, controller, isTv: true);
       tester
           .widget<FilledButton>(
             find.byKey(const ValueKey('scan-selected-libraries')),
@@ -648,7 +643,7 @@ void main() {
     addTearDown(fixture.controller.dispose);
     fixture.plex.scanGate = Completer<PlexLibraryScan>();
     final saves = fixture.store.saveCalls;
-    await _pump(tester, fixture.controller, androidTv: true);
+    await _pump(tester, fixture.controller, isTv: true);
     await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
     await fixture.plex.scanStarted.future;
 
@@ -676,7 +671,7 @@ void main() {
     addTearDown(fixture.controller.dispose);
     fixture.plex.scanGate = Completer<PlexLibraryScan>();
     final saves = fixture.store.saveCalls;
-    await _pump(tester, fixture.controller, androidTv: true);
+    await _pump(tester, fixture.controller, isTv: true);
     tester
         .widget<FilledButton>(
           find.byKey(const ValueKey('scan-selected-libraries')),
@@ -713,7 +708,7 @@ void main() {
         addTearDown(fixture.controller.dispose);
         fixture.store.blockNext(fail: fail);
         final saves = fixture.store.saveCalls;
-        await _pump(tester, fixture.controller, androidTv: true);
+        await _pump(tester, fixture.controller, isTv: true);
         tester
             .widget<FilledButton>(
               find.byKey(const ValueKey('scan-selected-libraries')),
@@ -778,7 +773,7 @@ void main() {
     await _pump(
       tester,
       fixture.controller,
-      androidTv: true,
+      isTv: true,
       onView: () => completions++,
     );
     await _advanceToReview(tester);
@@ -811,7 +806,7 @@ void main() {
   testWidgets('NAV-I2 Configure Back returns to Libraries', (tester) async {
     final controller = _SetupController();
     addTearDown(controller.dispose);
-    await _pump(tester, controller, androidTv: true);
+    await _pump(tester, controller, isTv: true);
     await _advanceToConfigure(tester);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -829,7 +824,7 @@ void main() {
   ) async {
     final reviewController = _SetupController();
     addTearDown(reviewController.dispose);
-    await _pump(tester, reviewController, androidTv: true);
+    await _pump(tester, reviewController, isTv: true);
     await _advanceToReview(tester);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -839,7 +834,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     final failedController = _SetupController(failApply: true);
     addTearDown(failedController.dispose);
-    await _pump(tester, failedController, androidTv: true);
+    await _pump(tester, failedController, isTv: true);
     await _advanceToReview(tester);
     await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
     await tester.pumpAndSettle();
@@ -862,7 +857,7 @@ void main() {
         try {
           FocusManager.instance.highlightStrategy =
               FocusHighlightStrategy.alwaysTouch;
-          await _pump(tester, controller, androidTv: tv);
+          await _pump(tester, controller, isTv: tv);
           Future<void> checkLabel(String label) async {
             final text = find.text(label);
             expect(text, findsOneWidget);
@@ -917,7 +912,7 @@ void main() {
       final controller = _SetupController();
       try {
         await tester.runAsync(loadPinnedTestFonts);
-        await _pump(tester, controller, androidTv: true);
+        await _pump(tester, controller, isTv: true);
         await _openPlaybackControls(tester);
         tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged!(
           true,
@@ -985,7 +980,7 @@ void main() {
       final tv = platform == TargetPlatform.android;
       final controller = _SetupController(mixedScan: true);
       try {
-        await _pump(tester, controller, androidTv: tv);
+        await _pump(tester, controller, isTv: tv);
         await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
         await tester.pumpAndSettle();
         final status = find.text('Couldn’t scan · Try again.');
@@ -1034,7 +1029,7 @@ void main() {
       final controller = _SetupController(channels: [_missingChannel]);
       try {
         await tester.runAsync(loadPinnedTestFonts);
-        await _pump(tester, controller, androidTv: tv);
+        await _pump(tester, controller, isTv: tv);
         tester.view.physicalSize = const Size(1920, 1080);
         await tester.pumpAndSettle();
         await _advanceToReview(tester);
@@ -1131,7 +1126,7 @@ void main() {
         }
         try {
           await tester.runAsync(loadPinnedTestFonts);
-          await _pump(tester, controller, androidTv: tv);
+          await _pump(tester, controller, isTv: tv);
           await _advanceToConfigure(tester);
           await tester.tap(find.byKey(const ValueKey('configure-section-2')));
           await tester.pumpAndSettle();
@@ -1226,7 +1221,7 @@ void main() {
         final controller = _SetupController();
         try {
           await tester.runAsync(loadPinnedTestFonts);
-          await _pump(tester, controller, androidTv: true);
+          await _pump(tester, controller, isTv: true);
           await _advanceToConfigure(tester);
           await tester.tap(find.byKey(const ValueKey('configure-section-2')));
           await tester.pumpAndSettle();
@@ -1296,7 +1291,7 @@ void main() {
       final controller = _SetupController();
       try {
         await tester.runAsync(loadPinnedTestFonts);
-        await _pump(tester, controller, androidTv: true);
+        await _pump(tester, controller, isTv: true);
         await _advanceToConfigure(tester);
         final section = find.byKey(const ValueKey('configure-section-1'));
         await tester.tap(section);
@@ -1373,7 +1368,7 @@ void main() {
         final tv = platform == TargetPlatform.android;
         final controller = _SetupController();
         try {
-          await _pump(tester, controller, androidTv: tv);
+          await _pump(tester, controller, isTv: tv);
           await _advanceToConfigure(tester);
           await tester.tap(find.byKey(const ValueKey('configure-section-1')));
           await tester.pumpAndSettle();
@@ -1459,7 +1454,7 @@ void main() {
         final tv = platform == TargetPlatform.android;
         final controller = _SetupController();
         try {
-          await _pump(tester, controller, androidTv: tv);
+          await _pump(tester, controller, isTv: tv);
           await _advanceToConfigure(tester);
           await tester.tap(find.byKey(const ValueKey('configure-section-2')));
           await tester.pumpAndSettle();
@@ -1517,7 +1512,7 @@ void main() {
         final controller = _SetupController();
         try {
           await tester.runAsync(loadPinnedTestFonts);
-          await _pump(tester, controller, androidTv: tv);
+          await _pump(tester, controller, isTv: tv);
           await tester.pumpAndSettle();
           Future<void> activate(Finder button) async {
             final label = find
@@ -1580,7 +1575,7 @@ void main() {
             channels: existing ? [_missingChannel] : [],
           );
           addTearDown(controller.dispose);
-          await _pump(tester, controller, androidTv: true);
+          await _pump(tester, controller, isTv: true);
           await _advanceToConfigure(tester);
           final configuration = find.byKey(
             const ValueKey('channel-configuration'),
@@ -1673,7 +1668,7 @@ void main() {
         final controller = _SetupController();
         try {
           await tester.runAsync(loadPinnedTestFonts);
-          await _pump(tester, controller, androidTv: true);
+          await _pump(tester, controller, isTv: true);
           await _advanceToConfigure(tester);
           final section = find.byKey(const ValueKey('configure-section-1'));
           await tester.tap(section);
@@ -3527,32 +3522,35 @@ Future<void> _pump(
   LineupController controller, {
   VoidCallback? onView,
   VoidCallback? onAdd,
-  bool androidTv = false,
+  bool isTv = false,
   double? reviewRenderScale,
 }) async {
   tester.view
-    ..physicalSize = androidTv ? const Size(1920, 1080) : const Size(1280, 720)
-    ..devicePixelRatio = androidTv ? 2 : 1;
+    ..physicalSize = isTv ? const Size(1920, 1080) : const Size(1280, 720)
+    ..devicePixelRatio = isTv ? 2 : 1;
   await tester.pumpWidget(
     MaterialApp(
-      builder: (context, child) => reviewRenderScale == null
-          ? LineupCanvas.builder(context, LineupFocusScope(child: child!))
-          : RepaintBoundary(
-              key: const ValueKey('review-page-raster'),
-              child: MediaQuery(
-                data: MediaQuery.of(context).copyWith(
-                  textScaler: TextScaler.linear(reviewRenderScale),
-                  disableAnimations: true,
-                ),
-                child: LineupCanvas.builder(
-                  context,
-                  LineupFocusScope(child: child!),
+      builder: (context, child) => DeviceProfileScope(
+        profile: profileFor(isTv),
+        child: reviewRenderScale == null
+            ? LineupCanvas.builder(context, LineupFocusScope(child: child!))
+            : RepaintBoundary(
+                key: const ValueKey('review-page-raster'),
+                child: MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(reviewRenderScale),
+                    disableAnimations: true,
+                  ),
+                  child: LineupCanvas.builder(
+                    context,
+                    LineupFocusScope(child: child!),
+                  ),
                 ),
               ),
-            ),
+      ),
       theme: LineupTheme.forName(
         LineupThemeName.emberSteel,
-        androidTv: androidTv,
+        formFactor: profileFor(isTv).formFactor,
         largeFocusIndicators: reviewRenderScale == 1.3,
       ),
       home: ListenableBuilder(
@@ -3578,9 +3576,14 @@ Future<void> _pumpRetainedSetup(
     ..devicePixelRatio = 2;
   await tester.pumpWidget(
     MaterialApp(
-      builder: (context, child) =>
-          LineupCanvas.builder(context, LineupFocusScope(child: child!)),
-      theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+      builder: (context, child) => DeviceProfileScope(
+        profile: profileFor(true),
+        child: LineupCanvas.builder(context, LineupFocusScope(child: child!)),
+      ),
+      theme: LineupTheme.forName(
+        LineupThemeName.emberSteel,
+        formFactor: profileFor(true).formFactor,
+      ),
       home: _RetainedSetupHost(key: hostKey, controller: controller),
     ),
   );

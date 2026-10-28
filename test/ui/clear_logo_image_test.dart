@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -212,16 +214,22 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final bytes = await _solidLogoBytes(tester, size: const Size(1600, 320));
     await tester.pumpWidget(
-      MaterialApp(
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
-        builder: LineupCanvas.builder,
-        home: Align(
-          alignment: Alignment.centerLeft,
-          child: ClearLogoImage(
-            bytes,
-            maximumSize: const Size(420, 84),
-            imageKey: const Key('accepted-logo'),
-            fallback: const Text('Readable title'),
+      DeviceProfileScope(
+        profile: profileFor(true),
+        child: MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(true).formFactor,
+          ),
+          builder: LineupCanvas.builder,
+          home: Align(
+            alignment: Alignment.centerLeft,
+            child: ClearLogoImage(
+              bytes,
+              maximumSize: const Size(420, 84),
+              imageKey: const Key('accepted-logo'),
+              fallback: const Text('Readable title'),
+            ),
           ),
         ),
       ),

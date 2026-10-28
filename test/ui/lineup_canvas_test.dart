@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -24,62 +26,71 @@ void main() {
       late EdgeInsets fullInsets;
       var taps = 0;
       await tester.pumpWidget(
-        MaterialApp(
-          theme: LineupTheme.forName(
-            LineupThemeName.emberSteel,
-            androidTv: true,
-          ),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              padding: const EdgeInsets.fromLTRB(100, 4, 8, 80),
-              viewPadding: const EdgeInsets.fromLTRB(100, 4, 8, 80),
-              viewInsets: const EdgeInsets.only(bottom: 150),
-              systemGestureInsets: const EdgeInsets.all(6),
-              textScaler: const TextScaler.linear(1.3),
+        DeviceProfileScope(
+          profile: tvProfile,
+          child: MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(true).formFactor,
             ),
-            child: LineupCanvas(child: child!),
-          ),
-          home: Builder(
-            builder: (context) {
-              outer = MediaQuery.of(context);
-              contentInsets = LineupCanvas.contentInsets(
-                context,
-                minimum: const EdgeInsets.all(48),
-              );
-              return SafeArea(
-                child: Builder(
-                  builder: (context) {
-                    consumed = MediaQuery.of(context);
-                    return SafeArea(
-                      child: Builder(
-                        builder: (context) {
-                          nested = MediaQuery.of(context);
-                          fullInsets = LineupCanvas.fullSafeInsetsOf(context);
-                          return Stack(
-                            children: [
-                              Positioned(
-                                left: 0,
-                                top: 0,
-                                child: GestureDetector(
-                                  key: const Key('safe-target'),
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => taps++,
-                                  child: const SizedBox(width: 80, height: 60),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                padding: const EdgeInsets.fromLTRB(100, 4, 8, 80),
+                viewPadding: const EdgeInsets.fromLTRB(100, 4, 8, 80),
+                viewInsets: const EdgeInsets.only(bottom: 150),
+                systemGestureInsets: const EdgeInsets.all(6),
+                textScaler: const TextScaler.linear(1.3),
+              ),
+              child: LineupCanvas(child: child!),
+            ),
+            home: Builder(
+              builder: (context) {
+                outer = MediaQuery.of(context);
+                contentInsets = LineupCanvas.contentInsets(
+                  context,
+                  minimum: const EdgeInsets.all(48),
+                );
+                return SafeArea(
+                  child: Builder(
+                    builder: (context) {
+                      consumed = MediaQuery.of(context);
+                      return SafeArea(
+                        child: Builder(
+                          builder: (context) {
+                            nested = MediaQuery.of(context);
+                            fullInsets = LineupCanvas.fullSafeInsetsOf(context);
+                            return Stack(
+                              children: [
+                                Positioned(
+                                  left: 0,
+                                  top: 0,
+                                  child: GestureDetector(
+                                    key: const Key('safe-target'),
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => taps++,
+                                    child: const SizedBox(
+                                      width: 80,
+                                      height: 60,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
+                              ],
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
           ),
         ),
       );
-      final scale = LineupCanvas.scaleFor(window, androidTv: true);
+      final scale = LineupCanvas.scaleFor(
+        window,
+        formFactor: profileFor(true).formFactor,
+      );
       expect(scale, closeTo(window.height / 1080, 1e-12));
       expect(outer.size, window / scale);
       expect(outer.size.height, 1080);
@@ -125,38 +136,41 @@ void main() {
       var taps = 0;
       const target = Key('canvas-bottom-action');
       await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              padding: const EdgeInsets.all(16),
-              viewPadding: const EdgeInsets.all(24),
-              viewInsets: const EdgeInsets.only(bottom: 80),
-              systemGestureInsets: const EdgeInsets.all(8),
-              textScaler: const TextScaler.linear(1.5),
+        DeviceProfileScope(
+          profile: desktopProfile,
+          child: MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                padding: const EdgeInsets.all(16),
+                viewPadding: const EdgeInsets.all(24),
+                viewInsets: const EdgeInsets.only(bottom: 80),
+                systemGestureInsets: const EdgeInsets.all(8),
+                textScaler: const TextScaler.linear(1.5),
+              ),
+              child: LineupCanvas(reduceMotion: true, child: child!),
             ),
-            child: LineupCanvas(reduceMotion: true, child: child!),
-          ),
-          home: Builder(
-            builder: (context) {
-              reported = MediaQuery.of(context);
-              return Stack(
-                children: [
-                  Positioned(
-                    right: 30,
-                    bottom: 30,
-                    child: SizedBox(
-                      width: 100,
-                      height: 50,
-                      child: GestureDetector(
-                        key: target,
-                        onTap: () => taps++,
-                        child: const ColoredBox(color: Colors.red),
+            home: Builder(
+              builder: (context) {
+                reported = MediaQuery.of(context);
+                return Stack(
+                  children: [
+                    Positioned(
+                      right: 30,
+                      bottom: 30,
+                      child: SizedBox(
+                        width: 100,
+                        height: 50,
+                        child: GestureDetector(
+                          key: target,
+                          onTap: () => taps++,
+                          child: const ColoredBox(color: Colors.red),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           ),
         ),
       );

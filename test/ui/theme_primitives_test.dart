@@ -12,6 +12,7 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/golden_test_support.dart';
+import '../support/device_profile_test_support.dart';
 
 void main() {
   setUpAll(loadPinnedTestFonts);
@@ -29,18 +30,24 @@ void main() {
           final tv = platform == TargetPlatform.android;
           try {
             await tester.pumpWidget(
-              MaterialApp(
-                theme: LineupTheme.forName(name, androidTv: tv),
-                builder: LineupCanvas.builder,
-                home: Scaffold(
-                  body: Center(
-                    child: LineupSegmentedControl<int>(
-                      segments: const [
-                        ButtonSegment(value: 0, label: Text('One')),
-                        ButtonSegment(value: 1, label: Text('Two')),
-                      ],
-                      selected: const {0},
-                      onSelectionChanged: (_) {},
+              DeviceProfileScope(
+                profile: profileFor(tv),
+                child: MaterialApp(
+                  theme: LineupTheme.forName(
+                    name,
+                    formFactor: profileFor(tv).formFactor,
+                  ),
+                  builder: LineupCanvas.builder,
+                  home: Scaffold(
+                    body: Center(
+                      child: LineupSegmentedControl<int>(
+                        segments: const [
+                          ButtonSegment(value: 0, label: Text('One')),
+                          ButtonSegment(value: 1, label: Text('Two')),
+                        ],
+                        selected: const {0},
+                        onSelectionChanged: (_) {},
+                      ),
                     ),
                   ),
                 ),
@@ -212,17 +219,20 @@ void main() {
       final focus = FocusNode();
       try {
         await tester.pumpWidget(
-          MaterialApp(
-            theme: LineupTheme.forName(
-              LineupThemeName.emberSteel,
-              androidTv: tv,
-            ),
-            builder: LineupCanvas.builder,
-            home: Scaffold(
-              body: FilledButton(
-                focusNode: focus,
-                onPressed: () {},
-                child: const Text('Continue'),
+          DeviceProfileScope(
+            profile: profileFor(tv),
+            child: MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(tv).formFactor,
+              ),
+              builder: LineupCanvas.builder,
+              home: Scaffold(
+                body: FilledButton(
+                  focusNode: focus,
+                  onPressed: () {},
+                  child: const Text('Continue'),
+                ),
               ),
             ),
           ),
@@ -305,23 +315,26 @@ void main() {
       final node = FocusNode();
       addTearDown(node.dispose);
       await tester.pumpWidget(
-        MaterialApp(
-          theme: LineupTheme.forName(LineupThemeName.emberSteel),
-          builder: LineupCanvas.builder,
-          home: Scaffold(
-            body: Column(
-              children: [
-                FilledButton(
-                  key: const Key('action'),
-                  focusNode: node,
-                  onPressed: () {},
-                  child: const Text('Continue'),
-                ),
-                const LineupRowSurface(
-                  selected: true,
-                  child: Text('Selected channel'),
-                ),
-              ],
+        DeviceProfileScope(
+          profile: desktopProfile,
+          child: MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: LineupCanvas.builder,
+            home: Scaffold(
+              body: Column(
+                children: [
+                  FilledButton(
+                    key: const Key('action'),
+                    focusNode: node,
+                    onPressed: () {},
+                    child: const Text('Continue'),
+                  ),
+                  const LineupRowSurface(
+                    selected: true,
+                    child: Text('Selected channel'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

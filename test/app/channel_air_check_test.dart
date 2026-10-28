@@ -40,8 +40,12 @@ void main() {
           controller,
           _channel(items: [_item('one'), _item('two')]),
           compact: true,
-          theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: tv)
-              .copyWith(
+          isTv: tv,
+          theme:
+              LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(tv).formFactor,
+              ).copyWith(
                 platform: tv ? TargetPlatform.android : TargetPlatform.windows,
               ),
         ),
@@ -1477,12 +1481,16 @@ Widget _airCheck(
   Channel? originalChannel,
   ValueChanged<ChannelAirCheckValidity>? onValidityChanged,
   bool always24 = false,
+  bool isTv = false,
   ThemeData? theme,
 }) => MaterialApp(
   theme: theme,
   builder: (context, child) => MediaQuery(
     data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: always24),
-    child: LineupCanvas(child: child!),
+    child: DeviceProfileScope(
+      profile: profileFor(isTv),
+      child: LineupCanvas(child: child!),
+    ),
   ),
   home: Scaffold(
     body: SingleChildScrollView(

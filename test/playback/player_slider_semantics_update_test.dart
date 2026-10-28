@@ -15,8 +15,15 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
+import '../support/device_profile_test_support.dart';
 import '../support/semantics_update_recorder.dart';
 import '../support/test_doubles.dart';
+
+Widget _desktopCanvasBuilder(BuildContext context, Widget? child) =>
+    DeviceProfileScope(
+      profile: desktopProfile,
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
 
 void main() {
   final binding = SemanticsRecordingBinding();
@@ -446,7 +453,7 @@ class _Harness {
     await tester.pumpWidget(
       MaterialApp(
         navigatorKey: h.navigator,
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         home: _MenuShell(
           menu: h.menu,
           child: PlayerView(controller: h.fixture.player, openGuide: () {}),

@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -41,6 +43,24 @@ final _extremeWideArtwork = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAABLAAAAAUCAIAAAASgVNzAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqCQQBEhHq/110AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA5LTA0VDAxOjE4OjE3KzAwOjAwct2ViQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOS0wNFQwMToxODoxNyswMDowMAOALTUAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDktMDRUMDE6MTg6MTcrMDA6MDBUlQzqAAAAjUlEQVR42u3XMQEAIAzAMMC/5yFjRxMFfXtn5gAAANDztgMAAADYYQgBAACiDCEAAECUIQQAAIgyhAAAAFGGEAAAIMoQAgAARBlCAACAKEMIAAAQZQgBAACiDCEAAECUIQQAAIgyhAAAAFGGEAAAIMoQAgAARBlCAACAKEMIAAAQZQgBAACiDCEAAEDUB/B/AyWGhzYyAAAAAElFTkSuQmCC',
 );
 
+Widget _playerDesktopCanvasBuilder(BuildContext context, Widget? child) =>
+    DeviceProfileScope(
+      profile: desktopProfile,
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
+
+Widget _playerTvCanvasBuilder(BuildContext context, Widget? child) =>
+    DeviceProfileScope(
+      profile: tvProfile,
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
+
+TransitionBuilder _playerCanvasBuilderFor(bool tv) =>
+    (_, child) => DeviceProfileScope(
+      profile: profileFor(tv),
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
+
 void main() {
   tearDown(debugResetClearLogoCache);
 
@@ -67,9 +87,9 @@ void main() {
         MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
           ),
-          builder: LineupCanvas.builder,
+          builder: _playerTvCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -173,9 +193,9 @@ void main() {
           child: MaterialApp(
             theme: LineupTheme.forName(
               LineupThemeName.emberSteel,
-              androidTv: tv,
+              formFactor: profileFor(tv).formFactor,
             ),
-            builder: LineupCanvas.builder,
+            builder: _playerCanvasBuilderFor(tv),
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         ),
@@ -239,9 +259,9 @@ void main() {
         MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: variant.tv,
+            formFactor: profileFor(variant.tv).formFactor,
           ),
-          builder: LineupCanvas.builder,
+          builder: _playerCanvasBuilderFor(variant.tv),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -289,20 +309,26 @@ void main() {
           fixture.player.showNowPlaying();
           final captureKey = GlobalKey();
           await tester.pumpWidget(
-            RepaintBoundary(
-              key: captureKey,
-              child: MaterialApp(
-                theme: LineupTheme.forName(
-                  LineupThemeName.emberSteel,
-                  androidTv: true,
-                  largeFocusIndicators: large,
+            DeviceProfileScope(
+              profile: profileFor(true),
+              child: RepaintBoundary(
+                key: captureKey,
+                child: MaterialApp(
+                  theme: LineupTheme.forName(
+                    LineupThemeName.emberSteel,
+                    formFactor: profileFor(true).formFactor,
+                    largeFocusIndicators: large,
+                  ),
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(textScaler: TextScaler.linear(textScale)),
+                    child: LineupCanvas(reduceMotion: large, child: child!),
+                  ),
+                  home: PlayerView(
+                    controller: fixture.player,
+                    openGuide: () {},
+                  ),
                 ),
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(context)
-                      .copyWith(textScaler: TextScaler.linear(textScale)),
-                  child: LineupCanvas(reduceMotion: large, child: child!),
-                ),
-                home: PlayerView(controller: fixture.player, openGuide: () {}),
               ),
             ),
           );
@@ -706,8 +732,11 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
-        builder: LineupCanvas.builder,
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(true).formFactor,
+        ),
+        builder: _playerTvCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -789,9 +818,9 @@ void main() {
         MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
           ),
-          builder: LineupCanvas.builder,
+          builder: _playerTvCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -863,9 +892,9 @@ void main() {
             MaterialApp(
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
-                androidTv: true,
+                formFactor: profileFor(true).formFactor,
               ),
-              builder: LineupCanvas.builder,
+              builder: _playerTvCanvasBuilder,
               home: PlayerView(
                 controller: fixture.player,
                 focusNode: root,
@@ -989,9 +1018,9 @@ void main() {
           MaterialApp(
             theme: LineupTheme.forName(
               LineupThemeName.emberSteel,
-              androidTv: true,
+              formFactor: profileFor(true).formFactor,
             ),
-            builder: LineupCanvas.builder,
+            builder: _playerTvCanvasBuilder,
             home: PlayerView(
               controller: fixture.player,
               focusNode: root,
@@ -1133,9 +1162,9 @@ void main() {
         MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
           ),
-          builder: LineupCanvas.builder,
+          builder: _playerTvCanvasBuilder,
           home: PlayerView(
             controller: fixture.player,
             focusNode: root,
@@ -1230,14 +1259,14 @@ void main() {
             MaterialApp(
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
-                androidTv: true,
+                formFactor: profileFor(true).formFactor,
               ),
-              builder: LineupCanvas.builder,
+              builder: _playerTvCanvasBuilder,
               home: LineupShell(
                 player: fixture.native,
                 controller: fixture.lineup,
                 initialMediaPath: '/synthetic.mp4',
-                androidTv: true,
+                profile: profileFor(true),
               ),
             ),
           );
@@ -1391,14 +1420,14 @@ void main() {
           MaterialApp(
             theme: LineupTheme.forName(
               LineupThemeName.emberSteel,
-              androidTv: true,
+              formFactor: profileFor(true).formFactor,
             ),
-            builder: LineupCanvas.builder,
+            builder: _playerTvCanvasBuilder,
             home: LineupShell(
               player: fixture.native,
               controller: fixture.lineup,
               initialMediaPath: '/synthetic.mp4',
-              androidTv: true,
+              profile: profileFor(true),
             ),
           ),
         );
@@ -1541,11 +1570,11 @@ void main() {
                 MaterialApp(
                   theme: LineupTheme.forName(
                     LineupThemeName.emberSteel,
-                    androidTv: true,
+                    formFactor: profileFor(true).formFactor,
                   ),
                   builder: (context, child) => MediaQuery(
                     data: MediaQuery.of(context).copyWith(padding: padding),
-                    child: LineupCanvas(child: child!),
+                    child: _playerTvCanvasBuilder(context, child),
                   ),
                   home: PlayerView(
                     controller: fixture.player,
@@ -1573,7 +1602,10 @@ void main() {
               ]) {
                 inside(find.byKey(Key(key)));
               }
-              final scale = LineupCanvas.scaleFor(window, androidTv: true);
+              final scale = LineupCanvas.scaleFor(
+                window,
+                formFactor: profileFor(true).formFactor,
+              );
               final bug = _drawnRect(
                 tester,
                 find.byKey(const Key('player-osd-channel-bug')),
@@ -1731,7 +1763,7 @@ void main() {
         final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: TooltipVisibility(
               visible: tooltipsVisible,
               child: PlayerView(controller: fixture.player, openGuide: () {}),
@@ -1791,7 +1823,7 @@ void main() {
       final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -1835,9 +1867,9 @@ void main() {
         MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
           ),
-          builder: LineupCanvas.builder,
+          builder: _playerTvCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -1903,7 +1935,7 @@ void main() {
       if (overlay == PlayerOverlay.nowPlaying) f.player.showNowPlaying();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
             largeFocusIndicators: false,
@@ -1947,7 +1979,7 @@ void main() {
       final f = _Fixture(PlayerState.playing);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
             largeFocusIndicators: false,
@@ -1956,6 +1988,7 @@ void main() {
             player: f.native,
             controller: f.lineup,
             initialMediaPath: 'https://synthetic.test/local',
+            profile: desktopProfile,
           ),
         ),
       );
@@ -2008,7 +2041,7 @@ void main() {
       fixture.player.showMiniGuide();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2060,7 +2093,7 @@ void main() {
         }
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -2095,7 +2128,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(LineupThemeName.slatePine),
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(
               controller: fixture.player,
               openGuide: () => closed = true,
@@ -2143,7 +2176,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(theme),
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -2250,7 +2283,7 @@ void main() {
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context)
                     .copyWith(textScaler: TextScaler.linear(textScale)),
-                child: LineupCanvas(child: child!),
+                child: _playerDesktopCanvasBuilder(context, child),
               ),
               home: PlayerView(controller: fixture.player, openGuide: () {}),
             ),
@@ -2336,7 +2369,7 @@ void main() {
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: TextScaler.linear(textScale)),
-              child: LineupCanvas(child: child!),
+              child: _playerDesktopCanvasBuilder(context, child),
             ),
             home: PlayerView(
               controller: fixture.player,
@@ -2527,7 +2560,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2577,7 +2610,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2609,7 +2642,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2651,7 +2684,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2681,7 +2714,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () {},
@@ -2723,7 +2756,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2767,7 +2800,7 @@ void main() {
         fixture.player.showOsd();
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -2799,7 +2832,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2842,7 +2875,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2921,7 +2954,7 @@ void main() {
     addTearDown(focus.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: focus,
@@ -2966,7 +2999,7 @@ void main() {
     addTearDown(focus.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: focus,
@@ -3008,7 +3041,7 @@ void main() {
     var guideOpens = 0;
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: Focus(
           onKeyEvent: (_, event) {
             if (event.logicalKey == LogicalKeyboardKey.digit1 &&
@@ -3073,7 +3106,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3114,7 +3147,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3156,7 +3189,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3194,7 +3227,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3225,7 +3258,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3254,7 +3287,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3285,7 +3318,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3305,7 +3338,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () => guideOpened = true,
@@ -3341,7 +3374,7 @@ void main() {
       fixture.player.moveMiniGuide(1);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -3373,7 +3406,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: errorFixture.player, openGuide: () {}),
         ),
       );
@@ -3405,7 +3438,7 @@ void main() {
           );
           await tester.pumpWidget(
             MaterialApp(
-              builder: LineupCanvas.builder,
+              builder: _playerTvCanvasBuilder,
               home: PlayerView(
                 controller: fixture.player,
                 openGuide: () => guideOpened = true,
@@ -3439,7 +3472,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: SizedBox(
           width: 320,
           height: 180,
@@ -3465,7 +3498,7 @@ void main() {
     expect(fixture.player.watchingChannelId, isNull);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3503,7 +3536,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerSurface(controller: fixture.player),
       ),
     );
@@ -3525,7 +3558,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () => guideOpened = true,
@@ -3586,7 +3619,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3616,7 +3649,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3662,7 +3695,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -3698,7 +3731,7 @@ void main() {
       fixture.player.showMiniGuide();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           key: ValueKey(size),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -3810,7 +3843,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           key: ValueKey(size),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -3928,7 +3961,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           key: ValueKey(state),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -3998,7 +4031,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -4025,7 +4058,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () {},
@@ -4096,7 +4129,7 @@ void main() {
         show();
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: Builder(
               builder: (context) => MediaQuery(
                 data: MediaQuery.of(context)
@@ -4132,7 +4165,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -4197,7 +4230,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           key: ValueKey(position),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -4231,7 +4264,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -4277,7 +4310,7 @@ void main() {
         fixture.player.showOsd();
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -4336,7 +4369,7 @@ void main() {
       item.fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           key: ValueKey(item.logo),
           home: PlayerView(controller: item.fixture.player, openGuide: () {}),
         ),
@@ -4477,7 +4510,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           key: ValueKey(itemCase.item.id),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -4512,7 +4545,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -4550,7 +4583,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           key: ValueKey(size),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -4588,7 +4621,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -4641,7 +4674,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -4710,7 +4743,7 @@ void main() {
       MaterialApp(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: LineupCanvas(child: child!),
+          child: _playerTvCanvasBuilder(context, child),
         ),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -4752,7 +4785,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(
             controller: fixture.player,
             focusNode: rootFocus,
@@ -4813,7 +4846,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: rootFocus,
@@ -4867,7 +4900,7 @@ void main() {
         fixture.player.showOsd();
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -4921,11 +4954,12 @@ void main() {
         );
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: LineupShell(
               player: fixture.native,
               controller: fixture.lineup,
               initialMediaPath: '/synthetic.mp4',
+              profile: desktopProfile,
             ),
           ),
         );
@@ -4985,7 +5019,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: rootFocus,
@@ -5033,7 +5067,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5090,7 +5124,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5157,7 +5191,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5212,7 +5246,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5277,7 +5311,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5373,7 +5407,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.subtitle);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -5489,7 +5523,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5548,7 +5582,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.subtitle);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -5598,7 +5632,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5650,7 +5684,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5703,7 +5737,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5748,7 +5782,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -5814,7 +5848,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5832,7 +5866,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(3840, 2160));
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: Builder(
           builder: (context) => MediaQuery(
             data: MediaQuery.of(context)
@@ -5883,7 +5917,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -5925,7 +5959,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -6005,7 +6039,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -6048,7 +6082,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -6072,12 +6106,12 @@ void main() {
     fixture.dispose();
   });
 
-  for (final androidTv in [false, true]) {
+  for (final isTv in [false, true]) {
     testWidgets(
-      'playback drawer hints use the ${androidTv ? 'TV' : 'desktop'} vocabulary',
+      'playback drawer hints use the ${isTv ? 'TV' : 'desktop'} vocabulary',
       (tester) async {
         final previousPlatform = debugDefaultTargetPlatformOverride;
-        if (androidTv) {
+        if (isTv) {
           debugDefaultTargetPlatformOverride = TargetPlatform.android;
         }
         final fixture = _Fixture(
@@ -6097,16 +6131,16 @@ void main() {
             MaterialApp(
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
-                androidTv: androidTv,
+                formFactor: profileFor(isTv).formFactor,
               ),
-              builder: LineupCanvas.builder,
+              builder: _playerCanvasBuilderFor(isTv),
               home: PlayerView(controller: fixture.player, openGuide: () {}),
             ),
           );
           await tester.pumpAndSettle();
           expect(
             find.text(
-              androidTv
+              isTv
                   ? 'Up/Down Browse · Select Tune · Back Close'
                   : 'Up / Down · Browse · Enter Tune · Esc Close',
             ),
@@ -6121,7 +6155,7 @@ void main() {
             find.descendant(
               of: find.byKey(const Key('playback-options-footer')),
               matching: find.text(
-                androidTv
+                isTv
                     ? 'Up/Down Browse · Select Choose · Back Close'
                     : 'Up/Down Browse · Enter Select · Esc Close',
               ),
@@ -6145,7 +6179,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -6196,7 +6230,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -6226,7 +6260,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -6251,7 +6285,7 @@ void main() {
       fixture.player.showMiniGuide();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -6313,7 +6347,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -6471,7 +6505,7 @@ void main() {
         fixture.player.showTracks(scenario.type);
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -6555,7 +6589,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -6652,7 +6686,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: Builder(
             builder: (context) => MediaQuery(
               data: MediaQuery.of(context).copyWith(
@@ -6773,7 +6807,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -6829,7 +6863,7 @@ void main() {
       MaterialApp(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: LineupCanvas(child: child!),
+          child: _playerDesktopCanvasBuilder(context, child),
         ),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -6869,7 +6903,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -6899,7 +6933,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         theme: LineupTheme.forName(LineupThemeName.directv),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -6934,7 +6968,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7037,7 +7071,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -7158,7 +7192,7 @@ void main() {
         );
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -7198,7 +7232,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7220,7 +7254,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7252,7 +7286,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -7293,7 +7327,7 @@ void main() {
     addTearDown(fixture.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7336,7 +7370,7 @@ void main() {
         addTearDown(fixture.dispose);
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -7376,7 +7410,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7405,7 +7439,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -7449,7 +7483,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7485,7 +7519,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -7521,7 +7555,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: disabled.player, openGuide: () {}),
         ),
       );
@@ -7558,7 +7592,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7592,7 +7626,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7626,7 +7660,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7677,7 +7711,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _playerDesktopCanvasBuilder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -7713,7 +7747,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -7794,7 +7828,7 @@ void main() {
         tester.view.physicalSize = viewport;
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
@@ -7887,7 +7921,7 @@ void main() {
         ..physicalSize = const Size(3840, 2160);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -7969,7 +8003,7 @@ void main() {
         tester.view.physicalSize = testCase.viewport;
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _playerDesktopCanvasBuilder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -8023,7 +8057,7 @@ void main() {
         MaterialApp(
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: LineupCanvas(child: child!),
+            child: _playerDesktopCanvasBuilder(context, child),
           ),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -8068,7 +8102,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(
             controller: fixture.player,
             openGuide: () {},
@@ -8110,7 +8144,7 @@ void main() {
       final fixture = _Fixture(PlayerState.playing, richProgram: true);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _playerDesktopCanvasBuilder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -8814,8 +8848,11 @@ Future<void> _openInfoForAmendment(
   fixture.player.showNowPlaying();
   await tester.pumpWidget(
     MaterialApp(
-      theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
-      builder: LineupCanvas.builder,
+      theme: LineupTheme.forName(
+        LineupThemeName.emberSteel,
+        formFactor: profileFor(true).formFactor,
+      ),
+      builder: _playerTvCanvasBuilder,
       home: PlayerView(controller: fixture.player, openGuide: () {}),
     ),
   );

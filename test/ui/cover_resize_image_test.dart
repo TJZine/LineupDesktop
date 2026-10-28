@@ -96,14 +96,14 @@ void main() {
 
   test('image cache budget is capped on Android TV only', () {
     final tv = ImageCache();
-    configureImageCache(tv, androidTv: true);
-    expect(tv.maximumSizeBytes, androidTvImageCacheBytes);
-    expect(androidTvImageCacheBytes, 48 * 1024 * 1024);
+    configureImageCache(tv, isTv: true);
+    expect(tv.maximumSizeBytes, tvImageCacheBytes);
+    expect(tvImageCacheBytes, 48 * 1024 * 1024);
 
     final desktop = ImageCache();
     final defaultBytes = desktop.maximumSizeBytes;
-    configureImageCache(desktop, androidTv: false);
+    configureImageCache(desktop, isTv: false);
     expect(desktop.maximumSizeBytes, defaultBytes);
-    expect(defaultBytes, greaterThan(androidTvImageCacheBytes));
+    expect(defaultBytes, greaterThan(tvImageCacheBytes));
   });
 }

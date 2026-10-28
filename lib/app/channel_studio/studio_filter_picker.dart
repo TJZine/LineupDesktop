@@ -183,7 +183,7 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
                   focusNode: fieldFocus,
                   // TV arrival focuses the navigation node (initState) without
                   // editing; autofocus would grant the editor a keyboard.
-                  autofocus: !LineupTheme.of(fieldContext).androidTv,
+                  autofocus: !DeviceProfile.of(fieldContext).isTv,
                   onEditingComplete: finishEditing,
                   style: _studioBodyStyle(fieldContext),
                   decoration: const InputDecoration(hintText: 'Search values'),

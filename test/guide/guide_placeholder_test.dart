@@ -73,24 +73,27 @@ void main() {
         );
         try {
           await tester.pumpWidget(
-            MaterialApp(
-              theme: LineupTheme.forName(
-                LineupThemeName.emberSteel,
-                androidTv: true,
-              ),
-              builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(context)
-                    .copyWith(textScaler: TextScaler.linear(scale)),
-                child: Builder(
-                  builder: (context) => LineupCanvas.builder(context, child),
+            DeviceProfileScope(
+              profile: profileFor(true),
+              child: MaterialApp(
+                theme: LineupTheme.forName(
+                  LineupThemeName.emberSteel,
+                  formFactor: profileFor(true).formFactor,
                 ),
-              ),
-              home: SafeArea(
-                child: GuideView(
-                  controller: guide,
-                  pictureInPicture: const SizedBox.shrink(),
-                  onClose: (_, _) {},
-                  onTune: (_) async {},
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(textScaler: TextScaler.linear(scale)),
+                  child: Builder(
+                    builder: (context) => LineupCanvas.builder(context, child),
+                  ),
+                ),
+                home: SafeArea(
+                  child: GuideView(
+                    controller: guide,
+                    pictureInPicture: const SizedBox.shrink(),
+                    onClose: (_, _) {},
+                    onTune: (_) async {},
+                  ),
                 ),
               ),
             ),
@@ -200,24 +203,28 @@ void main() {
           );
           try {
             await tester.pumpWidget(
-              MaterialApp(
-                theme: LineupTheme.forName(
-                  LineupThemeName.emberSteel,
-                  androidTv: true,
-                ),
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(context)
-                      .copyWith(textScaler: TextScaler.linear(scale)),
-                  child: Builder(
-                    builder: (context) => LineupCanvas.builder(context, child),
+              DeviceProfileScope(
+                profile: profileFor(true),
+                child: MaterialApp(
+                  theme: LineupTheme.forName(
+                    LineupThemeName.emberSteel,
+                    formFactor: profileFor(true).formFactor,
                   ),
-                ),
-                home: SafeArea(
-                  child: GuideView(
-                    controller: guide,
-                    pictureInPicture: const SizedBox.shrink(),
-                    onClose: (_, _) {},
-                    onTune: (_) async {},
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(textScaler: TextScaler.linear(scale)),
+                    child: Builder(
+                      builder: (context) =>
+                          LineupCanvas.builder(context, child),
+                    ),
+                  ),
+                  home: SafeArea(
+                    child: GuideView(
+                      controller: guide,
+                      pictureInPicture: const SizedBox.shrink(),
+                      onClose: (_, _) {},
+                      onTune: (_) async {},
+                    ),
                   ),
                 ),
               ),

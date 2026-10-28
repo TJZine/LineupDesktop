@@ -26,6 +26,7 @@ import 'package:lineup_desktop/playback/native_video_surface.dart';
 import '../support/ui_fixture.dart' show FixturePlayer;
 import '../support/golden_test_support.dart' show loadPinnedTestFonts;
 import '../support/test_doubles.dart';
+import '../support/device_profile_test_support.dart';
 
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -43,6 +44,30 @@ final _narrowLogoPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAABQAAASwCAAAAADeIDU6AAAAWElEQVR4nO3IMQEAAAwCIPuX1gILsANO0kOklFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSinl1xx/t2e0Ivf9MAAAAABJRU5ErkJggg==',
 );
 const _artI1LogoColor = Color(0xFF19E6D4);
+
+Widget _guideCanvasBuilder(BuildContext context, Widget? child) {
+  return DeviceProfileScope(
+    profile: desktopProfile,
+    child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+  );
+}
+
+Widget _desktopCanvasChild(Widget child) => DeviceProfileScope(
+  profile: desktopProfile,
+  child: LineupCanvas(child: child),
+);
+
+Widget _guideTvCanvasBuilder(BuildContext context, Widget? child) =>
+    DeviceProfileScope(
+      profile: tvProfile,
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
+
+TransitionBuilder _guideCanvasBuilderFor(bool tv) =>
+    (_, child) => DeviceProfileScope(
+      profile: profileFor(tv),
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
 
 void main() {
   tearDown(debugResetClearLogoCache);
@@ -70,7 +95,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               focusNode: focus,
@@ -145,7 +170,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -255,7 +280,7 @@ void main() {
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: TextScaler.linear(textScale)),
-              child: LineupCanvas(child: child!),
+              child: _desktopCanvasChild(child!),
             ),
             home: GuideView(
               controller: guide,
@@ -365,7 +390,7 @@ void main() {
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: TextScaler.linear(scale)),
-              child: LineupCanvas(child: child!),
+              child: _desktopCanvasChild(child!),
             ),
             home: GuideView(
               controller: guide,
@@ -462,7 +487,7 @@ void main() {
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context)
                     .copyWith(textScaler: TextScaler.linear(textScale)),
-                child: LineupCanvas(child: child!),
+                child: _desktopCanvasChild(child!),
               ),
               home: GuideView(
                 controller: guide,
@@ -582,7 +607,7 @@ void main() {
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context)
                     .copyWith(textScaler: TextScaler.linear(textScale)),
-                child: LineupCanvas(child: child!),
+                child: _desktopCanvasChild(child!),
               ),
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
@@ -724,7 +749,7 @@ void main() {
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context)
                 .copyWith(textScaler: const TextScaler.linear(1.5)),
-            child: LineupCanvas(child: child!),
+            child: _desktopCanvasChild(child!),
           ),
           home: GuideView(
             controller: guide,
@@ -825,7 +850,7 @@ void main() {
       try {
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               pictureInPicture: const ColoredBox(color: Colors.black),
@@ -912,7 +937,7 @@ void main() {
       addTearDown(lineup.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
@@ -989,7 +1014,7 @@ void main() {
       for (final theme in LineupThemeName.values) {
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             theme: LineupTheme.forName(theme, largeFocusIndicators: true),
             home: GuideView(
               controller: guide,
@@ -1115,7 +1140,7 @@ void main() {
         guide.requestChannels(lineup.channels);
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               onClose: (_, _) {},
@@ -1176,7 +1201,7 @@ void main() {
       var setups = 0;
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1230,7 +1255,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1297,7 +1322,7 @@ void main() {
       addTearDown(guide.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1442,7 +1467,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1478,7 +1503,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1522,7 +1547,7 @@ void main() {
       final elapsed = Stopwatch()..start();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1567,7 +1592,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1657,7 +1682,7 @@ void main() {
     final firstViewport = Stopwatch()..start();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1744,7 +1769,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1806,7 +1831,7 @@ void main() {
       guide.requestChannels(lineup.channels);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1895,7 +1920,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1963,7 +1988,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -2093,7 +2118,7 @@ void main() {
         ..physicalSize = size;
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
@@ -2181,7 +2206,7 @@ void main() {
       ..physicalSize = const Size(1280, 720);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) => closes++,
@@ -2261,7 +2286,7 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(textScaler: const TextScaler.linear(1.25)),
-          child: LineupCanvas(child: child!),
+          child: _desktopCanvasChild(child!),
         ),
         home: GuideView(
           controller: guide,
@@ -2381,7 +2406,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -2474,7 +2499,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -2550,7 +2575,7 @@ void main() {
         ..physicalSize = size;
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const SizedBox.expand(),
@@ -2611,7 +2636,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -2674,7 +2699,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -2736,8 +2761,11 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        builder: _guideTvCanvasBuilder,
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(true).formFactor,
+        ),
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -2814,8 +2842,11 @@ void main() {
       addTearDown(guide.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
-          theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: tv),
+          builder: _guideCanvasBuilderFor(tv),
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(tv).formFactor,
+          ),
           home: GuideView(
             controller: guide,
             showIdleArtwork: true,
@@ -2870,7 +2901,7 @@ void main() {
     });
   }
 
-  for (final (surface, androidTv, padded) in [
+  for (final (surface, isTv, padded) in [
     ('desktop', false, false),
     ('desktop', false, true),
     ('tv', true, false),
@@ -2928,9 +2959,9 @@ void main() {
             child: MaterialApp(
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
-                androidTv: androidTv,
+                formFactor: profileFor(isTv).formFactor,
               ),
-              builder: LineupCanvas.builder,
+              builder: _guideCanvasBuilderFor(isTv),
               home: GuideView(
                 controller: guide,
                 focusNode: focus,
@@ -2996,8 +3027,11 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        builder: _guideTvCanvasBuilder,
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(true).formFactor,
+        ),
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -3065,7 +3099,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
@@ -3118,7 +3152,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -3168,7 +3202,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -3208,7 +3242,7 @@ void main() {
     final tunes = <String>[];
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -3267,7 +3301,7 @@ void main() {
         addTearDown(lineup.dispose);
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
             home: Scaffold(
               body: GuideView(
@@ -3333,7 +3367,7 @@ void main() {
           key: boundaryKey,
           child: MaterialApp(
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               onClose: (_, _) {},
@@ -3418,7 +3452,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             scaffoldMessengerKey: shellMessenger,
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
             home: Scaffold(
               body: ValueListenableBuilder<bool>(
@@ -3478,7 +3512,7 @@ void main() {
       addTearDown(guide.dispose);
       addTearDown(lineup.dispose);
       Widget app() => MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
         home: GuideView(
           controller: guide,
@@ -3576,7 +3610,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               onClose: (_, _) {},
@@ -3729,7 +3763,7 @@ void main() {
       addTearDown(grid.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: Focus(
             onKeyEvent: (_, event) {
               if (event is KeyDownEvent &&
@@ -3927,7 +3961,7 @@ void main() {
       addTearDown(lineup.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -4014,7 +4048,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: Focus(
             canRequestFocus: false,
             onKeyEvent: (_, event) {
@@ -4097,7 +4131,7 @@ void main() {
     var appChords = 0;
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: Focus(
           onKeyEvent: (_, event) {
             if (event is KeyDownEvent &&
@@ -4204,7 +4238,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
@@ -4262,7 +4296,7 @@ void main() {
       now = guide.windowStart.add(const Duration(hours: 1));
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
@@ -4323,7 +4357,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -4385,7 +4419,7 @@ void main() {
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: const TextScaler.linear(2)),
-              child: LineupCanvas(child: child!),
+              child: _desktopCanvasChild(child!),
             ),
             home: GuideView(
               controller: guide,
@@ -4420,7 +4454,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
@@ -4442,7 +4476,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -4475,7 +4509,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
@@ -4510,7 +4544,7 @@ void main() {
     );
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
-      builder: LineupCanvas.builder,
+      builder: _guideCanvasBuilder,
       home: GuideView(
         controller: guide,
         onClose: (_, _) {},
@@ -4574,7 +4608,7 @@ void main() {
     );
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
-      builder: LineupCanvas.builder,
+      builder: _guideCanvasBuilder,
       home: GuideView(
         controller: guide,
         onClose: (_, _) {},
@@ -4656,7 +4690,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},

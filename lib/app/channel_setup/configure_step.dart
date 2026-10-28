@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
@@ -176,7 +177,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                 child: LineupNavigationRow(
                   selected: widget.section == index,
                   key: ValueKey('configure-section-$index'),
-                  autofocus: LineupTheme.of(context).androidTv && index == 0,
+                  autofocus: DeviceProfile.of(context).isTv && index == 0,
                   onPressed: () => widget.onSectionChanged(index),
                   child: Text(labels[index]),
                 ),
@@ -613,7 +614,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
   Widget _sourceSelectionControl(
     BuilderStrategy strategy,
     ChannelPlanAllocation allocation,
-  ) => LineupTheme.of(context).androidTv
+  ) => DeviceProfile.of(context).isTv
       ? LineupRowSurface(
           selected: false,
           child: Builder(
@@ -709,7 +710,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 style: TextButton.styleFrom(
-                  padding: LineupTheme.of(context).androidTv
+                  padding: DeviceProfile.of(context).isTv
                       ? const EdgeInsets.symmetric(horizontal: 20)
                       : EdgeInsets.zero,
                   minimumSize: const Size(0, 48),
@@ -732,7 +733,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
 
   Widget _sourceGroupingControl(BuilderStrategy strategy) {
     final roles = LineupTheme.of(context);
-    final menuTheme = roles.androidTv ? Theme.of(context) : null;
+    final menuTheme = DeviceProfile.of(context).isTv ? Theme.of(context) : null;
     final enabled = _strategies.contains(strategy);
     final countStyle = TextStyle(
       color: roles.secondaryText,
@@ -764,11 +765,11 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             maxWidth: constraints.maxWidth,
             labels: ['Separate by library', groupingLabel],
             style: groupingStyle,
-            outerHorizontalChrome: roles.androidTv
+            outerHorizontalChrome: DeviceProfile.of(context).isTv
                 ? LineupDropdownBox.contentPadding(compact: true).horizontal +
                       2 * LineupDropdownBox.borderWidth
                 : 0,
-            menuVerticalPadding: roles.androidTv
+            menuVerticalPadding: DeviceProfile.of(context).isTv
                 ? LineupDropdownMenuRow.contentPadding.vertical
                 : 8,
           );
@@ -788,17 +789,17 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                     padding: EdgeInsets.symmetric(horizontal: 10),
                     itemHeight: metrics.itemHeight,
                     value: _grouped.contains(strategy),
-                    style: roles.androidTv
+                    style: DeviceProfile.of(context).isTv
                         ? groupingStyle.copyWith(
                             color: enabled
                                 ? LineupTheme.of(context).primaryText
                                 : LineupTheme.of(context).mutedText,
                           )
                         : groupingStyle,
-                    iconEnabledColor: roles.androidTv
+                    iconEnabledColor: DeviceProfile.of(context).isTv
                         ? LineupTheme.of(context).secondaryText
                         : null,
-                    iconDisabledColor: roles.androidTv
+                    iconDisabledColor: DeviceProfile.of(context).isTv
                         ? LineupTheme.of(context).mutedText
                         : null,
                     items: lineupMenuItems(
@@ -916,7 +917,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               child: Shortcuts(
                 // RadioGroup owns all four arrows by default. TV uses vertical
                 // arrows to leave the choices through normal spatial traversal.
-                shortcuts: LineupTheme.of(context).androidTv
+                shortcuts: DeviceProfile.of(context).isTv
                     ? const {
                         SingleActivator(LogicalKeyboardKey.arrowUp):
                             DirectionalFocusIntent(TraversalDirection.up),
@@ -1104,7 +1105,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                   context,
                   // Toggleable's focused state follows Flutter's platform
                   // highlight mode, which can remain touch for native TV keys.
-                  roles.androidTv
+                  DeviceProfile.of(context).isTv
                       ? focus.playback[mode]!.hasFocus
                       : state.states.contains(WidgetState.focused),
                 );
@@ -1390,7 +1391,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       fontSize: 18,
       height: 1.4,
     );
-    Widget choiceLabel(int choice) => roles.androidTv
+    Widget choiceLabel(int choice) => DeviceProfile.of(context).isTv
         ? Builder(
             builder: (context) => Text(
               '$choice',
@@ -1427,11 +1428,11 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                 maxWidth: constraints.maxWidth,
                 labels: choices.map((choice) => '$choice'),
                 style: dropdownStyle,
-                outerHorizontalChrome: roles.androidTv
+                outerHorizontalChrome: DeviceProfile.of(context).isTv
                     ? LineupDropdownBox.contentPadding().horizontal +
                           2 * LineupDropdownBox.borderWidth
                     : 0,
-                menuVerticalPadding: roles.androidTv
+                menuVerticalPadding: DeviceProfile.of(context).isTv
                     ? LineupDropdownMenuRow.contentPadding.vertical
                     : 8,
               );
@@ -1454,7 +1455,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                         isExpanded: true,
                         isDense: true,
                         iconSize: 24,
-                        icon: roles.androidTv
+                        icon: DeviceProfile.of(context).isTv
                             ? Builder(
                                 builder: (context) => Icon(
                                   Icons.arrow_drop_down,
@@ -1475,13 +1476,17 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                               ),
                           ],
                           value,
-                          menuTheme: roles.androidTv ? Theme.of(context) : null,
+                          menuTheme: DeviceProfile.of(context).isTv
+                              ? Theme.of(context)
+                              : null,
                         ),
                         onChanged: (next) {
                           if (next != null) onChanged(next);
                         },
                         dropdownColor: LineupTheme.of(context).elevatedSurface,
-                        menuWidth: roles.androidTv ? dropdownWidth : null,
+                        menuWidth: DeviceProfile.of(context).isTv
+                            ? dropdownWidth
+                            : null,
                         selectedItemBuilder: (_) => [
                           for (final choice in choices) choiceLabel(choice),
                         ],

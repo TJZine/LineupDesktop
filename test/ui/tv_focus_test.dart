@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +16,10 @@ void main() {
     addTearDown(focusNode.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(true).formFactor,
+        ),
         builder: LineupCanvas.builder,
         home: Scaffold(
           body: LineupRowSurface(
@@ -67,7 +72,7 @@ void main() {
         MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
             largeFocusIndicators: true,
           ),
           builder: (context, child) => LineupCanvas.builder(
