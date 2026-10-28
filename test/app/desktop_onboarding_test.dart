@@ -74,16 +74,19 @@ void main() {
           expect(controller.serverSelectionCanCancel, isTrue);
         }
         await tester.pumpWidget(
-          MaterialApp(
-            builder: LineupCanvas.builder,
-            theme: LineupTheme.forName(
-              LineupThemeName.emberSteel,
-              formFactor: profileFor(true).formFactor,
-            ),
-            home: UpstreamOnboardingView(
-              controller: controller,
-              onLogout: () async {},
-              openBrowser: () async {},
+          DeviceProfileScope(
+            profile: tvProfile,
+            child: MaterialApp(
+              builder: LineupCanvas.builder,
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(true).formFactor,
+              ),
+              home: UpstreamOnboardingView(
+                controller: controller,
+                onLogout: () async {},
+                openBrowser: () async {},
+              ),
             ),
           ),
         );
