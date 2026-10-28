@@ -463,6 +463,7 @@ internal class Media3Engine(
             handler.post {
                 if (networkSuccess) network = null
                 released = decoderSuccess && networkSuccess
+                if (debug) diagnose("release_fence returned=$returned internalTimeout=$timedOutThisAttempt threadAlive=${playbackThread.isAlive} decoderSuccess=$decoderSuccess networkSuccess=$networkSuccess")
                 diagnose("engine_released success=$released")
                 complete(released)
             }
