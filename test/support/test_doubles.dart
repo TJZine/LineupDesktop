@@ -87,23 +87,22 @@ class FakeNativePlayer implements NativePlayer {
     this.capabilities = capabilities ?? _fakeDefaultCapabilities();
   }
 
-  static PlayerCapabilities _fakeDefaultCapabilities() => switch (
-    defaultTargetPlatform
-  ) {
-    TargetPlatform.windows => const PlayerCapabilities(
-      displayMatching: true,
-      fullscreen: PlayerFullscreenMode.window,
-    ),
-    TargetPlatform.macOS => const PlayerCapabilities(
-      displayMatching: false,
-      fullscreen: PlayerFullscreenMode.window,
-    ),
-    TargetPlatform.android => const PlayerCapabilities.unavailable(),
-    _ => const PlayerCapabilities(
-      displayMatching: false,
-      fullscreen: PlayerFullscreenMode.window,
-    ),
-  };
+  static PlayerCapabilities _fakeDefaultCapabilities() =>
+      switch (defaultTargetPlatform) {
+        TargetPlatform.windows => const PlayerCapabilities(
+          displayMatching: true,
+          fullscreen: PlayerFullscreenMode.window,
+        ),
+        TargetPlatform.macOS => const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.window,
+        ),
+        TargetPlatform.android => const PlayerCapabilities.unavailable(),
+        _ => const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.window,
+        ),
+      };
 
   final bool emitLoadingOnLoad;
   int? _eventGeneration;

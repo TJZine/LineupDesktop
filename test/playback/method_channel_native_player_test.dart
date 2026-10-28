@@ -77,10 +77,7 @@ void main() {
         await player.initialize();
         expect(player.capabilities, entry.value);
         await player.dispose();
-        expect(
-          player.capabilities,
-          const PlayerCapabilities.unavailable(),
-        );
+        expect(player.capabilities, const PlayerCapabilities.unavailable());
       }
     });
 
