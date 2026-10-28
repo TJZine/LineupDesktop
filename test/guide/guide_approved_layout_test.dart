@@ -54,7 +54,7 @@ void main() {
             MaterialApp(
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
-                androidTv: true,
+                formFactor: profileFor(true).formFactor,
                 largeFocusIndicators: large,
               ),
               builder: (context, child) => MediaQuery(
@@ -166,40 +166,43 @@ void main() {
           );
           final boundary = GlobalKey();
           await tester.pumpWidget(
-            RepaintBoundary(
-              key: boundary,
-              child: ValueListenableBuilder<LineupThemeName>(
-                valueListenable: theme,
-                builder: (context, value, _) => MaterialApp(
-                  debugShowCheckedModeBanner: false,
-                  theme: LineupTheme.forName(
-                    value,
-                    androidTv: tv,
-                    largeFocusIndicators: large,
-                  ),
-                  builder: (context, child) =>
-                      ValueListenableBuilder<TextScaler>(
-                        valueListenable: textScaler,
-                        builder: (context, value, _) => MediaQuery(
-                          data: MediaQuery.of(context)
-                              .copyWith(textScaler: value),
-                          child: LineupCanvas(
-                            reduceMotion: true,
-                            child: child!,
+            DeviceProfileScope(
+              profile: profileFor(tv),
+              child: RepaintBoundary(
+                key: boundary,
+                child: ValueListenableBuilder<LineupThemeName>(
+                  valueListenable: theme,
+                  builder: (context, value, _) => MaterialApp(
+                    debugShowCheckedModeBanner: false,
+                    theme: LineupTheme.forName(
+                      value,
+                      formFactor: profileFor(tv).formFactor,
+                      largeFocusIndicators: large,
+                    ),
+                    builder: (context, child) =>
+                        ValueListenableBuilder<TextScaler>(
+                          valueListenable: textScaler,
+                          builder: (context, value, _) => MediaQuery(
+                            data: MediaQuery.of(context)
+                                .copyWith(textScaler: value),
+                            child: LineupCanvas(
+                              reduceMotion: true,
+                              child: child!,
+                            ),
                           ),
                         ),
+                    home: GuideView(
+                      controller: guide,
+                      watchingChannelId: 'c3',
+                      pictureInPicture: const ColoredBox(
+                        color: Color(0xff203747),
+                        child: Center(child: Text('Synthetic picture proxy')),
                       ),
-                  home: GuideView(
-                    controller: guide,
-                    watchingChannelId: 'c3',
-                    pictureInPicture: const ColoredBox(
-                      color: Color(0xff203747),
-                      child: Center(child: Text('Synthetic picture proxy')),
+                      onOpenPlayer: () {},
+                      onClose: (_, _) {},
+                      onOpenMenu: (_, _) {},
+                      onTune: (_) async {},
                     ),
-                    onOpenPlayer: () {},
-                    onClose: (_, _) {},
-                    onOpenMenu: (_, _) {},
-                    onTune: (_) async {},
                   ),
                 ),
               ),
@@ -319,7 +322,7 @@ void main() {
                 );
                 final roles = LineupTheme.forName(
                   name,
-                  androidTv: true,
+                  formFactor: profileFor(true).formFactor,
                 ).extension<LineupThemeRoles>()!;
                 expect(support.text.style!.color, roles.focusMutedText);
               }
@@ -407,7 +410,7 @@ void main() {
                 expect(tester.element(find.text('LINEUP')), same(lockup));
                 final roles = LineupTheme.forName(
                   name,
-                  androidTv: true,
+                  formFactor: profileFor(true).formFactor,
                   largeFocusIndicators: large,
                 ).extension<LineupThemeRoles>()!;
                 final scoped = LineupTheme.of(lockup);

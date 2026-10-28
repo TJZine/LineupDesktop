@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import 'app_theme.dart';
 import 'lineup_canvas.dart';
@@ -110,7 +111,7 @@ class LineupTopBar extends StatelessWidget {
                     onPressed: () =>
                         onOpenMenu!(invokerContext, menuFocusNode!),
                     style: TextButton.styleFrom(
-                      padding: roles.androidTv
+                      padding: DeviceProfile.of(context).isTv
                           ? const EdgeInsets.symmetric(horizontal: 20)
                           : EdgeInsets.zero,
                     ),

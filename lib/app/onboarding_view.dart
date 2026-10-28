@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
@@ -98,16 +99,16 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   bool _pulse = true;
   FocusNode? _lastControlFocus;
   bool _focusRecoveryScheduled = false;
-  var _androidTv = false;
+  var _isTv = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _androidTv = LineupTheme.of(context).androidTv;
+    _isTv = DeviceProfile.of(context).isTv;
   }
 
   void _recoverAndroidFocus() {
-    if (!_androidTv || !mounted) return;
+    if (!_isTv || !mounted) return;
     final primary = FocusManager.instance.primaryFocus;
     if (primary != null &&
         primary != _navigationFocus &&
@@ -181,7 +182,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     final nextLinkingStopped = _isLinkingStopped(controller);
     final retryNeedsFocus = !_linkingStopped && nextLinkingStopped;
     final linkNeedsFocus =
-        _androidTv &&
+        _isTv &&
         !_wasLinking &&
         controller.stage == SetupStage.linking &&
         controller.pinUsable;
@@ -234,7 +235,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   void _returnFromPin() {
     if (_pinUser == null) return;
     setState(() => _pinUser = null);
-    if (!LineupTheme.of(context).androidTv &&
+    if (!DeviceProfile.of(context).isTv &&
         widget.accountOrigin &&
         widget.controller.profileSelectionCanCancel &&
         widget.controller.profileSelectionOriginStage == SetupStage.ready) {
@@ -316,7 +317,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   void _focusNavigation() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _navigationFocus.canRequestFocus) {
-        if (_androidTv) {
+        if (_isTv) {
           _navigationFocus.descendants
               .where((node) => node.canRequestFocus && !node.skipTraversal)
               .firstOrNull
@@ -351,7 +352,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.backspace;
     if (!contextualBack) return KeyEventResult.ignored;
-    if (_androidTv) {
+    if (_isTv) {
       return handleBack() ? KeyEventResult.handled : KeyEventResult.ignored;
     }
     if (_pinUser == null &&
@@ -377,14 +378,14 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       },
       child: Focus(
         focusNode: _navigationFocus,
-        skipTraversal: roles.androidTv,
+        skipTraversal: DeviceProfile.of(context).isTv,
         canRequestFocus: true,
         onKeyEvent: _navigationKey,
         child: CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
             // Desktop keeps its existing shortcut path. TV routes these keys
             // through the leaf adapter above and the shared shell fallback.
-            if (!roles.androidTv &&
+            if (!DeviceProfile.of(context).isTv &&
                 (!AndroidBackScope.claims(context) ||
                     _pinUser != null ||
                     widget.controller.profileSelectionCanCancel ||
@@ -565,7 +566,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   Widget _linkingContent(BuildContext context, double contentWidth) {
     final controller = widget.controller;
     final pin = controller.activePin;
-    final androidTv = LineupTheme.of(context).androidTv;
+    final isTv = DeviceProfile.of(context).isTv;
     final usable = _usableLink && controller.error == null;
     final expired =
         controller.pinExpired && !controller.secureCancellationRequired;
@@ -668,7 +669,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                   ),
                 ),
               ),
-              if (!androidTv)
+              if (!isTv)
                 LineupCompactControls(
                   child: OutlinedButton(
                     onPressed: usable ? _copyCode : null,
@@ -689,15 +690,15 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           );
     final action = usable
         ? Semantics(
-            label: androidTv
+            label: isTv
                 ? 'Open plex.tv/link in a browser on this TV, if available.'
                 : null,
             button: true,
             child: FilledButton.icon(
-              focusNode: androidTv ? _linkActionFocus : null,
+              focusNode: isTv ? _linkActionFocus : null,
               onPressed: _openingBrowser ? null : _openBrowser,
               icon: const Icon(Icons.open_in_browser),
-              label: Text(androidTv ? 'Open on this TV' : 'Open browser'),
+              label: Text(isTv ? 'Open on this TV' : 'Open browser'),
             ),
           )
         : FilledButton(
@@ -894,7 +895,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   }
 
   bool _profileReturnTarget(int index) =>
-      LineupTheme.of(context).androidTv &&
+      DeviceProfile.of(context).isTv &&
           widget.controller.profiles.any((p) => p.id == _invokedProfileId)
       ? widget.controller.profiles[index].id == _invokedProfileId
       : index == 0;
@@ -1199,7 +1200,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     }
     if (!mounted || widget.controller.busy) return;
     setState(() {
-      if (LineupTheme.of(context).androidTv) _invokedProfileId = user.id;
+      if (DeviceProfile.of(context).isTv) _invokedProfileId = user.id;
       _pinUser = user;
     });
   }
@@ -1355,7 +1356,7 @@ class _ProfileCardState extends State<_ProfileCard> {
     final next = _focusNode.hasFocus;
     if (next == _focused || !mounted) return;
     setState(() => _focused = next);
-    if (LineupTheme.of(context).androidTv) {
+    if (DeviceProfile.of(context).isTv) {
       _nameOverlay.hide();
       return;
     }
@@ -1427,7 +1428,7 @@ class _ProfileCardState extends State<_ProfileCard> {
                           return OverlayPortal(
                             controller: _nameOverlay,
                             overlayChildBuilder: (_) =>
-                                LineupTheme.of(context).androidTv
+                                DeviceProfile.of(context).isTv
                                 ? const SizedBox.shrink()
                                 : Positioned(
                                     left: 0,
@@ -1541,7 +1542,8 @@ class _ProfileBadge extends StatelessWidget {
               label,
               style: TextStyle(
                 color: label == 'Current'
-                    ? roles.androidTv && roles.primaryText == roles.onFocus
+                    ? DeviceProfile.of(context).isTv &&
+                              roles.primaryText == roles.onFocus
                           ? roles.primaryText
                           : roles.progressFill
                     : roles.secondaryText,
@@ -1846,7 +1848,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
 
   @override
   Widget build(BuildContext context) {
-    final androidTv = LineupTheme.of(context).androidTv;
+    final isTv = DeviceProfile.of(context).isTv;
     const gap = 16.0;
     return PopScope(
       canPop: AndroidBackScope.claims(context),
@@ -1858,7 +1860,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
         focusNode: _keyboardFocus,
         // TV traversal starts on the real digit control; this ancestor still
         // owns number and Back routing without competing for autofocus.
-        autofocus: !androidTv,
+        autofocus: !isTv,
         onKeyEvent: _key,
         child: SizedBox(
           key: const Key('profile-pin-sheet'),

@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,36 +19,42 @@ Future<({FocusNode field, FocusNode other})> _pump(
   addTearDown(field.dispose);
   addTearDown(other.dispose);
   await tester.pumpWidget(
-    MaterialApp(
-      theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
-      builder: (context, child) =>
-          KeyboardVisibilityScope(visibility: visibility, child: child!),
-      home: Scaffold(
-        body: LineupFocusScope(
-          child: Column(
-            children: [
-              if (enabled != null)
-                ValueListenableBuilder<bool>(
-                  valueListenable: enabled,
-                  builder: (context, value, _) => LineupTextFieldActivation(
-                    enabled: value,
+    DeviceProfileScope(
+      profile: profileFor(true),
+      child: MaterialApp(
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(true).formFactor,
+        ),
+        builder: (context, child) =>
+            KeyboardVisibilityScope(visibility: visibility, child: child!),
+        home: Scaffold(
+          body: LineupFocusScope(
+            child: Column(
+              children: [
+                if (enabled != null)
+                  ValueListenableBuilder<bool>(
+                    valueListenable: enabled,
+                    builder: (context, value, _) => LineupTextFieldActivation(
+                      enabled: value,
+                      focusNode: field,
+                      builder: (context, focus, done) =>
+                          TextField(focusNode: focus, onEditingComplete: done),
+                    ),
+                  )
+                else
+                  LineupTextFieldActivation(
                     focusNode: field,
                     builder: (context, focus, done) =>
                         TextField(focusNode: focus, onEditingComplete: done),
                   ),
-                )
-              else
-                LineupTextFieldActivation(
-                  focusNode: field,
-                  builder: (context, focus, done) =>
-                      TextField(focusNode: focus, onEditingComplete: done),
+                TextButton(
+                  focusNode: other,
+                  onPressed: () {},
+                  child: const Text('Other'),
                 ),
-              TextButton(
-                focusNode: other,
-                onPressed: () {},
-                child: const Text('Other'),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

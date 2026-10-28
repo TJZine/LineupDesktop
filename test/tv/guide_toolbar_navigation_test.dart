@@ -138,9 +138,9 @@ class _GuideFixtureController extends FixtureController {
       buildChannelSchedule(channel, (channel.source as ManualSource).items);
 }
 
-UiFixture _geometryFixture({required bool androidTv, int channelCount = 2}) =>
+UiFixture _geometryFixture({required bool isTv, int channelCount = 2}) =>
     UiFixture(
-      androidTv: androidTv,
+      profile: profileFor(isTv),
       guideClock: () => DateTime.utc(2026, 1, 15, 3, 17),
       controller: _GuideFixtureController(
         scenario: LineupScenario(
@@ -180,7 +180,7 @@ void main() {
         'L2 Guide aliases and modality follow capability $platform TV=$tv',
         (tester) async {
           debugDefaultTargetPlatformOverride = platform;
-          final fixture = _geometryFixture(androidTv: tv, channelCount: 12);
+          final fixture = _geometryFixture(isTv: tv, channelCount: 12);
           try {
             await tester.pumpWidget(fixture.build());
             await _settle(tester);
@@ -237,7 +237,7 @@ void main() {
           ..devicePixelRatio = 2;
         try {
           await tester.pumpWidget(
-            _geometryFixture(androidTv: true, channelCount: 6).build(),
+            _geometryFixture(isTv: true, channelCount: 6).build(),
           );
           await _settle(tester);
           final guide = find.byKey(const Key('classic-guide'));
@@ -271,12 +271,15 @@ void main() {
         ..physicalSize = const Size(1920, 1080)
         ..devicePixelRatio = 2;
       try {
-        final fixture = _geometryFixture(androidTv: true);
+        final fixture = _geometryFixture(isTv: true);
         await tester.pumpWidget(
           Transform.scale(
             scale:
                 scale /
-                LineupCanvas.scaleFor(const Size(960, 540), androidTv: true),
+                LineupCanvas.scaleFor(
+                  const Size(960, 540),
+                  formFactor: profileFor(true).formFactor,
+                ),
             alignment: Alignment.topLeft,
             child: fixture.build(),
           ),
@@ -333,60 +336,59 @@ void main() {
     });
   }
 
-  for (final androidTv in [false, true]) {
-    testWidgets(
-      'Guide keeps mounted cell and timeline identity (TV: $androidTv)',
-      (tester) async {
-        debugDefaultTargetPlatformOverride = androidTv
-            ? TargetPlatform.android
-            : TargetPlatform.macOS;
-        try {
-          final fixture = _geometryFixture(androidTv: androidTv);
-          await tester.pumpWidget(fixture.build());
-          await _settle(tester);
-          final guide = tester.widget<GuideView>(find.byType(GuideView));
-          final programs = [
-            ...guide.controller.row('geometry-0').programs,
-            ...guide.controller.row('geometry-1').programs,
-          ];
-          expect(programs.length, greaterThanOrEqualTo(4));
-          final elements = {
-            for (final program in programs)
-              program.id: tester.element(find.byKey(ValueKey(program.id))),
-          };
-          final states = {
-            for (final program in programs)
-              program.id: tester.state(find.byKey(ValueKey(program.id))),
-          };
-          final timelines = {
-            for (var row = 0; row < 2; row++)
-              row: tester.element(
+  for (final isTv in [false, true]) {
+    testWidgets('Guide keeps mounted cell and timeline identity (TV: $isTv)', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = isTv
+          ? TargetPlatform.android
+          : TargetPlatform.macOS;
+      try {
+        final fixture = _geometryFixture(isTv: isTv);
+        await tester.pumpWidget(fixture.build());
+        await _settle(tester);
+        final guide = tester.widget<GuideView>(find.byType(GuideView));
+        final programs = [
+          ...guide.controller.row('geometry-0').programs,
+          ...guide.controller.row('geometry-1').programs,
+        ];
+        expect(programs.length, greaterThanOrEqualTo(4));
+        final elements = {
+          for (final program in programs)
+            program.id: tester.element(find.byKey(ValueKey(program.id))),
+        };
+        final states = {
+          for (final program in programs)
+            program.id: tester.state(find.byKey(ValueKey(program.id))),
+        };
+        final timelines = {
+          for (var row = 0; row < 2; row++)
+            row: tester.element(
+              find.byKey(ValueKey('guide-timeline-geometry-$row')),
+            ),
+        };
+        for (final selected in programs.reversed) {
+          guide.controller.focusProgram(selected);
+          await tester.pump();
+          for (final program in programs) {
+            final finder = find.byKey(ValueKey(program.id));
+            expect(tester.element(finder), same(elements[program.id]));
+            expect(tester.state(finder), same(states[program.id]));
+          }
+          for (var row = 0; row < 2; row++) {
+            expect(
+              tester.element(
                 find.byKey(ValueKey('guide-timeline-geometry-$row')),
               ),
-          };
-          for (final selected in programs.reversed) {
-            guide.controller.focusProgram(selected);
-            await tester.pump();
-            for (final program in programs) {
-              final finder = find.byKey(ValueKey(program.id));
-              expect(tester.element(finder), same(elements[program.id]));
-              expect(tester.state(finder), same(states[program.id]));
-            }
-            for (var row = 0; row < 2; row++) {
-              expect(
-                tester.element(
-                  find.byKey(ValueKey('guide-timeline-geometry-$row')),
-                ),
-                same(timelines[row]),
-              );
-            }
+              same(timelines[row]),
+            );
           }
-        } finally {
-          await tester.pumpWidget(const SizedBox.shrink());
-          debugDefaultTargetPlatformOverride = null;
         }
-      },
-    );
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
   }
 
   testWidgets('TV Guide walks the toolbar and returns to the same grid cell', (
@@ -436,7 +438,7 @@ void main() {
           settings: const LineupSettings(guideHours: 4),
         ),
       ),
-      androidTv: true,
+      profile: profileFor(true),
     );
     try {
       await tester.pumpWidget(fixture.build());
@@ -565,7 +567,7 @@ void main() {
           ],
         ),
       ),
-      androidTv: false,
+      profile: profileFor(false),
     );
     try {
       await tester.pumpWidget(fixture.build());

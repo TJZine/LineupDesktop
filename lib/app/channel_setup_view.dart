@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
@@ -60,7 +61,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   bool _discoveryRetry = false;
   String? _notice;
   String? _error;
-  bool _androidTv = false;
+  bool _isTv = false;
   bool _committingLibraries = false;
   int _libraryCommitRevision = 0;
   bool _completionActionStarted = false;
@@ -76,7 +77,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _androidTv = LineupTheme.of(context).androidTv;
+    _isTv = DeviceProfile.of(context).isTv;
   }
 
   @override
@@ -119,7 +120,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   void _scheduleLibraryEntryFocus() {
-    if (!_androidTv ||
+    if (!_isTv ||
         _step != _SetupStep.libraries ||
         _libraryFocusCallbackScheduled) {
       return;
@@ -141,7 +142,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   bool get _libraryEntryTargetIsEnabled {
     if (!mounted ||
-        !_androidTv ||
+        !_isTv ||
         _committingLibraries ||
         _step != _SetupStep.libraries) {
       return false;
@@ -222,7 +223,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     if (key == LogicalKeyboardKey.backspace && _editableTextOwnsBackspace()) {
       return KeyEventResult.ignored;
     }
-    if (!_androidTv ||
+    if (!_isTv ||
         ![
           LogicalKeyboardKey.escape,
           LogicalKeyboardKey.goBack,

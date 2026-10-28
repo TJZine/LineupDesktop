@@ -142,7 +142,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: const LineupScenario(stage: SetupStage.welcome),
       );
       await tester.pumpWidget(fixture.build());
