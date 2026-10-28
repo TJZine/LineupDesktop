@@ -147,10 +147,12 @@ internal class Media3Engine(
                 if (closed) return
                 publishSessionClock()
                 val p = player.currentPosition
-                val now = android.os.SystemClock.uptimeMillis()
-                if (lastProgressDiagnosticMs == Long.MIN_VALUE || now - lastProgressDiagnosticMs >= 5000) {
-                    lastProgressDiagnosticMs = now
-                    diagnose("progress positionMs=$p playing=${player.isPlaying}")
+                if (debug) {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (lastProgressDiagnosticMs == Long.MIN_VALUE || now - lastProgressDiagnosticMs >= 5000) {
+                        lastProgressDiagnosticMs = now
+                        diagnose("progress positionMs=$p playing=${player.isPlaying}")
+                    }
                 }
                 observer?.property("time-pos", p.coerceAtLeast(0) / 1000.0)
                 val d = player.duration
