@@ -94,6 +94,15 @@ class HarnessController extends LineupController {
 
 class HarnessPlayer implements NativePlayer {
   @override
+  final subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {}
+
+  @override
   bool fullscreen = false;
   final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
   @override

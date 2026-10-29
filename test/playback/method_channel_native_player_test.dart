@@ -17,6 +17,308 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
+  group('subtitle presentation and ephemeral cues', () {
+    late MethodChannelNativePlayer player;
+    final calls = <MethodCall>[];
+    setUp(() async {
+      calls.clear();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      player = MethodChannelNativePlayer();
+      await player.initialize();
+      addTearDown(() async {
+        await player.dispose();
+        messenger.setMockMethodCallHandler(channel, null);
+      });
+    });
+    Future<void> beginLoad() async {
+      final load = player.load(Uri.parse('file:///subtitle-fixture.mkv'));
+      await pumpEventQueue(times: 2);
+      final id = calls.lastWhere((c) => c.method == 'load').arguments['loadId'];
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'state': 'playing',
+        'loadId': id,
+      });
+      await load;
+    }
+
+    Future<void> cues(Object? value, {int? loadId}) =>
+        _sendNativeEvent(messenger, {
+          'type': 'property',
+          'name': 'subtitle-cues',
+          'loadId':
+              loadId ??
+              calls.lastWhere((c) => c.method == 'load').arguments['loadId'],
+          'value': value,
+        });
+    List<Object> cue(String text) => [
+      {
+        'align': 2,
+        'lines': [
+          [
+            {'text': text, 'italic': true, 'bold': true, 'underline': true},
+          ],
+        ],
+      },
+    ];
+
+    test(
+      'typed method payload, bounds, errors, and ordering during pending stop',
+      () async {
+        await beginLoad();
+        final stop = player.stop();
+        await pumpEventQueue(times: 2);
+        final presentation = player.setSubtitlePresentation(
+          scale: 1.5,
+          imageRaise: .1,
+          lineupDrawsStyled: true,
+        );
+        final load = player.load(Uri.parse('file:///subtitle-fixture.mkv'));
+        await presentation;
+        final sent = calls.last;
+        expect(sent.method, 'setSubtitlePresentation');
+        expect(sent.arguments, {
+          'scale': 1.5,
+          'imageRaise': .1,
+          'lineupDrawsStyled': true,
+        });
+        expect(calls.where((c) => c.method == 'load'), hasLength(1));
+        await _sendNativeEvent(messenger, {
+          'type': 'stopResult',
+          'stopId': calls
+              .lastWhere((c) => c.method == 'stop')
+              .arguments['stopId'],
+          'success': true,
+        });
+        await stop;
+        await pumpEventQueue(times: 2);
+        expect(calls.last.method, 'load');
+        await _sendNativeEvent(messenger, {
+          'type': 'state',
+          'state': 'playing',
+          'loadId': calls.last.arguments['loadId'],
+        });
+        await load;
+        for (final bad in [double.nan, double.infinity, .24, 4.01]) {
+          await expectLater(
+            player.setSubtitlePresentation(
+              scale: bad,
+              imageRaise: 0,
+              lineupDrawsStyled: false,
+            ),
+            throwsA(
+              isA<PlayerUnavailable>().having(
+                (e) => e.failureCode,
+                'code',
+                'invalid_argument',
+              ),
+            ),
+          );
+        }
+        for (final bad in [double.nan, double.infinity, -.01, .251]) {
+          await expectLater(
+            player.setSubtitlePresentation(
+              scale: 1,
+              imageRaise: bad,
+              lineupDrawsStyled: false,
+            ),
+            throwsA(isA<PlayerUnavailable>()),
+          );
+        }
+        for (final code in [
+          'invalid_argument',
+          'not_initialized',
+          'native_command_error',
+        ]) {
+          messenger.setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'setSubtitlePresentation') {
+              throw PlatformException(
+                code: code,
+                message: 'fixture private message',
+              );
+            }
+            return null;
+          });
+          await expectLater(
+            player.setSubtitlePresentation(
+              scale: 1,
+              imageRaise: 0,
+              lineupDrawsStyled: false,
+            ),
+            throwsA(
+              isA<PlayerUnavailable>().having(
+                (e) => e.failureCode,
+                'code',
+                code,
+              ),
+            ),
+          );
+          expect(player.status.state, PlayerState.playing);
+        }
+      },
+    );
+    test(
+      'cues bypass PlayerEvent; malformed payloads and all bounds are rejected',
+      () async {
+        await beginLoad();
+        var events = 0;
+        final sub = player.events.listen((_) => events++);
+        addTearDown(sub.cancel);
+        await cues(cue('fixture'));
+        final current = player.subtitleCues.value;
+        final segment = current.cues.single.lines.single.single;
+        expect(segment.italic && segment.bold && segment.underline, isTrue);
+        expect(current.cues.clear, throwsUnsupportedError);
+        expect(
+          () => current.cues.single.lines.single.clear(),
+          throwsUnsupportedError,
+        );
+        for (final invalid in [
+          null,
+          <String, Object?>{},
+          [null],
+          [
+            {'align': 0, 'lines': <Object?>[]},
+          ],
+          [
+            {'align': 10, 'lines': <Object?>[]},
+          ],
+          [
+            {'align': 2.0, 'lines': <Object?>[]},
+          ],
+          [
+            {'align': 2, 'lines': 'bad'},
+          ],
+          [
+            {
+              'align': 2,
+              'lines': [null],
+            },
+          ],
+          [
+            {
+              'align': 2,
+              'lines': [
+                [null],
+              ],
+            },
+          ],
+          [
+            {
+              'align': 2,
+              'lines': [
+                [
+                  {'text': 1},
+                ],
+              ],
+            },
+          ],
+          for (final flag in ['italic', 'bold', 'underline'])
+            [
+              {
+                'align': 2,
+                'lines': [
+                  [
+                    {'text': 'fixture', flag: null},
+                  ],
+                ],
+              },
+            ],
+          List.filled(9, cue('x').single),
+          [
+            {'align': 2, 'lines': List.filled(9, <Object?>[])},
+          ],
+          [
+            {
+              'align': 2,
+              'lines': [
+                List.filled(33, {'text': ''}),
+              ],
+            },
+          ],
+          cue('x' * 4097),
+          cue('é' * 2049),
+        ]) {
+          await cues(invalid);
+          expect(identical(player.subtitleCues.value, current), isTrue);
+        }
+        await cues(
+          List.filled(8, {
+            'align': 9,
+            'lines': List.filled(8, List.filled(32, {'text': 'é'})),
+          }),
+        );
+        expect(
+          player.subtitleCues.value.cues,
+          hasLength(8),
+        ); // exactly 4096 UTF-8 bytes
+        expect(events, 0);
+        await cues(cue('é' * 2048));
+        expect(player.subtitleCues.value.cues, hasLength(1));
+        await cues([]);
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+      },
+    );
+    test('clears on stale rejection, track off, load, terminal states, stop and dispose', () async {
+      await beginLoad();
+      await cues(cue('fixture'));
+      await cues(cue('stale fixture'), loadId: -1);
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      await cues(cue('fixture'));
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'name': 'track-list',
+        'loadId': calls
+            .lastWhere((c) => c.method == 'load')
+            .arguments['loadId'],
+        'value': [],
+      });
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      for (final state in ['ended', 'error']) {
+        await beginLoad();
+        await cues(cue('fixture'));
+        await _sendNativeEvent(messenger, {
+          'type': 'state',
+          'state': state,
+          'loadId': calls
+              .lastWhere((c) => c.method == 'load')
+              .arguments['loadId'],
+        });
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        await cues(cue('late fixture'));
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+      }
+      await beginLoad();
+      await cues(cue('fixture'));
+      final load = player.load(Uri.parse('file:///replacement-fixture.mkv'));
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      await pumpEventQueue(times: 2);
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'state': 'playing',
+        'loadId': calls.last.arguments['loadId'],
+      });
+      await load;
+      await cues(cue('fixture'));
+      final stop = player.stop();
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      await pumpEventQueue(times: 2);
+      await _sendNativeEvent(messenger, {
+        'type': 'stopResult',
+        'success': true,
+        'stopId': calls.last.arguments['stopId'],
+      });
+      await stop;
+      await beginLoad();
+      await cues(cue('fixture'));
+      final dispose = player.dispose();
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      await dispose;
+    });
+  });
   group('observed fullscreen', () {
     late MethodChannelNativePlayer player;
     setUp(() {

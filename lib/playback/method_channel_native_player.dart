@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import 'native_player.dart';
 
@@ -40,12 +41,43 @@ class MethodChannelNativePlayer implements NativePlayer {
        _stopTimeout = stopTimeout ?? const Duration(seconds: 10),
        _trackTimeout = trackTimeout ?? const Duration(seconds: 5);
 
+  final _subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  @override
+  ValueListenable<SubtitleCues> get subtitleCues => _subtitleCues;
+
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) {
+    if (!scale.isFinite ||
+        scale < 0.25 ||
+        scale > 4 ||
+        !imageRaise.isFinite ||
+        imageRaise < 0 ||
+        imageRaise > 0.25) {
+      return Future.error(
+        const PlayerUnavailable(
+          "Invalid subtitle presentation.",
+          failureCode: "invalid_argument",
+        ),
+      );
+    }
+    return _invoke("setSubtitlePresentation", {
+      "scale": scale,
+      "imageRaise": imageRaise,
+      "lineupDrawsStyled": lineupDrawsStyled,
+    });
+  }
+
   final _events = StreamController<PlayerEvent>.broadcast(sync: true);
   final _displayReports = StreamController<DisplayMatchingReport>.broadcast(
     sync: true,
   );
   final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
   bool _fullscreen = false;
+  bool _subtitleCuesEnabled = false;
   int _nativeEventEpoch = 0;
   final Duration _loadTimeout;
   final Duration _stopTimeout;
@@ -158,6 +190,8 @@ class MethodChannelNativePlayer implements NativePlayer {
         failureCode: 'insecure_media_uri',
       );
     }
+    _subtitleCuesEnabled = false;
+    _clearSubtitleCues();
     await _lifecycle;
     await _stopOperation;
     _requireInitialized();
@@ -175,6 +209,7 @@ class MethodChannelNativePlayer implements NativePlayer {
     _activeLoadId = loadId;
     _activeGeneration = generation;
     _resetMediaState(startPaused: startPaused);
+    _subtitleCuesEnabled = true;
     _setStatus(PlayerState.loading, 'Loading media');
     try {
       final completion = pending.future
@@ -265,6 +300,10 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
+    if (type == PlayerTrackType.subtitle && id == null) {
+      _subtitleCuesEnabled = false;
+      _clearSubtitleCues();
+    }
     await _lifecycle;
     _requireInitialized();
     final loadId = _activeLoadId;
@@ -313,6 +352,8 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   @override
   Future<void> stop() {
+    _subtitleCuesEnabled = false;
+    _clearSubtitleCues();
     final existing = _stopOperation;
     if (existing != null) return existing;
     final stopId = ++_nextStopId;
@@ -362,38 +403,42 @@ class MethodChannelNativePlayer implements NativePlayer {
   }
 
   @override
-  Future<void> dispose() => _serializeLifecycle(() async {
-    _fullscreen = false;
-    ++_nativeEventEpoch;
-    final stop = _pendingStop;
-    if (stop != null && !stop.$2.isCompleted) {
-      stop.$2.completeError(
+  Future<void> dispose() {
+    _subtitleCuesEnabled = false;
+    _clearSubtitleCues();
+    return _serializeLifecycle(() async {
+      _fullscreen = false;
+      ++_nativeEventEpoch;
+      final stop = _pendingStop;
+      if (stop != null && !stop.$2.isCompleted) {
+        stop.$2.completeError(
+          const PlayerUnavailable('The native player was disposed.'),
+        );
+      }
+      _pendingStop = null;
+      _completePendingLoadError(
         const PlayerUnavailable('The native player was disposed.'),
       );
-    }
-    _pendingStop = null;
-    _completePendingLoadError(
-      const PlayerUnavailable('The native player was disposed.'),
-    );
-    _completePendingTrackSelectionErrors(
-      const PlayerUnavailable('The native player was disposed.'),
-    );
-    _pendingLoad = null;
-    _activeLoadId = null;
-    _activeGeneration = null;
-    if (!_initialized) return;
-    _initialized = false;
-    try {
-      await _invokeNative<void>('dispose');
-    } finally {
-      if (identical(_handlerOwner, this)) {
-        _channel.setMethodCallHandler(null);
-        _handlerOwner = null;
+      _completePendingTrackSelectionErrors(
+        const PlayerUnavailable('The native player was disposed.'),
+      );
+      _pendingLoad = null;
+      _activeLoadId = null;
+      _activeGeneration = null;
+      if (!_initialized) return;
+      _initialized = false;
+      try {
+        await _invokeNative<void>('dispose');
+      } finally {
+        if (identical(_handlerOwner, this)) {
+          _channel.setMethodCallHandler(null);
+          _handlerOwner = null;
+        }
+        _resetMediaState();
+        _setStatus(PlayerState.stopped, 'Native player disposed');
       }
-      _resetMediaState();
-      _setStatus(PlayerState.stopped, 'Native player disposed');
-    }
-  });
+    });
+  }
 
   Future<void> _serializeLifecycle(Future<void> Function() operation) {
     final next = _lifecycle.then((_) => operation());
@@ -491,6 +536,27 @@ class MethodChannelNativePlayer implements NativePlayer {
       if (report == null || report.revision != _displayRevision) return;
       _displayReport = report;
       if (!_displayReports.isClosed) _displayReports.add(report);
+      return;
+    }
+    if (event["type"] == "property" && event["name"] == "subtitle-cues") {
+      if (!_isCurrentLoadEvent(event)) {
+        _clearSubtitleCues();
+        return;
+      }
+      if (const {
+        PlayerState.error,
+        PlayerState.ended,
+        PlayerState.stopped,
+      }.contains(_status.state)) {
+        return;
+      }
+      if (!_subtitleCuesEnabled) return;
+      final cues = SubtitleCues.tryParse(event["value"]);
+      if (cues == null) {
+        debugPrint("Malformed subtitle cues dropped.");
+      } else {
+        _subtitleCues.value = cues;
+      }
       return;
     }
     if (!_isCurrentLoadEvent(event)) return;
@@ -613,6 +679,12 @@ class MethodChannelNativePlayer implements NativePlayer {
         _duration = _durationFromSeconds(value);
       case 'track-list':
         _tracks = List.unmodifiable(_decodeTracks(value));
+        _subtitleCuesEnabled = _tracks.any(
+          (t) => t.type == PlayerTrackType.subtitle && t.selected,
+        );
+        if (!_subtitleCuesEnabled) {
+          _clearSubtitleCues();
+        }
       case 'video-format':
         _telemetry = _copyTelemetry(videoFormat: value);
       case 'video-codec':
@@ -919,7 +991,14 @@ class MethodChannelNativePlayer implements NativePlayer {
     }
   }
 
+  void _clearSubtitleCues() {
+    if (!_subtitleCues.value.isEmpty) {
+      _subtitleCues.value = const SubtitleCues.empty();
+    }
+  }
+
   void _resetMediaState({bool startPaused = false}) {
+    _clearSubtitleCues();
     _paused = startPaused;
     _position = Duration.zero;
     _duration = Duration.zero;
@@ -934,6 +1013,14 @@ class MethodChannelNativePlayer implements NativePlayer {
     String? failureCode,
     int? httpStatus,
   }) {
+    if (const {
+      PlayerState.error,
+      PlayerState.ended,
+      PlayerState.stopped,
+    }.contains(state)) {
+      _subtitleCuesEnabled = false;
+      _clearSubtitleCues();
+    }
     _status = PlayerStatus(
       state: state,
       message: message,

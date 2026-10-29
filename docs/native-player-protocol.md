@@ -46,6 +46,7 @@ The native result is `null` unless a result map is shown.
 | `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
 | `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
+| `setSubtitlePresentation` | `scale: num`, finite, 0.25–4.0; `imageRaise: num`, finite, 0–0.25; `lineupDrawsStyled: bool`; all required | `null`, `not_initialized`, or `invalid_argument`; Android may return `native_command_error` for unexpected exceptions. Never `command_queue_full`. |
 | `setVolume` | `volume: num`, finite and 0–100 inclusive | `null`, `invalid_argument`, or `command_queue_full`. |
 
 `loadId` is non-negative in the native `load` parser, while Dart-generated
@@ -156,6 +157,7 @@ Forwarded properties are:
 | --- | --- |
 | `pause` | bool |
 | `time-pos`, `duration` | finite mpv doubles; Dart clamps missing, negative, or non-finite values to zero duration |
+| `subtitle-cues` | list of at most 8 cues; ephemeral media content, parsed separately from `PlayerEvent` (see Subtitles) |
 | `track-list` | list of at most 256 track maps |
 | `video-format`, `video-codec`, `current-vo`, `hwdec-current` | bounded strings, at most 4,096 bytes each |
 | `video-params` | map with `w`, `h`, `pixelformat`, `hw-pixelformat`, `primaries`, `gamma`, `colormatrix`, and `sig-peak` |
@@ -528,3 +530,69 @@ integrated acceptance remain separately recorded target/human obligations.
   unavailable/unknown diagnostic, but they are not the same serialized value.
 - Dart-generated load IDs start at 1 although the native `load` parser also
   accepts 0. The stricter positive rule remains required for `selectTrack`.
+
+## Subtitles
+
+Dart owns persisted style, defaults and plain-text rendering. Native owns decoder
+classification: plain text is Lineup-drawn, native ASS is engine-drawn unless
+`lineupDrawsStyled` is true, and image subtitles always remain engine-drawn.
+`scale` affects engine subtitles; `imageRaise` moves only image subtitles.
+Lineup text uses its own concrete appearance in the presentation rectangle.
+
+`setSubtitlePresentation` is player-scoped (no `loadId`). It applies to the
+current and later loads until replaced or disposed. Native keeps one pending
+latest-value slot, separate from the ordinary command queue. Acceptance before
+another command guarantees application before that command executes. Desktop
+applies changes within one worker poll. Dispose resets presentation; Dart sends
+again before the next load after initialization. Invalid arguments leave the
+current presentation unchanged; unknown extra keys are ignored. Rendering is
+unobserved: application failures never become playback errors or track results.
+
+The coordinator sends without awaiting immediately before load, and coalesces
+committed settings updates while a call is in flight. Rejection clears its sent
+value for retry on the next load and records only an allowlisted error code.
+Cue updates never emit a general Player snapshot or coordinator notification.
+Malformed cues are skipped with a fixed message. Cues clear on replacement load,
+stop, terminal state, subtitle-off, stale-load rejection and disposal.
+
+**Event: `property` with name `subtitle-cues`:**
+
+- Value: a list of at most 8 cues; an empty list clears. Each cue is
+  `{align: int 1–9 (numeric-keypad position; 2 = bottom center), lines: [[segment, …], …]}`
+  with at most 8 lines per cue and 32 segments per line. A segment is
+  `{text: String, italic?: bool, bold?: bool, underline?: bool}`. Total text
+  across the value is at most 4 KiB UTF-8; native truncates at a character
+  boundary and drops excess cues, lines or segments rather than failing.
+- Load-scoped like the existing property events (carries the current
+  `loadId`; Dart drops stale ones). **Replace in place, never evicted:** both
+  bounded queues (`PlayerCore::QueueEvent` and Android `PlayerEventQueue.add`)
+  enforce the same rule: a new
+  `subtitle-cues` replaces any undelivered `subtitle-cues` at its position, and
+  the capacity eviction skips it so a pending clear cannot be evicted. At most
+  one `subtitle-cues` is ever queued, so the exemption cannot grow the queue.
+- Emitted **only while the selected subtitle track is Lineup-drawn**.
+  When the selection changes to an engine-drawn track or to none, and on stop,
+  end, error and new load, native emits (or Dart synthesizes) an empty list.
+- Embedded colors, fonts and positions inside plain-text cues are dropped,
+  except alignment: SRT/ASS `{\anN}` tags (mpv) and Media3 cue line/position
+  map to `align` (top/middle/bottom × left/center/right). Media3 fractional
+  lines (WebVTT) map by thirds; CEA-608's `LINE_TYPE_NUMBER` rows
+  (`Cea608Decoder.java:1050`) map positive rows in the top third to top and the
+  rest to bottom, and negative rows (counted from the bottom) to bottom. On
+  desktop, ffmpeg's WebVTT decoder drops cue settings, so WebVTT positions apply
+  on Android only. Italic, bold and underline are kept.
+- Cue text is media content: never logged, exported or retained after clearing.
+
+**Separate channel `lineup/device_captions` (Android only).** Not part of
+the player protocol, because it is not player-scoped:
+
+- `read` → `{enabled: bool, fontScale: num, foreground: int?, background: int?, window: int?, edgeType: "none"|"outline"|"dropShadow"|"raised"|"depressed"|null, edgeColor: int?, typeface: "standard"|"monoSans"|"serif"|"monoSerif"|"casual"|"cursive"|"smallCaps"|null}`.
+  Unset device values are null and Dart uses the Standard value for them.
+  ARGB ints may arrive as 32- or 64-bit integers. `enabled` is the system
+  captions switch; Lineup uses the device **style** whether or not that switch
+  is on (the viewer asked for it explicitly), and the Settings row says so when
+  it is off.
+- Native calls `changed` with the same map when a `CaptioningChangeListener`
+  fires. It registers while Dart has called `listen` and unregisters on
+  `cancel` or activity destruction.
+- Desktop has no handler; Dart never calls it there (host-gated).

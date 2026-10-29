@@ -1,3 +1,5 @@
+import 'subtitle_style.dart';
+
 enum OverlayTransparency {
   moreTransparent('more-transparent', 'More transparent'),
   standard('standard', 'Standard'),
@@ -41,6 +43,7 @@ class LineupSettings {
     this.largeFocusIndicators = false,
     this.profilePickerOnStartup = false,
     this.diagnosticsEnabled = false,
+    this.subtitleStyle = const SubtitleStyle(),
   });
 
   final OverlayTransparency overlayTransparency;
@@ -57,6 +60,7 @@ class LineupSettings {
   final bool largeFocusIndicators;
   final bool profilePickerOnStartup;
   final bool diagnosticsEnabled;
+  final SubtitleStyle subtitleStyle;
 
   LineupSettings copyWith({
     OverlayTransparency? overlayTransparency,
@@ -73,6 +77,7 @@ class LineupSettings {
     bool? largeFocusIndicators,
     bool? profilePickerOnStartup,
     bool? diagnosticsEnabled,
+    SubtitleStyle? subtitleStyle,
   }) => LineupSettings(
     overlayTransparency: overlayTransparency ?? this.overlayTransparency,
     theme: theme ?? this.theme,
@@ -91,6 +96,7 @@ class LineupSettings {
     profilePickerOnStartup:
         profilePickerOnStartup ?? this.profilePickerOnStartup,
     diagnosticsEnabled: diagnosticsEnabled ?? this.diagnosticsEnabled,
+    subtitleStyle: subtitleStyle ?? this.subtitleStyle,
   );
 
   Map<String, Object?> toJson() => {
@@ -109,6 +115,7 @@ class LineupSettings {
     'largeFocusIndicators': largeFocusIndicators,
     'profilePickerOnStartup': profilePickerOnStartup,
     'diagnosticsEnabled': diagnosticsEnabled,
+    'subtitleStyle': subtitleStyle.toJson(),
   };
 
   factory LineupSettings.fromJson(Object? value) {
@@ -139,6 +146,7 @@ class LineupSettings {
       'largeFocusIndicators',
       'profilePickerOnStartup',
       'diagnosticsEnabled',
+      'subtitleStyle',
     };
     final keys = json.keys.toSet();
     const retiredFields = {
@@ -152,6 +160,7 @@ class LineupSettings {
       'dvrControlsEnabled',
       'matchDisplayHdr',
       'guideShowChannelSources',
+      'subtitleStyle',
       ...retiredFields,
     });
     if (!keys.containsAll(requiredFields) ||
@@ -251,6 +260,9 @@ class LineupSettings {
       largeFocusIndicators: boolean('largeFocusIndicators'),
       profilePickerOnStartup: boolean('profilePickerOnStartup'),
       diagnosticsEnabled: boolean('diagnosticsEnabled'),
+      subtitleStyle: json.containsKey('subtitleStyle')
+          ? SubtitleStyle.fromJson(json['subtitleStyle'])
+          : const SubtitleStyle(),
     );
   }
 }

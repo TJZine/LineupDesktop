@@ -227,6 +227,7 @@ void main() {
           'guideShowChannelSources': false,
           'overlayTransparency': 'standard',
           'matchDisplayHdr': true,
+          'subtitleStyle': const LineupSettings().subtitleStyle.toJson(),
         };
       expect(loaded.state.toJson(), expected);
       await store.save(loaded.state);
@@ -288,6 +289,7 @@ void main() {
           ...old['settings'] as Map,
           'overlayTransparency': 'standard',
           'matchDisplayHdr': true,
+          'subtitleStyle': const LineupSettings().subtitleStyle.toJson(),
         };
       expect(loaded.state.toJson(), expected);
       await store.save(loaded.state);

@@ -35,6 +35,7 @@ enum DiagnosticEvent {
     'Guide current program wait timed out',
   ),
   guideScheduleLoadTimedOut('guide', 'Guide schedule load timed out'),
+  subtitlePresentationRejected('playback', 'Subtitle presentation rejected'),
   nativePlaybackFailed('playback', 'Native playback failed'),
   playbackRequestFailed('playback', 'Playback request failed'),
   plexPlaybackSelected('playback', 'Plex playback selected');
@@ -287,6 +288,12 @@ class Diagnostics extends ChangeNotifier {
 
   // One definition per key, with intentionally distinct storage/export rules.
   static const _contextPolicies = <String, _ContextPolicy>{
+    'subtitleError': _FixedEnumContextPolicy({
+      'invalid_argument',
+      'not_initialized',
+      'native_command_error',
+      'missing_plugin',
+    }),
     'castOutcome': _FixedEnumContextPolicy({
       'requested',
       'enriched',

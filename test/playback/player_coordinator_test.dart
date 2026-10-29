@@ -21,12 +21,258 @@ import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/settings/subtitle_style.dart';
 
 import '../support/test_doubles.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  group('subtitle presentation', () {
+    testWidgets(
+      'synchronous presentation-before-load, reuse and appearance-only commits',
+      (tester) async {
+        final player = _SubtitlePlayer();
+        final f = _ContinuationFixture(player: player);
+        addTearDown(f.close);
+        player.pending = Completer<void>();
+        final loading = f.coordinator.loadInitialMedia(
+          Uri.parse('file:///subtitle-fixture.mkv'),
+        );
+        await tester.pump();
+        expect(player.subtitleCommandOrder, ['presentation', 'load']);
+        player.pending!.complete();
+        await loading;
+        await f.coordinator.tune('channel-b');
+        expect(player.subtitlePresentations, hasLength(1));
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(
+              textColor: SubtitleColor.red,
+              font: SubtitleFont.cursive,
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(player.subtitlePresentations, hasLength(1));
+        f.coordinator.dispose();
+        f.disposed = true;
+      },
+    );
+    testWidgets(
+      'late restore and three rapid commits coalesce to first and latest',
+      (tester) async {
+        final player = _SubtitlePlayer()..pending = Completer<void>();
+        final f = _ContinuationFixture(player: player);
+        addTearDown(f.close);
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(size: SubtitleSize.p125),
+          ),
+        );
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(size: SubtitleSize.p150),
+          ),
+        );
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(
+              size: SubtitleSize.p300,
+              position: SubtitlePosition.highest,
+              styleStyledSubtitles: true,
+            ),
+          ),
+        );
+        expect(player.subtitlePresentations.map((p) => p.scale), [1.25]);
+        final pending = player.pending!;
+        player.pending = null;
+        pending.complete();
+        await tester.pump();
+        expect(player.subtitlePresentations.map((p) => p.scale), [1.25, 3]);
+        expect(player.subtitlePresentations.last.imageRaise, .15);
+        expect(player.subtitlePresentations.last.lineupDrawsStyled, isTrue);
+        f.coordinator.dispose();
+        f.disposed = true;
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(size: SubtitleSize.p50),
+          ),
+        );
+        await tester.pump();
+        expect(player.subtitlePresentations, hasLength(2));
+        f.coordinator.dispose();
+        f.disposed = true;
+      },
+    );
+    testWidgets(
+      'rejection never blocks load or errors playback and next load retries',
+      (tester) async {
+        final player = _SubtitlePlayer()
+          ..rejection = const PlayerUnavailable(
+            'fixture rejection',
+            failureCode: 'invalid_argument',
+          );
+        final f = _ContinuationFixture(player: player);
+        addTearDown(f.close);
+        f.lineup.diagnostics.enabled = true;
+        await f.coordinator.loadInitialMedia(
+          Uri.parse('file:///subtitle-fixture.mkv'),
+        );
+        await tester.pump();
+        expect(player.loads, hasLength(1));
+        expect(f.coordinator.status.state, isNot(PlayerState.error));
+        expect(
+          f.lineup.diagnostics.entries
+              .where((e) => e.message == 'Subtitle presentation rejected')
+              .single
+              .context,
+          {'subtitleError': 'invalid_argument'},
+        );
+        player.rejection = null;
+        await f.coordinator.tune('channel-b');
+        expect(player.subtitlePresentations, hasLength(2));
+        f.coordinator.dispose();
+        f.disposed = true;
+      },
+    );
+    testWidgets(
+      'newest commit survives rejected in-flight command; disposed completion never sends',
+      (tester) async {
+        final player = _SubtitlePlayer()..pending = Completer<void>();
+        final f = _ContinuationFixture(player: player);
+        addTearDown(f.close);
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(size: SubtitleSize.p125),
+          ),
+        );
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(size: SubtitleSize.p300),
+          ),
+        );
+        final pending = player.pending!;
+        player.pending = null;
+        pending.completeError(
+          const PlayerUnavailable(
+            'fixture rejection',
+            failureCode: 'native_command_error',
+          ),
+        );
+        await tester.pump();
+        expect(player.subtitlePresentations.map((p) => p.scale), [1.25, 3]);
+        player.pending = Completer<void>();
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(size: SubtitleSize.p50),
+          ),
+        );
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(size: SubtitleSize.p75),
+          ),
+        );
+        f.coordinator.dispose();
+        f.disposed = true;
+        player.pending!.complete();
+        await tester.pump();
+        expect(player.subtitlePresentations.map((p) => p.scale), [1.25, 3, .5]);
+      },
+    );
+    testWidgets('load queues latest before an older presentation settles', (
+      tester,
+    ) async {
+      final player = _SubtitlePlayer()..pending = Completer<void>();
+      final f = _ContinuationFixture(player: player);
+      addTearDown(f.close);
+      f.lineup.diagnostics.enabled = true;
+      f.lineup.setSettings(
+        f.lineup.settings.copyWith(
+          subtitleStyle: const SubtitleStyle(size: SubtitleSize.p125),
+        ),
+      );
+      f.lineup.setSettings(
+        f.lineup.settings.copyWith(
+          subtitleStyle: const SubtitleStyle(size: SubtitleSize.p300),
+        ),
+      );
+      final old = player.pending!;
+      player.pending = null;
+      await f.coordinator.loadInitialMedia(
+        Uri.parse('file:///subtitle-fixture.mkv'),
+      );
+      expect(player.subtitleCommandOrder, [
+        'presentation',
+        'presentation',
+        'load',
+      ]);
+      f.lineup.diagnostics.enabled = true;
+      old.completeError(MissingPluginException());
+      await tester.pump();
+      expect(player.subtitlePresentations.map((p) => p.scale), [1.25, 3]);
+      expect(
+        f.lineup.diagnostics.entries
+            .where((e) => e.message == 'Subtitle presentation rejected')
+            .single
+            .context,
+        {'subtitleError': 'missing_plugin'},
+      );
+      await f.coordinator.tune('channel-b');
+      expect(player.subtitlePresentations, hasLength(2));
+      f.coordinator.dispose();
+      f.disposed = true;
+    });
+    testWidgets(
+      'cues use an independent listenable and clear through lifecycle',
+      (tester) async {
+        final player = _SubtitlePlayer();
+        final f = _ContinuationFixture(player: player);
+        addTearDown(f.close);
+        await f.coordinator.loadInitialMedia(
+          Uri.parse('file:///subtitle-fixture.mkv'),
+        );
+        await tester.pump();
+        var rebuilds = 0;
+        f.coordinator.addListener(() => rebuilds++);
+        final cues = SubtitleCues([
+          SubtitleCue(
+            align: 2,
+            lines: [
+              [const SubtitleSegment(text: 'fixture')],
+            ],
+          ),
+        ]);
+        player.emitSubtitleCues(cues);
+        expect(f.coordinator.subtitleCues.value, same(cues));
+        expect(rebuilds, 0);
+        await f.coordinator.tune('channel-b');
+        expect(f.coordinator.subtitleCues.value.isEmpty, isTrue);
+        player.emitSubtitleCues(cues);
+        await f.coordinator.selectTrack(PlayerTrackType.subtitle, null);
+        expect(f.coordinator.subtitleCues.value.isEmpty, isTrue);
+        player.emitSubtitleCues(cues);
+        expect(f.coordinator.subtitleCues.value.isEmpty, isTrue);
+        await f.coordinator.tune('channel-0');
+        player.emitSubtitleCues(cues);
+        await f.coordinator.stop();
+        expect(f.coordinator.subtitleCues.value.isEmpty, isTrue);
+        await f.coordinator.tune('channel-b');
+        player.emitSubtitleCues(cues);
+        player.emitStatus(
+          PlayerState.error,
+          generation: player.loadGenerations.last,
+        );
+        await tester.pump();
+        expect(f.coordinator.subtitleCues.value.isEmpty, isTrue);
+        await f.coordinator.tune('channel-0');
+        player.emitSubtitleCues(cues);
+        f.coordinator.dispose();
+        f.disposed = true;
+        expect(f.coordinator.subtitleCues.value.isEmpty, isTrue);
+      },
+    );
+  });
   testWidgets(
     'channel tag window rejects stale tunes, continuations and duplicate playing',
     (tester) async {
@@ -9830,5 +10076,26 @@ class _BlockingDisplayPlayer extends _DisplayPlayer {
     if (loads.length != 2) return;
     secondLoadStarted.complete();
     await releaseSecondLoad.future;
+  }
+}
+
+class _SubtitlePlayer extends _EventPlayer {
+  Completer<void>? pending;
+  Object? rejection;
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) {
+    unawaited(
+      super.setSubtitlePresentation(
+        scale: scale,
+        imageRaise: imageRaise,
+        lineupDrawsStyled: lineupDrawsStyled,
+      ),
+    );
+    if (rejection case final error?) return Future.error(error);
+    return pending?.future ?? Future.value();
   }
 }

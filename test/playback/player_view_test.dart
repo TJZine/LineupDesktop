@@ -8827,6 +8827,15 @@ String _statusLabelForTest(PlayerState state) => switch (state) {
 };
 
 class _Native implements NativePlayer {
+  @override
+  final subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {}
+
   _Native(
     PlayerState state, {
     this.failLoad = false,
