@@ -551,13 +551,14 @@ void main() {
     PlayerCommand resolve(
       LogicalKeyboardKey key, {
       required PlayerOverlay overlay,
+      bool androidTv = true,
       bool hasProgram = true,
       bool tvOsdAtBottom = false,
       bool initialPress = true,
     }) => resolvePlayerKey(
       key,
       overlay: overlay,
-      androidTv: true,
+      androidTv: androidTv,
       dvr: true,
       unsupported: false,
       initialPress: initialPress,
@@ -615,6 +616,32 @@ void main() {
     expect(
       resolve(LogicalKeyboardKey.info, overlay: PlayerOverlay.nowPlaying),
       PlayerAction.showOsdFromInfo,
+    );
+    for (final key in [LogicalKeyboardKey.info, LogicalKeyboardKey.keyI]) {
+      for (final overlay in [PlayerOverlay.none, PlayerOverlay.osd]) {
+        expect(
+          resolve(key, overlay: overlay, hasProgram: false),
+          PlayerAction.showOsd,
+        );
+        expect(
+          resolve(
+            key,
+            overlay: overlay,
+            hasProgram: false,
+            initialPress: false,
+          ),
+          PlayerAction.ignored,
+        );
+      }
+    }
+    expect(
+      resolve(
+        LogicalKeyboardKey.keyI,
+        overlay: PlayerOverlay.none,
+        androidTv: false,
+        hasProgram: false,
+      ),
+      PlayerAction.showNowPlaying,
     );
   });
 

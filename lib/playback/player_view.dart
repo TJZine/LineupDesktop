@@ -449,14 +449,14 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
               if (focused == _PlayerControl.moreInfo) {
                 _controls[_PlayerControl.close]!.requestFocus();
               } else if (focused != _PlayerControl.close &&
-                  moreInfo.context != null) {
+                  _isLiveControl(moreInfo)) {
                 moreInfo.requestFocus();
               } else {
                 _controls[_PlayerControl.close]!.requestFocus();
               }
             } else {
               final moreInfo = _controls[_PlayerControl.moreInfo]!;
-              if (focused == _PlayerControl.close && moreInfo.context != null) {
+              if (focused == _PlayerControl.close && _isLiveControl(moreInfo)) {
                 moreInfo.requestFocus();
               } else {
                 _focusTvAction(first: true);
@@ -480,9 +480,12 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
             defaultTargetPlatform == TargetPlatform.macOS &&
             HardwareKeyboard.instance.isMetaPressed,
         hasProgram:
-            event.logicalKey == LogicalKeyboardKey.arrowDown &&
+            (event.logicalKey == LogicalKeyboardKey.arrowDown &&
                 (controller.overlay == PlayerOverlay.none ||
-                    controller.overlay == PlayerOverlay.osd)
+                    controller.overlay == PlayerOverlay.osd)) ||
+                (_androidTv &&
+                    (event.logicalKey == LogicalKeyboardKey.info ||
+                        event.logicalKey == LogicalKeyboardKey.keyI))
             ? controller.currentProgram != null
             : false,
       ),
@@ -612,7 +615,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         return;
       }
       final invoker = _controls[_PlayerControl.moreInfo]!;
-      if (invoker.context != null && invoker.canRequestFocus) {
+      if (_isLiveControl(invoker)) {
         invoker.requestFocus();
       } else {
         final actions = _availableTvActions;
@@ -631,12 +634,18 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     });
   }
 
+  // FocusNode retains its last context after its widget detaches. A retired
+  // action cannot accept navigation or restore focus for a later program.
+  bool _isLiveControl(FocusNode node) =>
+      node.parent != null &&
+      node.context?.mounted == true &&
+      node.canRequestFocus;
+
   List<_PlayerControl> get _availableTvActions => [
     for (final entry in _controls.entries)
       if (entry.key != _PlayerControl.close &&
           entry.key != _PlayerControl.moreInfo &&
-          entry.value.context != null &&
-          entry.value.canRequestFocus)
+          _isLiveControl(entry.value))
         entry.key,
   ];
 

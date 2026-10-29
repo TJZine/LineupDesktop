@@ -1875,7 +1875,9 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                     child: LineupInlineLink(
                       onPressed: _submitting ? null : handleBack,
                       child: Text(
-                        widget.accountOrigin && widget.profileOriginIsReady
+                        !androidTv &&
+                                widget.accountOrigin &&
+                                widget.profileOriginIsReady
                             ? '‹ Settings · Account'
                             : '‹ Profiles',
                       ),
