@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -63,6 +65,28 @@ class MemoryCredentialStore implements CredentialStore {
 }
 
 class FakeNativePlayer implements NativePlayer {
+  @override
+  final ValueNotifier<SubtitleCues> subtitleCues = ValueNotifier<SubtitleCues>(
+    const SubtitleCues.empty(),
+  );
+  final subtitlePresentations =
+      <({double scale, double imageRaise, bool lineupDrawsStyled})>[];
+  final subtitleCommandOrder = <String>[];
+  void emitSubtitleCues(SubtitleCues cues) => subtitleCues.value = cues;
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {
+    subtitleCommandOrder.add("presentation");
+    subtitlePresentations.add((
+      scale: scale,
+      imageRaise: imageRaise,
+      lineupDrawsStyled: lineupDrawsStyled,
+    ));
+  }
+
   FakeNativePlayer({
     PlayerStatus? initialStatus,
     this.position = Duration.zero,
@@ -148,6 +172,8 @@ class FakeNativePlayer implements NativePlayer {
     bool startPaused = false,
     Duration? startPosition,
   }) async {
+    subtitleCommandOrder.add("load");
+    subtitleCues.value = const SubtitleCues.empty();
     loads.add(media);
     loadPlexTokens.add(plexToken);
     final nextGeneration = generation ?? this.generation + 1;

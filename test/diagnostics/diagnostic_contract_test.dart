@@ -53,6 +53,7 @@ Recent events:
 2026-10-15T11:59:00.000Z plex: Cast portrait unavailable
 2026-10-15T11:59:00.000Z guide: Guide current program wait timed out
 2026-10-15T11:59:00.000Z guide: Guide schedule load timed out
+2026-10-15T11:59:00.000Z playback: Subtitle presentation rejected
 2026-10-15T11:59:00.000Z playback: Native playback failed
 2026-10-15T11:59:00.000Z playback: Playback request failed
 2026-10-15T11:59:00.000Z playback: Plex playback selected
@@ -77,6 +78,7 @@ const _eventPairs = <(String, String)>[
   ('plex', 'Cast portrait unavailable'),
   ('guide', 'Guide current program wait timed out'),
   ('guide', 'Guide schedule load timed out'),
+  ('playback', 'Subtitle presentation rejected'),
   ('playback', 'Native playback failed'),
   ('playback', 'Playback request failed'),
   ('playback', 'Plex playback selected'),
@@ -138,6 +140,41 @@ DiagnosticSupportSnapshot _snapshot(List<DiagnosticEntry> events) =>
     );
 
 void main() {
+  test('subtitle rejection stores and exports only fixed error codes', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    addTearDown(diagnostics.dispose);
+    for (final code in [
+      'invalid_argument',
+      'not_initialized',
+      'native_command_error',
+      'missing_plugin',
+    ]) {
+      diagnostics.add(DiagnosticEvent.subtitlePresentationRejected, {
+        'subtitleError': code,
+        'cueText': 'fixture private caption',
+      });
+      expect(diagnostics.entries.last.context, {'subtitleError': code});
+    }
+    diagnostics.add(DiagnosticEvent.subtitlePresentationRejected, {
+      'subtitleError': 'fixture private caption',
+    });
+    expect(diagnostics.entries.last.context, isEmpty);
+    final report = diagnostics.buildSupportReport(
+      _snapshot([
+        DiagnosticEntry(
+          DateTime.utc(2026),
+          'playback',
+          'Subtitle presentation rejected',
+          {
+            'subtitleError': 'fixture private caption',
+            'cueText': 'fixture private caption',
+          },
+        ),
+      ]),
+    );
+    expect(report, isNot(contains('fixture private caption')));
+  });
+
   test('cast diagnostics admit only fixed enums in storage and export', () {
     final diagnostics = Diagnostics()..enabled = true;
     addTearDown(diagnostics.dispose);
