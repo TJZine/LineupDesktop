@@ -133,7 +133,8 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                 override fun event(value: Map<String, Any?>) {
                     channel.invokeMethod("event", value)
                 }
-            }
+            },
+            MediaCapabilitiesProbe(activity)::read,
         )
 
     init {

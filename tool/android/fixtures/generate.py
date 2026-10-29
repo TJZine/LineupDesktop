@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Deterministic synthetic media only. Re-runnable; no account/media inputs."""
-import json, pathlib, subprocess
+import json, pathlib, subprocess, tempfile
 ROOT = pathlib.Path(__file__).resolve().parent / 'fixtures'
 ROOT.mkdir(exist_ok=True)
 def run(args):
@@ -106,6 +106,16 @@ if not (ROOT/'bad-parent.mp4').exists():
         position+=size
     else: raise RuntimeError('missing_fixture_moov')
     (ROOT/'bad-parent.mp4').write_bytes(data)
+# HLS session outputs are additive; never re-encode or alter the progressive controls.
+if not (ROOT/'session/index.m3u8').exists():
+    with tempfile.TemporaryDirectory(prefix='hls-', dir=ROOT) as temporary:
+        directory=pathlib.Path(temporary)
+        subprocess.run(['ffmpeg','-y','-i',str(ROOT/'h264.mp4'),'-t','12','-c','copy',
+            '-f','hls','-hls_time','2','-hls_playlist_type','vod','-hls_segment_type','fmp4',
+            '-hls_fmp4_init_filename','init.mp4','-hls_segment_filename',str(directory/'segment-%03d.m4s'),
+            str(directory/'index.m3u8')],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        (directory/'master.m3u8').write_text('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=8000000\nindex.m3u8\n')
+        directory.replace(ROOT/'session')
 facts={}
 for path in sorted(ROOT.glob('*')):
     if path.suffix not in ('.mkv','.mp4'): continue

@@ -11,7 +11,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.ui.SubtitleView
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -97,10 +100,12 @@ internal class Media3Engine(
             listener.failure("source_open_error")
             return
         }
-        val network = MediaHttp.forLoad()
+        val network = MediaHttp.forLoad(
+            if (media.kind == LoadKind.plexSession) media.uri.toHttpUrlOrNull() else null,
+        )
         client = network
         val source = OkHttpDataSource.Factory(network)
-        if (media.token != null)
+        if (media.kind == LoadKind.direct && media.token != null)
             source.setDefaultRequestProperties(mapOf("X-Plex-Token" to media.token))
         http = source
         if (debug) {
@@ -211,28 +216,27 @@ internal class Media3Engine(
             mapOf("gamma" to null, "primaries" to null, "pixelformat" to null),
         )
         player.setSeekParameters(SeekParameters.EXACT)
-        player.setMediaSource(
-            ProgressiveMediaSource.Factory(
-                    source,
-                    GuardedExtractorsFactory { fact ->
-                        if (debug && fact["phase"] == "fragment-seek") {
-                            val position = fact["position"] as Long
-                            handler.post { if (!closed) listener.fragmentSeek(position) }
-                        }
-                        if (debug && fact["phase"] == "validate") {
-                            val revision = fact["revision"] as Int
-                            val accepted =
-                                (fact["declaredVideo"] != true || fact["video"] == true) &&
-                                    (fact["declaredAudio"] != true || fact["audio"] == true)
-                            handler.post {
-                                if (!closed) listener.sourceInitialization(revision, accepted)
-                            }
-                        }
-                    },
-                )
-                .createMediaSource(MediaItem.fromUri(media.uri)),
-            milliseconds(media.startSeconds),
+        val mediaSource = createSource(
+            media,
+            source,
+            GuardedExtractorsFactory { fact ->
+                if (debug && fact["phase"] == "fragment-seek") {
+                    val position = fact["position"] as Long
+                    handler.post { if (!closed) listener.fragmentSeek(position) }
+                }
+                if (debug && fact["phase"] == "validate") {
+                    val revision = fact["revision"] as Int
+                    val accepted =
+                        (fact["declaredVideo"] != true || fact["video"] == true) &&
+                            (fact["declaredAudio"] != true || fact["audio"] == true)
+                    handler.post {
+                        if (!closed) listener.sourceInitialization(revision, accepted)
+                    }
+                }
+            },
         )
+        if (media.kind == LoadKind.plexSession) player.setMediaSource(mediaSource)
+        else player.setMediaSource(mediaSource, milliseconds(media.startSeconds))
         player.playWhenReady = !media.paused
         listener.property("pause", media.paused)
         player.prepare()
@@ -341,6 +345,16 @@ internal class Media3Engine(
     }
 
     companion object {
+        internal fun createSource(
+            media: MediaLoad,
+            source: OkHttpDataSource.Factory,
+            extractors: ExtractorsFactory,
+        ): MediaSource =
+            if (media.kind == LoadKind.plexSession)
+                HlsMediaSource.Factory(source).createMediaSource(MediaItem.fromUri(media.uri))
+            else ProgressiveMediaSource.Factory(source, extractors)
+                .createMediaSource(MediaItem.fromUri(media.uri))
+
         private val cleanupExecutor =
             java.util.concurrent.Executors.newSingleThreadExecutor { task ->
                 Thread(task, "LineupMediaCleanup").apply { isDaemon = true }

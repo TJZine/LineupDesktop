@@ -10,7 +10,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def serve(self, body):
         path=urllib.parse.urlsplit(self.path).path
         route=path.split('/')[-1]
-        known_routes={p.name for p in self.server.root.iterdir() if p.suffix in ('.mp4','.mkv')} | {'same','cross-host','cross-port','downgrade','loop','nested.m3u8','sink'}
+        session_files={p.name for p in (self.server.root/'session').glob('*') if p.suffix in ('.m3u8','.mp4','.m4s')}
+        known_routes=session_files | {p.name for p in self.server.root.iterdir() if p.suffix in ('.mp4','.mkv')} | {'same','cross-host','cross-port','downgrade','loop','nested.m3u8','sink'}
         valid=hmac.compare_digest(self.headers.get('X-Plex-Token',''),TOKEN)
         # Do not store raw request targets, query strings, or header values.
         entry={'route':route if route in known_routes else 'other','token_header':bool(self.headers.get('X-Plex-Token')),'token_valid':valid,'token_in_url':TOKEN in self.path or 'x-plex-token' in self.path.lower(),'range':bool(self.headers.get('Range')),'port':self.server.server_port}
@@ -25,8 +26,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(200); self.send_header('Content-Length',str(len(data))); self.end_headers()
             if body: self.wfile.write(data)
             return
-        file=self.server.root/route
-        if not file.is_file() or file.suffix not in ('.mp4','.mkv'): return self.empty(404)
+        session=path == '/session/'+route and route in session_files
+        file=(self.server.root/'session'/route) if session else self.server.root/route
+        if not file.is_file() or file.suffix not in (('.m3u8','.mp4','.m4s') if session else ('.mp4','.mkv')): return self.empty(404)
         size=file.stat().st_size; first=0; last=size-1
         value=self.headers.get('Range')
         if value:
@@ -35,7 +37,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             first=int(match[1]); last=min(int(match[2]),last) if match[2] else last
             if first>last: return self.empty(416)
         self.send_response(206 if value else 200)
-        self.send_header('Accept-Ranges','bytes'); self.send_header('Content-Type','video/mp4' if file.suffix=='.mp4' else 'video/x-matroska')
+        content_type='application/vnd.apple.mpegurl' if file.suffix=='.m3u8' else 'video/mp4' if file.suffix in ('.mp4','.m4s') else 'video/x-matroska'
+        self.send_header('Accept-Ranges','bytes'); self.send_header('Content-Type',content_type)
         self.send_header('Content-Length',str(last-first+1))
         if value: self.send_header('Content-Range',f'bytes {first}-{last}/{size}')
         self.end_headers()

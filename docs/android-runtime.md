@@ -28,6 +28,16 @@ passive views and the method channel; `NativePlayerController.kt` owns protocol
 validation, bounded queues, correlation and lifecycle fencing. A fresh
 `Media3Engine` belongs to each load. See the [Android protocol details](native-player-protocol.md#android-backend)
 for failure mapping, telemetry, exact initial joins and display limitations.
+`plexSession` loads use the HLS module at the same Media3 version, with a
+per-load origin pin before the existing redirect policy. Playlists, keys,
+initialization files and segments must stay on the load's HTTPS scheme, host
+and port, without userinfo or a token query. Session requests have no Plex
+header or explicit player start position; a provided `startSeconds` is rejected,
+including zero. HLS uses the playlist's own start. Direct Play retains the
+guarded progressive source and existing start handling. `mediaCapabilities`
+reads current decoder profiles, display HDR and Media3 audio-output capabilities
+on the application looper; Dart owns eligibility and conversion policy.
+
 There is one authoritative Dart application; no Android Plex, schedule,
 persistence or navigation implementation exists beside it. Windows/macOS keep
 their existing libmpv adapters and transport contracts.

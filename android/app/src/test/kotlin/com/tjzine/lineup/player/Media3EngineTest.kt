@@ -188,4 +188,57 @@ class Media3EngineTest {
         assertFalse(player.playbackLooper.thread.isAlive)
         assertFalse(awake)
     }
+    @Test
+    fun explicitSessionUsesHlsAndDirectKeepsGuardedProgressiveSource() {
+        val factory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(MediaHttp.forLoad())
+        val direct = MediaLoad("https://session.invalid/index.m3u8", 1, null, false, 0.0)
+        assertTrue(Media3Engine.createSource(direct, factory, GuardedExtractorsFactory {}) is
+            androidx.media3.exoplayer.source.ProgressiveMediaSource)
+        assertTrue(Media3Engine.createSource(direct.copy(kind = LoadKind.plexSession), factory,
+            GuardedExtractorsFactory {}) is androidx.media3.exoplayer.hls.HlsMediaSource)
+    }
+
+    @Test
+    fun sessionPreparationUsesPlaylistDefaultWhileDirectKeepsExplicitPosition() {
+        for (kind in listOf(LoadKind.direct, LoadKind.plexSession)) {
+            lateinit var actual: ExoPlayer
+            var preparation: List<Any?>? = null
+            val engine = engine { context ->
+                actual = ExoPlayer.Builder(context).build()
+                java.lang.reflect.Proxy.newProxyInstance(
+                    ExoPlayer::class.java.classLoader,
+                    arrayOf(ExoPlayer::class.java),
+                ) { _, method, args ->
+                    when (method.name) {
+                        "setMediaSource" -> { preparation = args!!.toList(); null }
+                        // Record preparation at the player boundary without starting network IO.
+                        "prepare" -> null
+                        else -> method.invoke(actual, *(args ?: emptyArray()))
+                    }
+                } as ExoPlayer
+            }
+            shadowOf(actual.playbackLooper).unPause()
+            try {
+                engine.load(MediaLoad("https://session.invalid/index.m3u8", 1, null, false, 13.25, kind),
+                    object : PlayerEngine.Listener {
+                        override fun ready(paused: Boolean) {}
+                        override fun ended() {}
+                        override fun failure(code: String, httpStatus: Int?) { fail(code) }
+                        override fun property(name: String, value: Any?) {}
+                    })
+                val args = preparation!!
+                if (kind == LoadKind.plexSession) {
+                    assertEquals("session must preserve manifest default start", 1, args.size)
+                    assertTrue(args[0] is androidx.media3.exoplayer.hls.HlsMediaSource)
+                } else {
+                    assertEquals(2, args.size)
+                    assertTrue(args[0] is androidx.media3.exoplayer.source.ProgressiveMediaSource)
+                    assertEquals(13250L, args[1])
+                }
+            } finally {
+                assertTrue(release(engine))
+            }
+        }
+    }
+
 }

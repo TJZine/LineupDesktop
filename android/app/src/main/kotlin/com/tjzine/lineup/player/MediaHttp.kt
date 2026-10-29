@@ -1,5 +1,6 @@
 package com.tjzine.lineup.player
 
+import okhttp3.HttpUrl
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 
@@ -16,12 +17,13 @@ import okhttp3.OkHttpClient
 internal object MediaHttp {
     private val base: OkHttpClient by lazy { OkHttpClient() }
 
-    fun forLoad(): OkHttpClient =
+    fun forLoad(origin: HttpUrl? = null): OkHttpClient =
         base
             .newBuilder()
             .dispatcher(Dispatcher())
             .followRedirects(false)
             .followSslRedirects(false)
+            .apply { if (origin != null) addInterceptor(OriginPin(origin)) }
             .addInterceptor(OriginPolicy())
             .build()
 }

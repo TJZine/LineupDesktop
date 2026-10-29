@@ -1,7 +1,10 @@
 package com.tjzine.lineup.player
 
 /** Protocol/lifetime owner. Calls and completion callbacks use the application looper. */
-internal class NativePlayerController(private val host: PlayerHost) {
+internal class NativePlayerController(
+    private val host: PlayerHost,
+    private val mediaCapabilities: () -> Map<String, Any> = { MediaCapabilitiesProbe.empty },
+) {
     interface Reply {
         fun success(value: Any? = null)
 
@@ -70,6 +73,10 @@ internal class NativePlayerController(private val host: PlayerHost) {
                 else -> {
                     if (!initialized || disposing) throw ProtocolError("not_initialized")
                     when (method) {
+                        "mediaCapabilities" -> {
+                            if (arguments != null) throw ProtocolError("invalid_argument")
+                            reply.success(mediaCapabilities())
+                        }
                         "setVideoRect" -> {
                             host.rect(PlayerProtocol.rect(arguments))
                             reply.success()
@@ -484,6 +491,7 @@ internal class NativePlayerController(private val host: PlayerHost) {
                 "initialize",
                 "dispose",
                 "load",
+                "mediaCapabilities",
                 "play",
                 "pause",
                 "seek",
