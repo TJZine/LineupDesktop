@@ -456,6 +456,14 @@ CallResult PlayerCore::Initialize() {
       {"autoload-files", "no"},
       {"idle", "yes"},
       {"keep-open", "no"},
+  };
+  for (const auto& [name, value] : core_options) {
+    if (option_status >= 0) {
+      option_status = DisablingOptionStatus(
+          name, value, mpv_operations_.set_option_string(mpv_, name, value));
+    }
+  }
+  const std::pair<const char*, const char*> subtitle_options[] = {
       {"sub-color", "#00FFFFFF"},
       {"sub-outline-size", "0"},
       {"sub-shadow-offset", "0"},
@@ -463,10 +471,15 @@ CallResult PlayerCore::Initialize() {
       {"sub-border-style", "outline-and-shadow"},
       {"sub-ass-override", "scale"},
   };
-  for (const auto& [name, value] : core_options) {
-    if (option_status >= 0) {
-      option_status = DisablingOptionStatus(
-          name, value, mpv_operations_.set_option_string(mpv_, name, value));
+  // Subtitle failures follow E3 even before initialization. Keep their status
+  // separate so one rejection cannot skip other subtitle/output options or
+  // prevent playback. Mandatory core/security/output failures remain fatal.
+  if (option_status >= 0) {
+    for (const auto& [name, value] : subtitle_options) {
+      if (mpv_operations_.set_option_string(mpv_, name, value) < 0) {
+        std::cerr << "[lineup-player] subtitle option " << name
+                  << " rejected" << std::endl;
+      }
     }
   }
   for (const auto& [name, value] : output.options) {

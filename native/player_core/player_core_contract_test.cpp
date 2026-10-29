@@ -137,6 +137,7 @@ struct FakeMpv {
   std::map<std::string, std::string> load_options;
   int node_load_status = 0;
   std::string rejected_option;
+  int rejected_option_status = MPV_ERROR_OPTION_NOT_FOUND;
   std::string rejected_observation;
   std::optional<LoadOutcome> controlled_load;
   std::optional<int64_t> playlist_id;
@@ -185,7 +186,7 @@ int FakeSetOption(mpv_handle*, const char* name, mpv_format format, void* data) 
 int FakeSetOptionString(mpv_handle*, const char* name, const char* value) {
   std::lock_guard lock(fake->mutex);
   fake->options.push_back(std::string(name) + "=" + value);
-  return fake->rejected_option == name ? MPV_ERROR_OPTION_NOT_FOUND : 0;
+  return fake->rejected_option == name ? fake->rejected_option_status : 0;
 }
 
 int FakeRequestLogMessages(mpv_handle*, const char* level) {
@@ -1507,8 +1508,8 @@ void InitializeFailures() {
     core.Shutdown();
   }
   {
-    // Any other missing option keeps failing initialization with today's
-    // error, even though the fake reports the same option-not-found status.
+    // Other mandatory options remain fatal even though the fake reports
+    // the same option-not-found status as optional osc/ytdl disabling.
     FakeHost host;
     fake->rejected_option = "input-media-keys";
     PlayerCore core(FakeOperations(), host);
@@ -1530,6 +1531,78 @@ void InitializeFailures() {
     Check(reply.error == "initialize_failed" && host.cancelled == 1 &&
           fake->destroyed == destroyed_before + 1 && !core.initialized(),
           "observation failure stops initialization");
+  }
+  const std::pair<const char*, const char*> subtitle_options[] = {
+      {"sub-color", "#00FFFFFF"},
+      {"sub-outline-size", "0"},
+      {"sub-shadow-offset", "0"},
+      {"sub-back-color", "#00000000"},
+      {"sub-border-style", "outline-and-shadow"},
+      {"sub-ass-override", "scale"},
+  };
+  for (const auto& [rejected, ignored_value] : subtitle_options) {
+    (void)ignored_value;
+    for (const int status : {MPV_ERROR_OPTION_NOT_FOUND, MPV_ERROR_OPTION_ERROR}) {
+      FakeHost host;
+      fake->rejected_option = rejected;
+      fake->rejected_option_status = status;
+      fake->options.clear();
+      fake->commands.clear();
+      fake->playlist_id = 77;
+      PlayerCore core(FakeOperations(), host);
+      std::ostringstream diagnostics;
+      auto* original_stderr = std::cerr.rdbuf(diagnostics.rdbuf());
+      const CallResult result = core.Initialize();
+      std::cerr.rdbuf(original_stderr);
+      fake->rejected_option.clear();
+      fake->rejected_option_status = MPV_ERROR_OPTION_NOT_FOUND;
+      Check(!result.error && core.initialized() && host.cancelled == 0,
+            "each rejected subtitle init option leaves playback initialized");
+      const std::string rejection =
+          std::string("[lineup-player] subtitle option ") + rejected + " rejected\n";
+      Check(diagnostics.str().find(rejection) == 0 &&
+            diagnostics.str().find(rejection, rejection.size()) == std::string::npos,
+            "subtitle init rejection emits one fixed non-content diagnostic");
+      for (const auto& [name, value] : subtitle_options) {
+        Check(std::count(fake->options.begin(), fake->options.end(),
+                         std::string(name) + "=" + value) == 1,
+              "all subtitle defaults attempted despite an earlier rejection");
+      }
+      Check(std::find(fake->options.begin(), fake->options.end(), "vo=gpu-next") != fake->options.end() &&
+            fake->options.back() == "hwdec=auto",
+            "subtitle rejection does not skip mandatory output/hwdec options");
+      Events events;
+      Reply load;
+      Call(core, "load", load, {{"uri", Value("https://fixture.invalid/subtitle-option")},
+                                 {"loadId", Value(41)}});
+      Check(load.successes == 1, "load accepted after subtitle option rejection");
+      PumpUntil(core, events, [&] {
+        std::lock_guard lock(fake->mutex);
+        return std::find(fake->commands.begin(), fake->commands.end(), "loadfile") != fake->commands.end();
+      }, "worker executes load after subtitle option rejection");
+      mpv_event_start_file start_data{};
+      start_data.playlist_entry_id = 77;
+      mpv_event start{};
+      start.event_id = MPV_EVENT_START_FILE;
+      start.data = &start_data;
+      mpv_event ready{};
+      ready.event_id = MPV_EVENT_FILE_LOADED;
+      {
+        std::lock_guard lock(fake->mutex);
+        fake->injected.push_back(start);
+        fake->injected.push_back(ready);
+      }
+      PumpUntil(core, events, [&] {
+        return std::any_of(events.received.begin(), events.received.end(), [](const auto& event) {
+          return Has(event, "state", Value("playing")) && Has(event, "loadId", Value(41));
+        });
+      }, "later load reaches correlated playing state after subtitle option rejection");
+      Check(std::none_of(events.received.begin(), events.received.end(), [](const auto& event) {
+        return Has(event, "state", Value("error"));
+      }), "subtitle init rejection never publishes a playback failure");
+      core.Shutdown();
+      fake->playlist_id.reset();
+    }
   }
   fake->created = 0;
   fake->destroyed = 0;
