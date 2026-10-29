@@ -43,13 +43,39 @@ int main() {
   cues = ParseSubtitleCues("a{nested{\\b1}bad}b{\\unknown tag}c{unfinished", false);
   Check(Text(cues) == "abc" && Segment(cues[0]).size() == 1, "nested/malformed/unknown blocks removed");
   Check(Text(ParseSubtitleCues("a\\nb\nc", false)) == "abc", "soft and event newlines");
-  for (auto tag : {"\\pos(1,2)", "\\move(1,2,3,4)", "\\org(1,2)", "\\clip(1,2,3,4)", "\\iclip(1,2,3,4)", "\\p1", "\\p0"}) {
+  for (auto tag : {"\\pos(1,2)", "\\move(1,2,3,4)", "\\org(1,2)", "\\clip(1,2,3,4)", "\\iclip(1,2,3,4)", "\\p1"}) {
     const std::string event = std::string("{ ") + tag + "}sign";
     Check(ParseSubtitleCues(event, true).empty(), "ASS signs and drawing events excluded");
     Check(!ParseSubtitleCues(event, false).empty(), "converted text retained despite positioning tags");
   }
   Check(Text(ParseSubtitleCues("{\\pos(1,2)}sign\n{\\i1}dialogue\n{\\p1}m 0 0 l 1 1", true)) == "dialogue", "ASS mixed event filtering");
-  Check(Text(ParseSubtitleCues("{\\pbo2}dialogue", true)) == "dialogue", "tag prefix is not drawing");
+  for (auto tag : {R"(\p0)", R"(\p000)", R"(\p+0)", R"(\p-0)",
+                   R"(\p-1)", R"(\p)", R"(\pbo2)", R"(\painter1)",
+                   R"(\position(1,2))", R"(\movements)", R"(\rpos)",
+                   R"(\fnposition)"}) {
+    const std::string event = std::string("{") + tag + "}dialogue";
+    Check(Text(ParseSubtitleCues(event, true)) == "dialogue",
+          "nonpositive drawing resets and unrelated tag/style names retain dialogue");
+  }
+  cues = ParseSubtitleCues(R"({\p0\an8\i1\b1\u1}dialogue)", true);
+  Check(cues.size() == 1 && Map(cues[0]).at("align") == Value(8) &&
+        Text(cues) == "dialogue" && Segment(cues[0]).at("italic") == Value(true) &&
+        Segment(cues[0]).at("bold") == Value(true) &&
+        Segment(cues[0]).at("underline") == Value(true),
+        "p0 preserves dialogue emphasis and alignment");
+  for (auto event : {R"({\p1}drawing{\p0}dialogue)",
+                     R"(dialogue{\p0\p2}drawing{\p0}tail)",
+                     R"({\p+1}drawing)", R"({\p 2}drawing)",
+                     R"({\p0001}drawing)",
+                     R"({\p999999999999999999999999999999}drawing)"}) {
+    Check(ParseSubtitleCues(event, true).empty(),
+          "any positive drawing mode excludes the whole event despite later resets");
+  }
+  const std::string literal = R"(literal \p1 and \pos(1,2) outside overrides)";
+  Check(Text(ParseSubtitleCues(literal, true)) == literal,
+        "literal backslashes outside override blocks are dialogue");
+  Check(Text(ParseSubtitleCues("{\\p1}drawing{\\p0}tail\n{\\p0\\i1}dialogue", true)) == "dialogue",
+        "drawing exclusion stays event-scoped and preserves adjacent reset dialogue");
   Check(Text(ParseSubtitleCues("Fixture café 日本語 😀", false)) == "Fixture café 日本語 😀", "UTF-8 kept");
   cues = ParseSubtitleCues(std::string(4095, 'a') + "😀tail", false);
   Check(Text(cues).size() == 4095, "truncation never splits scalar");

@@ -21,6 +21,7 @@ add_executable(authenticated-reference
   "${REPO_ROOT}/macos/Runner/NativePlayer/FoundationValueConversion.mm"
   "${REPO_ROOT}/macos/Runner/NativePlayer/VideoGeometry.mm"
   "${REPO_ROOT}/native/player_core/player_core.cpp"
+  "${REPO_ROOT}/native/player_core/subtitle_cues.cpp"
   "${REPO_ROOT}/native/player_core/libmpv_operations.cpp"
   "${REPO_ROOT}/native/player_core/platform_arguments.cpp"
   "${REPO_ROOT}/native/player_core/track_list_encoder.cpp")
