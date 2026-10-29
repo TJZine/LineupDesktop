@@ -2021,6 +2021,7 @@ void main() {
       );
       await tester.sendKeyEvent(
         tv ? LogicalKeyboardKey.goBack : LogicalKeyboardKey.escape,
+        physicalKey: PhysicalKeyboardKey.escape,
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
