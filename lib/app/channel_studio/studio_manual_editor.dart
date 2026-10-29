@@ -16,6 +16,7 @@ class _StudioManualEditor extends StatefulWidget {
     required this.sourceExplanation,
     required this.onChanged,
     required this.onSelectionPendingChanged,
+    super.key,
   });
   final ManualRundown rundown;
   final _StudioInventory inventory;
@@ -146,6 +147,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
     widget.onSelectionPendingChanged(false);
   }
 
+  bool cancelPendingChoice() {
+    if (_showBrowseSelected) {
+      _setShowBrowseSelected(false);
+      return true;
+    }
+    if (_browseSelecting) {
+      _cancelSelection();
+      return true;
+    }
+    return false;
+  }
+
   Widget _pendingHint() => Semantics(
     liveRegion: true,
     child: Text(
@@ -265,15 +278,20 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
           else if (!_manualRundown) ...[
             LineupField(
               label: 'Search',
-              child: TextField(
-                key: const Key('studio-search'),
-                controller: _search,
+              child: LineupTextFieldActivation(
                 focusNode: _searchFocus,
                 enabled: !_saving,
-                decoration: const InputDecoration(
-                  hintText: 'Search title or show title',
+                builder: (fieldContext, fieldFocus, finishEditing) => TextField(
+                  key: const Key('studio-search'),
+                  controller: _search,
+                  focusNode: fieldFocus,
+                  onEditingComplete: finishEditing,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                    hintText: 'Search title or show title',
+                  ),
+                  onChanged: (_) => _browseChanged(),
                 ),
-                onChanged: (_) => _browseChanged(),
               ),
             ),
             SizedBox(height: 12),
@@ -472,19 +490,25 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             TextFieldTapRegion(
               child: Stack(
                 children: [
-                  TextField(
-                    key: const Key('studio-rundown-search'),
-                    controller: _rundownSearch,
+                  LineupTextFieldActivation(
                     focusNode: _rundownSearchFocus,
-                    decoration: InputDecoration(
-                      hintText: 'Search channel programs',
-                      // Retain InputDecorator's suffix slot, but keep the
-                      // action outside the native text field's leaf semantics.
-                      suffixIcon: rundownQuery.isEmpty
-                          ? null
-                          : const SizedBox.shrink(),
-                    ),
-                    onChanged: (_) => setState(() {}),
+                    builder: (fieldContext, fieldFocus, finishEditing) =>
+                        TextField(
+                          key: const Key('studio-rundown-search'),
+                          controller: _rundownSearch,
+                          focusNode: fieldFocus,
+                          onEditingComplete: finishEditing,
+                          decoration: InputDecoration(
+                            hintText: 'Search channel programs',
+                            // Retain InputDecorator's suffix slot, but keep the
+                            // action outside the native text field's leaf
+                            // semantics.
+                            suffixIcon: rundownQuery.isEmpty
+                                ? null
+                                : const SizedBox.shrink(),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
                   ),
                   if (rundownQuery.isNotEmpty)
                     PositionedDirectional(
@@ -724,9 +748,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
           listenable: focus,
           builder: (context, child) {
             final roles = LineupTheme.of(context);
+            final focused = LineupFocusScope.visible(context, focus.hasFocus);
+            final focusFill =
+                focused && roles.focusTreatment == LineupFocusTreatment.fill;
+            final focusRing =
+                focused && roles.focusTreatment == LineupFocusTreatment.ring;
             return Container(
               decoration: BoxDecoration(
-                color: focus.hasFocus ? roles.selectedSurface : null,
+                color: focusFill
+                    ? roles.focusedSurface
+                    : focus.hasFocus
+                    ? roles.selectedSurface
+                    : null,
                 border: Border(
                   left: BorderSide(
                     color: focus.hasFocus
@@ -737,17 +770,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                 ),
                 borderRadius: BorderRadius.zero,
               ),
-              foregroundDecoration: BoxDecoration(
-                border: Border.all(
-                  color: LineupFocusScope.visible(context, focus.hasFocus)
-                      ? roles.focusBorder
-                      : Colors.transparent,
-                  width: LineupFocusScope.visible(context, focus.hasFocus)
-                      ? roles.focusBorderWidth
-                      : 1,
-                ),
+              foregroundDecoration: focusRing
+                  ? BoxDecoration(
+                      border: Border.all(
+                        color: roles.focusBorder,
+                        width: roles.focusBorderWidth,
+                      ),
+                    )
+                  : null,
+              child: LineupFocusFrame(
+                focused: focusFill,
+                child: LineupFocusInk(focused: focusFill, child: child),
               ),
-              child: child,
             );
           },
           child: repeatedTitle
@@ -922,12 +956,16 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
         height: (size.height - viewInsets.vertical - 200).clamp(0.0, 380),
         child: Column(
           children: [
-            TextField(
-              key: const Key('move-program-search'),
-              controller: _search,
-              autofocus: true,
-              decoration: InputDecoration(hintText: 'Search programs'),
-              onChanged: (_) => setState(() {}),
+            LineupTextFieldActivation(
+              builder: (fieldContext, fieldFocus, finishEditing) => TextField(
+                key: const Key('move-program-search'),
+                controller: _search,
+                focusNode: fieldFocus,
+                autofocus: !LineupTheme.of(fieldContext).androidTv,
+                onEditingComplete: finishEditing,
+                decoration: InputDecoration(hintText: 'Search programs'),
+                onChanged: (_) => setState(() {}),
+              ),
             ),
             SizedBox(height: 8),
             Expanded(

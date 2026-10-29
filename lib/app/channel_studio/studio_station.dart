@@ -84,18 +84,26 @@ class _StudioStationState extends State<_StudioStation> {
                   Expanded(
                     child: LineupField(
                       label: 'Channel name',
-                      child: TextFormField(
-                        key: const Key('studio-name'),
-                        controller: _name,
+                      child: LineupTextFieldActivation(
                         focusNode: _nameFocus,
                         enabled: !_saving,
-                        style: _studioBodyStyle(context),
-                        decoration: const InputDecoration(hintText: 'Required'),
-                        onChanged: (_) => _changed(),
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty
-                            ? 'Enter a channel name.'
-                            : null,
+                        builder: (fieldContext, fieldFocus, finishEditing) =>
+                            TextFormField(
+                              key: const Key('studio-name'),
+                              controller: _name,
+                              focusNode: fieldFocus,
+                              onEditingComplete: finishEditing,
+                              enabled: !_saving,
+                              style: _studioBodyStyle(fieldContext),
+                              decoration: const InputDecoration(
+                                hintText: 'Required',
+                              ),
+                              onChanged: (_) => _changed(),
+                              validator: (value) =>
+                                  value == null || value.trim().isEmpty
+                                  ? 'Enter a channel name.'
+                                  : null,
+                            ),
                       ),
                     ),
                   ),
@@ -104,16 +112,22 @@ class _StudioStationState extends State<_StudioStation> {
                     width: numberWidth,
                     child: LineupField(
                       label: 'Number',
-                      child: TextFormField(
-                        key: const Key('studio-number'),
-                        controller: _number,
+                      child: LineupTextFieldActivation(
                         focusNode: _numberFocus,
                         enabled: !_saving,
-                        keyboardType: TextInputType.number,
-                        style: _studioBodyStyle(context),
-                        decoration: const InputDecoration(),
-                        onChanged: (_) => _changed(),
-                        validator: _validateNumber,
+                        builder: (fieldContext, fieldFocus, finishEditing) =>
+                            TextFormField(
+                              key: const Key('studio-number'),
+                              controller: _number,
+                              focusNode: fieldFocus,
+                              onEditingComplete: finishEditing,
+                              enabled: !_saving,
+                              keyboardType: TextInputType.number,
+                              style: _studioBodyStyle(fieldContext),
+                              decoration: const InputDecoration(),
+                              onChanged: (_) => _changed(),
+                              validator: _validateNumber,
+                            ),
                       ),
                     ),
                   ),

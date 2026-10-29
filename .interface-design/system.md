@@ -87,7 +87,9 @@ Preserve:
 
 - The bottom OSD's safe-area insets, title/status hierarchy, five standard
   actions and optional DVR controls, timing row, full-width progress lane,
-  channel bug, keyboard focus, and auto-hide behavior.
+  channel bug, keyboard focus, and auto-hide behavior. The channel bug enters
+  on its own with a fade and small drop (fade only with Reduce Motion), and
+  shows with the OSD and for about 4 s after a channel change.
 - Now Playing expands the same bottom panel upward and shares its actions,
   Up Next, timing and progress. Preserve its poster/text split, compact title
   artwork, single metadata line, format chips, three-line synopsis, and at most

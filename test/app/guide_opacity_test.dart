@@ -58,12 +58,49 @@ void main() {
       aperture: find.byKey(const Key('guide-picture-in-picture')),
     );
   });
+  for (final scale in [1.0, 1.15, 1.3]) {
+    for (final large in [false, true]) {
+      testWidgets(
+        'TV Guide paint surrounds native aperture at $scale Large $large',
+        (tester) async {
+          final fixture = _readyFixture(
+            androidTv: true,
+            playerState: const PlayerStatus(
+              state: PlayerState.ready,
+              message: 'Synthetic player surface',
+            ),
+            scenario: LineupScenario(
+              settings: LineupSettings(
+                reduceMotion: true,
+                largeFocusIndicators: large,
+              ),
+            ),
+          );
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          await _pump(
+            tester,
+            fixture.build(),
+            viewport: const Size(1920, 1080),
+          );
+          await _expectClassicOpacity(
+            tester,
+            aperture: find.byKey(const Key('guide-picture-in-picture')),
+          );
+        },
+      );
+    }
+  }
 }
 
-Future<void> _pump(WidgetTester tester, Widget child) async {
+Future<void> _pump(
+  WidgetTester tester,
+  Widget child, {
+  Size viewport = _viewport,
+}) async {
   tester.view
     ..devicePixelRatio = 1
-    ..physicalSize = _viewport;
+    ..physicalSize = viewport;
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(RepaintBoundary(key: _goldenKey, child: child));
@@ -102,10 +139,15 @@ Future<void> _expectClassicOpacity(
         );
   if (allowed != null) {
     int alphaAt(int x, int y) => pixels.getUint8((y * width + x) * 4 + 3);
-    final left = allowed.left.ceil();
+    final left = allowed.left.ceil() + 1;
     final right = allowed.right.floor() - 2;
     final top = allowed.top.ceil() + 1;
     final bottom = allowed.bottom.floor() - 2;
+    expect(
+      alphaAt(allowed.center.dx.floor(), allowed.center.dy.floor()),
+      0,
+      reason: 'Native video interior stays transparent',
+    );
     expect(alphaAt(left, top), 0, reason: 'Square top-left native corner');
     expect(
       alphaAt(left, bottom),
@@ -146,7 +188,11 @@ Future<void> _expectClassicOpacity(
   expect(transparentPixels, allowed == null ? 0 : greaterThan(0));
 }
 
-UiFixture _readyFixture({LineupScenario? scenario, PlayerStatus? playerState}) {
+UiFixture _readyFixture({
+  LineupScenario? scenario,
+  PlayerStatus? playerState,
+  bool androidTv = false,
+}) {
   final player = FixturePlayer();
   if (playerState != null) {
     player.emit(
@@ -170,6 +216,7 @@ UiFixture _readyFixture({LineupScenario? scenario, PlayerStatus? playerState}) {
     ),
   );
   return UiFixture(
+    androidTv: androidTv,
     controller: controller,
     player: player,
     guideClock: () => _fixedNow,

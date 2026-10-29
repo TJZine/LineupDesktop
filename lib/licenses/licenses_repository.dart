@@ -67,7 +67,8 @@ class LicensesRepository {
   }
 
   List<LicenseSource> get sources => [
-    if (defaultTargetPlatform == TargetPlatform.macOS)
+    if (defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.android)
       LicenseSource('Native runtime', _native),
     LicenseSource('Flutter and packages', _packages),
     LicenseSource('Fonts and engine notices', _notices),
@@ -116,6 +117,7 @@ class LicensesRepository {
               parts.first == 'patches')) {
         throw const FormatException('Invalid license index');
       }
+      final android = defaultTargetPlatform == TargetPlatform.android;
       final group = parts.first == 'licenses' && parts.length >= 3
           ? parts[1]
           : parts.first == 'patches'
@@ -124,7 +126,9 @@ class LicensesRepository {
       (groups[group] ??= []).add(
         LicenseItem.document(
           id,
-          parts.last,
+          android && group == 'artifacts' && parts.length >= 4
+              ? '${parts[2].replaceAll('__', ':')} · ${parts.last}'
+              : parts.last,
           () => _nativeDocument(id),
           subtitle: path,
         ),
@@ -140,7 +144,11 @@ class LicensesRepository {
       for (final name in names)
         LicenseItem.list(
           'native/$name',
-          name,
+          defaultTargetPlatform == TargetPlatform.android
+              ? (name == 'artifacts'
+                    ? 'Artifact notices'
+                    : name.replaceAll('__', ':'))
+              : name,
           groups[name]!..sort((a, b) => a.subtitle.compareTo(b.subtitle)),
         ),
     ];

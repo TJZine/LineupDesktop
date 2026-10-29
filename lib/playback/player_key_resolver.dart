@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../ui/lineup_focus.dart' show androidTvKeyAlias;
 import 'player_coordinator.dart';
 
 sealed class PlayerCommand {
@@ -13,6 +14,7 @@ enum PlayerAction implements PlayerCommand {
   backToGuide(false),
   collapseNowPlaying(false),
   closeOverlay(false),
+  openMenu(false),
   commitChannelNumber(false),
   openGuide(true),
   miniGuideUp(false),
@@ -89,15 +91,23 @@ final _pageKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
 PlayerCommand resolvePlayerKey(
   LogicalKeyboardKey key, {
   required PlayerOverlay overlay,
+  required bool androidTv,
   required bool dvr,
   required bool unsupported,
   required bool initialPress,
   required bool hasProgram,
+  bool tvOsdAtBottom = false,
   // macOS only: Command chords belong to the app menu and system, so no
   // Player action may claim them. Ctrl handling is unchanged.
   bool commandPressed = false,
 }) {
   if (commandPressed) return PlayerAction.ignored;
+  // Android TV's Menu key is a shell action, not the optional Info command.
+  // Resolve it before the shared TV aliases turn contextMenu into keyI.
+  if (androidTv && key == LogicalKeyboardKey.contextMenu) {
+    return PlayerAction.openMenu;
+  }
+  key = androidTvKeyAlias(key, androidTv: androidTv) ?? key;
   if (_backKeys.contains(key)) {
     return switch (overlay) {
       PlayerOverlay.none => PlayerAction.backToGuide,
@@ -134,6 +144,26 @@ PlayerCommand resolvePlayerKey(
                   key == LogicalKeyboardKey.arrowRight)) ||
           (overlay == PlayerOverlay.miniGuide && selects))) {
     return PlayerAction.consumed;
+  }
+  // Program information is readonly: arrows/Select belong to its reader and
+  // Close. Only explicit remote transport/channel commands escape to Player.
+  // Availability and unsupported-media guards above remain authoritative.
+  if (overlay == PlayerOverlay.programInfo) {
+    if (_guideKeys.contains(key)) return PlayerAction.openGuide;
+    if (unsupported && key == LogicalKeyboardKey.mediaPlayPause) {
+      return PlayerAction.consumed;
+    }
+    return switch (key) {
+      LogicalKeyboardKey.mediaPlayPause => PlayerAction.togglePlayback,
+      LogicalKeyboardKey.mediaPlay => PlayerAction.play,
+      LogicalKeyboardKey.mediaPause => PlayerAction.pause,
+      LogicalKeyboardKey.mediaStop => PlayerAction.stop,
+      LogicalKeyboardKey.mediaRewind => PlayerAction.rewind,
+      LogicalKeyboardKey.mediaFastForward => PlayerAction.fastForward,
+      LogicalKeyboardKey.pageUp => PlayerAction.previousChannel,
+      LogicalKeyboardKey.pageDown => PlayerAction.nextChannel,
+      _ => PlayerAction.ignored,
+    };
   }
   final overlayOwnsKey = switch (overlay) {
     PlayerOverlay.audioTracks ||
@@ -191,6 +221,12 @@ PlayerCommand resolvePlayerKey(
   }
   if (key == LogicalKeyboardKey.arrowDown &&
       (overlay == PlayerOverlay.none || overlay == PlayerOverlay.osd)) {
+    if (androidTv) {
+      if (overlay == PlayerOverlay.none) return PlayerAction.showOsd;
+      return tvOsdAtBottom && hasProgram
+          ? PlayerAction.showNowPlaying
+          : PlayerAction.consumed;
+    }
     return hasProgram
         ? PlayerAction.showNowPlaying
         : PlayerAction.showOsdFromInfo;
@@ -198,6 +234,8 @@ PlayerCommand resolvePlayerKey(
   if (initialPress && key == LogicalKeyboardKey.keyI) {
     return nowPlaying
         ? PlayerAction.showOsdFromInfo
+        : androidTv && !hasProgram
+        ? PlayerAction.showOsd
         : PlayerAction.showNowPlaying;
   }
   if (initialPress && _fullscreenKeys.contains(key)) {

@@ -67,6 +67,43 @@ void main() {
   );
 
   test(
+    'Android names are readable while notice paths and IDs stay exact',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      index.addAll([
+        {
+          'id': 'activity',
+          'path': 'licenses/androidx.activity__activity/Apache.txt',
+          'bytes': 20,
+        },
+        {
+          'id': 'notice',
+          'path': 'licenses/artifacts/com.squareup.okhttp3__okhttp__4.12.0/NOTICE.txt',
+          'bytes': 20,
+        },
+      ]);
+      final groups = await LicensesRepository().sources.first.load();
+      final activity = groups.singleWhere(
+        (g) => g.title == 'androidx.activity:activity',
+      );
+      expect(
+        activity.children!.single.subtitle,
+        'licenses/androidx.activity__activity/Apache.txt',
+      );
+      await activity.children!.single.read!();
+      expect(calls.last.arguments, {'id': 'activity'});
+      expect(
+        groups
+            .singleWhere((g) => g.title == 'Artifact notices')
+            .children!
+            .single
+            .title,
+        'com.squareup.okhttp3:okhttp:4.12.0 · NOTICE.txt',
+      );
+    },
+  );
+
+  test(
     'rejects duplicate IDs, paths, traversal, bad shape and missing tree',
     () async {
       final original = [...index];
@@ -245,6 +282,19 @@ void main() {
       expect(
         await notices.last.read!(),
         contains('Windows DirectComposition patch is not applied'),
+      );
+    },
+  );
+
+  test(
+    'Android exposes native runtime notices but keeps rebuilding macOS-only',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final sources = LicensesRepository().sources;
+      expect(sources.map((source) => source.title), contains('Native runtime'));
+      expect(
+        sources.map((source) => source.title),
+        isNot(contains('Sources and rebuilding')),
       );
     },
   );

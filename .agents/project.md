@@ -84,6 +84,10 @@ Lineup Desktop is a Flutter/Dart desktop application with a Windows C++/libmpv
 media boundary. macOS is not yet a release platform; its adapter implements
 [the protocol](../docs/native-player-protocol.md) on the shared core, and
 [the port plan](../docs/macos-port-plan.md) owns the remaining packages.
+Android TV and Android-based Fire OS use a Kotlin Media3 adapter of the same
+protocol ([Android runtime](../docs/android-runtime.md)); the
+[TV UI decisions](../docs/design/tv-ui-decisions.md) are the approved TV
+interface contract.
 Electron history is provenance material, not an application compatibility target.
 
 Preserve the distinction between a product requirement and its current

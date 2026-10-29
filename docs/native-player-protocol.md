@@ -417,6 +417,100 @@ the shared core, with these platform-specific values:
   failure without running destructors or removing a live worker's layer.
   Synchronous shutdown is reserved for emergency/destructor cleanup.
 
+## Android backend
+
+`android/app/src/main/kotlin/com/tjzine/lineup/player/` implements the same wire
+with Media3 **1.11.1**; it does not use or duplicate the desktop libmpv core.
+The Dart composition root selects the existing method-channel transport on
+Android. Plex, schedule joins, recovery, persistence and navigation remain Dart
+policy. `clientApiVersion: 1` is an Android adapter constant, not an mpv version.
+Dart's historical local ready message is unchanged for desktop compatibility.
+
+`NativePlayerController` validates codec values, admits at most 64 commands and
+128 KiB of URI/header data, and owns load/stop/request correlation. Commands and
+Media3 callbacks run on the application looper. A fresh engine/listener captures
+one load and lifecycle generation; replacement retires it before teardown.
+Dispose retires its generation and queued credentials before asynchronously
+releasing the engine and replying. Decoder/view operations stay on the application
+looper; cancellation and TLS pool closure run on an IO worker. Stop/dispose and
+successor loads wait for that cleanup, which is coalesced across concurrent
+retirement requests. A failed release retains cleanup responsibility for retry. Events use the 256-entry property-first
+queue above; essential-event overflow terminates the current load with
+`event_queue_overflow`. Retired events are filtered again at delivery.
+
+The engine publishes `loading` once and `playing` only on its first READY,
+including a paused READY. Rebuffering, seeking and later READY callbacks do not
+emit state changes. Pause is a property. Position and duration are read from
+Media3 every 250 ms, including while paused; unavailable duration is null.
+Track command completion and observed `onTracksChanged` snapshots remain
+separate. Positive track IDs belong to TrackGroup identity/index for that load;
+unsupported subtitle entries are omitted. Original text `Format.codecs` maps
+Media3's pre-parsed cues to `subrip`/`ass`. There is no wire `default` flag.
+Channel layouts, pixel formats, output color and signal peak stay null when
+unavailable. Source BT.2020/PQ/HLG facts describe source metadata, not display
+appearance; `hwdec-current` is the observed decoder name and `current-vo` is null.
+
+| Media3 observation | Native failure code |
+| --- | --- |
+| HTTP response failure | `http_error`, with a 4xx/5xx status when available |
+| HTTP/network IO, timeout, unsafe redirect | `network_error` |
+| Decoder initialization/query/decode/capability failure | `video_decode_error` or `audio_decode_error`, from renderer format |
+| Container/manifest parsing | `container_error` |
+| MP4 type-observer structural failure (even wrapped in IO) | `container_error` |
+| Extractor omitted all declared video/audio, or exposed type has no supported track | `video_decode_error` / `audio_decode_error` |
+| File not found, source permission/open failure | `source_open_error` |
+| AudioTrack initialization/write/offload failure | `audio_output_error` |
+| Video frame processing failure | `video_output_error` |
+| Other engine failure | `native_error` (Dart's existing normalization) |
+
+Typed omitted-media and MP4 structural causes take precedence over generic
+parser/network categories. Matroska callbacks and a bounded consumed-byte MP4
+observer detect extractor omissions; fragmented MP4 checks each new `moov`
+against **current** parsed track exposure. Ordinary sample seeks retain validated
+facts. Fragmented-extractor seeks restart at box headers: they retain the last
+validated declaration while rearming framing observation, so a later `moov`
+cannot borrow old audio/video exposure after a nonzero indexed seek. Ordinary
+nonfragmented sample seeks retain facts without treating sample bytes as boxes.
+Genuine audio-only/video-only and supported alternative tracks remain
+valid. Subtitles alone never cause an audio/video unsupported-type failure.
+
+Only `ProgressiveMediaSource` and an HTTP-only OkHttp data source are installed;
+there is no manifest, file, nested-reference or external-subtitle resolver.
+OkHttp automatic redirects are disabled. Each manual redirect must retain the
+original HTTPS scheme, normalized host and effective port, with a bounded hop
+count and no userinfo or token query parameter. Credentials are header-only;
+stop/dispose drop the header factory and cancel network operations. No event or
+command error includes a URI, token or raw engine exception. The synthetic
+fixture CA is trusted only by debug builds; profile/release have no fixture CA
+or network-security override.
+
+Initial positions use the approved exact Media3 preparation position, avoiding
+a later backward re-seek. Explicit `exact` and `keyframes` map to
+`SeekParameters.EXACT` and `PREVIOUS_SYNC`. This backend choice does not alter
+the coordinator's join/user-seek policy or desktop behavior.
+
+Presentation uses a default-z-order native video `SurfaceView`, native
+`SubtitleView`, then Flutter with both transparent background and surface render
+mode. The rectangle is logical top-left × scale, with aspect fit including pixel
+aspect ratio; zero size hides presentation while retaining media. A zero rectangle
+hides the video `SurfaceView` itself (releasing its surface; Media3 reattaches on
+show), never only its container: a visible 0x0 SurfaceView skips surface updates
+on Android 11/12, so backgrounding would orphan its layer and later loads would
+render black. It persists
+across loads/stops. Native views have no input or accessibility ownership.
+Fullscreen is always observed true, including after a false request; Flutter
+owns the approved TV control adaptation. Display matching validates revisions
+and reports `unavailable`/`unsupported_api` with route `none`, without changing
+OS display settings. Media3 retains its default seamless-only frame-rate
+strategy. KEEP_SCREEN_ON follows observed playback and clears on pause,
+stop, end, error and disposal.
+
+The U2 probe's spatial/alpha/HDR results support this presentation choice;
+**temporal G6 (the ≤1-display-frame transition bound) remains unverified** under
+the maintainer's permission to proceed. Probe results are not acceptance of the
+production adapter. Physical Fire TV, receiver audio, Dolby Vision, PGS and final
+integrated acceptance remain separately recorded target/human obligations.
+
 ## Dart/C++ differences recorded at this revision
 
 - Native initialization queues an `idle` event with message `Native libmpv

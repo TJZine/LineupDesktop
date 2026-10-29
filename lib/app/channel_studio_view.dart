@@ -143,6 +143,21 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool get _busy => _saving || _tuning;
   bool get saving => _saving;
   bool get dirty => _session.dirty;
+
+  /// Cancels a reachable nested Studio choice without leaving the editor.
+  ///
+  /// A pending choice may briefly outlive its child during a rebuild. In that
+  /// case the parent still claims Back so it cannot fall through to the dirty
+  /// Studio leave guard and discard the draft.
+  bool cancelPendingChoice() {
+    final programming = _programmingKey.currentState;
+    if (programming != null) {
+      final cancelled = programming.cancelPendingChoice();
+      return cancelled || _pendingProgrammingChoice != null;
+    }
+    return _pendingProgrammingChoice != null;
+  }
+
   ChannelStudioMode get _effectiveMode =>
       _session.expectedBase != null && !_session.generated
       ? ChannelStudioMode.editCustom

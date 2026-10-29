@@ -78,6 +78,7 @@ class SetupLibraryStep extends StatelessWidget {
     required this.onCommit,
     required this.onToggleLibrary,
     required this.onToggleAll,
+    this.entryFocusNode,
     this.onRequestLogout,
     super.key,
   });
@@ -92,6 +93,7 @@ class SetupLibraryStep extends StatelessWidget {
   final Future<void> Function(Set<String> ready) onCommit;
   final ValueChanged<String> onToggleLibrary;
   final VoidCallback onToggleAll;
+  final FocusNode? entryFocusNode;
   final Future<void> Function()? onRequestLogout;
 
   bool get _settled => switch (data.libraryScanStatus) {
@@ -176,6 +178,14 @@ class SetupLibraryStep extends StatelessWidget {
         .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
     final actionStyle = Theme.of(context).textTheme.labelLarge!
         .copyWith(fontSize: 18);
+    Widget actionLabel(String label) => Builder(
+      builder: (context) => Text(
+        label,
+        style: roles.androidTv
+            ? actionStyle.copyWith(color: LineupTheme.of(context).primaryText)
+            : actionStyle,
+      ),
+    );
     final retryLabel = data.selectionCollectionRecovery != null
         ? 'Rescan after Plex changes'
         : retry.isEmpty
@@ -192,17 +202,22 @@ class SetupLibraryStep extends StatelessWidget {
             TextButton(
               key: const ValueKey('setup-switch-server'),
               style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
+                padding: LineupTheme.of(context).androidTv
+                    ? const EdgeInsets.symmetric(horizontal: 20)
+                    : EdgeInsets.zero,
                 minimumSize: const Size(0, 48),
                 alignment: Alignment.centerLeft,
               ),
               onPressed: data.canSwitchServer ? onSwitchServer : null,
-              child: Text('Switch server', style: actionStyle),
+              child: actionLabel('Switch server'),
             ),
           if (!scanning && data.channelSetupCanCancel)
             TextButton(
+              style: roles.androidTv
+                  ? TextButton.styleFrom(minimumSize: const Size(0, 48))
+                  : null,
               onPressed: onCancelSetup,
-              child: Text('Cancel', style: actionStyle),
+              child: actionLabel('Cancel'),
             ),
         ],
       ),
@@ -238,6 +253,12 @@ class SetupLibraryStep extends StatelessWidget {
                   ),
                 FilledButton(
                   key: const ValueKey('setup-switch-server'),
+                  focusNode:
+                      roles.androidTv && !data.busy && data.canSwitchServer
+                      ? entryFocusNode
+                      : null,
+                  autofocus:
+                      roles.androidTv && !data.busy && data.canSwitchServer,
                   onPressed: data.canSwitchServer ? onSwitchServer : null,
                   child: const Text('Switch server'),
                 ),
@@ -245,8 +266,9 @@ class SetupLibraryStep extends StatelessWidget {
             )
           : scanning
           ? TextButton(
+              autofocus: roles.androidTv,
               onPressed: onCancelScan,
-              child: Text('Cancel scan', style: actionStyle),
+              child: actionLabel('Cancel scan'),
             )
           : canContinue
           ? FilledButton(
@@ -272,9 +294,10 @@ class SetupLibraryStep extends StatelessWidget {
               child: Text(_settled ? 'Scan again' : 'Scan selected libraries'),
             ),
     );
-    return LayoutBuilder(
+    final body = LayoutBuilder(
       builder: (context, constraints) {
         final singleScroll =
+            roles.androidTv ||
             constraints.maxHeight < 800 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.5;
         final list = ListView.separated(
@@ -284,7 +307,7 @@ class SetupLibraryStep extends StatelessWidget {
           itemCount: data.libraries.length,
           separatorBuilder: (_, _) => const Divider(height: 1),
           itemBuilder: (_, index) =>
-              _libraryRow(context, data.libraries[index]),
+              _libraryRow(context, data.libraries[index], index),
         );
         final title = data.libraryScanStatus == LibraryScanStatus.scanning
             ? 'Scanning your libraries'
@@ -337,10 +360,24 @@ class SetupLibraryStep extends StatelessWidget {
                   ),
                 ),
               ),
-            const SizedBox(height: 24),
-            footer,
+            if (!roles.androidTv) ...[const SizedBox(height: 24), footer],
           ],
         );
+        if (roles.androidTv) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1040),
+              child: SetupStage(
+                footer: footer,
+                child: SingleChildScrollView(
+                  key: const ValueKey('channel-setup-single-scroll'),
+                  child: content,
+                ),
+              ),
+            ),
+          );
+        }
         return Align(
           alignment: singleScroll ? Alignment.topCenter : Alignment.center,
           child: ConstrainedBox(
@@ -357,6 +394,12 @@ class SetupLibraryStep extends StatelessWidget {
         );
       },
     );
+    return roles.androidTv
+        ? FocusTraversalGroup(
+            policy: SetupVerticalTraversalPolicy(),
+            child: body,
+          )
+        : body;
   }
 
   Widget _header(BuildContext context, String title, String subtitle) => Column(
@@ -404,39 +447,56 @@ class SetupLibraryStep extends StatelessWidget {
       child: Row(
         children: [
           if (libraries.length > 1)
-            // One focus target covers the checkbox and its label. The button
-            // carries the tri-state semantics.
-            MergeSemantics(
-              child: Semantics(
-                checked: value ?? false,
-                mixed: value == null,
-                child: TextButton(
-                  style: const ButtonStyle(
-                    padding: WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(horizontal: 8),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(0),
+              // One focus target covers the checkbox and its label, matching
+              // the library rows. The button carries the tri-state semantics.
+              child: MergeSemantics(
+                child: Semantics(
+                  checked: value ?? false,
+                  mixed: value == null,
+                  child: TextButton(
+                    focusNode:
+                        roles.androidTv &&
+                            data.libraryScanStatus !=
+                                LibraryScanStatus.scanning &&
+                            editable
+                        ? entryFocusNode
+                        : null,
+                    autofocus: roles.androidTv && editable,
+                    style: const ButtonStyle(
+                      padding: WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 8),
+                      ),
                     ),
-                  ),
-                  onPressed: editable ? onToggleAll : null,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _checkbox(
-                        key: const ValueKey('select-all-libraries'),
-                        skipTraversal: true,
-                        tristate: true,
-                        value: value,
-                        onChanged: editable ? (_) => onToggleAll() : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Select all',
-                        style: summaryStyle.copyWith(
-                          color: editable
-                              ? roles.secondaryText
-                              : roles.mutedText,
+                    onPressed: editable ? onToggleAll : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _checkbox(
+                          key: const ValueKey('select-all-libraries'),
+                          skipTraversal: true,
+                          tristate: true,
+                          value: value,
+                          onChanged: editable ? (_) => onToggleAll() : null,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Builder(
+                          builder: (context) {
+                            final ink = LineupTheme.of(context);
+                            return Text(
+                              'Select all',
+                              style: summaryStyle.copyWith(
+                                fontSize: 16,
+                                color: editable
+                                    ? ink.secondaryText
+                                    : ink.mutedText,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -477,29 +537,30 @@ class SetupLibraryStep extends StatelessWidget {
     );
   }
 
-  Widget _libraryRow(BuildContext context, PlexLibrary library) {
-    final roles = LineupTheme.of(context);
-    final textTheme = Theme.of(context).textTheme;
+  Widget _libraryRow(BuildContext context, PlexLibrary library, int index) {
+    final tv = LineupTheme.of(context).androidTv;
     final selected = selectedLibraryIds.contains(library.id);
-    final fact = data.libraryScanFacts[library.id];
-    final collectionRecovery = data.collectionRecoveryByLibrary[library.id];
-    final titleStyle = textTheme.bodyMedium!.copyWith(
-      color: roles.primaryText,
-      fontSize: 20,
-      fontWeight: FontWeight.w600,
-      height: 1.3,
-    );
-    final statusStyle = textTheme.bodyMedium!.copyWith(
-      fontSize: 18,
-      height: 1.4,
-    );
-    final typeStyle = textTheme.bodyMedium!.copyWith(
-      color: roles.mutedText,
-      fontSize: 16,
-      height: 1.4,
-    );
-    return LayoutBuilder(
+    final row = LayoutBuilder(
       builder: (context, constraints) {
+        final roles = LineupTheme.of(context);
+        final textTheme = Theme.of(context).textTheme;
+        final fact = data.libraryScanFacts[library.id];
+        final collectionRecovery = data.collectionRecoveryByLibrary[library.id];
+        final titleStyle = textTheme.bodyMedium!.copyWith(
+          color: roles.primaryText,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+        );
+        final statusStyle = textTheme.bodyMedium!.copyWith(
+          fontSize: 18,
+          height: 1.4,
+        );
+        final typeStyle = textTheme.bodyMedium!.copyWith(
+          color: roles.mutedText,
+          fontSize: 16,
+          height: 1.4,
+        );
         final textScale = MediaQuery.textScalerOf(context).scale(1);
         final narrow =
             constraints.maxWidth / textScale < 620 || textScale >= 1.6;
@@ -532,15 +593,18 @@ class SetupLibraryStep extends StatelessWidget {
                   ),
                   if (fact.status == LibraryScanStatus.transientFailure ||
                       data.unavailableCollectionLibraryIds.contains(library.id))
-                    LineupInlineLink(
-                      key: ValueKey('retry-library-${library.id}'),
-                      onPressed: data.busy
-                          ? null
-                          : () => onScan(retryLibraryIds: {library.id}),
-                      child: Text(
-                        collectionRecovery == null
-                            ? 'Retry'
-                            : 'Rescan after Plex changes',
+                    FocusTraversalOrder(
+                      order: NumericFocusOrder(index * 2 + 2),
+                      child: LineupInlineLink(
+                        key: ValueKey('retry-library-${library.id}'),
+                        onPressed: data.busy
+                            ? null
+                            : () => onScan(retryLibraryIds: {library.id}),
+                        child: Text(
+                          collectionRecovery == null
+                              ? 'Retry'
+                              : 'Rescan after Plex changes',
+                        ),
                       ),
                     ),
                 ],
@@ -563,6 +627,7 @@ class SetupLibraryStep extends StatelessWidget {
                 children: [
                   _checkbox(
                     value: selected,
+                    skipTraversal: tv,
                     semanticLabel: library.title,
                     onChanged: data.busy
                         ? null
@@ -586,6 +651,7 @@ class SetupLibraryStep extends StatelessWidget {
                 children: [
                   _checkbox(
                     value: selected,
+                    skipTraversal: tv,
                     semanticLabel: library.title,
                     onChanged: data.busy
                         ? null
@@ -598,8 +664,23 @@ class SetupLibraryStep extends StatelessWidget {
                 ],
               );
         return InkWell(
-          canRequestFocus: false,
-          excludeFromSemantics: true,
+          key: ValueKey('library-row-${library.id}'),
+          focusNode:
+              tv &&
+                  index == 0 &&
+                  data.libraries.length == 1 &&
+                  data.libraryScanStatus != LibraryScanStatus.scanning &&
+                  !data.busy
+              ? entryFocusNode
+              : null,
+          autofocus:
+              tv &&
+              index == 0 &&
+              !data.busy &&
+              data.libraryScanStatus != LibraryScanStatus.scanning &&
+              data.libraries.length == 1,
+          canRequestFocus: tv,
+          excludeFromSemantics: !tv,
           onTap: data.busy ? null : () => onToggleLibrary(library.id),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
@@ -608,12 +689,29 @@ class SetupLibraryStep extends StatelessWidget {
         );
       },
     );
+    return tv
+        ? FocusTraversalOrder(
+            order: NumericFocusOrder(index * 2 + 1),
+            child: Semantics(
+              checked: selected,
+              // The checkbox alone shows checked state; the surface carries
+              // focus and hover only.
+              child: LineupRowSurface(selected: false, child: row),
+            ),
+          )
+        : row;
   }
 
-  Color _scanColor(BuildContext context, LibraryScanStatus status) =>
-      status == LibraryScanStatus.transientFailure
-      ? Theme.of(context).colorScheme.error
-      : LineupTheme.of(context).secondaryText;
+  Color _scanColor(BuildContext context, LibraryScanStatus status) {
+    final roles = LineupTheme.of(context);
+    if (status != LibraryScanStatus.transientFailure) {
+      return roles.secondaryText;
+    }
+    final focusedTv =
+        roles.androidTv &&
+        LineupFocusScope.visible(context, Focus.of(context).hasFocus);
+    return focusedTv ? roles.primaryText : Theme.of(context).colorScheme.error;
+  }
 
   String _scanDetail(LibraryScanFact fact) => switch (fact.status) {
     LibraryScanStatus.idle => 'Waiting to scan',

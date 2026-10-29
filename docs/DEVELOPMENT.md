@@ -122,9 +122,11 @@ Additional targets cover native correlation and shutdown:
   against installed candidate assets. A retained blank-widget Dart entry point
   avoids opening user state or credentials through the application bootstrap.
 
-All are `EXCLUDE_FROM_ALL`; CI explicitly selects `native_playback_state_test`,
-`player_core_contract_test`, and `encodable_value_conversion_test`. These tests
-do not require a live engine or the patched engine:
+All are `EXCLUDE_FROM_ALL`. Of these, CI explicitly selects `native_playback_state_test`,
+`player_core_contract_test`, and `encodable_value_conversion_test` (alongside
+`track_list_encoder`, `display_dynamic_range` and `display_guardian`), and runs
+`native_player_contract_test` as described below; `runner_lifecycle_test` is not
+in CI. The first three tests do not require a live engine or the patched engine:
 
 ```powershell
 cmake --build .\build\windows\x64 --config Release --target player_core_contract_test encodable_value_conversion_test
@@ -810,8 +812,8 @@ manifest, Windows patches, affected source/process fixtures and consumer scripts
 and workflow changes select `engine-required`; package-only changes select only
 the application/package job. Ordinary `lib/` or `windows/` product edits alone do
 not select them. Manual dispatch or an unavailable comparison base selects both.
-The current push filter does not automatically run `platform/macos`; use a PR or
-an explicitly authorized manual run for hosted proof.
+Pushes to `main` and to `platform/**` branches run CI automatically; other
+branches need a PR or an explicitly authorized manual run for hosted proof.
 
 The engine-test matrix has separate Debug and Release jobs, each with its own
 sync, fresh unittest-enabled recipe build and 180-minute budget. Each runs full
@@ -835,3 +837,25 @@ earlier recipe passed Debug. The recorded earlier Release failure remains blocke
 inspect which jobs ran before describing a green CI result. CI does not launch
 the application; runtime markers and native presentation still require physical
 Windows acceptance.
+
+## Android TV development
+
+[Android runtime](android-runtime.md) owns the Android host, signing, sideload,
+media-entrypoint and local diagnostic instructions. Use pinned Flutter 3.47.7
+first on `PATH`, JDK 17 and the SDK configured for that Flutter installation.
+Android uses the stock engine and supports API 28+ TV devices. Build the
+universal `armeabi-v7a` + `arm64-v8a` debug APK with:
+
+```sh
+tool/android/with-signing.sh flutter build apk --debug --target-platform android-arm,android-arm64
+```
+
+Both debug and release use the dedicated external Lineup keystore;
+`LINEUP_ANDROID_SIGNING=debug-key` is a debug-only contributor/CI override.
+Run the portable format/analyze/test checks and, when Kotlin tests exist,
+`cd android && ./gradlew :app:testDebugUnitTest`. Use the documented emulator
+secure-storage smoke entrypoint for native write/read/restart/delete and
+same-key upgrade evidence. Always pass `adb -s <serial>` / `flutter -d <id>`.
+On a signed-in device, update only with `adb install -r -d`, because Flutter's
+install/run workflows may uninstall and delete user state. Emulator checks
+do not establish physical 32-bit Fire OS, HDR, composition, or media acceptance.

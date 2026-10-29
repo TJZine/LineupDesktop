@@ -2092,6 +2092,88 @@ class LineupController extends ChangeNotifier {
     );
   }
 
+  Future<List<PlexCastMember>?> castForItem(
+    String itemId, {
+    Future<void>? cancelled,
+  }) async {
+    final serverId = server?.id;
+    final selectedConnection = connection;
+    if (serverId == null || selectedConnection == null || itemId.isEmpty) {
+      return null;
+    }
+    final scope = _authorizationScope;
+    final abort = Completer<void>();
+    var finished = false;
+    if (cancelled != null) {
+      unawaited(
+        cancelled.then((_) {
+          if (!finished && !abort.isCompleted) abort.complete();
+        }),
+      );
+    }
+    bool current() =>
+        !abort.isCompleted &&
+        _isCurrentAuthorizationScope(scope) &&
+        server?.id == serverId &&
+        _logoutFuture == null;
+    try {
+      final request = _withPmsAuthorization(_epoch, serverId, (
+        token,
+        refreshedConnection,
+      ) {
+        if (!current()) {
+          throw const PlexException(
+            'authorization-unavailable',
+            'Cast session ended.',
+          );
+        }
+        return plex.itemCast(
+          (refreshedConnection ?? selectedConnection).uri,
+          token,
+          itemId,
+          cancelled: abort.future,
+        );
+      });
+      // A shared refresh may serve other callers. Release this caller promptly
+      // on retirement, and let current() prevent its retry after refresh.
+      final cast = await Future.any<List<PlexCastMember>?>([
+        request,
+        abort.future.then((_) => null),
+      ]);
+      return current() ? cast : null;
+    } catch (_) {
+      if (!current()) return null;
+      rethrow;
+    } finally {
+      finished = true;
+    }
+  }
+
+  /// Program artwork transcoded by the selected server to cover [width] x
+  /// [height] physical pixels. Unsized program artwork and cast portraits use
+  /// [artworkForPath].
+  Future<Uint8List?> programArtworkForPath(
+    Uri path, {
+    required int width,
+    required int height,
+  }) async {
+    final serverId = server?.id;
+    if (serverId == null || connection == null || path.toString().isEmpty) {
+      return null;
+    }
+    return _withPmsAuthorization(
+      _epoch,
+      serverId,
+      (token, refreshedConnection) => plex.artwork(
+        (refreshedConnection ?? connection!).uri,
+        token,
+        path,
+        width: width,
+        height: height,
+      ),
+    );
+  }
+
   Future<Uint8List?> artworkForPath(Uri path, {int? width, int? height}) async {
     final serverId = server?.id;
     final selectedConnection = connection;
@@ -2393,6 +2475,10 @@ class LineupController extends ChangeNotifier {
     _mutationEligibility++;
     _retireAuthorizationScope();
   }
+
+  /// Retires playback-only refresh work without signing out or changing the
+  /// selected session. Existing requests cannot recover over a background stop.
+  void cancelPlaybackAuthorization() => _retireAuthorizationScope();
 
   void _retireAuthorizationScope() {
     _authorizationScope++;

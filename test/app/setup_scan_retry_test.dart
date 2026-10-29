@@ -20,6 +20,67 @@ import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import '../support/test_doubles.dart';
 
 void main() {
+  for (final size in [const Size(1280, 720), const Size(1920, 1080)]) {
+    testWidgets(
+      'changed selection shows failed scan facts before and after saved-scope restart at $size',
+      (tester) async {
+        final fixture = await _ScanFixture.restored(savedLibraryIds: {'first'});
+        addTearDown(fixture.controller.dispose);
+        await _showSetup(tester, fixture, size: size);
+        final previous = fixture.store.state;
+        final previousMedia = fixture.controller.availableMedia;
+        fixture.failedLibraries.add('second');
+        fixture.itemReads.clear();
+        await tester.tap(find.byKey(const ValueKey('library-row-second')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('scan-again-libraries')));
+        await tester.pumpAndSettle();
+
+        expect(fixture.itemReads.toSet(), _libraries);
+        expect(fixture.controller.error, isNotNull);
+        expect(fixture.store.state, same(previous));
+        expect(fixture.controller.availableMedia, same(previousMedia));
+        expect(fixture.controller.libraryScanReadyIds, {'first'});
+        expect(fixture.controller.libraryScanRetryIds, {'second'});
+        expect(
+          fixture.controller.libraryScanFacts['second']?.status,
+          LibraryScanStatus.transientFailure,
+        );
+        final retry = find.byKey(const ValueKey('retry-library-second'));
+        expect(retry, findsOneWidget);
+        expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
+        fixture.itemReads.clear();
+        await tester.tap(retry);
+        await tester.pumpAndSettle();
+        expect(fixture.itemReads, ['second']);
+        expect(retry, findsOneWidget);
+        expect(fixture.store.state, same(previous));
+
+        fixture.failedLibraries.clear();
+        await tester.tap(retry);
+        await tester.pumpAndSettle();
+        expect(find.text('Shape your lineup'), findsOneWidget);
+        expect(fixture.controller.selectedLibraryIds, _libraries);
+
+        // Restart the same saved selection with the same service failure. Both
+        // paths must expose the failed row, without installing controller facts.
+        await tester.pumpWidget(const SizedBox.shrink());
+        final restarted = await _ScanFixture.restored(
+          failedLibraryIds: {'second'},
+          initialState: fixture.store.state,
+        );
+        addTearDown(restarted.controller.dispose);
+        await _showSetup(tester, restarted, size: size);
+        expect(
+          restarted.controller.libraryScanFacts['second']?.status,
+          LibraryScanStatus.transientFailure,
+        );
+        expect(retry, findsOneWidget);
+        expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
+      },
+    );
+  }
+
   testWidgets(
     'failed reentry rescan retries real library reads before advancing',
     (tester) async {
@@ -285,8 +346,12 @@ final _missing = Channel(
   shuffleSeed: 1,
 );
 
-Future<void> _showSetup(WidgetTester tester, _ScanFixture fixture) async {
-  tester.view.physicalSize = const Size(1920, 1080);
+Future<void> _showSetup(
+  WidgetTester tester,
+  _ScanFixture fixture, {
+  Size size = const Size(1920, 1080),
+}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -307,38 +372,42 @@ Future<void> _showSetup(WidgetTester tester, _ScanFixture fixture) async {
 // Only the external service response is controlled. The controller, Plex parser,
 // scan state, persistence commands and Setup widgets run their production paths.
 class _ScanFixture {
-  _ScanFixture({required bool requiredPlaylist}) {
+  _ScanFixture({
+    required bool requiredPlaylist,
+    Set<String> savedLibraryIds = _libraries,
+    PersistedState? initialState,
+  }) {
     store = MemoryAppStore(
-      initial: PersistedState(
-        profileId: 'owner',
-        selectedServerByProfile: const {'owner': 'server'},
-        selectedLibraryIdsByProfileServer: const {
-          'owner': {
-            'server': ['first', 'second'],
-          },
-        },
-        channelsByProfileServer: {
-          'owner': {
-            'server': [
-              Channel(
-                id: 'saved',
-                number: 1,
-                name: 'Saved',
-                source: requiredPlaylist
-                    ? const PlaylistSource('saved')
-                    : const LibrarySource(
-                        libraryId: 'first',
-                        libraryType: PlexLibraryType.movie,
-                      ),
-                playbackMode: PlaybackMode.sequential,
-                anchor: DateTime.utc(2026),
-                shuffleSeed: 1,
-                scheduleVersion: currentScheduleVersion,
-              ),
-            ],
-          },
-        },
-      ),
+      initial:
+          initialState ??
+          PersistedState(
+            profileId: 'owner',
+            selectedServerByProfile: const {'owner': 'server'},
+            selectedLibraryIdsByProfileServer: {
+              'owner': {'server': savedLibraryIds.toList()},
+            },
+            channelsByProfileServer: {
+              'owner': {
+                'server': [
+                  Channel(
+                    id: 'saved',
+                    number: 1,
+                    name: 'Saved',
+                    source: requiredPlaylist
+                        ? const PlaylistSource('saved')
+                        : const LibrarySource(
+                            libraryId: 'first',
+                            libraryType: PlexLibraryType.movie,
+                          ),
+                    playbackMode: PlaybackMode.sequential,
+                    anchor: DateTime.utc(2026),
+                    shuffleSeed: 1,
+                    scheduleVersion: currentScheduleVersion,
+                  ),
+                ],
+              },
+            },
+          ),
     );
     controller = LineupController(
       store: store,
@@ -349,10 +418,22 @@ class _ScanFixture {
       ),
     );
   }
-  static Future<_ScanFixture> restored({bool requiredPlaylist = false}) async {
-    final fixture = _ScanFixture(requiredPlaylist: requiredPlaylist);
+  static Future<_ScanFixture> restored({
+    bool requiredPlaylist = false,
+    Set<String> savedLibraryIds = _libraries,
+    Set<String> failedLibraryIds = const {},
+    PersistedState? initialState,
+  }) async {
+    final fixture = _ScanFixture(
+      requiredPlaylist: requiredPlaylist,
+      savedLibraryIds: savedLibraryIds,
+      initialState: initialState,
+    )..failedLibraries.addAll(failedLibraryIds);
     await fixture.controller.initialize();
-    expect(fixture.controller.stage, SetupStage.ready);
+    expect(
+      fixture.controller.stage,
+      failedLibraryIds.isEmpty ? SetupStage.ready : SetupStage.servers,
+    );
     fixture.itemReads.clear();
     return fixture;
   }

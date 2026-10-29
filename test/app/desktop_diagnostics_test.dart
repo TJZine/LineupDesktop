@@ -15,13 +15,20 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
-  Future<void> show(WidgetTester tester, FixtureController controller) async {
+  Future<void> show(
+    WidgetTester tester,
+    FixtureController controller, {
+    bool androidTv = false,
+    bool largeFocus = false,
+    VoidCallback? onRecordingSettings,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         builder: LineupCanvas.builder,
         theme: LineupTheme.forName(
           LineupThemeName.emberSteel,
-          largeFocusIndicators: false,
+          largeFocusIndicators: largeFocus,
+          androidTv: androidTv,
         ),
         home: RepaintBoundary(
           key: const Key('diagnostic-render'),
@@ -31,13 +38,212 @@ void main() {
               playback: const PlaybackDiagnosticSnapshot(
                 state: PlayerState.stopped,
               ),
-              onRecordingSettings: () {},
+              onRecordingSettings: onRecordingSettings ?? () {},
             ),
           ),
         ),
       ),
     );
   }
+
+  for (final large in [false, true]) {
+    testWidgets(
+      'TV technical header uses actual focus ink and header-only frame (large $large)',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final previous = FocusManager.instance.highlightStrategy;
+        FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.alwaysTouch;
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 2;
+        try {
+          final controller = FixtureController();
+          addTearDown(controller.dispose);
+          await show(tester, controller, androidTv: true, largeFocus: large);
+          await tester.pumpAndSettle();
+          final technical = find.byKey(
+            const PageStorageKey('diagnostic-technical-details'),
+          );
+          final originalState = tester.state(technical);
+          final title = find.text('Technical details');
+          final tile = find.descendant(
+            of: technical,
+            matching: find.byType(ListTile),
+          );
+          final rect = tester.getRect(tile);
+          final roles = LineupTheme.of(tester.element(technical));
+          Future<void> key(LogicalKeyboardKey key) async {
+            await tester.sendKeyEvent(key);
+            await tester.pumpAndSettle();
+          }
+
+          await key(LogicalKeyboardKey.arrowDown);
+          await key(LogicalKeyboardKey.arrowDown);
+          final focusedTheme = ListTileTheme.of(tester.element(tile));
+          expect(focusedTheme.tileColor, roles.focusedSurface);
+          expect(
+            tester.widget<ExpansionTile>(technical).statesController!.value,
+            contains(WidgetState.focused),
+          );
+          expect(tester.widget<Text>(title).style?.color, roles.onFocus);
+          final arrow = find.descendant(
+            of: tile,
+            matching: find.byIcon(Icons.expand_more),
+          );
+          expect(IconTheme.of(tester.element(arrow)).color, roles.onFocus);
+          expect(focusedTheme.shape != null, large);
+          if (large) expect(focusedTheme.shape!.dimensions, EdgeInsets.zero);
+          expect(tester.getRect(tile), rect);
+          await key(LogicalKeyboardKey.select);
+          expect(tester.state(technical), same(originalState));
+          expect(
+            tester.widget<ExpansionTile>(technical).controller!.isExpanded,
+            isTrue,
+          );
+          expect(tester.getRect(tile), rect);
+          final body = find.text('Windows display');
+          expect(
+            LineupTheme.of(tester.element(body)).primaryText,
+            roles.primaryText,
+          );
+          expect(
+            Theme.of(tester.element(body)).textTheme.bodyMedium?.color,
+            Theme.of(tester.element(technical)).textTheme.bodyMedium?.color,
+          );
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(
+            tester.widget<ExpansionTile>(technical).controller!.isExpanded,
+            isTrue,
+          );
+          expect(tester.state(technical), same(originalState));
+          expect(
+            ListTileTheme.of(tester.element(tile)).tileColor,
+            isNot(roles.focusedSurface),
+          );
+          expect(tester.widget<Text>(title).style?.color, roles.primaryText);
+          expect(ListTileTheme.of(tester.element(tile)).shape, isNull);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          tester.view.reset();
+          FocusManager.instance.highlightStrategy = previous;
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
+
+  testWidgets(
+    'TV arrows read the full technical panel and reach recording settings',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      try {
+        final controller = FixtureController();
+        addTearDown(controller.dispose);
+        var recordingCalls = 0;
+        await show(
+          tester,
+          controller,
+          androidTv: true,
+          onRecordingSettings: () => recordingCalls++,
+        );
+        await tester.pumpAndSettle();
+        Future<void> key(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+        }
+
+        bool focusedIn(Finder finder) {
+          final target = tester.element(finder);
+          final primary =
+              FocusManager.instance.primaryFocus?.context as Element?;
+          var inside = identical(target, primary);
+          primary?.visitAncestorElements((e) {
+            inside |= identical(e, target);
+            return !inside;
+          });
+          return inside;
+        }
+
+        final copy = find.widgetWithText(FilledButton, 'Copy redacted report');
+        final technical = find.byKey(
+          const PageStorageKey('diagnostic-technical-details'),
+        );
+        final recording = find.widgetWithText(TextButton, 'Recording settings');
+        // Enter through normal remote traversal, with no pointer or requestFocus.
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(focusedIn(copy), isTrue);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(focusedIn(technical), isTrue);
+        await key(LogicalKeyboardKey.select);
+        final list = tester.widget<ListView>(find.byType(ListView));
+        final scroll = list.controller!;
+        final start = scroll.offset;
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(scroll.offset, greaterThan(start));
+        final viewport = tester.getRect(find.byType(ListView));
+        var sawLowerDetails = false;
+        var sawEvents = false;
+        for (var i = 0; i < 60; i++) {
+          for (final pair in [
+            (
+              find.byKey(
+                const ValueKey('diagnostics-technical-fact-Renderer output'),
+              ),
+              true,
+            ),
+            (find.text('Recent events'), false),
+          ]) {
+            if (pair.$1.evaluate().isNotEmpty) {
+              final rect = tester.getRect(pair.$1);
+              final visible =
+                  rect.top >= viewport.top && rect.bottom <= viewport.bottom;
+              if (pair.$2) {
+                sawLowerDetails |= visible;
+              } else {
+                sawEvents |= visible;
+              }
+            }
+          }
+          if (scroll.offset >= scroll.position.maxScrollExtent) break;
+          await key(LogicalKeyboardKey.arrowDown);
+        }
+        expect(sawLowerDetails, isTrue);
+        expect(sawEvents, isTrue);
+        expect(focusedIn(technical), isTrue);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(focusedIn(recording), isTrue);
+        await key(LogicalKeyboardKey.select);
+        expect(recordingCalls, 1);
+        await key(LogicalKeyboardKey.arrowUp);
+        expect(focusedIn(technical), isTrue);
+        // Reverse reading while the existing expanded toggle retains ownership.
+        for (var i = 0; i < 60 && scroll.offset > 0; i++) {
+          await key(LogicalKeyboardKey.arrowUp);
+        }
+        expect(scroll.offset, 0);
+        await key(LogicalKeyboardKey.arrowUp);
+        expect(focusedIn(copy), isTrue);
+        // Select still collapses the panel; ordinary traversal then reaches the
+        // interactive control below it without swallowing its activation.
+        await key(LogicalKeyboardKey.arrowDown);
+        await key(LogicalKeyboardKey.select);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(focusedIn(recording), isTrue);
+        await key(LogicalKeyboardKey.select);
+        expect(recordingCalls, 2);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
 
   testWidgets('diagnostics exposes its report and technical details', (
     tester,

@@ -7,9 +7,12 @@ import 'dart:ui' show SemanticsAction;
 // ignore_for_file: prefer_final_locals
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/air_check_verification.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -20,6 +23,75 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final tv in [true, false]) {
+    testWidgets('schedule row focus ink preserves live identity tv=$tv', (
+      tester,
+    ) async {
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTouch;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      final controller = _AirController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          _channel(items: [_item('one'), _item('two')]),
+          compact: true,
+          theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: tv)
+              .copyWith(
+                platform: tv ? TargetPlatform.android : TargetPlatform.windows,
+              ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final row = find.ancestor(
+        of: find.text('ON NOW'),
+        matching: find.byType(LineupNavigationRow),
+      );
+      expect(row, findsOneWidget);
+      final live = find.descendant(of: row, matching: find.text('ON NOW'));
+      final metadata = find.descendant(
+        of: row,
+        matching: find.byWidgetPredicate(
+          (w) => w is Text && (w.data?.startsWith('Today ·') ?? false),
+        ),
+      );
+      expect(metadata, findsOneWidget);
+      Color? ink(Finder text) => tester.widget<Text>(text).style?.color;
+      final base = ink(live);
+      final baseMeta = ink(metadata);
+      final element = tester.element(live);
+      // Enter the real shared row's focus owner, then use D-pad to leave it.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      final button = find.descendant(
+        of: row,
+        matching: find.byType(TextButton),
+      );
+      Focus.of(
+        tester.element(
+          find.descendant(of: button, matching: find.byType(Padding)).last,
+        ),
+      ).requestFocus();
+      await tester.pumpAndSettle();
+      expect(Focus.of(tester.element(live)).hasFocus, isTrue);
+      expect(ink(live), tv ? const Color(0xFF090806) : base);
+      expect(
+        ink(metadata),
+        tv
+            ? LineupTheme.of(tester.element(metadata)).focusSecondaryText
+            : baseMeta,
+      );
+      expect(tester.element(live), same(element));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(Focus.of(tester.element(live)).hasFocus, isFalse);
+      expect(ink(live), base);
+      expect(ink(metadata), baseMeta);
+    });
+  }
   testWidgets(
     'successful Air Check load with failed projection offers a recovering retry',
     (tester) async {
@@ -1405,7 +1477,9 @@ Widget _airCheck(
   Channel? originalChannel,
   ValueChanged<ChannelAirCheckValidity>? onValidityChanged,
   bool always24 = false,
+  ThemeData? theme,
 }) => MaterialApp(
+  theme: theme,
   builder: (context, child) => MediaQuery(
     data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: always24),
     child: LineupCanvas(child: child!),

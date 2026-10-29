@@ -9,6 +9,7 @@ import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
+import 'navigation_shortcuts.dart';
 import 'plex_link_launcher.dart';
 
 sealed class _ServerAttempt {
@@ -73,16 +74,19 @@ class UpstreamOnboardingView extends StatefulWidget {
   final FocusNode? menuFocusNode;
 
   @override
-  State<UpstreamOnboardingView> createState() => _UpstreamOnboardingViewState();
+  State<UpstreamOnboardingView> createState() => UpstreamOnboardingViewState();
 }
 
-class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
+class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
+    with WidgetsBindingObserver {
   Timer? _clock;
   final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
   final _profileReturnFocus = FocusNode(debugLabel: 'Return to profiles');
+  final _profilePinKey = GlobalKey<_ProfilePinStepState>();
   late bool _linkingStopped;
+  late bool _wasLinking;
   late bool _busy;
   int? _browserPinId;
   bool get _openingBrowser =>
@@ -90,12 +94,66 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   _ServerAttempt _serverAttempt = const _NoServerAttempt();
   int _serverAttemptRevision = 0;
   PlexHomeUser? _pinUser;
+  String? _invokedProfileId;
   bool _pulse = true;
+  FocusNode? _lastControlFocus;
+  bool _focusRecoveryScheduled = false;
+  var _androidTv = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _androidTv = LineupTheme.of(context).androidTv;
+  }
+
+  void _recoverAndroidFocus() {
+    if (!_androidTv || !mounted) return;
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary != null &&
+        primary != _navigationFocus &&
+        primary.ancestors.contains(_navigationFocus)) {
+      _lastControlFocus = primary;
+      return;
+    }
+    if (_focusRecoveryScheduled) return;
+    _focusRecoveryScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusRecoveryScheduled = false;
+      if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+      final current = FocusManager.instance.primaryFocus;
+      final stranded =
+          current == null ||
+          current == _navigationFocus ||
+          (current is FocusScopeNode &&
+              _navigationFocus.ancestors.contains(current));
+      if (!stranded) return;
+      final previous = _lastControlFocus;
+      final target =
+          previous != null &&
+              previous.context?.mounted == true &&
+              previous.canRequestFocus &&
+              previous.ancestors.contains(_navigationFocus)
+          ? previous
+          : _navigationFocus.descendants
+                .where((node) => node.canRequestFocus && !node.skipTraversal)
+                .firstOrNull;
+      target?.requestFocus();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _recoverAndroidFocus();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    FocusManager.instance.addListener(_recoverAndroidFocus);
     _linkingStopped = _isLinkingStopped(widget.controller);
+    _wasLinking = widget.controller.stage == SetupStage.linking;
     _busy = widget.controller.busy;
     widget.controller.addListener(_controllerChanged);
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -111,6 +169,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
     _linkingStopped = _isLinkingStopped(widget.controller);
+    _wasLinking = widget.controller.stage == SetupStage.linking;
     _busy = widget.controller.busy;
     widget.controller.addListener(_controllerChanged);
   }
@@ -121,6 +180,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final nextBusy = controller.busy;
     final nextLinkingStopped = _isLinkingStopped(controller);
     final retryNeedsFocus = !_linkingStopped && nextLinkingStopped;
+    final linkNeedsFocus =
+        _androidTv &&
+        !_wasLinking &&
+        controller.stage == SetupStage.linking &&
+        controller.pinUsable;
     final cancelNeedsFocus =
         !_busy &&
         nextBusy &&
@@ -129,16 +193,21 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         controller.profileSelectionCanCancel;
     setState(() {
       _linkingStopped = nextLinkingStopped;
+      _wasLinking = controller.stage == SetupStage.linking;
       _busy = nextBusy;
       if (controller.stage != SetupStage.profiles) _pinUser = null;
     });
-    final target = retryNeedsFocus
+    final target = retryNeedsFocus || linkNeedsFocus
         ? _linkActionFocus
         : cancelNeedsFocus
         ? _profileCancelFocus
         : null;
     if (target != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (linkNeedsFocus &&
+            (controller.stage != SetupStage.linking || !controller.pinUsable)) {
+          return;
+        }
         if (mounted && target.canRequestFocus) target.requestFocus();
       });
     }
@@ -152,6 +221,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   @override
   void dispose() {
     widget.controller.removeListener(_controllerChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    FocusManager.instance.removeListener(_recoverAndroidFocus);
     _clock?.cancel();
     _navigationFocus.dispose();
     _linkActionFocus.dispose();
@@ -163,7 +234,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   void _returnFromPin() {
     if (_pinUser == null) return;
     setState(() => _pinUser = null);
-    if (widget.accountOrigin &&
+    if (!LineupTheme.of(context).androidTv &&
+        widget.accountOrigin &&
         widget.controller.profileSelectionCanCancel &&
         widget.controller.profileSelectionOriginStage == SetupStage.ready) {
       widget.controller.cancelProfileSelection();
@@ -176,32 +248,82 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     });
   }
 
+  /// Claims one contextual Back press for the active onboarding owner.
+  ///
+  /// A false result is deliberately side-effect-free: the shell may then
+  /// classify this screen as a legitimate first-run root. Pending work and a
+  /// temporarily unavailable child state are claimed so a press cannot race
+  /// an asynchronous owner or fall through to task backgrounding.
+  bool handleBack() {
+    final controller = widget.controller;
+    if (_pinUser != null) {
+      return _profilePinKey.currentState?.handleBack() ?? true;
+    }
+
+    switch (controller.stage) {
+      case SetupStage.welcome:
+        return controller.busy;
+      case SetupStage.linking:
+        if (controller.busy) return true;
+        unawaited(controller.cancelLinking());
+        return true;
+      case SetupStage.profiles:
+        if (controller.profileSelectionCanCancel) {
+          controller.cancelProfileSelection();
+          _focusNavigation();
+          return true;
+        }
+        return controller.busy;
+      case SetupStage.servers:
+        if (!controller.canSwitchServer) return true;
+        if (controller.serverSelectionCanCancel) {
+          controller.cancelServerSelection();
+          _focusNavigation();
+          return true;
+        }
+        return controller.busy;
+      case SetupStage.channelSetup || SetupStage.ready:
+        return false;
+    }
+  }
+
+  // Preserve the pre-NAV desktop PopScope/shortcut behavior. The shared TV
+  // shell calls handleBack() directly; desktop has no new implicit linking or
+  // root-exit policy in this leaf.
   void _handleBack() {
     if (_pinUser != null) {
-      if (widget.controller.busy) return;
-      _returnFromPin();
+      _profilePinKey.currentState?.handleBack();
       return;
     }
     final controller = widget.controller;
-    var handled = false;
     if (controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel) {
       controller.cancelProfileSelection();
-      handled = true;
+      _focusNavigation();
     } else if (controller.stage == SetupStage.servers &&
         controller.serverSelectionCanCancel) {
       controller.cancelServerSelection();
-      handled = true;
-    }
-    if (handled) {
       _focusNavigation();
     }
+  }
+
+  bool _editableTextOwnsBackspace() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    return context?.widget is EditableText ||
+        context?.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
   void _focusNavigation() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _navigationFocus.canRequestFocus) {
-        _navigationFocus.requestFocus();
+        if (_androidTv) {
+          _navigationFocus.descendants
+              .where((node) => node.canRequestFocus && !node.skipTraversal)
+              .firstOrNull
+              ?.requestFocus();
+        } else {
+          _navigationFocus.requestFocus();
+        }
       }
     });
   }
@@ -217,18 +339,26 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   }
 
   KeyEventResult _navigationKey(FocusNode _, KeyEvent event) {
-    if (event is! KeyDownEvent || _pinUser != null) {
+    if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
-    if (event.logicalKey == LogicalKeyboardKey.escape ||
-        event.logicalKey == LogicalKeyboardKey.goBack ||
-        event.logicalKey == LogicalKeyboardKey.backspace) {
-      final controller = widget.controller;
-      if (controller.profileSelectionCanCancel ||
-          controller.serverSelectionCanCancel) {
-        _handleBack();
-        return KeyEventResult.handled;
-      }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.backspace && _editableTextOwnsBackspace()) {
+      return KeyEventResult.ignored;
+    }
+    final contextualBack =
+        key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.backspace;
+    if (!contextualBack) return KeyEventResult.ignored;
+    if (_androidTv) {
+      return handleBack() ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
+    if (_pinUser == null &&
+        (widget.controller.profileSelectionCanCancel ||
+            widget.controller.serverSelectionCanCancel)) {
+      _handleBack();
+      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
@@ -241,17 +371,28 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       _ => false,
     };
     return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (_, _) => _handleBack(),
+      canPop: AndroidBackScope.claims(context),
+      onPopInvokedWithResult: (_, _) {
+        if (!AndroidBackScope.claims(context)) _handleBack();
+      },
       child: Focus(
         focusNode: _navigationFocus,
+        skipTraversal: roles.androidTv,
         canRequestFocus: true,
         onKeyEvent: _navigationKey,
         child: CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
-            const SingleActivator(LogicalKeyboardKey.escape): _handleBack,
-            const SingleActivator(LogicalKeyboardKey.goBack): _handleBack,
-            const SingleActivator(LogicalKeyboardKey.backspace): _handleBack,
+            // Desktop keeps its existing shortcut path. TV routes these keys
+            // through the leaf adapter above and the shared shell fallback.
+            if (!roles.androidTv &&
+                (!AndroidBackScope.claims(context) ||
+                    _pinUser != null ||
+                    widget.controller.profileSelectionCanCancel ||
+                    widget.controller.serverSelectionCanCancel)) ...{
+              const SingleActivator(LogicalKeyboardKey.escape): _handleBack,
+              const SingleActivator(LogicalKeyboardKey.goBack): _handleBack,
+              const SingleActivator(LogicalKeyboardKey.backspace): _handleBack,
+            },
           },
           child: Scaffold(
             body: DecoratedBox(
@@ -424,6 +565,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Widget _linkingContent(BuildContext context, double contentWidth) {
     final controller = widget.controller;
     final pin = controller.activePin;
+    final androidTv = LineupTheme.of(context).androidTv;
     final usable = _usableLink && controller.error == null;
     final expired =
         controller.pinExpired && !controller.secureCancellationRequired;
@@ -526,12 +668,13 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                   ),
                 ),
               ),
-              LineupCompactControls(
-                child: OutlinedButton(
-                  onPressed: usable ? _copyCode : null,
-                  child: const Text('Copy code'),
+              if (!androidTv)
+                LineupCompactControls(
+                  child: OutlinedButton(
+                    onPressed: usable ? _copyCode : null,
+                    child: const Text('Copy code'),
+                  ),
                 ),
-              ),
             ],
           )
         : message == null
@@ -545,10 +688,17 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             ),
           );
     final action = usable
-        ? FilledButton.icon(
-            onPressed: _openingBrowser ? null : _openBrowser,
-            icon: const Icon(Icons.open_in_browser),
-            label: const Text('Open browser'),
+        ? Semantics(
+            label: androidTv
+                ? 'Open plex.tv/link in a browser on this TV, if available.'
+                : null,
+            button: true,
+            child: FilledButton.icon(
+              focusNode: androidTv ? _linkActionFocus : null,
+              onPressed: _openingBrowser ? null : _openBrowser,
+              icon: const Icon(Icons.open_in_browser),
+              label: Text(androidTv ? 'Open on this TV' : 'Open browser'),
+            ),
           )
         : FilledButton(
             focusNode: _linkActionFocus,
@@ -743,6 +893,12 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     );
   }
 
+  bool _profileReturnTarget(int index) =>
+      LineupTheme.of(context).androidTv &&
+          widget.controller.profiles.any((p) => p.id == _invokedProfileId)
+      ? widget.controller.profiles[index].id == _invokedProfileId
+      : index == 0;
+
   Widget _profiles() => _HeroContent(
     title: "Who's watching?",
     subtitle: 'Choose a Plex Home profile to continue.',
@@ -805,8 +961,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                           .profiles[start + column]
                                           .id ==
                                       widget.controller.profile?.id,
-                                  autofocus: start + column == 0,
-                                  focusNode: start + column == 0
+                                  autofocus: _profileReturnTarget(
+                                    start + column,
+                                  ),
+                                  focusNode:
+                                      _profileReturnTarget(start + column)
                                       ? _profileReturnFocus
                                       : null,
                                   onPressed: widget.controller.busy
@@ -1039,21 +1198,27 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       return;
     }
     if (!mounted || widget.controller.busy) return;
-    setState(() => _pinUser = user);
+    setState(() {
+      if (LineupTheme.of(context).androidTv) _invokedProfileId = user.id;
+      _pinUser = user;
+    });
   }
 
-  Widget _profilePin({required Key key}) => _ProfilePinStep(
+  Widget _profilePin({required Key key}) => KeyedSubtree(
     key: key,
-    user: _pinUser!,
-    accountOrigin: widget.accountOrigin,
-    profileOriginIsReady:
-        widget.controller.profileSelectionOriginStage == SetupStage.ready,
-    onBack: _returnFromPin,
-    onAccepted: () {
-      if (mounted) setState(() => _pinUser = null);
-    },
-    onSubmit: (pin) => widget.controller.selectProfile(_pinUser!, pin: pin),
-    error: () => widget.controller.error,
+    child: _ProfilePinStep(
+      key: _profilePinKey,
+      user: _pinUser!,
+      accountOrigin: widget.accountOrigin,
+      profileOriginIsReady:
+          widget.controller.profileSelectionOriginStage == SetupStage.ready,
+      onBack: _returnFromPin,
+      onAccepted: () {
+        if (mounted) setState(() => _pinUser = null);
+      },
+      onSubmit: (pin) => widget.controller.selectProfile(_pinUser!, pin: pin),
+      error: () => widget.controller.error,
+    ),
   );
 }
 
@@ -1190,6 +1355,10 @@ class _ProfileCardState extends State<_ProfileCard> {
     final next = _focusNode.hasFocus;
     if (next == _focused || !mounted) return;
     setState(() => _focused = next);
+    if (LineupTheme.of(context).androidTv) {
+      _nameOverlay.hide();
+      return;
+    }
     final style = LineupTypography.body.copyWith(fontWeight: FontWeight.w600);
     final painter = TextPainter(
       text: TextSpan(text: widget.user.name, style: style),
@@ -1225,6 +1394,7 @@ class _ProfileCardState extends State<_ProfileCard> {
           enabled: widget.onPressed != null,
           child: LineupRowSurface(
             selected: widget.active,
+            scaleOnFocus: true,
             child: TextButton(
               focusNode: _focusNode,
               autofocus: widget.autofocus,
@@ -1256,44 +1426,50 @@ class _ProfileCardState extends State<_ProfileCard> {
                           );
                           return OverlayPortal(
                             controller: _nameOverlay,
-                            overlayChildBuilder: (_) => Positioned(
-                              left: 0,
-                              top: 0,
-                              width:
-                                  (_nameAnchor.leaderSize?.width ?? 200) + 16,
-                              child: CompositedTransformFollower(
-                                link: _nameAnchor,
-                                showWhenUnlinked: false,
-                                offset: const Offset(-8, -4),
-                                child: IgnorePointer(
-                                  child: ExcludeSemantics(
-                                    child: DecoratedBox(
-                                      key: ValueKey(
-                                        'profile-name-full-${user.id}',
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: roles.elevatedSurface,
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: roles.subtleBorder,
-                                        ),
-                                      ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        child: Text(
-                                          user.name,
-                                          textAlign: TextAlign.center,
-                                          style: nameStyle,
+                            overlayChildBuilder: (_) =>
+                                LineupTheme.of(context).androidTv
+                                ? const SizedBox.shrink()
+                                : Positioned(
+                                    left: 0,
+                                    top: 0,
+                                    width:
+                                        (_nameAnchor.leaderSize?.width ?? 200) +
+                                        16,
+                                    child: CompositedTransformFollower(
+                                      link: _nameAnchor,
+                                      showWhenUnlinked: false,
+                                      offset: const Offset(-8, -4),
+                                      child: IgnorePointer(
+                                        child: ExcludeSemantics(
+                                          child: DecoratedBox(
+                                            key: ValueKey(
+                                              'profile-name-full-${user.id}',
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: roles.elevatedSurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: roles.subtleBorder,
+                                              ),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              child: Text(
+                                                user.name,
+                                                textAlign: TextAlign.center,
+                                                style: nameStyle,
+                                              ),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            ),
                             child: CompositedTransformTarget(
                               link: _nameAnchor,
                               child: Tooltip(
@@ -1348,31 +1524,36 @@ class _ProfileBadge extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: label,
-    child: ExcludeSemantics(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: LineupTheme.of(context).elevatedSurface,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: LineupTheme.of(context).subtleBorder),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: label == 'Current'
-                  ? LineupTheme.of(context).progressFill
-                  : LineupTheme.of(context).secondaryText,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return Semantics(
+      label: label,
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: LineupTheme.of(context).elevatedSurface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: LineupTheme.of(context).subtleBorder),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: label == 'Current'
+                    ? roles.androidTv && roles.primaryText == roles.onFocus
+                          ? roles.primaryText
+                          : roles.progressFill
+                    : roles.secondaryText,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 PlexConnection? _measuredConnection(PlexServer server) {
@@ -1564,6 +1745,12 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
   final _keyboardFocus = FocusNode(debugLabel: 'Profile PIN keyboard owner');
   final _firstDigitFocus = FocusNode(debugLabel: 'Profile PIN digit 1');
 
+  bool handleBack() {
+    if (_submitting) return true;
+    widget.onBack();
+    return true;
+  }
+
   @override
   void dispose() {
     _keyboardFocus.dispose();
@@ -1652,175 +1839,185 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
     }
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      if (!_submitting) widget.onBack();
-      return KeyEventResult.handled;
+      return handleBack() ? KeyEventResult.handled : KeyEventResult.ignored;
     }
     return KeyEventResult.ignored;
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: false,
-    onPopInvokedWithResult: (_, _) {
-      if (!_submitting) widget.onBack();
-    },
-    child: Focus(
-      key: const Key('profile-pin-keyboard-owner'),
-      focusNode: _keyboardFocus,
-      autofocus: true,
-      onKeyEvent: _key,
-      child: SizedBox(
-        key: const Key('profile-pin-sheet'),
-        width: double.infinity,
-        child: ConstrainedBox(
-          key: const Key('profile-pin-surface'),
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: LineupInlineLink(
-                    onPressed: _submitting ? null : widget.onBack,
-                    child: Text(
-                      widget.accountOrigin && widget.profileOriginIsReady
-                          ? '‹ Settings · Account'
-                          : '‹ Profiles',
+  Widget build(BuildContext context) {
+    final androidTv = LineupTheme.of(context).androidTv;
+    const gap = 16.0;
+    return PopScope(
+      canPop: AndroidBackScope.claims(context),
+      onPopInvokedWithResult: (_, _) {
+        if (!AndroidBackScope.claims(context)) handleBack();
+      },
+      child: Focus(
+        key: const Key('profile-pin-keyboard-owner'),
+        focusNode: _keyboardFocus,
+        // TV traversal starts on the real digit control; this ancestor still
+        // owns number and Back routing without competing for autofocus.
+        autofocus: !androidTv,
+        onKeyEvent: _key,
+        child: SizedBox(
+          key: const Key('profile-pin-sheet'),
+          width: double.infinity,
+          child: ConstrainedBox(
+            key: const Key('profile-pin-surface'),
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: LineupInlineLink(
+                      onPressed: _submitting ? null : handleBack,
+                      child: Text(
+                        !androidTv &&
+                                widget.accountOrigin &&
+                                widget.profileOriginIsReady
+                            ? '‹ Settings · Account'
+                            : '‹ Profiles',
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 28),
-                LineupProfileAvatar(
-                  name: widget.user.name,
-                  identity: widget.user.id,
-                  size: 120,
-                  locked: true,
-                  photo: widget.user.thumb?.isAbsolute == true
-                      ? NetworkImage(widget.user.thumb.toString())
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  widget.user.name,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: LineupTypography.pageTitle,
-                ),
-                const SizedBox(height: 28),
-                Semantics(
-                  key: const Key('profile-pin-progress'),
-                  container: true,
-                  explicitChildNodes: true,
-                  liveRegion: true,
-                  label: '${_pin.length} of 4 digits entered',
-                  child: ExcludeSemantics(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (var index = 0; index < 4; index++)
-                          Container(
-                            width: 24,
-                            height: 24,
-                            margin: const EdgeInsets.symmetric(horizontal: 8),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: index < _pin.length
-                                  ? LineupTheme.of(context).progressFill
-                                  : Colors.transparent,
-                              border: Border.all(
+                  SizedBox(height: 28),
+                  LineupProfileAvatar(
+                    name: widget.user.name,
+                    identity: widget.user.id,
+                    size: 120,
+                    locked: true,
+                    photo: widget.user.thumb?.isAbsolute == true
+                        ? NetworkImage(widget.user.thumb.toString())
+                        : null,
+                  ),
+                  SizedBox(height: gap),
+                  Text(
+                    widget.user.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: LineupTypography.pageTitle,
+                  ),
+                  SizedBox(height: 28),
+                  Semantics(
+                    key: const Key('profile-pin-progress'),
+                    container: true,
+                    explicitChildNodes: true,
+                    liveRegion: true,
+                    label: '${_pin.length} of 4 digits entered',
+                    child: ExcludeSemantics(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (var index = 0; index < 4; index++)
+                            Container(
+                              width: 24,
+                              height: 24,
+                              margin: const EdgeInsets.symmetric(horizontal: 8),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
                                 color: index < _pin.length
                                     ? LineupTheme.of(context).progressFill
-                                    : LineupTheme.of(context).defaultBorder,
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: index < _pin.length
+                                      ? LineupTheme.of(context).progressFill
+                                      : LineupTheme.of(context).defaultBorder,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 44,
-                  child: _submitting
-                      ? Semantics(
-                          label: 'Checking PIN',
-                          child: const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : _error == null
-                      ? const SizedBox.shrink()
-                      : Semantics(
-                          key: const Key('profile-pin-error'),
-                          container: true,
-                          liveRegion: true,
-                          label: _error,
-                          child: ExcludeSemantics(
-                            child: Center(
-                              child: Text(
-                                _error!,
-                                softWrap: true,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
+                  SizedBox(height: gap),
+                  SizedBox(
+                    key: const Key('profile-pin-status'),
+                    height: 44,
+                    child: _submitting
+                        ? Semantics(
+                            label: 'Checking PIN',
+                            child: const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : _error == null
+                        ? const SizedBox.shrink()
+                        : Semantics(
+                            key: const Key('profile-pin-error'),
+                            container: true,
+                            liveRegion: true,
+                            label: _error,
+                            child: ExcludeSemantics(
+                              child: Center(
+                                child: Text(
+                                  _error!,
+                                  softWrap: true,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                ),
-                const SizedBox(height: 16),
-                LineupCompactControls(
-                  child: SizedBox(
-                    width: 3 * 104 + 2 * 8,
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (var digit = 1; digit <= 9; digit++)
+                  ),
+                  SizedBox(height: gap),
+                  LineupCompactControls(
+                    child: SizedBox(
+                      width: 3 * 104 + 2 * 8,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (var digit = 1; digit <= 9; digit++)
+                            _PinKey(
+                              digit: digit,
+                              focusNode: digit == 1 ? _firstDigitFocus : null,
+                              autofocus: digit == 1,
+                              onPressed: _submitting
+                                  ? null
+                                  : () => _digit(digit),
+                            ),
+                          SizedBox(width: 104, height: 76),
                           _PinKey(
-                            digit: digit,
-                            focusNode: digit == 1 ? _firstDigitFocus : null,
-                            autofocus: digit == 1,
-                            onPressed: _submitting ? null : () => _digit(digit),
+                            digit: 0,
+                            onPressed: _submitting ? null : () => _digit(0),
                           ),
-                        const SizedBox(width: 104, height: 76),
-                        _PinKey(
-                          digit: 0,
-                          onPressed: _submitting ? null : () => _digit(0),
-                        ),
-                        _PinControlKey(
-                          tooltip: 'Backspace',
-                          onPressed: _submitting || _pin.isEmpty
-                              ? null
-                              : () => setState(() {
-                                  _error = null;
-                                  _pin = _pin.substring(0, _pin.length - 1);
-                                }),
-                          child: const Text(
-                            '⌫',
-                            style: TextStyle(fontSize: 24),
+                          _PinControlKey(
+                            tooltip: 'Backspace',
+                            onPressed: _submitting || _pin.isEmpty
+                                ? null
+                                : () => setState(() {
+                                    _error = null;
+                                    _pin = _pin.substring(0, _pin.length - 1);
+                                  }),
+                            child: const Text(
+                              '⌫',
+                              style: TextStyle(fontSize: 24),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                TextButton(
-                  onPressed: _submitting ? null : widget.onBack,
-                  child: const Text('Cancel'),
-                ),
-              ],
+                  SizedBox(height: 20),
+                  TextButton(
+                    onPressed: _submitting ? null : handleBack,
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _PinKey extends StatelessWidget {

@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart'
+    show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 
 import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
@@ -16,6 +18,7 @@ enum PlayerOverlay {
   none,
   osd,
   nowPlaying,
+  programInfo,
   miniGuide,
   fullGuide,
   audioTracks,
@@ -24,7 +27,7 @@ enum PlayerOverlay {
   error,
 }
 
-class PlayerCoordinator extends ChangeNotifier {
+class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   static const _catchUpTolerance = Duration(seconds: 30);
   static const _prematureEndTolerance = Duration(seconds: 30);
   static const _nativeStopTimeout = Duration(seconds: 10);
@@ -35,6 +38,7 @@ class PlayerCoordinator extends ChangeNotifier {
     required this.lineup,
     required this.guide,
     this.overlayTimeout,
+    this.androidTv = false,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
     _indexChannels();
@@ -60,6 +64,14 @@ class PlayerCoordinator extends ChangeNotifier {
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
+    if (androidTv) {
+      WidgetsBinding.instance.addObserver(this);
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (lifecycle == AppLifecycleState.hidden ||
+          lifecycle == AppLifecycleState.paused) {
+        unawaited(setApplicationForeground(false));
+      }
+    }
     notifyListeners();
   }
 
@@ -80,6 +92,11 @@ class PlayerCoordinator extends ChangeNotifier {
   final LineupController lineup;
   final GuideController guide;
   final Duration? overlayTimeout;
+  final bool androidTv;
+  bool _backgroundSuspended = false;
+  // Null means no captured intent; false keeps an explicit/untuned stop from
+  // being recaptured as play while native stop acknowledgement is pending.
+  bool? _resumeAfterBackground;
   final DateTime Function() _clock;
   GuideProgram? _resolvingProgram;
   late PlayerStatus _status;
@@ -95,6 +112,8 @@ class PlayerCoordinator extends ChangeNotifier {
   Timer? _noticeTimer;
   Timer? _busyTimer;
   Timer? _channelStepTimer;
+  Timer? _channelTagTimer;
+  int? _channelTagTuneGeneration;
   Completer<bool>? _channelStepCompletion;
   String? _channelStepTargetId;
   String? _notice;
@@ -188,6 +207,9 @@ class PlayerCoordinator extends ChangeNotifier {
       );
   List<PlayerTrack> get tracks => _tracks;
   PlayerOverlay get overlay => _overlay;
+
+  /// A tune gets one channel-tag window, starting with observed playback.
+  bool get channelTagWindowActive => _channelTagTimer?.isActive ?? false;
   int get overlayPresentationGeneration => _overlayPresentationGeneration;
   String get channelNumber => _channelNumber;
   String? get miniGuideChannelId =>
@@ -457,12 +479,14 @@ class PlayerCoordinator extends ChangeNotifier {
     _tracks,
     _overlay,
     _overlayPresentationGeneration,
+    channelTagWindowActive,
     _error,
     _trackConfirmation.type,
     _trackConfirmation.id,
   );
 
   void _event(PlayerEvent event) {
+    if (_disposed || _backgroundSuspended) return;
     if (event.generation != _activeLoadGeneration) return;
     final load = _activeLoad;
     final terminal = const {
@@ -624,11 +648,22 @@ class PlayerCoordinator extends ChangeNotifier {
           if (holdTransition) break;
           if (!_preservePresentation &&
               event.status.state != previousState &&
-              _overlay != PlayerOverlay.nowPlaying) {
+              _overlay != PlayerOverlay.nowPlaying &&
+              _overlay != PlayerOverlay.programInfo) {
             _setOverlay(PlayerOverlay.osd);
           }
           break;
         case PlayerState.playing:
+          if (!displayHoldActive &&
+              load != null &&
+              _ownsLoad(load) &&
+              _channelTagTuneGeneration == _tuneGeneration) {
+            _channelTagTuneGeneration = null;
+            _channelTagTimer = Timer(const Duration(seconds: 4), () {
+              _channelTagTimer = null;
+              if (!_disposed) notifyListeners();
+            });
+          }
           if (holdTransition) break;
           if (!_preservePresentation &&
               previousState != PlayerState.playing &&
@@ -704,13 +739,118 @@ class PlayerCoordinator extends ChangeNotifier {
     if (!_disposed && previousFacts != _eventVisibleFacts) notifyListeners();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!androidTv || _disposed) return;
+    switch (state) {
+      case AppLifecycleState.hidden || AppLifecycleState.paused:
+        unawaited(setApplicationForeground(false));
+      case AppLifecycleState.resumed:
+        unawaited(setApplicationForeground(true));
+      case AppLifecycleState.inactive:
+        // Observe intent without stopping: native onStop can publish Stopped
+        // before Flutter's hidden/paused message reaches this coordinator.
+        if (!_backgroundSuspended) _resumeAfterBackground ??= hasPlaybackIntent;
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+
+  Future<void> setApplicationForeground(bool foreground) async {
+    if (!androidTv || _disposed) return;
+    if (foreground) {
+      if (!_backgroundSuspended) {
+        if (_resumeAfterBackground == true) _resumeAfterBackground = null;
+        return;
+      }
+      _backgroundSuspended = false;
+      final resume = _resumeAfterBackground == true;
+      final deadline = _sleepDeadline;
+      if (deadline != null && _clock().isBefore(deadline)) {
+        final epoch = _sleepEpoch;
+        _sleepTimer = Timer(
+          deadline.difference(_clock()),
+          () => _expireSleepTimer(epoch),
+        );
+      }
+      final channelId = lineup.currentChannelId;
+      if (resume && channelId != null) await _tune(channelId);
+      return;
+    }
+    if (_backgroundSuspended) return;
+    _resumeAfterBackground ??= hasPlaybackIntent;
+    _backgroundSuspended = true; // Retire admission before any async cleanup.
+    lineup.cancelPlaybackAuthorization();
+    _clearTransientStatus();
+    _cancelOverlayTimer();
+    _cursorTimer?.cancel();
+    _cursorTimer = null;
+    try {
+      await _stop(forBackground: true);
+    } catch (error) {
+      if (!_disposed) {
+        _recordPlaybackFailure(error, operation: 'lifecycle_stop');
+        _error =
+            'Playback could not be stopped. Retry or choose another channel.';
+        notifyListeners();
+      }
+    }
+  }
+
   Future<bool> tune(String channelId) => _tune(channelId);
+
+  /// Opens an already playing Guide channel without disturbing its session.
+  /// Eligibility is decided synchronously: no stale identity can survive an
+  /// await between checking ownership and returning control to the shell.
+  Future<bool> activateFromGuide(String channelId) {
+    final active = _active;
+    final load = _activeLoad;
+    final now = _clock();
+    if (active != null &&
+        load != null &&
+        _ownsLoad(load) &&
+        !_tuning &&
+        _error == null &&
+        !_scopeCleanupPending &&
+        _nativeStopOperation == null &&
+        _authorizationRecovery == null &&
+        _advancingGeneration == null &&
+        !load.pending &&
+        !load.replacing &&
+        !displayHoldActive &&
+        identical(load.request, active.request) &&
+        _contentGeneration == lineup.contentGeneration &&
+        active.channel?.id == channelId &&
+        watchingChannelId == channelId &&
+        (_sleepDeadline == null || now.isBefore(_sleepDeadline!))) {
+      final current = guide.currentProgram(channelId, now);
+      if (current != null &&
+          active.program.isCurrentAt(now) &&
+          current.id == active.program.id &&
+          current.scheduled.end == active.program.scheduled.end) {
+        return Future.value(true);
+      }
+    }
+    return _tune(channelId);
+  }
+
+  int _nextTuneGeneration({bool announceChannel = false}) {
+    _channelTagTimer?.cancel();
+    _channelTagTimer = null;
+    final generation = ++_tuneGeneration;
+    // Natural program/part continuation preserves presentation. Explicit
+    // retunes (including Retry and foreground resume) announce the channel.
+    _channelTagTuneGeneration = announceChannel ? generation : null;
+    return generation;
+  }
 
   Future<bool> _tune(
     String channelId, {
     GuideProgram? endedProgram,
     bool channelStep = false,
   }) {
+    if (_disposed || _backgroundSuspended) return Future.value(false);
+    _resumeAfterBackground = null;
     _cancelPendingChannelStep(clearTarget: !channelStep);
     if (channelStep) _channelStepTargetId = channelId;
     final deadline = _sleepDeadline;
@@ -720,7 +860,9 @@ class PlayerCoordinator extends ChangeNotifier {
     _userPaused = false;
     if (endedProgram == null) _clearTransientStatus();
     _resolvingProgram = null;
-    final generation = ++_tuneGeneration;
+    final generation = _nextTuneGeneration(
+      announceChannel: endedProgram == null,
+    );
     _continuationGeneration = endedProgram == null ? null : generation;
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
@@ -763,12 +905,13 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> loadInitialMedia(Uri media) async {
-    if (_initialMediaRequested) return;
+    if (_disposed || _backgroundSuspended || _initialMediaRequested) return;
     _initialMediaRequested = true;
+    _resumeAfterBackground = null;
     _userPaused = false;
     if (await _expireSleepIfNeeded()) return;
     _clearTransientStatus();
-    final generation = ++_tuneGeneration;
+    final generation = _nextTuneGeneration(announceChannel: true);
     ++_controlGeneration;
     try {
       await _load(media);
@@ -932,7 +1075,7 @@ class PlayerCoordinator extends ChangeNotifier {
     }
   }
 
-  bool get _supersededByTune => _tuning || _disposed;
+  bool get _supersededByTune => _tuning || _disposed || _backgroundSuspended;
 
   _ActiveProgram _commitActive(
     LineupPlaybackRequest request,
@@ -975,6 +1118,7 @@ class PlayerCoordinator extends ChangeNotifier {
     SeekMode seekMode = SeekMode.exact,
     bool authorizationRetried = false,
   }) {
+    if (_disposed || _backgroundSuspended) throw const _PlaybackSuperseded();
     if (_nativeStopOperation != null) {
       throw const PlayerUnavailable('Playback stop is still pending.');
     }
@@ -1075,6 +1219,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   bool _ownsLoad(_PlaybackLoad load) =>
       !_disposed &&
+      !_backgroundSuspended &&
       load.tuneGeneration == _tuneGeneration &&
       identical(_activeLoad, load);
 
@@ -1397,18 +1542,34 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> pause() => _setPlaybackPaused(true);
 
-  Future<void> stop() async {
+  Future<void> stop() => _stop();
+
+  Future<void> _stop({bool forBackground = false}) async {
+    if (!forBackground) _resumeAfterBackground = false;
     _cancelPendingChannelStep();
-    _clearSleepTimer();
-    final generation = ++_tuneGeneration;
+    if (forBackground) {
+      // Keep the absolute sleep deadline: returning after expiry cannot revive
+      // playback, and a non-expired timer is rearmed on foreground return.
+      _sleepTimer?.cancel();
+      _sleepTimer = null;
+    } else {
+      _clearSleepTimer();
+    }
+    final generation = _nextTuneGeneration();
     ++_controlGeneration;
     _tuning = false;
     _canRetry = false;
     _invalidateAuthorizationRecovery();
-    final nativeStop = _beginNativeStop(force: true)!;
+    final nativeStop = _beginNativeStop(
+      force: !forBackground || hasPlaybackIntent,
+    );
+    if (_overlay == PlayerOverlay.programInfo) {
+      _cancelOverlayTimer();
+      _presentOverlay(PlayerOverlay.none);
+    }
     if (!_disposed) notifyListeners();
     final operation = _tuneOperations.then((_) async {
-      await nativeStop;
+      if (nativeStop != null) await nativeStop;
       if (_disposed || generation != _tuneGeneration) return;
       _status = const PlayerStatus(
         state: PlayerState.stopped,
@@ -1642,7 +1803,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> _setPlaybackPaused(bool paused) async {
-    if (_disposed) return;
+    if (_disposed || _backgroundSuspended) return;
     final intentRevision = ++_playbackIntentRevision;
     final controlGeneration = ++_controlGeneration;
     final tuneGeneration = _tuneGeneration;
@@ -1679,17 +1840,19 @@ class PlayerCoordinator extends ChangeNotifier {
       return;
     }
     if (current() && _ownsPlaybackControl(controlGeneration, tuneGeneration)) {
-      showOsd();
+      if (_overlay != PlayerOverlay.programInfo) showOsd();
     }
   }
 
   bool _ownsPlaybackControl(int controlGeneration, int tuneGeneration) =>
       !_disposed &&
+      !_backgroundSuspended &&
       controlGeneration == _controlGeneration &&
       tuneGeneration == _tuneGeneration;
 
   bool _ownsSeek(int seekGeneration, int tuneGeneration) =>
       !_disposed &&
+      !_backgroundSuspended &&
       seekGeneration == _seekGeneration &&
       tuneGeneration == _tuneGeneration;
 
@@ -1706,6 +1869,11 @@ class PlayerCoordinator extends ChangeNotifier {
   void showNowPlaying() {
     if (currentProgram == null) return;
     _setOverlay(PlayerOverlay.nowPlaying, timed: false);
+  }
+
+  void showProgramInfo() {
+    if (_overlay != PlayerOverlay.nowPlaying || currentProgram == null) return;
+    _setOverlay(PlayerOverlay.programInfo, timed: false);
   }
 
   void showMiniGuide() {
@@ -1786,6 +1954,10 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void closeOverlay() {
+    if (_overlay == PlayerOverlay.programInfo) {
+      currentProgram == null ? showOsd() : showNowPlaying();
+      return;
+    }
     if (_overlay == PlayerOverlay.channelNumber) {
       _numberTimer?.cancel();
       _numberTimer = null;
@@ -1887,12 +2059,13 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> _expireSleepTimer(int epoch) async {
     if (_disposed || epoch != _sleepEpoch) return;
+    _resumeAfterBackground = false;
     _cancelPendingChannelStep();
     _sleepTimer?.cancel();
     _sleepTimer = null;
     _sleepDuration = null;
     _sleepDeadline = null;
-    final tuneGeneration = ++_tuneGeneration;
+    final tuneGeneration = _nextTuneGeneration();
     ++_controlGeneration;
     _tuning = false;
     _canRetry = false;
@@ -2034,7 +2207,7 @@ class PlayerCoordinator extends ChangeNotifier {
       ++_seekGeneration;
       final fullscreenCleanup = _queueFullscreenReset();
       if (_active != null || _tuning || _nativeCleanupRequired) {
-        ++_tuneGeneration;
+        _nextTuneGeneration();
         _tuning = false;
         _canRetry = false;
         _invalidateAuthorizationRecovery();
@@ -2097,11 +2270,14 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _guideChanged() {
-    if (_overlay == PlayerOverlay.nowPlaying && currentProgram == null) {
+    if (_overlay == PlayerOverlay.programInfo && currentProgram == null) {
+      showOsd();
+    } else if (_overlay == PlayerOverlay.nowPlaying && currentProgram == null) {
       closeOverlay();
     } else if (_overlay == PlayerOverlay.miniGuide ||
         _overlay == PlayerOverlay.osd ||
-        _overlay == PlayerOverlay.nowPlaying) {
+        _overlay == PlayerOverlay.nowPlaying ||
+        _overlay == PlayerOverlay.programInfo) {
       notifyListeners();
     }
   }
@@ -2265,12 +2441,14 @@ class PlayerCoordinator extends ChangeNotifier {
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
+    if (androidTv) WidgetsBinding.instance.removeObserver(this);
+    _resumeAfterBackground = false;
     _displayMatching.dispose();
     unawaited(_cancelPlayerSubscription(_displaySubscription));
     _displaySubscription = null;
     unawaited(_cancelPlayerSubscription(_fullscreenSubscription));
     _fullscreenSubscription = null;
-    ++_tuneGeneration;
+    _nextTuneGeneration();
     ++_controlGeneration;
     ++_sleepEpoch;
     _activeLoad = null;

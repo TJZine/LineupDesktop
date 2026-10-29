@@ -53,7 +53,19 @@ void main() {
     }
   }
 
-  testWidgets('native app menu openSettings opens Settings when ready', (
+  testWidgets('Android ignores desktop native app-menu navigation', (
+    tester,
+  ) async {
+    final fixture = UiFixture(
+      scenario: const LineupScenario(stage: SetupStage.ready),
+    );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await _sendAppMenu(tester, 'openSettings');
+    _expectDestination('Guide');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  desktopTest('native app menu openSettings opens Settings when ready', (
     tester,
   ) async {
     final fixture = UiFixture(
@@ -69,7 +81,7 @@ void main() {
     _expectDestination('Settings');
   });
 
-  testWidgets('native app menu openSettings is ignored before setup is ready', (
+  desktopTest('native app menu openSettings is ignored before setup is ready', (
     tester,
   ) async {
     const active = PlexHomeUser(id: 'a', name: 'Active', protected: false);
@@ -94,7 +106,7 @@ void main() {
     expect(find.byKey(const Key('settings-app-menu')), findsNothing);
   });
 
-  testWidgets('native app menu openSettings does not act under a dialog', (
+  desktopTest('native app menu openSettings does not act under a dialog', (
     tester,
   ) async {
     final fixture = UiFixture(
@@ -145,7 +157,7 @@ void main() {
     _expectDestination('Channels');
   });
 
-  testWidgets('native app menu openSettings closes an open Lineup menu', (
+  desktopTest('native app menu openSettings closes an open Lineup menu', (
     tester,
   ) async {
     final fixture = UiFixture(
@@ -419,7 +431,7 @@ void main() {
 
   for (final expireInSettings in [false, true]) {
     for (final useEscape in [false, true]) {
-      testWidgets(
+      desktopTest(
         'Settings ${useEscape ? "Escape" : "Back"} returns to Guide '
         'after sleep expiry ${expireInSettings ? "in Settings" : "in Player"}',
         (tester) async {
@@ -1072,4 +1084,12 @@ Future<void> _sendAppMenu(WidgetTester tester, String method) async {
     (_) {},
   );
   await tester.pumpAndSettle();
+}
+
+void desktopTest(String name, WidgetTesterCallback body) {
+  testWidgets(
+    name,
+    body,
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
 }

@@ -16,6 +16,7 @@ import '../playback/player_view.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
+import '../ui/lineup_canvas.dart';
 import 'channel_setup_view.dart';
 import 'channels_view.dart';
 import 'diagnostics_view.dart';
@@ -30,12 +31,14 @@ class LineupShell extends StatefulWidget {
     required this.controller,
     this.initialMediaPath,
     this.guideClock,
+    this.androidTv = false,
     super.key,
   });
   final NativePlayer player;
   final LineupController controller;
   final String? initialMediaPath;
   final DateTime Function()? guideClock;
+  final bool androidTv;
   @override
   State<LineupShell> createState() => _LineupShellState();
 }
@@ -47,7 +50,23 @@ class _LineupShellState extends State<LineupShell> {
   ShellDestination? _settingsReturnDestination;
   late final GuideController _guide;
   late final PlayerCoordinator _player;
-  final _playerKey = GlobalKey();
+  final _playerKey = GlobalKey<PlayerViewState>();
+  final _onboardingKey = GlobalKey<UpstreamOnboardingViewState>();
+  GlobalKey<UpstreamChannelSetupViewState> _setupKey =
+      GlobalKey<UpstreamChannelSetupViewState>();
+  bool _retainSetup = false;
+  (String?, String?, String?, int)? _suspendedSetupScope;
+  late _TvLocation _tvLocation = widget.initialMediaPath == null
+      ? const _TvHome()
+      : const _TvPlayer();
+  int _routeIntent = 0;
+
+  (String?, String?, String?, int) get _scopeStamp => (
+    widget.controller.account?.id,
+    widget.controller.profile?.id,
+    widget.controller.server?.id,
+    widget.controller.contentGeneration,
+  );
   final _channelsKey = GlobalKey<ChannelsViewState>();
   final _guideFocus = FocusNode(debugLabel: 'Guide');
   final _channelsFocus = FocusNode(debugLabel: 'Channels');
@@ -80,8 +99,13 @@ class _LineupShellState extends State<LineupShell> {
   void initState() {
     super.initState();
     _lastStage = widget.controller.stage;
+    _retainSetup =
+        _lastStage == SetupStage.channelSetup &&
+        !widget.controller.restoringSavedLineup;
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
-    _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
+    }
     _guide = GuideController(
       lineup: widget.controller,
       clock: widget.guideClock,
@@ -91,6 +115,7 @@ class _LineupShellState extends State<LineupShell> {
       lineup: widget.controller,
       guide: _guide,
       clock: widget.guideClock,
+      androidTv: widget.androidTv,
     );
     _player.setPlayerDestinationVisible(
       _destination == ShellDestination.player,
@@ -131,11 +156,48 @@ class _LineupShellState extends State<LineupShell> {
     final stage = widget.controller.stage;
     final returnedToApp =
         _lastStage != SetupStage.ready && stage == SetupStage.ready;
+    if (widget.androidTv) {
+      if (_lastStage != stage) _routeIntent++;
+      if (_lastStage == SetupStage.channelSetup &&
+          (stage == SetupStage.servers || stage == SetupStage.profiles) &&
+          _setupKey.currentState != null) {
+        _suspendedSetupScope = _scopeStamp;
+      }
+      if (_suspendedSetupScope case final stamp?) {
+        if (stamp != _scopeStamp ||
+            (stage != SetupStage.channelSetup &&
+                stage != SetupStage.servers &&
+                stage != SetupStage.profiles)) {
+          // Retire before a successful scope publication can bind an old draft.
+          _retireSetup();
+          _tvLocation = const _TvHome();
+          _destination = ShellDestination.guide;
+        } else if (stage == SetupStage.channelSetup) {
+          _suspendedSetupScope = null;
+          _restoreResumedSetupFocus();
+        }
+      }
+      if (stage == SetupStage.channelSetup &&
+          !widget.controller.restoringSavedLineup) {
+        _retainSetup = true;
+      }
+      if (stage == SetupStage.ready || stage == SetupStage.welcome) {
+        _retireSetup();
+      }
+      if (stage == SetupStage.welcome) {
+        _tvLocation = const _TvHome();
+        _destination = ShellDestination.guide;
+      }
+    }
     _lastStage = stage;
     if (returnedToApp && _onboardingSupport) {
       _onboardingSupport = false;
       _destination = ShellDestination.settings;
-      _settingsReturnDestination ??= ShellDestination.guide;
+      if (widget.androidTv) {
+        _tvLocation = _tvSettings;
+      } else {
+        _settingsReturnDestination ??= ShellDestination.guide;
+      }
     }
     if (stage == SetupStage.welcome) _onboardingFromAccount = false;
     if (_appMenu != null &&
@@ -152,7 +214,9 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
-    _appMenuChannel.setMethodCallHandler(null);
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      _appMenuChannel.setMethodCallHandler(null);
+    }
     widget.controller.removeListener(_changed);
     _player.removeListener(_playerChanged);
     _player.dispose();
@@ -171,8 +235,138 @@ class _LineupShellState extends State<LineupShell> {
     super.dispose();
   }
 
-  Future<void> _select(ShellDestination destination) async {
+  bool get _setupVisible =>
+      widget.controller.stage == SetupStage.channelSetup &&
+      !widget.controller.restoringSavedLineup &&
+      !_onboardingSupport;
+
+  void _restoreResumedSetupFocus() {
+    final key = _setupKey;
+    final state = key.currentState;
+    // A synchronous picker round trip that never hid Setup needs no recovery.
+    if (state == null ||
+        state.context.findAncestorWidgetOfExactType<Offstage>()?.offstage !=
+            true) {
+      return;
+    }
+    final scope = _scopeStamp;
+    final intent = _routeIntent;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_retainSetup ||
+          !_setupVisible ||
+          _appMenu != null ||
+          _licensesOpen ||
+          intent != _routeIntent ||
+          scope != _scopeStamp ||
+          key != _setupKey ||
+          !identical(key.currentState, state)) {
+        return;
+      }
+      state.restoreNavigationFocus();
+    });
+  }
+
+  void _retireSetup() {
+    if (_retainSetup) _setupKey = GlobalKey<UpstreamChannelSetupViewState>();
+    _retainSetup = false;
+    _suspendedSetupScope = null;
+  }
+
+  _TvWatch get _tvWatch => _tvLocation.watch;
+  _TvSettings get _tvSettings => switch (_tvLocation) {
+    final _TvSettings location => location,
+    _TvDiagnostics(:final settings) => settings,
+    final _TvChannels location => _TvSettings(location),
+    final _TvWatch location => _TvSettings(location),
+  };
+
+  _TvLocation _tvOpen(ShellDestination destination) => switch (destination) {
+    ShellDestination.guide =>
+      _hasPlaybackSurface ? const _TvBrowse() : const _TvHome(),
+    ShellDestination.player => const _TvPlayer(),
+    ShellDestination.channels => _TvChannels(_tvWatch),
+    ShellDestination.settings => _tvSettings,
+    ShellDestination.diagnostics => _TvDiagnostics(_tvSettings),
+  };
+
+  _TvLocation _validTvLocation(_TvLocation location) {
+    if (_hasPlaybackSurface) return location;
+    return switch (location) {
+      _TvPlayer() || _TvBrowse() => const _TvHome(),
+      _TvChannels(:final origin) => _TvChannels(
+        _validTvLocation(origin) as _TvWatch,
+      ),
+      _TvSettings(:final origin) => _TvSettings(_validTvLocation(origin)),
+      _TvDiagnostics(:final settings) => _TvDiagnostics(
+        _validTvLocation(settings) as _TvSettings,
+      ),
+      _TvHome() => location,
+    };
+  }
+
+  bool _handleTvBack() {
+    if (_appMenu != null) {
+      _closeAppMenu();
+      return true;
+    }
+    if (_licensesOpen) {
+      _licensesKey.currentState?.back();
+      return true;
+    }
+    if (_onboardingSupport) {
+      setState(() => _onboardingSupport = false);
+      return true;
+    }
+    if (_selectionPending) return true;
+    final controller = widget.controller;
+    if (controller.stage != SetupStage.ready) {
+      if (controller.restoringSavedLineup) return !controller.canSwitchServer;
+      if (controller.stage == SetupStage.channelSetup) {
+        return _setupKey.currentState?.handleBack() ?? true;
+      }
+      return _onboardingKey.currentState?.handleBack() ?? true;
+    }
+    switch (_tvLocation) {
+      case _TvHome():
+        return false;
+      case _TvPlayer():
+        if (_playerKey.currentState case final state?) {
+          return state.handleBack();
+        }
+      case _TvBrowse():
+        _returnTv(const _TvPlayer());
+        return true;
+      case _TvChannels(:final origin):
+        final state = _channelsKey.currentState;
+        if (state == null) break;
+        if (!state.handleBack()) _returnTv(origin);
+        return true;
+      case _TvSettings(:final origin):
+        _returnTv(origin);
+        return true;
+      case _TvDiagnostics(:final settings):
+        _settingsCategory = SettingsCategory.support;
+        _returnTv(settings);
+        return true;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+    return true;
+  }
+
+  void _returnTv(_TvLocation location) {
+    final valid = _validTvLocation(location);
+    unawaited(_select(valid.destination, tvLocation: valid));
+  }
+
+  Future<void> _select(
+    ShellDestination destination, {
+    _TvLocation? tvLocation,
+  }) async {
     if (_selectionPending) return;
+    final proposed = widget.androidTv
+        ? tvLocation ?? _tvOpen(destination)
+        : null;
     if (widget.controller.stage != SetupStage.ready &&
         !await _leaveOnboardingForRoute()) {
       return;
@@ -185,11 +379,15 @@ class _LineupShellState extends State<LineupShell> {
       _closeLicenses();
     }
     if (destination == _destination &&
+        (proposed == null || proposed == _tvLocation) &&
         !(destination == ShellDestination.channels &&
             (_channelsKey.currentState?.studioOpen ?? false))) {
       if (_appMenu != null) _closeAppMenu();
       return;
     }
+    final intent = ++_routeIntent;
+    final stage = widget.controller.stage;
+    final scope = _scopeStamp;
     _selectionPending = true;
     try {
       if (_destination == ShellDestination.channels &&
@@ -197,8 +395,14 @@ class _LineupShellState extends State<LineupShell> {
               Future.value(true)))) {
         return;
       }
-      if (!mounted) return;
-      if (widget.controller.stage == SetupStage.ready) {
+      if (!mounted ||
+          (widget.androidTv &&
+              (intent != _routeIntent ||
+                  stage != widget.controller.stage ||
+                  scope != _scopeStamp))) {
+        return;
+      }
+      if (!widget.androidTv && widget.controller.stage == SetupStage.ready) {
         if (destination == ShellDestination.settings &&
             _destination != ShellDestination.settings &&
             _destination != ShellDestination.diagnostics) {
@@ -216,16 +420,19 @@ class _LineupShellState extends State<LineupShell> {
               : ShellDestination.guide;
         }
       }
-      if (destination == ShellDestination.guide) {
+      final committed = proposed == null ? null : _validTvLocation(proposed);
+      final routeDestination = committed?.destination ?? destination;
+      if (routeDestination == ShellDestination.guide) {
         _player.showFullGuide();
       } else if (_player.overlay == PlayerOverlay.fullGuide) {
         _player.closeOverlay();
       }
       setState(() {
         _licensesOpen = false;
-        _destination = destination;
+        if (committed != null) _tvLocation = committed;
+        _destination = routeDestination;
         _player.setPlayerDestinationVisible(
-          destination == ShellDestination.player,
+          routeDestination == ShellDestination.player,
         );
         _appMenu = null;
       });
@@ -238,13 +445,18 @@ class _LineupShellState extends State<LineupShell> {
   bool get _hasPlaybackSurface =>
       _player.hasPlaybackIntent || _player.error != null;
 
-  ShellDestination? get _settingsBackDestination =>
-      _settingsReturnDestination == ShellDestination.player &&
-          !_hasPlaybackSurface
+  ShellDestination? get _settingsBackDestination => widget.androidTv
+      ? _validTvLocation(_tvSettings.origin).destination
+      : _settingsReturnDestination == ShellDestination.player &&
+            !_hasPlaybackSurface
       ? ShellDestination.guide
       : _settingsReturnDestination;
 
   void _returnFromSettings() {
+    if (widget.androidTv) {
+      _returnTv(_tvSettings.origin);
+      return;
+    }
     final destination = _settingsBackDestination;
     if (destination != null) unawaited(_select(destination));
   }
@@ -288,7 +500,16 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _restoreRouteFocus() {
-    if (!mounted) return;
+    if (!mounted ||
+        widget.controller.stage != SetupStage.ready ||
+        _appMenu != null ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    if (widget.androidTv && _destination == ShellDestination.channels) {
+      _channelsKey.currentState?.restoreNavigationFocus();
+      return;
+    }
     final target = switch (_destination) {
       ShellDestination.guide => _guideFocus,
       ShellDestination.channels => _channelsFocus,
@@ -324,7 +545,9 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Future<void> _tuneFromGuide(String channelId) async {
-    final tuning = _player.tune(channelId);
+    final tuning = widget.androidTv
+        ? _player.activateFromGuide(channelId)
+        : _player.tune(channelId);
     await _select(ShellDestination.player);
     await tuning;
   }
@@ -344,7 +567,8 @@ class _LineupShellState extends State<LineupShell> {
           invoker != null &&
           invoker.parent != null &&
           invoker.context?.mounted == true &&
-          invoker.canRequestFocus) {
+          invoker.canRequestFocus &&
+          invoker.ancestors.every((node) => node.descendantsAreFocusable)) {
         invoker.requestFocus();
       } else {
         _restoreRouteFocus();
@@ -395,11 +619,20 @@ class _LineupShellState extends State<LineupShell> {
             child: ExcludeFocus(excluding: _licensesOpen, child: settings),
           ),
           if (_licensesOpen)
-            LicensesView(
-              key: _licensesKey,
-              onBack: _closeLicenses,
-              onOpenMenu: onboarding ? null : _openAppMenu,
-              menuFocusNode: onboarding ? null : _licensesMenuFocus,
+            ColoredBox(
+              color: LineupTheme.of(context).deepBackground,
+              child: SafeArea(
+                left: LineupTheme.of(context).androidTv,
+                top: LineupTheme.of(context).androidTv,
+                right: LineupTheme.of(context).androidTv,
+                bottom: LineupTheme.of(context).androidTv,
+                child: LicensesView(
+                  key: _licensesKey,
+                  onBack: _closeLicenses,
+                  onOpenMenu: onboarding ? null : _openAppMenu,
+                  menuFocusNode: onboarding ? null : _licensesMenuFocus,
+                ),
+              ),
             ),
         ],
       );
@@ -437,6 +670,25 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   KeyEventResult _globalKey(FocusNode _, KeyEvent event) {
+    final backKey = {
+      LogicalKeyboardKey.escape,
+      LogicalKeyboardKey.backspace,
+      LogicalKeyboardKey.goBack,
+    }.contains(event.logicalKey);
+    if (widget.androidTv && backKey) {
+      final editing = FocusManager.instance.primaryFocus?.context;
+      if (event.logicalKey == LogicalKeyboardKey.backspace &&
+          (editing?.widget is EditableText ||
+              editing?.findAncestorWidgetOfExactType<EditableText>() != null)) {
+        return KeyEventResult.ignored;
+      }
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        return KeyEventResult.ignored;
+      }
+      if (event is KeyRepeatEvent) return KeyEventResult.handled;
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      return _handleTvBack() ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
         FocusManager.instance.primaryFocus?.context
@@ -509,14 +761,29 @@ class _LineupShellState extends State<LineupShell> {
   Future<void> _completeSetup() async {
     widget.controller.completeChannelSetup();
     _onboardingFromAccount = false;
-    await _select(ShellDestination.channels);
+    await _select(
+      widget.androidTv ? ShellDestination.guide : ShellDestination.channels,
+      tvLocation: widget.androidTv ? const _TvHome() : null,
+    );
   }
 
   Future<void> _completeSetupAndAdd() async {
     widget.controller.completeChannelSetup();
     _onboardingFromAccount = false;
-    await _select(ShellDestination.channels);
+    await _select(
+      ShellDestination.channels,
+      tvLocation: widget.androidTv ? const _TvChannels(_TvHome()) : null,
+    );
+    final intent = _routeIntent;
+    final scope = _scopeStamp;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.controller.stage != SetupStage.ready ||
+          _destination != ShellDestination.channels ||
+          (widget.androidTv &&
+              (intent != _routeIntent || scope != _scopeStamp))) {
+        return;
+      }
       _channelsKey.currentState?.openNew();
     });
   }
@@ -592,7 +859,15 @@ class _LineupShellState extends State<LineupShell> {
           color: roles.scrim.withValues(alpha: 0.45),
         ),
         CustomSingleChildLayout(
-          delegate: _AnchoredMenuLayout(anchor),
+          delegate: _AnchoredMenuLayout(
+            anchor,
+            insets: LineupTheme.of(context).androidTv
+                ? LineupCanvas.contentInsets(
+                    context,
+                    minimum: const EdgeInsets.all(16),
+                  )
+                : const EdgeInsets.all(16),
+          ),
           child: FocusScope(
             node: _appMenuScope,
             autofocus: true,
@@ -645,9 +920,9 @@ class _LineupShellState extends State<LineupShell> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text('Now Playing'),
-                              Text(
+                              _menuDetail(
                                 _player.currentProgram!.scheduled.item.title,
-                                style: detailStyle,
+                                detailStyle,
                               ),
                             ],
                           ),
@@ -687,7 +962,7 @@ class _LineupShellState extends State<LineupShell> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(profileName ?? accountName),
-                                    Text(serverName, style: detailStyle),
+                                    _menuDetail(serverName, detailStyle),
                                     LineupConnectionStatus(
                                       connection: widget.controller.connection,
                                     ),
@@ -710,6 +985,15 @@ class _LineupShellState extends State<LineupShell> {
       ],
     );
   }
+
+  Widget _menuDetail(String text, TextStyle? style) => Builder(
+    builder: (context) => Text(
+      text,
+      style: LineupTheme.of(context).androidTv
+          ? style?.copyWith(color: LineupTheme.of(context).secondaryText)
+          : style,
+    ),
+  );
 
   Widget _menuDestination({
     required ShellDestination destination,
@@ -740,7 +1024,7 @@ class _LineupShellState extends State<LineupShell> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label),
-            if (helper != null) Text(helper, style: detailStyle),
+            if (helper != null) _menuDetail(helper, detailStyle),
           ],
         ),
       ),
@@ -749,24 +1033,69 @@ class _LineupShellState extends State<LineupShell> {
 
   @override
   Widget build(BuildContext context) {
+    Widget child = _buildShell(context);
+    if (widget.androidTv) {
+      final visibleSetup = _setupVisible;
+      child = Stack(
+        fit: StackFit.expand,
+        children: [
+          if (_retainSetup)
+            Offstage(
+              offstage: !visibleSetup,
+              child: ExcludeFocus(
+                excluding: !visibleSetup,
+                child: ExcludeSemantics(
+                  excluding: !visibleSetup,
+                  child: TickerMode(
+                    enabled: visibleSetup,
+                    child: UpstreamChannelSetupView(
+                      key: _setupKey,
+                      controller: widget.controller,
+                      onRequestLogout: _requestLogout,
+                      onViewLineup: _completeSetup,
+                      onAddCustomChannel: _completeSetupAndAdd,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (!visibleSetup) child,
+        ],
+      );
+    }
+    return defaultTargetPlatform == TargetPlatform.android
+        ? AndroidBackScope(
+            onUnhandledBack: widget.androidTv ? _handleTvBack : null,
+            child: child,
+          )
+        : child;
+  }
+
+  Widget _buildShell(BuildContext context) {
     _lastPlayerFacts = _shellPlayerFacts;
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {
       if (_onboardingSupport) {
         return _withGlobalKeys(
           Scaffold(
-            body: _settingsWithLicenses(
-              SettingsView(
-                controller: controller,
-                category: SettingsCategory.support,
-                onCategoryChanged: (_) {},
-                supportOnly: true,
-                backLabel: '‹ Back to setup',
-                onBack: () => setState(() => _onboardingSupport = false),
-                openLicensesFocus: _openLicensesFocus,
-                onOpenLicenses: () => setState(() => _licensesOpen = true),
+            body: SafeArea(
+              left: !LineupTheme.of(context).androidTv,
+              top: !LineupTheme.of(context).androidTv,
+              right: !LineupTheme.of(context).androidTv,
+              bottom: !LineupTheme.of(context).androidTv,
+              child: _settingsWithLicenses(
+                SettingsView(
+                  controller: controller,
+                  category: SettingsCategory.support,
+                  onCategoryChanged: (_) {},
+                  supportOnly: true,
+                  backLabel: '‹ Back to setup',
+                  onBack: () => setState(() => _onboardingSupport = false),
+                  openLicensesFocus: _openLicensesFocus,
+                  onOpenLicenses: () => setState(() => _licensesOpen = true),
+                ),
+                onboarding: true,
               ),
-              onboarding: true,
             ),
           ),
         );
@@ -775,18 +1104,24 @@ class _LineupShellState extends State<LineupShell> {
       final onboarding = controller.restoringSavedLineup
           ? LineupRestoreView(controller: controller)
           : controller.stage == SetupStage.channelSetup
-          ? UpstreamChannelSetupView(
-              controller: controller,
-              onRequestLogout: _requestLogout,
-              onViewLineup: _completeSetup,
-              onAddCustomChannel: _completeSetupAndAdd,
-            )
+          ? widget.androidTv
+                ? const SizedBox.shrink()
+                : UpstreamChannelSetupView(
+                    key: _setupKey,
+                    controller: controller,
+                    onRequestLogout: _requestLogout,
+                    onViewLineup: _completeSetup,
+                    onAddCustomChannel: _completeSetupAndAdd,
+                  )
           : UpstreamOnboardingView(
+              key: _onboardingKey,
               controller: controller,
               onLogout: _logout,
               onRequestLogout: _requestLogout,
               accountOrigin: _onboardingFromAccount,
-              onOpenSettings: defaultTargetPlatform == TargetPlatform.macOS
+              onOpenSettings:
+                  (defaultTargetPlatform == TargetPlatform.macOS ||
+                      LineupTheme.of(context).androidTv)
                   ? _showOnboardingSupport
                   : null,
               onOpenMenu: onboardingMenuAvailable ? _openAppMenu : null,
@@ -825,6 +1160,7 @@ class _LineupShellState extends State<LineupShell> {
       controller: _player,
       focusNode: _playerFocus,
       openGuide: () => unawaited(_select(ShellDestination.guide)),
+      onBackToGuide: widget.androidTv ? () => _returnTv(const _TvHome()) : null,
       openMenu: _openAppMenu,
     );
     final hasPlaybackSurface = _hasPlaybackSurface;
@@ -837,6 +1173,7 @@ class _LineupShellState extends State<LineupShell> {
       watchingChannelId: _player.watchingChannelId,
       focusNode: _guideFocus,
       onClose: _closeGuide,
+      onBack: widget.androidTv ? _handleTvBack : null,
       onOpenMenu: _openAppMenu,
       pictureInPicture: guideHasPicture
           ? PlayerSurface(controller: _player, showErrors: true)
@@ -881,6 +1218,10 @@ class _LineupShellState extends State<LineupShell> {
       openLicensesFocus: _openLicensesFocus,
       onOpenLicenses: () => setState(() => _licensesOpen = true),
     );
+    final routeConsumesSafeArea =
+        !(LineupTheme.of(context).androidTv &&
+            (_destination == ShellDestination.player ||
+                _destination == ShellDestination.settings));
     final routeView = switch (_destination) {
       ShellDestination.guide => guideView,
       ShellDestination.channels => ChannelsView(
@@ -905,18 +1246,71 @@ class _LineupShellState extends State<LineupShell> {
         playback: _player.diagnosticPlaybackSnapshot,
         onRecordingSettings: () {
           _settingsCategory = SettingsCategory.support;
-          unawaited(_select(ShellDestination.settings));
+          widget.androidTv
+              ? _returnTv(_tvSettings)
+              : unawaited(_select(ShellDestination.settings));
         },
         focusNode: _diagnosticsFocus,
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
         onBack: () {
           _settingsCategory = SettingsCategory.support;
-          unawaited(_select(ShellDestination.settings));
+          widget.androidTv
+              ? _returnTv(_tvSettings)
+              : unawaited(_select(ShellDestination.settings));
         },
       ),
       ShellDestination.player => playerView,
     };
+    final roles = LineupTheme.of(context);
+    final routeColor =
+        _destination == ShellDestination.settings ||
+            _destination == ShellDestination.player ||
+            (_destination == ShellDestination.guide && hasPlaybackSurface)
+        ? Colors.transparent
+        : Theme.of(context).scaffoldBackgroundColor;
+    final insets = MediaQuery.paddingOf(context);
+    final safeRoute = SafeArea(
+      left: routeConsumesSafeArea,
+      top: routeConsumesSafeArea,
+      right: routeConsumesSafeArea,
+      bottom: routeConsumesSafeArea,
+      child: routeView,
+    );
+    final paintedRoute = roles.androidTv
+        ? ColoredBox(
+            color: routeColor,
+            // Paint only the margin around the Guide's transparent native PiP
+            // aperture. Filling the whole route would cover the video.
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: _destination == ShellDestination.guide
+                    ? Border(
+                        left: BorderSide(
+                          color: roles.deepBackground,
+                          width: insets.left,
+                        ),
+                        top: BorderSide(
+                          color: roles.deepBackground,
+                          width: insets.top,
+                        ),
+                        right: BorderSide(
+                          color: roles.deepBackground,
+                          width: insets.right,
+                        ),
+                        bottom: BorderSide(
+                          color: roles.deepBackground,
+                          width: insets.bottom,
+                        ),
+                      )
+                    : null,
+              ),
+              child: safeRoute,
+            ),
+          )
+        : SafeArea(
+            child: ColoredBox(color: routeColor, child: routeView),
+          );
     return _withGlobalKeys(
       Scaffold(
         backgroundColor: Colors.transparent,
@@ -932,18 +1326,7 @@ class _LineupShellState extends State<LineupShell> {
                 visible: TooltipVisibility.of(context) && _appMenu == null,
                 child: ExcludeFocus(
                   excluding: _appMenu != null,
-                  child: SafeArea(
-                    child: ColoredBox(
-                      color:
-                          _destination == ShellDestination.settings ||
-                              _destination == ShellDestination.player ||
-                              (_destination == ShellDestination.guide &&
-                                  hasPlaybackSurface)
-                          ? Colors.transparent
-                          : Theme.of(context).scaffoldBackgroundColor,
-                      child: routeView,
-                    ),
-                  ),
+                  child: paintedRoute,
                 ),
               ),
             ),
@@ -955,19 +1338,79 @@ class _LineupShellState extends State<LineupShell> {
   }
 }
 
+// Finite TV parents: only watch locations may sit beneath Channels; Settings
+// may additionally retain Channels. Returning consumes this parent, never pushes.
+sealed class _TvLocation {
+  const _TvLocation();
+  ShellDestination get destination;
+  _TvWatch get watch;
+}
+
+sealed class _TvWatch extends _TvLocation {
+  const _TvWatch();
+  @override
+  _TvWatch get watch => this;
+}
+
+final class _TvHome extends _TvWatch {
+  const _TvHome();
+  @override
+  ShellDestination get destination => ShellDestination.guide;
+}
+
+final class _TvPlayer extends _TvWatch {
+  const _TvPlayer();
+  @override
+  ShellDestination get destination => ShellDestination.player;
+}
+
+final class _TvBrowse extends _TvWatch {
+  const _TvBrowse();
+  @override
+  ShellDestination get destination => ShellDestination.guide;
+}
+
+final class _TvChannels extends _TvLocation {
+  const _TvChannels(this.origin);
+  final _TvWatch origin;
+  @override
+  ShellDestination get destination => ShellDestination.channels;
+  @override
+  _TvWatch get watch => origin;
+}
+
+final class _TvSettings extends _TvLocation {
+  const _TvSettings(this.origin)
+    : assert(origin is _TvWatch || origin is _TvChannels);
+  final _TvLocation origin;
+  @override
+  ShellDestination get destination => ShellDestination.settings;
+  @override
+  _TvWatch get watch => origin.watch;
+}
+
+final class _TvDiagnostics extends _TvLocation {
+  const _TvDiagnostics(this.settings);
+  final _TvSettings settings;
+  @override
+  ShellDestination get destination => ShellDestination.diagnostics;
+  @override
+  _TvWatch get watch => settings.watch;
+}
+
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
-  const _AnchoredMenuLayout(this.anchor);
+  const _AnchoredMenuLayout(this.anchor, {required this.insets});
 
   final Rect anchor;
+  final EdgeInsets insets;
 
-  double get _margin => 16;
   double get _gap => 8;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
       BoxConstraints(
-        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0.0, 320),
-        maxHeight: (constraints.maxHeight - _margin * 2).clamp(
+        maxWidth: (constraints.maxWidth - insets.horizontal).clamp(0.0, 320),
+        maxHeight: (constraints.maxHeight - insets.vertical).clamp(
           0.0,
           double.infinity,
         ),
@@ -975,17 +1418,19 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final horizontalMargin = math.min(_margin, size.width / 2);
-    final leftLimit = size.width - childSize.width - horizontalMargin;
+    final horizontalMargin = math.min(insets.left, size.width / 2);
+    final leftLimit =
+        size.width - childSize.width - math.min(insets.right, size.width / 2);
     final left = (anchor.right - childSize.width).clamp(
       math.min(horizontalMargin, leftLimit),
       math.max(horizontalMargin, leftLimit),
     );
-    final verticalMargin = math.min(_margin, size.height / 2);
-    final bottomLimit = size.height - childSize.height - verticalMargin;
+    final verticalMargin = math.min(insets.top, size.height / 2);
+    final bottomMargin = math.min(insets.bottom, size.height / 2);
+    final bottomLimit = size.height - childSize.height - bottomMargin;
     final below = anchor.bottom + _gap;
     final above = anchor.top - childSize.height - _gap;
-    final top = below + childSize.height <= size.height - verticalMargin
+    final top = below + childSize.height <= size.height - bottomMargin
         ? below
         : above >= verticalMargin
         ? above
@@ -998,7 +1443,7 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_AnchoredMenuLayout oldDelegate) =>
-      oldDelegate.anchor != anchor;
+      oldDelegate.anchor != anchor || oldDelegate.insets != insets;
 }
 
 Uri _mediaUri(String value) {
@@ -1119,6 +1564,7 @@ class _SettingsViewState extends State<SettingsView> {
     final settingsTheme = LineupTheme.forName(
       _displaySettings.theme,
       largeFocusIndicators: _displaySettings.largeFocusIndicators,
+      androidTv: LineupTheme.of(context).androidTv,
     );
     final roles = settingsTheme.extension<LineupThemeRoles>()!;
     return LineupFocusTheme(
@@ -1129,66 +1575,75 @@ class _SettingsViewState extends State<SettingsView> {
           child: ColoredBox(
             key: const Key('settings-immersive-scrim'),
             color: roles.deepBackground.withValues(alpha: 0.94),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compact =
-                    LineupLayout.isCompactWidth(constraints.maxWidth) ||
-                    MediaQuery.textScalerOf(context).scale(1) >= 2;
-                final theme = Theme.of(context);
-                return DefaultTextStyle(
-                  style: theme.textTheme.bodyMedium!,
-                  child: Builder(
-                    builder: (context) => Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        LineupTopBar(
-                          menuKey: const Key('settings-app-menu'),
-                          onOpenMenu: widget.onOpenMenu,
-                          menuFocusNode: widget.menuFocusNode,
-                        ),
-                        Expanded(
-                          child: LineupContentWidth(
-                            vertical: 24,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _settingsHeader(context),
-                                const SizedBox(height: 24),
-                                Expanded(
-                                  child: compact
-                                      ? Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            _categoryRail(context, true),
-                                            Expanded(
-                                              child: _detailPane(context, true),
-                                            ),
-                                          ],
-                                        )
-                                      : Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            _categoryRail(context, false),
-                                            Expanded(
-                                              child: _detailPane(
-                                                context,
-                                                false,
+            child: SafeArea(
+              left: roles.androidTv,
+              top: roles.androidTv,
+              right: roles.androidTv,
+              bottom: roles.androidTv,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact =
+                      LineupLayout.isCompactWidth(constraints.maxWidth) ||
+                      MediaQuery.textScalerOf(context).scale(1) >= 2;
+                  final theme = Theme.of(context);
+                  return DefaultTextStyle(
+                    style: theme.textTheme.bodyMedium!,
+                    child: Builder(
+                      builder: (context) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          LineupTopBar(
+                            menuKey: const Key('settings-app-menu'),
+                            onOpenMenu: widget.onOpenMenu,
+                            menuFocusNode: widget.menuFocusNode,
+                          ),
+                          Expanded(
+                            child: LineupContentWidth(
+                              vertical: 24,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _settingsHeader(context),
+                                  const SizedBox(height: 24),
+                                  Expanded(
+                                    child: compact
+                                        ? Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              _categoryRail(context, true),
+                                              Expanded(
+                                                child: _detailPane(
+                                                  context,
+                                                  true,
+                                                ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                ),
-                              ],
+                                            ],
+                                          )
+                                        : Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              _categoryRail(context, false),
+                                              Expanded(
+                                                child: _detailPane(
+                                                  context,
+                                                  false,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -1291,6 +1746,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _categoryDetail(BuildContext context) {
     final value = _displaySettings;
+    final androidTv = LineupTheme.of(context).androidTv;
 
     return ListView(
       children: [
@@ -1435,7 +1891,7 @@ class _SettingsViewState extends State<SettingsView> {
                   onChanged: onChanged,
                 ),
               ),
-              if (defaultTargetPlatform != TargetPlatform.macOS)
+              if (defaultTargetPlatform != TargetPlatform.macOS && !androidTv)
                 ..._settingControl<bool>(
                   _SettingKey.matchDisplayHdr,
                   (current, item) => current.copyWith(matchDisplayHdr: item),
@@ -1478,6 +1934,7 @@ class _SettingsViewState extends State<SettingsView> {
             ],
             SettingsCategory.account => [
               _SettingsRow(
+                revealOnFocus: true,
                 label: const Text('Plex Home profile'),
                 helper: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1532,6 +1989,7 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ),
               _SettingsRow(
+                revealOnFocus: true,
                 label: const Text('Plex Media Server'),
                 helper: widget.controller.server == null
                     ? const Text('No server selected')
@@ -1552,6 +2010,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               SizedBox(height: 24),
               _SettingsRow(
+                revealOnFocus: true,
                 label: const Text('Signed-in Plex account'),
                 helper: Text(widget.controller.account?.name ?? 'Plex account'),
                 control: OutlinedButton(
@@ -1577,6 +2036,7 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ),
               _SettingsRow(
+                revealOnFocus: true,
                 label: const Text('Diagnostics'),
                 helper: const Text(
                   'Review redacted support events from this session.',
@@ -1586,8 +2046,9 @@ class _SettingsViewState extends State<SettingsView> {
                   child: const Text('Open Diagnostics'),
                 ),
               ),
-              if (defaultTargetPlatform == TargetPlatform.macOS)
+              if (defaultTargetPlatform == TargetPlatform.macOS || androidTv)
                 _SettingsRow(
+                  revealOnFocus: true,
                   label: const Text('Licenses'),
                   helper: const Text(
                     'Read third-party licenses, notices, and source information.',
@@ -1752,74 +2213,88 @@ class _SettingsRow extends StatelessWidget {
     required this.helper,
     required this.control,
     this.first = false,
+    this.revealOnFocus = false,
+    this.horizontalPadding = 0,
   });
 
   final Widget label;
   final Widget helper;
   final Widget control;
   final bool first;
+  final bool revealOnFocus;
+  final double horizontalPadding;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final reflow =
-          constraints.maxWidth < 900 ||
-          MediaQuery.textScalerOf(context).scale(1) >= 1.5;
-      final controlWidth = math.min(280.0, constraints.maxWidth);
-      final theme = Theme.of(context);
-      final roles = LineupTheme.of(context);
-      final description = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DefaultTextStyle.merge(
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: roles.primaryText,
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              height: 1.2,
-            ),
-            child: label,
-          ),
-          SizedBox(height: 6),
-          DefaultTextStyle.merge(
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: roles.secondaryText,
-              fontSize: 18,
-              height: 1.5,
-            ),
-            child: helper,
-          ),
-        ],
-      );
-      return Container(
-        constraints: BoxConstraints(minHeight: 132),
-        padding: EdgeInsets.fromLTRB(0, (first ? 16 : 28), 0, 28),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: roles.subtleBorder)),
-        ),
-        child: reflow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  description,
-                  SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(width: controlWidth, child: control),
-                  ),
-                ],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: description),
-                  SizedBox(width: 32),
-                  SizedBox(width: controlWidth, child: control),
-                ],
+  Widget build(BuildContext context) {
+    final row = LayoutBuilder(
+      builder: (context, constraints) {
+        final reflow =
+            constraints.maxWidth < 900 ||
+            MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+        final controlWidth = math.min(280.0, constraints.maxWidth);
+        final theme = Theme.of(context);
+        final roles = LineupTheme.of(context);
+        final description = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DefaultTextStyle.merge(
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: roles.primaryText,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                height: 1.2,
               ),
-      );
-    },
-  );
+              child: label,
+            ),
+            SizedBox(height: 6),
+            DefaultTextStyle.merge(
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: roles.secondaryText,
+                fontSize: 18,
+                height: 1.5,
+              ),
+              child: helper,
+            ),
+          ],
+        );
+        return Container(
+          constraints: BoxConstraints(minHeight: 132),
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            (first ? 16 : 28),
+            horizontalPadding,
+            28,
+          ),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+          ),
+          child: reflow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    description,
+                    SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(width: controlWidth, child: control),
+                    ),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: description),
+                    SizedBox(width: 32),
+                    SizedBox(width: controlWidth, child: control),
+                  ],
+                ),
+        );
+      },
+    );
+    return revealOnFocus && LineupTheme.of(context).androidTv
+        ? LineupFocusReveal(child: row)
+        : row;
+  }
 }
 
 class _SettingsSwitchTile extends StatelessWidget {
@@ -1838,31 +2313,37 @@ class _SettingsSwitchTile extends StatelessWidget {
   final bool first;
 
   @override
-  Widget build(BuildContext context) => MergeSemantics(
-    child: _SettingsRow(
-      label: title,
-      helper: subtitle,
-      control: Builder(
-        builder: (context) {
-          return SizedBox(
-            height: 48,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: SizedBox(
-                width: 56,
-                child: Switch(
-                  value: value,
-                  onChanged: onChanged,
-                  padding: EdgeInsets.zero,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return LineupToggleSurface(
+      child: MergeSemantics(
+        child: _SettingsRow(
+          horizontalPadding: roles.androidTv ? 16 : 0,
+          label: title,
+          helper: subtitle,
+          control: Builder(
+            builder: (context) {
+              return SizedBox(
+                height: 48,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: SizedBox(
+                    width: 56,
+                    child: Switch(
+                      value: value,
+                      onChanged: onChanged,
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          );
-        },
+              );
+            },
+          ),
+          first: first,
+        ),
       ),
-      first: first,
-    ),
-  );
+    );
+  }
 }
 
 class _Dropdown<T> extends StatelessWidget {
@@ -1901,13 +2382,15 @@ class _Dropdown<T> extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(label),
-                    Text(
-                      choiceDescription!(item),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: LineupTheme.of(context).secondaryText,
-                        fontSize: 14,
+                    Builder(
+                      builder: (context) => Text(
+                        choiceDescription!(item),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: LineupTheme.of(context).secondaryText,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ],
@@ -1916,33 +2399,36 @@ class _Dropdown<T> extends StatelessWidget {
       );
       selectedItems.add(Text(label));
     }
-    return MergeSemantics(
-      child: _SettingsRow(
-        label: Text(label),
-        helper: Text(description),
-        control: SizedBox(
-          width: double.infinity,
-          child: lineupDropdownField<T>(
-            context: context,
-            key: ValueKey('settings-field-$label'),
-            initialValue: value,
-            isExpanded: true,
-            itemHeight: null,
-            icon: const Icon(Icons.arrow_drop_down, size: 20),
-            style: theme.textTheme.bodyLarge?.copyWith(fontSize: 18),
-            decoration: InputDecoration(),
-            items: items,
-            selectedItemChildren: choiceDescription == null
-                ? null
-                : selectedItems,
-            onChanged: changed == null
-                ? null
-                : (item) {
-                    if (item != null) changed!(item);
-                  },
+    return LineupToggleSurface(
+      child: MergeSemantics(
+        child: _SettingsRow(
+          horizontalPadding: LineupTheme.of(context).androidTv ? 16 : 0,
+          label: Text(label),
+          helper: Text(description),
+          control: SizedBox(
+            width: double.infinity,
+            child: lineupDropdownField<T>(
+              context: context,
+              key: ValueKey('settings-field-$label'),
+              initialValue: value,
+              isExpanded: true,
+              itemHeight: null,
+              icon: const Icon(Icons.arrow_drop_down, size: 20),
+              style: theme.textTheme.bodyLarge?.copyWith(fontSize: 18),
+              decoration: InputDecoration(),
+              items: items,
+              selectedItemChildren: choiceDescription == null
+                  ? null
+                  : selectedItems,
+              onChanged: changed == null
+                  ? null
+                  : (item) {
+                      if (item != null) changed!(item);
+                    },
+            ),
           ),
+          first: first,
         ),
-        first: first,
       ),
     );
   }

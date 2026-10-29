@@ -20,9 +20,10 @@ class SetupStage extends StatelessWidget {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final singleScroll =
-        media.size.width < 900 ||
-        media.size.height < 720 ||
-        media.textScaler.scale(14) >= 24;
+        !LineupTheme.of(context).androidTv &&
+        (media.size.width < 900 ||
+            media.size.height < 720 ||
+            media.textScaler.scale(14) >= 24);
     if (singleScroll) {
       return Column(
         children: [
@@ -136,5 +137,37 @@ class SetupFooter extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Setup's TV rows form a vertical reading sequence, including nested Retry
+/// actions. Geometric traversal can otherwise skip a wide row in favor of a
+/// narrow footer aligned with the previous control.
+class SetupVerticalTraversalPolicy extends OrderedTraversalPolicy {
+  SetupVerticalTraversalPolicy()
+    : super(secondary: WidgetOrderTraversalPolicy());
+  @override
+  bool inDirection(FocusNode currentNode, TraversalDirection direction) {
+    if (direction != TraversalDirection.up &&
+        direction != TraversalDirection.down) {
+      return super.inDirection(currentNode, direction);
+    }
+    final nodes =
+        currentNode.nearestScope?.traversalDescendants.where((node) {
+          final context = node.context;
+          return node is! FocusScopeNode &&
+              context != null &&
+              identical(FocusTraversalGroup.maybeOfNode(node), this);
+        }).toList() ??
+        <FocusNode>[];
+    final ordered = sortDescendants(nodes, currentNode).toList();
+    final index = ordered.indexOf(currentNode);
+    final next = index + (direction == TraversalDirection.down ? 1 : -1);
+    if (index >= 0 && next >= ordered.length) return true;
+    if (index < 0 || next < 0) {
+      return super.inDirection(currentNode, direction);
+    }
+    requestFocusCallback(ordered[next]);
+    return true;
   }
 }

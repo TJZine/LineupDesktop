@@ -3,6 +3,26 @@ import 'package:flutter/services.dart';
 
 import 'app_theme.dart';
 
+export 'focus_ink.dart';
+
+/// D14 aliases belong to the explicit TV capability, including injected TV
+/// surfaces on desktop hosts. Share that policy between command routing and
+/// focus modality; ordinary desktop Application/Menu keys remain untouched.
+LogicalKeyboardKey? androidTvKeyAlias(
+  LogicalKeyboardKey key, {
+  required bool androidTv,
+}) {
+  if (!androidTv) return null;
+  return switch (key) {
+    LogicalKeyboardKey.channelUp => LogicalKeyboardKey.pageUp,
+    LogicalKeyboardKey.channelDown => LogicalKeyboardKey.pageDown,
+    LogicalKeyboardKey.guide => LogicalKeyboardKey.f2,
+    LogicalKeyboardKey.info ||
+    LogicalKeyboardKey.contextMenu => LogicalKeyboardKey.keyI,
+    _ => null,
+  };
+}
+
 /// Paint modality is separate from focus ownership. Pointer input never unfocuses.
 ///
 /// This scope shows rings for navigation keys only. Player and shell separately
@@ -23,6 +43,7 @@ class LineupFocusScope extends StatefulWidget {
 
 class _LineupFocusScopeState extends State<LineupFocusScope> {
   bool _visible = false;
+  bool _initialized = false;
   static final _navigationKeys = {
     LogicalKeyboardKey.tab,
     LogicalKeyboardKey.arrowUp,
@@ -45,8 +66,23 @@ class _LineupFocusScopeState extends State<LineupFocusScope> {
     HardwareKeyboard.instance.addHandler(_onKey);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _visible = LineupTheme.of(context).androidTv;
+      _initialized = true;
+    }
+  }
+
   bool _onKey(KeyEvent event) {
-    if (event is! KeyUpEvent && _navigationKeys.contains(event.logicalKey)) {
+    if (event is! KeyUpEvent &&
+        (_navigationKeys.contains(event.logicalKey) ||
+            androidTvKeyAlias(
+                  event.logicalKey,
+                  androidTv: LineupTheme.of(context).androidTv,
+                ) !=
+                null)) {
       _setVisible(true);
     }
     return false;
@@ -90,21 +126,26 @@ class LineupFocusTheme extends StatelessWidget {
     ButtonStyle style(LineupButtonTier tier) =>
         LineupTheme.buttonStyle(roles, tier, focusVisible: visible);
     final segmented = data.segmentedButtonTheme.style?.copyWith(
-      side: WidgetStateProperty.resolveWith(
-        (states) => BorderSide(
-          color: visible && states.contains(WidgetState.focused)
-              ? roles.focusBorder
-              : roles.defaultBorder,
-          width: visible && states.contains(WidgetState.focused)
-              ? roles.focusBorderWidth
-              : 1,
-        ),
-      ),
+      side: WidgetStateProperty.resolveWith((states) {
+        final focused = visible && states.contains(WidgetState.focused);
+        if (!focused) return BorderSide(color: roles.defaultBorder, width: 1);
+        if (roles.focusTreatment == LineupFocusTreatment.fill) {
+          return roles.largeFocusIndicators
+              ? BorderSide(color: roles.focusBorder, width: 3)
+              : BorderSide.none;
+        }
+        return BorderSide(
+          color: roles.focusBorder,
+          width: roles.focusBorderWidth,
+        );
+      }),
     );
     return Theme(
       data: data.copyWith(
         focusColor: visible
-            ? roles.focusBorder.withValues(alpha: .08)
+            ? roles.focusTreatment == LineupFocusTreatment.fill
+                  ? Colors.transparent
+                  : roles.focusBorder.withValues(alpha: .08)
             : Colors.transparent,
         filledButtonTheme: FilledButtonThemeData(
           style: style(LineupButtonTier.primary),

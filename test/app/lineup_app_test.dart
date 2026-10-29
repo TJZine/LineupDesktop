@@ -16,6 +16,7 @@ import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
+import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -23,6 +24,70 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'TV shell keeps Player and Settings video full-frame with safe menus',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      final controller = _FakeController(
+        scenario: const LineupScenario(stage: SetupStage.ready),
+      );
+      final native = _PlayingPlayer();
+      await tester.pumpWidget(
+        LineupBootstrap(
+          player: native,
+          controller: controller,
+          androidTv: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      Rect drawn(Finder finder) => Rect.fromPoints(
+        tester.getTopLeft(finder),
+        tester.getBottomRight(finder),
+      );
+      await openDestination(tester, 'Player');
+      tester.widget<PlayerView>(find.byType(PlayerView)).controller.showOsd();
+      await tester.pumpAndSettle();
+      for (final route in ['Player', 'Settings']) {
+        if (route == 'Settings') {
+          await tester.tap(find.text('Settings').last);
+          await tester.pumpAndSettle();
+        }
+        final surface = drawn(find.byType(NativeVideoSurface));
+        expect(surface.left, 0);
+        expect(surface.top, 0);
+        expect(surface.width, closeTo(960, .001));
+        expect(surface.height, closeTo(540, .001));
+        final video = native.videoRects.last;
+        expect(video.width, closeTo(960, .001));
+        expect(video.height, closeTo(540, .001));
+        expect(video.scale, 2);
+        await tester.tap(
+          route == 'Player'
+              ? find.byKey(const Key('player-app-menu'))
+              : find.byTooltip('Open Lineup menu'),
+        );
+        await tester.pumpAndSettle();
+        final menu = drawn(find.byKey(const Key('immersive-app-menu')));
+        expect(menu.left, greaterThanOrEqualTo(8));
+        expect(menu.top, greaterThanOrEqualTo(8));
+        expect(menu.right, lessThanOrEqualTo(952));
+        if (route == 'Player') {
+          // Player keeps its desktop 96cu gutter; shell menus use 16cu.
+          expect(menu.right, closeTo(912, .001));
+        } else {
+          expect(menu.left, closeTo(8, .001));
+        }
+        expect(menu.bottom, lessThanOrEqualTo(532));
+        if (route == 'Settings') {
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+        }
+      }
+    },
+  );
   testWidgets(
     'shutdown observes delayed native failure without leaking details',
     (tester) async {
@@ -223,7 +288,11 @@ void main() {
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
-      LineupBootstrap(player: _FakePlayer(), controller: controller),
+      LineupBootstrap(
+        player: _FakePlayer(),
+        controller: controller,
+        androidTv: false,
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
@@ -412,6 +481,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Account'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Sign out of Plex'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out of Plex'));
     await tester.pumpAndSettle();
     expect(find.text('Sign out of Plex?'), findsOneWidget);
@@ -495,7 +566,11 @@ void main() {
       scenario: LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(
-      LineupBootstrap(player: _FakePlayer(), controller: controller),
+      LineupBootstrap(
+        player: _FakePlayer(),
+        controller: controller,
+        androidTv: false,
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -622,6 +697,8 @@ void main() {
     expect(find.text('Switch server'), findsOneWidget);
     expect(find.textContaining('Direct local · 18 ms'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Switch server'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Switch server'));
     await tester.pumpAndSettle();
     expect(find.text('Choose a server'), findsOneWidget);
@@ -799,6 +876,81 @@ void main() {
     expect(find.text('‹ Profiles'), findsOneWidget);
     expect(find.text('‹ Settings · Account'), findsNothing);
   });
+
+  for (final tv in [false, true]) {
+    testWidgets(
+      'explicit TV lifecycle wiring controls scheduled playback (TV: $tv)',
+      (tester) async {
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        final controller = _FakeController(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              Channel(
+                id: 'lifecycle',
+                number: 1,
+                name: 'Lifecycle channel',
+                source: const ManualSource([
+                  ChannelItem(
+                    id: 'program',
+                    title: 'Program',
+                    duration: Duration(hours: 24),
+                  ),
+                ]),
+                playbackMode: PlaybackMode.sequential,
+                anchor: DateTime.now().subtract(const Duration(minutes: 1)),
+                shuffleSeed: 1,
+              ),
+            ],
+          ),
+        );
+        final player = _FakePlayer();
+        await tester.pumpWidget(
+          LineupBootstrap(
+            player: player,
+            controller: controller,
+            androidTv: tv,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(player.loads, hasLength(1));
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+        expect(player.stops, 0);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+        expect(player.loads, hasLength(1));
+        for (final state in [
+          AppLifecycleState.inactive,
+          AppLifecycleState.hidden,
+          AppLifecycleState.paused,
+        ]) {
+          tester.binding.handleAppLifecycleStateChanged(state);
+        }
+        await tester.pumpAndSettle();
+        expect(player.stops, tv ? 1 : 0);
+        for (final state in [
+          AppLifecycleState.hidden,
+          AppLifecycleState.inactive,
+          AppLifecycleState.resumed,
+        ]) {
+          tester.binding.handleAppLifecycleStateChanged(state);
+        }
+        await tester.pumpAndSettle();
+        expect(player.loads, hasLength(tv ? 2 : 1));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+  }
 
   testWidgets('Guide activation tunes and returns to the full player', (
     tester,
@@ -1198,45 +1350,76 @@ void main() {
     expect(find.text('Active'), findsNothing);
   });
 
-  testWidgets('focused profile name reveals the full name without reflow', (
-    tester,
-  ) async {
-    final controller = _FakeController(
-      scenario: LineupScenario(
-        stage: SetupStage.profiles,
-        profiles: const [
-          PlexHomeUser(id: 'first', name: 'First', protected: false),
-          PlexHomeUser(
-            id: 'long',
-            name: 'A very long profile name that needs the focused treatment',
-            protected: false,
+  for (final androidTv in [false, true]) {
+    testWidgets(
+      'focused profile name overlay follows form factor: TV=$androidTv',
+      (tester) async {
+        final controller = _FakeController(
+          scenario: LineupScenario(
+            stage: SetupStage.profiles,
+            profiles: const [
+              PlexHomeUser(id: 'first', name: 'First', protected: false),
+              PlexHomeUser(
+                id: 'long',
+                name:
+                    'A very long profile name that needs the focused treatment',
+                protected: false,
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-    await tester.pumpWidget(
-      LineupBootstrap(player: _FakePlayer(), controller: controller),
-    );
-    await tester.pumpAndSettle();
+        );
+        await tester.pumpWidget(
+          LineupBootstrap(
+            player: _FakePlayer(),
+            controller: controller,
+            androidTv: androidTv,
+          ),
+        );
+        await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('profile-name-full-first')), findsNothing);
-    expect(find.byKey(const ValueKey('profile-name-full-long')), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    expect(
-      find.byKey(const ValueKey('profile-name-full-long')),
-      findsOneWidget,
+        expect(
+          find.byKey(const ValueKey('profile-name-full-first')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('profile-name-full-long')),
+          findsNothing,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        if (androidTv) {
+          expect(
+            find.byKey(const ValueKey('profile-name-full-long')),
+            findsNothing,
+          );
+          expect(
+            tester
+                .widget<Text>(
+                  find.text(
+                    'A very long profile name that needs the focused treatment',
+                  ),
+                )
+                .maxLines,
+            2,
+          );
+          return;
+        }
+        expect(
+          find.byKey(const ValueKey('profile-name-full-long')),
+          findsOneWidget,
+        );
+        final fullName = tester.widget<Text>(
+          find.descendant(
+            of: find.byKey(const ValueKey('profile-name-full-long')),
+            matching: find.byType(Text),
+          ),
+        );
+        expect(fullName.maxLines, isNull);
+        expect(fullName.style?.fontFamily, 'Inter');
+        expect(tester.takeException(), isNull);
+      },
     );
-    final fullName = tester.widget<Text>(
-      find.descendant(
-        of: find.byKey(const ValueKey('profile-name-full-long')),
-        matching: find.byType(Text),
-      ),
-    );
-    expect(fullName.maxLines, isNull);
-    expect(fullName.style?.fontFamily, 'Inter');
-    expect(tester.takeException(), isNull);
-  });
+  }
 
   testWidgets('unprotected profile failure remains visible in onboarding', (
     tester,

@@ -84,6 +84,18 @@ Future<void> _pumpGuide(WidgetTester tester, {required bool rich}) async {
 
 Future<void> _match(WidgetTester tester, String name) async {
   final boundary = find.byKey(_goldenKey);
+  final context = tester.element(boundary);
+  final images = find.descendant(of: boundary, matching: find.byType(Image));
+  await tester.runAsync(() async {
+    await precacheImage(
+      const AssetImage('assets/branding/lineup-logo-mark.png'),
+      context,
+    );
+    for (final element in images.evaluate()) {
+      await precacheImage((element.widget as Image).image, element);
+    }
+  });
+  await tester.pump();
   markSubtreeNeedsPaint(tester.renderObject(boundary));
   await tester.pump();
   await expectLater(boundary, matchesGoldenFile('goldens/$name'));

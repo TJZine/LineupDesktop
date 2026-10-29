@@ -18,6 +18,7 @@ Flutter/Dart application
               +-- C++ / libmpv
               +-- Windows presentation / DirectComposition
               +-- macOS presentation / MoltenVK / CAMetalLayer
+              +-- Android Kotlin / Media3 / SurfaceView
 ```
 
 ## Accepted ownership
@@ -52,6 +53,19 @@ event queue and generation filtering, token handling, and telemetry encoding.
 A platform adapter owns the channel and codec conversion, presentation, and
 window lifecycle; the Windows adapter is `windows/runner/native_player.*` and
 the macOS adapter is `macos/Runner/NativePlayer/LineupNativePlayer.*`.
+
+Android uses `android/app/src/main/kotlin/com/tjzine/lineup/player/` for the same
+protocol with Media3, independently of the desktop libmpv engine. Kotlin owns
+media decoding, scoped HTTP, native video/subtitle views and OS teardown only.
+The shared Dart controller/coordinator retain Plex, schedule, state, playback and
+navigation policy. Android/Media3 types do not enter domain or Flutter UI state.
+
+| Android owner | Responsibility |
+| --- | --- |
+| Dart composition root / existing method-channel transport | Select adapter; preserve shared domain/playback policy and wire validation |
+| `NativePlayerController` | Bounded command/event queues, immutable load/request/stop correlation and native lifecycle fencing |
+| `Media3Engine`, guarded extractors, origin policy | Decoder/track observations, progressive HTTPS, credential scope, unsupported media failures |
+| `NativePlayerAdapter` / activity | Passive SurfaceView and SubtitleView under transparent Flutter; physical rectangle and screen-awake mechanism |
 
 macOS is not yet a release platform; the [port plan](macos-port-plan.md) owns
 its decisions and remaining packages. The following section describes the
@@ -207,7 +221,8 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
 
 ## Implemented now
 
-- Root Flutter project targeting only macOS and Windows.
+- Root Flutter project targeting Windows, macOS and Android TV / Android-based
+  Fire OS.
 - Application bootstrap, a compact shared visual vocabulary, responsive page,
   section, notice, empty-state and confirmation primitives, focus-aware
   Material controls, semantic labels, navigation shell, and explicit startup
@@ -226,7 +241,7 @@ below the transparent `FlutterView`. The Objective-C++ adapter owns a
   Channels, Settings and Diagnostics, and an immersive shell for Guide and
   Player. The immersive Lineup menu calls the same route owner; it is not a
   second navigation system.
-- The Dart native-player seam. Windows and macOS use the method-channel
+- The Dart native-player seam. Windows, macOS and Android use the method-channel
   backend; other platforms use an explicit unsupported backend that never
   reports successful playback.
 - A Windows C++ libmpv owner, native child presentation, command/property/event

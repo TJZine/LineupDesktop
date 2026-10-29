@@ -42,6 +42,8 @@ class _StudioProgramming extends StatefulWidget {
 
 class _StudioProgrammingState extends State<_StudioProgramming> {
   late final _FilterPickerController _picker;
+  final _filterKey = GlobalKey<_StudioFilterEditorState>();
+  final _manualKey = GlobalKey<_StudioManualEditorState>();
   BuildContext? _programmingContext;
   double _pickerMinimumHeight = 0;
   bool _selectionPending = false;
@@ -86,6 +88,36 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
         ? _StudioPendingChoice.selection
         : null,
   );
+
+  bool cancelPendingChoice() {
+    final key = _picker.activeKey;
+    if (key != null) {
+      final forBrowse = _picker.forBrowse;
+      if (forBrowse) {
+        final owner = _manualKey.currentState;
+        if (owner != null) return owner._cancelPendingFilter();
+      } else {
+        final owner = _filterKey.currentState;
+        if (owner != null) return owner._cancelPendingFilter();
+      }
+      _picker.close();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (forBrowse) {
+          _manualKey.currentState?._restoreFilterFocus(key);
+        } else {
+          _filterKey.currentState?._restoreFilterFocus(key);
+        }
+      });
+      return true;
+    }
+    if (_selectionPending) {
+      final manual = _manualKey.currentState;
+      return manual?.cancelPendingChoice() ?? true;
+    }
+    return false;
+  }
+
   void _selectSource(StudioSourceChoice? choice) {
     if (choice == _session.sourceChoice) return;
     _picker.close(notify: false);
@@ -195,6 +227,7 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
               child: ExcludeFocus(
                 excluding: !libraryActive,
                 child: _StudioFilterEditor(
+                  key: _filterKey,
                   draft: _session,
                   active: libraryActive,
                   inventory: widget.inventory,
@@ -234,6 +267,7 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
               child: ExcludeFocus(
                 excluding: !manualActive,
                 child: _StudioManualEditor(
+                  key: _manualKey,
                   rundown: _session.rundown,
                   inventory: widget.inventory,
                   readInventory: widget.readInventory,

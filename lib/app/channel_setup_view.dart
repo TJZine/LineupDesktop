@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
@@ -32,10 +33,11 @@ class UpstreamChannelSetupView extends StatefulWidget {
   final VoidCallback? onAddCustomChannel;
 
   @override
-  State<UpstreamChannelSetupView> createState() => _SetupState();
+  State<UpstreamChannelSetupView> createState() =>
+      UpstreamChannelSetupViewState();
 }
 
-class _SetupState extends State<UpstreamChannelSetupView> {
+class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   _SetupStep _step = _SetupStep.libraries;
   int _configurationSection = 0;
   final _selectedLibraries = <String>{};
@@ -58,10 +60,24 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   bool _discoveryRetry = false;
   String? _notice;
   String? _error;
+  bool _androidTv = false;
+  bool _committingLibraries = false;
+  int _libraryCommitRevision = 0;
+  bool _completionActionStarted = false;
+  final _libraryEntryFocus = FocusNode(debugLabel: 'Setup libraries entry');
+  bool _libraryFocusCallbackScheduled = false;
+  bool _libraryFocusClearScheduled = false;
+  bool _libraryEntryWasEnabled = false;
 
   SetupReview? get _review => _phase?.review;
 
   bool get _firstSetup => _review?.base.isEmpty ?? true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _androidTv = LineupTheme.of(context).androidTv;
+  }
 
   @override
   void initState() {
@@ -74,6 +90,169 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           ? widget.controller.libraries.map((library) => library.id)
           : widget.controller.selectedLibraryIds,
     );
+  }
+
+  @override
+  void dispose() {
+    _libraryEntryFocus.dispose();
+    super.dispose();
+  }
+
+  bool get _libraryEntryFocusIsEligible {
+    if (!mounted || _step != _SetupStep.libraries) return false;
+    if (ModalRoute.of(context)?.isCurrent != true) return false;
+    if (!_libraryEntryFocus.canRequestFocus ||
+        _libraryEntryFocus.context?.mounted != true) {
+      return false;
+    }
+    if (_libraryEntryFocus.enclosingScope?.canRequestFocus == false) {
+      return false;
+    }
+    if (context.findAncestorWidgetOfExactType<Offstage>()?.offstage == true) {
+      return false;
+    }
+    if (context.findAncestorWidgetOfExactType<ExcludeFocus>()?.excluding ==
+        true) {
+      return false;
+    }
+    return true;
+  }
+
+  void _scheduleLibraryEntryFocus() {
+    if (!_androidTv ||
+        _step != _SetupStep.libraries ||
+        _libraryFocusCallbackScheduled) {
+      return;
+    }
+    _libraryFocusCallbackScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _libraryFocusCallbackScheduled = false;
+      restoreNavigationFocus();
+    });
+  }
+
+  /// Restores the existing Libraries entry after a retained navigation return.
+  /// The shell calls this only once its subtree is visible again.
+  void restoreNavigationFocus() {
+    if (_libraryEntryTargetIsEnabled && _libraryEntryFocusIsEligible) {
+      _libraryEntryFocus.requestFocus();
+    }
+  }
+
+  bool get _libraryEntryTargetIsEnabled {
+    if (!mounted ||
+        !_androidTv ||
+        _committingLibraries ||
+        _step != _SetupStep.libraries) {
+      return false;
+    }
+    final controller = widget.controller;
+    if (controller.libraryScanStatus == LibraryScanStatus.scanning) {
+      return false;
+    }
+    if (controller.libraries.isEmpty) {
+      return !controller.busy && controller.canSwitchServer;
+    }
+    return !controller.busy;
+  }
+
+  void _clearLibraryEntryFocusIfUnavailable() {
+    if (_libraryEntryTargetIsEnabled ||
+        !_libraryEntryFocus.hasFocus ||
+        _libraryFocusClearScheduled) {
+      return;
+    }
+    _libraryFocusClearScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _libraryFocusClearScheduled = false;
+      if (mounted && !_libraryEntryTargetIsEnabled) {
+        _libraryEntryFocus.unfocus(disposition: UnfocusDisposition.scope);
+      }
+    });
+  }
+
+  /// Claims one contextual Back press for the active setup owner.
+  bool handleBack() {
+    if (_step == _SetupStep.libraries) {
+      if (_committingLibraries || !widget.controller.canSwitchServer) {
+        return true;
+      }
+      if (widget.controller.libraryScanStatus == LibraryScanStatus.scanning) {
+        widget.controller.cancelLibraryScan();
+        return true;
+      }
+      if (widget.controller.channelSetupCanCancel) {
+        widget.controller.cancelChannelSetup();
+        return true;
+      }
+      return widget.controller.busy;
+    }
+
+    if (_step == _SetupStep.configure) {
+      _backToLibraries();
+      return true;
+    }
+    if (_step == _SetupStep.review) {
+      _backToConfigure();
+      return true;
+    }
+
+    final phase = _phase;
+    if (phase is Applying || phase == null) return true;
+    if (phase is Failed) {
+      _backToReview(phase);
+      return true;
+    }
+    if (phase is Completed) {
+      _viewLineupFromBack();
+      return true;
+    }
+    return true;
+  }
+
+  bool _editableTextOwnsBackspace() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    return context?.widget is EditableText ||
+        context?.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
+  KeyEventResult _navigationKey(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.backspace && _editableTextOwnsBackspace()) {
+      return KeyEventResult.ignored;
+    }
+    if (!_androidTv ||
+        ![
+          LogicalKeyboardKey.escape,
+          LogicalKeyboardKey.goBack,
+          LogicalKeyboardKey.backspace,
+        ].contains(key)) {
+      return KeyEventResult.ignored;
+    }
+    return handleBack() ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  void _backToLibraries() {
+    if (!mounted) return;
+    setState(() => _step = _SetupStep.libraries);
+    _scheduleLibraryEntryFocus();
+  }
+
+  void _backToConfigure() {
+    if (!mounted) return;
+    setState(() => _step = _SetupStep.configure);
+  }
+
+  void _backToReview(SetupPhase phase) {
+    if (!mounted) return;
+    setState(() {
+      _step = _SetupStep.review;
+      _phase = Reviewing(
+        phase.review,
+        confirmed: phase is Failed && phase.confirmed,
+      );
+    });
   }
 
   final _projection = ChannelSetupProjection();
@@ -163,6 +342,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   @override
   Widget build(BuildContext context) {
+    final entryEnabled = _libraryEntryTargetIsEnabled;
+    if (entryEnabled && !_libraryEntryWasEnabled) {
+      _scheduleLibraryEntryFocus();
+    }
+    _libraryEntryWasEnabled = entryEnabled;
+    _clearLibraryEntryFocusIfUnavailable();
     final resultState = _step == _SetupStep.result;
     final phase = _phase;
     final page = SafeArea(
@@ -215,16 +400,21 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ),
       ),
     );
-    return Scaffold(
-      body: Material(
-        color: LineupTheme.of(context).deepBackground,
-        child: resultState
-            ? SetupResultAtmosphere(
-                applying: phase is Applying,
-                failed: phase is Failed,
-                child: page,
-              )
-            : page,
+    return Focus(
+      // Route descendant Back keys without becoming a directional focus target.
+      canRequestFocus: false,
+      onKeyEvent: _navigationKey,
+      child: Scaffold(
+        body: Material(
+          color: LineupTheme.of(context).deepBackground,
+          child: resultState
+              ? SetupResultAtmosphere(
+                  applying: phase is Applying,
+                  failed: phase is Failed,
+                  child: page,
+                )
+              : page,
+        ),
       ),
     );
   }
@@ -356,6 +546,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           ..addAll(widget.controller.libraries.map((library) => library.id));
       }
     }),
+    entryFocusNode: _libraryEntryFocus,
     onRequestLogout: widget.onRequestLogout,
   );
 
@@ -406,6 +597,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Future<void> _commitLibraries(Set<String> ready) async {
+    if (_committingLibraries) return;
+    final revision = ++_libraryCommitRevision;
+    _committingLibraries = true;
     try {
       final saved = await widget.controller.commitLibraryScan(ready);
       if (!mounted) return;
@@ -429,6 +623,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           ),
         );
       }
+    } finally {
+      if (mounted && revision == _libraryCommitRevision) {
+        _committingLibraries = false;
+      }
     }
   }
 
@@ -443,7 +641,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       section: _configurationSection,
       onSectionChanged: (section) =>
           setState(() => _configurationSection = section),
-      onBack: () => setState(() => _step = _SetupStep.libraries),
+      onBack: _backToLibraries,
       onReview: _prepareReview,
       hasConfirmedMissingSources:
           _mode == ChannelBuildMode.merge &&
@@ -643,7 +841,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       onSearchChanged: (search) => setState(() => _reviewSearch = search),
       isGeneratedSourceConfirmedGone:
           widget.controller.isGeneratedSourceConfirmedGone,
-      onBack: () => setState(() => _step = _SetupStep.configure),
+      onBack: _backToConfigure,
       onModeChanged: _changeReviewMode,
       onRemovalChanged: _changeReviewRemoval,
       onRemovalConfirmationChanged: (confirmed) => setState(() {
@@ -743,20 +941,22 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     return SetupResultStep(
       phase: phase,
       totalChannels: widget.controller.channels.length,
-      onBackToReview: () => setState(() {
-        _step = _SetupStep.review;
-        _phase = Reviewing(
-          phase.review,
-          confirmed: phase is Failed && phase.confirmed,
-        );
-      }),
+      onBackToReview: () => _backToReview(phase),
       onViewLineup: _viewLineup,
       onAddCustom: _addCustom,
     );
   }
 
-  void _viewLineup() =>
-      (widget.onViewLineup ?? widget.controller.completeChannelSetup)();
+  void _viewLineup() {
+    (widget.onViewLineup ?? widget.controller.completeChannelSetup)();
+  }
+
+  void _viewLineupFromBack() {
+    if (_completionActionStarted) return;
+    _completionActionStarted = true;
+    _viewLineup();
+  }
+
   void _addCustom() =>
       (widget.onAddCustomChannel ?? widget.controller.completeChannelSetup)();
 }

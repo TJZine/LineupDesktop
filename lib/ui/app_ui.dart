@@ -1,15 +1,17 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
+import 'lineup_canvas.dart';
 import 'lineup_focus.dart';
 
 export 'lineup_controls.dart';
 export 'lineup_focus.dart';
+export 'lineup_text_field_activation.dart';
 
 typedef LineupMenuCallback = void Function(
   BuildContext invokerContext,
@@ -51,33 +53,41 @@ class LineupTopBar extends StatelessWidget {
       final roles = LineupTheme.of(context);
       final menu = onOpenMenu != null && menuFocusNode != null;
       final condensed = constraints.maxWidth < 900;
-      final lockup = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            'assets/branding/lineup-logo-mark.png',
-            width: 30,
-            height: 30,
-            excludeFromSemantics: true,
-          ),
-          if (!condensed) ...[
-            const SizedBox(width: 14),
-            Text(
-              'LINEUP',
-              style: TextStyle(
-                fontFamily: 'Arial',
-                fontSize: 22,
-                fontWeight: FontWeight.w400,
-                letterSpacing: 3,
-                color: roles.primaryText,
-              ),
+      final lockup = Builder(
+        builder: (context) {
+          final ink = LineupTheme.of(context);
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/branding/lineup-logo-mark.png',
+                  width: 30,
+                  height: 30,
+                  excludeFromSemantics: true,
+                ),
+                if (!condensed) ...[
+                  const SizedBox(width: 14),
+                  Text(
+                    'LINEUP',
+                    style: TextStyle(
+                      fontFamily: 'Arial',
+                      fontSize: 22,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 3,
+                      color: ink.primaryText,
+                    ),
+                  ),
+                ],
+                if (menu) ...[
+                  const SizedBox(width: 14),
+                  Icon(Icons.menu, size: 22, color: ink.primaryText),
+                ],
+              ],
             ),
-          ],
-          if (menu) ...[
-            const SizedBox(width: 14),
-            Icon(Icons.menu, size: 22, color: roles.primaryText),
-          ],
-        ],
+          );
+        },
       );
       return Container(
         key: const ValueKey('lineup-top-bar'),
@@ -99,7 +109,11 @@ class LineupTopBar extends StatelessWidget {
                     focusNode: menuFocusNode,
                     onPressed: () =>
                         onOpenMenu!(invokerContext, menuFocusNode!),
-                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    style: TextButton.styleFrom(
+                      padding: roles.androidTv
+                          ? const EdgeInsets.symmetric(horizontal: 20)
+                          : EdgeInsets.zero,
+                    ),
                     child: lockup,
                   ),
                 ),
@@ -351,77 +365,6 @@ class LineupEmptyState extends StatelessWidget {
   );
 }
 
-class LineupSelectionCard extends StatefulWidget {
-  const LineupSelectionCard({
-    required this.selected,
-    required this.onPressed,
-    required this.child,
-    this.autofocus = false,
-    super.key,
-  });
-  final bool selected;
-  final VoidCallback? onPressed;
-  final Widget child;
-  final bool autofocus;
-
-  @override
-  State<LineupSelectionCard> createState() => _LineupSelectionCardState();
-}
-
-class _LineupSelectionCardState extends State<LineupSelectionCard> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    final radius = roles.panelRadius;
-    final focusRadius = radius == 0 ? 0.0 : radius + 3;
-    return MergeSemantics(
-      child: Semantics(
-        button: true,
-        selected: widget.selected,
-        enabled: widget.onPressed != null,
-        child: AnimatedContainer(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : LineupTheme.fast,
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(focusRadius),
-            border: Border.all(
-              color: LineupFocusScope.visible(context, _focused)
-                  ? roles.focusBorder
-                  : Colors.transparent,
-              width: LineupFocusScope.visible(context, _focused)
-                  ? roles.focusBorderWidth
-                  : 1,
-            ),
-          ),
-          child: Card(
-            margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(radius),
-              side: BorderSide(
-                color: widget.selected
-                    ? roles.progressFill
-                    : roles.subtleBorder,
-                width: 1,
-              ),
-            ),
-            child: InkWell(
-              autofocus: widget.autofocus,
-              borderRadius: BorderRadius.circular(radius),
-              onFocusChange: (focused) => setState(() => _focused = focused),
-              onTap: widget.onPressed,
-              child: widget.child,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 Future<bool> confirmDestructiveAction(
   BuildContext context, {
   required String title,
@@ -452,6 +395,139 @@ Future<bool> confirmDestructiveAction(
       ),
     ) ??
     false;
+
+/// Decodes [imageProvider] no larger than needed to cover a [width] x
+/// [height] physical-pixel slot with [BoxFit.cover], preserving aspect ratio
+/// and never upscaling. Unlike [ResizeImage], the target depends on the
+/// intrinsic aspect ratio, so a wide slot never receives a softer decode.
+@immutable
+class CoverResizeImage extends ImageProvider<CoverResizeImageKey> {
+  const CoverResizeImage(
+    this.imageProvider, {
+    required this.width,
+    required this.height,
+  }) : assert(width > 0 && height > 0);
+
+  /// Decode bucket in physical pixels. Rounding the slot up to it keeps a
+  /// resizing desktop window from decoding on every frame, and is never
+  /// smaller than the painted slot.
+  static const bucket = 64;
+
+  /// A cover-decoded provider for [bytes] laid out in [constraints] (canvas
+  /// pixels), or a plain [MemoryImage] unless the slot is tight. A loose slot
+  /// sizes an image from its intrinsic pixels, which resizing would change.
+  static ImageProvider forSlot(
+    BuildContext context,
+    Uint8List bytes,
+    BoxConstraints constraints,
+  ) {
+    final memory = MemoryImage(bytes);
+    final slot = constraints.biggest;
+    if (!constraints.isTight || slot.isEmpty || !slot.isFinite) return memory;
+    final ratio = LineupCanvas.physicalPixelRatioOf(context);
+    int physical(double extent) =>
+        ((extent * ratio).ceil() / bucket).ceil() * bucket;
+    return CoverResizeImage(
+      memory,
+      width: physical(slot.width),
+      height: physical(slot.height),
+    );
+  }
+
+  /// The proportional decode size that covers [width] x [height], capped at
+  /// the intrinsic size.
+  static ui.TargetImageSize targetSize(
+    int intrinsicWidth,
+    int intrinsicHeight,
+    int width,
+    int height,
+  ) {
+    final scale = math.min(
+      1.0,
+      math.max(width / intrinsicWidth, height / intrinsicHeight),
+    );
+    return ui.TargetImageSize(
+      width: math.min(intrinsicWidth, (intrinsicWidth * scale).ceil()),
+      height: math.min(intrinsicHeight, (intrinsicHeight * scale).ceil()),
+    );
+  }
+
+  final ImageProvider imageProvider;
+  final int width;
+  final int height;
+
+  @override
+  Future<CoverResizeImageKey> obtainKey(ImageConfiguration configuration) {
+    Completer<CoverResizeImageKey>? completer;
+    SynchronousFuture<CoverResizeImageKey>? result;
+    unawaited(
+      imageProvider.obtainKey(configuration).then((Object key) {
+        final value = CoverResizeImageKey._(key, width, height);
+        if (completer == null) {
+          result = SynchronousFuture(value);
+        } else {
+          completer.complete(value);
+        }
+      }),
+    );
+    if (result != null) return result!;
+    completer = Completer<CoverResizeImageKey>();
+    return completer.future;
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    CoverResizeImageKey key,
+    ImageDecoderCallback decode,
+  ) {
+    Future<ui.Codec> decodeCover(
+      ui.ImmutableBuffer buffer, {
+      ui.TargetImageSizeCallback? getTargetSize,
+    }) {
+      assert(getTargetSize == null);
+      return decode(
+        buffer,
+        getTargetSize: (intrinsicWidth, intrinsicHeight) =>
+            targetSize(intrinsicWidth, intrinsicHeight, width, height),
+      );
+    }
+
+    final completer = imageProvider.loadImage(key._providerKey, decodeCover);
+    completer.addEphemeralErrorListener((_, _) {
+      scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
+    });
+    return completer;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is CoverResizeImage &&
+      other.imageProvider == imageProvider &&
+      other.width == width &&
+      other.height == height;
+
+  @override
+  int get hashCode => Object.hash(imageProvider, width, height);
+}
+
+@immutable
+class CoverResizeImageKey {
+  const CoverResizeImageKey._(this._providerKey, this.width, this.height);
+
+  final Object _providerKey;
+  final int width;
+  final int height;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CoverResizeImageKey &&
+      other._providerKey == _providerKey &&
+      other.width == width &&
+      other.height == height;
+
+  @override
+  int get hashCode => Object.hash(_providerKey, width, height);
+}
 
 bool clearLogoIsUsable(Size intrinsicSize, BoxConstraints constraints) {
   if (!intrinsicSize.width.isFinite ||
@@ -500,18 +576,60 @@ class ClearLogoImage extends StatefulWidget {
   State<ClearLogoImage> createState() => _ClearLogoImageState();
 }
 
+typedef _ClearLogoRequest = ({
+  Uint8List bytes,
+  int width,
+  int height,
+  double pixelRatio,
+});
+
 class _ClearLogoImageState extends State<ClearLogoImage> {
-  Future<Size?>? _intrinsicSize;
-  Future<Rect?>? _visibleFraction;
+  _ClearLogoRequest? _request;
+  _ClearLogoRaster? _raster;
+  int _generation = 0;
+
+  void _reset() {
+    _generation++;
+    _request = null;
+    _raster?.image.dispose();
+    _raster = null;
+  }
 
   @override
   void didUpdateWidget(covariant ClearLogoImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.bytes != widget.bytes) {
-      _intrinsicSize = null;
-      _visibleFraction = null;
-    }
+    if (!identical(oldWidget.bytes, widget.bytes)) _reset();
   }
+
+  @override
+  void dispose() {
+    _reset();
+    super.dispose();
+  }
+
+  void _load(_ClearLogoRequest request) {
+    _reset();
+    _request = request;
+    final entry = _clearLogoCacheEntry(request);
+    if (entry.completed) {
+      // Called from build before `_raster` is read, so no setState is needed.
+      _raster = entry.cloneRaster();
+      return;
+    }
+    final generation = _generation;
+    unawaited(
+      entry.done.then((_) {
+        if (!mounted || generation != _generation) return;
+        final raster = entry.cloneRaster();
+        if (raster != null) setState(() => _raster = raster);
+      }),
+    );
+  }
+
+  // Round down so every bucket still fits the current slot. Changes within a
+  // bucket only relayout the existing raster, avoiding repeated decodes.
+  static int _pixelBucket(double pixels) =>
+      math.max(1, (pixels / 8).floor() * 8);
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -525,122 +643,217 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
                 widget.maximumSize!.height,
               ),
             );
-      return FutureBuilder<Size?>(
-        future: _intrinsicSize ??= _decodeImageSize(
-          widget.bytes,
-          createLocalImageConfiguration(context),
-        ),
-        builder: (context, snapshot) {
-          final size = snapshot.data;
-          if (snapshot.connectionState != ConnectionState.done ||
-              size == null ||
-              !clearLogoIsUsable(size, constraints)) {
-            return widget.fallback;
-          }
-          Widget image() => ConstrainedBox(
-            constraints: constraints,
-            child: Image.memory(
-              widget.bytes,
-              key: widget.imageKey,
-              fit: BoxFit.contain,
-              alignment: Alignment.centerLeft,
-              gaplessPlayback: true,
-              semanticLabel: widget.semanticLabel,
-              excludeFromSemantics: widget.excludeFromSemantics,
-              errorBuilder: (_, _, _) => widget.fallback,
-            ),
-          );
-          final minimum = widget.minimumVisibleSize;
-          if (minimum == null && widget.maximumVisibleHeight == null) {
-            return image();
-          }
-          return FutureBuilder<Rect?>(
-            future: _visibleFraction ??= _decodeVisibleFraction(widget.bytes),
-            builder: (context, visible) {
-              final fraction = visible.data;
-              if (visible.connectionState != ConnectionState.done ||
-                  fraction == null) {
-                return widget.fallback;
-              }
-              var fitted = applyBoxFit(
-                BoxFit.contain,
-                size,
-                constraints.biggest,
-              ).destination;
-              final visibleCap = widget.maximumVisibleHeight;
-              if (visibleCap != null &&
-                  fitted.height * fraction.height > visibleCap) {
-                fitted *= visibleCap / (fitted.height * fraction.height);
-              }
-              if (minimum != null &&
-                  (fitted.width * fraction.width < minimum.width ||
-                      fitted.height * fraction.height < minimum.height)) {
-                return widget.fallback;
-              }
-              return SizedBox(
-                width: fitted.width * fraction.width,
-                height: fitted.height * fraction.height,
-                child: Stack(
-                  children: [
-                    Positioned(
-                      left: -fitted.width * fraction.left,
-                      top: -fitted.height * fraction.top,
-                      width: fitted.width,
-                      height: fitted.height,
-                      child: image(),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+      if (!constraints.hasBoundedWidth ||
+          !constraints.hasBoundedHeight ||
+          constraints.biggest.isEmpty) {
+        if (_request != null) _reset();
+        return widget.fallback;
+      }
+      // Canvas pixels are scaled by LineupCanvas before reaching the window,
+      // so decode at the painted physical size, not canvas size x DPR.
+      final ratio = LineupCanvas.physicalPixelRatioOf(context);
+      final request = (
+        bytes: widget.bytes,
+        width: _pixelBucket(constraints.maxWidth * ratio),
+        height: _pixelBucket(constraints.maxHeight * ratio),
+        pixelRatio: ratio,
       );
-    },
-  );
-}
-
-Future<Size?> _decodeImageSize(
-  Uint8List bytes,
-  ImageConfiguration configuration,
-) {
-  final completer = Completer<Size?>();
-  final stream = MemoryImage(bytes).resolve(configuration);
-  late final ImageStreamListener listener;
-  listener = ImageStreamListener(
-    (info, _) {
-      final size = Size(
-        info.image.width.toDouble(),
-        info.image.height.toDouble(),
-      );
-      try {
-        completer.complete(size);
-      } finally {
-        try {
-          info.dispose();
-        } finally {
-          stream.removeListener(listener);
+      if (request != _request) _load(request);
+      final raster = _raster;
+      if (raster == null ||
+          !clearLogoIsUsable(raster.intrinsicSize, constraints)) {
+        return widget.fallback;
+      }
+      final fraction = raster.visibleFraction;
+      var fitted = applyBoxFit(
+        BoxFit.contain,
+        raster.intrinsicSize,
+        constraints.biggest,
+      ).destination;
+      final crop =
+          widget.minimumVisibleSize != null ||
+          widget.maximumVisibleHeight != null;
+      if (crop) {
+        final cap = widget.maximumVisibleHeight;
+        if (cap != null && fitted.height * fraction.height > cap) {
+          fitted *= cap / (fitted.height * fraction.height);
+        }
+        final minimum = widget.minimumVisibleSize;
+        if (minimum != null &&
+            (fitted.width * fraction.width < minimum.width ||
+                fitted.height * fraction.height < minimum.height)) {
+          return widget.fallback;
         }
       }
-    },
-    onError: (_, _) {
-      completer.complete();
-      stream.removeListener(listener);
+      Widget image = ConstrainedBox(
+        constraints: constraints,
+        child: RawImage(
+          key: widget.imageKey,
+          image: raster.image,
+          // Preserve the original contain geometry independently of decode size.
+          width: fitted.width,
+          height: fitted.height,
+          fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
+        ),
+      );
+      if (!widget.excludeFromSemantics) {
+        image = Semantics(
+          container: widget.semanticLabel != null,
+          image: true,
+          label: widget.semanticLabel ?? '',
+          child: image,
+        );
+      }
+      if (!crop) return image;
+      return SizedBox(
+        width: fitted.width * fraction.width,
+        height: fitted.height * fraction.height,
+        child: Stack(
+          children: [
+            Positioned(
+              left: -fitted.width * fraction.left,
+              top: -fitted.height * fraction.top,
+              width: fitted.width,
+              height: fitted.height,
+              child: image,
+            ),
+          ],
+        ),
+      );
     },
   );
-  stream.addListener(listener);
-  return completer.future;
 }
 
-Future<Rect?> _decodeVisibleFraction(Uint8List bytes) async {
+class _ClearLogoRaster {
+  const _ClearLogoRaster(this.image, this.intrinsicSize, this.visibleFraction);
+
+  final ui.Image image;
+  final Size intrinsicSize;
+  final Rect visibleFraction;
+}
+
+const _clearLogoCacheCapacity = 8;
+
+/// One decoded (or failed) logo for a bytes object and pixel bucket. The cache
+/// owns [raster]'s master image; mounted states only ever hold clones of it.
+class _ClearLogoCacheEntry {
+  _ClearLogoCacheEntry(this.bytes, this.width, this.height);
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
+  late final Future<void> done;
+  _ClearLogoRaster? raster;
+  bool completed = false;
+
+  /// Set when the cache was reset while this decode was in flight.
+  bool dropped = false;
+
+  _ClearLogoRaster? cloneRaster() {
+    final master = raster;
+    if (master == null) return null;
+    return _ClearLogoRaster(
+      master.image.clone(),
+      master.intrinsicSize,
+      master.visibleFraction,
+    );
+  }
+}
+
+// Least recently used first. Bytes are matched by identity, never by content.
+final List<_ClearLogoCacheEntry> _clearLogoCache = [];
+
+_ClearLogoCacheEntry _clearLogoCacheEntry(_ClearLogoRequest request) {
+  final index = _clearLogoCache.indexWhere(
+    (entry) =>
+        identical(entry.bytes, request.bytes) &&
+        entry.width == request.width &&
+        entry.height == request.height,
+  );
+  if (index >= 0) {
+    final entry = _clearLogoCache.removeAt(index);
+    _clearLogoCache.add(entry);
+    return entry;
+  }
+  final entry = _ClearLogoCacheEntry(
+    request.bytes,
+    request.width,
+    request.height,
+  );
+  entry.done = _decodeClearLogo(request).then((raster) {
+    entry.completed = true;
+    if (entry.dropped) {
+      raster?.image.dispose();
+      return;
+    }
+    entry.raster = raster;
+  });
+  _clearLogoCache.add(entry);
+  _evictClearLogos();
+  return entry;
+}
+
+// Runs only on insertion, which happens during build. Waiters clone in the
+// microtasks that follow a decode, so every completed entry has been cloned
+// before it can be evicted here.
+void _evictClearLogos() {
+  while (_clearLogoCache.length > _clearLogoCacheCapacity) {
+    final index = _clearLogoCache.indexWhere((entry) => entry.completed);
+    if (index < 0) return; // Never evict an in-flight decode.
+    _clearLogoCache.removeAt(index).raster?.image.dispose();
+  }
+}
+
+/// Waits for all pending clear-logo rasters, including decodes started by waiters.
+/// Widget tests should call this in `runAsync`, then pump to paint the result.
+@visibleForTesting
+Future<void> clearLogoDecodesSettled() async {
+  while (true) {
+    final pending = [
+      for (final entry in _clearLogoCache)
+        if (!entry.completed) entry.done,
+    ];
+    if (pending.isEmpty) return;
+    await Future.wait(pending);
+  }
+}
+
+@visibleForTesting
+void debugResetClearLogoCache() {
+  for (final entry in _clearLogoCache) {
+    if (entry.completed) {
+      entry.raster?.image.dispose();
+      entry.raster = null;
+    } else {
+      entry.dropped = true;
+    }
+  }
+  _clearLogoCache.clear();
+}
+
+Future<_ClearLogoRaster?> _decodeClearLogo(_ClearLogoRequest request) async {
+  ui.ImmutableBuffer? buffer;
+  ui.ImageDescriptor? descriptor;
   ui.Codec? codec;
   ui.Image? image;
   try {
-    codec = await ui.instantiateImageCodec(
-      bytes,
-      targetWidth: 512,
-      targetHeight: 512,
-      allowUpscaling: false,
+    buffer = await ui.ImmutableBuffer.fromUint8List(request.bytes);
+    descriptor = await ui.ImageDescriptor.encoded(buffer);
+    final intrinsicSize = Size(
+      descriptor.width.toDouble(),
+      descriptor.height.toDouble(),
+    );
+    final scale = math.min(
+      1.0,
+      math.min(
+        request.width / descriptor.width,
+        request.height / descriptor.height,
+      ),
+    );
+    codec = await descriptor.instantiateCodec(
+      targetWidth: math.max(1, (descriptor.width * scale).floor()),
+      targetHeight: math.max(1, (descriptor.height * scale).floor()),
     );
     image = (await codec.getNextFrame()).image;
     final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
@@ -657,16 +870,21 @@ Future<Rect?> _decodeVisibleFraction(Uint8List bytes) async {
       }
     }
     if (right < left || bottom < top) return null;
-    return Rect.fromLTRB(
+    final fraction = Rect.fromLTRB(
       math.max(0, left - 1) / image.width,
       math.max(0, top - 1) / image.height,
       math.min(image.width, right + 2) / image.width,
       math.min(image.height, bottom + 2) / image.height,
     );
+    final result = _ClearLogoRaster(image, intrinsicSize, fraction);
+    image = null; // The caller now owns this validated image handle.
+    return result;
   } catch (_) {
     return null;
   } finally {
     image?.dispose();
     codec?.dispose();
+    descriptor?.dispose();
+    buffer?.dispose();
   }
 }
