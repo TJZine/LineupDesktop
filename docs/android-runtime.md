@@ -251,3 +251,21 @@ API 34 Android TV emulator validation confirms comparisons against all seven
 specified Typeface families and live updates from the system Captions screen,
 including style changes while its Display switch is off. This establishes the
 Android OS channel; the Fire OS settings backing remains a physical check.
+
+Direct Play decorates SSA through the existing extractor parser factory. The
+single stock Media3 parser keeps authored behavior; bounded temporary markers
+carry sign/drawing classification and inline i/b/u through cue serialization.
+Private nonvisual annotations are removed before native drawing. Whole events
+with pos/move/org/clip/iclip or positive p are omitted from Lineup drawing;
+p0, literal backslashes and ordinary inline styles remain. Bare i/b/u and r
+reset emphasis with the same grammar as the desktop parser. Live toggles use the
+classification on already-decoded cues without reloading.
+
+A decorator failure makes that track use original stock native cues, including
+when styling is enabled. Already-current cues reroute immediately; fallback
+never replaces them with an empty Lineup result. Original-input replay on a
+failure skips callbacks already delivered, avoiding duplicate merge cues. Raw
+input/rewrite scratch is capped at 64 KiB, 64 events and 256 style transitions;
+there is no second parser, extra buffered timeline or retained raw-event cache.
+An empty public parse releases SsaParser's reference to rewritten scratch after
+each packet. HLS/transcoding is not wired to this decorator.

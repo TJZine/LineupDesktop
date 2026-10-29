@@ -67,6 +67,23 @@ Dialogue: 0,0:00:12.10,0:00:18.00,Default,,0,0,0,,{\p1}m 0 0 l 30 0 30 30 0 30{\
             'pixelSize':24,'text':['Look out!','[Door creaks]']},indent=2)+'\n')
 
 
+    # SSA dialogue/sign/drawing parity controls; separate from prior corpus identities.
+    ssa_header = (ROOT/'subtitle-routing.ass').read_text().split('[Events]')[0]
+    for name, dialogue in [
+        ('subtitle-ass-dialogue', r'''Dialogue: 0,0:00:00.50,0:00:12.00,Default,,0,0,0,,Dialogue {\i1}italic{\i0} {\b1}bold{\b0} {\u1}underlined{\u0}
+Dialogue: 0,0:00:00.50,0:00:12.00,Default,,0,0,0,,{\p0\an8}p0 retained
+Dialogue: 0,0:00:06.10,0:00:12.00,Default,,0,0,0,,{\pos(80,80)}Synthetic sign
+Dialogue: 0,0:00:12.10,0:00:29.00,Default,,0,0,0,,Dialogue {\i1}italic{\i0} {\b1}bold{\b0} {\u1}underlined{\u0}
+Dialogue: 0,0:00:12.10,0:00:29.00,Default,,0,0,0,,{\p0\an8}p0 retained
+Dialogue: 0,0:00:12.10,0:00:18.00,Default,,0,0,0,,{\p1}m 0 0 l 30 0 30 30 0 30{\p0}
+'''),
+        ('subtitle-ass-fallback', 'Dialogue: 0,0:00:00.50,0:00:29.00,Default,,0,0,0,,Fallback literal \ue000LN: preserved\n'),
+    ]:
+        source = ROOT/(name+'.ass')
+        source.write_text(ssa_header+'[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'+dialogue)
+        if not (ROOT/(name+'.mkv')).exists():
+            run(['ffmpeg','-y','-i',str(ROOT/'subtitle-source.mp4'),'-i',str(source),'-map','0:v','-map','1:0','-c:v','copy','-c:s','ass','-disposition:s:0','default',str(ROOT/(name+'.mkv'))])
+
     subtitle_facts = {}
     for path in sorted(ROOT.glob('subtitle-*')):
         if path.suffix not in ('.mkv', '.mp4'): continue

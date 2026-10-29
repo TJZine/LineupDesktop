@@ -554,3 +554,11 @@ activity cleanup. Reads and `changed` events use nullable fields for unset OS
 style values, unsigned 64-bit ARGB colors, and the protocol's seven typeface
 keys. Device style remains available while the system captions switch is off.
 Subtitle processing exceptions use fixed debug-only messages without content.
+
+For Direct Play SSA, private nonvisual cue metadata retains event classification
+through Media3's pre-parsed cue codec. It adds no wire fields. Lineup mode drops
+whole sign events (pos/move/org/clip/iclip) and positive drawing-mode events;
+p0 dialogue and i/b/u/an remain. A failed decorator track falls back to stock
+native drawing even when `lineupDrawsStyled` is true; existing decoded cues also
+fall back without reload or a playback-error event. Native drawing receives
+stock-equivalent cues with private metadata removed.

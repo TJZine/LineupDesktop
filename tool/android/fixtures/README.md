@@ -160,3 +160,17 @@ contains explicit `\1c` color and `\1a&H40&` alpha spans.
 Keep the ASS source's blank section separators. Media3 1.11.1 otherwise skips
 the last PlayResY/Style rows; the real-parser JVM test checks authored fractional
 size and color so a fallback-style render cannot stand in for ASS fidelity.
+
+`subtitle-ass-dialogue.mkv` adds concurrent ordinary dialogue with inline
+italic/bold/underline, p0/an8 dialogue, a sign at7s and a drawing at13s. Dialogue
+records restart at12.1s so a direct-start13s check reads the concurrent records
+in the same Matroska cluster; stock Media3 otherwise omits long-lived early cue
+packets on that seek. This is a fixture control, not a production seek fix.
+`subtitle-ass-fallback.mkv` deliberately contains a literal reserved-marker
+prefix to exercise stock native fallback; its original literal text must be
+preserved, including with styling enabled. Earlier fixture media stays unchanged.
+
+JVM resources include a tiny synthetic SSA-only Matroska derived from the
+original authored source and the shared desktop tag cases. Tests run the real
+extractor/parser/cue codec on API28/34, compare stock/native fields, spans and
+timing, and verify inline toggles, overlap, literal collisions and track fallback.

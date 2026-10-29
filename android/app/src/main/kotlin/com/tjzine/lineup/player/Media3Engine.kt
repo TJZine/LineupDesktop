@@ -82,6 +82,9 @@ internal class Media3Engine(
     private var observer: PlayerEngine.Listener? = null
     private var lastCues: List<Cue> = emptyList()
     private var subtitleFormat: Format? = null
+    private val ssaParsers = SsaDialogueParser.Factory(debug) {
+        handler.post { if (!closed) refreshSubtitles() }
+    }
 
     internal fun subtitleTracksChanged(value: Tracks) {
         if (closed) return
@@ -111,11 +114,13 @@ internal class Media3Engine(
         if (closed) return
         try {
             val presentation = subtitlePresentation()
-            val native = SubtitleCues.engineDraws(subtitleFormat, presentation)
+            val native = SubtitleCues.engineDraws(subtitleFormat, presentation) ||
+                ssaParsers.nativeFallback(subtitleFormat, lastCues)
             subtitles.setCues(lastCues.filter { it.bitmap != null || native }
-                .map { SubtitleCues.transform(it, presentation) })
+                .map { SubtitleCues.transform(SsaDialogueParser.nativeCue(it), presentation) })
             observer?.property("subtitle-cues", if (native) emptyList<Any>()
-                else if (subtitleFormat == null) emptyList<Any>() else SubtitleCues.encode(lastCues))
+                else if (subtitleFormat == null) emptyList<Any>() else SubtitleCues.encode(
+                    if (SsaDialogueParser.isSsa(subtitleFormat)) SsaDialogueParser.lineupCues(lastCues) else lastCues))
         } catch (_: Exception) {
             if (debug) android.util.Log.d("LineupPlayer", "Subtitle update skipped")
         }
@@ -272,7 +277,7 @@ internal class Media3Engine(
                                 if (!closed) listener.sourceInitialization(revision, accepted)
                             }
                         }
-                    },
+                    }.apply { setSubtitleParserFactory(ssaParsers) },
                 )
                 .createMediaSource(MediaItem.fromUri(media.uri)),
             milliseconds(media.startSeconds),
@@ -330,6 +335,7 @@ internal class Media3Engine(
         observer = null
         lastCues = emptyList()
         subtitleFormat = null
+        ssaParsers.clear()
         handler.removeCallbacks(progress)
         http?.setDefaultRequestProperties(emptyMap())
         http = null
