@@ -481,8 +481,8 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
             HardwareKeyboard.instance.isMetaPressed,
         hasProgram:
             (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-                (controller.overlay == PlayerOverlay.none ||
-                    controller.overlay == PlayerOverlay.osd)) ||
+                    (controller.overlay == PlayerOverlay.none ||
+                        controller.overlay == PlayerOverlay.osd)) ||
                 (_androidTv &&
                     (event.logicalKey == LogicalKeyboardKey.info ||
                         event.logicalKey == LogicalKeyboardKey.keyI))

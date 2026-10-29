@@ -1985,56 +1985,53 @@ void main() {
   );
 
   for (final tv in [false, true]) {
-    testWidgets(
-      'account-origin PIN Back returns to '
-      '${tv ? "Profiles on TV" : "Account on desktop"}',
-      (tester) async {
-        final controller = _PinController(
-          scenario: LineupScenario(
-            stage: SetupStage.profiles,
-            server: const PlexServer(
-              id: 'server',
-              name: 'Server',
-              connections: [],
-            ),
-            profileSelectionOrigin: SetupStage.ready,
-            profiles: const [
-              PlexHomeUser(
-                id: 'profile',
-                name: 'Protected profile',
-                protected: true,
-              ),
-            ],
+    testWidgets('account-origin PIN Back returns to '
+        '${tv ? "Profiles on TV" : "Account on desktop"}', (tester) async {
+      final controller = _PinController(
+        scenario: LineupScenario(
+          stage: SetupStage.profiles,
+          server: const PlexServer(
+            id: 'server',
+            name: 'Server',
+            connections: [],
           ),
-        );
-        addTearDown(controller.dispose);
-        await show(tester, controller, accountOrigin: true, androidTv: tv);
-        await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
-        await tester.pumpAndSettle();
+          profileSelectionOrigin: SetupStage.ready,
+          profiles: const [
+            PlexHomeUser(
+              id: 'profile',
+              name: 'Protected profile',
+              protected: true,
+            ),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await show(tester, controller, accountOrigin: true, androidTv: tv);
+      await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
+      await tester.pumpAndSettle();
 
-        expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(Dialog), findsNothing);
+      expect(
+        find.text(tv ? '‹ Profiles' : '‹ Settings · Account'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(tv ? '‹ Settings · Account' : '‹ Profiles'),
+        findsNothing,
+      );
+      await tester.sendKeyEvent(
+        tv ? LogicalKeyboardKey.goBack : LogicalKeyboardKey.escape,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
+      expect(controller.stage, tv ? SetupStage.profiles : SetupStage.ready);
+      if (tv) {
         expect(
-          find.text(tv ? '‹ Profiles' : '‹ Settings · Account'),
+          find.byKey(const ValueKey('profile-card-profile')),
           findsOneWidget,
         );
-        expect(
-          find.text(tv ? '‹ Settings · Account' : '‹ Profiles'),
-          findsNothing,
-        );
-        await tester.sendKeyEvent(
-          tv ? LogicalKeyboardKey.goBack : LogicalKeyboardKey.escape,
-        );
-        await tester.pumpAndSettle();
-        expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
-        expect(controller.stage, tv ? SetupStage.profiles : SetupStage.ready);
-        if (tv) {
-          expect(
-            find.byKey(const ValueKey('profile-card-profile')),
-            findsOneWidget,
-          );
-        }
-      },
-    );
+      }
+    });
   }
 }
 

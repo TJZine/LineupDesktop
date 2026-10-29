@@ -2875,112 +2875,110 @@ void main() {
     ('late initial failure', null, _wideLogoPng, _wideLogoPng),
     ('failed growth with initial fallback', _tinyPng, null, _tinyPng),
   ]) {
-    testWidgets(
-      'Guide backdrop preserves best available image: $label',
-      (tester) async {
-        tester.view
-          ..physicalSize = const Size(1280, 800)
-          ..devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        final poster = Completer<Uint8List?>();
-        final original = Completer<Uint8List?>();
-        final larger = Completer<Uint8List?>();
-        var backdropLoads = 0;
-        final now = DateTime(2026, 10, 29, 12);
-        final lineup = _Lineup(
-          1,
-          artworkLoader: (path) {
-            if (path.path == '/poster') return poster.future;
-            expect(path.path, '/backdrop');
-            backdropLoads++;
-            return backdropLoads == 1 ? original.future : larger.future;
-          },
-          scenario: LineupScenario(
-            settings: const LineupSettings(
-              guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
-              preferClearLogos: false,
-              reduceMotion: true,
-            ),
-            channels: [
-              Channel(
-                id: 'channel',
-                number: 7,
-                name: 'Drama Seven',
-                source: ManualSource([
-                  ChannelItem(
-                    id: 'episode',
-                    title: 'The Arrival',
-                    duration: const Duration(hours: 24),
-                    poster: Uri.parse('/poster'),
-                    backdrop: Uri.parse('/backdrop'),
-                  ),
-                ]),
-                playbackMode: PlaybackMode.sequential,
-                anchor: now.subtract(const Duration(hours: 1)),
-                shuffleSeed: 7,
-              ),
-            ],
+    testWidgets('Guide backdrop preserves best available image: $label', (
+      tester,
+    ) async {
+      tester.view
+        ..physicalSize = const Size(1280, 800)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final poster = Completer<Uint8List?>();
+      final original = Completer<Uint8List?>();
+      final larger = Completer<Uint8List?>();
+      var backdropLoads = 0;
+      final now = DateTime(2026, 10, 29, 12);
+      final lineup = _Lineup(
+        1,
+        artworkLoader: (path) {
+          if (path.path == '/poster') return poster.future;
+          expect(path.path, '/backdrop');
+          backdropLoads++;
+          return backdropLoads == 1 ? original.future : larger.future;
+        },
+        scenario: LineupScenario(
+          settings: const LineupSettings(
+            guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+            preferClearLogos: false,
+            reduceMotion: true,
           ),
-        );
-        addTearDown(lineup.dispose);
-        final guide = GuideController(
-          lineup: lineup,
-          clock: () => now,
-          loadSchedule: (channel) async => _schedule(channel),
-        );
-        addTearDown(guide.dispose);
-        await tester.pumpWidget(
-          MaterialApp(
-            builder: LineupCanvas.builder,
-            theme: LineupTheme.forName(LineupThemeName.emberSteel),
-            home: GuideView(
-              controller: guide,
-              showIdleArtwork: true,
-              pictureInPicture: const Text('Choose a channel to watch'),
-              onClose: (_, _) {},
-              onTune: (_) async {},
+          channels: [
+            Channel(
+              id: 'channel',
+              number: 7,
+              name: 'Drama Seven',
+              source: ManualSource([
+                ChannelItem(
+                  id: 'episode',
+                  title: 'The Arrival',
+                  duration: const Duration(hours: 24),
+                  poster: Uri.parse('/poster'),
+                  backdrop: Uri.parse('/backdrop'),
+                ),
+              ]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: now.subtract(const Duration(hours: 1)),
+              shuffleSeed: 7,
             ),
+          ],
+        ),
+      );
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: GuideView(
+            controller: guide,
+            showIdleArtwork: true,
+            pictureInPicture: const Text('Choose a channel to watch'),
+            onClose: (_, _) {},
+            onTune: (_) async {},
           ),
-        );
-        await tester.pumpAndSettle();
-        expect(backdropLoads, 1);
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(backdropLoads, 1);
 
-        tester.view.physicalSize = const Size(1920, 1080);
-        await tester.pumpAndSettle();
-        expect(backdropLoads, 2);
-        final (_, initialWidth, initialHeight) =
-            lineup.programArtworkSizes.first;
-        final (_, largerWidth, largerHeight) = lineup.programArtworkSizes.last;
-        expect(
-          largerWidth > initialWidth || largerHeight > initialHeight,
-          isTrue,
-        );
-        larger.complete(resizedBackdrop);
-        await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(1920, 1080);
+      await tester.pumpAndSettle();
+      expect(backdropLoads, 2);
+      final (_, initialWidth, initialHeight) = lineup.programArtworkSizes.first;
+      final (_, largerWidth, largerHeight) = lineup.programArtworkSizes.last;
+      expect(
+        largerWidth > initialWidth || largerHeight > initialHeight,
+        isTrue,
+      );
+      larger.complete(resizedBackdrop);
+      await tester.pumpAndSettle();
 
-        void expectBackdrop(Uint8List? bytes) {
-          for (final key in ['guide-idle-backdrop', 'guide-info-backdrop']) {
-            if (bytes == null) {
-              expect(find.byKey(Key(key)), findsNothing);
-              continue;
-            }
-            final image = tester.widget<Image>(find.byKey(Key(key))).image;
-            final source =
-                (image as CoverResizeImage).imageProvider as MemoryImage;
-            expect(source.bytes, same(bytes));
+      void expectBackdrop(Uint8List? bytes) {
+        for (final key in ['guide-idle-backdrop', 'guide-info-backdrop']) {
+          if (bytes == null) {
+            expect(find.byKey(Key(key)), findsNothing);
+            continue;
           }
+          final image = tester.widget<Image>(find.byKey(Key(key))).image;
+          final source =
+              (image as CoverResizeImage).imageProvider as MemoryImage;
+          expect(source.bytes, same(bytes));
         }
+      }
 
-        expectBackdrop(resizedBackdrop);
-        original.complete(initialBackdrop);
-        poster.complete(null);
-        await tester.pumpAndSettle();
-        expectBackdrop(expectedBackdrop);
-        expect(backdropLoads, 2);
-        expect(tester.takeException(), isNull);
-      },
-    );
+      expectBackdrop(resizedBackdrop);
+      original.complete(initialBackdrop);
+      poster.complete(null);
+      await tester.pumpAndSettle();
+      expectBackdrop(expectedBackdrop);
+      expect(backdropLoads, 2);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   for (final (surface, androidTv, padded) in [
