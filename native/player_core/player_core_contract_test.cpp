@@ -73,6 +73,14 @@ void operator delete[](void* pointer, std::size_t) noexcept {
   std::free(pointer);
 }
 
+namespace lineup::player {
+struct SubtitleCoreTestAccess {
+  static void Run(PlayerCore& core) { core.RunPendingCommands(core.generation_.load()); }
+  static bool EmptySlot(PlayerCore& core) { return !core.pending_subtitle_presentation_; }
+  static void Dispose(PlayerCore& core) { core.FinishDispose(); }
+};
+}  // namespace lineup::player
+
 namespace {
 
 using lineup::player::CallError;
@@ -84,6 +92,7 @@ using lineup::player::PlayerCore;
 using lineup::player::PlayerCoreTestAccess;
 using lineup::player::Value;
 using lineup::player::ValueMap;
+using lineup::player::ValueList;
 
 void Check(bool condition, const char* obligation) {
   if (!condition) {
@@ -112,6 +121,9 @@ struct FakeMpv {
   std::vector<std::string> options;
   std::vector<std::string> observations;
   std::vector<std::string> commands;
+  std::vector<std::pair<std::string, double>> subtitle_properties;
+  std::vector<std::string> execution_order;
+  std::string rejected_subtitle_property;
   std::vector<std::string> seek_flags;
   std::vector<std::string> seek_targets;
   std::atomic<double> seek_position{0};
@@ -125,6 +137,7 @@ struct FakeMpv {
   std::map<std::string, std::string> load_options;
   int node_load_status = 0;
   std::string rejected_option;
+  int rejected_option_status = MPV_ERROR_OPTION_NOT_FOUND;
   std::string rejected_observation;
   std::optional<LoadOutcome> controlled_load;
   std::optional<int64_t> playlist_id;
@@ -173,7 +186,7 @@ int FakeSetOption(mpv_handle*, const char* name, mpv_format format, void* data) 
 int FakeSetOptionString(mpv_handle*, const char* name, const char* value) {
   std::lock_guard lock(fake->mutex);
   fake->options.push_back(std::string(name) + "=" + value);
-  return fake->rejected_option == name ? MPV_ERROR_OPTION_NOT_FOUND : 0;
+  return fake->rejected_option == name ? fake->rejected_option_status : 0;
 }
 
 int FakeRequestLogMessages(mpv_handle*, const char* level) {
@@ -227,6 +240,13 @@ int FakeGetProperty(mpv_handle*, const char* name, mpv_format format, void* data
 }
 
 int FakeSetProperty(mpv_handle*, const char* name, mpv_format format, void* data) {
+  if (std::string_view(name).substr(0, 4) == "sub-") {
+    std::lock_guard lock(fake->mutex);
+    const double value = format == MPV_FORMAT_FLAG ? *static_cast<int*>(data) : *static_cast<double*>(data);
+    fake->subtitle_properties.emplace_back(name, value);
+    fake->execution_order.push_back(name);
+    return fake->rejected_subtitle_property == name ? MPV_ERROR_PROPERTY_ERROR : 0;
+  }
   if (std::strcmp(name, "pause") == 0 && format == MPV_FORMAT_FLAG) {
     fake->paused = *static_cast<int*>(data) != 0;
     return 0;
@@ -252,6 +272,7 @@ int FakeCommand(mpv_handle*, const char** args) {
   }
   std::lock_guard lock(fake->mutex);
   fake->commands.push_back(args[0]);
+  fake->execution_order.push_back(args[0]);
   if (std::strcmp(args[0], "seek") == 0) {
     fake->seek_flags.push_back(args[2]);
     fake->seek_targets.push_back(args[1]);
@@ -1487,8 +1508,8 @@ void InitializeFailures() {
     core.Shutdown();
   }
   {
-    // Any other missing option keeps failing initialization with today's
-    // error, even though the fake reports the same option-not-found status.
+    // Other mandatory options remain fatal even though the fake reports
+    // the same option-not-found status as optional osc/ytdl disabling.
     FakeHost host;
     fake->rejected_option = "input-media-keys";
     PlayerCore core(FakeOperations(), host);
@@ -1510,6 +1531,78 @@ void InitializeFailures() {
     Check(reply.error == "initialize_failed" && host.cancelled == 1 &&
           fake->destroyed == destroyed_before + 1 && !core.initialized(),
           "observation failure stops initialization");
+  }
+  const std::pair<const char*, const char*> subtitle_options[] = {
+      {"sub-color", "#00FFFFFF"},
+      {"sub-outline-size", "0"},
+      {"sub-shadow-offset", "0"},
+      {"sub-back-color", "#00000000"},
+      {"sub-border-style", "outline-and-shadow"},
+      {"sub-ass-override", "scale"},
+  };
+  for (const auto& [rejected, ignored_value] : subtitle_options) {
+    (void)ignored_value;
+    for (const int status : {MPV_ERROR_OPTION_NOT_FOUND, MPV_ERROR_OPTION_ERROR}) {
+      FakeHost host;
+      fake->rejected_option = rejected;
+      fake->rejected_option_status = status;
+      fake->options.clear();
+      fake->commands.clear();
+      fake->playlist_id = 77;
+      PlayerCore core(FakeOperations(), host);
+      std::ostringstream diagnostics;
+      auto* original_stderr = std::cerr.rdbuf(diagnostics.rdbuf());
+      const CallResult result = core.Initialize();
+      std::cerr.rdbuf(original_stderr);
+      fake->rejected_option.clear();
+      fake->rejected_option_status = MPV_ERROR_OPTION_NOT_FOUND;
+      Check(!result.error && core.initialized() && host.cancelled == 0,
+            "each rejected subtitle init option leaves playback initialized");
+      const std::string rejection =
+          std::string("[lineup-player] subtitle option ") + rejected + " rejected\n";
+      Check(diagnostics.str().find(rejection) == 0 &&
+            diagnostics.str().find(rejection, rejection.size()) == std::string::npos,
+            "subtitle init rejection emits one fixed non-content diagnostic");
+      for (const auto& [name, value] : subtitle_options) {
+        Check(std::count(fake->options.begin(), fake->options.end(),
+                         std::string(name) + "=" + value) == 1,
+              "all subtitle defaults attempted despite an earlier rejection");
+      }
+      Check(std::find(fake->options.begin(), fake->options.end(), "vo=gpu-next") != fake->options.end() &&
+            fake->options.back() == "hwdec=auto",
+            "subtitle rejection does not skip mandatory output/hwdec options");
+      Events events;
+      Reply load;
+      Call(core, "load", load, {{"uri", Value("https://fixture.invalid/subtitle-option")},
+                                 {"loadId", Value(41)}});
+      Check(load.successes == 1, "load accepted after subtitle option rejection");
+      PumpUntil(core, events, [&] {
+        std::lock_guard lock(fake->mutex);
+        return std::find(fake->commands.begin(), fake->commands.end(), "loadfile") != fake->commands.end();
+      }, "worker executes load after subtitle option rejection");
+      mpv_event_start_file start_data{};
+      start_data.playlist_entry_id = 77;
+      mpv_event start{};
+      start.event_id = MPV_EVENT_START_FILE;
+      start.data = &start_data;
+      mpv_event ready{};
+      ready.event_id = MPV_EVENT_FILE_LOADED;
+      {
+        std::lock_guard lock(fake->mutex);
+        fake->injected.push_back(start);
+        fake->injected.push_back(ready);
+      }
+      PumpUntil(core, events, [&] {
+        return std::any_of(events.received.begin(), events.received.end(), [](const auto& event) {
+          return Has(event, "state", Value("playing")) && Has(event, "loadId", Value(41));
+        });
+      }, "later load reaches correlated playing state after subtitle option rejection");
+      Check(std::none_of(events.received.begin(), events.received.end(), [](const auto& event) {
+        return Has(event, "state", Value("error"));
+      }), "subtitle init rejection never publishes a playback failure");
+      core.Shutdown();
+      fake->playlist_id.reset();
+    }
   }
   fake->created = 0;
   fake->destroyed = 0;
@@ -1533,11 +1626,13 @@ void Lifecycle() {
       "wid=4242", "config=no", "terminal=no", "input-default-bindings=no",
       "input-vo-keyboard=no", "input-media-keys=no", "osc=no", "ytdl=no",
       "tls-verify=yes", "access-references=no", "autoload-files=no", "idle=yes",
-      "keep-open=no", "vo=gpu-next", "gpu-api=d3d11", "gpu-context=d3d11",
+      "keep-open=no", "sub-color=#00FFFFFF", "sub-outline-size=0", "sub-shadow-offset=0",
+      "sub-back-color=#00000000", "sub-border-style=outline-and-shadow", "sub-ass-override=scale", "vo=gpu-next", "gpu-api=d3d11", "gpu-context=d3d11",
       "hwdec=auto"};
   const std::vector<std::string> expected_observations{
       "pause", "time-pos", "duration", "track-list", "video-format", "video-codec",
-      "current-vo", "hwdec-current", "video-params", "video-target-params"};
+      "current-vo", "hwdec-current", "video-params", "video-target-params",
+      "current-tracks/sub/codec", "sub-text/ass"};
   {
     std::lock_guard lock(fake->mutex);
     Check(fake->options == expected_options, "option order and platform placement");
@@ -1831,11 +1926,175 @@ void StaleWakeupAfterShutdown() {
   }
 }
 
+void SubtitleContract() {
+  FakeMpv state;
+  fake = &state;
+  FakeHost host;
+  PlayerCore core(FakeOperations(), host);
+  Events events;
+  const auto presentation = [](double scale, double raise = .15, bool styled = false) {
+    return ValueMap{{"scale", Value(scale)}, {"imageRaise", Value(raise)}, {"lineupDrawsStyled", Value(styled)}};
+  };
+  Reply cold;
+  Call(core, "setSubtitlePresentation", cold, presentation(1));
+  Check(cold.error == "not_initialized", "subtitle command requires initialization");
+  PlayerCoreTestAccess::OpenWorkerlessClient(core, FakeClient());
+  for (auto args : {ValueMap{}, ValueMap{{"scale", Value(1)}}, presentation(.24), presentation(4.01),
+                    presentation(1, -.01), presentation(1, .251), presentation(std::numeric_limits<double>::infinity()),
+                    presentation(1, std::numeric_limits<double>::quiet_NaN()),
+                    ValueMap{{"scale", Value(true)}, {"imageRaise", Value(0)}, {"lineupDrawsStyled", Value(false)}}}) {
+    Reply invalid;
+    Call(core, "setSubtitlePresentation", invalid, args);
+    Check(invalid.error == "invalid_argument", "malformed subtitle presentation rejected");
+  }
+  for (int i = 0; i < 10; ++i) {
+    Reply reply;
+    Call(core, "setSubtitlePresentation", reply, presentation(1 + i * .1));
+    Check(reply.successes == 1, "latest value accepts rapid changes");
+  }
+  Reply invalid_latest;
+  Call(core, "setSubtitlePresentation", invalid_latest, presentation(9));
+  Check(invalid_latest.error == "invalid_argument", "invalid call leaves pending value intact");
+  Reply load;
+  Call(core, "load", load, {{"uri", Value("https://fixture.invalid/video")}, {"loadId", Value(1)}});
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  Check(state.subtitle_properties.front().first == "sub-scale" && std::abs(state.subtitle_properties.front().second - 1.9) < 1e-9, "only final scale applied");
+  Check(std::count_if(state.subtitle_properties.begin(), state.subtitle_properties.end(), [](auto& property) { return property.first == "sub-scale"; }) == 1, "one latest-value application");
+  Check(std::find(state.execution_order.begin(), state.execution_order.end(), "sub-scale") <
+        std::find(state.execution_order.begin(), state.execution_order.end(), "loadfile"), "style precedes load in one batch");
+  auto& playback = PlayerCoreTestAccess::State(core);
+  playback.StartFile(1);
+  const auto property = [&](const char* name, const char* text) {
+    char* data = const_cast<char*>(text);
+    mpv_event_property p{name, text ? MPV_FORMAT_STRING : MPV_FORMAT_NONE, text ? &data : nullptr};
+    mpv_event event{}; event.event_id = MPV_EVENT_PROPERTY_CHANGE; event.data = &p;
+    PlayerCoreTestAccess::Event(core, event);
+  };
+  const auto last_cues = [&]() -> ValueList {
+    events.received.clear(); Drain(core, events);
+    ValueList cues;
+    for (const auto& event : events.received) {
+      const auto* name = lineup::player::FindString(&event, "name");
+      Check(!name || (*name != "sub-text/ass" && *name != "current-tracks/sub/codec"), "raw cue/codec properties intercepted");
+      if (name && *name == "subtitle-cues") cues = std::get<ValueList>(event.at("value"));
+    }
+    return cues;
+  };
+  property("sub-text/ass", "Fixture text before codec");
+  Check(last_cues().empty(), "unknown codec cannot publish text");
+  property("current-tracks/sub/codec", "subrip");
+  Check(last_cues().size() == 1, "codec reclassifies cached text");
+  Check(state.subtitle_properties.back() == std::make_pair(std::string("sub-visibility"), 0.0), "text suppressed");
+  property("current-tracks/sub/codec", "hdmv_pgs_subtitle");
+  Check(last_cues().empty(), "PGS clears Flutter cues");
+  Check(std::find(state.subtitle_properties.begin(), state.subtitle_properties.end(), std::make_pair(std::string("sub-pos"), 85.0)) != state.subtitle_properties.end(), "image raise applies");
+  property("current-tracks/sub/codec", "ass");
+  Check(last_cues().empty(), "native ASS remains engine drawn");
+  const auto last_position = std::find_if(state.subtitle_properties.rbegin(), state.subtitle_properties.rend(), [](auto& property_value) { return property_value.first == "sub-pos"; });
+  Check(last_position != state.subtitle_properties.rend() && last_position->second == 100, "ASS position reset");
+  property("sub-text/ass", "{\\pos(1,2)}Fixture sign\nFixture dialogue");
+  Reply styled;
+  Call(core, "setSubtitlePresentation", styled, presentation(2, .1, true));
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  Check(last_cues().size() == 1, "styled opt-in reuses cached dialogue and excludes signs");
+  state.rejected_subtitle_property = "sub-scale";
+  Reply failing;
+  Call(core, "setSubtitlePresentation", failing, presentation(3, .2, false));
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  last_cues();
+  Check(std::none_of(events.received.begin(), events.received.end(), [](auto& event) { return Has(event, "failureCode", Value("command_error")); }), "subtitle failure never fails playback");
+  Check(state.subtitle_properties.back() == std::make_pair(std::string("sub-visibility"), 1.0), "later properties apply after scale rejection");
+  const size_t applied_before_repeat = state.subtitle_properties.size();
+  Reply repeated;
+  Call(core, "setSubtitlePresentation", repeated, presentation(3, .2, false));
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  Check(state.subtitle_properties.size() == applied_before_repeat, "rejected unchanged properties are not retried per cue/value");
+  property("current-tracks/sub/codec", "ssa");
+  property("sub-text/ass", "Fixture lavf SSA");
+  Check(last_cues().size() == 1, "lavf SSA is converted text");
+  property("current-tracks/sub/codec", nullptr);
+  Check(last_cues().empty(), "no selection clears");
+  property("current-tracks/sub/codec", "subrip");
+  Check(last_cues().empty(), "track deselection forgets cached text");
+  property("sub-text/ass", "Fixture before selection");
+  Reply selected;
+  Call(core, "selectTrack", selected, {{"loadId", Value(1)}, {"requestId", Value(9)}, {"type", Value("subtitle")}, {"id", Value(2)}});
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  Check(last_cues().empty(), "track selection clears old text");
+  property("sub-text/ass", "Fixture same codec new track");
+  Check(last_cues().size() == 1, "same-codec track switch needs no repeated codec notification");
+  property("sub-text/ass", "Fixture before stop");
+  Reply stop;
+  Call(core, "stop", stop, {{"stopId", Value(1)}});
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  Check(last_cues().empty(), "stop clears cues");
+  property("sub-text/ass", "Fixture stale stop cue");
+  Check(last_cues().empty(), "pending stop blocks late cue");
+  playback.ObserveIdle(true, 0);
+  Reply next;
+  Call(core, "load", next, {{"uri", Value("https://fixture.invalid/next")}, {"loadId", Value(2)}});
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  Check(last_cues().empty(), "new load clears cues");
+  property("current-tracks/sub/codec", "subrip");
+  property("sub-text/ass", "Fixture obsolete load");
+  Check(last_cues().empty(), "obsolete load observation blocked");
+  playback.StartFile(2);
+  property("sub-text/ass", "Fixture same codec new load");
+  Check(last_cues().size() == 1, "same-codec load needs no repeated codec notification");
+  End(core, 2, 0);
+  Check(last_cues().empty(), "end clears visible text");
+  property("sub-text/ass", "Fixture late terminal text");
+  Check(last_cues().empty(), "terminal load cannot republish cues");
+  // Queue clear cannot be evicted by either telemetry or completion pressure.
+  const auto generation = PlayerCoreTestAccess::Generation(core);
+  auto cue = [](bool nonempty) { return ValueMap{{"type", Value("property")}, {"name", Value("subtitle-cues")}, {"loadId", Value(2)}, {"value", Value(nonempty ? ValueList{Value("fixture")} : ValueList{})}}; };
+  PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("state")}, {"state", Value("marker")}});
+  PlayerCoreTestAccess::Queue(core, generation, cue(true));
+  PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("state")}, {"state", Value("after")}});
+  PlayerCoreTestAccess::Queue(core, generation, cue(false));
+  events.received.clear(); Drain(core, events);
+  Check(events.received.size() == 3 && Has(events.received[1], "name", Value("subtitle-cues")), "replace cue in place without duplicate");
+  PlayerCoreTestAccess::Queue(core, generation, cue(true));
+  for (int i = 0; i < 600; ++i) PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("property")}, {"name", Value("time-pos")}});
+  PlayerCoreTestAccess::Queue(core, generation, cue(false));
+  for (int i = 0; i < 600; ++i) PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("trackResult")}});
+  events.received.clear(); Drain(core, events);
+  Check(events.received.size() == 256 && std::count_if(events.received.begin(), events.received.end(), [](auto& event) { return Has(event, "name", Value("subtitle-cues")) && std::get<ValueList>(event.at("value")).empty(); }) == 1, "clear retained at capacity under mixed pressure");
+  for (int i = 0; i < 64; ++i) {
+    Reply play;
+    Call(core, "play", play);
+    Check(play.successes == 1, "fill generic command queue");
+  }
+  Reply full;
+  Call(core, "play", full);
+  Check(full.error == "command_queue_full", "generic queue really is saturated");
+  Reply independent;
+  Call(core, "setSubtitlePresentation", independent, {{"scale", Value(4)}, {"imageRaise", Value(0)}, {"lineupDrawsStyled", Value(false)}, {"future", Value(true)}});
+  Check(independent.successes == 1, "presentation accepts integers and extra keys at queue capacity");
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  Reply load_after_failure;
+  Call(core, "load", load_after_failure, {{"uri", Value("https://fixture.invalid/recovery")}, {"loadId", Value(3)}});
+  lineup::player::SubtitleCoreTestAccess::Run(core);
+  Start(core, 3);
+  mpv_event ready{};
+  ready.event_id = MPV_EVENT_FILE_LOADED;
+  PlayerCoreTestAccess::Event(core, ready);
+  events.received.clear(); Drain(core, events);
+  Check(std::any_of(events.received.begin(), events.received.end(), [](auto& event) { return Has(event, "state", Value("playing")); }), "load still plays after subtitle property rejection");
+  Reply pending;
+  Call(core, "setSubtitlePresentation", pending, presentation(4));
+  lineup::player::SubtitleCoreTestAccess::Dispose(core);
+  Check(lineup::player::SubtitleCoreTestAccess::EmptySlot(core), "dispose clears pending slot");
+  PlayerCoreTestAccess::CloseWorkerlessClient(core);
+  fake = nullptr;
+}
+
 }  // namespace
 
 int main() {
   FirstOpenEnvironment diagnostic_defaults(nullptr);
   FirstOpenProbeContract();
+  SubtitleContract();
   FakeMpv state;
   fake = &state;
   {
