@@ -230,6 +230,11 @@ reports bounded styled text segments through the load-scoped `subtitle-cues`
 property; the native SubtitleView receives no ordinary text. SSA keeps authored
 styling unless the viewer opts into Lineup styling. Bitmap cues remain native.
 Both native kinds scale live; supported bitmap geometry also raises and clamps.
+The event queue reserves one of its 256 slots for the latest `subtitle-cues`
+snapshot, including an empty clear; ordinary events have 255 slots. A first cue
+cannot displace a completion or cause overflow. Pending cues replace in place
+and remain protected during telemetry eviction and genuine ordinary overflow.
+
 SSA's default text size compensates for letterboxing so its em size follows the
 Lineup presentation rectangle. Native defaults are white with black outline,
 transparent background and window, with embedded SSA styles/sizes enabled.

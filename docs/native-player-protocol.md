@@ -436,8 +436,12 @@ Dispose retires its generation and queued credentials before asynchronously
 releasing the engine and replying. Decoder/view operations stay on the application
 looper; cancellation and TLS pool closure run on an IO worker. Stop/dispose and
 successor loads wait for that cleanup, which is coalesced across concurrent
-retirement requests. A failed release retains cleanup responsibility for retry. Events use the 256-entry property-first
-queue above; essential-event overflow terminates the current load with
+retirement requests. A failed release retains cleanup responsibility for retry.
+Events use the 256-entry property-first
+queue above, with one slot reserved for the latest `subtitle-cues` (including a
+clear) and 255 for ordinary events. First cue admission never evicts a completion;
+replacements keep their queue position. Essential ordinary-event overflow
+terminates the current load with
 `event_queue_overflow`. Retired events are filtered again at delivery.
 
 The engine publishes `loading` once and `playing` only on its first READY,

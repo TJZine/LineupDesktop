@@ -407,11 +407,36 @@ class NativePlayerControllerTest {
     }
 
     @Test
+    fun firstCueAtOrdinaryCapacityPreservesCompletionsAndActiveLoad() {
+        initialize()
+        load()
+        host.drain()
+        host.events.clear()
+        val engine = host.engines.single()
+        repeat(255) {
+            call("setDisplayMatching", mapOf("revision" to it, "session" to true, "desired" to "hdr"))
+        }
+        engine.listener.property("subtitle-cues", listOf("first"))
+        engine.listener.property("subtitle-cues", emptyList<Any>())
+        repeat(300) { engine.listener.property("time-pos", it.toDouble()) }
+        host.drain()
+        assertEquals((0L until 255L).toList(), host.events.filter { it["type"] == "display" }.map { it["revision"] })
+        assertEquals(256, host.events.size)
+        assertEquals("subtitle-cues", host.events.last()["name"])
+        assertEquals(emptyList<Any>(), host.events.last()["value"])
+        assertFalse(host.events.any { it["state"] == "error" })
+        assertFalse(engine.released)
+        engine.listener.ready(false)
+        host.drain()
+        assertEquals("playing", host.events.last()["state"])
+    }
+
+    @Test
     fun essentialEventOverflowFailsTheActiveLoad() {
         initialize()
         load()
         host.drain()
-        repeat(300) {
+        repeat(256) {
             call(
                 "setDisplayMatching",
                 mapOf("revision" to it, "session" to true, "desired" to "hdr"),
