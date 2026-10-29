@@ -70,6 +70,55 @@ bool IsHttpsUri(std::string_view uri) {
   return authority_start < uri.size() && authority_end != authority_start;
 }
 
+bool IsSafeSessionUri(std::string_view uri) {
+  if (!IsHttpsUri(uri)) return false;
+  const size_t authority_start = uri.find("://") + 3;
+  const size_t authority_end = uri.find_first_of("/?#", authority_start);
+  const auto authority = uri.substr(authority_start, authority_end - authority_start);
+  if (authority.empty() || authority.find('@') != std::string_view::npos) return false;
+  const auto host_end = authority.front() == '[' ? authority.find(']') + 1
+                                                : authority.find(':');
+  const auto host = authority.substr(0, host_end);
+  if (host.empty() || host == "[]" ||
+      (authority.front() == '[' && host_end <= 2)) return false;
+  for (const unsigned char byte : uri) {
+    if (byte <= 0x20 || byte == 0x7f || byte == '\\') return false;
+  }
+  const size_t query = uri.find('?');
+  if (query == std::string_view::npos) return true;
+  const size_t fragment = uri.find('#');
+  if (fragment != std::string_view::npos && fragment < query) return true;
+  auto remaining = uri.substr(query + 1, fragment - query - 1);
+  while (!remaining.empty()) {
+    const auto end = remaining.find('&');
+    const auto parameter = remaining.substr(0, end);
+    const auto raw_key = parameter.substr(0, parameter.find('='));
+    std::string key;
+    for (size_t i = 0; i < raw_key.size(); ++i) {
+      if (raw_key[i] == '%') {
+        if (i + 2 >= raw_key.size()) return false;
+        const auto hex = [](char byte) -> int {
+          if (byte >= '0' && byte <= '9') return byte - '0';
+          if (byte >= 'a' && byte <= 'f') return byte - 'a' + 10;
+          if (byte >= 'A' && byte <= 'F') return byte - 'A' + 10;
+          return -1;
+        };
+        const int high = hex(raw_key[i + 1]);
+        const int low = hex(raw_key[i + 2]);
+        if (high < 0 || low < 0) return false;
+        key += static_cast<char>(high * 16 + low);
+        i += 2;
+      } else {
+        key += raw_key[i];
+      }
+    }
+    if (AsciiLower(key) == "x-plex-token") return false;
+    if (end == std::string_view::npos) break;
+    remaining.remove_prefix(end + 1);
+  }
+  return true;
+}
+
 bool IsValidPlexToken(std::string_view value) {
   if (value.empty() || value.size() > kMaxPlexTokenBytes) {
     return false;
@@ -707,10 +756,20 @@ CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
     return CallResult::Failure("invalid_argument",
                                "A non-negative integer loadId is required.");
   }
+  const auto* kind_value = Find(*arguments, "kind");
+  const auto* kind = FindString(arguments, "kind");
+  if (kind_value && (!kind || (*kind != "direct" && *kind != "plexSession"))) {
+    return CallResult::Failure("invalid_argument", "The load kind is invalid.");
+  }
+  const bool plex_session = kind && *kind == "plexSession";
   const auto* token_value = Find(*arguments, "plexToken");
   const bool token_supplied =
       token_value && !std::holds_alternative<std::monostate>(*token_value);
   const auto* plex_token = FindString(arguments, "plexToken");
+  if (plex_session && (token_supplied || Find(*arguments, "startSeconds") ||
+                       !IsSafeSessionUri(*uri))) {
+    return CallResult::Failure("invalid_argument", "The Plex session load is invalid.");
+  }
   if (token_supplied &&
       (!plex_token || !IsValidPlexToken(*plex_token))) {
     return CallResult::Failure("invalid_argument", "The Plex token is invalid.");
@@ -721,6 +780,7 @@ CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
         "Plex authentication requires an HTTPS media URI.");
   }
   LoadCommand command{*load_id, *uri, {}};
+  command.plex_session = plex_session;
   if (Find(*arguments, "startPaused")) {
     const auto* paused = FindBool(arguments, "startPaused");
     if (!paused) {
@@ -816,7 +876,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       status =
           mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
       if (status >= 0) {
-        if (payload.plex_header.empty() && !payload.start_seconds) {
+        if (!payload.plex_session && payload.plex_header.empty() && !payload.start_seconds) {
           const char* value[] = {"loadfile", payload.uri.c_str(), "replace",
                                  nullptr};
           status = mpv_operations_.command(mpv_, value);
@@ -836,14 +896,18 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           values[4].format = MPV_FORMAT_NODE_MAP;
           // String per-file options share one map. Never append options or
           // authentication material to the media URI.
-          mpv_node option_values[4]{};
-          char* option_keys[4]{};
+          mpv_node option_values[6]{};
+          char* option_keys[6]{};
           int option_count = 0;
           auto option = [&](const char* key, char* value) {
             option_keys[option_count] = const_cast<char*>(key);
             option_values[option_count].format = MPV_FORMAT_STRING;
             option_values[option_count++].u.string = value;
           };
+          if (payload.plex_session) {
+            option("access-references", const_cast<char*>("yes"));
+            option("curl-max-redirects", const_cast<char*>("0"));
+          }
           if (!payload.plex_header.empty()) {
             // mpv reuses custom headers on redirects; authenticated loads
             // must remain on their original HTTPS request.

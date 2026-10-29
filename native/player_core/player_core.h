@@ -170,6 +170,7 @@ class PlayerCore {
     int64_t load_id;
     std::string uri;
     PlexHeader plex_header;
+    bool plex_session = false;
     bool start_paused = false;
     std::optional<double> start_seconds = std::nullopt;
   };

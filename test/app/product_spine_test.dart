@@ -444,6 +444,7 @@ class _ProductPlayer extends FakeNativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,

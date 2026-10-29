@@ -206,6 +206,7 @@ bool RuntimeBound() {
 @property(nonatomic) BOOL finished;
 @property(nonatomic) BOOL rejected;
 @property(nonatomic) BOOL progressed;
+@property(nonatomic) BOOL playing;
 @property(nonatomic) PlaybackObservation* playbackObservation;
 - (BOOL)call:(NSString*)method arguments:(id)arguments;
 - (void)sendEvent:(NSDictionary*)event;
@@ -218,6 +219,7 @@ bool RuntimeBound() {
       ![call.arguments isKindOfClass:NSDictionary.class]) return;
   NSDictionary* event = call.arguments;
   NSString* state = event[@"state"];
+  if ([state isEqual:@"playing"]) self.playing = YES;
   if ([state isEqual:@"ended"] || [state isEqual:@"stopped"] || [state isEqual:@"error"])
     self.finished = YES;
   // A later ended/stopped event must never erase an earlier error.
@@ -359,7 +361,8 @@ int main(int argc, char** argv) {
       if (!mode.empty() && mode != "observe" && mode != "access-references" &&
           mode != "autoload-files" && mode != "control-allow-references" &&
           mode != "control-disable-tls" && mode != "control-late-error" &&
-          mode != "control-delayed-start" && mode != "control-ignore-start-delayed") return 2;
+          mode != "control-delayed-start" && mode != "control-ignore-start-delayed" &&
+          mode != "session") return 2;
       if (!nonzero_start && (mode == "control-delayed-start" || mode == "control-ignore-start-delayed")) return 2;
       NSURL* uri = [NSURL URLWithString:@(argv[2])];
       if (![uri.scheme isEqual:@"https"] || ![uri.host isEqual:@"127.0.0.1"] ||
@@ -380,6 +383,10 @@ int main(int argc, char** argv) {
         NSMutableDictionary* load = [@{
             @"uri": @(argv[2]), @"loadId": @1,
             @"plexToken": @"lineup-synthetic-reference-test", @"startPaused": @YES} mutableCopy];
+        if (mode == "session") {
+          [load removeObjectForKey:@"plexToken"];
+          load[@"kind"] = @"plexSession";
+        }
         if (nonzero_start) load[@"startSeconds"] = @3.5;
         if ([messenger call:@"load" arguments:load]) {
           const auto deadline = [NSDate dateWithTimeIntervalSinceNow:mode == "observe" ? 2 : 12];
@@ -420,6 +427,7 @@ int main(int argc, char** argv) {
                 << " delay_exercised=" << delay_exercised
                 << " ignored_start=" << ignored_start
                 << " landing_confirmed=" << (playback.landing.load() >= 0)
+                << " playing=" << static_cast<bool>(messenger.playing)
                 << " progressed=" << static_cast<bool>(messenger.progressed)
                 << " rejected=" << static_cast<bool>(messenger.rejected)
                 << " timed_out=" << timed_out << '\n';

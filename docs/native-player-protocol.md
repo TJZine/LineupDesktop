@@ -54,6 +54,37 @@ load-ID rule. Native command admission also has a capacity of 64 queued
 commands and a combined URI/header budget of 128 KiB; rejection uses
 `command_queue_full`.
 
+### Plex session loads and media capabilities
+
+`load` additionally accepts `kind: "direct" | "plexSession"`; omission means
+`direct`. Unknown values are `invalid_argument`. Direct loads retain the
+existing command, reference restrictions and authenticated header behavior.
+A `plexSession` load forbids a non-null `plexToken` and requires HTTPS with a
+nonempty authority, no userinfo and no `X-Plex-Token` query key (case
+insensitive, including percent-encoded keys). Both Dart and native reject an
+unsafe session with `invalid_argument` before loading it. A session also
+rejects any non-null Dart `startPosition` or present wire `startSeconds`,
+including zero or explicit null: its live offset belongs to the server session,
+so a player start would apply it twice.
+
+The shared libmpv core uses a node-map `loadfile` for sessions with string
+per-file options `access-references=yes` and `curl-max-redirects=0`, and no
+`http-header-fields`, `start` or `hr-seek`. Global reference restrictions remain
+unchanged. mpv restores the per-file options on completion, stop and replacement. There is
+no credential fallback for any playlist, init segment or media segment.
+
+Android additionally implements `mediaCapabilities` with no arguments:
+`{videoDecoders: [...], audioDecoders: [...], audioPassthrough: [...], containers: [...]}`.
+There are at most 64 video decoder records, 64 decoded audio codecs, 16 audio
+passthrough codecs and 32 containers. Video records have a required Plex
+`codec` name and optional `profiles`, `maxLevel`, positive `maxWidth`,
+`maxHeight`, `maxBitrateKbps`, `hdr` and `dolbyVisionProfiles` facts. Codec
+names use Plex spelling. Android queries these at call time on the application
+looper and truncates lists deterministically. Dart caches the parsed result
+for one second; malformed, oversized or failed replies become
+`MediaCapabilities.unknown`, requiring a server decision. Desktop Dart uses
+`MediaCapabilities.desktop` and never sends this native query.
+
 ### Command error mapping in Dart
 
 For a `PlatformException`, the transport preserves these native command codes:
@@ -473,6 +504,14 @@ cannot borrow old audio/video exposure after a nonzero indexed seek. Ordinary
 nonfragmented sample seeks retain facts without treating sample bytes as boxes.
 Genuine audio-only/video-only and supported alternative tracks remain
 valid. Subtitles alone never cause an audio/video unsupported-type failure.
+
+For `plexSession`, Media3 selects `HlsMediaSource` over a per-load OkHttp
+client with `OriginPin` before `OriginPolicy` and no default request headers.
+Every playlist, init and media request must retain the load's HTTPS scheme,
+host and port and contain neither userinfo nor a token query. Pin rejection
+maps to `network_error`; manifest parsing maps to `container_error`; child
+HTTP failures retain `http_error` and their bounded status. The following
+original-load restrictions apply to `direct` loads.
 
 Only `ProgressiveMediaSource` and an HTTP-only OkHttp data source are installed;
 there is no manifest, file, nested-reference or external-subtitle resolver.

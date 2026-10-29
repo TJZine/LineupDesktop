@@ -162,6 +162,10 @@ class HarnessLoggingPlayer implements NativePlayer {
   Future<void> get initialized => _initialized.future;
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.desktop;
+
+  @override
   Future<void> initialize() async {
     await _call('initialize', _player.initialize);
     if (!_initialized.isCompleted) _initialized.complete();
@@ -174,6 +178,7 @@ class HarnessLoggingPlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) => _call(
     'load generation=$generation',
     () => _player.load(
@@ -182,6 +187,7 @@ class HarnessLoggingPlayer implements NativePlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     ),
   );
   @override

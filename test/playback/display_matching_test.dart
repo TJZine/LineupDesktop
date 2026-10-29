@@ -494,6 +494,10 @@ class _Fixture {
 
 class _Player implements NativePlayer {
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.desktop;
+
+  @override
   bool get fullscreen => false;
   @override
   Stream<bool> get fullscreenChanges => const Stream.empty();

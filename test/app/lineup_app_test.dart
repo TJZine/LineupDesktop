@@ -2382,6 +2382,7 @@ class _DelayedLoadPlayer extends _FakePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,

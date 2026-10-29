@@ -8581,6 +8581,7 @@ class _ContinuationStatePlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -8588,6 +8589,7 @@ class _ContinuationStatePlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length != 2) return;
     for (final state in [
@@ -8999,6 +9001,7 @@ mixin _BlocksFirstLoad on _Player {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9006,6 +9009,7 @@ mixin _BlocksFirstLoad on _Player {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length == 1) {
       firstLoadStarted.complete();
@@ -9070,6 +9074,7 @@ class _BlockingStopEventPlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9077,6 +9082,7 @@ class _BlockingStopEventPlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     emitStatus(PlayerState.playing, generation: generation);
   }
@@ -9107,6 +9113,7 @@ class _PreemptibleLoadPlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9114,6 +9121,7 @@ class _PreemptibleLoadPlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     calls.add('load');
     if (loads.length != 1) return;
@@ -9152,6 +9160,7 @@ class _LoadFailurePlayer extends _Player {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9159,6 +9168,7 @@ class _LoadFailurePlayer extends _Player {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     Error.throwWithStackTrace(failure, StackTrace.current);
   }
@@ -9265,6 +9275,7 @@ class _SecondLoadFailurePlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9272,6 +9283,7 @@ class _SecondLoadFailurePlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length == 2 && !failSeek) {
       Error.throwWithStackTrace(failure, StackTrace.current);
@@ -9298,6 +9310,7 @@ class _BlockingSecondLoadPlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9305,6 +9318,7 @@ class _BlockingSecondLoadPlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length != 2) return;
     secondLoadStarted.complete();
@@ -9323,6 +9337,7 @@ class _BlockingFailingSecondLoadPlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9330,6 +9345,7 @@ class _BlockingFailingSecondLoadPlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length != 2) return;
     secondLoadStarted.complete();
@@ -9356,6 +9372,7 @@ class _SynchronousAuthorizationPlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9363,6 +9380,7 @@ class _SynchronousAuthorizationPlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length > failures) return;
     emitError(
@@ -9385,6 +9403,7 @@ class _AsyncInitialAuthorizationPlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9392,6 +9411,7 @@ class _AsyncInitialAuthorizationPlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length != 1) return;
     emitError(
@@ -9414,6 +9434,7 @@ class _SuccessfulPartAuthorizationPlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9421,6 +9442,7 @@ class _SuccessfulPartAuthorizationPlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length != 2) return;
     position = const Duration(minutes: 7);
@@ -9453,6 +9475,7 @@ class _PartAuthorizationFailurePlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9460,6 +9483,7 @@ class _PartAuthorizationFailurePlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length != 2) return;
     emitError(
@@ -9481,6 +9505,7 @@ class _FailingPartAuthorizationRetryPlayer
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9488,6 +9513,7 @@ class _FailingPartAuthorizationRetryPlayer
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length == 3) throw StateError('authorization retry failed');
   }
@@ -9507,6 +9533,7 @@ class _BlockingFailingPartAuthorizationRetryPlayer
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9514,6 +9541,7 @@ class _BlockingFailingPartAuthorizationRetryPlayer
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length != 3) return;
     retryLoadStarted.complete();
@@ -9722,6 +9750,7 @@ class _DisplayPlayer extends _EventPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9729,6 +9758,7 @@ class _DisplayPlayer extends _EventPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     pausedStarts.add(startPaused);
     if (failReplacementBeforeReady && loads.length == 2) {
@@ -9819,6 +9849,7 @@ class _BlockingDisplayPlayer extends _DisplayPlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     await super.load(
       media,
@@ -9826,6 +9857,7 @@ class _BlockingDisplayPlayer extends _DisplayPlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
     );
     if (loads.length != 2) return;
     secondLoadStarted.complete();

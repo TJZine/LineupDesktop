@@ -1436,6 +1436,61 @@ void Validation(PlayerCore& core) {
   CloseWorkerless(core);
 }
 
+void SessionLoads(PlayerCore& core) {
+  OpenWorkerless(core);
+  const auto request = [](const std::string& uri) {
+    return ValueMap{{"uri", Value(uri)}, {"loadId", Value(int64_t{501})},
+                    {"kind", Value("plexSession")}};
+  };
+  for (const auto* uri : {"http://media.invalid/index.m3u8", "https:///index.m3u8",
+                          "https://user@media.invalid/index.m3u8",
+                          "https://:443/index.m3u8",
+                          "https://media.invalid/index.m3u8?X-PLEX-TOKEN=synthetic",
+                          "https://media.invalid/index.m3u8?%58-Plex-Token=synthetic"}) {
+    Reply reply;
+    Call(core, "load", reply, request(uri));
+    Check(reply.errors == 1 && reply.error == "invalid_argument",
+          "unsafe session URI rejected before queueing");
+  }
+  auto arguments = request("https://media.invalid/index.m3u8");
+  arguments["plexToken"] = Value("synthetic-session-token");
+  Reply token;
+  Record(token, *core.HandleCommand("load", &arguments));
+  const auto& scrubbed = std::get<std::string>(arguments["plexToken"]);
+  Check(token.errors == 1 && token.error == "invalid_argument" &&
+        std::all_of(scrubbed.begin(), scrubbed.end(), [](char byte) { return byte == 0; }),
+        "session token forbidden and converted buffer wiped");
+  for (const auto& invalid : {Value("unknown"), Value(), Value(true)}) {
+    auto bad = request("https://media.invalid/index.m3u8");
+    bad["kind"] = invalid;
+    Reply reply;
+    Call(core, "load", reply, bad);
+    Check(reply.errors == 1 && reply.error == "invalid_argument", "unknown load kind rejected");
+  }
+  for (const auto& start : {Value(0.0), Value(600.0), Value()}) {
+    auto positioned = request("https://media.invalid/index.m3u8");
+    positioned["startSeconds"] = start;
+    Reply reply;
+    Call(core, "load", reply, positioned);
+    Check(reply.errors == 1 && reply.error == "invalid_argument",
+          "session startSeconds is forbidden even when zero or null");
+  }
+  Reply session;
+  Call(core, "load", session, request("https://media.invalid/index.m3u8"));
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  Check(session.successes == 1 && fake->load_options ==
+        std::map<std::string, std::string>{{"access-references", "yes"}, {"curl-max-redirects", "0"}},
+        "session load uses token-free reference and redirect map");
+  Reply direct;
+  auto ordinary = request("https://media.invalid/direct.mp4");
+  ordinary["kind"] = Value("direct");
+  Call(core, "load", direct, ordinary);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  Check(direct.successes == 1 && fake->commands.back() == "loadfile",
+        "direct without options retains original load command");
+  CloseWorkerless(core);
+}
+
 void InitializeFailures() {
   fake->created = 0;
   fake->destroyed = 0;
@@ -1847,6 +1902,7 @@ int main() {
     InitialJoinObservation(core);
     ReadinessPauseSnapshot(core);
     Validation(core);
+    SessionLoads(core);
   }
   InitializeFailures();
   Lifecycle();

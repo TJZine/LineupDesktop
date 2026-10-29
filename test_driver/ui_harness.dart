@@ -140,6 +140,10 @@ class HarnessPlayer implements NativePlayer {
   Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.desktop;
+
+  @override
   Future<void> initialize() async {}
   @override
   Future<void> load(
@@ -148,6 +152,7 @@ class HarnessPlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     if (_disposed) return;
     final operation = ++_loadEpoch;

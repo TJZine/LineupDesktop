@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -452,6 +453,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       final loadId = calls.last.arguments!['loadId']! as int;
       expect(calls.last.arguments!['plexToken'], 'test-token');
+      expect(calls.last.arguments!['kind'], 'direct');
       expect(calls.last.arguments!['startSeconds'], 18.250001);
       expect(
         calls.last.arguments!['uri'],
@@ -1347,6 +1349,185 @@ void main() {
       await loaded;
     },
   );
+
+  test(
+    'session loads validate before sending and serialize their kind',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      for (final uri in [
+        'http://media.example/index.m3u8',
+        'https:opaque',
+        'https://user@media.example/index.m3u8',
+        'https://media.example/index.m3u8?X-PLEX-TOKEN=synthetic',
+        'https://media.example/index.m3u8?%58-Plex-Token=synthetic',
+      ]) {
+        await expectLater(
+          player.load(Uri.parse(uri), kind: LoadKind.plexSession),
+          throwsA(
+            isA<PlayerUnavailable>().having(
+              (e) => e.failureCode,
+              'code',
+              'invalid_argument',
+            ),
+          ),
+        );
+      }
+      await expectLater(
+        player.load(
+          Uri.parse('https://media.example/index.m3u8'),
+          kind: LoadKind.plexSession,
+          plexToken: 'synthetic',
+        ),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (e) => e.failureCode,
+            'code',
+            'invalid_argument',
+          ),
+        ),
+      );
+      for (final position in [Duration.zero, const Duration(seconds: 600)]) {
+        await expectLater(
+          player.load(
+            Uri.parse('https://media.example/index.m3u8'),
+            kind: LoadKind.plexSession,
+            startPosition: position,
+          ),
+          throwsA(
+            isA<PlayerUnavailable>().having(
+              (e) => e.failureCode,
+              'code',
+              'invalid_argument',
+            ),
+          ),
+        );
+      }
+      expect(calls.where((call) => call.method == 'load'), isEmpty);
+      final load = player.load(
+        Uri.parse('https://media.example/index.m3u8'),
+        kind: LoadKind.plexSession,
+      );
+      await pumpEventQueue();
+      final call = calls.last;
+      expect(call.arguments['kind'], 'plexSession');
+      expect(call.arguments.containsKey('startSeconds'), isFalse);
+      expect(call.arguments['plexToken'], isNull);
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'state': 'playing',
+        'loadId': call.arguments['loadId'],
+      });
+      await load;
+    },
+  );
+
+  test('desktop capabilities never invoke the native method', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final player = MethodChannelNativePlayer();
+    expect(await player.mediaCapabilities(), same(MediaCapabilities.desktop));
+    expect(calls, isEmpty);
+    await player.dispose();
+  });
+
+  test(
+    'Android capabilities parse and cache one bounded reply for a second',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      var queries = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'mediaCapabilities') return null;
+        queries++;
+        return {
+          'videoDecoders': [
+            {'codec': 'h264', 'maxWidth': 1920, 'maxHeight': 1080},
+          ],
+          'audioDecoders': ['aac'],
+          'audioPassthrough': <String>[],
+          'containers': ['mp4'],
+        };
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      final capabilities = await player.mediaCapabilities();
+      expect(capabilities.known, isTrue);
+      expect(capabilities.videoDecoders.single.codec, 'h264');
+      expect(await player.mediaCapabilities(), same(capabilities));
+      expect(queries, 1);
+      await Future<void>.delayed(const Duration(milliseconds: 1050));
+      await player.mediaCapabilities();
+      expect(queries, 2);
+      await player.dispose();
+    },
+  );
+
+  test(
+    'failed capabilities and a reply retired by dispose remain unknown',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final reply = Completer<Object?>();
+      var fail = true;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'mediaCapabilities') return null;
+        if (fail) throw PlatformException(code: 'unavailable');
+        return reply.future;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      expect(await player.mediaCapabilities(), same(MediaCapabilities.unknown));
+      await player.dispose();
+      fail = false;
+      final pending = player.mediaCapabilities();
+      await pumpEventQueue();
+      await player.dispose();
+      reply.complete({
+        'videoDecoders': [
+          {'codec': 'h264'},
+        ],
+        'audioDecoders': ['aac'],
+        'audioPassthrough': <String>[],
+        'containers': ['mp4'],
+      });
+      expect(await pending, same(MediaCapabilities.unknown));
+    },
+  );
+
+  for (final reply in [
+    null,
+    {'videoDecoders': 'bad'},
+    {
+      'videoDecoders': List.generate(65, (_) => {'codec': 'h264'}),
+      'audioDecoders': ['aac'],
+      'audioPassthrough': <String>[],
+      'containers': ['mp4'],
+    },
+  ]) {
+    test('malformed capability reply forces unknown: $reply', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      messenger.setMockMethodCallHandler(channel, (_) async => reply);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      expect(await player.mediaCapabilities(), same(MediaCapabilities.unknown));
+      await player.dispose();
+    });
+  }
 
   test('authenticated loads require an HTTPS authority in Dart', () async {
     final calls = <MethodCall>[];

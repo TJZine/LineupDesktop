@@ -16,9 +16,10 @@
 namespace {
 const char* test_ca = nullptr;
 std::string mode;
+std::atomic<mpv_handle*> observed_client{nullptr};
 
-// One load per process. Only the worker touches lifecycle flags; publication
-// to the platform messenger is atomic. No load target/property jump is progress.
+// Each load has separate observations. Only the worker touches lifecycle
+// flags; publication to the platform messenger is atomic. No target jump is progress.
 struct PlaybackObservation {
   explicit PlaybackObservation(bool nonzero = false) : nonzero(nonzero) {}
   const bool nonzero;
@@ -48,14 +49,16 @@ struct PlaybackObservation {
         seconds >= baseline + 0.2) advanced.store(true);
   }
 };
-PlaybackObservation* observation = nullptr;
+std::atomic<PlaybackObservation*> observation{nullptr};
 bool delay_exercised = false;
 bool ignored_start = false;
+bool ignored_references = false;
 
-// Deliberately omit only start in the sensitivity control. The original map
-// retains authentication, redirect restrictions, and hr-seek policy.
+// Sensitivity controls remove only their named per-file option. All other
+// authentication, redirect and seek policy remains in the original node map.
 int CommandTestNode(mpv_handle* client, mpv_node* command, mpv_node* result) {
-  if (mode != "control-ignore-start-delayed") return mpv_command_node(client, command, result);
+  if (mode != "control-ignore-start-delayed" && mode != "session-control-no-references")
+    return mpv_command_node(client, command, result);
   if (command->format != MPV_FORMAT_NODE_ARRAY || command->u.list->num != 5)
     return MPV_ERROR_INVALID_PARAMETER;
   const auto& options = command->u.list->values[4];
@@ -63,7 +66,13 @@ int CommandTestNode(mpv_handle* client, mpv_node* command, mpv_node* result) {
   std::vector<mpv_node> values;
   std::vector<char*> keys;
   for (int i = 0; i < options.u.list->num; ++i) {
-    if (std::strcmp(options.u.list->keys[i], "start") == 0) {
+    if (mode == "session-control-no-references" &&
+        std::strcmp(options.u.list->keys[i], "access-references") == 0) {
+      ignored_references = true;
+      continue;
+    }
+    if (mode == "control-ignore-start-delayed" &&
+        std::strcmp(options.u.list->keys[i], "start") == 0) {
       ignored_start = true;
       continue;
     }
@@ -83,15 +92,16 @@ int CommandTestNode(mpv_handle* client, mpv_node* command, mpv_node* result) {
 
 mpv_event* WaitTestEvent(mpv_handle* client, double timeout) {
   auto* event = mpv_wait_event(client, timeout);
-  if (!observation || !event) return event;
+  auto* current_observation = observation.load();
+  if (!current_observation || !event) return event;
   if (event->event_id == MPV_EVENT_START_FILE) {
-    ++observation->files_started;
-    observation->loaded = false;
+    ++current_observation->files_started;
+    current_observation->loaded = false;
   }
-  if (event->event_id == MPV_EVENT_FILE_LOADED && observation->files_started == 1)
-    observation->loaded = true;
-  if (event->event_id == MPV_EVENT_END_FILE) observation->loaded = false;
-  if (event->event_id == MPV_EVENT_PLAYBACK_RESTART && observation->loaded &&
+  if (event->event_id == MPV_EVENT_FILE_LOADED && current_observation->files_started == 1)
+    current_observation->loaded = true;
+  if (event->event_id == MPV_EVENT_END_FILE) current_observation->loaded = false;
+  if (event->event_id == MPV_EVENT_PLAYBACK_RESTART && current_observation->loaded &&
       !delay_exercised && (mode == "control-delayed-start" || mode == "control-ignore-start-delayed")) {
     delay_exercised = true;
     std::this_thread::sleep_for(std::chrono::seconds(3));
@@ -109,9 +119,9 @@ mpv_event* WaitTestEvent(mpv_handle* client, double timeout) {
           mpv_get_property(client, "pause", MPV_FORMAT_FLAG, &paused) >= 0 &&
           mpv_get_property(client, "time-pos", MPV_FORMAT_DOUBLE, &seconds) >= 0) {
         if (event->event_id == MPV_EVENT_PLAYBACK_RESTART)
-          observation->Restart(seconds, seeking != 0, paused != 0);
+          current_observation->Restart(seconds, seeking != 0, paused != 0);
         else
-          observation->Position(seconds, seeking != 0, paused != 0);
+          current_observation->Position(seconds, seeking != 0, paused != 0);
       }
     }
   }
@@ -131,7 +141,15 @@ mpv_handle* CreateTestClient() {
     mpv_terminate_destroy(client);
     return nullptr;
   }
+  observed_client = client;
   return client;
+}
+
+bool ReferencesRestored() {
+  auto* client = observed_client.load();
+  int enabled = 1;
+  return client && mpv_get_property(client, "options/access-references",
+                                    MPV_FORMAT_FLAG, &enabled) >= 0 && !enabled;
 }
 
 int InitializeTestClient(mpv_handle* client) {
@@ -172,6 +190,8 @@ class TestMessenger final : public flutter::BinaryMessenger {
     if (!call || !call->arguments()) return;
     const auto* map = std::get_if<Map>(call->arguments());
     if (!map) return;
+    const auto load_id = map->find(Value("loadId"));
+    if (load_id != map->end() && load_id->second != Value(active_load_id)) return;
     const auto state = map->find(Value("state"));
     if (state != map->end()) {
       const auto* text = std::get_if<std::string>(&state->second);
@@ -204,6 +224,7 @@ class TestMessenger final : public flutter::BinaryMessenger {
     return replied && success;
   }
 
+  int64_t active_load_id = 1;
   PlaybackObservation* playback_observation = nullptr;
   flutter::BinaryMessageHandler handler;
   mutable bool finished = false;
@@ -333,7 +354,12 @@ int main(int argc, char** argv) {
   }
   if (!mode.empty() && mode != "observe" && mode != "access-references" &&
       mode != "autoload-files" && mode != "control-delayed-start" &&
-      mode != "control-ignore-start-delayed") return 2;
+      mode != "control-ignore-start-delayed" && mode != "session-complete" &&
+      mode != "session-stop" && mode != "session-replace" &&
+      mode != "session-redirect" && mode != "session-off-origin" &&
+      mode != "session-control-no-references") return 2;
+  const bool session = mode.rfind("session-", 0) == 0;
+  if (session && nonzero_start) return 2;
   if (!nonzero_start && (mode == "control-delayed-start" || mode == "control-ignore-start-delayed")) return 2;
   const bool observe = mode == "observe";
   FILE* redirected = nullptr;
@@ -345,11 +371,19 @@ int main(int argc, char** argv) {
                                 GetModuleHandle(nullptr), nullptr);
   if (!window) return 2;
   PlaybackObservation playback(nonzero_start);
+  PlaybackObservation restored;
   observation = &playback;
   TestMessenger messenger;
   messenger.playback_observation = &playback;
   bool timed_out = false;
   bool initialized = false;
+  bool session_progressed = false;
+  bool session_rejected = false;
+  bool restoration_attempted = false;
+  bool restoration_rejected = false;
+  bool restoration_progressed = false;
+  bool references_restored_before = false;
+  bool references_restored_after = false;
   {
     WindowsNativePlayer player(window, window, &messenger, TestOperations());
     initialized = messenger.Call("initialize");
@@ -359,6 +393,10 @@ int main(int argc, char** argv) {
         {Value("plexToken"), Value("lineup-synthetic-reference-test")},
         {Value("startPaused"), Value(true)},
     };
+    if (session) {
+      load.erase(Value("plexToken"));
+      load.emplace(Value("kind"), Value("plexSession"));
+    }
     if (nonzero_start) load.emplace(Value("startSeconds"), Value(3.5));
     if (initialized && messenger.Call("load", load)) {
       const auto deadline = std::chrono::steady_clock::now() +
@@ -369,6 +407,8 @@ int main(int argc, char** argv) {
           if (!messenger.Call("play")) { messenger.failed = true; break; }
           playback.released.store(true);
         }
+        if (session && messenger.progressed &&
+            (mode == "session-stop" || mode == "session-replace")) break;
         MSG message;
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
           if (!player.HandleWindowMessage(message.message)) {
@@ -378,9 +418,81 @@ int main(int argc, char** argv) {
         }
         MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
       }
-      timed_out = !messenger.finished && !observe;
+      timed_out = !messenger.finished && !observe &&
+          !(session && messenger.progressed &&
+            (mode == "session-stop" || mode == "session-replace"));
     } else {
       messenger.failed = true;
+    }
+    if (session) {
+      session_progressed = messenger.progressed;
+      session_rejected = messenger.failed;
+      if (!timed_out && session_progressed && !session_rejected &&
+          (mode == "session-complete" || mode == "session-stop" || mode == "session-replace")) {
+        if (mode == "session-stop") {
+          messenger.finished = false;
+          if (!messenger.Call("stop", {{Value("stopId"), Value(int64_t{1})}})) {
+            timed_out = true;
+          }
+          const auto stop_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+          while (!messenger.finished && !timed_out && std::chrono::steady_clock::now() < stop_deadline) {
+            MSG message;
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+              if (!player.HandleWindowMessage(message.message)) {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+              }
+            }
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+          }
+          timed_out = timed_out || !messenger.finished;
+          session_rejected = session_rejected || messenger.failed;
+        }
+        if (!timed_out && !session_rejected) {
+          references_restored_before = ReferencesRestored();
+          // The same initialized client now makes an authenticated Direct Play
+          // load. Its nested reference must be refused after every exit path.
+          const std::string first_uri(argv[2]);
+          const auto path = first_uri.find('/', 8);
+          if (path == std::string::npos) return 2;
+          const auto restore_uri = first_uri.substr(0, path) + "/restore.m3u8";
+          observation = &restored;
+          messenger.playback_observation = &restored;
+          messenger.active_load_id = 2;
+          messenger.finished = false;
+          messenger.failed = false;
+          messenger.progressed = false;
+          restoration_attempted = true;
+          if (!messenger.Call("load", {{Value("uri"), Value(restore_uri)},
+                                      {Value("loadId"), Value(int64_t{2})},
+                                      {Value("plexToken"), Value("lineup-synthetic-reference-test")},
+                                      {Value("startPaused"), Value(true)}})) {
+            messenger.failed = true;
+          } else {
+            const auto restore_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(12);
+            while (!messenger.finished && std::chrono::steady_clock::now() < restore_deadline) {
+              if (restored.sampled.load() && restored.initial_paused.load() && !restored.released.load()) {
+                if (!messenger.Call("play")) { messenger.failed = true; break; }
+                restored.released.store(true);
+              }
+              MSG message;
+              while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                if (!player.HandleWindowMessage(message.message)) {
+                  TranslateMessage(&message);
+                  DispatchMessageW(&message);
+                }
+              }
+              MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+            }
+            timed_out = !messenger.finished;
+          }
+          references_restored_after = ReferencesRestored();
+          restoration_rejected = messenger.failed;
+          restoration_progressed = messenger.progressed;
+          observation = nullptr;
+          messenger.playback_observation = nullptr;
+        }
+      }
     }
   }
   observation = nullptr;
@@ -394,6 +506,14 @@ int main(int argc, char** argv) {
             << " landing_confirmed=" << (playback.landing.load() >= 0)
             << " progressed=" << messenger.progressed
             << " rejected=" << messenger.failed
+            << " session_progressed=" << session_progressed
+            << " session_rejected=" << session_rejected
+            << " session_override_removed=" << ignored_references
+            << " restoration_attempted=" << restoration_attempted
+            << " restoration_rejected=" << restoration_rejected
+            << " restoration_progressed=" << restoration_progressed
+            << " references_restored_before=" << references_restored_before
+            << " references_restored_after=" << references_restored_after
             << " timed_out=" << timed_out << '\n';
   if (mode == "access-references" || mode == "autoload-files") return initialized ? 1 : 0;
   return initialized && !timed_out ? 0 : 1;

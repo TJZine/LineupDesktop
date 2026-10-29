@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'native_player.dart';
@@ -50,6 +51,9 @@ class MethodChannelNativePlayer implements NativePlayer {
   final Duration _loadTimeout;
   final Duration _stopTimeout;
   final Duration _trackTimeout;
+  MediaCapabilities? _mediaCapabilities;
+  DateTime? _mediaCapabilitiesAt;
+  Future<MediaCapabilities>? _mediaCapabilitiesPending;
   int _nextStopId = 0;
   int _nextTrackRequestId = 0;
   (int, Completer<void>)? _pendingStop;
@@ -136,13 +140,67 @@ class MethodChannelNativePlayer implements NativePlayer {
   });
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return MediaCapabilities.desktop;
+    }
+    final now = DateTime.now();
+    if (_mediaCapabilities != null &&
+        _mediaCapabilitiesAt != null &&
+        now.difference(_mediaCapabilitiesAt!) < const Duration(seconds: 1)) {
+      return _mediaCapabilities!;
+    }
+    if (_mediaCapabilitiesPending != null) return _mediaCapabilitiesPending!;
+    final epoch = _nativeEventEpoch;
+    final pending = () async {
+      MediaCapabilities capabilities;
+      try {
+        capabilities = MediaCapabilities.fromWire(
+          await _invokeNative<Object?>('mediaCapabilities')
+              .timeout(const Duration(seconds: 5)),
+        );
+      } catch (_) {
+        capabilities = MediaCapabilities.unknown;
+      }
+      if (epoch != _nativeEventEpoch) return MediaCapabilities.unknown;
+      _mediaCapabilities = capabilities;
+      _mediaCapabilitiesAt = DateTime.now();
+      return capabilities;
+    }();
+    _mediaCapabilitiesPending = pending;
+    try {
+      return await pending;
+    } finally {
+      if (identical(_mediaCapabilitiesPending, pending)) {
+        _mediaCapabilitiesPending = null;
+      }
+    }
+  }
+
+  @override
   Future<void> load(
     Uri media, {
     String? plexToken,
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
+    if (kind == LoadKind.plexSession &&
+        (plexToken != null ||
+            startPosition != null ||
+            media.scheme.toLowerCase() != 'https' ||
+            !media.hasAuthority ||
+            media.host.isEmpty ||
+            media.userInfo.isNotEmpty ||
+            media.queryParametersAll.keys.any(
+              (key) => key.toLowerCase() == 'x-plex-token',
+            ))) {
+      throw const PlayerUnavailable(
+        'The Plex session load is invalid.',
+        failureCode: 'invalid_argument',
+      );
+    }
     if (startPosition != null && startPosition < Duration.zero) {
       throw const PlayerUnavailable(
         'The initial playback position must be non-negative.',
@@ -189,6 +247,7 @@ class MethodChannelNativePlayer implements NativePlayer {
         'plexToken': plexToken,
         'loadId': loadId,
         'startPaused': startPaused,
+        'kind': kind.name,
         if (startPosition != null)
           'startSeconds':
               startPosition.inMicroseconds / Duration.microsecondsPerSecond,
@@ -365,6 +424,9 @@ class MethodChannelNativePlayer implements NativePlayer {
   Future<void> dispose() => _serializeLifecycle(() async {
     _fullscreen = false;
     ++_nativeEventEpoch;
+    _mediaCapabilities = null;
+    _mediaCapabilitiesAt = null;
+    _mediaCapabilitiesPending = null;
     final stop = _pendingStop;
     if (stop != null && !stop.$2.isCompleted) {
       stop.$2.completeError(

@@ -138,6 +138,10 @@ class FakeNativePlayer implements NativePlayer {
   Stream<DisplayMatchingReport> get displayReports => _displayReports.stream;
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.desktop;
+
+  @override
   Future<void> initialize() async {}
 
   @override
@@ -147,6 +151,7 @@ class FakeNativePlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   }) async {
     loads.add(media);
     loadPlexTokens.add(plexToken);

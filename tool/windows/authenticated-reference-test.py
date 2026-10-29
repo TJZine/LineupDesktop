@@ -141,15 +141,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         decoded_path = urllib.parse.unquote(self.path)
         token_url = TOKEN in decoded_path or "x-plex-token" in decoded_path.lower()
         with self.server.lock:
-            self.server.requests.append((self.path, any(TOKEN in value for _, value in self.headers.items()), token_url))
+            self.server.requests.append((self.path, any(name.lower() == "x-plex-token" or TOKEN in value
+                                                  for name, value in self.headers.items()), token_url))
             if range_header:
                 self.server.range_requests = getattr(self.server, "range_requests", 0) + 1
-        if self.server.authenticated and self.headers.get("X-Plex-Token") != TOKEN:
+        if (self.server.authenticated and not self.path.startswith("/session-") and
+                self.headers.get("X-Plex-Token") != TOKEN):
             self.send_response(401)
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        if self.path.startswith("/redirect"):
+        if self.path.startswith(("/redirect", "/session-redirect")):
             self.send_response(302)
             self.send_header("Location", self.server.redirect)
             self.send_header("Content-Length", "0")
@@ -198,6 +200,7 @@ def certificate(root, openssl):
                       "extendedKeyUsage=serverAuth\n", encoding="ascii")
     run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
          "-subj", "/CN=Lineup temporary test CA", "-addext", "basicConstraints=critical,CA:TRUE",
+         "-addext", "keyUsage=critical,keyCertSign,cRLSign",
          "-keyout", str(root / "ca.key"), "-out", str(root / "ca.pem")])
     run([openssl, "req", "-new", "-newkey", "rsa:2048", "-nodes", "-config", str(config),
          "-keyout", str(root / "leaf.key"), "-out", str(root / "leaf.csr")])
@@ -249,7 +252,8 @@ def main():
             raise RuntimeError("pinned DLL hash mismatch")
     records = [row for nonzero_start in (False, True)
                for row in matrix(args, nonzero_start)]
-    passed = len(records) == 48 and all(row["pass"] for row in records)
+    records.extend(session_matrix(args))
+    passed = len(records) == 55 and all(row["pass"] for row in records)
     print(json.dumps({"pass": passed, "case_count": len(records)}), flush=True)
     return 0 if passed else 1
 
@@ -434,6 +438,123 @@ def matrix(args, nonzero_start):
         expected |= {"control-delayed-start", "control-ignore-start-delayed"}
     if len(records) != (25 if nonzero_start else 23) or {row["case"] for row in records} != expected:
         raise RuntimeError("incomplete_profile_matrix")
+    return records
+
+
+def session_matrix(args):
+    records = []
+    with tempfile.TemporaryDirectory(prefix="lineup-session-reference-") as temporary:
+        root = pathlib.Path(temporary)
+        context = certificate(root, args.openssl)
+        run([args.ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=c=blue:s=64x64:r=10",
+             "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "10",
+             "-keyint_min", "10", "-sc_threshold", "0", "-bf", "0", "-f", "hls",
+             "-hls_segment_type", "fmp4", "-hls_time", "1", "-hls_list_size", "0",
+             "-hls_fmp4_init_filename", "session-init.mp4", "-hls_segment_filename",
+             str(root / "session-%d.m4s"), str(root / "session-source.m3u8")])
+        playlist = (root / "session-source.m3u8").read_bytes()
+        if b'#EXT-X-MAP:URI="session-init.mp4"' not in playlist or b"#EXT-X-ENDLIST" not in playlist:
+            raise RuntimeError("invalid_session_fixture")
+        servers, threads = [], []
+        try:
+            for _ in range(2):
+                server = Server(("127.0.0.1", 0), Handler)
+                server.context = context
+                server.authenticated = not servers
+                server.requests = []
+                server.files = {"/" + path.name: (path.read_bytes(), "application/octet-stream")
+                                for path in root.iterdir() if path.suffix in (".mp4", ".m4s")}
+                servers.append(server)
+                thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
+                thread.start()
+                threads.append(thread)
+            a, b = servers
+            origin_a = f"https://127.0.0.1:{a.server_port}"
+            origin_b = f"https://127.0.0.1:{b.server_port}"
+            a.redirect = origin_b + "/session-source.m3u8"
+            a.files["/session-good.m3u8"] = (playlist, "application/vnd.apple.mpegurl")
+            b.files["/session-source.m3u8"] = (playlist, "application/vnd.apple.mpegurl")
+            off_origin = playlist.replace(b'URI="session-init.mp4"',
+                                          ('URI="' + origin_b + '/session-init.mp4"').encode())
+            off_origin = re.sub(rb"(?m)^(session-[0-9]+\.m4s)$",
+                                lambda match: origin_b.encode() + b"/" + match[1], off_origin)
+            a.files["/session-off-origin.m3u8"] = (off_origin, "application/vnd.apple.mpegurl")
+            # A direct successor intentionally references a second origin. Its
+            # authenticated root must load, but references must already be off.
+            restore = off_origin.replace(b"/session-init.mp4", b"/restore-init.mp4")
+            restore = re.sub(rb"/session-([0-9]+)\.m4s", rb"/restore-\1.m4s", restore)
+            a.files["/restore.m3u8"] = (restore, "application/vnd.apple.mpegurl")
+            b.files["/restore-init.mp4"] = a.files["/session-init.mp4"]
+            for path in root.glob("session-*.m4s"):
+                b.files["/restore-" + path.name.removeprefix("session-")] = a.files["/" + path.name]
+
+            cases = [
+                ("session-complete", "/session-good.m3u8", "session-complete", True, True),
+                ("session-stop", "/session-good.m3u8", "session-stop", True, True),
+                ("session-replace", "/session-good.m3u8", "session-replace", True, True),
+                ("session-off-origin", "/session-off-origin.m3u8", "session-off-origin", True, False),
+                ("session-redirect", "/session-redirect.m3u8", "session-redirect", False, False),
+                ("session-control-no-references", "/session-good.m3u8", "session-control-no-references", False, False),
+                ("session-restored-override", "/session-good.m3u8", "session-complete", True, True),
+            ]
+            for name, path, mode, positive, restoration in cases:
+                for server in servers:
+                    with server.lock:
+                        server.requests.clear()
+                result = subprocess.run([str(args.harness), str(root / "ca.pem"), origin_a + path, mode],
+                                        capture_output=True, timeout=remaining(30))
+                fields = read_outcomes(result, False)
+                required = {"session_progressed", "session_rejected", "session_override_removed",
+                            "restoration_attempted", "restoration_progressed", "restoration_rejected",
+                            "references_restored_before", "references_restored_after"}
+                if required - fields.keys():
+                    raise RuntimeError("missing_session_outcomes")
+                with a.lock, b.lock:
+                    root_requested = any(request == path for request, _, _ in a.requests)
+                    root_token = any(token for request, token, _ in a.requests if request == path)
+                    child_requests = [(request, token) for server in servers
+                                      for request, token, _ in server.requests
+                                      if request not in (path, "/restore.m3u8")]
+                    restore_requested = any(request == "/restore.m3u8" and token
+                                            for request, token, _ in a.requests)
+                    restore_child_requests = sum(request.startswith("/restore-")
+                                                 for request, _, _ in b.requests)
+                    audit = {
+                        "root_requested": root_requested,
+                        "session_token": root_token or any(token for _, token in child_requests),
+                        "child_requests": len(child_requests),
+                        "off_origin_requests": len(b.requests),
+                        "restore_requested": restore_requested,
+                        "restore_child_requests": restore_child_requests,
+                        "token_in_url": any(url for server in servers for _, _, url in server.requests),
+                        "server_error": any(server.failed for server in servers),
+                    }
+                passed = (result.returncode == 0 and fields["initialized"] == "1" and
+                          fields["timed_out"] == "0" and root_requested and
+                          not audit["session_token"] and not audit["token_in_url"] and
+                          not audit["server_error"] and
+                          fields["session_progressed"] == str(int(positive)) and
+                          fields["session_rejected"] == str(int(not positive)) and
+                          fields["session_override_removed"] == str(int(mode == "session-control-no-references")) and
+                          fields["restoration_attempted"] == str(int(restoration)))
+                if positive:
+                    passed = passed and audit["child_requests"] > 0
+                else:
+                    passed = passed and audit["child_requests"] == 0
+                if restoration:
+                    passed = (passed and restore_requested and restore_child_requests == 0 and
+                              fields["restoration_rejected"] == "1" and fields["restoration_progressed"] == "0" and
+                              fields["references_restored_after"] == "1" and
+                              (mode == "session-replace" or fields["references_restored_before"] == "1"))
+                if name == "session-off-origin":
+                    passed = passed and audit["off_origin_requests"] > 0
+                row = {"case": name, "pass": bool(passed), **audit, **fields}
+                records.append(row)
+                print(json.dumps(row), flush=True)
+        finally:
+            finish_servers(servers, threads)
+    if len(records) != 7 or len({row["case"] for row in records}) != 7:
+        raise RuntimeError("incomplete_session_matrix")
     return records
 
 

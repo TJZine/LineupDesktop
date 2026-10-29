@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import '../plex/plex_transcode.dart';
+
+export '../plex/plex_transcode.dart' show MediaCapabilities;
+
 abstract interface class NativePlayer {
   PlayerStatus get status;
   Duration get position;
@@ -30,6 +34,9 @@ abstract interface class NativePlayer {
 
   Future<void> initialize();
 
+  /// Current decoder and output facts; malformed or unavailable facts are unknown.
+  Future<MediaCapabilities> mediaCapabilities();
+
   /// Loads [media] for the caller's optional [generation].
   ///
   /// [generation] identifies the current load and may be projected on emitted
@@ -47,12 +54,16 @@ abstract interface class NativePlayer {
   /// it to [media]. Backends must also prevent media from implicitly loading
   /// nested or external references unless the target and its credential scope
   /// have been explicitly validated by the owning playback policy.
+  /// [LoadKind.plexSession] requires a token-free HTTPS URI without userinfo
+  /// or a token query, and forbids [startPosition] because the session owns its
+  /// offset. Only this kind enables per-file nested references.
   Future<void> load(
     Uri media, {
     String? plexToken,
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
   });
   Future<void> setDisplayMatching(DisplayMatchingRequest request);
   Future<void> play();
@@ -87,6 +98,8 @@ abstract interface class NativePlayer {
 /// Keyframe seeks use mpv's backward preference, including its beginning-of-file
 /// fallback when no preceding keyframe exists. Exact is for explicit user seeks.
 enum SeekMode { exact, keyframes }
+
+enum LoadKind { direct, plexSession }
 
 enum DisplayMatchingState { hdr, sdr, unknown }
 
