@@ -47,6 +47,8 @@
 		5A1E0C00000000000D00F006 /* NativeShutdownTests.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D00F005 /* NativeShutdownTests.mm */; };
 		5A1E0C00000000000D010002 /* LicenseResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D010001 /* LicenseResources.swift */; };
 		5A1E0C00000000000D011002 /* AppChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D011001 /* AppChannels.swift */; };
+		5A1E0C00000000000D020001 /* subtitle_cues.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D020003 /* subtitle_cues.cpp */; };
+		5A1E0C00000000000D020002 /* subtitle_cues.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D020003 /* subtitle_cues.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -116,6 +118,8 @@
 		5A1E0C00000000000D00F005 /* NativeShutdownTests.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NativeShutdownTests.mm; sourceTree = "<group>"; };
 		5A1E0C00000000000D010001 /* LicenseResources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseResources.swift; sourceTree = "<group>"; };
 		5A1E0C00000000000D011001 /* AppChannels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppChannels.swift; sourceTree = "<group>"; };
+		5A1E0C00000000000D020003 /* subtitle_cues.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = subtitle_cues.cpp; sourceTree = "<group>"; };
+		5A1E0C00000000000D020004 /* subtitle_cues.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = subtitle_cues.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -257,6 +261,8 @@
 				5A1E0C00000000000D00E002 /* platform_arguments.h */,
 				5A1E0C00000000000D00E001 /* platform_arguments.cpp */,
 				5A1E0C00000000000D00D00B /* player_core.h */,
+				5A1E0C00000000000D020003 /* subtitle_cues.cpp */,
+				5A1E0C00000000000D020004 /* subtitle_cues.h */,
 				5A1E0C00000000000D00D00A /* player_core.cpp */,
 				5A1E0C00000000000D00D00D /* mpv_operations.h */,
 				5A1E0C00000000000D00D00C /* libmpv_operations.cpp */,
@@ -477,6 +483,7 @@
 				5A1E0C00000000000D00F004 /* LineupPlayerLifecycle.mm in Sources */,
 				5A1E0C00000000000D00F006 /* NativeShutdownTests.mm in Sources */,
 				5A1E0C00000000000D00D031 /* player_core.cpp in Sources */,
+				5A1E0C00000000000D020002 /* subtitle_cues.cpp in Sources */,
 				5A1E0C00000000000D00D032 /* libmpv_operations.cpp in Sources */,
 				5A1E0C00000000000D00D033 /* track_list_encoder.cpp in Sources */,
 				5A1E0C00000000000D00D034 /* platform_arguments.cpp in Sources */,
@@ -493,6 +500,7 @@
 				5A1E0C00000000000D00D013 /* FoundationValueConversion.mm in Sources */,
 				5A1E0C00000000000D00D014 /* VideoGeometry.mm in Sources */,
 				5A1E0C00000000000D00D015 /* player_core.cpp in Sources */,
+				5A1E0C00000000000D020001 /* subtitle_cues.cpp in Sources */,
 				5A1E0C00000000000D00D016 /* libmpv_operations.cpp in Sources */,
 				5A1E0C00000000000D00D017 /* track_list_encoder.cpp in Sources */,
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,

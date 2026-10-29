@@ -528,3 +528,39 @@ integrated acceptance remain separately recorded target/human obligations.
   unavailable/unknown diagnostic, but they are not the same serialized value.
 - Dart-generated load IDs start at 1 although the native `load` parser also
   accepts 0. The stricter positive rule remains required for `selectTrack`.
+
+### Desktop subtitle decoding and presentation
+
+Windows and macOS share the libmpv subtitle implementation in
+`native/player_core`. A pending `setSubtitlePresentation` value is taken under
+the same mutex as the next command batch and applied before that batch. It
+uses no command-queue slot or URI/header budget and adds no worker wake
+primitive; idle changes are picked up by the existing 50 ms poll. Rejected
+subtitle properties are logged with their fixed property name and libmpv error,
+without publishing a playback failure; unchanged property values are not retried
+on every cue.
+
+At mpv `3186d369`, codec `ass` is native styled ASS. The bitmap codecs are
+`hdmv_pgs_subtitle`, `dvd_subtitle`, `dvb_subtitle`, `xsub`, and the default
+bitmap configurations of `dvb_teletext` and `arib_caption`. Every other codec,
+including lavf `ssa`, is treated as converted text. Recheck this classification
+against `sd_ass` and `sd_lavc` when upgrading libmpv.
+
+The core observes the selected codec and `sub-text/ass` privately. Neither raw
+property is forwarded or logged. Codec and text notifications may arrive in
+either order; cached text is reclassified when the codec arrives. Converted text
+(and native ASS when opted in) uses `sub-visibility=no`; an invisible unstyled
+libass style is also installed as a track-switch backstop. Native ASS and bitmap
+subtitles retain their engine rendering. Scale applies to both; `sub-pos` is
+raised only for bitmap tracks and reset to 100 for other tracks, preserving
+authored ASS positioning.
+
+Cue conversion retains alignment and italic/bold/underline runs, drops other
+overrides, and bounds the input scan/cache to 64 KiB and the output to the common
+cue limits. Opted-in native ASS excludes events containing positioning, clipping
+or drawing tags. Cues belong to the active observed load; obsolete observations
+are discarded. Load, subtitle selection, stop, end, error and disposal discard
+cached media text. Explicit clears accompany previously published text; the
+Dart transport also clears at its load/stop/dispose boundaries. Pending cue
+updates replace in place and remain exempt from both telemetry and completion
+eviction, including empty clears. Cue text is never diagnostic content.
