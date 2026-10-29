@@ -489,7 +489,7 @@ void main() {
             final command = resolvePlayerKey(
               c.key,
               overlay: c.overlay,
-              androidTv: tv,
+              tvRemote: tv,
               dvr: c.dvr,
               unsupported: c.unsupported,
               initialPress: c.initialPress,
@@ -551,14 +551,14 @@ void main() {
     PlayerCommand resolve(
       LogicalKeyboardKey key, {
       required PlayerOverlay overlay,
-      bool androidTv = true,
+      bool tvRemote = true,
       bool hasProgram = true,
       bool tvOsdAtBottom = false,
       bool initialPress = true,
     }) => resolvePlayerKey(
       key,
       overlay: overlay,
-      androidTv: androidTv,
+      tvRemote: tvRemote,
       dvr: true,
       unsupported: false,
       initialPress: initialPress,
@@ -638,7 +638,7 @@ void main() {
       resolve(
         LogicalKeyboardKey.keyI,
         overlay: PlayerOverlay.none,
-        androidTv: false,
+        tvRemote: false,
         hasProgram: false,
       ),
       PlayerAction.showNowPlaying,
@@ -659,7 +659,7 @@ void main() {
               resolvePlayerKey(
                 key,
                 overlay: PlayerOverlay.programInfo,
-                androidTv: true,
+                tvRemote: true,
                 dvr: dvr,
                 unsupported: unsupported,
                 initialPress: false,
@@ -672,7 +672,7 @@ void main() {
             resolvePlayerKey(
               LogicalKeyboardKey.guide,
               overlay: PlayerOverlay.programInfo,
-              androidTv: true,
+              tvRemote: true,
               dvr: dvr,
               unsupported: unsupported,
               initialPress: true,
@@ -698,7 +698,7 @@ void main() {
               resolvePlayerKey(
                 entry.key,
                 overlay: PlayerOverlay.programInfo,
-                androidTv: true,
+                tvRemote: true,
                 dvr: dvr,
                 unsupported: unsupported,
                 initialPress: true,
@@ -719,7 +719,7 @@ void main() {
               resolvePlayerKey(
                 key,
                 overlay: PlayerOverlay.programInfo,
-                androidTv: true,
+                tvRemote: true,
                 dvr: dvr,
                 unsupported: unsupported,
                 initialPress: true,
@@ -745,7 +745,7 @@ void main() {
         resolvePlayerKey(
           key,
           overlay: PlayerOverlay.none,
-          androidTv: false,
+          tvRemote: false,
           dvr: true,
           unsupported: false,
           initialPress: true,
@@ -760,7 +760,7 @@ void main() {
       resolvePlayerKey(
         LogicalKeyboardKey.keyK,
         overlay: PlayerOverlay.none,
-        androidTv: false,
+        tvRemote: false,
         dvr: true,
         unsupported: false,
         initialPress: true,

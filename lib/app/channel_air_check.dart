@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
 import '../channels/scheduler.dart';
@@ -358,7 +359,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                 builder: (context) {
                   final roles = LineupTheme.of(context);
                   final focused =
-                      roles.androidTv &&
+                      DeviceProfile.of(context).isTv &&
                       Focus.of(context).hasFocus &&
                       LineupFocusScope.visible(context);
                   return Padding(

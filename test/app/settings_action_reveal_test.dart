@@ -32,7 +32,7 @@ UiFixture _fixture({
   bool large = false,
   bool reduce = false,
 }) => UiFixture(
-  androidTv: tv,
+  profile: profileFor(tv),
   guideClock: () => DateTime(2026, 1, 15, 12),
   scenario: LineupScenario(
     stage: SetupStage.ready,

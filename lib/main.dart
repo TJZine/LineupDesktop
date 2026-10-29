@@ -2,12 +2,13 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kReleaseMode;
+    show defaultTargetPlatform, kReleaseMode;
 import 'package:flutter/material.dart';
 
 import 'app/lineup_app.dart';
 import 'app/lineup_controller.dart';
 import 'persistence/app_store.dart';
+import 'platform/device_profile.dart';
 import 'playback/native_player_factory.dart';
 import 'plex/plex_client.dart';
 
@@ -18,10 +19,8 @@ void nativeRunnerLifecycleTestMain() {
 
 void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
-  configureImageCache(
-    PaintingBinding.instance.imageCache,
-    androidTv: defaultTargetPlatform == TargetPlatform.android,
-  );
+  final profile = DeviceProfile.fallbackFor(defaultTargetPlatform);
+  configureImageCache(PaintingBinding.instance.imageCache, isTv: profile.isTv);
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -49,6 +48,7 @@ void main(List<String> arguments) {
   }
   runApp(
     LineupStartup(
+      profile: profile,
       createBootstrap: () async {
         final store = await FileAppStore.create();
         final clientIdentifier = await store.clientIdentifier();

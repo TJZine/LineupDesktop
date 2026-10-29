@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
 import '../playback/player_coordinator.dart';
@@ -171,7 +172,7 @@ class ChannelsViewState extends State<ChannelsView> {
   void restoreNavigationFocus() => _restoreNavigationFocus();
 
   bool _isTvBackEvent(BuildContext context, KeyEvent event) {
-    if (!LineupTheme.of(context).androidTv || event is! KeyDownEvent) {
+    if (!DeviceProfile.of(context).isTv || event is! KeyDownEvent) {
       return false;
     }
     return event.logicalKey == LogicalKeyboardKey.goBack ||
@@ -513,7 +514,7 @@ class ChannelsViewState extends State<ChannelsView> {
                     itemBuilder: (context, index) {
                       final channel = visible[index];
                       _noteVisibleHealth(channel.id);
-                      final menuTheme = LineupTheme.of(context).androidTv
+                      final menuTheme = DeviceProfile.of(context).isTv
                           ? Theme.of(context)
                           : null;
                       // The selection-mode checkbox alone shows checked
@@ -523,7 +524,7 @@ class ChannelsViewState extends State<ChannelsView> {
                         child: Builder(
                           builder: (context) {
                             final focusedTv =
-                                LineupTheme.of(context).androidTv &&
+                                DeviceProfile.of(context).isTv &&
                                 LineupFocusScope.visible(
                                   context,
                                   Focus.of(context).hasFocus,
@@ -1549,7 +1550,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_autofocusRequested && LineupTheme.of(context).androidTv) {
+    if (!_autofocusRequested && DeviceProfile.of(context).isTv) {
       _autofocusRequested = true;
       FocusScope.of(context).autofocus(_searchFocus);
     }
@@ -1600,7 +1601,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
               builder: (fieldContext, fieldFocus, finishEditing) => TextField(
                 controller: _search,
                 focusNode: fieldFocus,
-                autofocus: !LineupTheme.of(fieldContext).androidTv,
+                autofocus: !DeviceProfile.of(fieldContext).isTv,
                 onEditingComplete: finishEditing,
                 decoration: searchDecoration,
                 onChanged: (_) => setState(() {}),
@@ -1680,7 +1681,7 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
   }
 
   KeyEventResult _readSelectedNames(FocusNode _, KeyEvent event) {
-    if (!LineupTheme.of(context).androidTv ||
+    if (!DeviceProfile.of(context).isTv ||
         !_scrollController.hasClients ||
         (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
         HardwareKeyboard.instance.isControlPressed ||
@@ -1776,14 +1777,14 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                 fit: FlexFit.loose,
                 child: Focus(
                   focusNode: _readerFocus,
-                  canRequestFocus: roles.androidTv,
-                  skipTraversal: !roles.androidTv,
+                  canRequestFocus: DeviceProfile.of(context).isTv,
+                  skipTraversal: !DeviceProfile.of(context).isTv,
                   onKeyEvent: _readSelectedNames,
                   child: ListenableBuilder(
                     listenable: _readerFocus,
                     builder: (context, _) {
                       final fill =
-                          roles.androidTv &&
+                          DeviceProfile.of(context).isTv &&
                           roles.focusTreatment == LineupFocusTreatment.fill &&
                           LineupFocusScope.visible(
                             context,
@@ -1803,13 +1804,15 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                           child: LineupFocusInk(
                             focused: fill,
                             child: Semantics(
-                              label: roles.androidTv
+                              label: DeviceProfile.of(context).isTv
                                   ? 'Selected channels for deletion'
                                   : null,
-                              readOnly: roles.androidTv ? true : null,
+                              readOnly: DeviceProfile.of(context).isTv
+                                  ? true
+                                  : null,
                               child: Padding(
                                 padding: EdgeInsets.all(
-                                  roles.androidTv &&
+                                  DeviceProfile.of(context).isTv &&
                                           roles.focusTreatment ==
                                               LineupFocusTreatment.fill &&
                                           roles.largeFocusIndicators
