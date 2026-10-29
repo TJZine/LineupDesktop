@@ -28,6 +28,7 @@ enum DiagnosticEvent {
     'Collection discovery unavailable',
   ),
   libraryScanTiming('plex-library', 'Library scan timing'),
+  castEnrichment('plex', 'Cast enrichment'),
   castPortraitUnavailable('plex', 'Cast portrait unavailable'),
   guideCurrentProgramWaitTimedOut(
     'guide',
@@ -286,6 +287,18 @@ class Diagnostics extends ChangeNotifier {
 
   // One definition per key, with intentionally distinct storage/export rules.
   static const _contextPolicies = <String, _ContextPolicy>{
+    'castOutcome': _FixedEnumContextPolicy({
+      'requested',
+      'enriched',
+      'noRicherData',
+      'failed',
+    }),
+    'castFailure': _FixedEnumContextPolicy({
+      'auth',
+      'timeout',
+      'transport',
+      'shape',
+    }),
     'code': _CategoricalContextPolicy(_failureCategories),
     'failureCode': _CategoricalContextPolicy(_failureCategories),
     'operation': _CategoricalContextPolicy(_operations),
@@ -496,6 +509,19 @@ sealed class _ContextPolicy {
 
   Object? sanitizeForStorage(Object? value);
   String? admitForExport(Object value);
+}
+
+/// Cast enrichment records only closed outcome/failure enums, even in memory.
+final class _FixedEnumContextPolicy extends _ContextPolicy {
+  const _FixedEnumContextPolicy(this.values);
+  final Set<String> values;
+
+  @override
+  String? sanitizeForStorage(Object? value) =>
+      value is String && values.contains(value) ? value : null;
+
+  @override
+  String? admitForExport(Object value) => sanitizeForStorage(value);
 }
 
 final class _CategoricalContextPolicy extends _ContextPolicy {

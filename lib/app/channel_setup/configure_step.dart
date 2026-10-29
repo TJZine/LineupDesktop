@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
@@ -175,6 +176,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                 child: LineupNavigationRow(
                   selected: widget.section == index,
                   key: ValueKey('configure-section-$index'),
+                  autofocus: LineupTheme.of(context).androidTv && index == 0,
                   onPressed: () => widget.onSectionChanged(index),
                   child: Text(labels[index]),
                 ),
@@ -298,6 +300,8 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     required double maxWidth,
     required Iterable<String> labels,
     required TextStyle style,
+    double outerHorizontalChrome = 0,
+    double menuVerticalPadding = 8,
   }) {
     final horizontalPadding = 10;
     final arrowWidth = 24;
@@ -336,10 +340,16 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       maxWidth,
       math.max(
         desiredWidth,
-        intrinsicWidth + 2 * horizontalPadding + arrowWidth,
+        intrinsicWidth +
+            2 * horizontalPadding +
+            arrowWidth +
+            outerHorizontalChrome,
       ),
     );
-    final textWidth = math.max(1.0, width - 2 * horizontalPadding - arrowWidth);
+    final textWidth = math.max(
+      1.0,
+      width - 2 * horizontalPadding - arrowWidth - outerHorizontalChrome,
+    );
     var textHeight = 0.0;
     for (final label in labels) {
       textHeight = math.max(textHeight, measure(label, maxWidth: textWidth));
@@ -347,7 +357,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     return (
       width: width,
       closedHeight: math.max(baseHeight, textHeight + 8),
-      itemHeight: math.max(48, textHeight + 8),
+      itemHeight: math.max(48, textHeight + menuVerticalPadding),
     );
   }
 
@@ -603,6 +613,20 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
   Widget _sourceSelectionControl(
     BuilderStrategy strategy,
     ChannelPlanAllocation allocation,
+  ) => LineupTheme.of(context).androidTv
+      ? LineupRowSurface(
+          selected: false,
+          child: Builder(
+            builder: (context) =>
+                _sourceSelectionContent(context, strategy, allocation),
+          ),
+        )
+      : _sourceSelectionContent(context, strategy, allocation);
+
+  Widget _sourceSelectionContent(
+    BuildContext context,
+    BuilderStrategy strategy,
+    ChannelPlanAllocation allocation,
   ) {
     final roles = LineupTheme.of(context);
     final enabled = _strategies.contains(strategy);
@@ -685,7 +709,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
+                  padding: LineupTheme.of(context).androidTv
+                      ? const EdgeInsets.symmetric(horizontal: 20)
+                      : EdgeInsets.zero,
                   minimumSize: const Size(0, 48),
                   alignment: Alignment.centerLeft,
                 ),
@@ -706,6 +732,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
 
   Widget _sourceGroupingControl(BuilderStrategy strategy) {
     final roles = LineupTheme.of(context);
+    final menuTheme = roles.androidTv ? Theme.of(context) : null;
     final enabled = _strategies.contains(strategy);
     final countStyle = TextStyle(
       color: roles.secondaryText,
@@ -737,6 +764,13 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             maxWidth: constraints.maxWidth,
             labels: ['Separate by library', groupingLabel],
             style: groupingStyle,
+            outerHorizontalChrome: roles.androidTv
+                ? LineupDropdownBox.contentPadding(compact: true).horizontal +
+                      2 * LineupDropdownBox.borderWidth
+                : 0,
+            menuVerticalPadding: roles.androidTv
+                ? LineupDropdownMenuRow.contentPadding.vertical
+                : 8,
           );
           final dropdown = SizedBox(
             width: metrics.width,
@@ -745,34 +779,55 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               child: LineupDropdownBox(
                 compact: true,
                 enabled: enabled,
-                child: DropdownButton<bool>(
-                  key: ValueKey('source-grouping-${strategy.name}'),
-                  isExpanded: true,
-                  isDense: true,
-                  iconSize: 24,
-                  padding: EdgeInsets.symmetric(horizontal: 10),
-                  itemHeight: metrics.itemHeight,
-                  value: _grouped.contains(strategy),
-                  style: groupingStyle,
-                  items: lineupMenuItems([
-                    const DropdownMenuItem(
-                      value: false,
-                      child: Text('Separate by library'),
+                child: Builder(
+                  builder: (context) => DropdownButton<bool>(
+                    key: ValueKey('source-grouping-${strategy.name}'),
+                    isExpanded: true,
+                    isDense: true,
+                    iconSize: 24,
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    itemHeight: metrics.itemHeight,
+                    value: _grouped.contains(strategy),
+                    style: roles.androidTv
+                        ? groupingStyle.copyWith(
+                            color: enabled
+                                ? LineupTheme.of(context).primaryText
+                                : LineupTheme.of(context).mutedText,
+                          )
+                        : groupingStyle,
+                    iconEnabledColor: roles.androidTv
+                        ? LineupTheme.of(context).secondaryText
+                        : null,
+                    iconDisabledColor: roles.androidTv
+                        ? LineupTheme.of(context).mutedText
+                        : null,
+                    items: lineupMenuItems(
+                      [
+                        const DropdownMenuItem(
+                          value: false,
+                          child: Text('Separate by library'),
+                        ),
+                        DropdownMenuItem(
+                          value: true,
+                          child: Text(groupingLabel),
+                        ),
+                      ],
+                      _grouped.contains(strategy),
+                      menuTheme: menuTheme,
                     ),
-                    DropdownMenuItem(value: true, child: Text(groupingLabel)),
-                  ], _grouped.contains(strategy)),
-                  onChanged: enabled
-                      ? (value) =>
-                            widget.onGroupingChanged(strategy, value == true)
-                      : null,
-                  dropdownColor: LineupTheme.of(context).elevatedSurface,
-                  selectedItemBuilder: (_) => ([
-                    const DropdownMenuItem(
-                      value: false,
-                      child: Text('Separate by library'),
-                    ),
-                    DropdownMenuItem(value: true, child: Text(groupingLabel)),
-                  ]).map<Widget>((item) => item.child).toList(),
+                    onChanged: enabled
+                        ? (value) =>
+                              widget.onGroupingChanged(strategy, value == true)
+                        : null,
+                    dropdownColor: roles.elevatedSurface,
+                    selectedItemBuilder: (_) => ([
+                      const DropdownMenuItem(
+                        value: false,
+                        child: Text('Separate by library'),
+                      ),
+                      DropdownMenuItem(value: true, child: Text(groupingLabel)),
+                    ]).map<Widget>((item) => item.child).toList(),
+                  ),
                 ),
               ),
             ),
@@ -822,16 +877,18 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       'Additional channel versions',
       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.4),
     );
-    final additionalVersionsSubtitle = Padding(
-      padding: EdgeInsets.only(top: 12),
-      child: Text(
-        _playback == PlaybackMode.sequential
-            ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
-            : 'Create extra channels with alternate schedules or another playback mode.',
-        style: TextStyle(
-          color: LineupTheme.of(context).secondaryText,
-          fontSize: 18,
-          height: 1.4,
+    final additionalVersionsSubtitle = Builder(
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(top: 12),
+        child: Text(
+          _playback == PlaybackMode.sequential
+              ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
+              : 'Create extra channels with alternate schedules or another playback mode.',
+          style: TextStyle(
+            color: LineupTheme.of(context).secondaryText,
+            fontSize: 18,
+            height: 1.4,
+          ),
         ),
       ),
     );
@@ -856,32 +913,44 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             return RadioGroup<PlaybackMode>(
               groupValue: _playback,
               onChanged: (mode) => widget.onPlaybackChanged(mode!),
-              child: Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  _playbackChoice(
-                    PlaybackMode.shuffle,
-                    'Shuffle',
-                    'Mix programs into a shuffled schedule.',
-                    focus: focus,
-                    width: width,
-                  ),
-                  _playbackChoice(
-                    PlaybackMode.sequential,
-                    'In order',
-                    'Keep the order supplied by the channel’s source.',
-                    focus: focus,
-                    width: width,
-                  ),
-                  _playbackChoice(
-                    PlaybackMode.block,
-                    'Mini-marathons',
-                    'Play a few episodes of one show, then move to another.',
-                    focus: focus,
-                    width: width,
-                  ),
-                ],
+              child: Shortcuts(
+                // RadioGroup owns all four arrows by default. TV uses vertical
+                // arrows to leave the choices through normal spatial traversal.
+                shortcuts: LineupTheme.of(context).androidTv
+                    ? const {
+                        SingleActivator(LogicalKeyboardKey.arrowUp):
+                            DirectionalFocusIntent(TraversalDirection.up),
+                        SingleActivator(LogicalKeyboardKey.arrowDown):
+                            DirectionalFocusIntent(TraversalDirection.down),
+                      }
+                    : const {},
+                child: Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    _playbackChoice(
+                      PlaybackMode.shuffle,
+                      'Shuffle',
+                      'Mix programs into a shuffled schedule.',
+                      focus: focus,
+                      width: width,
+                    ),
+                    _playbackChoice(
+                      PlaybackMode.sequential,
+                      'In order',
+                      'Keep the order supplied by the channel’s source.',
+                      focus: focus,
+                      width: width,
+                    ),
+                    _playbackChoice(
+                      PlaybackMode.block,
+                      'Mini-marathons',
+                      'Play a few episodes of one show, then move to another.',
+                      focus: focus,
+                      width: width,
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -909,15 +978,17 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
         SizedBox(height: sectionGap),
         _episodeStrip(),
         SizedBox(height: 28),
-        ListTileTheme.merge(
-          titleAlignment: ListTileTitleAlignment.top,
-          child: SwitchListTile(
-            value: _extras,
-            controlAffinity: ListTileControlAffinity.trailing,
-            contentPadding: EdgeInsets.zero,
-            title: additionalVersionsTitle,
-            subtitle: additionalVersionsSubtitle,
-            onChanged: changeAdditionalVersions,
+        LineupToggleSurface(
+          child: ListTileTheme.merge(
+            titleAlignment: ListTileTitleAlignment.top,
+            child: SwitchListTile(
+              value: _extras,
+              controlAffinity: ListTileControlAffinity.trailing,
+              contentPadding: EdgeInsets.zero,
+              title: additionalVersionsTitle,
+              subtitle: additionalVersionsSubtitle,
+              onChanged: changeAdditionalVersions,
+            ),
           ),
         ),
         if (_extras)
@@ -1024,71 +1095,99 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             autofocus: false,
             groupRegistry: RadioGroup.maybeOf<PlaybackMode>(context),
             enabled: true,
-            builder: (context, state) {
-              final roles = LineupTheme.of(context);
-              final selected = state.states.contains(WidgetState.selected);
-              final focused = LineupFocusScope.visible(
-                context,
-                state.states.contains(WidgetState.focused),
-              );
-              final hovered = state.states.contains(WidgetState.hovered);
-              final radius = BorderRadius.circular(roles.panelRadius);
-              final surface = selected
-                  ? roles.elevatedSurface
-                  : roles.primarySurface;
-              return Container(
-                constraints: BoxConstraints(minHeight: 152),
-                padding: EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: hovered
-                      ? Color.alphaBlend(
-                          roles.primaryText.withValues(alpha: 0.04),
-                          surface,
-                        )
-                      : surface,
-                  borderRadius: radius,
-                  border: Border.all(
-                    color: selected ? roles.progressFill : roles.defaultBorder,
+            builder: (context, state) => ListenableBuilder(
+              listenable: focus.playback[mode]!,
+              builder: (context, _) {
+                final roles = LineupTheme.of(context);
+                final selected = state.states.contains(WidgetState.selected);
+                final focused = LineupFocusScope.visible(
+                  context,
+                  // Toggleable's focused state follows Flutter's platform
+                  // highlight mode, which can remain touch for native TV keys.
+                  roles.androidTv
+                      ? focus.playback[mode]!.hasFocus
+                      : state.states.contains(WidgetState.focused),
+                );
+                final hovered = state.states.contains(WidgetState.hovered);
+                final radius = BorderRadius.circular(roles.panelRadius);
+                final focusFill =
+                    focused &&
+                    roles.focusTreatment == LineupFocusTreatment.fill;
+                final focusRing =
+                    focused &&
+                    roles.focusTreatment == LineupFocusTreatment.ring;
+                final surface = selected
+                    ? roles.elevatedSurface
+                    : roles.primarySurface;
+                return LineupFocusFrame(
+                  focused: focusFill,
+                  child: Container(
+                    constraints: BoxConstraints(minHeight: 152),
+                    padding: EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: focusFill
+                          ? roles.focusedSurface
+                          : hovered
+                          ? Color.alphaBlend(
+                              roles.primaryText.withValues(alpha: 0.04),
+                              surface,
+                            )
+                          : surface,
+                      borderRadius: radius,
+                      border: Border.all(
+                        color: selected
+                            ? roles.progressFill
+                            : roles.defaultBorder,
+                      ),
+                    ),
+                    foregroundDecoration: focusRing
+                        ? BoxDecoration(
+                            borderRadius: radius,
+                            border: Border.all(
+                              color: roles.focusBorder,
+                              width: roles.focusBorderWidth,
+                            ),
+                          )
+                        : null,
+                    child: LineupFocusInk(
+                      focused: focusFill,
+                      child: Builder(
+                        builder: (context) {
+                          final ink = LineupTheme.of(context);
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: TextStyle(
+                                  color: ink.primaryText,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.4,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                description,
+                                style: TextStyle(
+                                  color: ink.secondaryText,
+                                  fontSize: 18,
+                                  height: 1.4,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
                   ),
-                ),
-                foregroundDecoration: focused
-                    ? BoxDecoration(
-                        borderRadius: radius,
-                        border: Border.all(
-                          color: roles.focusBorder,
-                          width: roles.focusBorderWidth,
-                        ),
-                      )
-                    : null,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: roles.primaryText,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        height: 1.4,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        color: roles.secondaryText,
-                        fontSize: 18,
-                        height: 1.4,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -1291,6 +1390,18 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       fontSize: 18,
       height: 1.4,
     );
+    Widget choiceLabel(int choice) => roles.androidTv
+        ? Builder(
+            builder: (context) => Text(
+              '$choice',
+              maxLines: 1,
+              softWrap: false,
+              style: dropdownStyle.copyWith(
+                color: LineupTheme.of(context).primaryText,
+              ),
+            ),
+          )
+        : Text('$choice');
 
     Widget field({
       required Key key,
@@ -1316,6 +1427,13 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                 maxWidth: constraints.maxWidth,
                 labels: choices.map((choice) => '$choice'),
                 style: dropdownStyle,
+                outerHorizontalChrome: roles.androidTv
+                    ? LineupDropdownBox.contentPadding().horizontal +
+                          2 * LineupDropdownBox.borderWidth
+                    : 0,
+                menuVerticalPadding: roles.androidTv
+                    ? LineupDropdownMenuRow.contentPadding.vertical
+                    : 8,
               );
               final dropdownWidth = metrics.width;
               final inline =
@@ -1336,28 +1454,37 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                         isExpanded: true,
                         isDense: true,
                         iconSize: 24,
+                        icon: roles.androidTv
+                            ? Builder(
+                                builder: (context) => Icon(
+                                  Icons.arrow_drop_down,
+                                  color: LineupTheme.of(context).secondaryText,
+                                ),
+                              )
+                            : null,
                         padding: EdgeInsets.symmetric(horizontal: 10),
                         itemHeight: metrics.itemHeight,
                         value: value,
                         style: dropdownStyle,
-                        items: lineupMenuItems([
-                          for (final choice in choices)
-                            DropdownMenuItem(
-                              value: choice,
-                              child: Text('$choice'),
-                            ),
-                        ], value),
+                        items: lineupMenuItems(
+                          [
+                            for (final choice in choices)
+                              DropdownMenuItem(
+                                value: choice,
+                                child: choiceLabel(choice),
+                              ),
+                          ],
+                          value,
+                          menuTheme: roles.androidTv ? Theme.of(context) : null,
+                        ),
                         onChanged: (next) {
                           if (next != null) onChanged(next);
                         },
                         dropdownColor: LineupTheme.of(context).elevatedSurface,
-                        selectedItemBuilder: (_) => ([
-                          for (final choice in choices)
-                            DropdownMenuItem(
-                              value: choice,
-                              child: Text('$choice'),
-                            ),
-                        ]).map<Widget>((item) => item.child).toList(),
+                        menuWidth: roles.androidTv ? dropdownWidth : null,
+                        selectedItemBuilder: (_) => [
+                          for (final choice in choices) choiceLabel(choice),
+                        ],
                       ),
                     ),
                   ),
@@ -1505,61 +1632,100 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             onExit: (_) {
               if (hovered) setRowState(() => hovered = false);
             },
-            child: DecoratedBox(
-              key: ValueKey('source-order-${strategy.name}'),
-              decoration: BoxDecoration(
-                color: hovered || LineupFocusScope.visible(context, focused)
-                    ? roles.primarySurface
-                    : Colors.transparent,
-                border: Border(bottom: BorderSide(color: roles.subtleBorder)),
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: rowHeight),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 28,
-                      child: Text('${index + 1}', style: rankStyle),
+            child: Builder(
+              builder: (context) {
+                final visible = LineupFocusScope.visible(context, focused);
+                final fillFocus =
+                    visible &&
+                    roles.focusTreatment == LineupFocusTreatment.fill;
+                return DecoratedBox(
+                  key: ValueKey('source-order-${strategy.name}'),
+                  decoration: BoxDecoration(
+                    color: fillFocus
+                        ? roles.focusedSurface
+                        : hovered || visible
+                        ? roles.primarySurface
+                        : Colors.transparent,
+                    border: Border(
+                      bottom: BorderSide(color: roles.subtleBorder),
                     ),
-                    SizedBox(width: rowGap),
-                    Expanded(
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(text: builderStrategyLabels[strategy]!),
-                            if (!enabled)
-                              TextSpan(text: '  Off', style: rankStyle),
-                          ],
-                        ),
-                        style: nameStyle,
+                  ),
+                  child: LineupFocusFrame(
+                    focused: fillFocus,
+                    child: LineupFocusInk(
+                      focused: fillFocus,
+                      child: Builder(
+                        builder: (context) {
+                          final ink = LineupTheme.of(context);
+                          final inkNameStyle = nameStyle.copyWith(
+                            color: ink.primaryText,
+                          );
+                          final inkRankStyle = rankStyle.copyWith(
+                            color: ink.secondaryText,
+                          );
+                          return ConstrainedBox(
+                            constraints: BoxConstraints(minHeight: rowHeight),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 28,
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: inkRankStyle,
+                                  ),
+                                ),
+                                SizedBox(width: rowGap),
+                                Expanded(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text:
+                                              builderStrategyLabels[strategy]!,
+                                        ),
+                                        if (!enabled)
+                                          TextSpan(
+                                            text: '  Off',
+                                            style: inkRankStyle,
+                                          ),
+                                      ],
+                                    ),
+                                    style: inkNameStyle,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    lineupArrowButton(
+                                      focusNode: focus.order[strategy]!.earlier,
+                                      tooltip: 'Move earlier',
+                                      onPressed: index == 0
+                                          ? null
+                                          : () => _moveSource(index, -1, focus),
+                                      icon: Icons.arrow_upward,
+                                    ),
+                                    lineupArrowButton(
+                                      focusNode: focus.order[strategy]!.later,
+                                      tooltip: 'Move later',
+                                      onPressed:
+                                          index == _sourceOrder.length - 1
+                                          ? null
+                                          : () => _moveSource(index, 1, focus),
+                                      icon: Icons.arrow_downward,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    SizedBox(width: 8),
-                    Wrap(
-                      spacing: 4,
-                      children: [
-                        lineupArrowButton(
-                          focusNode: focus.order[strategy]!.earlier,
-                          tooltip: 'Move earlier',
-                          onPressed: index == 0
-                              ? null
-                              : () => _moveSource(index, -1, focus),
-                          icon: Icons.arrow_upward,
-                        ),
-                        lineupArrowButton(
-                          focusNode: focus.order[strategy]!.later,
-                          tooltip: 'Move later',
-                          onPressed: index == _sourceOrder.length - 1
-                              ? null
-                              : () => _moveSource(index, 1, focus),
-                          icon: Icons.arrow_downward,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ),

@@ -154,7 +154,11 @@ class _LibraryScanState {
   _LibraryScanResult? get readiness => _ready?.result;
   int? get readinessScope => _ready?.contentScope;
   Map<String, LibraryScanFact> get facts => Map.unmodifiable({
-    for (final entry in rows.entries) entry.key: entry.value.fact,
+    // A failed refresh may retain the previous committable inventory while
+    // staging a different selection for retry. Display that selection's facts,
+    // including newly added failures, rather than hiding them behind readiness.
+    for (final entry in (_retainedRetry?.rows ?? rows).entries)
+      entry.key: entry.value.fact,
   });
   Map<String, Set<String>> get failedCollectionTitles => Map.unmodifiable({
     for (final entry in rows.entries)

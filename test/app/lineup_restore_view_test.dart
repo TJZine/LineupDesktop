@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -374,6 +377,126 @@ void main() {
     );
   }
 
+  testWidgets(
+    'Android restore Back preserves real scan and blocks held migration commit',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final outside = FocusNode(debugLabel: 'Outside restoration shell');
+      const platform = MethodChannel('lineup/platform');
+      var backgrounds = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(platform, (
+        call,
+      ) async {
+        if (call.method == 'moveTaskToBack') backgrounds++;
+        return true;
+      });
+      try {
+        final fixture = _realRestoreFixture(legacy: true);
+        final native = FixturePlayer();
+        await tester.pumpWidget(
+          Focus(
+            focusNode: outside,
+            child: LineupBootstrap(
+              controller: fixture.controller,
+              player: native,
+              androidTv: true,
+            ),
+          ),
+        );
+        await _waitForRestore(tester, fixture.plex);
+        await tester.pumpAndSettle();
+        expect(find.text('Loading your lineup…'), findsOneWidget);
+        expect(
+          find.byType(UpstreamChannelSetupView, skipOffstage: false),
+          findsNothing,
+        );
+        final restoreFocus = Focus.of(
+          tester.element(find.text('Switch server')),
+        );
+        restoreFocus.requestFocus();
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(restoreFocus));
+        expect(
+          restoreFocus.ancestors.any(
+            (node) => node.debugLabel == 'Android root Back',
+          ),
+          isTrue,
+        );
+        final saves = fixture.store.calls;
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(backgrounds, 1);
+        expect(
+          fixture.controller.libraryScanStatus,
+          LibraryScanStatus.scanning,
+        );
+        expect(fixture.plex.cancellations, 0);
+        expect(fixture.plex.scans, 1);
+        expect(fixture.store.calls, saves);
+
+        outside.requestFocus();
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(outside));
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(backgrounds, 2);
+        expect(fixture.plex.cancellations, 0);
+        expect(fixture.plex.completedScans, 0);
+        expect(fixture.store.calls, saves);
+        expect(find.text('Loading your lineup…'), findsOneWidget);
+
+        fixture.store.blockNext();
+        fixture.plex.finish.complete();
+        for (var i = 0; i < 30 && !fixture.store.started.isCompleted; i++) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+        expect(fixture.store.started.isCompleted, isTrue);
+        expect(fixture.controller.canSwitchServer, isFalse);
+        expect(fixture.controller.restoringSavedLineup, isTrue);
+        expect(
+          tester
+              .widget<TextButton>(
+                find.byKey(const ValueKey('restore-switch-server')),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(
+          find.byType(UpstreamChannelSetupView, skipOffstage: false),
+          findsNothing,
+        );
+        outside.requestFocus();
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(outside));
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(backgrounds, 2, reason: 'started migration save blocks Back');
+        expect(fixture.store.calls, saves + 1);
+        expect(fixture.plex.scans, 1);
+        expect(find.text('Loading your lineup…'), findsOneWidget);
+        fixture.store.release();
+        await tester.pumpAndSettle();
+        expect(fixture.controller.stage, SetupStage.ready);
+        expect(fixture.controller.restoringSavedLineup, isFalse);
+        expect(fixture.store.calls, saves + 1);
+        expect(native.loads, isEmpty);
+        expect(native.stops, 0);
+      } finally {
+        FocusManager.instance.applyFocusChangesIfNeeded();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        outside.dispose();
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          platform,
+          null,
+        );
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
   testWidgets('native initialization remains a barrier during real restore', (
     tester,
   ) async {
@@ -535,10 +658,11 @@ Future<void> _waitForRestore(WidgetTester tester, _RestorePlex plex) async {
   await tester.pump();
 }
 
-({LineupController controller, _RestorePlex plex, MemoryAppStore store})
-_realRestoreFixture() {
+({LineupController controller, _RestorePlex plex, _RestoreStore store})
+_realRestoreFixture({bool legacy = false}) {
   final channel = Channel(
     id: 'saved',
+    scheduleVersion: legacy ? 1 : currentScheduleVersion,
     number: 1,
     name: 'Saved channel',
     source: const LibrarySource(
@@ -549,7 +673,7 @@ _realRestoreFixture() {
     anchor: DateTime.utc(2026),
     shuffleSeed: 1,
   );
-  final store = MemoryAppStore()
+  final store = _RestoreStore()
     ..state = PersistedState(
       settings: const LineupSettings(reduceMotion: true),
       selectedServerByProfile: const {'owner': 'server'},
@@ -574,6 +698,28 @@ _realRestoreFixture() {
   return (controller: controller, plex: plex, store: store);
 }
 
+class _RestoreStore extends MemoryAppStore {
+  int calls = 0;
+  Completer<void>? gate;
+  Completer<void> started = Completer<void>();
+  void blockNext() {
+    gate = Completer<void>();
+    started = Completer<void>();
+  }
+
+  void release() => gate!.complete();
+  @override
+  Future<void> save(PersistedState value) async {
+    calls++;
+    if (gate case final held?) {
+      started.complete();
+      await held.future;
+      gate = null;
+    }
+    await super.save(value);
+  }
+}
+
 class _GatedPlayer extends FixturePlayer {
   final finish = Completer<void>();
   @override
@@ -589,6 +735,7 @@ class _RestorePlex extends PlexClient {
   final finish = Completer<void>();
   int scans = 0;
   int completedScans = 0;
+  int cancellations = 0;
   final server = PlexServer(
     id: 'server',
     name: 'Synthetic server',
@@ -631,6 +778,11 @@ class _RestorePlex extends PlexClient {
     Future<void>? cancelled,
   }) async {
     scans++;
+    unawaited(
+      cancelled?.then<void>((_) {
+        cancellations++;
+      }),
+    );
     onPhase?.call(PlexLibraryScanPhase.items);
     await finish.future;
     completedScans++;

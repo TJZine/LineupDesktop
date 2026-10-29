@@ -394,6 +394,56 @@ time regardless of that setting. Page Up/Page Down, number entry, Guide/Mini
 Guide tuning, tracks, sleep, menu, and fullscreen also do not depend on the
 setting. The timed OSD follows the configured 2–15 second auto-hide duration.
 
+### Android TV and Fire TV remote
+
+Use the D-pad to move focus and Select to activate the focused control. Back
+closes the current Player overlay, returns from Player to Guide, or follows the
+current screen's Back action. At the root, an unconsumed Back backgrounds Lineup
+without closing its task. Home belongs to the TV system.
+
+Leaving Lineup or putting the TV to sleep stops playback and releases the player.
+Returning while playback was active tunes the current channel at its current
+scheduled position. An explicit Stop or an expired sleep timer keeps playback
+stopped. Restarting Lineup restores its saved profile, server, lineup and channel
+through the normal startup flow.
+
+Text fields use two steps: focus the field with the D-pad, then press Select to
+open the keyboard. Dismissing the keyboard or choosing Done returns to field
+navigation, so the D-pad can reach the next control.
+
+| Remote button | Action |
+| --- | --- |
+| Select | With the Player controls hidden, show the compact OSD; otherwise activate the focused control |
+| Left / Right | Move through focused Player actions; seek only with DVR enabled and video focused |
+| Up / Down | Hidden Player: Up opens Mini Guide and Down shows the compact OSD; from the compact OSD action row, Down expands details when a program exists; in expanded details, move within the details |
+| Channel Up / Channel Down | Player: previous/next channel; Mini Guide: move seven channels; Guide: move a visible page, like Page Up / Page Down |
+| Guide | Open the full Guide from Player; in Guide, follow its Close Guide action |
+| Info | Player: expand details from hidden or compact OSD; collapse expanded details to compact OSD; with no current program, show the compact OSD |
+| Menu | Open the Lineup menu from Player or Guide |
+| Play/Pause, Rewind, Fast Forward | Existing Player transport actions when DVR playback controls are enabled |
+| Number buttons | Enter a channel number in Player, then Select to confirm |
+
+Guide and Info depend on the remote; Fire TV remotes provide Menu but may not
+provide Guide or Info. In Channel Review, Right from a channel row or disclosure
+header jumps to the footer's enabled primary action, or **Back to configure** if
+that action is disabled, and Up returns to the remembered row. The TV hint is
+**Press right on any channel to jump here**. Moving between regions does not
+apply, save, change consent, or clear the query.
+
+When lineup generation completes on TV, **Open guide** goes to Guide. **Add a
+custom channel** goes to Studio; desktop keeps its existing View lineup action.
+
+Up from the Guide's first channel row enters the nearest toolbar control; Down
+returns to the selected grid cell. Player action keys reset the OSD timeout;
+auto-hide returns focus to video. Closing a track drawer or sleep picker returns
+to its invoking action. If playback fails, use the focused Retry action when
+available, or Browse channels.
+
+Use the Player's OSD controls for tracks and sleep. Plex linking uses the code
+and QR shown on the TV; open plex.tv/link on another device when the TV has no
+browser. The Studio manual editor and air check remain reachable but are not
+accepted for remote-only operation in this beta.
+
 ## Channels
 
 **Generate lineup** is the bulk workflow. It proposes generator-owned channels,

@@ -17,6 +17,178 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/test_doubles.dart';
 
 void main() {
+  GuideProgram castProgram(String id) {
+    final start = DateTime.utc(2026);
+    return GuideProgram(
+      channelId: 'channel',
+      scheduled: ScheduledProgram(
+        item: ChannelItem(
+          id: id,
+          title: 'Fixture',
+          duration: const Duration(hours: 1),
+          cast: [ChannelCastMember(name: 'Actor A')],
+        ),
+        start: start,
+        end: start.add(const Duration(hours: 1)),
+        elapsed: Duration.zero,
+        index: 0,
+        loop: 0,
+      ),
+    );
+  }
+
+  test('cast surface deduplicates, shares display data, isolates items, and caches noRicherData', () async {
+    final lineup = _CastLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(lineup: lineup);
+    addTearDown(guide.dispose);
+    guide.requestViewport(0, 1);
+    await guide.ensureCurrentProgram(lineup.channels.single.id);
+    await _settle();
+    expect(lineup.requests, isEmpty);
+    final a = castProgram('a');
+    final b = castProgram('b');
+    for (var i = 0; i < 20; i++) {
+      expect(guide.castFor(a).cast.single.portrait, isNull);
+    }
+    await _settle();
+    expect(lineup.requests, ['a']);
+    lineup.pending.removeAt(0).complete(const [
+      PlexCastMember(name: 'Actor A', thumbPath: '/filled'),
+    ]);
+    await _settle();
+    expect(guide.castFor(a).cast.single.portrait?.path, '/filled');
+    expect(guide.castFor(b).cast.single.portrait, isNull);
+    await _settle();
+    lineup.pending.removeAt(0).complete(const [
+      PlexCastMember(name: 'Unmatched'),
+    ]);
+    await _settle();
+    for (var i = 0; i < 20; i++) {
+      guide.castFor(b);
+    }
+    await _settle();
+    expect(lineup.requests, ['a', 'b']);
+    expect(a.scheduled.item.cast.single.portrait, isNull);
+  });
+
+  test('cast failures retry only after the fixed interval and use bounded enum diagnostics', () async {
+    var now = DateTime.utc(2026);
+    final lineup = _CastLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    lineup.diagnostics.enabled = true;
+    final guide = GuideController(lineup: lineup, clock: () => now);
+    addTearDown(guide.dispose);
+    final a = castProgram('a');
+    guide.castFor(a);
+    await _settle();
+    lineup.pending
+        .removeAt(0)
+        .completeError(const PlexException('network-timeout', 'private'));
+    await _settle();
+    for (var i = 0; i < 10; i++) {
+      guide.castFor(a);
+    }
+    now = now.add(
+      GuideController.castFailureRetryInterval -
+          const Duration(microseconds: 1),
+    );
+    guide.castFor(a);
+    await _settle();
+    expect(lineup.requests, ['a']);
+    expect(lineup.diagnostics.entries.last.context, {
+      'castOutcome': 'failed',
+      'castFailure': 'timeout',
+    });
+    now = now.add(const Duration(microseconds: 1));
+    guide.castFor(a);
+    await _settle();
+    expect(lineup.requests, ['a', 'a']);
+    lineup.pending.removeAt(0).complete(const []);
+    await _settle();
+    expect(lineup.diagnostics.entries.last.context, {
+      'castOutcome': 'noRicherData',
+    });
+  });
+
+  test(
+    'cast LRU is bounded, pending work is pinned, and concurrency is two',
+    () async {
+      final lineup = _CastLineup(_channels(1));
+      addTearDown(lineup.dispose);
+      final guide = GuideController(lineup: lineup);
+      addTearDown(guide.dispose);
+      for (var i = 0; i < 40; i++) {
+        guide.castFor(castProgram('$i'));
+      }
+      await _settle();
+      expect(lineup.requests, ['0', '1']);
+      for (var i = 0; i < 40; i++) {
+        guide.castFor(castProgram('$i'));
+      }
+      for (
+        var batch = 0;
+        batch < GuideController.maximumCachedCastEntries ~/ 2;
+        batch++
+      ) {
+        final pending = lineup.pending.toList();
+        lineup.pending.clear();
+        expect(pending, hasLength(2));
+        for (final completer in pending) {
+          completer.complete(const []);
+        }
+        await _settle();
+      }
+      expect(
+        lineup.requests,
+        hasLength(GuideController.maximumCachedCastEntries),
+      );
+      guide.castFor(castProgram('0')); // Most recently used.
+      guide.castFor(castProgram('new'));
+      await _settle();
+      lineup.pending.removeAt(0).complete(const []);
+      await _settle();
+      guide.castFor(castProgram('0'));
+      guide.castFor(castProgram('1')); // Oldest completed entry was evicted.
+      await _settle();
+      expect(lineup.requests.where((id) => id == '0'), hasLength(1));
+      expect(lineup.requests.where((id) => id == '1'), hasLength(2));
+      lineup.pending.removeAt(0).complete(const []);
+      await _settle();
+    },
+  );
+
+  test(
+    'cast generation retirement drops late results and disposal never notifies',
+    () async {
+      final lineup = _CastLineup(_channels(1));
+      addTearDown(lineup.dispose);
+      final guide = GuideController(lineup: lineup);
+      final a = castProgram('a');
+      guide.castFor(a);
+      await _settle();
+      final stale = lineup.pending.removeAt(0);
+      lineup.changeContentScope();
+      expect(guide.castFor(a).cast.single.portrait, isNull);
+      await _settle();
+      stale.complete(const [
+        PlexCastMember(name: 'Actor A', thumbPath: '/stale'),
+      ]);
+      await _settle();
+      expect(guide.castFor(a).cast.single.portrait, isNull);
+      final current = lineup.pending.removeAt(0);
+      var notifications = 0;
+      guide.addListener(() => notifications++);
+      guide.dispose();
+      current.complete(const [
+        PlexCastMember(name: 'Actor A', thumbPath: '/late'),
+      ]);
+      await _settle();
+      expect(notifications, 0);
+      expect(lineup.requests, ['a', 'a']);
+    },
+  );
+
   test('successful load with failed projection owns error, evicts cache, and retries', () async {
     final lineup = _TestLineup(_channels(1));
     addTearDown(lineup.dispose);
@@ -1461,6 +1633,60 @@ void main() {
     },
   );
 
+  test('transcoded backdrops are keyed by size and never reuse portraits or originals', () async {
+    final lineup = _ArtworkLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(lineup: lineup);
+    addTearDown(guide.dispose);
+    final start = DateTime.utc(2026);
+    final backdrop = Uri.parse('/library/metadata/1/art/2');
+    final program = GuideProgram(
+      channelId: 'channel',
+      scheduled: ScheduledProgram(
+        item: ChannelItem(
+          id: 'item',
+          title: 'Fixture',
+          duration: const Duration(hours: 1),
+          backdrop: backdrop,
+        ),
+        start: start,
+        end: start.add(const Duration(hours: 1)),
+        elapsed: Duration.zero,
+        index: 0,
+        loop: 0,
+      ),
+    );
+
+    final first = guide.backdropFor(program, width: 1344, height: 384);
+    final cached = guide.backdropFor(program, width: 1344, height: 384);
+    final larger = guide.backdropFor(program, width: 1920, height: 448);
+    final original = guide.artworkFor(program, GuideArtworkKind.backdrop);
+    final portraitSized = guide.artworkForPath(
+      backdrop,
+      width: 1344,
+      height: 384,
+    );
+    await _settle();
+
+    expect(identical(first, cached), isTrue);
+    expect(identical(first, larger), isFalse);
+    expect(identical(first, original), isFalse);
+    expect(identical(first, portraitSized), isFalse);
+    expect(lineup.programArtworkSizes, [
+      (path: backdrop, width: 1344, height: 384),
+      (path: backdrop, width: 1920, height: 448),
+    ]);
+    expect(lineup.artworkSizes, [
+      (width: null, height: null),
+      (width: 1344, height: 384),
+    ]);
+    lineup.completeArtwork();
+    expect(
+      await Future.wait([first, larger, original, portraitSized]),
+      everyElement(isNotNull),
+    );
+  });
+
   test('production schedules use the persistent catalog worker', () async {
     final channel = Channel(
       id: 'library-channel',
@@ -2502,6 +2728,20 @@ class _ArtworkLineup extends _TestLineup {
     return completer.future;
   }
 
+  final programArtworkSizes = <({Uri path, int width, int height})>[];
+
+  @override
+  Future<Uint8List?> programArtworkForPath(
+    Uri path, {
+    required int width,
+    required int height,
+  }) {
+    programArtworkSizes.add((path: path, width: width, height: height));
+    final completer = Completer<Uint8List?>();
+    _artwork.add(completer);
+    return completer.future;
+  }
+
   void completeArtwork() {
     for (final completer in _artwork) {
       if (!completer.isCompleted) completer.complete(Uint8List(0));
@@ -2519,5 +2759,21 @@ class _FailingStore extends MemoryAppStore {
     if (fail) throw StateError('Synthetic save failure');
     saved = state;
     await super.save(state);
+  }
+}
+
+class _CastLineup extends _TestLineup {
+  _CastLineup(super.value);
+  final requests = <String>[];
+  final pending = <Completer<List<PlexCastMember>?>>[];
+  @override
+  Future<List<PlexCastMember>?> castForItem(
+    String itemId, {
+    Future<void>? cancelled,
+  }) {
+    requests.add(itemId);
+    final completer = Completer<List<PlexCastMember>?>();
+    pending.add(completer);
+    return completer.future;
   }
 }

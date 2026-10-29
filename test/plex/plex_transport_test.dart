@@ -848,6 +848,72 @@ void main() {
       expect(request.headers['X-Plex-Token'], 'secret');
     });
 
+    test(
+      'sized program artwork uses the authenticated PMS transcoder',
+      () async {
+        late http.BaseRequest request;
+        final plex = client((value, _) async {
+          request = value;
+          return http.StreamedResponse(Stream.value([1, 2, 3, 4]), 200);
+        });
+
+        final bytes = await plex.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          Uri.parse('/library/metadata/1/art/9'),
+          width: 1344,
+          height: 384,
+          maximumBytes: 4,
+        );
+
+        expect(bytes, [1, 2, 3, 4]);
+        expect(request.url.host, 'plex.example');
+        expect(request.url.path, '/photo/:/transcode');
+        expect(request.url.queryParameters, {
+          'width': '1344',
+          'height': '384',
+          'minSize': '1',
+          'upscale': '0',
+          'url': '/library/metadata/1/art/9',
+        });
+        expect(request.followRedirects, isFalse);
+        expect(request.headers['X-Plex-Token'], 'secret');
+        expect(request.url.toString(), isNot(contains('secret')));
+      },
+    );
+
+    for (final size in [(0, 384), (1344, 0), (4097, 384), (1344, null)]) {
+      test('rejects artwork size $size before sending', () async {
+        final plex = client((_, _) async => throw StateError('sent request'));
+
+        await expectLater(
+          plex.artwork(
+            Uri.parse('https://plex.example:32400'),
+            'secret',
+            Uri.parse('/library/metadata/1/art'),
+            width: size.$1,
+            height: size.$2,
+          ),
+          plexError('artwork-unavailable'),
+        );
+      });
+    }
+
+    test('sized artwork keeps the path allowlist', () async {
+      final plex = client((_, _) async => throw StateError('sent request'));
+
+      await expectLater(
+        plex.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          Uri.parse('https://attacker.example/library/metadata/1/art'),
+          width: 100,
+          height: 100,
+        ),
+        plexError('artwork-unavailable'),
+      );
+    });
+
     for (final mismatch in {
       'host': 'https://attacker.example/art',
       'scheme': 'http://plex.example:32400/art',

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
@@ -10,6 +11,7 @@ typedef _Case = ({
   bool unsupported,
   bool initialPress,
   bool hasProgram,
+  bool tvOsdAtBottom,
   PlayerAction? action,
   String? digit,
 });
@@ -24,6 +26,7 @@ void main() {
     bool unsupported = false,
     bool initialPress = true,
     bool hasProgram = true,
+    bool tvOsdAtBottom = false,
     String? digit,
   }) {
     for (final key in keys) {
@@ -34,6 +37,7 @@ void main() {
         unsupported: unsupported,
         initialPress: initialPress,
         hasProgram: hasProgram,
+        tvOsdAtBottom: tvOsdAtBottom,
         action: action,
         digit: digit,
       ));
@@ -72,10 +76,13 @@ void main() {
     PlayerAction.miniGuideDown,
     PlayerAction.tuneMiniGuide,
     PlayerAction.showOsd,
+    PlayerAction.openMenu,
     PlayerAction.showSleepTimer,
   };
 
-  for (final overlay in PlayerOverlay.values) {
+  for (final overlay in PlayerOverlay.values.where(
+    (o) => o != PlayerOverlay.programInfo,
+  )) {
     // Back outranks every mode/availability guard, including repeats.
     for (final dvr in [false, true]) {
       for (final unsupported in [false, true]) {
@@ -116,12 +123,16 @@ void main() {
     final now = overlay == PlayerOverlay.nowPlaying;
 
     row(
-      [LogicalKeyboardKey.keyG, LogicalKeyboardKey.f2],
+      [
+        LogicalKeyboardKey.keyG,
+        LogicalKeyboardKey.f2,
+        LogicalKeyboardKey.guide,
+      ],
       overlay,
       error || number ? PlayerAction.ignored : PlayerAction.openGuide,
     );
     row(
-      [LogicalKeyboardKey.pageUp],
+      [LogicalKeyboardKey.pageUp, LogicalKeyboardKey.channelUp],
       overlay,
       owned || number
           ? PlayerAction.ignored
@@ -130,7 +141,7 @@ void main() {
           : PlayerAction.previousChannel,
     );
     row(
-      [LogicalKeyboardKey.pageDown],
+      [LogicalKeyboardKey.pageDown, LogicalKeyboardKey.channelDown],
       overlay,
       owned || number
           ? PlayerAction.ignored
@@ -206,7 +217,11 @@ void main() {
     }
     final blocksActions = owned || error || number;
     row(
-      [LogicalKeyboardKey.keyI],
+      [
+        LogicalKeyboardKey.keyI,
+        LogicalKeyboardKey.info,
+        LogicalKeyboardKey.contextMenu,
+      ],
       overlay,
       blocksActions
           ? PlayerAction.ignored
@@ -227,6 +242,8 @@ void main() {
     row(
       [
         LogicalKeyboardKey.keyI,
+        LogicalKeyboardKey.info,
+        LogicalKeyboardKey.contextMenu,
         LogicalKeyboardKey.keyF,
         LogicalKeyboardKey.f11,
         LogicalKeyboardKey.keyS,
@@ -356,13 +373,13 @@ void main() {
       initialPress: false,
     );
     row(
-      [LogicalKeyboardKey.pageUp],
+      [LogicalKeyboardKey.pageUp, LogicalKeyboardKey.channelUp],
       overlay,
       mini ? PlayerAction.miniGuidePageUp : PlayerAction.consumed,
       unsupported: true,
     );
     row(
-      [LogicalKeyboardKey.pageDown],
+      [LogicalKeyboardKey.pageDown, LogicalKeyboardKey.channelDown],
       overlay,
       mini ? PlayerAction.miniGuidePageDown : PlayerAction.consumed,
       unsupported: true,
@@ -442,52 +459,252 @@ void main() {
         unsupported: c.unsupported,
         initialPress: false,
         hasProgram: c.hasProgram,
+        tvOsdAtBottom: c.tvOsdAtBottom,
         action: c.action,
         digit: c.digit,
       ));
     }
   }
 
-  test('Player key resolution table preserves priority, aliases and sleep policy', () {
-    final actions = <PlayerAction>{};
-    for (final c in cases) {
-      final reason =
-          '${c.key.keyLabel} / ${c.overlay.name} / dvr=${c.dvr} / unsupported=${c.unsupported} / initial=${c.initialPress} / program=${c.hasProgram}';
-      final command = resolvePlayerKey(
-        c.key,
-        overlay: c.overlay,
-        dvr: c.dvr,
-        unsupported: c.unsupported,
-        initialPress: c.initialPress,
-        hasProgram: c.hasProgram,
+  final tvAliases = {
+    LogicalKeyboardKey.channelUp,
+    LogicalKeyboardKey.channelDown,
+    LogicalKeyboardKey.guide,
+    LogicalKeyboardKey.info,
+    LogicalKeyboardKey.contextMenu,
+  };
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    for (final tv in [false, true]) {
+      test('Player key priority, aliases and sleep policy on $platform TV=$tv', () {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          final actions = <PlayerAction>{};
+          for (final c in cases) {
+            final reason =
+                '${c.key.keyLabel} / ${c.overlay.name} / dvr=${c.dvr} / unsupported=${c.unsupported} / initial=${c.initialPress} / program=${c.hasProgram}';
+            final command = resolvePlayerKey(
+              c.key,
+              overlay: c.overlay,
+              androidTv: tv,
+              dvr: c.dvr,
+              unsupported: c.unsupported,
+              initialPress: c.initialPress,
+              hasProgram: c.hasProgram,
+              tvOsdAtBottom: c.tvOsdAtBottom,
+            );
+            final expectedAction = !tv && tvAliases.contains(c.key)
+                ? PlayerAction.ignored
+                : tv && c.key == LogicalKeyboardKey.contextMenu
+                ? PlayerAction.openMenu
+                : tv &&
+                      c.key == LogicalKeyboardKey.arrowDown &&
+                      (c.overlay == PlayerOverlay.none ||
+                          c.overlay == PlayerOverlay.osd)
+                ? c.overlay == PlayerOverlay.none
+                      ? PlayerAction.showOsd
+                      : c.tvOsdAtBottom && c.hasProgram
+                      ? PlayerAction.showNowPlaying
+                      : PlayerAction.consumed
+                : c.action;
+            if (c.digit != null) {
+              expect(
+                command,
+                isA<AppendChannelDigit>().having(
+                  (value) => value.digit,
+                  'digit',
+                  c.digit,
+                ),
+                reason: reason,
+              );
+              expect(command.closesSleepPicker, isTrue, reason: reason);
+            } else {
+              expect(command, expectedAction, reason: reason);
+              expect(
+                command.closesSleepPicker,
+                !noSleepClose.contains(expectedAction),
+                reason: reason,
+              );
+              actions.add(expectedAction!);
+            }
+          }
+          expect(
+            actions,
+            containsAll(
+              PlayerAction.values.where(
+                (action) => tv || action != PlayerAction.openMenu,
+              ),
+            ),
+            reason: 'Every executor action has behavioral table evidence.',
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
+  }
+
+  test('M1 TV Menu and compact details intents are state-specific', () {
+    PlayerCommand resolve(
+      LogicalKeyboardKey key, {
+      required PlayerOverlay overlay,
+      bool hasProgram = true,
+      bool tvOsdAtBottom = false,
+      bool initialPress = true,
+    }) => resolvePlayerKey(
+      key,
+      overlay: overlay,
+      androidTv: true,
+      dvr: true,
+      unsupported: false,
+      initialPress: initialPress,
+      hasProgram: hasProgram,
+      tvOsdAtBottom: tvOsdAtBottom,
+    );
+
+    for (final overlay in [
+      PlayerOverlay.none,
+      PlayerOverlay.osd,
+      PlayerOverlay.nowPlaying,
+    ]) {
+      expect(
+        resolve(LogicalKeyboardKey.contextMenu, overlay: overlay),
+        PlayerAction.openMenu,
       );
-      if (c.digit != null) {
-        expect(
-          command,
-          isA<AppendChannelDigit>().having(
-            (value) => value.digit,
-            'digit',
-            c.digit,
-          ),
-          reason: reason,
-        );
-        expect(command.closesSleepPicker, isTrue, reason: reason);
-      } else {
-        expect(command, c.action, reason: reason);
-        expect(
-          command.closesSleepPicker,
-          !noSleepClose.contains(c.action),
-          reason: reason,
-        );
-        actions.add(c.action!);
-      }
     }
     expect(
-      actions,
-      containsAll(PlayerAction.values),
-      reason: 'Every executor action has behavioral table evidence.',
+      resolve(LogicalKeyboardKey.arrowDown, overlay: PlayerOverlay.none),
+      PlayerAction.showOsd,
+    );
+    expect(
+      resolve(
+        LogicalKeyboardKey.arrowDown,
+        overlay: PlayerOverlay.none,
+        hasProgram: false,
+      ),
+      PlayerAction.showOsd,
+    );
+    expect(
+      resolve(LogicalKeyboardKey.arrowDown, overlay: PlayerOverlay.osd),
+      PlayerAction.consumed,
+    );
+    expect(
+      resolve(
+        LogicalKeyboardKey.arrowDown,
+        overlay: PlayerOverlay.osd,
+        tvOsdAtBottom: true,
+      ),
+      PlayerAction.showNowPlaying,
+    );
+    expect(
+      resolve(
+        LogicalKeyboardKey.arrowDown,
+        overlay: PlayerOverlay.osd,
+        tvOsdAtBottom: true,
+        hasProgram: false,
+      ),
+      PlayerAction.consumed,
+    );
+    expect(
+      resolve(LogicalKeyboardKey.keyI, overlay: PlayerOverlay.none),
+      PlayerAction.showNowPlaying,
+    );
+    expect(
+      resolve(LogicalKeyboardKey.info, overlay: PlayerOverlay.nowPlaying),
+      PlayerAction.showOsdFromInfo,
     );
   });
+
+  for (final dvr in [false, true]) {
+    for (final unsupported in [false, true]) {
+      test(
+        'program info remote availability DVR=$dvr unsupported=$unsupported',
+        () {
+          for (final key in [
+            LogicalKeyboardKey.escape,
+            LogicalKeyboardKey.goBack,
+            LogicalKeyboardKey.backspace,
+          ]) {
+            expect(
+              resolvePlayerKey(
+                key,
+                overlay: PlayerOverlay.programInfo,
+                androidTv: true,
+                dvr: dvr,
+                unsupported: unsupported,
+                initialPress: false,
+                hasProgram: true,
+              ),
+              PlayerAction.closeOverlay,
+            );
+          }
+          expect(
+            resolvePlayerKey(
+              LogicalKeyboardKey.guide,
+              overlay: PlayerOverlay.programInfo,
+              androidTv: true,
+              dvr: dvr,
+              unsupported: unsupported,
+              initialPress: true,
+              hasProgram: true,
+            ),
+            PlayerAction.openGuide,
+          );
+          for (final entry in {
+            LogicalKeyboardKey.mediaPlayPause: PlayerAction.togglePlayback,
+            LogicalKeyboardKey.mediaPlay: PlayerAction.play,
+            LogicalKeyboardKey.mediaPause: PlayerAction.pause,
+            LogicalKeyboardKey.mediaStop: PlayerAction.stop,
+            LogicalKeyboardKey.mediaRewind: PlayerAction.rewind,
+            LogicalKeyboardKey.mediaFastForward: PlayerAction.fastForward,
+            LogicalKeyboardKey.channelUp: PlayerAction.previousChannel,
+            LogicalKeyboardKey.channelDown: PlayerAction.nextChannel,
+          }.entries) {
+            final media =
+                entry.key != LogicalKeyboardKey.channelUp &&
+                entry.key != LogicalKeyboardKey.channelDown;
+            final blocked = unsupported || (media && !dvr);
+            expect(
+              resolvePlayerKey(
+                entry.key,
+                overlay: PlayerOverlay.programInfo,
+                androidTv: true,
+                dvr: dvr,
+                unsupported: unsupported,
+                initialPress: true,
+                hasProgram: true,
+              ),
+              blocked ? PlayerAction.consumed : entry.value,
+              reason: entry.key.keyLabel,
+            );
+          }
+          for (final key in [
+            LogicalKeyboardKey.arrowUp,
+            LogicalKeyboardKey.arrowDown,
+            LogicalKeyboardKey.arrowLeft,
+            LogicalKeyboardKey.arrowRight,
+            LogicalKeyboardKey.select,
+          ]) {
+            expect(
+              resolvePlayerKey(
+                key,
+                overlay: PlayerOverlay.programInfo,
+                androidTv: true,
+                dvr: dvr,
+                unsupported: unsupported,
+                initialPress: true,
+                hasProgram: true,
+              ),
+              PlayerAction.ignored,
+            );
+          }
+        },
+      );
+    }
+  }
 
   test('a pressed Command key leaves every key unresolved for the menu', () {
     for (final key in [
@@ -501,6 +718,7 @@ void main() {
         resolvePlayerKey(
           key,
           overlay: PlayerOverlay.none,
+          androidTv: false,
           dvr: true,
           unsupported: false,
           initialPress: true,
@@ -515,6 +733,7 @@ void main() {
       resolvePlayerKey(
         LogicalKeyboardKey.keyK,
         overlay: PlayerOverlay.none,
+        androidTv: false,
         dvr: true,
         unsupported: false,
         initialPress: true,

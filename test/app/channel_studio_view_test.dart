@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -8,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
+import 'package:lineup_desktop/app/channels_view.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -5178,6 +5181,307 @@ void main() {
   });
 
   testWidgets(
+    'TV Back cancels a nested Studio filter before leaving the editor',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      const platform = MethodChannel('lineup/platform');
+      var backgrounded = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(platform, (call) async {
+            expect(call.method, 'moveTaskToBack');
+            backgrounded++;
+            return true;
+          });
+      final original = _channel(
+        id: 'nested-back',
+        number: 12,
+        name: 'Nested Back',
+      );
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [
+            _media('drama', libraryId: 'movies', genres: ['Drama']),
+            _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      try {
+        await tester.pumpWidget(
+          UiFixture(controller: controller, androidTv: true).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        await tester.tap(find.byKey(const ValueKey('channel-row-nested-back')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Library').last);
+        await _settleAirCheck(tester);
+        await _openStudioFilter(tester, 'genre');
+        expect(
+          find.byKey(const Key('studio-filter-picker-genre')),
+          findsOneWidget,
+        );
+        await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(ChannelStudioView), findsOneWidget);
+        expect(
+          find.byKey(const Key('studio-filter-picker-genre')),
+          findsNothing,
+        );
+        expect(find.text('Discard changes?'), findsNothing);
+        expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
+        expect(backgrounded, 0);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(ChannelStudioView), findsNothing);
+        expect(backgrounded, 0);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(platform, null);
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets(
+    'Studio choice cancellation works for criteria and focusless state',
+    (tester) async {
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [
+            _media('drama', libraryId: 'movies', genres: ['Drama']),
+            _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+          ],
+        ),
+      );
+      final studioKey = GlobalKey<ChannelStudioViewState>();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.createCustom,
+          studioKey: studioKey,
+        ),
+      );
+      await _settleAirCheck(tester);
+      await _openStudioFilter(tester, 'genre');
+      expect(
+        find.byKey(const Key('studio-filter-picker-genre')),
+        findsOneWidget,
+      );
+      expect(find.text('Drama'), findsWidgets);
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+      FocusManager.instance.primaryFocus?.unfocus();
+      expect(studioKey.currentState!.cancelPendingChoice(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
+      expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('studio-library-add-filter')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-filter-criteria')), findsOneWidget);
+      FocusManager.instance.primaryFocus?.unfocus();
+      expect(studioKey.currentState!.cancelPendingChoice(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-filter-criteria')), findsNothing);
+      expect(find.text('Discard changes?'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'manual selected-only Back unwinds before dirty leave and coalesces',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final original = _channel(
+        id: 'manual-back',
+        number: 13,
+        name: 'Manual Back',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'existing',
+            title: 'Existing',
+            duration: Duration(minutes: 30),
+          ),
+        ]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [original],
+          availableMedia: [_media('new-item'), _media('other-item')],
+        ),
+      );
+      addTearDown(controller.dispose);
+      try {
+        await tester.pumpWidget(
+          UiFixture(controller: controller, androidTv: true).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        final channelsState = tester.state<ChannelsViewState>(
+          find.byType(ChannelsView),
+        );
+        await tester.tap(find.byKey(const ValueKey('channel-row-manual-back')));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('studio-name')), 'Dirty');
+        // Close TV editing first; an open editor consumes Back to finish.
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('studio-manual-browse-stage')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Select'));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('studio-result-new-item')));
+        await tester.pump();
+        await tester.tap(find.text('Show selected'));
+        await tester.pumpAndSettle();
+        expect(find.text('Back to results'), findsOneWidget);
+
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.goBack,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Back to results'), findsNothing);
+        expect(find.text('Show selected'), findsOneWidget);
+
+        expect(channelsState.handleBack(), isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('Show selected'), findsNothing);
+        expect(find.text('Discard changes?'), findsNothing);
+        expect(channelsState.handleBack(), isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('Discard changes?'), findsOneWidget);
+        expect(channelsState.handleBack(), isTrue);
+        await tester.pump();
+        expect(find.text('Discard changes?'), findsOneWidget);
+        expect(find.byType(AlertDialog), findsOneWidget);
+        await tester.tap(find.text('Keep editing'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ChannelStudioView), findsOneWidget);
+        expect(find.text('Discard changes?'), findsNothing);
+
+        expect(channelsState.handleBack(), isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('Discard changes?'), findsOneWidget);
+        await tester.tap(find.text('Keep editing'));
+        await tester.pumpAndSettle();
+        expect(find.text('Discard changes?'), findsNothing);
+        expect(controller.saved, isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets(
+    'TV Back and requestLeave are consumed during a pending Studio save',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      const platform = MethodChannel('lineup/platform');
+      var backgrounded = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(platform, (call) async {
+            expect(call.method, 'moveTaskToBack');
+            backgrounded++;
+            return true;
+          });
+      final original = _channel(
+        id: 'pending-save',
+        number: 14,
+        name: 'Pending Save',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'pending-program',
+            title: 'Pending program',
+            duration: Duration(minutes: 30),
+          ),
+        ]),
+      );
+      final controller = _BlockingSaveController(
+        scenario: LineupScenario(stage: SetupStage.ready, channels: [original]),
+      );
+      addTearDown(controller.dispose);
+      try {
+        await tester.pumpWidget(
+          UiFixture(controller: controller, androidTv: true).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        final channelsState = tester.state<ChannelsViewState>(
+          find.byType(ChannelsView),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('channel-row-pending-save')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('studio-name')), 'Draft');
+        await tester.pump();
+        final save = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Save changes'),
+        );
+        expect(save.onPressed, isNotNull);
+        save.onPressed!();
+        await tester.pump();
+        expect(controller.saveCalls, 1);
+        expect(find.text('Saving channel…'), findsOneWidget);
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.goBack,
+          physicalKey: PhysicalKeyboardKey.escape,
+        );
+        await tester.pump();
+        expect(find.byType(ChannelStudioView), findsOneWidget);
+        expect(backgrounded, 0);
+        final firstLeave = channelsState.requestLeave();
+        final secondLeave = channelsState.requestLeave();
+        expect(await firstLeave, isFalse);
+        expect(controller.saveCalls, 1);
+        expect(await secondLeave, isFalse);
+        expect(controller.saveCalls, 1);
+        expect(controller.attempted?.name, 'Draft');
+        controller.release.complete();
+        await tester.pumpAndSettle();
+        expect(controller.saveCalls, 1);
+        expect(controller.saveRequests.single.name, 'Draft');
+        expect(
+          find.textContaining('No lineup changes were saved'),
+          findsOneWidget,
+        );
+        expect(find.byType(ChannelStudioView), findsOneWidget);
+        expect(backgrounded, 0);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(platform, null);
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets(
     'pending choices keep Studio panels fixed and survive layout changes',
     (tester) async {
       tester.view
@@ -5435,6 +5739,222 @@ void main() {
       }
     },
   );
+
+  group('Studio text fields use TV navigation and Select editing', () {
+    final tvTheme = LineupTheme.forName(
+      LineupThemeName.emberSteel,
+      androidTv: true,
+    );
+
+    _studioTvTest('station name and number edit only after Select', (
+      tester,
+    ) async {
+      final controller = _RecordingSaveController(
+        scenario: _studioGenreScenario(),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.createCustom, theme: tvTheme),
+      );
+      await _settleAirCheck(tester);
+      final name = find.byKey(const Key('studio-name'));
+      final number = find.byKey(const Key('studio-number'));
+      _studioFieldNavigation(tester, name).requestFocus();
+      await tester.pumpAndSettle();
+      _expectStudioFieldNavigating(tester, name);
+
+      // Arrows pass through closed fields; arrival never opens the keyboard.
+      await _studioKey(tester, LogicalKeyboardKey.arrowRight);
+      _expectStudioFieldNavigating(tester, number);
+      await _studioKey(tester, LogicalKeyboardKey.arrowLeft);
+      _expectStudioFieldNavigating(tester, name);
+
+      await _studioKey(tester, LogicalKeyboardKey.select);
+      _expectStudioFieldEditing(tester, name);
+      tester.testTextInput.enterText('');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(_fieldText(tester, 'studio-name'), isEmpty);
+      _expectStudioFieldNavigating(tester, name);
+
+      // TextFormField validation still runs and returns to navigation focus.
+      await tester.ensureVisible(find.text('Save channel'));
+      await tester.tap(find.text('Save channel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a channel name.'), findsOneWidget);
+      expect(controller.saved, isNull);
+      _expectStudioFieldNavigating(tester, name);
+    });
+
+    _studioTvTest('manual browse search edits only after Select', (
+      tester,
+    ) async {
+      final channel = _channel(
+        id: 'manual',
+        number: 1,
+        name: 'Manual',
+        source: ManualSource([channelItemFor(_media('one'))]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [channel],
+          availableMedia: [_media('one'), _media('two')],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: channel,
+          theme: tvTheme,
+        ),
+      );
+      await _settleAirCheck(tester);
+      await _selectStudioStage(tester, 'studio-manual-browse-stage');
+      await tester.pumpAndSettle();
+      final search = find.byKey(const Key('studio-search'));
+      final navigation = _studioFieldNavigation(tester, search);
+      navigation.requestFocus();
+      await tester.pumpAndSettle();
+      await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+      expect(navigation.hasFocus, isFalse);
+      expect(tester.testTextInput.isVisible, isFalse);
+      await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+      _expectStudioFieldNavigating(tester, search);
+
+      await _studioKey(tester, LogicalKeyboardKey.select);
+      _expectStudioFieldEditing(tester, search);
+      tester.testTextInput.enterText('two');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-result-two')), findsOneWidget);
+      await _studioKey(tester, LogicalKeyboardKey.escape);
+      _expectStudioFieldNavigating(tester, search);
+      await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+      expect(navigation.hasFocus, isFalse);
+    });
+
+    _studioTvTest('filter picker opens on navigation focus without keyboard', (
+      tester,
+    ) async {
+      final controller = _RecordingSaveController(
+        scenario: _studioGenreScenario(),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.createCustom, theme: tvTheme),
+      );
+      await _settleAirCheck(tester);
+      await _openStudioFilter(tester, 'genre');
+      final picker = find.byKey(const Key('studio-filter-picker-genre'));
+      final search = find.descendant(
+        of: picker,
+        matching: find.byType(TextField),
+      );
+      _expectStudioFieldNavigating(tester, search);
+      await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+      expect(_studioFieldNavigation(tester, search).hasFocus, isFalse);
+      await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+      _expectStudioFieldNavigating(tester, search);
+
+      await _studioKey(tester, LogicalKeyboardKey.select);
+      _expectStudioFieldEditing(tester, search);
+      // Escape first closes editing, then the existing picker shortcut cancels.
+      await _studioKey(tester, LogicalKeyboardKey.escape);
+      _expectStudioFieldNavigating(tester, search);
+      expect(picker, findsOneWidget);
+      await _studioKey(tester, LogicalKeyboardKey.escape);
+      expect(picker, findsNothing);
+    });
+  });
+
+  testWidgets('desktop Studio fields still edit directly on focus', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController(
+      scenario: _studioGenreScenario(),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await _settleAirCheck(tester);
+    final name = find.byKey(const Key('studio-name'));
+    _studioEditable(tester, name).widget.focusNode.requestFocus();
+    await tester.pumpAndSettle();
+    _expectStudioFieldEditing(tester, name);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Channel name');
+
+    await _openStudioFilter(tester, 'genre');
+    _expectStudioFieldEditing(
+      tester,
+      find.descendant(
+        of: find.byKey(const Key('studio-filter-picker-genre')),
+        matching: find.byType(TextField),
+      ),
+    );
+  });
+}
+
+void _studioTvTest(String name, WidgetTesterCallback body) {
+  testWidgets(name, (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await body(tester);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+}
+
+LineupScenario _studioGenreScenario() => LineupScenario(
+  libraries: const [
+    PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+  ],
+  selectedLibraryIds: {'movies'},
+  availableMedia: [
+    _media('drama', libraryId: 'movies', genres: ['Drama']),
+    _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+  ],
+);
+
+Future<void> _studioKey(WidgetTester tester, LogicalKeyboardKey key) async {
+  await tester.sendKeyEvent(key);
+  await tester.pumpAndSettle();
+}
+
+EditableTextState _studioEditable(WidgetTester tester, Finder field) =>
+    tester.state<EditableTextState>(
+      find.descendant(of: field, matching: find.byType(EditableText)),
+    );
+
+FocusNode _studioFieldNavigation(WidgetTester tester, Finder field) => tester
+    .widget<LineupTextFieldActivation>(
+      find.ancestor(
+        of: field,
+        matching: find.byType(LineupTextFieldActivation),
+      ),
+    )
+    .focusNode!;
+
+void _expectStudioFieldNavigating(WidgetTester tester, Finder field) {
+  expect(
+    _studioFieldNavigation(tester, field).hasPrimaryFocus,
+    isTrue,
+    reason: 'primary=${FocusManager.instance.primaryFocus}',
+  );
+  expect(_studioEditable(tester, field).widget.focusNode.hasFocus, isFalse);
+  expect(tester.testTextInput.isVisible, isFalse);
+}
+
+void _expectStudioFieldEditing(WidgetTester tester, Finder field) {
+  expect(
+    _studioEditable(tester, field).widget.focusNode.hasPrimaryFocus,
+    isTrue,
+    reason: 'primary=${FocusManager.instance.primaryFocus}',
+  );
+  expect(tester.testTextInput.isVisible, isTrue);
 }
 
 double _studioScrollOffset(WidgetTester tester) => tester
@@ -5658,6 +6178,8 @@ class _BlockingSaveController extends FixtureController {
   _BlockingSaveController({super.scenario});
 
   final release = Completer<void>();
+  int saveCalls = 0;
+  final saveRequests = <Channel>[];
   Channel? attempted;
 
   @override
@@ -5669,6 +6191,8 @@ class _BlockingSaveController extends FixtureController {
     Channel channel, {
     required Channel? expectedBase,
   }) async {
+    saveCalls++;
+    saveRequests.add(channel);
     attempted = channel;
     await release.future;
     throw StateError('synthetic save failure');

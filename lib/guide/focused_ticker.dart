@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+/// Counts real text measurements for memoization tests.
+@visibleForTesting
+int debugFocusedTickerMeasureCount = 0;
+
 /// Shows a single line of text and gently reveals focused overflow.
 class FocusedTicker extends StatefulWidget {
   const FocusedTicker({
@@ -37,6 +41,8 @@ class _FocusedTickerState extends State<FocusedTicker>
   _TickerConfiguration? _requestedConfiguration;
   _TickerConfiguration? _activeConfiguration;
   int _generation = 0;
+  _MeasureKey? _measuredKey;
+  Size _measuredSize = Size.zero;
 
   @override
   void dispose() {
@@ -130,7 +136,26 @@ class _FocusedTickerState extends State<FocusedTicker>
     );
   }
 
+  // Width-independent, so a rebuild with the same text and style (focus,
+  // scroll, or a sibling change) reuses the last layout.
   Size _measureText(
+    TextDirection textDirection,
+    TextScaler textScaler,
+    TextStyle style,
+  ) {
+    final key = (
+      text: widget.text,
+      textDirection: textDirection,
+      textScaler: textScaler,
+      style: style,
+    );
+    if (key == _measuredKey) return _measuredSize;
+    debugFocusedTickerMeasureCount++;
+    _measuredKey = key;
+    return _measuredSize = _layoutText(textDirection, textScaler, style);
+  }
+
+  Size _layoutText(
     TextDirection textDirection,
     TextScaler textScaler,
     TextStyle style,
@@ -199,6 +224,13 @@ class _FocusedTickerState extends State<FocusedTicker>
     });
   }
 }
+
+typedef _MeasureKey = ({
+  String text,
+  TextDirection textDirection,
+  TextScaler textScaler,
+  TextStyle style,
+});
 
 typedef _TickerConfiguration = ({
   String text,

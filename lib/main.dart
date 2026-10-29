@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kReleaseMode;
 import 'package:flutter/material.dart';
 
 import 'app/lineup_app.dart';
@@ -16,6 +18,10 @@ void nativeRunnerLifecycleTestMain() {
 
 void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
+  configureImageCache(
+    PaintingBinding.instance.imageCache,
+    androidTv: defaultTargetPlatform == TargetPlatform.android,
+  );
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -34,7 +40,8 @@ void main(List<String> arguments) {
   };
 
   String? mediaArgument;
-  for (final argument in arguments) {
+  for (final argument
+      in Platform.isAndroid && kReleaseMode ? const <String>[] : arguments) {
     if (argument.startsWith('--media=')) {
       mediaArgument = argument.substring('--media='.length);
       break;
@@ -54,6 +61,7 @@ void main(List<String> arguments) {
           player: createPlatformNativePlayer(
             isWindows: Platform.isWindows,
             isMacOS: Platform.isMacOS,
+            isAndroid: Platform.isAndroid,
           ),
           initialMediaPath: mediaArgument,
         );

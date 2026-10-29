@@ -76,6 +76,7 @@ class _SetupResultStepState extends State<SetupResultStep> {
   Widget build(BuildContext context) {
     final review = widget.phase.review;
     final roles = LineupTheme.of(context);
+    final primaryActionLabel = roles.androidTv ? 'Open guide' : 'View lineup';
     final headingStyle = LineupTypography.pageTitle.copyWith(
       color: roles.primaryText,
     );
@@ -171,7 +172,9 @@ class _SetupResultStepState extends State<SetupResultStep> {
                     onPressed: _failed
                         ? widget.onBackToReview
                         : widget.onViewLineup,
-                    child: Text(_failed ? 'Back to review' : 'View lineup'),
+                    child: Text(
+                      _failed ? 'Back to review' : primaryActionLabel,
+                    ),
                   ),
                 ),
                 if (!_failed) ...[

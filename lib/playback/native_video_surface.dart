@@ -15,11 +15,18 @@ class NativeVideoSurface extends StatefulWidget {
 
 class _NativeVideoSurfaceState extends State<NativeVideoSurface>
     with WidgetsBindingObserver {
+  // A player has one native output, even while a route replaces its surface
+  // widget. The successor mounts before the predecessor is disposed. Giving it
+  // ownership here prevents the old widget's zero rectangle from destroying
+  // the live Android SurfaceView between two visible rectangles.
+  static final _owners = Expando<_NativeVideoSurfaceState>();
+
   PlayerVideoRect? _lastRect;
 
   @override
   void initState() {
     super.initState();
+    _owners[widget.player] = this;
     WidgetsBinding.instance.addObserver(this);
     _scheduleBoundsUpdate();
   }
@@ -28,6 +35,8 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
   void didUpdateWidget(NativeVideoSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.player, widget.player)) {
+      _hideIfOwner(oldWidget.player);
+      _owners[widget.player] = this;
       _lastRect = null;
     }
     _scheduleBoundsUpdate();
@@ -39,8 +48,15 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _hideIfOwner(widget.player);
+    super.dispose();
+  }
+
+  void _hideIfOwner(NativePlayer player) {
+    if (!identical(_owners[player], this)) return;
+    _owners[player] = null;
     unawaited(
-      widget.player
+      player
           .setVideoRect(
             const PlayerVideoRect(
               left: 0,
@@ -52,7 +68,6 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
           )
           .catchError((_) {}),
     );
-    super.dispose();
   }
 
   void _scheduleBoundsUpdate() {
@@ -60,7 +75,7 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
   }
 
   void _updateBounds() {
-    if (!mounted) return;
+    if (!mounted || !identical(_owners[widget.player], this)) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     final bounds = MatrixUtils.transformRect(

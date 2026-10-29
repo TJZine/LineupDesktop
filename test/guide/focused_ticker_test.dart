@@ -134,6 +134,48 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     expect(tester.getTopLeft(find.text(text)).dx, resetX);
   });
+
+  testWidgets('text measurement is reused until text or style changes', (
+    tester,
+  ) async {
+    const text = 'A very long focused program title that must move';
+    Widget ticker({
+      String value = text,
+      bool focused = false,
+      double width = 140,
+      TextStyle? style,
+    }) => MaterialApp(
+      home: Center(
+        child: SizedBox(
+          width: width,
+          child: FocusedTicker(text: value, focused: focused, style: style),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(ticker());
+    final measured = debugFocusedTickerMeasureCount;
+    // Focus and width changes rebuild and relayout without measuring again.
+    await tester.pumpWidget(ticker(focused: true));
+    await tester.pumpWidget(ticker(focused: true, width: 120));
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(debugFocusedTickerMeasureCount, measured);
+    // The focused overflow still scrolls with the remembered measurement.
+    final x = tester.getTopLeft(find.text(text)).dx;
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getTopLeft(find.text(text)).dx, lessThan(x));
+
+    await tester.pumpWidget(ticker(value: 'Another title', focused: true));
+    expect(debugFocusedTickerMeasureCount, measured + 1);
+    await tester.pumpWidget(
+      ticker(
+        value: 'Another title',
+        focused: true,
+        style: const TextStyle(fontSize: 30),
+      ),
+    );
+    expect(debugFocusedTickerMeasureCount, measured + 2);
+  });
 }
 
 class _Harness extends StatelessWidget {

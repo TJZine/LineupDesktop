@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
@@ -56,18 +58,219 @@ class SetupReviewStep extends StatefulWidget {
 class _SetupReviewStepState extends State<SetupReviewStep> {
   late SetupReviewFilter _filter = widget.initialFilter;
   late final _search = TextEditingController(text: widget.initialSearch);
+  final _searchFocus = FocusNode(debugLabel: 'Setup review search');
+
+  final _rosterScroll = ScrollController();
+  final _backFocus = FocusNode(debugLabel: 'Review Back to configure');
+  final _primaryFocus = FocusNode(debugLabel: 'Review primary');
+  final _rowScopes = <String, FocusNode>{};
+  List<String> _returnOrder = const [];
+  String? _returnId;
+  double _returnOffset = 0;
+  bool _rosterFocused = false;
+  int _revealGeneration = 0;
+
+  List<SetupReviewEntry> get _visibleEntries {
+    final query = _search.text.trim().toLowerCase();
+    return widget.review.entries.where((entry) {
+      final channel = entry.channel;
+      return (query.isEmpty ||
+              channel.name.toLowerCase().contains(query) ||
+              '${channel.number}'.contains(query)) &&
+          (_filter == SetupReviewFilter.all || entry.kind.name == _filter.name);
+    }).toList();
+  }
+
+  bool get _primaryEnabled =>
+      !widget.review.counts.hasChanges ||
+      (widget.notice != 'Updating review…' &&
+          (widget.review.counts.removed == 0 || widget.removalConfirmed));
+
+  void _rememberRow(String id) {
+    _returnId = id;
+    _returnOrder = widget.review.entries
+        .map((entry) => entry.channel.id)
+        .toList();
+    _returnOffset = _rosterScroll.offset;
+  }
+
+  KeyEventResult _rowKey(String id, KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.arrowRight ||
+        event is KeyUpEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent) return KeyEventResult.handled;
+    final target = [
+      if (_primaryEnabled) _primaryFocus,
+      _backFocus,
+    ].where(_canFocus).firstOrNull;
+    if (target == null) return KeyEventResult.ignored;
+    _revealGeneration++;
+    _rememberRow(id);
+    target.requestFocus();
+    return KeyEventResult.handled;
+  }
+
+  bool _canFocus(FocusNode node) =>
+      node.canRequestFocus && node.context?.mounted == true;
+
+  void _clearReturn() {
+    _returnId = null;
+    _returnOrder = const [];
+  }
+
+  void _footerFocusChanged(bool focused) {
+    if (!focused) {
+      _revealGeneration++;
+      _clearReturn();
+    }
+  }
+
+  String? _returnTarget(List<SetupReviewEntry> entries) {
+    final ids = entries.map((entry) => entry.channel.id).toSet();
+    if (ids.contains(_returnId)) return _returnId;
+    final origin = _returnOrder.indexOf(_returnId ?? '');
+    // Equal-distance ties choose the preceding entry in the original order.
+    for (var distance = 1; distance < _returnOrder.length; distance++) {
+      for (final index in [origin - distance, origin + distance]) {
+        if (index >= 0 &&
+            index < _returnOrder.length &&
+            ids.contains(_returnOrder[index])) {
+          return _returnOrder[index];
+        }
+      }
+    }
+    return entries.isEmpty ? null : entries.first.channel.id;
+  }
+
+  Future<void> _returnToRoster() async {
+    final generation = ++_revealGeneration;
+    final entries = _visibleEntries;
+    final id = _returnTarget(entries);
+    final offset = _returnOffset;
+    // Consume before moving focus. Footer exit cancels pending reveals, but
+    // cannot erase the snapshot used by this return.
+    _clearReturn();
+    if (id == null) {
+      if (_canFocus(_searchFocus)) {
+        _searchFocus.requestFocus();
+        await Scrollable.ensureVisible(_searchFocus.context!);
+      }
+      return;
+    }
+    if (!_rosterScroll.hasClients) return;
+    final targetIndex = entries.indexWhere((entry) => entry.channel.id == id);
+    final positions = {
+      for (var i = 0; i < entries.length; i++) entries[i].channel.id: i,
+    };
+    _rosterScroll.jumpTo(
+      offset.clamp(0, _rosterScroll.position.maxScrollExtent),
+    );
+    // A sliver may have disposed the return row while focus was in the footer.
+    // Walk viewport-sized chunks until it is built; row heights can vary with
+    // disclosure expansion and text scaling, so an estimated row extent is unsafe.
+    for (var attempt = 0; attempt <= entries.length; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted ||
+          generation != _revealGeneration ||
+          (!_primaryFocus.hasFocus && !_backFocus.hasFocus)) {
+        return;
+      }
+      final scope = _rowScopes[id];
+      final target = scope?.traversalDescendants.where(_canFocus).firstOrNull;
+      if (target?.context?.mounted == true) {
+        target!.requestFocus();
+        await Scrollable.ensureVisible(target.context!, alignment: .5);
+        return;
+      }
+      final built =
+          _rowScopes.entries
+              .where(
+                (entry) =>
+                    entry.value.context?.mounted == true &&
+                    positions.containsKey(entry.key),
+              )
+              .map((entry) => positions[entry.key]!)
+              .toList()
+            ..sort();
+      final forward = built.isEmpty || targetIndex > built.last;
+      final position = _rosterScroll.position;
+      final next =
+          (position.pixels +
+                  (forward ? 1 : -1) * position.viewportDimension * .8)
+              .clamp(0.0, position.maxScrollExtent);
+      if (next == position.pixels) return;
+      _rosterScroll.jumpTo(next);
+    }
+  }
+
+  KeyEventResult _footerKey(FocusNode node, KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.arrowUp || event is KeyUpEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent) return KeyEventResult.handled;
+    if (_returnId == null) return KeyEventResult.ignored;
+    unawaited(_returnToRoster());
+    return KeyEventResult.handled;
+  }
 
   bool get _firstSetup => widget.review.base.isEmpty;
 
+  bool get _entryFocusIsEligible {
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return false;
+    if (!_searchFocus.canRequestFocus ||
+        _searchFocus.context?.mounted != true) {
+      return false;
+    }
+    if (_searchFocus.enclosingScope?.canRequestFocus == false) return false;
+    if (context.findAncestorWidgetOfExactType<Offstage>()?.offstage == true) {
+      return false;
+    }
+    if (context.findAncestorWidgetOfExactType<ExcludeFocus>()?.excluding ==
+        true) {
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_entryFocusIsEligible && LineupTheme.of(context).androidTv) {
+        _searchFocus.requestFocus();
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _revealGeneration++;
+    _rosterScroll.dispose();
+    _backFocus.dispose();
+    _primaryFocus.dispose();
+    for (final node in _rowScopes.values) {
+      node.dispose();
+    }
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant SetupReviewStep oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.review, widget.review)) {
+      _revealGeneration++;
+      _clearReturn();
+      final ids = widget.review.entries
+          .map((entry) => entry.channel.id)
+          .toSet();
+      for (final id
+          in _rowScopes.keys.where((id) => !ids.contains(id)).toList()) {
+        _rowScopes.remove(id)!.dispose();
+      }
+    }
     if (oldWidget.initialFilter != widget.initialFilter) {
       _filter = widget.initialFilter;
     }
@@ -84,31 +287,47 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   Widget build(BuildContext context) {
     final review = widget.review;
     final noChanges = !review.counts.hasChanges;
-    return SetupStage(
-      footer: SetupFooter(
-        configuration: true,
-        leading: [
-          TextButton(
-            key: const ValueKey('back-to-configure'),
-            onPressed: widget.onBack,
-            child: const Text('Back to configure'),
-          ),
-        ],
-        summary: const SizedBox.shrink(),
-        trailing: noChanges
-            ? FilledButton(
-                onPressed: widget.onViewLineup,
-                child: const Text('View lineup'),
-              )
-            : FilledButton(
-                key: const ValueKey('apply-reviewed-lineup'),
-                onPressed:
-                    widget.notice == 'Updating review…' ||
-                        (review.counts.removed > 0 && !widget.removalConfirmed)
-                    ? null
-                    : widget.onApply,
-                child: Text(_applyLabel(review.mode, _firstSetup)),
-              ),
+    final body = SetupStage(
+      footer: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: LineupTheme.of(context).androidTv ? _footerKey : null,
+        onFocusChange: _footerFocusChanged,
+        child: SetupFooter(
+          configuration: true,
+          leading: [
+            TextButton(
+              key: const ValueKey('back-to-configure'),
+              focusNode: _backFocus,
+              onPressed: widget.onBack,
+              child: const Text('Back to configure'),
+            ),
+          ],
+          summary: LineupTheme.of(context).androidTv && _rosterFocused
+              ? Text(
+                  'Press right on any channel to jump here',
+                  key: const ValueKey('review-footer-hint'),
+                  style: Theme.of(context).textTheme.bodyMedium!
+                      .copyWith(color: LineupTheme.of(context).mutedText),
+                )
+              : const SizedBox.shrink(),
+          trailing: noChanges
+              ? FilledButton(
+                  focusNode: _primaryFocus,
+                  onPressed: widget.onViewLineup,
+                  child: Text(
+                    LineupTheme.of(context).androidTv
+                        ? 'Open guide'
+                        : 'View lineup',
+                  ),
+                )
+              : FilledButton(
+                  key: const ValueKey('apply-reviewed-lineup'),
+                  focusNode: _primaryFocus,
+                  onPressed: _primaryEnabled ? widget.onApply : null,
+                  child: Text(_applyLabel(review.mode, _firstSetup)),
+                ),
+        ),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -127,18 +346,29 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               const SizedBox(height: 8),
             ],
             _reviewOverview(),
-            if (_missingSources.isNotEmpty) ...[
+            if (_missingSources.isNotEmpty &&
+                !LineupTheme.of(context).androidTv) ...[
               const SizedBox(height: 16),
               _missingSourceReview(),
             ],
             const SizedBox(height: 24),
           ];
+          final orderedIntro = [
+            for (final child in intro)
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(-1),
+                child: child,
+              ),
+          ];
+          if (LineupTheme.of(context).androidTv) {
+            return _roster(leading: orderedIntro, includeRemoval: true);
+          }
           if (constraints.maxHeight < 650 ||
               MediaQuery.textScalerOf(context).scale(1) >= 1.5) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _roster(leading: intro)),
+                Expanded(child: _roster(leading: orderedIntro)),
                 if (review.counts.removed > 0)
                   _removalNotice(review.counts.removed),
               ],
@@ -147,7 +377,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ...intro,
+              ...orderedIntro,
               Expanded(child: _roster()),
               if (review.counts.removed > 0)
                 _removalNotice(review.counts.removed),
@@ -156,6 +386,12 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         },
       ),
     );
+    return LineupTheme.of(context).androidTv
+        ? FocusTraversalGroup(
+            policy: SetupVerticalTraversalPolicy(),
+            child: body,
+          )
+        : body;
   }
 
   List<Channel> get _missingSources =>
@@ -272,14 +508,16 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               ),
               SizedBox(
                 width: 220,
-                child: CheckboxListTile(
-                  key: const ValueKey('channel-setup-replace-confirmation'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  value: widget.removalConfirmed,
-                  title: const Text('I understand'),
-                  onChanged: (value) =>
-                      widget.onRemovalConfirmationChanged(value == true),
+                child: LineupToggleSurface(
+                  child: CheckboxListTile(
+                    key: const ValueKey('channel-setup-replace-confirmation'),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    value: widget.removalConfirmed,
+                    title: const Text('I understand'),
+                    onChanged: (value) =>
+                        widget.onRemovalConfirmationChanged(value == true),
+                  ),
                 ),
               ),
             ],
@@ -579,7 +817,10 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     );
   }
 
-  Widget _roster({List<Widget> leading = const []}) {
+  Widget _roster({
+    List<Widget> leading = const [],
+    bool includeRemoval = false,
+  }) {
     final review = widget.review;
     final roles = LineupTheme.of(context);
     final textStyle = Theme.of(context).textTheme.bodyMedium!
@@ -587,72 +828,121 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     final searchStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.primaryText, fontSize: 18, height: 1.4);
     final query = _search.text.trim().toLowerCase();
-    final entries = review.entries.where((entry) {
-      final found =
-          query.isEmpty ||
-          entry.channel.name.toLowerCase().contains(query) ||
-          '${entry.channel.number}'.contains(query);
-      return found &&
-          (_filter == SetupReviewFilter.all || entry.kind.name == _filter.name);
-    }).toList();
+    final entries = _visibleEntries;
     final filtered = _filter != SetupReviewFilter.all;
     return LineupCompactControls(
-      child: CustomScrollView(
-        key: const ValueKey('channel-setup-review-roster'),
-        slivers: [
-          if (leading.isNotEmpty) SliverList.list(children: leading),
-          SliverList.list(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const ValueKey('channel-setup-review-search'),
-                      controller: _search,
-                      style: searchStyle,
-                      decoration: InputDecoration(
-                        hintText: 'Search channels by name or number',
-                        hintStyle: searchStyle,
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (focused) {
+          if (_rosterFocused != focused) {
+            setState(() => _rosterFocused = focused);
+          }
+        },
+        child: CustomScrollView(
+          controller: _rosterScroll,
+          key: const ValueKey('channel-setup-review-roster'),
+          slivers: [
+            if (leading.isNotEmpty) SliverList.list(children: leading),
+            SliverList.list(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: FocusTraversalOrder(
+                        order: const NumericFocusOrder(0),
+                        child: LineupTextFieldActivation(
+                          focusNode: _searchFocus,
+                          builder: (fieldContext, fieldFocus, finishEditing) =>
+                              TextField(
+                                onEditingComplete: finishEditing,
+                                focusNode: fieldFocus,
+                                key: const ValueKey(
+                                  'channel-setup-review-search',
+                                ),
+                                controller: _search,
+                                style: searchStyle.copyWith(
+                                  color: LineupTheme.of(fieldContext)
+                                      .primaryText,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Search channels by name or number',
+                                  hintStyle: searchStyle.copyWith(
+                                    color: LineupTheme.of(fieldContext)
+                                        .primaryText,
+                                  ),
+                                ),
+                                onChanged: (value) {
+                                  setState(() {});
+                                  widget.onSearchChanged(value);
+                                },
+                              ),
+                        ),
                       ),
-                      onChanged: (value) {
-                        setState(() {});
-                        widget.onSearchChanged(value);
-                      },
                     ),
-                  ),
-                  if (!_firstSetup) ...[
-                    const SizedBox(width: 12),
-                    TextButton(
-                      key: const ValueKey('review-show-all'),
-                      onPressed: () {
-                        setState(() => _filter = SetupReviewFilter.all);
-                        widget.onFilterChanged(SetupReviewFilter.all);
-                      },
-                      child: const Text('Show all'),
-                    ),
+                    if (!_firstSetup) ...[
+                      const SizedBox(width: 12),
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(0),
+                        child: TextButton(
+                          key: const ValueKey('review-show-all'),
+                          onPressed: () {
+                            setState(() => _filter = SetupReviewFilter.all);
+                            widget.onFilterChanged(SetupReviewFilter.all);
+                          },
+                          child: const Text('Show all'),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                filtered
-                    ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
-                    : '${entries.length} of ${review.entries.length} review entries',
-                style: textStyle,
-              ),
-              const SizedBox(height: 12),
-              _rosterHeader(),
-            ],
-          ),
-          if (entries.isEmpty)
-            SliverToBoxAdapter(child: _emptyRoster(query, filtered))
-          else
-            SliverList.builder(
-              itemCount: entries.length,
-              itemBuilder: (_, index) => _reviewRow(entries[index]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  filtered
+                      ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
+                      : '${entries.length} of ${review.entries.length} review entries',
+                  style: textStyle,
+                ),
+                const SizedBox(height: 12),
+                _rosterHeader(),
+              ],
             ),
-        ],
+            if (entries.isEmpty)
+              SliverToBoxAdapter(child: _emptyRoster(query, filtered))
+            else
+              SliverList.builder(
+                itemCount: entries.length,
+                itemBuilder: (_, index) => KeyedSubtree(
+                  key: ValueKey(entries[index].channel.id),
+                  child: _reviewRow(entries[index], index),
+                ),
+                findChildIndexCallback: (key) {
+                  final index = entries.indexWhere(
+                    (entry) => ValueKey(entry.channel.id) == key,
+                  );
+                  return index < 0 ? null : index;
+                },
+              ),
+            if (includeRemoval && _missingSources.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: FocusTraversalOrder(
+                    order: NumericFocusOrder(review.entries.length + .5),
+                    child: _missingSourceReview(),
+                  ),
+                ),
+              ),
+            if (includeRemoval && review.counts.removed > 0)
+              SliverToBoxAdapter(
+                child: FocusTraversalOrder(
+                  order: NumericFocusOrder(review.entries.length + 1),
+                  child: _removalNotice(review.counts.removed),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -738,8 +1028,35 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     ),
   );
 
-  Widget _reviewRow(SetupReviewEntry entry) {
+  Widget _reviewRow(SetupReviewEntry entry, int index) {
+    if (!LineupTheme.of(context).androidTv) {
+      return _reviewRowContent(context, entry);
+    }
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(index + 1),
+      child: Focus(
+        focusNode: _rowScopes.putIfAbsent(
+          entry.channel.id,
+          () => FocusNode(debugLabel: 'Review row ${entry.channel.id}'),
+        ),
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: (_, event) => _rowKey(entry.channel.id, event),
+        child: LineupRowSurface(
+          selected: false,
+          child: Builder(
+            builder: (context) => _reviewRowContent(context, entry),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _reviewRowContent(BuildContext context, SetupReviewEntry entry) {
     final roles = LineupTheme.of(context);
+    final focusedTv =
+        roles.androidTv &&
+        LineupFocusScope.visible(context, Focus.of(context).hasFocus);
     final textTheme = Theme.of(context).textTheme;
     final nameStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
@@ -756,7 +1073,8 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         SetupReviewKind.unchanged => roles.mutedText,
         SetupReviewKind.updated => roles.secondaryText,
         SetupReviewKind.added => roles.secondaryText,
-        SetupReviewKind.removed => Theme.of(context).colorScheme.error,
+        SetupReviewKind.removed =>
+          focusedTv ? roles.primaryText : Theme.of(context).colorScheme.error,
       },
     );
     final changeWidth = _reviewChangeWidth();
@@ -817,9 +1135,13 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                   ),
               ],
             )
-          : Padding(
-              padding: const EdgeInsets.fromLTRB(12, 16, 52, 16),
-              child: content,
+          : Focus(
+              canRequestFocus: roles.androidTv,
+              skipTraversal: !roles.androidTv,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 16, 52, 16),
+                child: content,
+              ),
             ),
     );
   }

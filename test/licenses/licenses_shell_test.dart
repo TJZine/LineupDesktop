@@ -18,6 +18,7 @@ import '../support/golden_test_support.dart';
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('lineup/platform');
+  var backgrounds = 0;
   setUpAll(() async {
     await loadPinnedTestFonts();
     await rootBundle.loadString('assets/licenses/index.txt');
@@ -41,9 +42,14 @@ void main() {
   }
 
   setUp(() {
+    backgrounds = 0;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
       call,
     ) async {
+      if (call.method == 'moveTaskToBack') {
+        backgrounds++;
+        return true;
+      }
       if (call.method == 'listLicenseDocuments') {
         return [
           {'id': 'info', 'path': 'BUILD-INFO.txt', 'bytes': 10},
@@ -129,6 +135,48 @@ void main() {
       expect(fixture.controller.fixtureStore.savedStates, isEmpty);
     },
   );
+
+  testWidgets('Android onboarding opens Support and offline licenses', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final fixture = UiFixture(
+        androidTv: true,
+        scenario: const LineupScenario(stage: SetupStage.welcome),
+      );
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await tap(tester, 'Settings');
+      expect(find.text('Open Licenses'), findsOneWidget);
+      await tap(tester, 'Open Licenses');
+      expect(find.text('Native runtime'), findsOneWidget);
+      expect(find.text('Sources and rebuilding'), findsNothing);
+      expect(find.text('Flutter and packages'), findsOneWidget);
+      expect(find.text('Fonts and engine notices'), findsOneWidget);
+      await tap(tester, 'Fonts and engine notices');
+      expect(find.text('Instrument Sans'), findsOneWidget);
+      expect(find.text('Inter'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await escape(tester);
+      expect(find.byType(LicensesView), findsNothing);
+      expect(find.text('Open Licenses'), findsOneWidget);
+      expect(backgrounds, 0);
+      await escape(tester);
+      expect(
+        find.text('Your Plex library, scheduled like television'),
+        findsOneWidget,
+      );
+      expect(fixture.controller.stage, SetupStage.welcome);
+      expect(backgrounds, 0);
+      await escape(tester);
+      expect(backgrounds, 1);
+      expect(fixture.controller.stage, SetupStage.welcome);
+      expect(fixture.controller.fixtureStore.savedStates, isEmpty);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
   macTest('menu Esc precedes reader Back; Settings command dismisses reader', (
     tester,

@@ -15,6 +15,7 @@ import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/diagnostics/diagnostics.dart';
+import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
@@ -2832,6 +2833,19 @@ void main() {
       expect(plex.artworkServer, controller.connection!.uri);
       expect(plex.artworkPath, Uri.parse('/show/art'));
       expect(plex.artworkToken, 'pms-token');
+      expect(plex.artworkSize, isNull);
+
+      final sized = await controller.programArtworkForPath(
+        Uri.parse('/show/backdrop'),
+        width: 1344,
+        height: 384,
+      );
+
+      expect(sized, Uint8List.fromList([1, 2, 3]));
+      expect(plex.artworkServer, controller.connection!.uri);
+      expect(plex.artworkPath, Uri.parse('/show/backdrop'));
+      expect(plex.artworkToken, 'pms-token');
+      expect(plex.artworkSize, (width: 1344, height: 384));
     },
   );
 
@@ -2851,6 +2865,7 @@ void main() {
     final bytes = await controller.artworkForPath(uri, width: 72, height: 72);
 
     expect(bytes, isNull);
+    expect(await controller.castForItem('fixture'), isNull);
     expect(plex.artworkServer, isNull);
     expect(plex.artworkToken, isNull);
   });
@@ -3091,6 +3106,438 @@ void main() {
       expect(controller.channels.single.scheduleTransition, isNull);
     },
   );
+
+  test('cast generation retirement aborts both transports and immediately admits current work', () async {
+    final requests = <String>[];
+    final aborted = <String>[];
+    final responses = <String, Completer<http.StreamedResponse>>{};
+    final transport = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient.streaming((request, _) async {
+        final id = request.url.pathSegments.last;
+        requests.add(id);
+        final response = Completer<http.StreamedResponse>();
+        responses[id] = response;
+        return Future.any([
+          response.future,
+          (request as http.AbortableRequest).abortTrigger!.then((_) {
+            aborted.add(id);
+            throw http.RequestAbortedException(request.url);
+          }),
+        ]);
+      }),
+    );
+    addTearDown(transport.close);
+    final selected = _server('server');
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..castTransport = transport;
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.diagnostics.enabled = true;
+    final guide = GuideController(lineup: controller);
+    addTearDown(guide.dispose);
+    GuideProgram program(String id) => GuideProgram(
+      channelId: 'channel',
+      scheduled: ScheduledProgram(
+        item: ChannelItem(
+          id: id,
+          title: 'Fixture',
+          duration: const Duration(hours: 1),
+          cast: [ChannelCastMember(name: 'Actor A')],
+        ),
+        start: DateTime.utc(2026),
+        end: DateTime.utc(2026, 1, 1, 1),
+        elapsed: Duration.zero,
+        index: 0,
+        loop: 0,
+      ),
+    );
+    guide.castFor(program('old-one'));
+    guide.castFor(program('old-two'));
+    await Future<void>.delayed(Duration.zero);
+    expect(requests, ['old-one', 'old-two']);
+    final generation = guide.scheduleGeneration;
+    controller.fixtureActor.publishInventory();
+    expect(guide.scheduleGeneration, greaterThan(generation));
+    final current = program('current');
+    for (var i = 0; i < 20; i++) {
+      guide.castFor(current);
+    }
+    var notifications = 0;
+    guide.addListener(() => notifications++);
+    await Future<void>.delayed(Duration.zero);
+    // Neither response has completed, and no 15-second transport timeout elapsed.
+    expect(aborted, unorderedEquals(['old-one', 'old-two']));
+    expect(requests, ['old-one', 'old-two', 'current']);
+    expect(notifications, 0);
+    expect(
+      controller.diagnostics.entries.map((e) => e.context['castOutcome']),
+      ['requested', 'requested', 'requested'],
+    );
+    for (final id in ['old-one', 'old-two', 'current']) {
+      responses[id]!.complete(
+        http.StreamedResponse(
+          Stream.value(
+            utf8.encode(
+              jsonEncode({
+                'MediaContainer': {
+                  'Metadata': [
+                    {
+                      'ratingKey': id,
+                      'Role': [
+                        {'tag': 'Actor A', 'thumb': '/$id'},
+                      ],
+                    },
+                  ],
+                },
+              }),
+            ),
+          ),
+          200,
+        ),
+      );
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(guide.castFor(current).cast.single.portrait?.path, '/current');
+    expect(notifications, 1);
+    expect(
+      controller.diagnostics.entries.map((e) => e.context['castOutcome']),
+      ['requested', 'requested', 'requested', 'enriched'],
+    );
+    guide.castFor(program('dispose'));
+    await Future<void>.delayed(Duration.zero);
+    guide.dispose();
+    await Future<void>.delayed(Duration.zero);
+    expect(aborted, contains('dispose'));
+    expect(notifications, 1);
+    expect(
+      controller.diagnostics.entries.last.context['castOutcome'],
+      'requested',
+    );
+  });
+
+  for (final cancelDuringRefresh in [true, false]) {
+    test(
+      'cast cancellation during authorization ${cancelDuringRefresh ? 'refresh' : 'retry'} releases caller without obsolete IO',
+      () async {
+        final selected = _server('server');
+        final refresh = Completer<List<PlexServerAccess>>();
+        final retryStarted = Completer<void>();
+        var discoveries = 0;
+        var requests = 0;
+        var aborted = 0;
+        final transport = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient.streaming((request, _) async {
+            requests++;
+            if (requests == 1) {
+              return http.StreamedResponse(const Stream.empty(), 401);
+            }
+            retryStarted.complete();
+            await (request as http.AbortableRequest).abortTrigger!;
+            aborted++;
+            throw http.RequestAbortedException(request.url);
+          }),
+        );
+        addTearDown(transport.close);
+        final plex = _FakePlex()
+          ..serversResult = [selected]
+          ..connectionResult = selected.connections.single
+          ..castTransport = transport
+          ..discoverServersHandler = (_) {
+            discoveries++;
+            if (discoveries == 1) {
+              return Future.value([
+                PlexServerAccess(server: selected, token: 'initial'),
+              ]);
+            }
+            return refresh.future;
+          };
+        final controller = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        final cancel = Completer<void>();
+        var completed = false;
+        final cast = controller
+            .castForItem('one', cancelled: cancel.future)
+            .then((value) {
+              completed = true;
+              return value;
+            });
+        await Future<void>.delayed(Duration.zero);
+        expect(discoveries, 2);
+        expect(requests, 1);
+        if (!cancelDuringRefresh) {
+          refresh.complete([
+            PlexServerAccess(server: selected, token: 'refreshed'),
+          ]);
+          await retryStarted.future;
+        }
+        cancel.complete();
+        await Future<void>.delayed(Duration.zero);
+        expect(completed, isTrue);
+        expect(await cast, isNull);
+        if (cancelDuringRefresh) {
+          // Shared refresh is allowed to finish, but cannot start retired detail IO.
+          refresh.complete([
+            PlexServerAccess(server: selected, token: 'refreshed'),
+          ]);
+          await Future<void>.delayed(Duration.zero);
+          expect(requests, 1);
+          expect(aborted, 0);
+        } else {
+          expect(requests, 2);
+          expect(aborted, 1);
+        }
+      },
+    );
+  }
+
+  test('cast authorization cancellation stays retryable within the same Guide generation', () async {
+    final selected = _server('server');
+    var now = DateTime.utc(2026);
+    final pending = <Completer<List<PlexCastMember>>>[];
+    final requests = <String>[];
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..castHandler = (_, _, itemId) {
+        requests.add(itemId);
+        final completer = Completer<List<PlexCastMember>>();
+        pending.add(completer);
+        return completer.future;
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.diagnostics.enabled = true;
+    final guide = GuideController(lineup: controller, clock: () => now);
+    addTearDown(guide.dispose);
+    GuideProgram program(String id) => GuideProgram(
+      channelId: 'channel',
+      scheduled: ScheduledProgram(
+        item: ChannelItem(
+          id: id,
+          title: 'Fixture',
+          duration: const Duration(hours: 1),
+          cast: [ChannelCastMember(name: 'Actor A')],
+        ),
+        start: now,
+        end: now.add(const Duration(hours: 1)),
+        elapsed: Duration.zero,
+        index: 0,
+        loop: 0,
+      ),
+    );
+    final visible = program('one');
+    final generation = guide.scheduleGeneration;
+    final contentGeneration = controller.contentGeneration;
+    guide.castFor(visible);
+    await Future<void>.delayed(Duration.zero);
+    expect(requests, ['one']);
+    controller.cancelPlaybackAuthorization();
+    expect(guide.scheduleGeneration, generation);
+    expect(controller.contentGeneration, contentGeneration);
+    pending.removeAt(0).complete(const [
+      PlexCastMember(name: 'Actor A', thumbPath: '/retired'),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    // The actual controller returns null here: it is not a successful empty cast.
+    expect(
+      controller.diagnostics.entries.map(
+        (event) => event.context['castOutcome'],
+      ),
+      ['requested'],
+    );
+    for (var i = 0; i < 20; i++) {
+      expect(guide.castFor(visible).cast.single.portrait, isNull);
+    }
+    now = now.add(
+      GuideController.castFailureRetryInterval -
+          const Duration(microseconds: 1),
+    );
+    guide.castFor(visible);
+    await Future<void>.delayed(Duration.zero);
+    expect(requests, ['one']);
+    now = now.add(const Duration(microseconds: 1));
+    expect(guide.castFor(visible).cast.single.portrait, isNull);
+    await Future<void>.delayed(Duration.zero);
+    expect(requests, ['one', 'one']);
+    pending.removeAt(0).complete(const [
+      PlexCastMember(name: 'Actor A', thumbPath: '/current'),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    expect(guide.castFor(visible).cast.single.portrait?.path, '/current');
+    expect(controller.diagnostics.entries.last.context, {
+      'castOutcome': 'enriched',
+    });
+    expect(guide.scheduleGeneration, generation);
+    expect(controller.contentGeneration, contentGeneration);
+
+    // Negative control: a successful empty list remains cached for the generation.
+    final empty = program('empty');
+    guide.castFor(empty);
+    await Future<void>.delayed(Duration.zero);
+    pending.removeAt(0).complete(const []);
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.diagnostics.entries.last.context, {
+      'castOutcome': 'noRicherData',
+    });
+    now = now.add(GuideController.castFailureRetryInterval * 2);
+    for (var i = 0; i < 20; i++) {
+      expect(guide.castFor(empty).cast.single.portrait, isNull);
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(requests, ['one', 'one', 'empty']);
+  });
+
+  for (final change in ['logout', 'server', 'profile']) {
+    test('cast drops a successful late response after $change', () async {
+      final selected = _server('server');
+      final second = _server('second');
+      final pending = Completer<List<PlexCastMember>>();
+      final plex = _FakePlex()
+        ..serversResult = [selected, second]
+        ..connectionResult = selected.connections.single
+        ..castHandler = (_, token, _) {
+          expect(token, 'pms-token');
+          return pending.future;
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final cast = controller.castForItem('one');
+      await Future<void>.delayed(Duration.zero);
+      switch (change) {
+        case 'logout':
+          await controller.logout();
+        case 'server':
+          await controller.selectServer(second);
+        case 'profile':
+          await controller.selectProfile(
+            const PlexHomeUser(id: 'child', name: 'Child', protected: false),
+          );
+      }
+      pending.complete(const [
+        PlexCastMember(name: 'Actor A', thumbPath: '/late'),
+      ]);
+      expect(await cast, isNull);
+    });
+  }
+
+  test('cast authorization stops after one refresh', () async {
+    final selected = _server('server');
+    var calls = 0;
+    var discoveries = 0;
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..discoverServersHandler = (_) async {
+        discoveries++;
+        return [PlexServerAccess(server: selected, token: 'pms-token')];
+      }
+      ..castHandler = (_, _, _) async {
+        calls++;
+        throw const PlexException('auth-invalid', 'Expired');
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await expectLater(
+      controller.castForItem('one'),
+      throwsA(isA<PlexException>()),
+    );
+    expect(calls, 2);
+    expect(discoveries, 2);
+  });
+
+  test('cast authorization failures coalesce one refresh', () async {
+    final selected = _server('server');
+    final refresh = Completer<List<PlexServerAccess>>();
+    var discoveries = 0;
+    final castTokens = <String>[];
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..discoverServersHandler = (_) {
+        discoveries++;
+        if (discoveries == 1) {
+          return Future.value([
+            PlexServerAccess(server: selected, token: 'pms-token-1'),
+          ]);
+        }
+        return refresh.future;
+      }
+      ..castHandler = (_, token, _) async {
+        castTokens.add(token);
+        if (token == 'pms-token-1') {
+          throw const PlexException('auth-invalid', 'Expired');
+        }
+        return const <PlexCastMember>[];
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final first = controller.castForItem('one');
+    final second = controller.castForItem('two');
+    await Future<void>.delayed(Duration.zero);
+    expect(discoveries, 2);
+    refresh.complete([
+      PlexServerAccess(server: selected, token: 'pms-token-2'),
+    ]);
+
+    expect(await Future.wait([first, second]), [
+      <PlexCastMember>[],
+      <PlexCastMember>[],
+    ]);
+    expect(discoveries, 2);
+    expect(castTokens, [
+      'pms-token-1',
+      'pms-token-1',
+      'pms-token-2',
+      'pms-token-2',
+    ]);
+  });
 
   test('concurrent PMS authorization failures coalesce one refresh', () async {
     final selected = _server('server');
@@ -8463,6 +8910,73 @@ void main() {
     );
   }
 
+  test('background cancellation retires only playback authorization', () async {
+    final selected = _server('server');
+    final plex = _FakePlex()..serversResult = [selected];
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.fixtureActor.publishInventory(media: [_playableMovie]);
+    final request = controller.playbackFor('movie');
+    final connection = controller.connection;
+    final account = controller.account;
+    final profile = controller.profile;
+    final before = plex.discoveredTokens.length;
+    controller.cancelPlaybackAuthorization();
+    await expectLater(
+      request.authorizationRecovery!(),
+      throwsA(isA<PlexException>()),
+    );
+    expect(plex.discoveredTokens.length, before);
+    expect(controller.account, same(account));
+    expect(controller.profile, same(profile));
+    expect(controller.server?.id, 'server');
+    expect(controller.connection, same(connection));
+    final refreshed = await controller
+        .playbackFor('movie')
+        .authorizationRecovery!();
+    expect(refreshed.plexToken, plex.resourceToken);
+  });
+
+  test('background cancellation rejects an in-flight refresh before probing or publication', () async {
+    final selected = _server('server');
+    final plex = _FakePlex()..serversResult = [selected];
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.fixtureActor.publishInventory(media: [_playableMovie]);
+    final connection = controller.connection;
+    final discovery = Completer<List<PlexServerAccess>>();
+    final started = Completer<void>();
+    plex.discoverServersHandler = (_) {
+      started.complete();
+      return discovery.future;
+    };
+    final recovering = controller.playbackFor('movie').authorizationRecovery!();
+    final denied = expectLater(recovering, throwsA(isA<PlexException>()));
+    await started.future;
+    final probes = plex.selectedTokens.length;
+    controller.cancelPlaybackAuthorization();
+    discovery.complete([
+      PlexServerAccess(server: selected, token: 'retired-token'),
+    ]);
+    await denied;
+    expect(plex.selectedTokens.length, probes);
+    expect(controller.connection, same(connection));
+  });
+
   test('captured playback recovery survives discovery but rejects leave and return', () async {
     final selected = _server('server');
     final other = _server('other');
@@ -9164,6 +9678,21 @@ class _FakePlex extends PlexClient {
   )?
   playlistProgressHandler;
   Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
+  Future<List<PlexCastMember>> Function(Uri, String, String)? castHandler;
+  PlexClient? castTransport;
+  @override
+  Future<List<PlexCastMember>> itemCast(
+    Uri server,
+    String token,
+    String ratingKey, {
+    Future<void>? cancelled,
+  }) async {
+    if (castTransport case final transport?) {
+      return transport.itemCast(server, token, ratingKey, cancelled: cancelled);
+    }
+    return castHandler?.call(server, token, ratingKey) ?? const [];
+  }
+
   Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
   List<PlexPlaybackPartDescriptor>? playbackDescriptorResult;
   final playbackItems = <PlexMediaItem>[];
@@ -9187,6 +9716,7 @@ class _FakePlex extends PlexClient {
   int librariesCalls = 0;
   Uri? artworkServer;
   Uri? artworkPath;
+  ({int? width, int? height})? artworkSize;
   String? artworkToken;
 
   @override
@@ -9375,10 +9905,15 @@ class _FakePlex extends PlexClient {
     Uri server,
     String token,
     Uri path, {
+    int? width,
+    int? height,
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
     artworkServer = server;
     artworkPath = path;
+    artworkSize = width == null && height == null
+        ? null
+        : (width: width, height: height);
     artworkToken = token;
     final handler = artworkHandler;
     if (handler != null) return handler(server, token, path);

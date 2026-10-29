@@ -42,6 +42,15 @@ void main() {
         isA<MethodChannelNativePlayer>(),
       );
 
+      expect(
+        createPlatformNativePlayer(
+          isWindows: false,
+          isMacOS: false,
+          isAndroid: true,
+        ),
+        isA<MethodChannelNativePlayer>(),
+      );
+
       final other = createPlatformNativePlayer(
         isWindows: false,
         isMacOS: false,

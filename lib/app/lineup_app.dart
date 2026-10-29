@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, ValueListenable, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../playback/native_player.dart';
@@ -7,6 +9,7 @@ import '../persistence/app_store.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
+import '../ui/keyboard_visibility.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
@@ -14,6 +17,23 @@ import 'lineup_shell.dart';
 // DirectComposition engine variant); the macOS backend never does.
 const _requiredEngineFailureMessage =
     'The required Lineup DirectComposition Flutter engine is not active.';
+
+/// Decoded-image cache budget on Android TV (default Flutter budget: 100 MB).
+///
+/// The Guide's image working set at 1920x1080 physical is about 5 MB: the
+/// information backdrop decodes to cover 1344x384 (1344x756x4 = 4.1 MB) and
+/// the idle picture to cover 576x384 (683x384x4 = 1.0 MB). Clear logos use
+/// their own bounded cache. 48 MB keeps roughly nine recently focused
+/// programs' backdrops warm and still admits one unresized 3840x2160 decode
+/// (33.2 MB) from a consumer that cannot cover-resize, while bounding the
+/// cache well below the default on a 1.7 GB device under memory pressure.
+const androidTvImageCacheBytes = 48 << 20;
+
+/// Applies the platform's decoded-image cache budget. Desktop keeps Flutter's
+/// default.
+void configureImageCache(ImageCache cache, {required bool androidTv}) {
+  if (androidTv) cache.maximumSizeBytes = androidTvImageCacheBytes;
+}
 
 class LineupStartup extends StatefulWidget {
   const LineupStartup({required this.createBootstrap, super.key});
@@ -45,6 +65,7 @@ class _LineupStartupState extends State<LineupStartup> {
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
             largeFocusIndicators: false,
+            androidTv: defaultTargetPlatform == TargetPlatform.android,
           ),
           builder: LineupCanvas.builder,
           home: snapshot.hasError
@@ -65,6 +86,8 @@ class LineupBootstrap extends StatefulWidget {
     required this.controller,
     this.initialMediaPath,
     this.guideClock,
+    this.androidTv,
+    this.keyboardVisibility,
     super.key,
   });
 
@@ -72,6 +95,13 @@ class LineupBootstrap extends StatefulWidget {
   final LineupController controller;
   final String? initialMediaPath;
   final DateTime Function()? guideClock;
+
+  /// Null follows the host platform for the production composition root.
+  /// Tests and alternate compositions can inject the form factor explicitly.
+  final bool? androidTv;
+
+  /// An injected observation source remains owned by its caller.
+  final ValueListenable<bool?>? keyboardVisibility;
 
   @override
   State<LineupBootstrap> createState() => _LineupBootstrapState();
@@ -110,9 +140,29 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   bool _nativeInitialized = false;
   bool _restoreStarted = false;
 
+  PlatformKeyboardVisibility? _ownedKeyboardVisibility;
+  bool get _androidTv =>
+      widget.androidTv ?? defaultTargetPlatform == TargetPlatform.android;
+
+  void _configureKeyboardVisibility() {
+    if (_androidTv && widget.keyboardVisibility == null) {
+      _ownedKeyboardVisibility ??= PlatformKeyboardVisibility();
+    } else {
+      _ownedKeyboardVisibility?.dispose();
+      _ownedKeyboardVisibility = null;
+    }
+  }
+
+  @override
+  void didUpdateWidget(LineupBootstrap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _configureKeyboardVisibility();
+  }
+
   @override
   void initState() {
     super.initState();
+    _configureKeyboardVisibility();
     _settings = widget.controller.settings;
     _startupRecoveryNotice = widget.controller.startupRecoveryNotice;
     _restoreStarted = widget.controller.restoringSavedLineup;
@@ -151,6 +201,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
 
   @override
   void dispose() {
+    _ownedKeyboardVisibility?.dispose();
     widget.controller.removeListener(_changed);
     unawaited(_disposePlayer());
     widget.controller.dispose();
@@ -174,18 +225,31 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   @override
   Widget build(BuildContext context) {
     final settings = _settings;
+    final androidTv = _androidTv;
     return MaterialApp(
       title: 'Lineup Desktop',
       debugShowCheckedModeBanner: false,
       theme: LineupTheme.forName(
         settings.theme,
         largeFocusIndicators: settings.largeFocusIndicators,
+        androidTv: androidTv,
       ),
       themeAnimationDuration: settings.reduceMotion
           ? Duration.zero
           : kThemeAnimationDuration,
-      builder: (context, child) =>
-          LineupCanvas(reduceMotion: settings.reduceMotion, child: child!),
+      builder: (context, child) {
+        final canvas = LineupCanvas(
+          reduceMotion: settings.reduceMotion,
+          child: child!,
+        );
+        return androidTv
+            ? KeyboardVisibilityScope(
+                visibility:
+                    widget.keyboardVisibility ?? _ownedKeyboardVisibility!,
+                child: canvas,
+              )
+            : canvas;
+      },
       home: FutureBuilder<void>(
         future: _startup,
         builder: (context, snapshot) {
@@ -206,6 +270,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
           return Stack(
             children: [
               LineupShell(
+                androidTv: androidTv,
                 player: widget.player,
                 controller: widget.controller,
                 initialMediaPath: widget.initialMediaPath,

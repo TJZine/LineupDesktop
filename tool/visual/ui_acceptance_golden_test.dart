@@ -11,6 +11,7 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../../test/support/golden_test_support.dart';
 import '../../test/support/ui_fixture.dart';
@@ -55,10 +56,11 @@ void main() {
     );
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
     await openDestination(tester, 'Player');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
 
     expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+    expect(find.byKey(const Key('player-now-playing-surface')), findsNothing);
     await _match(tester, 'player-osd-1920x1080.png', additionalPumps: 2);
   });
 
@@ -76,12 +78,6 @@ void main() {
     );
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
     await openDestination(tester, 'Player');
-    final context = tester.element(find.byKey(_goldenKey));
-    await tester.runAsync(() async {
-      for (final bytes in _nowPlayingArtwork.values) {
-        await precacheImage(MemoryImage(bytes), context);
-      }
-    });
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
 
@@ -90,6 +86,7 @@ void main() {
       tester,
       'player-now-playing-1920x1080.png',
       precacheLogo: true,
+      precacheRenderedImages: true,
       additionalPumps: 2,
     );
   });
@@ -100,7 +97,11 @@ void main() {
     await openDestination(tester, 'Settings');
 
     expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
-    await _match(tester, 'settings-appearance-ember-steel-1920x1080.png');
+    await _match(
+      tester,
+      'settings-appearance-ember-steel-1920x1080.png',
+      precacheLogo: true,
+    );
   });
 }
 
@@ -123,6 +124,7 @@ Future<void> _match(
   WidgetTester tester,
   String name, {
   bool precacheLogo = false,
+  bool precacheRenderedImages = false,
   int additionalPumps = 0,
 }) async {
   if (precacheLogo) {
@@ -138,6 +140,19 @@ Future<void> _match(
     await tester.pump(const Duration(milliseconds: 400));
   }
   final boundary = find.byKey(_goldenKey);
+  if (precacheRenderedImages) {
+    final images = find.descendant(of: boundary, matching: find.byType(Image));
+    await tester.runAsync(() async {
+      for (final element in images.evaluate()) {
+        await precacheImage((element.widget as Image).image, element);
+      }
+    });
+  }
+  // ClearLogoImage paints a RawImage from its own async decode cache.
+  // This optional test lives outside test/, so allow its test-only hook.
+  // ignore: invalid_use_of_visible_for_testing_member
+  await tester.runAsync(clearLogoDecodesSettled);
+  await tester.pump();
   markSubtreeNeedsPaint(tester.renderObject(boundary));
   await tester.pump();
   await expectLater(boundary, matchesGoldenFile('goldens/$name'));

@@ -23,6 +23,7 @@ import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -41,6 +42,1893 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  tearDown(debugResetClearLogoCache);
+
+  for (final tv in [false, true]) {
+    for (final reduceMotion in [false, true]) {
+      testWidgets('channel tag motion tv=$tv reduceMotion=$reduceMotion', (
+        tester,
+      ) async {
+        await tester.runAsync(loadPinnedTestFonts);
+        await tester.binding.setSurfaceSize(
+          tv ? const Size(960, 540) : const Size(1920, 1080),
+        );
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final fixture = _Fixture(
+          PlayerState.playing,
+          overlayTimeout: const Duration(minutes: 1),
+        );
+        final captureKey = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: tv,
+              ),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(disableAnimations: reduceMotion),
+                child: LineupCanvas(child: child!),
+              ),
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final tag = find.byKey(const Key('player-osd-channel-bug'));
+        expect(tag, findsNothing);
+        fixture.player.showOsd();
+        await tester.pump();
+        final entryTops = <double>[];
+        for (var frame = 0; frame <= 4; frame++) {
+          if (frame > 0) await tester.pump(const Duration(microseconds: 87500));
+          final opacity = _channelTagOpacity(tester);
+          if (frame == 0) expect(opacity, 0);
+          if (frame > 0 && frame < 4) {
+            expect(opacity, allOf(greaterThan(0), lessThan(1)));
+          }
+          entryTops.add(_drawnRect(tester, tag).top);
+          await _captureChannelTag(
+            tester,
+            captureKey,
+            'tv-$tv-reduce-$reduceMotion-entry-$frame',
+            tv: tv,
+          );
+        }
+        expect(_channelTagOpacity(tester), 1);
+        final restingTop = entryTops.last;
+        expect(
+          entryTops.first,
+          closeTo(
+            restingTop -
+                (reduceMotion
+                    ? 0
+                    : tv
+                    ? 6
+                    : 12),
+            .01,
+          ),
+        );
+        for (final top in entryTops.take(4)) {
+          if (reduceMotion) {
+            expect(top, restingTop);
+          } else {
+            expect(top, lessThan(restingTop));
+          }
+        }
+        expect(tester.getSemantics(tag).label, 'Channel 7, Channel');
+        fixture.player.closeOverlay();
+        await tester.pump();
+        for (var frame = 0; frame <= 4; frame++) {
+          if (frame > 0) await tester.pump(const Duration(microseconds: 87500));
+          if (frame < 4) {
+            final opacity = _channelTagOpacity(tester);
+            if (frame == 0) expect(opacity, 1);
+            if (frame > 0) expect(opacity, allOf(greaterThan(0), lessThan(1)));
+            final top = _drawnRect(tester, tag).top;
+            expect(
+              top,
+              reduceMotion ? restingTop : lessThanOrEqualTo(restingTop),
+            );
+            if (!reduceMotion && frame > 0) expect(top, lessThan(restingTop));
+          } else {
+            expect(tag, findsNothing);
+          }
+          await _captureChannelTag(
+            tester,
+            captureKey,
+            'tv-$tv-reduce-$reduceMotion-exit-$frame',
+            tv: tv,
+          );
+        }
+        await fixture.player.tune('channel');
+        fixture.player.closeOverlay();
+        fixture.native.emitState(PlayerState.playing);
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+        expect(_channelTagOpacity(tester), 1);
+        await _captureChannelTag(
+          tester,
+          captureKey,
+          'tv-$tv-reduce-$reduceMotion-tune-window',
+          tv: tv,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }, semanticsEnabled: true);
+    }
+  }
+
+  for (final dismissAfterPlaying in [false, true]) {
+    testWidgets(
+      'channel tag gets four seconds from playing, dismissAfterPlaying=$dismissAfterPlaying',
+      (tester) async {
+        final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+        final captureKey = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              builder: LineupCanvas.builder,
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await fixture.player.tune('channel-1');
+        fixture.native.emitState(PlayerState.loading);
+        if (!dismissAfterPlaying) fixture.player.closeOverlay();
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        expect(fixture.player.channelTagWindowActive, isFalse);
+        expect(fixture.player.busyLabel, isNotNull);
+        expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+        fixture.native.emitState(PlayerState.playing);
+        await tester.pump();
+        if (dismissAfterPlaying) fixture.player.closeOverlay();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(fixture.player.channelTagWindowActive, isTrue);
+        expect(_channelTagOpacity(tester), 1);
+        expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+        await _captureChannelTag(
+          tester,
+          captureKey,
+          'tune-window-dismiss-$dismissAfterPlaying',
+        );
+        await tester.pump(const Duration(milliseconds: 3649));
+        expect(fixture.player.channelTagWindowActive, isTrue);
+        fixture.native.emitState(
+          PlayerState.playing,
+        ); // Repeated playing never renews it.
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(fixture.player.channelTagWindowActive, isFalse);
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'channel tag follows OSD without restarting during the tune window',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        overlayTimeout: const Duration(minutes: 1),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await fixture.player.tune('channel');
+      fixture.player.closeOverlay();
+      await tester.pumpAndSettle();
+      fixture.native.emitState(PlayerState.playing);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 175));
+      final halfway = _channelTagOpacity(tester);
+      expect(halfway, allOf(greaterThan(0), lessThan(1)));
+      final tag = find.byKey(const Key('player-osd-channel-bug'));
+      final element = tester.element(tag);
+      fixture.player.showOsd();
+      await tester.pump();
+      expect(_channelTagOpacity(tester), halfway);
+      expect(tester.element(tag), same(element));
+      await tester.pump(const Duration(milliseconds: 175));
+      expect(_channelTagOpacity(tester), 1);
+      await tester.pump(const Duration(seconds: 4));
+      expect(fixture.player.channelTagWindowActive, isFalse);
+      expect(tag, findsOneWidget);
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+      expect(_channelTagOpacity(tester), 1);
+      fixture.player.closeOverlay();
+      await tester.pumpAndSettle();
+      expect(tag, findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('channel tag suppression applies during the tune window', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    final suppressors = <VoidCallback>[
+      () => fixture.player.appendChannelDigit('9'),
+      () {
+        fixture.player.showNowPlaying();
+        fixture.player.showProgramInfo();
+      },
+      fixture.player.showMiniGuide,
+      fixture.player.showFullGuide,
+      () => fixture.player.showTracks(PlayerTrackType.audio),
+      () => fixture.player.showTracks(PlayerTrackType.subtitle),
+      () => fixture.native.emitState(PlayerState.error),
+    ];
+    for (final suppress in suppressors) {
+      await fixture.player.tune('channel');
+      fixture.native.emitState(PlayerState.playing);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
+      suppress();
+      await tester.pump();
+      await tester
+          .pump(); // Deliver native events and paint, without advancing time.
+      expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+    }
+    await fixture.player.tune('channel');
+    fixture.native.emitState(PlayerState.playing);
+    await tester.pumpAndSettle();
+    fixture.player.appendChannelDigit('9');
+    await fixture.player.commitChannelNumber();
+    fixture.player.showOsd();
+    await tester.pump();
+    expect(fixture.player.notice, isNotNull);
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+    // Busy suppression, independently of the overlay and notice timeout.
+    await fixture.player.tune('channel');
+    fixture.native.emitState(PlayerState.playing);
+    await tester.pumpAndSettle();
+    fixture.native.emitState(PlayerState.buffering);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(fixture.player.busyLabel, isNotNull);
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'visible cast surfaces share the hydrated shelf, semantics, and TV More info',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 24),
+          summary: 'Short synopsis.',
+          cast: [
+            ChannelCastMember(name: 'Catalog Actor', role: 'Catalog role'),
+          ],
+        ),
+      );
+      final pending = Completer<List<PlexCastMember>?>();
+      fixture.lineup.castHandler = (_) => pending.future;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await fixture.player.tune('channel');
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+      expect(find.byKey(const Key('player-osd-title')), findsOneWidget);
+      expect(fixture.lineup.castRequests, isEmpty);
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+      expect(fixture.lineup.castRequests, ['program']);
+      expect(find.text('Catalog Actor'), findsOneWidget);
+      expect(find.byKey(const Key('player-more-info')), findsNothing);
+      pending.complete(const [
+        PlexCastMember(
+          name: 'Detail Lead',
+          role: 'Lead',
+          thumbPath: '/hydrated/lead',
+        ),
+        PlexCastMember(name: 'Catalog Actor', role: 'Detail role'),
+        PlexCastMember(name: 'Detail Third'),
+        PlexCastMember(name: 'Detail Fourth'),
+        PlexCastMember(name: 'Detail Fifth', role: 'Guest'),
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.text('Detail Lead'), findsOneWidget);
+      expect(
+        find.byKey(const Key('player-now-playing-cast-portrait-0')),
+        findsOneWidget,
+      );
+      expect(
+        fixture.lineup.artworkRequests,
+        contains(Uri.parse('/hydrated/lead')),
+      );
+      expect(find.text('Detail Fourth'), findsOneWidget);
+      expect(find.text('Detail Fifth'), findsNothing);
+      expect(
+        find.bySemanticsLabel(
+          RegExp('Cast: Detail Lead as Lead, Catalog Actor as Detail role'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('player-more-info')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('player-more-info')));
+      await tester.pumpAndSettle();
+      expect(find.text('Detail Fifth'), findsOneWidget);
+      expect(find.text('Guest'), findsOneWidget);
+      expect(fixture.lineup.castRequests, ['program']);
+      expect(
+        fixture.player.currentProgram!.scheduled.item.cast.single.name,
+        'Catalog Actor',
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
+  for (final size in [
+    const Size(1280, 720),
+    const Size(1920, 1080),
+    const Size(960, 540),
+  ]) {
+    testWidgets('R2 matched Player size=$size', (tester) async {
+      await tester.runAsync(loadPinnedTestFonts);
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final tv = size.width == 960;
+      debugDefaultTargetPlatformOverride = tv
+          ? TargetPlatform.android
+          : TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final fixture = _Fixture(
+        PlayerState.playing,
+        guideClock: () => DateTime(2026, 1, 15, 12),
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 24),
+          summary: List.filled(20, 'A synthetic synopsis.').join(' '),
+          cast: _fixtureCast,
+        ),
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            selected: true,
+            language: 'eng',
+          ),
+        ],
+      );
+      await fixture.guide.ensureCurrentProgram('channel');
+      fixture.player.showNowPlaying();
+      final captureKey = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: captureKey,
+          child: MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: tv,
+            ),
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _settleNowPlayingArtwork(tester);
+      await _r2Capture(
+        tester,
+        captureKey,
+        'matched-$tv-${size.width.toInt()}-NowPlaying',
+      );
+      fixture.player.showMiniGuide();
+      await tester.pumpAndSettle();
+      await _r2Capture(
+        tester,
+        captureKey,
+        'matched-$tv-${size.width.toInt()}-MiniGuide',
+      );
+      fixture.player.showOsd();
+      fixture.player.showTracks(PlayerTrackType.audio);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+      await _r2Capture(
+        tester,
+        captureKey,
+        'matched-$tv-${size.width.toInt()}-Audio',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }, skip: Platform.environment['R2_CAPTURE'] == null);
+  }
+
+  for (final variant in [
+    (tv: true, long: false, cast: 4, shown: false),
+    (tv: true, long: true, cast: 4, shown: true),
+    (tv: true, long: false, cast: 24, shown: true),
+    (tv: false, long: true, cast: 24, shown: false),
+  ]) {
+    testWidgets('O1 More info uses actual synopsis and cast clamp $variant', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final item = _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 24),
+        summary: variant.long
+            ? List.filled(50, 'A lengthy program synopsis.').join(' ')
+            : 'Short synopsis.',
+        cast: List.generate(
+          variant.cast,
+          (i) => ChannelCastMember(name: 'Performer $i', role: 'Role $i'),
+        ),
+      );
+      final fixture = _Fixture(PlayerState.playing, richItemOverride: item);
+      await fixture.player.tune('channel');
+      fixture.player.showNowPlaying();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: variant.tv,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('player-more-info')),
+        variant.shown ? findsOneWidget : findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    });
+  }
+
+  for (final large in [false, true]) {
+    for (final textScale in [1.0, 1.3]) {
+      testWidgets(
+        'O1 remote reads full drawer and returns Large=$large scale=$textScale',
+        (tester) async {
+          await tester.runAsync(loadPinnedTestFonts);
+          await tester.binding.setSurfaceSize(const Size(960, 540));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final item = _fixtureItem(
+            0,
+            rich: true,
+            duration: const Duration(hours: 24),
+            summary: List.filled(
+              30,
+              'A lengthy program synopsis with all its details.',
+            ).join(' '),
+            cast: List.generate(
+              24,
+              (i) => ChannelCastMember(name: 'Performer $i', role: 'Role $i'),
+            ),
+          );
+          final fixture = _Fixture(
+            PlayerState.playing,
+            richItemOverride: item,
+            guideClock: () => DateTime(2026, 1, 15, 12),
+          );
+          await fixture.lineup.updateSettings(
+            (s) => s.copyWith(reduceMotion: large, largeFocusIndicators: large),
+          );
+          await fixture.player.tune('channel');
+          fixture.player.showNowPlaying();
+          final captureKey = GlobalKey();
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: captureKey,
+              child: MaterialApp(
+                theme: LineupTheme.forName(
+                  LineupThemeName.emberSteel,
+                  androidTv: true,
+                  largeFocusIndicators: large,
+                ),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(textScaler: TextScaler.linear(textScale)),
+                  child: LineupCanvas(reduceMotion: large, child: child!),
+                ),
+                home: PlayerView(controller: fixture.player, openGuide: () {}),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          Future<void> key(LogicalKeyboardKey key) async {
+            await tester.sendKeyEvent(key);
+            await tester.pumpAndSettle();
+          }
+
+          final shelf = tester.getRect(
+            find.byKey(const Key('player-now-playing-details')),
+          );
+          final fourthRole = tester.getRect(
+            find.byKey(const ValueKey('player-now-playing-cast-role-3')),
+          );
+          expect(fourthRole.bottom, lessThanOrEqualTo(shelf.bottom + .1));
+          expect(
+            tester
+                .getRect(find.byKey(const Key('player-now-playing-collapse')))
+                .top,
+            greaterThanOrEqualTo(27),
+          );
+          await _r2Capture(
+            tester,
+            captureKey,
+            'now-playing-entry-large$large-scale$textScale',
+          );
+          final more = find.byKey(const Key('player-more-info'));
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          await _r2Capture(
+            tester,
+            captureKey,
+            'now-playing-large$large-scale$textScale',
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+          await tester.pump();
+          expect(
+            tester
+                .widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher).first)
+                .duration,
+            large ? Duration.zero : const Duration(milliseconds: 300),
+          );
+          expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('player-more-info-close')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const Key('player-more-info-cast-23')),
+            findsOneWidget,
+          );
+          expect(
+            tester
+                .widget<Text>(find.byKey(const Key('player-more-info-summary')))
+                .maxLines,
+            isNull,
+          );
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-entry-large$large-scale$textScale',
+          );
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'More info reading',
+          );
+          expect(fixture.player.overlay.name, 'programInfo');
+          expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+          expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+          expect(find.text('Up/Down Scroll · Back Close'), findsOneWidget);
+          final reader = find.byKey(const Key('player-more-info-reading'));
+          expect(Focus.of(tester.element(reader)).hasPrimaryFocus, isTrue);
+          final decoration =
+              tester.widget<DecoratedBox>(reader).decoration as BoxDecoration;
+          expect(decoration.color, isNull);
+          expect(
+            (decoration.border! as Border).left,
+            const BorderSide(color: Color(0xFFE9DCC3), width: 4),
+          );
+          expect(
+            tester
+                .widget<RawScrollbar>(
+                  find.byKey(const Key('player-more-info-scrollbar')),
+                )
+                .thickness,
+            4,
+          );
+          expect(
+            tester
+                .widget<RawScrollbar>(
+                  find.byKey(const Key('player-more-info-scrollbar')),
+                )
+                .thumbColor,
+            const Color(0xFFE9DCC3),
+          );
+          final summaryInk = tester
+              .widget<RichText>(
+                find.descendant(
+                  of: find.byKey(const Key('player-more-info-summary')),
+                  matching: find.byType(RichText),
+                ),
+              )
+              .text
+              .style!
+              .color;
+          expect(summaryInk, const Color(0xFFF3E8D2));
+          await _expectInfoPaint(
+            tester,
+            captureKey,
+            reader,
+            focused: true,
+            name: 'paint-large$large-scale$textScale-reader',
+          );
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-top-large$large-scale$textScale',
+          );
+          final scroll = tester
+              .widget<SingleChildScrollView>(
+                find.byKey(const Key('player-more-info-scroll')),
+              )
+              .controller!;
+          for (
+            var n = 0;
+            n < 160 && scroll.offset < scroll.position.maxScrollExtent;
+            n++
+          ) {
+            await key(LogicalKeyboardKey.arrowDown);
+          }
+          expect(scroll.offset, scroll.position.maxScrollExtent);
+          final last = tester.getRect(
+            find.byKey(const Key('player-more-info-cast-23')),
+          );
+          final viewport = tester.getRect(reader);
+          expect(last.top, greaterThanOrEqualTo(viewport.top));
+          expect(last.bottom, lessThanOrEqualTo(viewport.bottom));
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-end-large$large-scale$textScale',
+          );
+          for (var n = 0; n < 160 && scroll.offset > 0; n++) {
+            await key(LogicalKeyboardKey.arrowUp);
+          }
+          expect(scroll.offset, 0);
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(
+            tester
+                .widget<TextButton>(
+                  find.byKey(const Key('player-more-info-close')),
+                )
+                .focusNode!
+                .hasPrimaryFocus,
+            isTrue,
+          );
+          await _expectInfoPaint(
+            tester,
+            captureKey,
+            reader,
+            focused: false,
+            name: 'paint-large$large-scale$textScale-close',
+          );
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-close-large$large-scale$textScale',
+          );
+          await key(LogicalKeyboardKey.select);
+          expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          await _r2Capture(
+            tester,
+            captureKey,
+            'info-return-large$large-scale$textScale',
+          );
+          await key(LogicalKeyboardKey.arrowUp);
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          await key(LogicalKeyboardKey.select);
+          await key(LogicalKeyboardKey.escape);
+          expect(Focus.of(tester.element(more)).hasFocus, isTrue);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+        },
+      );
+    }
+  }
+
+  testWidgets('O1 amendment reader owns initial focus', (tester) async {
+    final fixture = _amendmentFixture();
+    await _openInfoForAmendment(tester, fixture);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'More info reading');
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('O1 amendment reader paint stays dark instead of inverting', (
+    tester,
+  ) async {
+    final fixture = _amendmentFixture();
+    await _openInfoForAmendment(tester, fixture);
+    // On d155 entry is Close; establish its old reading state to isolate paint.
+    if (FocusManager.instance.primaryFocus?.debugLabel != 'More info reading') {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    final text = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(const Key('player-more-info-summary')),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(text.text.style?.color, const Color(0xFFF3E8D2));
+    expect(find.byKey(const Key('player-more-info-scrollbar')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+  testWidgets('O1 amendment replaces chrome without a Navigator route', (
+    tester,
+  ) async {
+    final fixture = _amendmentFixture();
+    await _openInfoForAmendment(tester, fixture);
+    expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
+    expect(find.byKey(const Key('player-status-bug')), findsNothing);
+    expect(find.text('Up/Down Scroll · Back Close'), findsOneWidget);
+    expect(
+      Navigator.of(
+        tester.element(find.byKey(const Key('player-more-info-close'))),
+      ).canPop(),
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  for (final dvr in [false, true]) {
+    for (final key in [
+      LogicalKeyboardKey.mediaPlayPause,
+      LogicalKeyboardKey.mediaPause,
+      LogicalKeyboardKey.mediaPlay,
+    ]) {
+      testWidgets('O1 amendment media action $key DVR=$dvr', (tester) async {
+        final fixture = _amendmentFixture(dvr: dvr);
+        fixture.native.emitControlEvents = true;
+        await _openInfoForAmendment(tester, fixture);
+        final count = fixture.native.pausedValues.length;
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+        if (dvr) {
+          final pause = key != LogicalKeyboardKey.mediaPlay;
+          expect(fixture.native.pausedValues.skip(count), [pause]);
+          expect(
+            fixture.player.status.state,
+            pause ? PlayerState.paused : PlayerState.playing,
+          );
+        } else {
+          expect(fixture.native.pausedValues.length, count);
+        }
+        expect(fixture.player.overlay.name, 'programInfo');
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'More info reading',
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      });
+    }
+  }
+  for (final key in [
+    LogicalKeyboardKey.channelUp,
+    LogicalKeyboardKey.channelDown,
+  ]) {
+    testWidgets('O1 amendment actual channel action $key', (tester) async {
+      final fixture = _amendmentFixture(channels: 3);
+      await _openInfoForAmendment(tester, fixture);
+      final before = fixture.native.loadCalls;
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+      expect(
+        fixture.lineup.currentChannelId,
+        key == LogicalKeyboardKey.channelUp ? 'channel-2' : 'channel-1',
+      );
+      expect(fixture.native.loadCalls, greaterThan(before));
+      expect(find.byKey(const Key('player-more-info-reading')), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.context, isNotNull);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('More info reading'),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    });
+  }
+  testWidgets('O1 amendment Close keeps media PlayPause in Player policy', (
+    tester,
+  ) async {
+    final fixture = _amendmentFixture(dvr: true);
+    fixture.native.emitControlEvents = true;
+    await _openInfoForAmendment(tester, fixture);
+    if (FocusManager.instance.primaryFocus?.debugLabel == 'More info reading') {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlayPause);
+    await tester.pumpAndSettle();
+    expect(fixture.native.pausedValues, [true]);
+    expect(fixture.player.status.state, PlayerState.paused);
+    expect(fixture.player.overlay.name, 'programInfo');
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'More info Close');
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'O1 amendment reads a real scheduled boundary live and safely returns without invoker',
+    (tester) async {
+      var now = DateTime(2026, 1, 15, 12);
+      final fixture = _amendmentFixture(now: () => now, short: true);
+      await _openInfoForAmendment(tester, fixture);
+      final old = fixture.player.currentProgram!.id;
+      final scroll = tester
+          .widget<SingleChildScrollView>(
+            find.byKey(const Key('player-more-info-scroll')),
+          )
+          .controller!;
+      if (FocusManager.instance.primaryFocus?.debugLabel !=
+          'More info reading') {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, greaterThan(0));
+      now = now.add(const Duration(hours: 1));
+      fixture.guide.playToNow();
+      fixture.native.emitState(PlayerState.ended, at: const Duration(hours: 1));
+      await tester.pumpAndSettle();
+      expect(fixture.native.loadCalls, 2);
+      expect(fixture.player.currentProgram!.id, isNot(old));
+      expect(
+        fixture.player.currentProgram!.scheduled.item.title,
+        'Replacement Program',
+      );
+      expect(find.text('Replacement Program'), findsOneWidget);
+      expect(find.text('Program'), findsNothing);
+      expect(scroll.offset, 0);
+      expect(fixture.player.overlay.name, 'programInfo');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      expect(find.byKey(const Key('player-more-info')), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.context, isNotNull);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('More info reading'),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+  for (final failure in ['stop', 'error']) {
+    testWidgets('O1 amendment $failure retires reader to live recovery focus', (
+      tester,
+    ) async {
+      final fixture = _amendmentFixture(dvr: true);
+      await _openInfoForAmendment(tester, fixture);
+      if (failure == 'stop') {
+        await tester.sendKeyEvent(LogicalKeyboardKey.mediaStop);
+      } else {
+        fixture.native.emitState(PlayerState.error);
+      }
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('player-more-info-reading')), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.context, isNotNull);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('More info reading'),
+      );
+      expect(
+        Focus.of(
+          tester.element(
+            find.text(failure == 'error' ? 'Retry' : 'Browse channels'),
+          ),
+        ).hasFocus,
+        isTrue,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    });
+  }
+
+  testWidgets('C5 TV Mini Guide virtual cursor paints cream and leaf ink', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, channelCount: 12);
+    await fixture.player.tune('channel');
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Establish remote modality first so this negative isolates virtual-cursor
+    // paint from the separate cold-focus correction.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    final owner = FocusManager.instance.primaryFocus;
+    for (var i = 0; i < 13; i++) {
+      final id = fixture.player.miniGuideChannelId!;
+      final text = find.byKey(Key('mini-guide-channel-$id'));
+      final rich = find
+          .descendant(of: text, matching: find.byType(RichText))
+          .first;
+      expect(
+        tester.widget<RichText>(rich).text.style?.color,
+        const Color(0xFF090806),
+      );
+      expect(tester.widget<RichText>(rich).text.style?.shadows, isEmpty);
+      final row = find
+          .ancestor(of: text, matching: find.byType(LineupRowSurface))
+          .first;
+      for (final text in tester.widgetList<RichText>(
+        find.descendant(of: row, matching: find.byType(RichText)),
+      )) {
+        if (text.text.style?.fontFamily == 'MaterialIcons') continue;
+        expect(
+          text.text.style?.shadows ?? const [],
+          isEmpty,
+          reason: text.text.toPlainText(),
+        );
+      }
+      final paints = find.descendant(
+        of: row,
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.decoration is BoxDecoration &&
+              (w.decoration! as BoxDecoration).color == const Color(0xFFE9DCC3),
+        ),
+      );
+      expect(paints, findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus, same(owner));
+    }
+    // Pointer modality hides the fill; restore the ordinary overlay shadow.
+    final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(5, 5));
+    await mouse.moveTo(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    final cursor = find.byKey(
+      Key('mini-guide-channel-${fixture.player.miniGuideChannelId}'),
+    );
+    final pointerText = tester.widget<RichText>(
+      find.descendant(of: cursor, matching: find.byType(RichText)).first,
+    );
+    expect(pointerText.text.style?.shadows, isNotEmpty);
+    expect(pointerText.text.style?.color, const Color(0xFFF3E8D2));
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'TV Sleep presets keep focus ink separate from selected preset in touch mode',
+    (tester) async {
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTouch;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      final fixture = _Fixture(PlayerState.playing);
+      fixture.player.showOsd();
+      fixture.player.showSleepTimer();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Color? ink(String text) => tester
+          .widget<RichText>(
+            find.descendant(
+              of: find.text(text),
+              matching: find.byType(RichText),
+            ),
+          )
+          .text
+          .style
+          ?.color;
+      final off = tester.element(find.byKey(const Key('sleep-timer-off')));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.highlightMode, FocusHighlightMode.touch);
+      expect(ink('30 minutes'), const Color(0xFF090806));
+      expect(ink('Off'), const Color(0xFFF3E8D2));
+      expect(fixture.player.sleepDuration, isNull);
+      expect(
+        tester.element(find.byKey(const Key('sleep-timer-off'))),
+        same(off),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+  for (final state in [
+    PlayerState.error,
+    PlayerState.stopped,
+    PlayerState.unsupported,
+  ]) {
+    testWidgets(
+      'TV recovery slate owns remote focus and retires controls: $state',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 2;
+        final fixture = _Fixture(
+          state == PlayerState.error ? PlayerState.playing : state,
+          failLoad: state == PlayerState.error,
+        );
+        final root = FocusNode();
+        var closed = false;
+        Future<void> key(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(
+            key,
+            physicalKey: key == LogicalKeyboardKey.goBack
+                ? PhysicalKeyboardKey.escape
+                : null,
+          );
+          await tester.pumpAndSettle();
+        }
+
+        bool focused(String label) =>
+            Focus.of(tester.element(find.text(label))).hasFocus;
+        try {
+          if (state == PlayerState.error) {
+            await fixture.player.tune('channel');
+            expect(fixture.player.canRetry, isTrue);
+          }
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: true,
+              ),
+              builder: LineupCanvas.builder,
+              home: PlayerView(
+                controller: fixture.player,
+                focusNode: root,
+                openGuide: () => closed = true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            focused(state == PlayerState.error ? 'Retry' : 'Browse channels'),
+            isTrue,
+          );
+          if (state == PlayerState.error) {
+            await key(LogicalKeyboardKey.arrowRight);
+          }
+          expect(focused('Browse channels'), isTrue);
+          for (var i = 0; i < 3; i++) {
+            fixture.lineup.notifyListeners();
+            await tester.pumpAndSettle();
+            expect(
+              focused('Browse channels'),
+              isTrue,
+              reason: 'Rebuilds must not restart autofocus',
+            );
+          }
+          await key(LogicalKeyboardKey.arrowRight);
+          expect(focused('Close'), isTrue);
+          await key(LogicalKeyboardKey.arrowLeft);
+          expect(focused('Browse channels'), isTrue);
+          await key(LogicalKeyboardKey.select);
+          expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+          expect(
+            tester.semantics.simulatedAccessibilityTraversal().any(
+              (node) =>
+                  node.getSemanticsData().label == 'Browse channels' &&
+                  node.getSemanticsData().hasAction(SemanticsAction.tap),
+            ),
+            isFalse,
+          );
+          await key(LogicalKeyboardKey.goBack);
+          expect(
+            focused(state == PlayerState.error ? 'Retry' : 'Browse channels'),
+            isTrue,
+          );
+          if (state == PlayerState.error) {
+            final loads = fixture.native.loadCalls;
+            fixture.native.failLoad = false;
+            await key(LogicalKeyboardKey.select);
+            expect(fixture.native.loadCalls, greaterThan(loads));
+            expect(fixture.player.error, isNull);
+            expect(find.widgetWithText(FilledButton, 'Retry'), findsNothing);
+            expect(root.hasPrimaryFocus, isTrue);
+          } else {
+            await key(LogicalKeyboardKey.arrowRight);
+            await key(LogicalKeyboardKey.select);
+            expect(closed, isTrue);
+            expect(find.bySemanticsLabel('Browse channels'), findsNothing);
+          }
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+          root.dispose();
+          tester.view.reset();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+      semanticsEnabled: true,
+    );
+  }
+  for (final dvr in [false, true]) {
+    testWidgets('TV Player remote action and return model DVR=$dvr', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      final root = FocusNode();
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        dvrControlsEnabled: dvr,
+        overlayTimeout: const Duration(seconds: 3),
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            title: 'English',
+            selected: true,
+          ),
+          PlayerTrack(
+            id: 2,
+            type: PlayerTrackType.subtitle,
+            title: 'English',
+            selected: false,
+          ),
+        ],
+      );
+      Future<void> key(LogicalKeyboardKey key) async {
+        // Flutter has no inferred physical key for normalized Android Back.
+        await tester.sendKeyEvent(
+          key,
+          physicalKey: key == LogicalKeyboardKey.goBack
+              ? PhysicalKeyboardKey.escape
+              : null,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      void focused(String label) {
+        expect(FocusManager.instance.primaryFocus!.debugLabel, switch (label) {
+          'menu' => 'Player Lineup menu',
+          'sleep' => 'Player sleep timer',
+          _ => 'Player $label',
+        });
+      }
+
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: true,
+            ),
+            builder: LineupCanvas.builder,
+            home: PlayerView(
+              controller: fixture.player,
+              focusNode: root,
+              openGuide: () {},
+              openMenu: (_, _) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await key(LogicalKeyboardKey.select);
+        focused('subtitles');
+        final initialCommands = fixture.native.transportCommands;
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('audio');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.overlay, PlayerOverlay.audioTracks);
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        focused('audio');
+        await key(LogicalKeyboardKey.arrowLeft);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
+        await key(LogicalKeyboardKey.goBack);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowRight);
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('sleep');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.sleepPickerOpen, isTrue);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(fixture.player.sleepPickerOpen, isTrue);
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.sleepPickerOpen, isFalse);
+        focused('sleep');
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('menu');
+        await key(LogicalKeyboardKey.arrowLeft);
+        focused('sleep');
+        expect(fixture.native.transportCommands, initialCommands);
+        await key(LogicalKeyboardKey.arrowUp);
+        expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+        await key(LogicalKeyboardKey.goBack);
+        expect(root.hasPrimaryFocus, isTrue);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowUp);
+        focused('close');
+        await key(LogicalKeyboardKey.arrowDown);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('audio');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.overlay, PlayerOverlay.audioTracks);
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+        focused('audio');
+        await key(LogicalKeyboardKey.arrowUp);
+        focused('close');
+        await key(LogicalKeyboardKey.select);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        focused('audio');
+        await key(LogicalKeyboardKey.arrowDown);
+        focused('subtitles');
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('audio');
+        await key(LogicalKeyboardKey.mediaRewind);
+        await key(LogicalKeyboardKey.mediaFastForward);
+        expect(
+          fixture.player.overlay,
+          dvr ? PlayerOverlay.osd : PlayerOverlay.nowPlaying,
+        );
+        expect(
+          fixture.native.transportCommands,
+          initialCommands + (dvr ? 2 : 0),
+        );
+        if (dvr) {
+          await key(LogicalKeyboardKey.arrowDown);
+          focused('subtitles');
+          await key(LogicalKeyboardKey.arrowRight);
+          focused('audio');
+        }
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        focused('audio');
+        await tester.pump(const Duration(seconds: 2));
+        await key(LogicalKeyboardKey.arrowRight);
+        focused('sleep');
+        await tester.pump(const Duration(seconds: 2));
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+        expect(fixture.player.overlay, PlayerOverlay.none);
+        expect(root.hasPrimaryFocus, isTrue);
+        await key(LogicalKeyboardKey.arrowLeft);
+        await key(LogicalKeyboardKey.arrowRight);
+        expect(
+          fixture.native.transportCommands,
+          initialCommands + (dvr ? 4 : 0),
+        );
+        if (dvr) await key(LogicalKeyboardKey.goBack);
+        await key(LogicalKeyboardKey.select);
+        focused('sleep');
+        await key(LogicalKeyboardKey.goBack);
+        expect(fixture.player.overlay, PlayerOverlay.none);
+        expect(root.hasPrimaryFocus, isTrue);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+        root.dispose();
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
+  testWidgets('M1 TV Menu stays on the shell callback and Down expands once', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 2;
+    final root = FocusNode();
+    addTearDown(root.dispose);
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    final invokerContexts = <BuildContext>[];
+    final invokerFocus = <FocusNode>[];
+    final menuCalls = <int>[];
+    await fixture.player.tune('channel');
+    fixture.player.closeOverlay();
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(
+            controller: fixture.player,
+            focusNode: root,
+            openGuide: () {},
+            openMenu: (context, focus) {
+              invokerContexts.add(context);
+              invokerFocus.add(focus);
+              menuCalls.add(menuCalls.length);
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final initialCommands = fixture.native.transportCommands;
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.none);
+      expect(menuCalls, [0]);
+      expect(invokerContexts.single.findRenderObject(), isA<RenderBox>());
+      expect(invokerFocus.single, same(root));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, isNotNull);
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(menuCalls, [0, 1]);
+      expect(invokerContexts.last.findRenderObject(), isA<RenderBox>());
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(menuCalls, [0, 1, 2]);
+      expect(fixture.native.transportCommands, initialCommands);
+
+      // Minimize and hide the Player, then verify ordinary Select reveals only
+      // compact OSD. The next Down is the deliberate details transition.
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      fixture.player.closeOverlay();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      expect(fixture.native.transportCommands, initialCommands);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+      tester.view.reset();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  for (final hasProgram in [true, false]) {
+    testWidgets(
+      'M1 mounted menu survives TV OSD retirement program=$hasProgram',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 2;
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richProgram: true,
+          tracks: const [
+            PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+          ],
+        );
+        fixture.lineup.fixtureActor.present(
+          const LineupPresentation(stage: SetupStage.ready),
+        );
+        Future<void> key(LogicalKeyboardKey value) async {
+          await tester.sendKeyEvent(
+            value,
+            physicalKey: value == LogicalKeyboardKey.goBack
+                ? PhysicalKeyboardKey.escape
+                : null,
+          );
+          await tester.pumpAndSettle();
+        }
+
+        try {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: true,
+              ),
+              builder: LineupCanvas.builder,
+              home: LineupShell(
+                player: fixture.native,
+                controller: fixture.lineup,
+                initialMediaPath: '/synthetic.mp4',
+                androidTv: true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final player = tester
+              .widget<PlayerView>(find.byType(PlayerView))
+              .controller;
+          if (hasProgram) {
+            final tuning = player.tune('channel');
+            await tester.pumpAndSettle();
+            expect(await tuning, isTrue);
+            expect(player.currentProgram, isNotNull);
+          } else {
+            expect(player.currentProgram, isNull);
+          }
+          fixture.native.emitState(PlayerState.playing);
+          await tester.pumpAndSettle();
+          // Establish hidden playback through actual Back, then exercise both
+          // ordinary compact reveals and fully retire their animated OSD subtree.
+          await key(LogicalKeyboardKey.goBack);
+          final initialCommands = fixture.native.transportCommands;
+          final initialLoads = fixture.native.loadCalls;
+          final store = fixture.lineup.store as MemoryAppStore;
+          final initialSaves = store.savedStates.length;
+          for (final reveal in [
+            LogicalKeyboardKey.arrowDown,
+            LogicalKeyboardKey.select,
+          ]) {
+            await key(reveal);
+            expect(player.overlay, PlayerOverlay.osd);
+            expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+            await key(LogicalKeyboardKey.goBack);
+            expect(player.overlay, PlayerOverlay.none);
+            expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+            expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+            await key(LogicalKeyboardKey.contextMenu);
+            expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+            expect(find.text('Plex account'), findsOneWidget);
+            expect(player.overlay, PlayerOverlay.none);
+            await key(LogicalKeyboardKey.goBack);
+            expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+            expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+          }
+
+          // A live OSD menu button remains the keyboard invoker when visible.
+          await key(LogicalKeyboardKey.select);
+          await key(LogicalKeyboardKey.contextMenu);
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await key(LogicalKeyboardKey.goBack);
+          expect(player.overlay, PlayerOverlay.osd);
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Player Lineup menu',
+          );
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(
+            player.overlay,
+            hasProgram ? PlayerOverlay.nowPlaying : PlayerOverlay.osd,
+          );
+          await key(LogicalKeyboardKey.contextMenu);
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await key(LogicalKeyboardKey.goBack);
+          expect(
+            player.overlay,
+            hasProgram ? PlayerOverlay.nowPlaying : PlayerOverlay.osd,
+          );
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Player Lineup menu',
+          );
+          // Track readers have no OSD invoker, even while its retiring button
+          // context is still retained by the shared FocusNode.
+          await key(LogicalKeyboardKey.arrowLeft);
+          await key(LogicalKeyboardKey.arrowLeft);
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Player audio',
+          );
+          await key(LogicalKeyboardKey.select);
+          expect(player.overlay, PlayerOverlay.audioTracks);
+          await key(LogicalKeyboardKey.contextMenu);
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await key(LogicalKeyboardKey.goBack);
+          expect(player.overlay, PlayerOverlay.audioTracks);
+          expect(
+            tester
+                .widget<PlayerView>(find.byType(PlayerView))
+                .focusNode!
+                .hasFocus,
+            isTrue,
+          );
+          expect(fixture.native.transportCommands, initialCommands);
+          expect(fixture.native.loadCalls, initialLoads);
+          expect(store.savedStates.length, initialSaves);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+          tester.view.reset();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
+
+  for (final reader in [
+    PlayerOverlay.audioTracks,
+    PlayerOverlay.subtitleTracks,
+    PlayerOverlay.programInfo,
+  ]) {
+    testWidgets('M1 mounted reader remains usable after menu: $reader', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 24),
+          summary: List.filled(100, 'A synthetic long synopsis.').join(' '),
+        ),
+        tracks: const [
+          PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+          PlayerTrack(id: 2, type: PlayerTrackType.audio, selected: false),
+          PlayerTrack(id: 11, type: PlayerTrackType.subtitle, selected: true),
+          PlayerTrack(id: 12, type: PlayerTrackType.subtitle, selected: false),
+        ],
+      );
+      Future<void> key(LogicalKeyboardKey value) async {
+        await tester.sendKeyEvent(
+          value,
+          physicalKey: value == LogicalKeyboardKey.goBack
+              ? PhysicalKeyboardKey.escape
+              : null,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      bool rowFocused(String key) {
+        final element = tester.element(find.byKey(Key(key)));
+        return Focus.of(element).hasFocus;
+      }
+
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              androidTv: true,
+            ),
+            builder: LineupCanvas.builder,
+            home: LineupShell(
+              player: fixture.native,
+              controller: fixture.lineup,
+              initialMediaPath: '/synthetic.mp4',
+              androidTv: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final player = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        final tuning = player.tune('channel');
+        await tester.pumpAndSettle();
+        expect(await tuning, isTrue);
+        fixture.native.emitState(PlayerState.playing);
+        await tester.pumpAndSettle();
+        final commands = fixture.native.transportCommands;
+        final loads = fixture.native.loadCalls;
+        final store = fixture.lineup.store as MemoryAppStore;
+        final saves = store.savedStates.length;
+        await key(LogicalKeyboardKey.info);
+        expect(player.overlay, PlayerOverlay.nowPlaying);
+        if (reader == PlayerOverlay.programInfo) {
+          await key(LogicalKeyboardKey.arrowUp);
+          await key(LogicalKeyboardKey.select);
+        } else {
+          if (reader == PlayerOverlay.audioTracks) {
+            await key(LogicalKeyboardKey.arrowRight);
+          }
+          await key(LogicalKeyboardKey.select);
+        }
+        expect(player.overlay, reader);
+        final primary = FocusManager.instance.primaryFocus;
+        await key(LogicalKeyboardKey.contextMenu);
+        expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+        await key(LogicalKeyboardKey.goBack);
+        expect(player.overlay, reader);
+        if (reader == PlayerOverlay.programInfo) {
+          expect(FocusManager.instance.primaryFocus, same(primary));
+          final scroll = tester
+              .widget<SingleChildScrollView>(
+                find.byKey(const Key('player-more-info-scroll')),
+              )
+              .controller!;
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(scroll.offset, greaterThan(0));
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(scroll.offset, 0);
+          await key(LogicalKeyboardKey.arrowUp);
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'More info Close',
+          );
+          await key(LogicalKeyboardKey.select);
+          expect(player.overlay, PlayerOverlay.nowPlaying);
+          expect(fixture.native.selectedTracks, isEmpty);
+        } else {
+          final type = reader == PlayerOverlay.audioTracks
+              ? PlayerTrackType.audio
+              : PlayerTrackType.subtitle;
+          final secondId = type == PlayerTrackType.audio ? 2 : 12;
+          expect(
+            rowFocused('playback-track-${type.name}-${secondId - 1}'),
+            isTrue,
+          );
+          await key(LogicalKeyboardKey.arrowDown);
+          expect(rowFocused('playback-track-${type.name}-$secondId'), isTrue);
+          await key(LogicalKeyboardKey.select);
+          expect(fixture.native.selectedTracks, [(type, secondId)]);
+          // Refresh real native track data while the menu hides its invoker.
+          // All rows of this type retire; Close/Off remains a live fallback.
+          await key(LogicalKeyboardKey.contextMenu);
+          fixture.native.emitTracks(const []);
+          await tester.pumpAndSettle();
+          await key(LogicalKeyboardKey.goBack);
+          expect(player.overlay, reader);
+          expect(player.tracks, isEmpty);
+          if (type == PlayerTrackType.audio) {
+            await key(LogicalKeyboardKey.select);
+            expect(player.overlay, PlayerOverlay.nowPlaying);
+          } else {
+            // The retired row falls back to Close; Down reaches Off.
+            await key(LogicalKeyboardKey.arrowDown);
+            expect(rowFocused('playback-track-off'), isTrue);
+            await key(LogicalKeyboardKey.select);
+            expect(fixture.native.selectedTracks, [
+              (type, secondId),
+              (type, null),
+            ]);
+          }
+        }
+        expect(fixture.native.transportCommands, commands);
+        expect(fixture.native.loadCalls, loads);
+        expect(store.savedStates.length, saves);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+        tester.view.reset();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
+  for (final window in const [Size(960, 540), Size(1920, 1080)]) {
+    for (final dvr in [false, true]) {
+      for (final padding in const [
+        EdgeInsets.zero,
+        EdgeInsets.fromLTRB(70, 35, 65, 40),
+      ]) {
+        testWidgets(
+          'TV Player keeps video full-frame and overlay content safe: $window DVR=$dvr padding=$padding',
+          (tester) async {
+            debugDefaultTargetPlatformOverride = TargetPlatform.android;
+            tester.view
+              ..physicalSize = window * 2
+              ..devicePixelRatio = 2;
+            final fixture = _Fixture(
+              PlayerState.playing,
+              richProgram: true,
+              channelCount: 5,
+              dvrControlsEnabled: dvr,
+              tracks: const [
+                PlayerTrack(
+                  id: 1,
+                  type: PlayerTrackType.audio,
+                  selected: true,
+                  title: 'English',
+                ),
+              ],
+            );
+            final safe = padding.deflateRect(Offset.zero & window);
+            void inside(Finder finder) {
+              final rect = _drawnRect(tester, finder);
+              expect(rect.left, greaterThanOrEqualTo(safe.left - .01));
+              expect(rect.top, greaterThanOrEqualTo(safe.top - .01));
+              expect(rect.right, lessThanOrEqualTo(safe.right + .01));
+              expect(rect.bottom, lessThanOrEqualTo(safe.bottom + .01));
+            }
+
+            try {
+              fixture.player.showOsd();
+              await tester.pumpWidget(
+                MaterialApp(
+                  theme: LineupTheme.forName(
+                    LineupThemeName.emberSteel,
+                    androidTv: true,
+                  ),
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context).copyWith(padding: padding),
+                    child: LineupCanvas(child: child!),
+                  ),
+                  home: PlayerView(
+                    controller: fixture.player,
+                    openGuide: () {},
+                  ),
+                ),
+              );
+              await tester.pumpAndSettle();
+              expect(
+                _drawnRect(tester, find.byType(NativeVideoSurface)),
+                Offset.zero & window,
+              );
+              final nativeRect = fixture.native.videoRects.last;
+              expect(nativeRect.left, 0);
+              expect(nativeRect.top, 0);
+              expect(nativeRect.width, closeTo(window.width, .001));
+              expect(nativeRect.height, closeTo(window.height, .001));
+              expect(nativeRect.scale, 2);
+              for (final key in [
+                'player-osd-title',
+                'player-osd-subtitles',
+                'player-osd-audio',
+                'player-osd-sleep',
+                'player-osd-channel-bug',
+              ]) {
+                inside(find.byKey(Key(key)));
+              }
+              final scale = LineupCanvas.scaleFor(window, androidTv: true);
+              final bug = _drawnRect(
+                tester,
+                find.byKey(const Key('player-osd-channel-bug')),
+              );
+              expect(bug.top, closeTo(math.max(padding.top, 24 * scale), .001));
+              expect(
+                window.width - bug.right,
+                closeTo(math.max(padding.right, 96 * scale), .001),
+              );
+              expect(
+                _drawnRect(
+                  tester,
+                  find.byKey(const Key('player-osd-progress-line')),
+                ).bottom,
+                closeTo(window.height, .001),
+              );
+              if (dvr) {
+                final target = find.byKey(const Key('player-safe-dvr-target'));
+                inside(target);
+                final sliderNode = tester.semantics
+                    .simulatedAccessibilityTraversal()
+                    .where(
+                      (node) =>
+                          node.getSemanticsData().flagsCollection.isSlider,
+                    )
+                    .single;
+                final range = sliderNode.getSemanticsData();
+                expect(range.label, 'Playback progress');
+                expect(range.value, '10:00 of 1:00:00');
+                expect(range.hasAction(SemanticsAction.increase), isTrue);
+                expect(range.hasAction(SemanticsAction.decrease), isTrue);
+                final box = tester.renderObject<RenderBox>(target);
+                final accessibleBounds = Rect.fromPoints(
+                  box.localToGlobal(sliderNode.rect.topLeft),
+                  box.localToGlobal(sliderNode.rect.bottomRight),
+                );
+                expect(accessibleBounds.top, greaterThanOrEqualTo(safe.top));
+                expect(
+                  accessibleBounds.bottom,
+                  lessThanOrEqualTo(safe.bottom + .001),
+                );
+                fixture.player.closeOverlay();
+                await tester.pump();
+                expect(
+                  tester.semantics.simulatedAccessibilityTraversal().where(
+                    (node) => node.getSemanticsData().flagsCollection.isSlider,
+                  ),
+                  isEmpty,
+                );
+                fixture.player.showOsd();
+                await tester.pumpAndSettle();
+              }
+              fixture.player.showSleepTimer();
+              await tester.pumpAndSettle();
+              inside(find.byKey(const Key('sleep-timer-picker')));
+              fixture.player.closeSleepPicker();
+              fixture.player.showNowPlaying();
+              await tester.pumpAndSettle();
+              inside(find.byKey(const Key('player-now-playing-surface')));
+              fixture.player.closeOverlay();
+              fixture.player.showTracks(PlayerTrackType.audio);
+              await tester.pumpAndSettle();
+              inside(find.byKey(const Key('playback-options-footer')));
+              inside(find.text('English').last);
+              fixture.player.closeOverlay();
+              fixture.player.showMiniGuide();
+              await tester.pumpAndSettle();
+              inside(find.text('Up/Down Browse · Select Tune · Back Close'));
+              expect(tester.takeException(), isNull);
+            } finally {
+              await tester.pumpWidget(const SizedBox.shrink());
+              fixture.dispose();
+              tester.view.reset();
+              debugDefaultTargetPlatformOverride = null;
+            }
+          },
+        );
+      }
+    }
+  }
   testWidgets('deferred tune transport name and icon agree with K', (
     tester,
   ) async {
@@ -209,6 +2097,35 @@ void main() {
     },
     semanticsEnabled: true,
   );
+
+  testWidgets('Android TV omits the ineffective fullscreen action', (
+    tester,
+  ) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+    try {
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Full screen'), findsNothing);
+      expect(find.byTooltip('Exit full screen'), findsNothing);
+    } finally {
+      fixture.dispose();
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
   testWidgets(
     'presentation getters distinguish watching from selected and held state',
     (tester) async {
@@ -617,8 +2534,8 @@ void main() {
           await _settleNowPlayingArtwork(tester);
           final logo = find.byKey(const Key('player-now-playing-logo'));
           expect(logo, findsOneWidget, reason: '$size text$textScale');
-          final image = tester.widget<Image>(logo);
-          expect(image.image, MemoryImage(bytes!));
+          final image = tester.widget<RawImage>(logo);
+          expect(image.image, isNotNull);
           final visibleLogo = find
               .ancestor(of: logo, matching: find.byType(ClearLogoImage))
               .first;
@@ -3060,43 +4977,55 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets('Reduce Motion settles player overlays in one pump', (
-    tester,
-  ) async {
-    final fixture = _Fixture(PlayerState.playing);
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: LineupCanvas(child: child!),
+  testWidgets(
+    'Reduce Motion settles panels in one pump while the channel tag fades',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: LineupCanvas(child: child!),
+          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
+      );
 
-    fixture.player.showOsd();
-    await tester.pump();
+      fixture.player.showOsd();
+      await tester.pump();
 
-    final switcher = tester.widget<AnimatedSwitcher>(
-      find.byType(AnimatedSwitcher),
-    );
-    expect(switcher.duration, Duration.zero);
-    expect(switcher.reverseDuration, Duration.zero);
-    expect(tester.hasRunningAnimations, isFalse);
-    expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
+      final switcher = tester.widget<AnimatedSwitcher>(
+        find.byType(AnimatedSwitcher),
+      );
+      expect(switcher.duration, Duration.zero);
+      expect(switcher.reverseDuration, Duration.zero);
+      expect(
+        find.bySemanticsLabel(RegExp('Playback controls')),
+        findsOneWidget,
+      );
 
-    fixture.player.closeOverlay();
-    await tester.pump();
-    fixture.player.showMiniGuide();
-    await tester.pump();
-    expect(switcher.duration, Duration.zero);
-    expect(switcher.reverseDuration, Duration.zero);
-    expect(tester.hasRunningAnimations, isFalse);
-    expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
+      final panel = find.byKey(const Key('player-osd-surface'));
+      final fade = tester.widget<FadeTransition>(
+        find.ancestor(of: panel, matching: find.byType(FadeTransition)).first,
+      );
+      final slide = tester.widget<SlideTransition>(
+        find.ancestor(of: panel, matching: find.byType(SlideTransition)).first,
+      );
+      expect(fade.opacity.value, 1);
+      expect(slide.position.value, Offset.zero);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
-  });
+      fixture.player.closeOverlay();
+      await tester.pump();
+      fixture.player.showMiniGuide();
+      await tester.pump();
+      expect(switcher.duration, Duration.zero);
+      expect(switcher.reverseDuration, Duration.zero);
+      expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 
   testWidgets(
     'reopened OSD rejects outgoing focus loss and keeps focused semantics',
@@ -4430,6 +6359,70 @@ void main() {
     fixture.dispose();
   });
 
+  for (final androidTv in [false, true]) {
+    testWidgets(
+      'playback drawer hints use the ${androidTv ? 'TV' : 'desktop'} vocabulary',
+      (tester) async {
+        final previousPlatform = debugDefaultTargetPlatformOverride;
+        if (androidTv) {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        }
+        final fixture = _Fixture(
+          PlayerState.playing,
+          tracks: const [
+            PlayerTrack(
+              id: 1,
+              type: PlayerTrackType.audio,
+              selected: true,
+              title: 'Original mix',
+            ),
+          ],
+        );
+        try {
+          fixture.player.showMiniGuide();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                androidTv: androidTv,
+              ),
+              builder: LineupCanvas.builder,
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text(
+              androidTv
+                  ? 'Up/Down Browse · Select Tune · Back Close'
+                  : 'Up / Down · Browse · Enter Tune · Esc Close',
+            ),
+            findsOneWidget,
+          );
+
+          fixture.player.closeOverlay();
+          fixture.player.showOsd();
+          fixture.player.showTracks(PlayerTrackType.audio);
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+              of: find.byKey(const Key('playback-options-footer')),
+              matching: find.text(
+                androidTv
+                    ? 'Up/Down Browse · Select Choose · Back Close'
+                    : 'Up/Down Browse · Enter Select · Esc Close',
+              ),
+            ),
+            findsOneWidget,
+          );
+        } finally {
+          fixture.dispose();
+          debugDefaultTargetPlatformOverride = previousPlatform;
+        }
+      },
+    );
+  }
+
   testWidgets('mini Guide wheel changes selection without scrolling', (
     tester,
   ) async {
@@ -5259,7 +7252,10 @@ void main() {
     );
     expect(fixture.lineup.artworkRequests, hasLength(2));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
-    expect(find.byType(Image), findsNWidgets(2));
+    expect(
+      find.byType(Image),
+      findsOneWidget,
+    ); // Poster; the logo owns a RawImage.
     expect(
       find.text('S2 E6 · 60 min · 2026 · Drama · Adventure'),
       findsOneWidget,
@@ -6332,7 +8328,11 @@ void main() {
       for (var frame = 0; frame < 4; frame++) {
         await tester.pump();
       }
-      expect(tester.hasRunningAnimations, isFalse);
+      final panel = find.byKey(const Key('player-now-playing-surface'));
+      final fade = tester.widget<FadeTransition>(
+        find.ancestor(of: panel, matching: find.byType(FadeTransition)).first,
+      );
+      expect(fade.opacity.value, 1);
       expect(
         find.byKey(const Key('player-now-playing-surface')),
         findsOneWidget,
@@ -6470,6 +8470,7 @@ class _Fixture {
     bool failSchedule = false,
     ChannelItem? richItemOverride,
     DateTime Function()? guideClock,
+    DateTime Function()? playerClock,
     Duration nativePosition = const Duration(minutes: 10),
     Duration nativeDuration = const Duration(hours: 1),
     PlayerTelemetry nativeTelemetry = const PlayerTelemetry(),
@@ -6516,6 +8517,7 @@ class _Fixture {
       lineup: lineup,
       guide: guide,
       overlayTimeout: overlayTimeout,
+      clock: playerClock,
     );
   }
 
@@ -6532,6 +8534,17 @@ class _Fixture {
 }
 
 class _Lineup extends LineupController {
+  Future<List<PlexCastMember>?> Function(String)? castHandler;
+  final castRequests = <String>[];
+  @override
+  Future<List<PlexCastMember>?> castForItem(
+    String itemId, {
+    Future<void>? cancelled,
+  }) async {
+    castRequests.add(itemId);
+    return castHandler?.call(itemId);
+  }
+
   _Lineup(
     int channelCount, {
     LineupScenario? scenario,
@@ -6659,6 +8672,13 @@ class _Lineup extends LineupController {
     _contentGeneration++;
     notifyListeners();
   }
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    (channel.source as ManualSource).items,
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+  );
 
   @override
   LineupPlaybackRequest playbackFor(String itemId) =>
@@ -6808,7 +8828,7 @@ class _Native implements NativePlayer {
     _tracks = tracks;
   }
 
-  final bool failLoad;
+  bool failLoad;
   final bool failStop;
   final bool failControls;
   final bool failTrackSelect;
@@ -6820,6 +8840,28 @@ class _Native implements NativePlayer {
   final _loadCompletion = Completer<void>();
   final _events = StreamController<PlayerEvent>.broadcast();
   int transportCommands = 0;
+  final pausedValues = <bool>[];
+  bool emitControlEvents = false;
+  int? lastLoadGeneration;
+
+  void emitState(PlayerState state, {Duration? at}) {
+    _events.add(
+      PlayerEvent(
+        status: PlayerStatus(
+          state: state,
+          message: state.name,
+          recoverable: true,
+          failureCode: state == PlayerState.error ? 'synthetic' : null,
+        ),
+        position: at ?? position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: tracks,
+        generation: lastLoadGeneration,
+      ),
+    );
+  }
+
   int loadCalls = 0;
   final fullscreenValues = <bool>[];
   final selectedTracks = <(PlayerTrackType, int?)>[];
@@ -6865,6 +8907,7 @@ class _Native implements NativePlayer {
     Duration? startPosition,
   }) async {
     loadCalls++;
+    lastLoadGeneration = generation;
     if (failLoad) throw const PlayerUnavailable('synthetic load failure');
     if (blockLoad) {
       if (!loadStarted.isCompleted) loadStarted.complete();
@@ -6897,6 +8940,8 @@ class _Native implements NativePlayer {
   @override
   Future<void> play() async {
     transportCommands++;
+    pausedValues.add(false);
+    if (emitControlEvents) emitState(PlayerState.playing);
     if (failControls) {
       throw const PlayerUnavailable(
         'Synthetic play failure.',
@@ -6908,6 +8953,8 @@ class _Native implements NativePlayer {
   @override
   Future<void> pause() async {
     transportCommands++;
+    pausedValues.add(true);
+    if (emitControlEvents) emitState(PlayerState.paused);
     if (failControls) {
       throw const PlayerUnavailable(
         'Synthetic pause failure.',
@@ -6921,8 +8968,12 @@ class _Native implements NativePlayer {
     transportCommands++;
   }
 
+  final videoRects = <PlayerVideoRect>[];
   @override
-  Future<void> setVideoRect(PlayerVideoRect rect) async {}
+  Future<void> setVideoRect(PlayerVideoRect rect) async {
+    videoRects.add(rect);
+  }
+
   @override
   Future<void> setFullscreen(bool fullscreen) async {
     fullscreenValues.add(fullscreen);
@@ -6944,6 +8995,7 @@ class _Native implements NativePlayer {
         duration: duration,
         telemetry: telemetry,
         tracks: _tracks,
+        generation: lastLoadGeneration,
       ),
     );
   }
@@ -6998,4 +9050,157 @@ Future<void> _showReachableTooltip(WidgetTester tester, String message) async {
     overlay.single.getSemanticsData().hasAction(SemanticsAction.tap),
     isFalse,
   );
+}
+
+Future<void> _r2Capture(WidgetTester tester, GlobalKey key, String name) async {
+  final directory = Platform.environment['R2_CAPTURE'];
+  if (directory == null) return;
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(directory).create(recursive: true);
+    await File('$directory/$name.png')
+        .writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
+}
+
+_Fixture _amendmentFixture({
+  bool dvr = false,
+  int channels = 1,
+  DateTime Function()? now,
+  bool short = false,
+}) {
+  final clock = now ?? () => DateTime(2026, 1, 15, 12);
+  return _Fixture(
+    PlayerState.playing,
+    dvrControlsEnabled: dvr,
+    channelCount: channels,
+    guideClock: clock,
+    playerClock: clock,
+    shortPrograms: short,
+    richItemOverride: _fixtureItem(
+      0,
+      rich: true,
+      duration: Duration(hours: short ? 1 : 24),
+      summary: List.filled(
+        30,
+        'Complete program details for reading.',
+      ).join(' '),
+      cast: List.generate(
+        24,
+        (i) => ChannelCastMember(name: 'Performer $i', role: 'Role $i'),
+      ),
+    ),
+  );
+}
+
+Future<void> _openInfoForAmendment(
+  WidgetTester tester,
+  _Fixture fixture,
+) async {
+  await fixture.player.tune('channel');
+  fixture.player.showNowPlaying();
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+      builder: LineupCanvas.builder,
+      home: PlayerView(controller: fixture.player, openGuide: () {}),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+  await tester.pumpAndSettle();
+  await tester.sendKeyEvent(LogicalKeyboardKey.select);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _expectInfoPaint(
+  WidgetTester tester,
+  GlobalKey captureKey,
+  Finder reader, {
+  required bool focused,
+  required String name,
+}) async {
+  final rect = tester.getRect(reader);
+  final box = tester.renderObject<RenderBox>(reader);
+  final scale = rect.width / box.size.width;
+  final sampleY = (rect.top + 20).floor();
+  final pixels = (await tester.runAsync(() async {
+    final image =
+        await (captureKey.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary)
+            .toImage();
+    final data = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!
+        .buffer
+        .asUint8List();
+    List<int> sample(double x) {
+      final offset = (sampleY * image.width + x.floor()) * 4;
+      return data.sublist(offset, offset + 4);
+    }
+
+    final values = {
+      'bar': sample(rect.left + 2 * scale),
+      'body': sample(rect.left + 12 * scale),
+      'thumb': sample(rect.right - 2 * scale),
+    };
+    image.dispose();
+    final directory = Platform.environment['R2_CAPTURE'];
+    if (directory != null) {
+      await File('$directory/$name.json').writeAsString(
+        jsonEncode({
+          'focused': focused,
+          'scale': scale,
+          'reader': [rect.left, rect.top, rect.right, rect.bottom],
+          'sample_y': sampleY,
+          'rgba': values,
+        }),
+      );
+    }
+    return values;
+  }))!;
+  expect(pixels['bar'], focused ? [233, 220, 195, 255] : [43, 38, 30, 255]);
+  expect(pixels['body']!.take(3).reduce((a, b) => a + b), lessThan(100));
+  if (focused) {
+    expect(pixels['thumb'], [233, 220, 195, 255]);
+  } else {
+    expect(pixels['thumb'], isNot([233, 220, 195, 255]));
+    expect(
+      pixels['thumb']!.take(3).reduce((a, b) => a + b),
+      greaterThan(pixels['body']!.take(3).reduce((a, b) => a + b)),
+    );
+  }
+}
+
+double _channelTagOpacity(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('player-osd-channel-bug')),
+            matching: find.byType(Opacity),
+          )
+          .first,
+    )
+    .opacity;
+
+Future<void> _captureChannelTag(
+  WidgetTester tester,
+  GlobalKey key,
+  String name, {
+  bool tv = false,
+}) async {
+  final directory = Platform.environment['CHANNEL_TAG_CAPTURE'];
+  if (directory == null) return;
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: tv ? 2 : 1);
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(directory).create(recursive: true);
+    await File('$directory/$name.png')
+        .writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
 }
