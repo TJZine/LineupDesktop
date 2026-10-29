@@ -653,3 +653,37 @@ cached media text. Explicit clears accompany previously published text; the
 Dart transport also clears at its load/stop/dispose boundaries. Pending cue
 updates replace in place and remain exempt from both telemetry and completion
 eviction, including empty clears. Cue text is never diagnostic content.
+
+### Android subtitle mechanisms
+
+Android accepts `setSubtitlePresentation` on the application looper, separately
+from the 64-command media queue. The adapter retains its latest validated value
+for the current and subsequent engines. Disposal clears that value and resets
+the persistent SubtitleView's cues, embedded-style flags and default sizes.
+
+Media3 routes the selected text format using its sample MIME (the original MIME
+in `Format.codecs` for pre-parsed `application/x-media3-cues`). SSA remains
+native unless `lineupDrawsStyled` is true. PGS, VobSub, DVB and every bitmap cue
+remain native. Other text is encoded as bounded `subtitle-cues`; native text
+painting is suppressed. Track changes clear both outputs and route the latest
+cue list again. Presentation changes transform the original cues again, avoiding
+cumulative scale. Fractional SSA font sizes scale individually; the fallback
+font size compensates for video letterboxing relative to the presentation rect.
+Supported start-anchored fractional bitmap rectangles scale about bottom-center,
+raise, and clamp inside the frame; unsupported anchors/unset dimensions retain
+the decoder's geometry.
+
+The independent Android `lineup/device_captions` channel registers its
+CaptioningManager listener only between `listen` and `cancel`, and removes it on
+activity cleanup. Reads and `changed` events use nullable fields for unset OS
+style values, unsigned 64-bit ARGB colors, and the protocol's seven typeface
+keys. Device style remains available while the system captions switch is off.
+Subtitle processing exceptions use fixed debug-only messages without content.
+
+For Direct Play SSA, private nonvisual cue metadata retains event classification
+through Media3's pre-parsed cue codec. It adds no wire fields. Lineup mode drops
+whole sign events (pos/move/org/clip/iclip) and positive drawing-mode events;
+p0 dialogue and i/b/u/an remain. A failed decorator track falls back to stock
+native drawing even when `lineupDrawsStyled` is true; existing decoded cues also
+fall back without reload or a playback-error event. Native drawing receives
+stock-equivalent cues with private metadata removed.

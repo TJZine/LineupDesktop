@@ -37,7 +37,11 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                     null,
                 )
             )
+            setApplyEmbeddedStyles(true)
+            setApplyEmbeddedFontSizes(true)
         }
+    private var presentation = SubtitlePresentation()
+    private var engine: Media3Engine? = null
     private val handler = Handler(Looper.getMainLooper())
     private val channel = MethodChannel(messenger, "lineup/native_player")
     private var rectangle = VideoRect(0.0, 0.0, 0.0, 0.0, 1.0)
@@ -117,8 +121,32 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                     else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 }
 
-                override fun createEngine(): PlayerEngine =
-                    Media3Engine(
+                override fun subtitlePresentation(value: SubtitlePresentation?) {
+                    presentation = value ?: SubtitlePresentation()
+                    if (value == null) {
+                        engine = null
+                        updateSubtitles {
+                            subtitles.setCues(emptyList())
+                            subtitles.setStyle(CaptionStyleCompat.DEFAULT)
+                            subtitles.setApplyEmbeddedStyles(true)
+                            subtitles.setApplyEmbeddedFontSizes(true)
+                            subtitles.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION)
+                        }
+                    } else {
+                        layoutVideo()
+                        engine?.refreshSubtitles()
+                    }
+                }
+
+                override fun createEngine(): PlayerEngine {
+                    updateSubtitles {
+                        subtitles.setStyle(CaptionStyleCompat(
+                            Color.WHITE, Color.TRANSPARENT, Color.TRANSPARENT,
+                            CaptionStyleCompat.EDGE_TYPE_OUTLINE, Color.BLACK, null,
+                        ))
+                    }
+                    layoutVideo()
+                    return Media3Engine(
                         activity,
                         handler,
                         video,
@@ -128,7 +156,9 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                             layoutVideo()
                         },
                         ::keepScreenOn,
-                    )
+                        subtitlePresentation = { presentation },
+                    ).also { engine = it }
+                }
 
                 override fun event(value: Map<String, Any?>) {
                     channel.invokeMethod("event", value)
@@ -198,6 +228,20 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
         video.visibility = if (shown) View.VISIBLE else View.INVISIBLE
         video.layoutParams = FrameLayout.LayoutParams(fitWidth, fitHeight, Gravity.CENTER)
         subtitles.layoutParams = FrameLayout.LayoutParams(fitWidth, fitHeight, Gravity.CENTER)
+        updateSubtitles {
+            subtitles.setFractionalTextSize(
+                0.0533f * presentation.scale * if (fitHeight > 0) height.toFloat() / fitHeight else 1f
+            )
+        }
+    }
+
+    private fun updateSubtitles(update: () -> Unit) {
+        try {
+            update()
+        } catch (_: Exception) {
+            if (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)
+                android.util.Log.d("LineupPlayer", "Subtitle view update skipped")
+        }
     }
 
     private fun pixels(value: Double) =
