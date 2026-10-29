@@ -645,8 +645,9 @@ authored ASS positioning.
 
 Cue conversion retains alignment and italic/bold/underline runs, drops other
 overrides, and bounds the input scan/cache to 64 KiB and the output to the common
-cue limits. Opted-in native ASS excludes events containing positioning, clipping
-or drawing tags. Cues belong to the active observed load; obsolete observations
+cue limits. Opted-in native ASS excludes whole events containing positioning,
+clipping or positive drawing-mode (`\p` > 0) tags, even if a later `\p0` resets
+the mode. A `\p0` reset alone retains dialogue, emphasis and alignment. Cues belong to the active observed load; obsolete observations
 are discarded. Load, subtitle selection, stop, end, error and disposal discard
 cached media text. Explicit clears accompany previously published text; the
 Dart transport also clears at its load/stop/dispose boundaries. Pending cue

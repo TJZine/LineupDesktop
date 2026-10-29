@@ -20,7 +20,24 @@ struct Style {
   }
 };
 
-bool TagBoundary(char c) { return c == '\\' || c == '}' || c == '{' || c == '(' || c == ' ' || (c >= '0' && c <= '9') || c == '-'; }
+bool TagLetter(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+bool PositiveDrawingMode(std::string_view argument) {
+  // ASS drawing mode is an integer. Inspect its sign and digits without
+  // accumulating a value, so even oversized untrusted arguments cannot overflow.
+  size_t i = 0;
+  while (i < argument.size() && (argument[i] == ' ' || argument[i] == '\t')) ++i;
+  if (i < argument.size() && argument[i] == '-') return false;
+  if (i < argument.size() && argument[i] == '+') ++i;
+  bool positive = false;
+  while (i < argument.size() && argument[i] >= '0' && argument[i] <= '9') {
+    positive = positive || argument[i] != '0';
+    ++i;
+  }
+  return positive;
+}
 
 bool IsSign(std::string_view event) {
   // Tags only have meaning inside an override block. Avoid rejecting literal
@@ -30,12 +47,15 @@ bool IsSign(std::string_view event) {
     if (event[i] == '{') ++depth;
     if (event[i] == '}' && depth > 0) --depth;
     if (!depth || event[i] != '\\') continue;
-    const auto tag = event.substr(i + 1);
-    for (auto name : {"pos", "move", "org", "clip", "iclip", "p"}) {
-      const std::string_view key(name);
-      if (tag.substr(0, key.size()) == key &&
-          (tag.size() == key.size() || TagBoundary(tag[key.size()]))) return true;
-    }
+    const size_t start = i + 1;
+    size_t end = start;
+    while (end < event.size() && TagLetter(event[end])) ++end;
+    const auto name = event.substr(start, end - start);
+    // Match complete tag names: pbo, position and style/font names are not
+    // drawing or positioning tags. A p0 reset alone is ordinary dialogue.
+    if (name == "pos" || name == "move" || name == "org" ||
+        name == "clip" || name == "iclip" ||
+        (name == "p" && PositiveDrawingMode(event.substr(end)))) return true;
   }
   return false;
 }
