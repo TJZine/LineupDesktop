@@ -961,7 +961,7 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
                 key: const Key('move-program-search'),
                 controller: _search,
                 focusNode: fieldFocus,
-                autofocus: !LineupTheme.of(fieldContext).androidTv,
+                autofocus: !DeviceProfile.of(fieldContext).isTv,
                 onEditingComplete: finishEditing,
                 decoration: InputDecoration(hintText: 'Search programs'),
                 onChanged: (_) => setState(() {}),

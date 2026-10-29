@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../../ui/app_theme.dart';
 import '../setup_review.dart';
@@ -76,7 +77,9 @@ class _SetupResultStepState extends State<SetupResultStep> {
   Widget build(BuildContext context) {
     final review = widget.phase.review;
     final roles = LineupTheme.of(context);
-    final primaryActionLabel = roles.androidTv ? 'Open guide' : 'View lineup';
+    final primaryActionLabel = DeviceProfile.of(context).isTv
+        ? 'Open guide'
+        : 'View lineup';
     final headingStyle = LineupTypography.pageTitle.copyWith(
       color: roles.primaryText,
     );

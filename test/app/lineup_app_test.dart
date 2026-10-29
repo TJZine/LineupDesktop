@@ -39,7 +39,7 @@ void main() {
         LineupBootstrap(
           player: native,
           controller: controller,
-          androidTv: true,
+          profile: profileFor(true),
         ),
       );
       await tester.pumpAndSettle();
@@ -125,7 +125,11 @@ void main() {
     final player = _PositionEventPlayer();
     await tester.pumpWidget(
       MaterialApp(
-        home: LineupShell(player: player, controller: controller),
+        home: LineupShell(
+          player: player,
+          controller: controller,
+          profile: desktopProfile,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -160,7 +164,10 @@ void main() {
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
-        LineupStartup(createBootstrap: () => composition.future),
+        LineupStartup(
+          profile: desktopProfile,
+          createBootstrap: () => composition.future,
+        ),
       );
       await tester.pump();
 
@@ -187,6 +194,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       LineupStartup(
+        profile: desktopProfile,
         createBootstrap: () {
           throw StateError('/private/startup/secret-sentinel');
         },
@@ -204,6 +212,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       LineupStartup(
+        profile: desktopProfile,
         createBootstrap: () async {
           await Future<void>.delayed(Duration.zero);
           throw StateError('/private/startup/secret-sentinel');
@@ -291,7 +300,7 @@ void main() {
       LineupBootstrap(
         player: _FakePlayer(),
         controller: controller,
-        androidTv: false,
+        profile: profileFor(false),
       ),
     );
     await tester.pumpAndSettle();
@@ -569,7 +578,7 @@ void main() {
       LineupBootstrap(
         player: _FakePlayer(),
         controller: controller,
-        androidTv: false,
+        profile: profileFor(false),
       ),
     );
     await tester.pumpAndSettle();
@@ -911,7 +920,7 @@ void main() {
           LineupBootstrap(
             player: player,
             controller: controller,
-            androidTv: tv,
+            profile: profileFor(tv),
           ),
         );
         await tester.pumpAndSettle();
@@ -1350,75 +1359,73 @@ void main() {
     expect(find.text('Active'), findsNothing);
   });
 
-  for (final androidTv in [false, true]) {
-    testWidgets(
-      'focused profile name overlay follows form factor: TV=$androidTv',
-      (tester) async {
-        final controller = _FakeController(
-          scenario: LineupScenario(
-            stage: SetupStage.profiles,
-            profiles: const [
-              PlexHomeUser(id: 'first', name: 'First', protected: false),
-              PlexHomeUser(
-                id: 'long',
-                name:
-                    'A very long profile name that needs the focused treatment',
-                protected: false,
-              ),
-            ],
-          ),
-        );
-        await tester.pumpWidget(
-          LineupBootstrap(
-            player: _FakePlayer(),
-            controller: controller,
-            androidTv: androidTv,
-          ),
-        );
-        await tester.pumpAndSettle();
+  for (final isTv in [false, true]) {
+    testWidgets('focused profile name overlay follows form factor: TV=$isTv', (
+      tester,
+    ) async {
+      final controller = _FakeController(
+        scenario: LineupScenario(
+          stage: SetupStage.profiles,
+          profiles: const [
+            PlexHomeUser(id: 'first', name: 'First', protected: false),
+            PlexHomeUser(
+              id: 'long',
+              name: 'A very long profile name that needs the focused treatment',
+              protected: false,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        LineupBootstrap(
+          player: _FakePlayer(),
+          controller: controller,
+          profile: profileFor(isTv),
+        ),
+      );
+      await tester.pumpAndSettle();
 
+      expect(
+        find.byKey(const ValueKey('profile-name-full-first')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('profile-name-full-long')),
+        findsNothing,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      if (isTv) {
         expect(
-          find.byKey(const ValueKey('profile-name-full-first')),
+          find.byKey(const ValueKey('profile-name-full-long')),
           findsNothing,
         );
         expect(
-          find.byKey(const ValueKey('profile-name-full-long')),
-          findsNothing,
+          tester
+              .widget<Text>(
+                find.text(
+                  'A very long profile name that needs the focused treatment',
+                ),
+              )
+              .maxLines,
+          2,
         );
-        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-        await tester.pump();
-        if (androidTv) {
-          expect(
-            find.byKey(const ValueKey('profile-name-full-long')),
-            findsNothing,
-          );
-          expect(
-            tester
-                .widget<Text>(
-                  find.text(
-                    'A very long profile name that needs the focused treatment',
-                  ),
-                )
-                .maxLines,
-            2,
-          );
-          return;
-        }
-        expect(
-          find.byKey(const ValueKey('profile-name-full-long')),
-          findsOneWidget,
-        );
-        final fullName = tester.widget<Text>(
-          find.descendant(
-            of: find.byKey(const ValueKey('profile-name-full-long')),
-            matching: find.byType(Text),
-          ),
-        );
-        expect(fullName.maxLines, isNull);
-        expect(fullName.style?.fontFamily, 'Inter');
-        expect(tester.takeException(), isNull);
-      },
-    );
+        return;
+      }
+      expect(
+        find.byKey(const ValueKey('profile-name-full-long')),
+        findsOneWidget,
+      );
+      final fullName = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const ValueKey('profile-name-full-long')),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(fullName.maxLines, isNull);
+      expect(fullName.style?.fontFamily, 'Inter');
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets('unprotected profile failure remains visible in onboarding', (

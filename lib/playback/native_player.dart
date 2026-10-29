@@ -16,6 +16,9 @@ abstract interface class NativePlayer {
   /// Latest observed window state; false before native initialization.
   bool get fullscreen;
 
+  /// Native presentation and display features available to this player.
+  PlayerCapabilities get capabilities;
+
   /// A hot broadcast stream of player state snapshots.
   ///
   /// Implementations must allow multiple simultaneous listeners. Events
@@ -97,6 +100,44 @@ abstract interface class NativePlayer {
   /// responsibility and may retry. Replacement loads wait for pending cleanup.
   Future<void> stop();
   Future<void> dispose();
+}
+
+enum PlayerFullscreenMode { window, systemBars, fixed }
+
+@immutable
+final class PlayerCapabilities {
+  const PlayerCapabilities({
+    required this.displayMatching,
+    required this.fullscreen,
+  });
+
+  const PlayerCapabilities.unavailable()
+    : displayMatching = false,
+      fullscreen = PlayerFullscreenMode.fixed;
+
+  static PlayerCapabilities forHost(TargetPlatform host) => switch (host) {
+    TargetPlatform.windows => const PlayerCapabilities(
+      displayMatching: true,
+      fullscreen: PlayerFullscreenMode.window,
+    ),
+    TargetPlatform.macOS => const PlayerCapabilities(
+      displayMatching: false,
+      fullscreen: PlayerFullscreenMode.window,
+    ),
+    _ => const PlayerCapabilities.unavailable(),
+  };
+
+  final bool displayMatching;
+  final PlayerFullscreenMode fullscreen;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlayerCapabilities &&
+      displayMatching == other.displayMatching &&
+      fullscreen == other.fullscreen;
+
+  @override
+  int get hashCode => Object.hash(displayMatching, fullscreen);
 }
 
 /// Keyframe seeks use mpv's backward preference, including its beginning-of-file

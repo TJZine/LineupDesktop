@@ -54,6 +54,9 @@ class UnsupportedNativePlayer implements NativePlayer {
   bool get fullscreen => false;
 
   @override
+  PlayerCapabilities get capabilities => const PlayerCapabilities.unavailable();
+
+  @override
   Stream<bool> get fullscreenChanges => const Stream.empty();
 
   @override

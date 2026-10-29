@@ -88,6 +88,7 @@ class FakeNativePlayer implements NativePlayer {
   }
 
   FakeNativePlayer({
+    PlayerCapabilities? capabilities,
     PlayerStatus? initialStatus,
     this.position = Duration.zero,
     this.duration = Duration.zero,
@@ -105,7 +106,26 @@ class FakeNativePlayer implements NativePlayer {
        tracks = List.unmodifiable(initialTracks),
        displayReport =
            initialDisplayReport ?? const DisplayMatchingReport.initial(),
-       _eventGeneration = initialGeneration;
+       _eventGeneration = initialGeneration {
+    this.capabilities = capabilities ?? _fakeDefaultCapabilities();
+  }
+
+  static PlayerCapabilities _fakeDefaultCapabilities() =>
+      switch (defaultTargetPlatform) {
+        TargetPlatform.windows => const PlayerCapabilities(
+          displayMatching: true,
+          fullscreen: PlayerFullscreenMode.window,
+        ),
+        TargetPlatform.macOS => const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.window,
+        ),
+        TargetPlatform.android => const PlayerCapabilities.unavailable(),
+        _ => const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.window,
+        ),
+      };
 
   final bool emitLoadingOnLoad;
   int? _eventGeneration;
@@ -122,6 +142,8 @@ class FakeNativePlayer implements NativePlayer {
   List<PlayerTrack> tracks;
   @override
   DisplayMatchingReport displayReport;
+  @override
+  late PlayerCapabilities capabilities;
 
   final loads = <Uri>[];
   final loadPlexTokens = <String?>[];

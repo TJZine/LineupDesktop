@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,26 +26,29 @@ Future<void> _mount(
   required TargetPlatform platform,
 }) async {
   await tester.pumpWidget(
-    MaterialApp(
-      theme: LineupTheme.forName(
-        LineupThemeName.emberSteel,
-        androidTv: tv,
-      ).copyWith(platform: platform),
-      builder: LineupCanvas.builder,
-      home: Scaffold(
-        body: Center(
-          child: SizedBox(
-            width: 500,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextButton(
-                  autofocus: true,
-                  onPressed: () {},
-                  child: const Text('Start'),
-                ),
-                child,
-              ],
+    DeviceProfileScope(
+      profile: profileFor(tv),
+      child: MaterialApp(
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(tv).formFactor,
+        ).copyWith(platform: platform),
+        builder: LineupCanvas.builder,
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    autofocus: true,
+                    onPressed: () {},
+                    child: const Text('Start'),
+                  ),
+                  child,
+                ],
+              ),
             ),
           ),
         ),
@@ -148,7 +153,7 @@ void main() {
             theme:
                 LineupTheme.forName(
                   LineupThemeName.emberSteel,
-                  androidTv: tv,
+                  formFactor: profileFor(tv).formFactor,
                   largeFocusIndicators: enabled,
                 ).copyWith(
                   platform: tv

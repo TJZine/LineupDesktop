@@ -5,6 +5,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/playback/method_channel_native_player.dart';
@@ -319,6 +320,142 @@ void main() {
       await dispose;
     });
   });
+
+  group('capability signal', () {
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    test('reads valid Android capabilities and ignores unknown keys', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'initialize') {
+          return <String, Object?>{
+            'clientApiVersion': 1,
+            'extra': 'ignored',
+            'capabilities': <String, Object?>{
+              'displayMatching': false,
+              'fullscreen': 'fixed',
+              'unknown': true,
+            },
+          };
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      expect(player.capabilities, const PlayerCapabilities.unavailable());
+      await player.initialize();
+
+      expect(
+        player.capabilities,
+        const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.fixed,
+        ),
+      );
+    });
+
+    test('uses host defaults when native capabilities are absent', () async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (call) async => call.method == 'initialize'
+            ? <String, Object?>{'clientApiVersion': 1}
+            : null,
+      );
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      for (final entry in <TargetPlatform, PlayerCapabilities>{
+        TargetPlatform.windows: const PlayerCapabilities(
+          displayMatching: true,
+          fullscreen: PlayerFullscreenMode.window,
+        ),
+        TargetPlatform.macOS: const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.window,
+        ),
+      }.entries) {
+        debugDefaultTargetPlatformOverride = entry.key;
+        final player = MethodChannelNativePlayer();
+        await player.initialize();
+        expect(player.capabilities, entry.value);
+        await player.dispose();
+        expect(player.capabilities, const PlayerCapabilities.unavailable());
+      }
+    });
+
+    test(
+      'malformed capabilities fail initialization and retire the handler',
+      () async {
+        final calls = <String>[];
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add(call.method);
+          if (call.method == 'initialize') {
+            return <String, Object?>{
+              'capabilities': <String, Object?>{'displayMatching': true},
+            };
+          }
+          if (call.method == 'dispose') {
+            throw PlatformException(code: 'dispose_failed');
+          }
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+        final player = MethodChannelNativePlayer();
+        await expectLater(
+          player.initialize(),
+          throwsA(
+            isA<PlayerUnavailable>().having(
+              (error) => error.failureCode,
+              'failureCode',
+              'initialize_failed',
+            ),
+          ),
+        );
+        expect(calls, ['initialize', 'dispose']);
+        expect(player.capabilities, const PlayerCapabilities.unavailable());
+
+        messenger.setMockMethodCallHandler(
+          channel,
+          (call) async => call.method == 'initialize'
+              ? <String, Object?>{'clientApiVersion': 1}
+              : null,
+        );
+        final recovered = MethodChannelNativePlayer();
+        addTearDown(recovered.dispose);
+        await recovered.initialize();
+      },
+    );
+
+    test(
+      'capabilities are unavailable before init and after dispose',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'initialize') {
+            return <String, Object?>{
+              'capabilities': <String, Object?>{
+                'displayMatching': false,
+                'fullscreen': 'fixed',
+              },
+            };
+          }
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+        final player = MethodChannelNativePlayer();
+        addTearDown(player.dispose);
+        expect(player.capabilities, const PlayerCapabilities.unavailable());
+        await player.initialize();
+        expect(player.capabilities.fullscreen, PlayerFullscreenMode.fixed);
+        await player.dispose();
+        expect(player.capabilities, const PlayerCapabilities.unavailable());
+      },
+    );
+  });
+
   group('observed fullscreen', () {
     late MethodChannelNativePlayer player;
     setUp(() {

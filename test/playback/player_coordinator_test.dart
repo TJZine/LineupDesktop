@@ -463,7 +463,7 @@ void main() {
   testWidgets(
     'channel tag window covers initial media, channel step and foreground resume',
     (tester) async {
-      final f = _ContinuationFixture(androidTv: true);
+      final f = _ContinuationFixture(isTv: true);
       addTearDown(f.close);
       await f.coordinator.loadInitialMedia(Uri.parse('file:///synthetic.mp4'));
       expect(f.coordinator.channelTagWindowActive, isFalse);
@@ -637,7 +637,7 @@ void main() {
     }
 
     test('background and disposed admission stay inert', () async {
-      final f = _ContinuationFixture(androidTv: true);
+      final f = _ContinuationFixture(isTv: true);
       addTearDown(f.close);
       await f.coordinator.tune('channel-0');
       await f.coordinator.setApplicationForeground(false);
@@ -772,7 +772,7 @@ void main() {
     test(
       'inactive is inert; background stops once and resumes current schedule',
       () async {
-        final f = _ContinuationFixture(androidTv: true);
+        final f = _ContinuationFixture(isTv: true);
         addTearDown(f.close);
         await f.coordinator.tune('channel-0');
         f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
@@ -811,7 +811,7 @@ void main() {
       expect(desktop.player.loads, hasLength(1));
       final idle = _EventPlayer()
         ..status = const PlayerStatus(state: PlayerState.idle, message: 'Idle');
-      final f = _ContinuationFixture(player: idle, androidTv: true);
+      final f = _ContinuationFixture(player: idle, isTv: true);
       addTearDown(f.close);
       await f.coordinator.setApplicationForeground(false);
       await f.coordinator.setApplicationForeground(true);
@@ -831,7 +831,7 @@ void main() {
 
     test('pending native load is canceled; late readiness cannot restart background playback', () async {
       final p = _PreemptibleLoadPlayer(blockStop: false);
-      final f = _ContinuationFixture(player: p, androidTv: true);
+      final f = _ContinuationFixture(player: p, isTv: true);
       addTearDown(f.close);
       final tuning = f.coordinator.tune('channel-0');
       await p.loadStarted.future;
@@ -849,7 +849,7 @@ void main() {
       'rapid pause/resume waits for owned stop and admits only the final tune',
       () async {
         final p = _PreemptibleLoadPlayer(blockStop: true);
-        final f = _ContinuationFixture(player: p, androidTv: true);
+        final f = _ContinuationFixture(player: p, isTv: true);
         addTearDown(f.close);
         addTearDown(() {
           if (!p.releaseStop.isCompleted) p.releaseStop.complete();
@@ -877,10 +877,7 @@ void main() {
           recoverAuthorization: true,
           blockAuthorizationRecovery: true,
         );
-        final f = _ContinuationFixture(
-          lineupController: lineup,
-          androidTv: true,
-        );
+        final f = _ContinuationFixture(lineupController: lineup, isTv: true);
         addTearDown(f.close);
         await f.coordinator.tune('channel-0');
         f.player.emitError(
@@ -902,7 +899,7 @@ void main() {
     test(
       'native background Stopped before hidden does not erase captured intent',
       () async {
-        final f = _ContinuationFixture(androidTv: true);
+        final f = _ContinuationFixture(isTv: true);
         addTearDown(f.close);
         await f.coordinator.tune('channel-0');
         f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
@@ -924,7 +921,7 @@ void main() {
       'pending intentional stop cannot be recaptured as a resume intent',
       () async {
         final p = _PreemptibleLoadPlayer(blockStop: true);
-        final f = _ContinuationFixture(player: p, androidTv: true);
+        final f = _ContinuationFixture(player: p, isTv: true);
         addTearDown(f.close);
         addTearDown(() {
           if (!p.releaseStop.isCompleted) p.releaseStop.complete();
@@ -944,7 +941,7 @@ void main() {
     );
 
     test('expired absolute sleep deadline prevents resume', () async {
-      final f = _ContinuationFixture(androidTv: true);
+      final f = _ContinuationFixture(isTv: true);
       addTearDown(f.close);
       await f.coordinator.tune('channel-0');
       f.coordinator.setSleepTimer(const Duration(minutes: 1));
@@ -8983,7 +8980,7 @@ class _ContinuationFixture {
     List<LineupPlaybackPart>? parts,
     _EventPlayer? player,
     bool recoverAuthorization = false,
-    bool androidTv = false,
+    bool isTv = false,
     _TestLineup? lineupController,
   }) : lineup =
            lineupController ??
@@ -9017,7 +9014,7 @@ class _ContinuationFixture {
       lineup: lineup,
       guide: guide,
       clock: () => now,
-      androidTv: androidTv,
+      suspendInBackground: isTv,
     );
   }
   DateTime now = DateTime(2026, 10, 10, 12);
