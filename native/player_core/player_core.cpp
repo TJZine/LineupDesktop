@@ -1502,19 +1502,18 @@ void PlayerCore::QueueEvent(uint64_t generation, ValueMap value) {
       return type && *type == "property" && name && *name == "subtitle-cues";
     };
     const bool incoming_cue = is_cue(value);
-    if (incoming_cue) {
-      const auto pending = std::find_if(events_.begin(), events_.end(),
-          [&](const QueuedEvent& event) { return is_cue(event.value); });
-      if (pending != events_.end()) {
-        *pending = QueuedEvent{generation, std::move(value)};
-        return;
-      }
+    const auto pending_cue = std::find_if(events_.begin(), events_.end(),
+        [&](const QueuedEvent& event) { return is_cue(event.value); });
+    if (incoming_cue && pending_cue != events_.end()) {
+      *pending_cue = QueuedEvent{generation, std::move(value)};
+      return;
     }
-    // At capacity, evict the oldest property event; otherwise drop an
-    // incoming property, or evict the oldest event to admit a non-property.
-    // This protects state, stop, track, and display completions from
-    // property telemetry pressure.
-    if (events_.size() >= kMaxQueuedEvents) {
+    // Reserve one of the existing slots even before the first cue arrives.
+    // Cue admission never displaces an ordinary event; ordinary pressure keeps
+    // the existing eviction policy within its own 255-event budget.
+    const size_t ordinary_count =
+        events_.size() - (pending_cue != events_.end() ? 1 : 0);
+    if (!incoming_cue && ordinary_count >= kMaxQueuedEvents - 1) {
       const auto* incoming_type_value = FindString(&value, "type");
       const auto property = std::find_if(
           events_.begin(), events_.end(), [&](const QueuedEvent& event) {
@@ -1523,7 +1522,7 @@ void PlayerCore::QueueEvent(uint64_t generation, ValueMap value) {
           });
       if (property != events_.end()) {
         events_.erase(property);
-      } else if (incoming_type_value && *incoming_type_value == "property" && !incoming_cue) {
+      } else if (incoming_type_value && *incoming_type_value == "property") {
         return;
       } else {
         const auto evict = std::find_if(events_.begin(), events_.end(),

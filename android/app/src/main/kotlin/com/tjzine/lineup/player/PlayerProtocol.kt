@@ -234,20 +234,22 @@ internal class PlayerEventQueue {
 
     fun add(event: QueuedEvent) {
         fun cues(e: QueuedEvent) = e.value["type"] == "property" && e.value["name"] == "subtitle-cues"
+        val cueIndex = queue.indexOfFirst { cues(it) }
         if (cues(event)) {
-            val index = queue.indexOfFirst { cues(it) }
-            if (index >= 0) {
-                queue[index] = event
-                return
-            }
+            if (cueIndex >= 0) queue[cueIndex] = event
+            else queue.addLast(event)
+            return
         }
-        if (queue.size == 256) {
+        // One of the 256 total slots always belongs to the latest cue snapshot,
+        // including a clear. Its first admission must never evict a completion.
+        val ordinaryCount = queue.size - (if (cueIndex >= 0) 1 else 0)
+        if (ordinaryCount == 255) {
             val property = queue.indexOfFirst { it.value["type"] == "property" && !cues(it) }
             if (property >= 0) {
                 val iterator = queue.iterator()
                 repeat(property + 1) { iterator.next() }
                 iterator.remove()
-            } else if (event.value["type"] == "property" && !cues(event)) return
+            } else if (event.value["type"] == "property") return
             else {
                 val iterator = queue.iterator()
                 while (iterator.hasNext()) {

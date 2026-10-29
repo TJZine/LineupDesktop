@@ -324,18 +324,27 @@ its report and media state on initialize/dispose.
 
 ## Queue capacity and eviction
 
-The native event queue holds 256 events. When it is full, the policy in
-`PlayerCore::QueueEvent` in `native/player_core/player_core.cpp` is:
+The native event queues hold at most 256 events, with one slot reserved for
+at most one pending `subtitle-cues` event. Ordinary telemetry and completions
+have a 255-event budget even before the first cue arrives. First cue admission
+uses the reserved slot without evicting a completion or causing overflow.
+A newer cue or clear replaces the pending cue in place, preserving its FIFO
+position. Cues are exempt from ordinary capacity eviction.
 
-1. Find and evict the oldest queued `property` event, regardless of the type
-   of the incoming event.
-2. If no queued property exists, drop an incoming `property` event.
-3. If no queued property exists and the incoming event is not a property, evict
-   the oldest event of any type and admit the incoming event.
+At the 255 ordinary-event limit, `PlayerCore::QueueEvent` in
+`native/player_core/player_core.cpp` retains this policy for ordinary events:
+
+1. Find and evict the oldest queued ordinary `property` event, regardless of
+   the type of the incoming ordinary event.
+2. If no queued ordinary property exists, drop an incoming ordinary `property`.
+3. If no queued ordinary property exists and the incoming ordinary event is not
+   a property, evict the oldest ordinary event and admit the incoming event.
 
 This policy protects state, stop, track, and display completions when property
-telemetry is under pressure. It is separate from the native command queue's
-64-entry/128-KiB admission limit.
+telemetry is under pressure. Genuine non-cue completion overflow retains its
+existing platform behavior; reserving a cue slot does not mask it. The event
+budget is separate from the native command queue's 64-entry/128-KiB admission
+limit.
 
 ## Presentation obligations
 
@@ -436,8 +445,12 @@ Dispose retires its generation and queued credentials before asynchronously
 releasing the engine and replying. Decoder/view operations stay on the application
 looper; cancellation and TLS pool closure run on an IO worker. Stop/dispose and
 successor loads wait for that cleanup, which is coalesced across concurrent
-retirement requests. A failed release retains cleanup responsibility for retry. Events use the 256-entry property-first
-queue above; essential-event overflow terminates the current load with
+retirement requests. A failed release retains cleanup responsibility for retry.
+Events use the 256-entry property-first
+queue above, with one slot reserved for the latest `subtitle-cues` (including a
+clear) and 255 for ordinary events. First cue admission never evicts a completion;
+replacements keep their queue position. Essential ordinary-event overflow
+terminates the current load with
 `event_queue_overflow`. Retired events are filtered again at delivery.
 
 The engine publishes `loading` once and `playing` only on its first READY,
@@ -589,7 +602,10 @@ caption channel. Canceled/disposed reads and callbacks cannot publish or send.
   enforce the same rule: a new
   `subtitle-cues` replaces any undelivered `subtitle-cues` at its position, and
   the capacity eviction skips it so a pending clear cannot be evicted. At most
-  one `subtitle-cues` is ever queued, so the exemption cannot grow the queue.
+  one `subtitle-cues` is ever queued. One of the existing 256 total slots is
+  always reserved for it, leaving 255 ordinary-event slots even when no cue is
+  pending. First cue admission cannot evict a completion or cause overflow;
+  total capacity remains 256, including a pending cue or clear.
 - Emitted **only while the selected subtitle track is Lineup-drawn**.
   When the selection changes to an engine-drawn track or to none, and on stop,
   end, error and new load, native emits (or Dart synthesizes) an empty list.

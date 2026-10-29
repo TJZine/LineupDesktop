@@ -873,32 +873,32 @@ void CorrelationAndPressure(PlayerCore& core) {
     PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("property")}});
   }
   Drain(core, events);
-  Check(received.size() == 256, "property pressure stays bounded");
+  Check(received.size() == 255, "property pressure stays bounded");
   Check(std::count_if(received.begin(), received.end(), [](const ValueMap& event) {
     return Has(event, "type", Value("stopResult"));
   }) == 1, "property pressure preserves critical acknowledgment");
   received.clear();
   PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("trackResult")}});
-  for (int i = 0; i < 255; ++i) {
+  for (int i = 0; i < 254; ++i) {
     PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("state")}});
   }
   PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("property")}});
   Drain(core, events);
-  Check(received.size() == 256 && Has(received[0], "type", Value("trackResult")),
+  Check(received.size() == 255 && Has(received[0], "type", Value("trackResult")),
         "incoming property cannot evict non-property acknowledgment");
   received.clear();
   PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("trackResult")}});
-  for (int i = 0; i < 256; ++i) {
+  for (int i = 0; i < 255; ++i) {
     PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("state")}});
   }
   Drain(core, events);
-  Check(received.size() == 256 &&
+  Check(received.size() == 255 &&
         std::none_of(received.begin(), received.end(), [](const ValueMap& event) {
           return Has(event, "type", Value("trackResult"));
         }), "non-property saturation evicts oldest ack; caller timeout/retry is required");
   received.clear();
   PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("trackResult")}});
-  for (int i = 0; i < 255; ++i) {
+  for (int i = 0; i < 254; ++i) {
     PlayerCoreTestAccess::Queue(core, generation,
                                 {{"type", Value("property")}, {"value", Value(int64_t{i})}});
   }
@@ -906,10 +906,10 @@ void CorrelationAndPressure(PlayerCore& core) {
   PlayerCoreTestAccess::Queue(core, generation,
                               {{"type", Value("property")}, {"value", Value(int64_t{999})}});
   Drain(core, events);
-  Check(received.size() == 256 && Has(received[0], "type", Value("trackResult")) &&
+  Check(received.size() == 255 && Has(received[0], "type", Value("trackResult")) &&
         Has(received[1], "value", Value(int64_t{2})) &&
-        Has(received[254], "type", Value("stopResult")) &&
-        Has(received[255], "value", Value(int64_t{999})),
+        Has(received[253], "type", Value("stopResult")) &&
+        Has(received[254], "value", Value(int64_t{999})),
         "full queue evicts the oldest property, not an older acknowledgment");
   received.clear();
   PlayerCoreTestAccess::Queue(core, generation, {{"type", Value("display")}});
@@ -1926,6 +1926,84 @@ void StaleWakeupAfterShutdown() {
   }
 }
 
+void CueSlotReservation() {
+  FakeHost host;
+  PlayerCore core(FakeOperations(), host);
+  Events events;
+  const auto generation = PlayerCoreTestAccess::Generation(core);
+  const auto ordinary = [&](int id, bool telemetry = false) {
+    const char* types[] = {"state", "stopResult", "trackResult", "display"};
+    PlayerCoreTestAccess::Queue(core, generation,
+        {{"type", Value(telemetry ? "property" : types[id % 4])},
+         {"name", Value(telemetry ? "time-pos" : "completion")}, {"testId", Value(id)}});
+  };
+  const auto cue = [&](bool clear) {
+    PlayerCoreTestAccess::Queue(core, generation,
+        {{"type", Value("property")}, {"name", Value("subtitle-cues")},
+         {"loadId", Value(77)},
+         {"value", Value(clear ? ValueList{} : lineup::player::ParseSubtitleCues("fixture", false))}});
+  };
+  const auto check_ids = [&](size_t cue_position) {
+    Check(events.received.size() == 256, "255 completions plus reserved cue stay within total256");
+    int id = 0;
+    for (size_t i = 0; i < events.received.size(); ++i) {
+      if (i == cue_position) {
+        Check(Has(events.received[i], "name", Value("subtitle-cues")) &&
+              std::get<ValueList>(events.received[i].at("value")).empty(),
+              "clear replacement retains the exact cue FIFO position");
+      } else {
+        Check(Has(events.received[i], "testId", Value(id++)),
+              "first cue/clear preserves every admitted completion identity in FIFO order");
+      }
+    }
+    Check(id == 255, "all255 uniquely identified completions survive cue admission");
+  };
+
+  // Reservation exists before any cue. Genuine ordinary overflow still evicts
+  // the oldest completion; an otherwise unused cue slot cannot hide overflow.
+  for (int i = 0; i < 256; ++i) ordinary(i);
+  Drain(core, events);
+  Check(events.received.size() == 255,
+        "ordinary events reserve one of256 slots even before the first cue");
+  for (size_t i = 0; i < events.received.size(); ++i) {
+    Check(Has(events.received[i], "testId", Value(static_cast<int>(i) + 1)),
+          "genuine completion overflow retains existing oldest-first eviction policy");
+  }
+  events.received.clear();
+
+  for (int i = 0; i < 255; ++i) ordinary(i);
+  cue(false);
+  cue(true);
+  Drain(core, events);
+  check_ids(255);
+  events.received.clear();
+
+  for (int i = 0; i < 127; ++i) ordinary(i);
+  cue(false);
+  for (int i = 127; i < 255; ++i) ordinary(i);
+  cue(true);
+  ordinary(999, true);  // Telemetry cannot displace a completion or the clear.
+  Drain(core, events);
+  check_ids(127);
+  events.received.clear();
+
+  cue(true);
+  for (int i = 0; i < 255; ++i) ordinary(i, true);
+  for (int i = 0; i < 600; ++i) ordinary(1000 + i, i % 2 == 0);
+  Drain(core, events);
+  Check(events.received.size() == 256 &&
+        Has(events.received.front(), "name", Value("subtitle-cues")) &&
+        std::get<ValueList>(events.received.front().at("value")).empty() &&
+        Has(events.received.back(), "testId", Value(1599)),
+        "mixed telemetry/completion pressure retains clear and newest completion within256");
+  int previous_id = -1;
+  for (size_t i = 1; i < events.received.size(); ++i) {
+    const auto id = std::get<int64_t>(events.received[i].at("testId"));
+    Check(id > previous_id, "ordinary FIFO survives mixed pressure without a duplicate cue");
+    previous_id = static_cast<int>(id);
+  }
+}
+
 void SubtitleContract() {
   FakeMpv state;
   fake = &state;
@@ -2095,6 +2173,7 @@ int main() {
   FirstOpenEnvironment diagnostic_defaults(nullptr);
   FirstOpenProbeContract();
   SubtitleContract();
+  CueSlotReservation();
   FakeMpv state;
   fake = &state;
   {
