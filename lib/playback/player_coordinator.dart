@@ -13,6 +13,7 @@ import '../guide/guide_controller.dart';
 import '../plex/plex_models.dart';
 import 'native_player.dart';
 import 'display_matching.dart';
+import 'subtitle_appearance_source.dart';
 
 enum PlayerOverlay {
   none,
@@ -41,6 +42,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     this.androidTv = false,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
+    subtitleAppearance = SubtitleAppearanceSource(lineup: lineup);
+    _releaseSubtitleAppearance = subtitleAppearance.retain();
+    _subtitleScale = subtitleAppearance.value.scale;
+    subtitleAppearance.addListener(_subtitleAppearanceChanged);
     _indexChannels();
     _status = player.status;
     _position = player.position;
@@ -76,6 +81,17 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  late final SubtitleAppearanceSource subtitleAppearance;
+  late final VoidCallback _releaseSubtitleAppearance;
+  late double _subtitleScale;
+
+  void _subtitleAppearanceChanged() {
+    final scale = subtitleAppearance.value.scale;
+    if (_disposed || scale == _subtitleScale) return;
+    _subtitleScale = scale;
+    _sendSubtitlePresentation();
+  }
+
   final _subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
   ValueListenable<SubtitleCues> get subtitleCues => _subtitleCues;
   ({double scale, double imageRaise, bool lineupDrawsStyled})?
@@ -99,7 +115,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed) return;
     final style = lineup.settings.subtitleStyle;
     final next = (
-      scale: style.size.scale,
+      scale: subtitleAppearance.value.scale,
       imageRaise: style.position.raise,
       lineupDrawsStyled: style.styleStyledSubtitles,
     );
@@ -139,7 +155,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
           final changed =
               next !=
               (
-                scale: current.size.scale,
+                scale: subtitleAppearance.value.scale,
                 imageRaise: current.position.raise,
                 lineupDrawsStyled: current.styleStyledSubtitles,
               );
@@ -2554,6 +2570,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
+    subtitleAppearance.removeListener(_subtitleAppearanceChanged);
+    _releaseSubtitleAppearance();
+    subtitleAppearance.dispose();
     player.subtitleCues.removeListener(_receiveSubtitleCues);
     _clearSubtitleCues();
     if (androidTv) WidgetsBinding.instance.removeObserver(this);
