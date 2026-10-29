@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.view.SurfaceView
 import androidx.media3.common.*
+import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -28,6 +29,7 @@ internal class Media3Engine(
     createPlayer: (Context) -> ExoPlayer = {
         ExoPlayer.Builder(it).setLoadControl(PlaybackMemory.loadControl(it)).build()
     },
+    private val subtitlePresentation: () -> SubtitlePresentation = { SubtitlePresentation() },
 ) : PlayerEngine {
     // The default builder owns an exclusive playback thread. Media3 quits it only
     // after releaseInternal finishes renderer/source teardown. Keep that public
@@ -78,6 +80,47 @@ internal class Media3Engine(
     private var closed = false
     private var released = false
     private var observer: PlayerEngine.Listener? = null
+    private var lastCues: List<Cue> = emptyList()
+    private var subtitleFormat: Format? = null
+
+    internal fun subtitleTracksChanged(value: Tracks) {
+        if (closed) return
+        try {
+            subtitleFormat = value.groups.firstNotNullOfOrNull { group ->
+                if (group.type != C.TRACK_TYPE_TEXT) null else
+                    (0 until group.length).firstOrNull { group.isTrackSelected(it) }
+                        ?.let { group.getTrackFormat(it) }
+            }
+            if (subtitleFormat == null) lastCues = emptyList()
+            subtitles.setCues(emptyList())
+            observer?.property("subtitle-cues", emptyList<Any>())
+            refreshSubtitles()
+        } catch (_: Exception) {
+            if (debug) android.util.Log.d("LineupPlayer", "Subtitle track update skipped")
+        }
+    }
+
+    internal fun subtitleCuesChanged(cues: List<Cue>) {
+        if (!closed) {
+            lastCues = cues
+            refreshSubtitles()
+        }
+    }
+
+    fun refreshSubtitles() {
+        if (closed) return
+        try {
+            val presentation = subtitlePresentation()
+            val native = SubtitleCues.engineDraws(subtitleFormat, presentation)
+            subtitles.setCues(lastCues.filter { it.bitmap != null || native }
+                .map { SubtitleCues.transform(it, presentation) })
+            observer?.property("subtitle-cues", if (native) emptyList<Any>()
+                else if (subtitleFormat == null) emptyList<Any>() else SubtitleCues.encode(lastCues))
+        } catch (_: Exception) {
+            if (debug) android.util.Log.d("LineupPlayer", "Subtitle update skipped")
+        }
+    }
+
     private val progress =
         object : Runnable {
             override fun run() {
@@ -150,11 +193,12 @@ internal class Media3Engine(
                         listener.failure(unsupported)
                         return
                     }
+                    subtitleTracksChanged(value)
                     listener.property("track-list", tracks.encode(value))
                 }
 
                 override fun onCues(cueGroup: CueGroup) {
-                    if (!closed) subtitles.setCues(cueGroup.cues)
+                    subtitleCuesChanged(cueGroup.cues)
                 }
 
                 override fun onVideoSizeChanged(size: VideoSize) {
@@ -284,6 +328,8 @@ internal class Media3Engine(
         val firstAttempt = !closed
         closed = true
         observer = null
+        lastCues = emptyList()
+        subtitleFormat = null
         handler.removeCallbacks(progress)
         http?.setDefaultRequestProperties(emptyMap())
         http = null
@@ -302,6 +348,8 @@ internal class Media3Engine(
         }
         try {
             subtitles.setCues(emptyList())
+        } catch (_: Exception) {
+            if (debug) android.util.Log.d("LineupPlayer", "Subtitle clear skipped")
         } finally {
             keepScreenOn(false)
         }

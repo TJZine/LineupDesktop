@@ -65,6 +65,13 @@ class NativePlayerControllerTest {
         val engines = mutableListOf<Engine>()
         val frames = mutableListOf<Triple<Long, Long, Long>>()
         var rectangle: VideoRect? = null
+        var presentation: SubtitlePresentation? = null
+        val presentationsAtCreation = mutableListOf<SubtitlePresentation?>()
+        var rejectPresentation = false
+        override fun subtitlePresentation(value: SubtitlePresentation?) {
+            if (rejectPresentation) throw IllegalStateException("fixture")
+            presentation = value
+        }
 
         override fun firstFrame(generation: Long, loadId: Long, positionMs: Long) {
             frames.add(Triple(generation, loadId, positionMs))
@@ -80,7 +87,7 @@ class NativePlayerControllerTest {
 
         override fun keepScreenOn(keep: Boolean) {}
 
-        override fun createEngine() = Engine().also { engines.add(it) }
+        override fun createEngine() = Engine().also { engines.add(it); presentationsAtCreation.add(presentation) }
 
         override fun event(value: Map<String, Any?>) {
             events.add(value)
@@ -500,4 +507,41 @@ class NativePlayerControllerTest {
             assertEquals(method, "invalid_argument", call(method, args).error)
         }
     }
+    @Test fun presentationBypassesFullQueueAppliesBeforeEngineAndResetsOnDispose() {
+        val host = Host()
+        val controller = NativePlayerController(host)
+        fun call(method: String, args: Any? = null): Result = Result().also { controller.call(method, args, it) }
+        val args = mapOf("scale" to 3L, "imageRaise" to 0.25, "lineupDrawsStyled" to true)
+        assertEquals("not_initialized", call("setSubtitlePresentation", args).error)
+        call("initialize")
+        repeat(64) { call("pause") }
+        assertNull(call("setSubtitlePresentation", args).error)
+        assertEquals(3f, host.presentation!!.scale)
+        assertEquals("invalid_argument", call("setSubtitlePresentation", args + ("scale" to 5)).error)
+        assertEquals(3f, host.presentation!!.scale)
+        host.drain()
+        call("load", mapOf("uri" to "https://fixture.invalid/media.mkv", "loadId" to 1L))
+        host.drain()
+        assertEquals(SubtitlePresentation(3f, 0.25f, true), host.presentationsAtCreation.single())
+        call("dispose")
+        assertNull(host.presentation)
+        host.drain()
+    }
+
+    @Test fun subtitleApplyExceptionReturnsCommandErrorWithoutFailingTheActiveLoad() {
+        val host = Host()
+        val controller = NativePlayerController(host)
+        fun call(method: String, args: Any? = null): Result = Result().also { controller.call(method, args, it) }
+        call("initialize")
+        call("load", mapOf("uri" to "https://fixture.invalid/media.mkv", "loadId" to 1L))
+        host.drain()
+        host.events.clear()
+        host.rejectPresentation = true
+        assertEquals("native_command_error", call("setSubtitlePresentation",
+            mapOf("scale" to 1, "imageRaise" to 0, "lineupDrawsStyled" to false)).error)
+        host.drain()
+        assertFalse(host.engines.single().released)
+        assertTrue(host.events.isEmpty())
+    }
+
 }

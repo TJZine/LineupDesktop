@@ -222,3 +222,32 @@ unsupported audio cannot use an FFmpeg extension. Built-in ASS styling is
 limited. The Studio manual editor and air check remain reachable but are not
 TV-accepted. Physical playback, HDR/DV, passthrough, remote feel and viewing-
 distance readability require their own device/human acceptance.
+
+## Subtitle presentation and device captions
+
+Flutter owns the appearance of ordinary text subtitles. Media3 decodes them and
+reports bounded styled text segments through the load-scoped `subtitle-cues`
+property; the native SubtitleView receives no ordinary text. SSA keeps authored
+styling unless the viewer opts into Lineup styling. Bitmap cues remain native.
+Both native kinds scale live; supported bitmap geometry also raises and clamps.
+SSA's default text size compensates for letterboxing so its em size follows the
+Lineup presentation rectangle. Native defaults are white with black outline,
+transparent background and window, with embedded SSA styles/sizes enabled.
+
+Device caption colors, edges, font scale and typeface come directly from
+CaptioningManager through `lineup/device_captions`. Dart explicitly subscribes;
+OS changes send `changed`, and cancel/activity cleanup removes the listener.
+The style is read even when the OS captions switch is off. Fire OS backing of
+these values still requires the physical-device check; emulator reads do not
+prove that platform behavior.
+
+The additive `subtitle-*` fixture corpus and focused generation command are
+documented in [the fixture README](../tool/android/fixtures/README.md).
+Routing/JVM tests establish bounds, span/alignment mapping, queue retention,
+track rerouting, live transforms and view reset. Packaged emulator checks and
+physical PGS/HDR/Fire OS acceptance remain separate evidence.
+
+API 34 Android TV emulator validation confirms comparisons against all seven
+specified Typeface families and live updates from the system Captions screen,
+including style changes while its Display switch is off. This establishes the
+Android OS channel; the Fire OS settings backing remains a physical check.

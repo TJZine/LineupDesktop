@@ -70,6 +70,10 @@ internal class NativePlayerController(private val host: PlayerHost) {
                 else -> {
                     if (!initialized || disposing) throw ProtocolError("not_initialized")
                     when (method) {
+                        "setSubtitlePresentation" -> {
+                            host.subtitlePresentation(PlayerProtocol.subtitlePresentation(arguments))
+                            reply.success()
+                        }
                         "setVideoRect" -> {
                             host.rect(PlayerProtocol.rect(arguments))
                             reply.success()
@@ -405,6 +409,7 @@ internal class NativePlayerController(private val host: PlayerHost) {
             reply.success()
             return
         }
+        host.subtitlePresentation(null)
         disposing = true
         initialized = false
         generation++
@@ -451,6 +456,7 @@ internal class NativePlayerController(private val host: PlayerHost) {
     }
 
     fun close() {
+        host.subtitlePresentation(null)
         initialized = false
         generation++
         purgeCommands()
@@ -491,6 +497,7 @@ internal class NativePlayerController(private val host: PlayerHost) {
                 "selectTrack",
                 "setVolume",
                 "setVideoRect",
+                "setSubtitlePresentation",
                 "setFullscreen",
                 "setDisplayMatching",
             )

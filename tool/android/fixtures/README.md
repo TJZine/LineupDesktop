@@ -120,3 +120,43 @@ frame timestamps. The collector accumulates overlapping PID-filtered snapshots
 instead of overwriting them, preserving early facts even when a device's logcat
 ring wraps. Subtitle snapshots are timed observations; check their pixels against
 the native selection history before attributing each image to a specific codec. It never clears global logs, uninstalls or erases app data.
+
+## Subtitle routing corpus
+
+`python3 tool/android/fixtures/generate.py --subtitles-only` generates only the
+additive `subtitle-*` corpus. Normal generation includes it too. Existing fixture
+source/encoding commands are unchanged, and existing media files are never
+rewritten. The new sources are synthetic test patterns with no account inputs:
+
+- `subtitle-routing.mkv`: two-line SRT with italic spans, a top `{\an8}` cue,
+  font color/alpha, and a positioned `{\pos}` cue.
+- `subtitle-wide.mkv`: the same SRT on 860×360 (approximately 2.39:1) video.
+- `subtitle-authored.mkv`: authored SSA with a fractional font size, color/alpha
+  spans, a positioned sign and a drawing-mode event.
+- `subtitle-movtext.mp4`: the SSA source encoded as mov_text, preserving text
+  color/alpha spans for native suppression checks.
+
+PGS still needs physical fixture acceptance. FFmpeg's dvdsub encoder accepts
+bitmap input but cannot render SRT text directly; bitmap-source generation is
+handled separately from text remuxing.
+
+`subtitle-bitmap.mkv` contains actual VobSub bitmap packets rendered from the
+synthetic two-line sample `Look out!` / `[Door creaks]`, white with a black
+outline. `bitmap_subtitle.c` rasterizes through FreeType into a paletted
+`AVSubtitleRect`, then uses FFmpeg's dvdsub encoder and MKV muxer; FFmpeg remuxes
+that track with the synthetic video. Generation needs a C compiler, pkg-config,
+FFmpeg development headers/libraries (`libavcodec`, `libavformat`, `libavutil`)
+and `freetype2`. Set `LINEUP_SUBTITLE_FONT` to a TrueType font; on macOS the
+default is `/System/Library/Fonts/Supplemental/Arial.ttf`. The generated
+`subtitle-bitmap-font.json` records the exact font SHA256 and 24px raster size.
+The font is a local fixture prerequisite and is not bundled into the app.
+
+The SRT source includes the requested HTML alpha attribute, but the installed
+FFmpeg text conversion drops that alpha (and retains RGB). It is an input
+coverage case, not evidence of retained alpha. The mov_text control instead
+comes from authored ASS and is verified by decoding back to ASS: its dialogue
+contains explicit `\1c` color and `\1a&H40&` alpha spans.
+
+Keep the ASS source's blank section separators. Media3 1.11.1 otherwise skips
+the last PlayResY/Style rows; the real-parser JVM test checks authored fractional
+size and color so a fallback-style render cannot stand in for ASS fidelity.

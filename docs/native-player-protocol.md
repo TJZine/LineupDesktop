@@ -528,3 +528,29 @@ integrated acceptance remain separately recorded target/human obligations.
   unavailable/unknown diagnostic, but they are not the same serialized value.
 - Dart-generated load IDs start at 1 although the native `load` parser also
   accepts 0. The stricter positive rule remains required for `selectTrack`.
+
+### Android subtitle mechanisms
+
+Android accepts `setSubtitlePresentation` on the application looper, separately
+from the 64-command media queue. The adapter retains its latest validated value
+for the current and subsequent engines. Disposal clears that value and resets
+the persistent SubtitleView's cues, embedded-style flags and default sizes.
+
+Media3 routes the selected text format using its sample MIME (the original MIME
+in `Format.codecs` for pre-parsed `application/x-media3-cues`). SSA remains
+native unless `lineupDrawsStyled` is true. PGS, VobSub, DVB and every bitmap cue
+remain native. Other text is encoded as bounded `subtitle-cues`; native text
+painting is suppressed. Track changes clear both outputs and route the latest
+cue list again. Presentation changes transform the original cues again, avoiding
+cumulative scale. Fractional SSA font sizes scale individually; the fallback
+font size compensates for video letterboxing relative to the presentation rect.
+Supported start-anchored fractional bitmap rectangles scale about bottom-center,
+raise, and clamp inside the frame; unsupported anchors/unset dimensions retain
+the decoder's geometry.
+
+The independent Android `lineup/device_captions` channel registers its
+CaptioningManager listener only between `listen` and `cancel`, and removes it on
+activity cleanup. Reads and `changed` events use nullable fields for unset OS
+style values, unsigned 64-bit ARGB colors, and the protocol's seven typeface
+keys. Device style remains available while the system captions switch is off.
+Subtitle processing exceptions use fixed debug-only messages without content.
