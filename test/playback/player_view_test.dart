@@ -959,11 +959,26 @@ void main() {
       await tester.pumpAndSettle();
       expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
       expect(find.byKey(const Key('player-more-info')), findsNothing);
-      expect(FocusManager.instance.primaryFocus?.context, isNotNull);
-      expect(
-        FocusManager.instance.primaryFocus?.debugLabel,
-        isNot('More info reading'),
-      );
+      final sleep = tester
+          .widget<TextButton>(find.byKey(const Key('player-osd-sleep')))
+          .focusNode!;
+      final close = tester
+          .widget<TextButton>(
+            find.byKey(const Key('player-now-playing-collapse')),
+          )
+          .focusNode!;
+      // A retired FocusNode keeps its last context. Prove an attached action
+      // receives focus and that the absent More info action is skipped both ways.
+      expect(sleep.hasPrimaryFocus, isTrue);
+      expect(sleep.parent, isNotNull);
+      final transportCommands = fixture.native.transportCommands;
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(close.hasPrimaryFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(sleep.hasPrimaryFocus, isTrue);
+      expect(fixture.native.transportCommands, transportCommands);
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
@@ -1569,6 +1584,10 @@ void main() {
           for (final reveal in [
             LogicalKeyboardKey.arrowDown,
             LogicalKeyboardKey.select,
+            if (!hasProgram) ...[
+              LogicalKeyboardKey.info,
+              LogicalKeyboardKey.keyI,
+            ],
           ]) {
             await key(reveal);
             expect(player.overlay, PlayerOverlay.osd);

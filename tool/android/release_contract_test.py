@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import unittest
+from unittest.mock import patch
 
 
 def module(name, filename):
@@ -42,6 +43,25 @@ class ReleaseContractTest(unittest.TestCase):
             ('androidx.annotation', 'annotation', '1.9.1'),
             ('androidx.media3', 'media3-exoplayer', '1.8.0'),
         ])
+
+    def test_gradle_report_preserves_caller_options_and_disables_daemon(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            wrapper = project / 'gradlew'
+            wrapper.write_text('#!/bin/sh\nprintf "%s\\n" "$GRADLE_OPTS"\n')
+            wrapper.chmod(0o755)
+            configured = ('-Dorg.gradle.project.android.builder.sdkDownload=false '
+                          '-Dorg.gradle.daemon=true')
+            for inherited in (None, '', configured):
+                with self.subTest(inherited=inherited), patch.dict(os.environ):
+                    if inherited is None:
+                        os.environ.pop('GRADLE_OPTS', None)
+                    else:
+                        os.environ['GRADLE_OPTS'] = inherited
+                    report = generator.run_gradle_report(project, 'releaseRuntimeClasspath')
+                    expected = (inherited or '').split() + ['-Dorg.gradle.daemon=false']
+                    self.assertEqual(expected, report.split())
+                    self.assertEqual(inherited, os.environ.get('GRADLE_OPTS'))
 
     def test_release_refuses_notice_drift_before_packaging(self):
         with tempfile.TemporaryDirectory() as directory:

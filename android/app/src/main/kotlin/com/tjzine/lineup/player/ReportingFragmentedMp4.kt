@@ -13,7 +13,8 @@ interface ParsedTrackReporter {
 /** Media3 exposes this hook for current initialization tracks, even when outputs are reused. */
 @UnstableApi
 class ReportingFragmentedMp4(subtitles: SubtitleParser.Factory) :
-    FragmentedMp4Extractor(subtitles), ParsedTrackReporter {
+    FragmentedMp4Extractor(subtitles, FragmentedMp4Extractor.FLAG_READ_MFRA_FOR_SEEK_MAP),
+    ParsedTrackReporter {
     override var reportParsedTrack: (Int?) -> Unit = {}
 
     override fun modifyTrack(track: Track?): Track? {

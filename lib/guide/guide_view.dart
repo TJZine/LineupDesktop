@@ -2171,7 +2171,12 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
     if (!mounted || token != _artworkToken) return;
     final poster = artwork[0];
     setState(() {
-      _backdrop = artwork[1];
+      // A resize may have already displayed a larger backdrop while this
+      // batch was waiting for the poster or logo. Keep it, but allow the
+      // initial image to fill an empty slot if the larger request failed.
+      if (_backdrop == null || _backdropSize == backdropSize) {
+        _backdrop = artwork[1];
+      }
       _clearLogo = artwork[2];
       _dynamicColor = poster == null ? null : _artworkHashColor(poster);
     });

@@ -331,7 +331,12 @@ def run_gradle_report(project: Path, configuration: str) -> str:
                 check=True,
                 capture_output=True,
                 text=True,
-                env={**os.environ, "GRADLE_OPTS": "-Dorg.gradle.daemon=false"},
+                env={
+                    **os.environ,
+                    "GRADLE_OPTS": (
+                        os.environ.get("GRADLE_OPTS", "") + " -Dorg.gradle.daemon=false"
+                    ).strip(),
+                },
             )
         except (OSError, subprocess.CalledProcessError) as error:
             raise GenerationError(f"Gradle dependency report failed: {error}") from error

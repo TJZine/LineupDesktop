@@ -234,6 +234,8 @@ PlayerCommand resolvePlayerKey(
   if (initialPress && key == LogicalKeyboardKey.keyI) {
     return nowPlaying
         ? PlayerAction.showOsdFromInfo
+        : tvRemote && !hasProgram
+        ? PlayerAction.showOsd
         : PlayerAction.showNowPlaying;
   }
   if (initialPress && _fullscreenKeys.contains(key)) {
