@@ -484,7 +484,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
             (event.logicalKey == LogicalKeyboardKey.arrowDown &&
                     (controller.overlay == PlayerOverlay.none ||
                         controller.overlay == PlayerOverlay.osd)) ||
-                (_androidTv &&
+                (_isTv &&
                     (event.logicalKey == LogicalKeyboardKey.info ||
                         event.logicalKey == LogicalKeyboardKey.keyI))
             ? controller.currentProgram != null

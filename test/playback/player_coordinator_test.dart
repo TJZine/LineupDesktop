@@ -87,7 +87,7 @@ void main() {
   testWidgets(
     'channel tag window covers initial media, channel step and foreground resume',
     (tester) async {
-      final f = _ContinuationFixture(androidTv: true);
+      final f = _ContinuationFixture(isTv: true);
       addTearDown(f.close);
       await f.coordinator.loadInitialMedia(Uri.parse('file:///synthetic.mp4'));
       expect(f.coordinator.channelTagWindowActive, isFalse);

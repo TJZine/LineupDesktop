@@ -86,12 +86,12 @@ void main() {
               debugShowCheckedModeBanner: false,
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
-                androidTv: tv,
+                formFactor: profileFor(tv).formFactor,
               ),
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context)
                     .copyWith(disableAnimations: reduceMotion),
-                child: LineupCanvas(child: child!),
+                child: _playerCanvasBuilderFor(tv)(context, child),
               ),
               home: PlayerView(controller: fixture.player, openGuide: () {}),
             ),

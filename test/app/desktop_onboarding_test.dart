@@ -2016,7 +2016,7 @@ void main() {
         ),
       );
       addTearDown(controller.dispose);
-      await show(tester, controller, accountOrigin: true, androidTv: tv);
+      await show(tester, controller, accountOrigin: true, isTv: tv);
       await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
       await tester.pumpAndSettle();
 
