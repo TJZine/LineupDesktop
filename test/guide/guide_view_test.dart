@@ -2719,6 +2719,237 @@ void main() {
     );
   });
 
+  testWidgets(
+    'focused cells and clock chrome refresh across a program boundary before the periodic tick',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final start = DateTime.utc(2026, 1, 15, 12);
+      var now = start.add(const Duration(minutes: 9, seconds: 59));
+      final lineup = _Lineup(
+        2,
+        scenario: LineupScenario(
+          channels: List.generate(
+            2,
+            (index) => Channel(
+              id: 'channel-$index',
+              number: index + 1,
+              name: 'Channel $index',
+              source: ManualSource([
+                ChannelItem(
+                  id: 'earlier-$index',
+                  title: 'Earlier $index',
+                  duration: const Duration(minutes: 10),
+                ),
+                ChannelItem(
+                  id: 'next-$index',
+                  title: 'Next $index',
+                  duration: const Duration(minutes: 10),
+                ),
+              ]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: start,
+              shuffleSeed: index,
+            ),
+          ),
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final earlier = guide
+          .row('channel-0')
+          .programs
+          .firstWhere((program) => program.scheduled.start == start);
+      final next = guide
+          .row('channel-1')
+          .programs
+          .firstWhere(
+            (program) =>
+                program.scheduled.start ==
+                start.add(const Duration(minutes: 10)),
+          );
+      guide.focusProgram(earlier);
+      await tester.pumpAndSettle();
+      Finder cell(GuideProgram program) => find.byKey(ValueKey(program.id));
+      String label(GuideProgram program) => tester
+          .widgetList<Semantics>(
+            find.descendant(
+              of: cell(program),
+              matching: find.byType(Semantics),
+            ),
+          )
+          .map((widget) => widget.properties.label ?? '')
+          .firstWhere(
+            (label) => label.startsWith(program.scheduled.item.title),
+          );
+      Finder marker(GuideProgram program) => find.descendant(
+        of: cell(program),
+        matching: find.byKey(const Key('guide-cell-now-line')),
+      );
+      expect(label(earlier), contains('currently airing'));
+      expect(label(next), contains('upcoming'));
+      expect(marker(earlier), findsOneWidget);
+      final oldNowLine = tester
+          .getTopLeft(find.byKey(const Key('guide-now-line')))
+          .dx;
+      final oldClock = tester
+          .widget<Text>(find.byKey(const Key('guide-current-date-time')))
+          .data;
+      now = start.add(const Duration(minutes: 10, seconds: 1));
+      guide.focusProgram(next);
+      await tester.pump();
+      expect(label(earlier), contains('ended'));
+      expect(label(next), contains('currently airing'));
+      expect(marker(earlier), findsNothing);
+      expect(marker(next), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('guide-now-line'))).dx,
+        greaterThan(oldNowLine),
+      );
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('guide-current-date-time')))
+            .data,
+        isNot(oldClock),
+      );
+      // Repeating the same cursor must refresh its fractional marker too.
+      final markerBefore = tester.getTopLeft(marker(next)).dx;
+      final rebuilt = <Element>[];
+      debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element);
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      now = now.add(const Duration(seconds: 5));
+      guide.focusProgram(next);
+      await tester.pump();
+      expect(tester.getTopLeft(marker(next)).dx, greaterThan(markerBefore));
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        hasLength(1),
+      );
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_Programs',
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  testWidgets(
+    'focus rebuilds only affected rails and cells, preserving unrelated tickers',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final lineup = _Lineup(6);
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            androidTv: true,
+          ),
+          home: GuideView(
+            controller: guide,
+            pictureInPicture: const ColoredBox(color: Colors.black),
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      guide.focusProgram(guide.row(guide.focusedChannelId!).programs.first);
+      await tester.pumpAndSettle();
+      final oldChannel = guide.focusedChannelId!;
+      final oldProgram = guide.focusedProgramId!;
+      final rebuilt = <Element>[];
+      debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element);
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      guide.moveVertical(1);
+      await tester.pump();
+      final newChannel = guide.focusedChannelId!;
+      final newProgram = guide.focusedProgramId!;
+      final cursors = rebuilt
+          .where(
+            (element) =>
+                element.widget.runtimeType.toString() == '_GuideCursorBuilder',
+          )
+          .map((element) => (element.widget.key as ValueKey).value)
+          .toList();
+      expect(
+        cursors.where((key) => key.toString().startsWith('guide-row-cursor-')),
+        unorderedEquals([
+          'guide-row-cursor-$oldChannel',
+          'guide-row-cursor-$newChannel',
+        ]),
+      );
+      expect(
+        cursors.where((key) => !key.toString().startsWith('guide-row-cursor-')),
+        unorderedEquals([oldProgram, newProgram]),
+      );
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        hasLength(2),
+      );
+      for (final element in rebuilt.where(
+        (element) => element.widget.runtimeType.toString() == 'FocusedTicker',
+      )) {
+        Object? programKey;
+        element.visitAncestorElements((ancestor) {
+          if (ancestor.widget.runtimeType.toString() != '_GuideCursorBuilder') {
+            return true;
+          }
+          programKey = (ancestor.widget.key as ValueKey).value;
+          return false;
+        });
+        expect([oldProgram, newProgram], contains(programKey));
+      }
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_Programs',
+        ),
+        isEmpty,
+      );
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_Toolbar',
+        ),
+        isEmpty,
+      );
+    },
+  );
+
   testWidgets('TV focus moves reuse Guide control measurements', (
     tester,
   ) async {
