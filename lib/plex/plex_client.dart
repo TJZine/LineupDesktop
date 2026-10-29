@@ -9,6 +9,7 @@ import 'package:xml/xml.dart';
 import '../app_version.dart';
 import '../channels/channel.dart';
 import 'plex_models.dart';
+import 'plex_transcode.dart';
 
 class PlexServerAccess {
   PlexServerAccess({required this.server, required String token})
@@ -40,11 +41,13 @@ class PlexClient {
     required this.clientIdentifier,
     http.Client? httpClient,
     this.requestTimeout = const Duration(seconds: 15),
+    this.onTranscodeStopFailure,
   }) : _http = httpClient ?? http.Client();
 
   final String clientIdentifier;
   final http.Client _http;
   final Duration requestTimeout;
+  final void Function(String code)? onTranscodeStopFailure;
 
   static const maximumLibraryCollections = 100000;
   static const maximumLibraryCollectionMembers = 100000;
@@ -1273,6 +1276,147 @@ class PlexClient {
     return response.bodyBytes;
   }
 
+  Future<PlexDecision> transcodeDecision(
+    Uri server,
+    PlexSessionRequest request,
+    String token,
+  ) async {
+    final response = await _send(
+      'GET',
+      _sessionUri(
+        server,
+        '/video/:/transcode/universal/decision',
+        request.query(directPlay: true),
+      ),
+      headers: _sessionHeaders(token, request.profile, request.sessionId),
+    );
+    if (response.statusCode != 200) _throwResponse(response);
+    return parsePlexDecision(response.body);
+  }
+
+  Future<PlexSessionStart> startTranscodeSession(
+    Uri server,
+    PlexSessionRequest request,
+    String token,
+  ) async {
+    final start = _sessionUri(
+      server,
+      '/video/:/transcode/universal/start.m3u8',
+      request.query(directPlay: false),
+    );
+    final response = await _send(
+      'GET',
+      start,
+      headers: _sessionHeaders(token, request.profile, request.sessionId),
+      maximumBytes: maximumPlexMasterBytes,
+      oversizedCode: 'session-invalid',
+      oversizedMessage: 'Plex returned an unsupported session playlist.',
+    );
+    if (response.statusCode != 200) _throwResponse(response);
+    return PlexSessionStart(
+      variant: validatePlexSessionMaster(
+        response.body,
+        server: server,
+        start: start,
+      ),
+      sessionId: request.sessionId,
+    );
+  }
+
+  Future<void> pingTranscodeSession(
+    Uri server,
+    String sessionId,
+    String token, {
+    PlexProfile? profile,
+  }) async {
+    _requireSessionId(sessionId);
+    final response = await _send(
+      'GET',
+      _sessionUri(server, '/video/:/transcode/universal/ping', {
+        'session': sessionId,
+      }),
+      headers: _sessionHeaders(token, profile, sessionId),
+      timeout: _sessionTimeout(const Duration(seconds: 5)),
+    );
+    if (response.statusCode != 200) _throwResponse(response);
+  }
+
+  Future<void> stopTranscodeSession(
+    Uri server,
+    String sessionId,
+    String token, {
+    PlexProfile? profile,
+  }) async {
+    try {
+      _requireSessionId(sessionId);
+      final response = await _send(
+        'GET',
+        _sessionUri(server, '/video/:/transcode/universal/stop', {
+          'session': sessionId,
+        }),
+        headers: _sessionHeaders(token, profile),
+        timeout: _sessionTimeout(const Duration(seconds: 2)),
+      );
+      if (response.statusCode != 200 && response.statusCode != 404) {
+        _throwResponse(response);
+      }
+    } catch (error) {
+      try {
+        onTranscodeStopFailure?.call(
+          error is PlexException ? error.code : 'session-stop-failed',
+        );
+      } catch (_) {
+        // Teardown remains best-effort even when a diagnostic consumer fails.
+      }
+    }
+  }
+
+  Future<void> selectPartStreams(
+    Uri server,
+    String partId, {
+    String? audioStreamId,
+    String? subtitleStreamId,
+    required String token,
+    PlexProfile? profile,
+  }) async {
+    if (!RegExp(r'^[0-9]+$').hasMatch(partId) ||
+        (audioStreamId != null &&
+            !RegExp(r'^[0-9]+$').hasMatch(audioStreamId)) ||
+        (subtitleStreamId != null &&
+            !RegExp(r'^[0-9]+$').hasMatch(subtitleStreamId)) ||
+        (audioStreamId == null && subtitleStreamId == null)) {
+      throw ArgumentError('Invalid Plex stream selection.');
+    }
+    final response = await _send(
+      'PUT',
+      _sessionUri(server, '/library/parts/$partId', {
+        'audioStreamID': ?audioStreamId,
+        'subtitleStreamID': ?subtitleStreamId,
+        'allParts': '1',
+      }),
+      headers: _sessionHeaders(token, profile),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponse(response);
+    }
+  }
+
+  Duration _sessionTimeout(Duration bound) =>
+      requestTimeout < bound ? requestTimeout : bound;
+
+  Map<String, String> _sessionHeaders(
+    String token,
+    PlexProfile? profile, [
+    String? sessionId,
+  ]) => {
+    ..._headers(token),
+    'X-Plex-Client-Profile-Name': 'Generic',
+    'X-Plex-Client-Profile-Extra':
+        (profile ?? buildProfile(MediaCapabilities.desktop, desktop: true))
+            .profileExtra,
+    'X-Plex-Session-Identifier': ?sessionId,
+  };
+
   void _cancel(Stream<List<int>> stream) {
     final subscription = stream.listen(
       null,
@@ -1292,7 +1436,15 @@ class PlexClient {
       headers: _headers(token),
       cancelled: cancelled,
     );
-    return _json(response, {200});
+    if (response.statusCode != 200) _throwResponse(response);
+    final json = _tryJson(response.body);
+    if (json != null) return _record(json, 'Plex response');
+    try {
+      final root = XmlDocument.parse(response.body).rootElement;
+      return {root.name.local: _metadataXmlRecord(root)};
+    } catch (_) {
+      throw const PlexException('parse-error', 'Plex response was invalid.');
+    }
   }
 
   Future<http.Response> _send(
@@ -1565,6 +1717,27 @@ Uri _directPlayUri(Uri server, String partPath) {
   );
 }
 
+Uri _sessionUri(Uri server, String path, Map<String, String> query) {
+  if (server.scheme != 'https' ||
+      server.host.isEmpty ||
+      server.authority.contains('@') ||
+      server.queryParametersAll.keys.any(
+        (key) => key.toLowerCase() == 'x-plex-token',
+      )) {
+    throw const PlexException(
+      'session-invalid',
+      'Plex sessions require a secure server.',
+    );
+  }
+  return server.resolve(path).replace(queryParameters: query, fragment: '');
+}
+
+void _requireSessionId(String sessionId) {
+  if (!isPlexSessionId(sessionId)) {
+    throw ArgumentError('Invalid Plex session identifier.');
+  }
+}
+
 bool _isSameServerUri(Uri server, Uri uri) =>
     uri.scheme == server.scheme &&
     uri.host == server.host &&
@@ -1588,6 +1761,27 @@ String? _identityId(String body) {
     return null;
   }
 }
+
+Map<String, Object?> _metadataXmlRecord(XmlElement element) => {
+  for (final attribute in element.attributes)
+    attribute.name.local: attribute.value,
+  for (final name
+      in element.childElements.map((child) => child.name.local).toSet())
+    if (name == 'Video')
+      'Metadata': [
+        for (final child in element.childElements.where(
+          (child) => child.name.local == name,
+        ))
+          _metadataXmlRecord(child),
+      ]
+    else
+      name: [
+        for (final child in element.childElements.where(
+          (child) => child.name.local == name,
+        ))
+          _metadataXmlRecord(child),
+      ],
+};
 
 PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final json = _record(raw, 'media item');
@@ -1648,6 +1842,32 @@ PlexMediaPart? _parseMediaPart(Map<Object?, Object?> raw) {
   final milliseconds = _optionalInteger(raw['duration']);
   return PlexMediaPart(
     path: path,
+    id: _optionalId(raw['id']),
+    streams: List.unmodifiable([
+      for (final stream in _optionalList(
+        raw['Stream'],
+      ).whereType<Map<Object?, Object?>>())
+        PlexMediaStream(
+          id: _optionalId(stream['id']),
+          streamType: _optionalInteger(stream['streamType']),
+          codec: _optionalText(stream['codec'])?.toLowerCase(),
+          profile: _optionalText(stream['profile'])?.toLowerCase(),
+          bitDepth: _optionalInteger(stream['bitDepth']),
+          width: _optionalInteger(stream['width']),
+          height: _optionalInteger(stream['height']),
+          bitrate: _optionalInteger(stream['bitrate']),
+          doviProfile: _optionalInteger(
+            stream['DOVIProfile'] ?? stream['doviProfile'],
+          ),
+          colorTrc: _optionalText(stream['colorTrc']),
+          channels: _optionalInteger(stream['channels']),
+          language: _optionalText(stream['language']),
+          selected: _boolean(stream['selected']),
+          isDefault: _boolean(stream['default']),
+          forced: _boolean(stream['forced']),
+          key: _optionalText(stream['key']),
+        ),
+    ]),
     duration: milliseconds != null && milliseconds > 0
         ? Duration(milliseconds: milliseconds)
         : null,
