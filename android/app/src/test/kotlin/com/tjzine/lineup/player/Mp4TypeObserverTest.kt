@@ -147,4 +147,40 @@ class Mp4TypeObserverTest {
         observer.reset()
         assertEquals(0, observer.revision)
     }
+
+    @Test
+    fun indexProbeReturnsToExactExtendedMediaHeaderAndObservesLaterMoov() {
+        val first = moov("vide")
+        val media = box("moof", ByteArray(20), extended = true)
+        val later = moov("soun")
+        val length = first.size + media.size + later.size + 16L
+        val observer = Mp4TypeObserver()
+        observer.consume(0, first, 0, first.size, length)
+        observer.markValidated()
+        observer.consume(first.size.toLong(), media, 0, 16, length)
+        observer.reposition(length - 16)
+        observer.consume(length - 16, ByteArray(16), 0, 16, length)
+        observer.reposition(first.size.toLong())
+        val resumed = media + later
+        observer.consume(first.size.toLong(), resumed, 0, resumed.size, length)
+        assertEquals(Mp4TypeObserver.Types(false, true), observer.requireSnapshot())
+        assertEquals(2, observer.revision)
+    }
+
+    @Test
+    fun explicitSampleSeekCancelsIndexProbeReturnCheckpoint() {
+        val first = moov("vide")
+        val media = box("moof", ByteArray(20))
+        val observer = Mp4TypeObserver()
+        observer.consume(0, first, 0, first.size, 10000)
+        observer.markValidated()
+        observer.consume(first.size.toLong(), media, 0, 8, 10000)
+        observer.reposition(9000)
+        observer.seek(4000)
+        observer.reposition(first.size.toLong())
+        val opaque = moov("soun")
+        observer.consume(first.size.toLong(), opaque, 0, opaque.size, 10000)
+        assertEquals(Mp4TypeObserver.Types(true, false), observer.types)
+        assertThrows(Mp4ObservationError::class.java) { observer.requireSnapshot() }
+    }
 }

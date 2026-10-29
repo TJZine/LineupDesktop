@@ -24,6 +24,8 @@ class Mp4TypeObserver(private val onMoovStart: () -> Unit = {}) {
     private var pendingAudio = false
     private var inMoov = false
     private var suspended = false
+    private var mediaBoxStart: Long? = null
+    private var suspendedReturnPosition: Long? = null
     private var validated = false
     var revision = 0
         private set
@@ -44,6 +46,8 @@ class Mp4TypeObserver(private val onMoovStart: () -> Unit = {}) {
         pendingAudio = false
         inMoov = false
         suspended = false
+        mediaBoxStart = null
+        suspendedReturnPosition = null
         validated = false
         revision = 0
         types = Types(false, false)
@@ -65,7 +69,10 @@ class Mp4TypeObserver(private val onMoovStart: () -> Unit = {}) {
             // If the parser starts at byte zero again, observe its header reparse.
             if (target == 0L) {
                 restartAtZeroPreservingTypes()
-            } else suspended = true
+            } else {
+                suspended = true
+                suspendedReturnPosition = null
+            }
         } else if (target == 0L) reset() else reposition(target)
     }
 
@@ -93,7 +100,18 @@ class Mp4TypeObserver(private val onMoovStart: () -> Unit = {}) {
     }
 
     fun reposition(target: Long) {
-        if (suspended || target == position) return
+        if (suspended) {
+            // Media3's MFRA probe reads the last 16 bytes (which need not be a
+            // box), then returns to the first moof/mdat header it already read.
+            // Ignore only that detour. Resume at this known header so a later
+            // moov still has to prove its own declared audio/video exposure.
+            if (target == suspendedReturnPosition) {
+                restartAtZeroPreservingTypes()
+                position = target
+            }
+            return
+        }
+        if (target == position) return
         val end = bodyEnd
         if (end != null && target in bodyStart..end && !bodyIsHandler) {
             position = target
@@ -103,6 +121,7 @@ class Mp4TypeObserver(private val onMoovStart: () -> Unit = {}) {
         }
         if (validated && !inMoov) {
             suspended = true
+            suspendedReturnPosition = mediaBoxStart
             return
         }
         throw Mp4ObservationError()
@@ -197,6 +216,9 @@ class Mp4TypeObserver(private val onMoovStart: () -> Unit = {}) {
         )
             throw Mp4ObservationError()
         val path = parents.map { it.type }
+        if (path.isEmpty()) {
+            mediaBoxStart = if (type == "moof" || type == "mdat") start else null
+        }
         val enter =
             (path.isEmpty() && type == "moov") ||
                 (path == listOf("moov") && type == "trak") ||

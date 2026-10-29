@@ -197,23 +197,31 @@ Future<void> _run(List<String> args) async {
         'mixed-video.mkv',
       ]) {
         phase = fixture;
-        await load(fixture);
-        await _wait(
-          () =>
-              player.position > const Duration(seconds: 1) ||
-              player.status.state == PlayerState.error,
-        );
-        if (player.status.state == PlayerState.error) {
-          throw StateError('format_failed');
-        }
+        await load(fixture, paused: true);
+        // A playing stream can reach this position naturally even when its
+        // seek map rejects the request. Prove the exact seek while paused.
         await player.seek(const Duration(milliseconds: 2250));
         await _wait(
           () =>
-              player.position >= const Duration(milliseconds: 2250) ||
+              (player.status.state == PlayerState.paused &&
+                  (player.position.inMilliseconds - 2250).abs() < 150) ||
               player.status.state == PlayerState.error,
         );
         if (player.status.state == PlayerState.error) {
           throw StateError('format_seek_failed');
+        }
+        _fact('format-seek', {
+          'case': fixture,
+          'positionMs': player.position.inMilliseconds,
+        });
+        await player.play();
+        await _wait(
+          () =>
+              player.position >= const Duration(milliseconds: 3250) ||
+              player.status.state == PlayerState.error,
+        );
+        if (player.status.state == PlayerState.error) {
+          throw StateError('format_failed');
         }
         _fact('format', {
           'case': fixture,
