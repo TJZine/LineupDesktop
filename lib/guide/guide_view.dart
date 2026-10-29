@@ -383,6 +383,7 @@ class _GuideViewState extends State<GuideView>
   late final AnimationController _activityPulse;
   ScrollController? _scroll;
   Timer? _clockTimer;
+  late final ValueNotifier<DateTime> _presentationClock;
   int _visibleRows = 8;
   double? _effectiveRowHeight;
   bool _rowHeightAdjustmentScheduled = false;
@@ -445,6 +446,7 @@ class _GuideViewState extends State<GuideView>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _lastFocusedChannelId = widget.controller.focusedChannelId;
+    _presentationClock = ValueNotifier(widget.controller.now);
     _searchController.text = widget.controller.searchQuery;
     _observedSearchQuery = widget.controller.searchQuery;
     _searchContentGeneration = widget.controller.lineup.contentGeneration;
@@ -465,7 +467,8 @@ class _GuideViewState extends State<GuideView>
   void _refreshClock() {
     if (!mounted) return;
     widget.controller.refreshForPresentation();
-    setState(() {});
+    _presentationClock.value = widget.controller.now;
+    _focusChanged();
   }
 
   @override
@@ -496,6 +499,7 @@ class _GuideViewState extends State<GuideView>
     widget.controller.removeListener(_changed);
     widget.controller.focus.removeListener(_focusChanged);
     _clockTimer?.cancel();
+    _presentationClock.dispose();
     _scroll
       ?..removeListener(_scrolled)
       ..dispose();
@@ -932,6 +936,7 @@ class _GuideViewState extends State<GuideView>
 
   Widget _toolbar(GuideLayoutPolicy policy) => _Toolbar(
     controller: widget.controller,
+    clock: _presentationClock,
     compact: policy.compact,
     watchingChannelId: widget.watchingChannelId,
     onClose: widget.onClose,
@@ -947,6 +952,7 @@ class _GuideViewState extends State<GuideView>
       listenable: Listenable.merge([
         widget.controller.focus,
         widget.controller.selection,
+        _presentationClock,
       ]),
       builder: (context, _) => _GuideShowcase(
         controller: widget.controller,
@@ -1022,7 +1028,10 @@ class _GuideViewState extends State<GuideView>
               return Stack(
                 children: [
                   ListenableBuilder(
-                    listenable: widget.controller.focus,
+                    listenable: Listenable.merge([
+                      widget.controller.focus,
+                      _presentationClock,
+                    ]),
                     builder: (context, _) {
                       final now = widget.controller.now;
                       final fraction =
@@ -1088,6 +1097,7 @@ class _GuideViewState extends State<GuideView>
                                   numberColumnWidth: _numberColumnWidth,
                                   watchingChannelId: widget.watchingChannelId,
                                   controller: widget.controller,
+                                  clock: _presentationClock,
                                   railWidth: policy.channelRailWidth,
                                   hideSchedule: _allVisibleFailed,
                                   showProvenance:
@@ -1326,6 +1336,7 @@ class _ClassicGuideSurface extends StatelessWidget {
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.controller,
+    required this.clock,
     required this.watchingChannelId,
     required this.compact,
     required this.onClose,
@@ -1335,6 +1346,7 @@ class _Toolbar extends StatelessWidget {
     required this.onKeyEvent,
   });
   final GuideController controller;
+  final Listenable clock;
   final String? watchingChannelId;
   final bool compact;
   final LineupMenuCallback onClose;
@@ -1353,9 +1365,6 @@ class _Toolbar extends StatelessWidget {
     final tunedChannel = controller.lineup.channels
         .where((channel) => channel.id == watchingChannelId)
         .firstOrNull;
-    final tunedProgram = tunedChannel == null
-        ? null
-        : controller.currentProgram(tunedChannel.id);
     final showPlaying =
         tunedChannel != null && controller.lineup.settings.nowWatchingBanner;
     final showDate = size.width >= 1100;
@@ -1378,19 +1387,27 @@ class _Toolbar extends StatelessWidget {
             if (showPlaying) ...[
               SizedBox(width: 20.0),
               Expanded(
-                child: Text(
-                  '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
-                  key: const Key('guide-now-playing-context'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: supportingStyle,
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([controller.focus, clock]),
+                  builder: (context, _) {
+                    final tunedProgram = controller.currentProgram(
+                      tunedChannel.id,
+                    );
+                    return Text(
+                      '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
+                      key: const Key('guide-now-playing-context'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: supportingStyle,
+                    );
+                  },
                 ),
               ),
             ] else
               const Spacer(),
             if (showDate)
               ListenableBuilder(
-                listenable: controller.focus,
+                listenable: Listenable.merge([controller.focus, clock]),
                 builder: (context, _) {
                   final now = controller.now.toLocal();
                   return Text(
@@ -2582,9 +2599,11 @@ class _GuideCursorBuilder extends StatefulWidget {
     required this.select,
     required this.builder,
     this.child,
+    this.clock,
     super.key,
   });
   final GuideController controller;
+  final Listenable? clock;
   final Object Function() select;
   final Widget Function(BuildContext, Widget?) builder;
   final Widget? child;
@@ -2600,6 +2619,7 @@ class _GuideCursorBuilderState extends State<_GuideCursorBuilder> {
     _value = widget.select();
     widget.controller.focus.addListener(_changed);
     widget.controller.selection.addListener(_changed);
+    widget.clock?.addListener(_changed);
   }
 
   @override
@@ -2610,6 +2630,10 @@ class _GuideCursorBuilderState extends State<_GuideCursorBuilder> {
       oldWidget.controller.selection.removeListener(_changed);
       widget.controller.focus.addListener(_changed);
       widget.controller.selection.addListener(_changed);
+    }
+    if (oldWidget.clock != widget.clock) {
+      oldWidget.clock?.removeListener(_changed);
+      widget.clock?.addListener(_changed);
     }
     _value = widget.select();
   }
@@ -2624,6 +2648,7 @@ class _GuideCursorBuilderState extends State<_GuideCursorBuilder> {
   void dispose() {
     widget.controller.focus.removeListener(_changed);
     widget.controller.selection.removeListener(_changed);
+    widget.clock?.removeListener(_changed);
     super.dispose();
   }
 
@@ -2635,6 +2660,7 @@ class _GuideRow extends StatelessWidget {
   const _GuideRow({
     required this.channel,
     required this.controller,
+    required this.clock,
     required this.watchingChannelId,
     required this.railWidth,
     required this.numberColumnWidth,
@@ -2646,6 +2672,7 @@ class _GuideRow extends StatelessWidget {
   });
   final Channel channel;
   final GuideController controller;
+  final Listenable clock;
   final String? watchingChannelId;
   final double railWidth;
   final double numberColumnWidth;
@@ -2671,6 +2698,7 @@ class _GuideRow extends StatelessWidget {
             channel: channel,
             data: controller.row(channel.id),
             controller: controller,
+            clock: clock,
             onTune: onTune,
             activityPulse: activityPulse,
             onGridKey: onGridKey,
@@ -2896,6 +2924,7 @@ class _Programs extends StatelessWidget {
     required this.channel,
     required this.data,
     required this.controller,
+    required this.clock,
     required this.onTune,
     required this.activityPulse,
     required this.onGridKey,
@@ -2903,6 +2932,7 @@ class _Programs extends StatelessWidget {
   final Channel channel;
   final GuideRowData data;
   final GuideController controller;
+  final Listenable clock;
   final Future<void> Function(String channelId) onTune;
   final Animation<double> activityPulse;
   final FocusOnKeyEventCallback onGridKey;
@@ -3010,14 +3040,22 @@ class _Programs extends StatelessWidget {
     return _GuideCursorBuilder(
       key: ValueKey(program.id),
       controller: controller,
+      clock: clock,
       select: () => (
         program.id == controller.focusedProgramId,
         program.id == controller.selectedProgramId,
-        // A repeated/clamped input still refreshes the focused cell's clock,
-        // while every unrelated cell keeps an unchanged selection value.
-        program.id == controller.focusedProgramId ? controller.now : null,
+        program.isCurrentAt(controller.now),
+        !program.scheduled.end.isAfter(controller.now),
       ),
-      builder: (context, _) {
+      child: _ProgramNowLine(
+        controller: controller,
+        clock: clock,
+        program: program,
+        viewportWidth: viewportWidth,
+        cellLeft: rect.left,
+        cellWidth: rect.width,
+      ),
+      builder: (context, nowLine) {
         final now = controller.now;
         final current = program.isCurrentAt(now);
         return _ProgramCell(
@@ -3025,14 +3063,7 @@ class _Programs extends StatelessWidget {
           focused: program.id == controller.focusedProgramId,
           selected: program.id == controller.selectedProgramId,
           current: current,
-          nowOffset: current
-              ? viewportWidth *
-                        now.difference(controller.windowStart).inMicroseconds /
-                        controller.windowEnd
-                            .difference(controller.windowStart)
-                            .inMicroseconds -
-                    rect.left
-              : null,
+          nowLine: nowLine!,
           past: !program.scheduled.end.isAfter(now),
           left: rect.left,
           width: rect.width,
@@ -3050,6 +3081,54 @@ class _Programs extends StatelessWidget {
       },
     );
   }
+}
+
+class _ProgramNowLine extends StatelessWidget {
+  const _ProgramNowLine({
+    required this.controller,
+    required this.clock,
+    required this.program,
+    required this.viewportWidth,
+    required this.cellLeft,
+    required this.cellWidth,
+  });
+  final GuideController controller;
+  final Listenable clock;
+  final GuideProgram program;
+  final double viewportWidth;
+  final double cellLeft;
+  final double cellWidth;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([controller.focus, clock]),
+    builder: (context, _) {
+      final now = controller.now;
+      final x =
+          viewportWidth *
+              now.difference(controller.windowStart).inMicroseconds /
+              controller.windowEnd
+                  .difference(controller.windowStart)
+                  .inMicroseconds -
+          cellLeft;
+      if (!program.isCurrentAt(now) || !(x >= 0 && x < cellWidth)) {
+        return const SizedBox.shrink();
+      }
+      return Positioned(
+        // The cell's one-pixel border is inside its timeline geometry.
+        left: x - 1,
+        top: 0,
+        bottom: 0,
+        child: IgnorePointer(
+          child: ColoredBox(
+            key: const Key('guide-cell-now-line'),
+            color: LineupTheme.of(context).liveAccent,
+            child: const SizedBox(width: 2),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _ScheduleStatus extends StatelessWidget {
@@ -3163,7 +3242,7 @@ class _ProgramCell extends StatefulWidget {
     required this.onTap,
     required this.reduceMotion,
     this.onDoubleTap,
-    this.nowOffset,
+    required this.nowLine,
   });
   final GuideProgram program;
   final bool focused;
@@ -3175,7 +3254,7 @@ class _ProgramCell extends StatefulWidget {
   final VoidCallback onTap;
   final bool reduceMotion;
   final VoidCallback? onDoubleTap;
-  final double? nowOffset;
+  final Widget nowLine;
 
   @override
   State<_ProgramCell> createState() => _ProgramCellState();
@@ -3250,24 +3329,7 @@ class _ProgramCellState extends State<_ProgramCell> {
                       width: 1,
                       child: ColoredBox(color: roles.subtleBorder),
                     ),
-                    if (widget.nowOffset case final x?
-                        when x >= 0 && x < widget.width)
-                      Positioned(
-                        left:
-                            x -
-                            border.dimensions
-                                .resolve(Directionality.of(context))
-                                .left,
-                        top: 0,
-                        bottom: 0,
-                        child: IgnorePointer(
-                          child: ColoredBox(
-                            key: const Key('guide-cell-now-line'),
-                            color: roles.liveAccent,
-                            child: const SizedBox(width: 2),
-                          ),
-                        ),
-                      ),
+                    widget.nowLine,
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 9,

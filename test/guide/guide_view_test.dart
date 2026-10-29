@@ -2755,7 +2755,10 @@ void main() {
               shuffleSeed: index,
             ),
           ),
-          settings: const LineupSettings(reduceMotion: true),
+          settings: const LineupSettings(
+            reduceMotion: true,
+            nowWatchingBanner: true,
+          ),
         ),
       );
       addTearDown(lineup.dispose);
@@ -2770,6 +2773,7 @@ void main() {
           builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
+            watchingChannelId: 'channel-0',
             onClose: (_, _) {},
             onTune: (_) async {},
           ),
@@ -2809,6 +2813,12 @@ void main() {
       expect(label(earlier), contains('currently airing'));
       expect(label(next), contains('upcoming'));
       expect(marker(earlier), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
+            .data,
+        '1 · Channel 0 — Earlier 0',
+      );
       final oldNowLine = tester
           .getTopLeft(find.byKey(const Key('guide-now-line')))
           .dx;
@@ -2819,6 +2829,12 @@ void main() {
       guide.focusProgram(next);
       await tester.pump();
       expect(label(earlier), contains('ended'));
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
+            .data,
+        '1 · Channel 0 — Next 0',
+      );
       expect(label(next), contains('currently airing'));
       expect(marker(earlier), findsNothing);
       expect(marker(next), findsOneWidget);
@@ -2845,7 +2861,7 @@ void main() {
         rebuilt.where(
           (element) => element.widget.runtimeType.toString() == '_ProgramCell',
         ),
-        hasLength(1),
+        isEmpty,
       );
       expect(
         rebuilt.where(
@@ -2853,6 +2869,160 @@ void main() {
         ),
         isEmpty,
       );
+    },
+  );
+
+  testWidgets(
+    'presentation clock updates markers and boundary cells without rebuilding the Guide layout',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final start = DateTime.utc(2026, 1, 15, 12);
+      var now = start.add(const Duration(minutes: 9, seconds: 15));
+      final lineup = _Lineup(
+        4,
+        scenario: LineupScenario(
+          channels: List.generate(
+            4,
+            (index) => Channel(
+              id: 'channel-$index',
+              number: index + 1,
+              name: 'Channel $index',
+              source: ManualSource([
+                ChannelItem(
+                  id: 'earlier-$index',
+                  title: 'Earlier $index',
+                  duration: const Duration(minutes: 10),
+                ),
+                ChannelItem(
+                  id: 'next-$index',
+                  title: 'Next $index',
+                  duration: const Duration(minutes: 110),
+                ),
+              ]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: start,
+              shuffleSeed: index,
+            ),
+          ),
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final programs = [
+        for (var index = 0; index < 4; index++)
+          guide.row('channel-$index').programs,
+      ];
+      guide.focusProgram(programs.first[1]);
+      await tester.pumpAndSettle();
+      Finder cell(GuideProgram program) => find.byKey(ValueKey(program.id));
+      Finder marker(GuideProgram program) => find.descendant(
+        of: cell(program),
+        matching: find.byKey(const Key('guide-cell-now-line')),
+      );
+      final originalMarkers = [
+        for (final row in programs) tester.getTopLeft(marker(row.first)).dx,
+      ];
+      final rebuilt = <Element>[];
+      debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element);
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      void expectStableLayout() {
+        for (final type in [
+          'GuideView',
+          '_GuideRow',
+          '_Programs',
+          '_Toolbar',
+        ]) {
+          expect(
+            rebuilt.where(
+              (element) => element.widget.runtimeType.toString() == type,
+            ),
+            isEmpty,
+            reason: type,
+          );
+        }
+      }
+
+      now = now.add(const Duration(seconds: 30));
+      await tester.pump(const Duration(seconds: 30));
+      expectStableLayout();
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        isEmpty,
+      );
+      for (var index = 0; index < programs.length; index++) {
+        expect(
+          tester.getTopLeft(marker(programs[index].first)).dx,
+          greaterThan(originalMarkers[index]),
+        );
+      }
+      // An ordinary input refreshes every visible marker, but no unrelated text.
+      rebuilt.clear();
+      now = now.add(const Duration(seconds: 5));
+      guide.focusProgram(programs.first[1]);
+      await tester.pump();
+      expectStableLayout();
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        isEmpty,
+      );
+      final markerPositions = [
+        for (final row in programs) tester.getTopLeft(marker(row.first)).dx,
+      ];
+      expect(
+        markerPositions.every((x) => (x - markerPositions.first).abs() < .01),
+        isTrue,
+      );
+      expect(markerPositions.first, greaterThan(originalMarkers.first));
+      // On the next tick, all four old/current pairs cross a real boundary.
+      rebuilt.clear();
+      now = start.add(const Duration(minutes: 10, seconds: 15));
+      await tester.pump(const Duration(seconds: 30));
+      expectStableLayout();
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        hasLength(8),
+      );
+      for (final row in programs) {
+        expect(marker(row.first), findsNothing);
+        expect(marker(row[1]), findsOneWidget);
+        final semantics = tester.widgetList<Semantics>(
+          find.descendant(of: cell(row[1]), matching: find.byType(Semantics)),
+        );
+        expect(
+          semantics.any(
+            (widget) =>
+                widget.properties.label?.contains('currently airing') == true,
+          ),
+          isTrue,
+        );
+      }
     },
   );
 
