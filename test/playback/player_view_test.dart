@@ -22,6 +22,7 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
+import 'package:lineup_desktop/playback/subtitle_layer.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -43,6 +44,54 @@ final _extremeWideArtwork = base64Decode(
 
 void main() {
   tearDown(debugResetClearLogoCache);
+
+  testWidgets(
+    'surface subtitles stay above native video and can be hidden for Settings',
+    (tester) async {
+      final f = _Fixture(PlayerState.playing);
+      addTearDown(f.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: PlayerSurface(controller: f.player),
+        ),
+      );
+      f.native.subtitleCues.value = SubtitleCues([
+        SubtitleCue(
+          align: 2,
+          lines: [
+            [const SubtitleSegment(text: 'Fixture caption')],
+          ],
+        ),
+      ]);
+      await tester.pump();
+      final stack = tester.widget<Stack>(
+        find
+            .ancestor(
+              of: find.byType(NativeVideoSurface),
+              matching: find.byType(Stack),
+            )
+            .first,
+      );
+      expect(stack.children[0], isA<NativeVideoSurface>());
+      expect(stack.children[1], isA<SubtitleLayer>());
+      expect(
+        find.descendant(
+          of: find.byType(SubtitleLayer),
+          matching: find.byType(CustomPaint),
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: PlayerSurface(controller: f.player, showSubtitles: false),
+        ),
+      );
+      expect(find.byType(SubtitleLayer), findsNothing);
+      expect(find.byType(NativeVideoSurface), findsOneWidget);
+    },
+  );
 
   for (final tv in [false, true]) {
     for (final reduceMotion in [false, true]) {
@@ -8828,7 +8877,9 @@ String _statusLabelForTest(PlayerState state) => switch (state) {
 
 class _Native implements NativePlayer {
   @override
-  final subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  final ValueNotifier<SubtitleCues> subtitleCues = ValueNotifier<SubtitleCues>(
+    const SubtitleCues.empty(),
+  );
   @override
   Future<void> setSubtitlePresentation({
     required double scale,

@@ -203,6 +203,12 @@ class LicensesRepository {
   Future<List<LicenseItem>> _notices() async => [
     _asset('Instrument Sans', 'assets/fonts/instrumentsans/OFL.txt'),
     _asset('Inter', 'assets/fonts/inter/OFL.txt'),
+    _asset('JetBrains Mono', 'assets/fonts/subtitles/monoSans/OFL.txt'),
+    _asset('Source Serif 4', 'assets/fonts/subtitles/serif/OFL.txt'),
+    _asset('Courier Prime', 'assets/fonts/subtitles/monoSerif/OFL.txt'),
+    _asset('Comic Neue', 'assets/fonts/subtitles/casual/OFL.txt'),
+    _asset('Dancing Script', 'assets/fonts/subtitles/cursive/OFL.txt'),
+    _asset('Alegreya Sans SC', 'assets/fonts/subtitles/smallCaps/OFL.txt'),
     if (defaultTargetPlatform == TargetPlatform.macOS)
       _asset('Engine notices', 'assets/licenses/engine-notices.txt'),
   ];

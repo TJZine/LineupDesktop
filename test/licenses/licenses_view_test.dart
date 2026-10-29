@@ -77,6 +77,46 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('bundled subtitle fonts expose their offline OFL documents', (
+    tester,
+  ) async {
+    final source = LicensesRepository().sources.singleWhere(
+      (s) => s.title == 'Fonts and engine notices',
+    );
+    final items = await source.load();
+    final names = [
+      'JetBrains Mono',
+      'Source Serif 4',
+      'Courier Prime',
+      'Comic Neue',
+      'Dancing Script',
+      'Alegreya Sans SC',
+    ];
+    // Read the actual bundled assets outside fake async, then let the UI's
+    // reads complete inside its own zone without depending on host file IO.
+    final documents = <String, String>{};
+    await tester.runAsync(() async {
+      for (final item in items) {
+        documents[item.id] = await item.read!();
+      }
+    });
+    final offline = LicensesRepository(
+      assets: _PreloadedLicenseAssets(documents),
+    ).sources.singleWhere((s) => s.title == source.title);
+    await show(tester, [offline]);
+    for (final name in names) {
+      await open(tester, name);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('SIL OPEN FONT LICENSE', findRichText: true),
+        findsWidgets,
+        reason: name,
+      );
+      await open(tester, '‹ Back to Licenses');
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   final example = [
     LicenseSource(
       'Native runtime',
@@ -637,4 +677,15 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }
   });
+}
+
+class _PreloadedLicenseAssets extends CachingAssetBundle {
+  _PreloadedLicenseAssets(this.documents);
+  final Map<String, String> documents;
+  @override
+  Future<String> loadString(String key, {bool cache = true}) async =>
+      documents[key]!;
+  @override
+  Future<ByteData> load(String key) =>
+      throw UnsupportedError('Text assets only');
 }

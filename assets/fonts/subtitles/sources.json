@@ -1,0 +1,110 @@
+[
+  {
+    "asset": "assets/fonts/subtitles/monoSans/Regular.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/ttf/JetBrainsMono-Regular.ttf",
+    "sha256": "e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1",
+    "bytes": 270224
+  },
+  {
+    "asset": "assets/fonts/subtitles/monoSans/Bold.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/ttf/JetBrainsMono-Bold.ttf",
+    "sha256": "d22c4f3821d725eb01210d278d95dfcfcaadc34699a06658d47c8a5cc5830ada",
+    "bytes": 274096
+  },
+  {
+    "asset": "assets/fonts/subtitles/monoSans/OFL.txt",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/OFL.txt",
+    "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+    "bytes": 4399
+  },
+  {
+    "asset": "assets/fonts/subtitles/serif/Regular.ttf",
+    "source": "https://raw.githubusercontent.com/adobe-fonts/source-serif/80d3f8894c09c937bebfa9011247d2e1c79fd6f4/TTF/SourceSerif4-Regular.ttf",
+    "sha256": "e5a4ee6a3d87bb9024796be390c6771e2a0eb1883dae25effaf57ca01668e24b",
+    "bytes": 261868
+  },
+  {
+    "asset": "assets/fonts/subtitles/serif/Bold.ttf",
+    "source": "https://raw.githubusercontent.com/adobe-fonts/source-serif/80d3f8894c09c937bebfa9011247d2e1c79fd6f4/TTF/SourceSerif4-Bold.ttf",
+    "sha256": "7cf4f4e1ad74f45058d5bc61716b82560442fbdcd9d3654d2dea96bf6c683d86",
+    "bytes": 271568
+  },
+  {
+    "asset": "assets/fonts/subtitles/serif/OFL.txt",
+    "source": "https://raw.githubusercontent.com/adobe-fonts/source-serif/80d3f8894c09c937bebfa9011247d2e1c79fd6f4/LICENSE.md",
+    "sha256": "c21d7293d87b6d7ab1d0229a2f55b77f33a7613a6a4e66f6693d68d7d8d09464",
+    "bytes": 4491
+  },
+  {
+    "asset": "assets/fonts/subtitles/monoSerif/Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/courierprime/CourierPrime-Regular.ttf",
+    "sha256": "72f793376f8e2841656bf21d77a5de010f2929bd6956a22ee848ad0c7eb978af",
+    "bytes": 71188
+  },
+  {
+    "asset": "assets/fonts/subtitles/monoSerif/Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/courierprime/CourierPrime-Bold.ttf",
+    "sha256": "ff1f38786c849d1c41fa8e447960abdb2bd75fdfb0cfcdeb524fad65a5af3638",
+    "bytes": 72856
+  },
+  {
+    "asset": "assets/fonts/subtitles/monoSerif/OFL.txt",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/courierprime/OFL.txt",
+    "sha256": "9a755af092b494944c99f471be6fddd19b006a448fefdc4717e4ee0aa09a97b0",
+    "bytes": 4403
+  },
+  {
+    "asset": "assets/fonts/subtitles/casual/Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/comicneue/ComicNeue-Regular.ttf",
+    "sha256": "a0ee5a37c8b27c4db0700137d928598b1e23b0089e1546a8961909176b779360",
+    "bytes": 57248
+  },
+  {
+    "asset": "assets/fonts/subtitles/casual/Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/comicneue/ComicNeue-Bold.ttf",
+    "sha256": "3e7e5fccfd7e0788f317b43312151c1bd5cf058c9697a8d83eac3939050bd61e",
+    "bytes": 55716
+  },
+  {
+    "asset": "assets/fonts/subtitles/casual/OFL.txt",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/comicneue/OFL.txt",
+    "sha256": "7c38a22e5878e60fe423360553e63dd7be23d29f1f60336034935dbfc96e8320",
+    "bytes": 4390
+  },
+  {
+    "asset": "assets/fonts/subtitles/cursive/Regular.ttf",
+    "source": "https://raw.githubusercontent.com/googlefonts/DancingScript/291f87c05206179b6bfd53735a5638b5cc84e3b3/fonts/ttf/DancingScript-Regular.ttf",
+    "sha256": "48ceb5145740383b3d21dbce5f3010bc456829d46ad92fc0df5fd7ce36c62371",
+    "bytes": 118504
+  },
+  {
+    "asset": "assets/fonts/subtitles/cursive/Bold.ttf",
+    "source": "https://raw.githubusercontent.com/googlefonts/DancingScript/291f87c05206179b6bfd53735a5638b5cc84e3b3/fonts/ttf/DancingScript-Bold.ttf",
+    "sha256": "ea80fedd89e84c4b572f0d780416956e84b0354d0df2d7985fe1883956677dc4",
+    "bytes": 114240
+  },
+  {
+    "asset": "assets/fonts/subtitles/cursive/OFL.txt",
+    "source": "https://raw.githubusercontent.com/googlefonts/DancingScript/291f87c05206179b6bfd53735a5638b5cc84e3b3/OFL.txt",
+    "sha256": "6f090277c00af96651ce6dbcc38ff1591047a3bffef486e80b6a32e8276a8201",
+    "bytes": 4443
+  },
+  {
+    "asset": "assets/fonts/subtitles/smallCaps/Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/alegreyasanssc/AlegreyaSansSC-Regular.ttf",
+    "sha256": "0c5d4abcdd83af0ce9f5d4ca49f226c2b3030d2a83adf92cb5a5c2638c8e68b0",
+    "bytes": 267620
+  },
+  {
+    "asset": "assets/fonts/subtitles/smallCaps/Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/alegreyasanssc/AlegreyaSansSC-Bold.ttf",
+    "sha256": "1f7f1ca33c4ae013a94d374106fd4044820b3d915e7f7a22182ddaf49b9c7912",
+    "bytes": 275612
+  },
+  {
+    "asset": "assets/fonts/subtitles/smallCaps/OFL.txt",
+    "source": "https://raw.githubusercontent.com/google/fonts/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/alegreyasanssc/OFL.txt",
+    "sha256": "0677891e6a143f297350d260ad766ad33bfc18ed5fa4f213acf648d6b597ec1a",
+    "bytes": 4405
+  }
+]

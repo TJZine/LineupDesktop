@@ -19,6 +19,7 @@ import '../ui/app_ui.dart';
 import '../ui/lineup_canvas.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
+import 'subtitle_layer.dart';
 import 'player_coordinator.dart';
 import 'player_key_resolver.dart';
 import 'player_track_label.dart';
@@ -896,6 +897,7 @@ class PlayerSurface extends StatelessWidget {
   const PlayerSurface({
     required this.controller,
     this.showErrors = false,
+    this.showSubtitles = true,
     this.fullPlayer = false,
     this.onClose,
     super.key,
@@ -903,6 +905,7 @@ class PlayerSurface extends StatelessWidget {
 
   final PlayerCoordinator controller;
   final bool showErrors;
+  final bool showSubtitles;
   final bool fullPlayer;
   final VoidCallback? onClose;
 
@@ -938,6 +941,11 @@ class PlayerSurface extends StatelessWidget {
           ColoredBox(color: roles.deepBackground)
         else
           NativeVideoSurface(player: controller.player),
+        if (showSubtitles)
+          SubtitleLayer(
+            cues: controller.subtitleCues,
+            appearance: controller.subtitleAppearance,
+          ),
         if (unsupported) _Unsupported(message: controller.status.message),
         if (preparing) const _Loading(label: 'Preparing playback'),
         if (!hasError && !preparing && state == PlayerState.buffering)

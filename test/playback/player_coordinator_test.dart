@@ -30,6 +30,136 @@ void main() {
 
   group('subtitle presentation', () {
     testWidgets(
+      'device appearance shares native scale, coalesces and restores saved size',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        const channel = MethodChannel('lineup/device_captions');
+        final messenger = tester.binding.defaultBinaryMessenger;
+        final response = Completer<Object?>();
+        final methods = <String>[];
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          methods.add(call.method);
+          return call.method == 'read' ? response.future : null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final player = _SubtitlePlayer();
+        final f = _ContinuationFixture(player: player);
+        addTearDown(f.close);
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(
+              size: SubtitleSize.p150,
+              useDeviceStyle: true,
+            ),
+          ),
+        );
+        await tester.pump();
+        final loading = f.coordinator.loadInitialMedia(
+          Uri.parse('file:///subtitle-fixture.mkv'),
+        );
+        await tester.pump();
+        expect(player.subtitleCommandOrder, ['presentation', 'load']);
+        expect(player.subtitlePresentations.single.scale, 1.5);
+        final releasePreview = f.coordinator.subtitleAppearance.retain();
+        expect(methods, ['listen', 'read']);
+        response.complete({'enabled': false, 'fontScale': 2.0});
+        await tester.pump();
+        await loading;
+        expect(f.coordinator.subtitleAppearance.value.scale, 2);
+        expect(player.subtitlePresentations.last.scale, 2);
+        Future<void> changed(double scale, {int color = 0xffffffff}) =>
+            messenger.handlePlatformMessage(
+              channel.name,
+              const StandardMethodCodec().encodeMethodCall(
+                MethodCall('changed', {
+                  'enabled': false,
+                  'fontScale': scale,
+                  'foreground': color,
+                }),
+              ),
+              (_) {},
+            );
+        final count = player.subtitlePresentations.length;
+        await changed(2, color: 0xff00ffff);
+        await tester.pump();
+        expect(player.subtitlePresentations, hasLength(count));
+        expect(f.coordinator.subtitleAppearance.value.textColor, 0xff00ffff);
+        player.rejection = MissingPluginException();
+        await changed(2.5);
+        await tester.pump();
+        final rejectedCount = player.subtitlePresentations.length;
+        player.rejection = null;
+        await changed(2.5, color: 0xffff00ff);
+        await tester.pump();
+        expect(player.subtitlePresentations, hasLength(rejectedCount));
+        player.pending = Completer<void>();
+        await changed(3);
+        await changed(9);
+        await changed(.01);
+        expect(player.subtitlePresentations.last.scale, 3);
+        final pending = player.pending!;
+        player.pending = null;
+        pending.complete();
+        await tester.pump();
+        expect(player.subtitlePresentations.last.scale, .25);
+        expect(f.coordinator.subtitleAppearance.value.scale, .25);
+        releasePreview();
+        expect(methods.where((m) => m == 'cancel'), isEmpty);
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(size: SubtitleSize.p150),
+          ),
+        );
+        await tester.pump();
+        expect(player.subtitlePresentations.last.scale, 1.5);
+        expect(f.coordinator.subtitleAppearance.value.scale, 1.5);
+        expect(methods, ['listen', 'read', 'cancel']);
+        f.coordinator.dispose();
+        f.disposed = true;
+        final sent = player.subtitlePresentations.length;
+        await changed(4);
+        await tester.pump();
+        expect(player.subtitlePresentations, hasLength(sent));
+        debugDefaultTargetPlatformOverride = null;
+      },
+    );
+    testWidgets(
+      'late initial device read cannot send after coordinator disposal',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        const channel = MethodChannel('lineup/device_captions');
+        final response = Completer<Object?>();
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          (call) async => call.method == 'read' ? response.future : null,
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            null,
+          ),
+        );
+        final player = _SubtitlePlayer();
+        final f = _ContinuationFixture(player: player);
+        addTearDown(f.close);
+        f.lineup.setSettings(
+          f.lineup.settings.copyWith(
+            subtitleStyle: const SubtitleStyle(useDeviceStyle: true),
+          ),
+        );
+        await tester.pump();
+        f.coordinator.dispose();
+        f.disposed = true;
+        final sent = player.subtitlePresentations.length;
+        response.complete({'enabled': false, 'fontScale': 3.0});
+        await tester.pump();
+        expect(player.subtitlePresentations, hasLength(sent));
+        debugDefaultTargetPlatformOverride = null;
+      },
+    );
+    testWidgets(
       'synchronous presentation-before-load, reuse and appearance-only commits',
       (tester) async {
         final player = _SubtitlePlayer();

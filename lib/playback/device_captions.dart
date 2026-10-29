@@ -62,7 +62,9 @@ final class DeviceCaptions {
       edge: edgeType ?? standard.edge,
       font: typeface ?? standard.font,
       bold: style.bold,
-      scale: fontScale,
+      scale: fontScale.isFinite && fontScale > 0
+          ? fontScale.clamp(0.25, 4.0)
+          : style.size.scale,
       raise: style.position.raise,
     );
   }

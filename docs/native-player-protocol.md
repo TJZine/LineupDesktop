@@ -555,6 +555,26 @@ Cue updates never emit a general Player snapshot or coordinator notification.
 Malformed cues are skipped with a fixed message. Cues clear on replacement load,
 stop, terminal state, subtitle-off, stale-load rejection and disposal.
 
+The coordinator owns one `SubtitleAppearanceSource` for its app/controller
+scope. Engine presentation, Player text and the Settings preview consume this
+same resolved value. The coordinator retains it even without Flutter cues;
+additional consumers may `retain()` and release without registering another
+channel handler. The source cancels the device subscription when no consumer
+requires device style, and disposes its client with the coordinator.
+
+On Android, with `useDeviceStyle` enabled, device `fontScale` supplies the
+**same effective scale for every subtitle format**, including engine-drawn ASS
+and images, regardless of the OS captions enabled switch. Positive device
+scales are clamped to the protocol's 0.25–4.0 range before either painting or
+sending. Until the initial asynchronous device read completes, both use the
+saved Lineup scale; load never awaits that read. Device changes and a refresh
+on application resume update that shared appearance and coalesce through the
+existing native command rules. Color-only device changes send no presentation
+command. Disabling device style restores the saved Lineup appearance and
+scale. Position, Bold and the styled-subtitle toggle remain Lineup's choices;
+device-derived values are never persisted. Desktop never invokes the Android
+caption channel. Canceled/disposed reads and callbacks cannot publish or send.
+
 **Event: `property` with name `subtitle-cues`:**
 
 - Value: a list of at most 8 cues; an empty list clears. Each cue is
