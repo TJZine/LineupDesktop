@@ -544,7 +544,7 @@ def main():
                        "FoundationValueConversion.mm", "VideoGeometry.h", "VideoGeometry.mm")],
                     *(REPO / "native/player_core").glob("*.h"),
                     *[REPO / "native/player_core" / name for name in
-                      ("player_core.cpp", "libmpv_operations.cpp", "platform_arguments.cpp", "track_list_encoder.cpp")]]
+                      ("player_core.cpp", "subtitle_cues.cpp", "libmpv_operations.cpp", "platform_arguments.cpp", "track_list_encoder.cpp")]]
     source_hashes = {str(path.relative_to(REPO)): sha(path) for path in source_paths if path.is_file()}
     metadata = {"runtime": identity, "source_files": source_hashes,
                 "source_head": run(["git", "-C", str(REPO), "rev-parse", "HEAD"], label="source-head").decode().strip()}
