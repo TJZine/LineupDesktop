@@ -806,6 +806,20 @@ void _evictClearLogos() {
   }
 }
 
+/// Waits for all pending clear-logo rasters, including decodes started by waiters.
+/// Widget tests should call this in `runAsync`, then pump to paint the result.
+@visibleForTesting
+Future<void> clearLogoDecodesSettled() async {
+  while (true) {
+    final pending = [
+      for (final entry in _clearLogoCache)
+        if (!entry.completed) entry.done,
+    ];
+    if (pending.isEmpty) return;
+    await Future.wait(pending);
+  }
+}
+
 @visibleForTesting
 void debugResetClearLogoCache() {
   for (final entry in _clearLogoCache) {

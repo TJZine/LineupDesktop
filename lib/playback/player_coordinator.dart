@@ -112,6 +112,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _noticeTimer;
   Timer? _busyTimer;
   Timer? _channelStepTimer;
+  Timer? _channelTagTimer;
+  int? _channelTagTuneGeneration;
   Completer<bool>? _channelStepCompletion;
   String? _channelStepTargetId;
   String? _notice;
@@ -205,6 +207,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       );
   List<PlayerTrack> get tracks => _tracks;
   PlayerOverlay get overlay => _overlay;
+
+  /// A tune gets one channel-tag window, starting with observed playback.
+  bool get channelTagWindowActive => _channelTagTimer?.isActive ?? false;
   int get overlayPresentationGeneration => _overlayPresentationGeneration;
   String get channelNumber => _channelNumber;
   String? get miniGuideChannelId =>
@@ -474,6 +479,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _tracks,
     _overlay,
     _overlayPresentationGeneration,
+    channelTagWindowActive,
     _error,
     _trackConfirmation.type,
     _trackConfirmation.id,
@@ -648,6 +654,16 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
           }
           break;
         case PlayerState.playing:
+          if (!displayHoldActive &&
+              load != null &&
+              _ownsLoad(load) &&
+              _channelTagTuneGeneration == _tuneGeneration) {
+            _channelTagTuneGeneration = null;
+            _channelTagTimer = Timer(const Duration(seconds: 4), () {
+              _channelTagTimer = null;
+              if (!_disposed) notifyListeners();
+            });
+          }
           if (holdTransition) break;
           if (!_preservePresentation &&
               previousState != PlayerState.playing &&
@@ -818,6 +834,16 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     return _tune(channelId);
   }
 
+  int _nextTuneGeneration({bool announceChannel = false}) {
+    _channelTagTimer?.cancel();
+    _channelTagTimer = null;
+    final generation = ++_tuneGeneration;
+    // Natural program/part continuation preserves presentation. Explicit
+    // retunes (including Retry and foreground resume) announce the channel.
+    _channelTagTuneGeneration = announceChannel ? generation : null;
+    return generation;
+  }
+
   Future<bool> _tune(
     String channelId, {
     GuideProgram? endedProgram,
@@ -834,7 +860,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _userPaused = false;
     if (endedProgram == null) _clearTransientStatus();
     _resolvingProgram = null;
-    final generation = ++_tuneGeneration;
+    final generation = _nextTuneGeneration(
+      announceChannel: endedProgram == null,
+    );
     _continuationGeneration = endedProgram == null ? null : generation;
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
@@ -883,7 +911,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _userPaused = false;
     if (await _expireSleepIfNeeded()) return;
     _clearTransientStatus();
-    final generation = ++_tuneGeneration;
+    final generation = _nextTuneGeneration(announceChannel: true);
     ++_controlGeneration;
     try {
       await _load(media);
@@ -1527,7 +1555,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     } else {
       _clearSleepTimer();
     }
-    final generation = ++_tuneGeneration;
+    final generation = _nextTuneGeneration();
     ++_controlGeneration;
     _tuning = false;
     _canRetry = false;
@@ -2037,7 +2065,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _sleepTimer = null;
     _sleepDuration = null;
     _sleepDeadline = null;
-    final tuneGeneration = ++_tuneGeneration;
+    final tuneGeneration = _nextTuneGeneration();
     ++_controlGeneration;
     _tuning = false;
     _canRetry = false;
@@ -2179,7 +2207,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       ++_seekGeneration;
       final fullscreenCleanup = _queueFullscreenReset();
       if (_active != null || _tuning || _nativeCleanupRequired) {
-        ++_tuneGeneration;
+        _nextTuneGeneration();
         _tuning = false;
         _canRetry = false;
         _invalidateAuthorizationRecovery();
@@ -2420,7 +2448,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _displaySubscription = null;
     unawaited(_cancelPlayerSubscription(_fullscreenSubscription));
     _fullscreenSubscription = null;
-    ++_tuneGeneration;
+    _nextTuneGeneration();
     ++_controlGeneration;
     ++_sleepEpoch;
     _activeLoad = null;

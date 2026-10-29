@@ -1,6 +1,7 @@
 package com.tjzine.lineup.player
 
 import android.app.Activity
+import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -11,6 +12,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
@@ -21,7 +23,21 @@ import kotlin.math.roundToInt
 class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMessenger) {
     val view = FrameLayout(activity)
     private val video = SurfaceView(activity)
-    private val subtitles = SubtitleView(activity)
+    // White text with a black outline and no box, like libmpv's default; Media3's
+    // DEFAULT draws an opaque black box behind text cues.
+    private val subtitles =
+        SubtitleView(activity).apply {
+            setStyle(
+                CaptionStyleCompat(
+                    Color.WHITE,
+                    Color.TRANSPARENT,
+                    Color.TRANSPARENT,
+                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                    Color.BLACK,
+                    null,
+                )
+            )
+        }
     private val handler = Handler(Looper.getMainLooper())
     private val channel = MethodChannel(messenger, "lineup/native_player")
     private var rectangle = VideoRect(0.0, 0.0, 0.0, 0.0, 1.0)

@@ -11,6 +11,7 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../../test/support/golden_test_support.dart';
 import '../../test/support/ui_fixture.dart';
@@ -146,8 +147,12 @@ Future<void> _match(
         await precacheImage((element.widget as Image).image, element);
       }
     });
-    await tester.pump();
   }
+  // ClearLogoImage paints a RawImage from its own async decode cache.
+  // This optional test lives outside test/, so allow its test-only hook.
+  // ignore: invalid_use_of_visible_for_testing_member
+  await tester.runAsync(clearLogoDecodesSettled);
+  await tester.pump();
   markSubtreeNeedsPaint(tester.renderObject(boundary));
   await tester.pump();
   await expectLater(boundary, matchesGoldenFile('goldens/$name'));

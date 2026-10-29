@@ -14,6 +14,28 @@ import 'package:lineup_desktop/ui/lineup_canvas.dart';
 void main() {
   tearDown(debugResetClearLogoCache);
 
+  testWidgets('decode settlement handles empty, pending and completed caches', (
+    tester,
+  ) async {
+    await tester.runAsync(clearLogoDecodesSettled);
+
+    final bytes = await _solidLogoBytes(tester);
+    await tester.pumpWidget(_logoApp(bytes));
+    expect(find.text('Readable title'), findsOneWidget);
+    expect(find.byKey(const Key('accepted-logo')), findsNothing);
+
+    await tester.runAsync(clearLogoDecodesSettled);
+    await tester.pump();
+    final image = tester
+        .widget<RawImage>(find.byKey(const Key('accepted-logo')))
+        .image!;
+    expect(image.debugDisposed, isFalse);
+    expect(find.text('Readable title'), findsNothing);
+
+    await tester.runAsync(clearLogoDecodesSettled);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'OSD rejects tiny visible, tall, empty and broken title artwork',
     (tester) async {

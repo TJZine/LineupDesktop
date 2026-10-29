@@ -1,13 +1,17 @@
 package com.tjzine.lineup.player
 
 import android.app.Activity
+import android.graphics.Color
 import android.view.SurfaceView
 import android.view.View
+import androidx.media3.ui.CaptionStyleCompat
+import androidx.media3.ui.SubtitleView
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.StandardMethodCodec
 import java.nio.ByteBuffer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -15,7 +19,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, sdk = [30])
+@Config(manifest = Config.NONE, sdk = [30, 31])
 class NativePlayerAdapterTest {
     private class Messenger : BinaryMessenger {
         var handler: BinaryMessenger.BinaryMessageHandler? = null
@@ -70,6 +74,61 @@ class NativePlayerAdapterTest {
 
         messenger.call("setVideoRect", rect(960.0, 540.0))
         assertEquals(View.VISIBLE, video.visibility)
+        adapter.close()
+    }
+
+    @Test
+    fun visibleRouteRectanglesKeepTheSurfaceUntilPlaybackIsActuallyHidden() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val messenger = Messenger()
+        val adapter = NativePlayerAdapter(activity, messenger)
+        activity.setContentView(adapter.view)
+        val video = (0 until adapter.view.childCount)
+            .map(adapter.view::getChildAt)
+            .filterIsInstance<SurfaceView>()
+            .single()
+        messenger.call("initialize")
+
+        // Flutter transfers the same native output between Player and Guide.
+        // Only a real final hide sends zero; it must still release the view's
+        // surface before a hidden window stop/start, as required by 91528805.
+        repeat(10) {
+            for ((width, height) in listOf(960.0 to 540.0, 320.0 to 180.0)) {
+                messenger.call("setVideoRect", rect(width, height))
+                assertEquals(View.VISIBLE, adapter.view.visibility)
+                assertEquals(View.VISIBLE, video.visibility)
+                assertEquals((width * 2).toInt(), video.layoutParams.width)
+                assertEquals((height * 2).toInt(), video.layoutParams.height)
+                assertEquals(adapter.view, video.parent)
+            }
+        }
+        messenger.call("setVideoRect", rect(0.0, 0.0))
+        assertEquals(View.INVISIBLE, video.visibility)
+        adapter.releaseForBackground()
+        messenger.call("setVideoRect", rect(960.0, 540.0))
+        assertEquals(View.VISIBLE, video.visibility)
+        adapter.close()
+    }
+
+    @Test
+    fun textSubtitlesAreOutlinedWithoutABackgroundBox() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val adapter = NativePlayerAdapter(activity, Messenger())
+        val subtitles = (0 until adapter.view.childCount)
+            .map(adapter.view::getChildAt)
+            .filterIsInstance<SubtitleView>()
+            .single()
+        // SubtitleView has no style getter; read the field setStyle assigns.
+        val style = SubtitleView::class.java.getDeclaredField("style")
+            .apply { isAccessible = true }
+            .get(subtitles) as CaptionStyleCompat
+
+        assertEquals(Color.WHITE, style.foregroundColor)
+        assertEquals(Color.TRANSPARENT, style.backgroundColor)
+        assertEquals(Color.TRANSPARENT, style.windowColor)
+        assertEquals(CaptionStyleCompat.EDGE_TYPE_OUTLINE, style.edgeType)
+        assertEquals(Color.BLACK, style.edgeColor)
+        assertNull(style.typeface)
         adapter.close()
     }
 }
