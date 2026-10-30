@@ -67,6 +67,72 @@ void main() {
     ];
 
     test(
+      'latest bounded pending cue reconciles only after selected observation',
+      () async {
+        await beginLoad();
+        final loadId = calls
+            .lastWhere((c) => c.method == 'load')
+            .arguments['loadId'];
+        Future<void> tracks(bool selected) => _sendNativeEvent(messenger, {
+          'type': 'property',
+          'loadId': loadId,
+          'name': 'track-list',
+          'value': [
+            {'id': 1, 'type': 'sub', 'selected': selected},
+          ],
+        });
+        await tracks(false);
+        await cues(cue('fixture replaced'));
+        await cues(cue('é' * 2048));
+        await cues(
+          cue('é' * 2049),
+        ); // malformed must not replace the bounded latest
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        await tracks(true);
+        expect(
+          player.subtitleCues.value.cues.single.lines.single.single.text,
+          'é' * 2048,
+        );
+        await tracks(false);
+        await tracks(true);
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+      },
+    );
+    test(
+      'Off rejection replays latest cue received while command was pending',
+      () async {
+        await beginLoad();
+        final loadId = calls
+            .lastWhere((c) => c.method == 'load')
+            .arguments['loadId'];
+        await _sendNativeEvent(messenger, {
+          'type': 'property',
+          'loadId': loadId,
+          'name': 'track-list',
+          'value': [
+            {'id': 1, 'type': 'sub', 'selected': true},
+          ],
+        });
+        final off = player.selectTrack(PlayerTrackType.subtitle, null);
+        final rejected = expectLater(off, throwsA(isA<PlayerUnavailable>()));
+        await pumpEventQueue(times: 2);
+        final request = calls.last;
+        await cues(cue('fixture while pending'));
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        await _sendNativeEvent(messenger, {
+          'type': 'trackResult',
+          'loadId': loadId,
+          'requestId': request.arguments['requestId'],
+          'success': false,
+        });
+        await rejected;
+        expect(
+          player.subtitleCues.value.cues.single.lines.single.single.text,
+          'fixture while pending',
+        );
+      },
+    );
+    test(
       'typed method payload, bounds, errors, and ordering during pending stop',
       () async {
         await beginLoad();

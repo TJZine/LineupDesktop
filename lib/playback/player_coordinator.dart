@@ -98,6 +98,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   _sentPresentation;
   Object? _presentationOperation;
   bool _subtitleCuesSuppressed = false;
+  int _subtitleSelectionGeneration = 0;
 
   void _receiveSubtitleCues() {
     if (!_disposed && !_subtitleCuesSuppressed) {
@@ -654,7 +655,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     }.contains(event.status.state)) {
       _subtitleCuesSuppressed = true;
     }
-    if (_subtitleCuesSuppressed) _clearSubtitleCues();
+    if (_subtitleCuesSuppressed) {
+      _clearSubtitleCues();
+    } else if (event.tracksUpdated) {
+      // The transport may have reconciled a cue before this track snapshot was
+      // emitted. Re-read its current value rather than waiting for another cue.
+      _receiveSubtitleCues();
+    }
     _telemetry = event.telemetry;
     _tracks = event.tracks;
     if (event.generation case final generation? when !terminal) {
@@ -1812,8 +1819,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
-    if (type == PlayerTrackType.subtitle && id == null) {
-      _subtitleCuesSuppressed = true;
+    final subtitleSelection = type == PlayerTrackType.subtitle
+        ? ++_subtitleSelectionGeneration
+        : null;
+    if (subtitleSelection != null) {
+      _subtitleCuesSuppressed =
+          id == null ||
+          !_tracks.any((t) => t.type == PlayerTrackType.subtitle && t.selected);
       _clearSubtitleCues();
     }
     final trackSelectionGeneration = ++_trackSelectionGeneration;
@@ -1856,6 +1868,22 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       });
     } catch (error) {
+      if (subtitleSelection != null &&
+          subtitleSelection == _subtitleSelectionGeneration &&
+          !_disposed &&
+          tuneGeneration == _tuneGeneration &&
+          loadGeneration == _activeLoadGeneration &&
+          !const {
+            PlayerState.error,
+            PlayerState.ended,
+            PlayerState.stopped,
+          }.contains(_status.state)) {
+        _subtitleCuesSuppressed = !_tracks.any(
+          (t) => t.type == PlayerTrackType.subtitle && t.selected,
+        );
+        _receiveSubtitleCues();
+      }
+
       if (_ownsTrackSelection(
             trackSelectionGeneration,
             tuneGeneration,

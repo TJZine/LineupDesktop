@@ -28,6 +28,296 @@ import '../support/test_doubles.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  group('subtitle selection reconciliation through the real transport', () {
+    const channel = MethodChannel('lineup/native_player');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    late MethodChannelNativePlayer player;
+    late PlayerCoordinator coordinator;
+    final calls = <MethodCall>[];
+    String? rejection;
+    Completer<void>? delayedInvoke;
+    var autoLifecycle = false;
+    int getLoadId() =>
+        calls.lastWhere((c) => c.method == 'load').arguments['loadId'] as int;
+    Future<void> tracks(bool selected) => _nativeEvent({
+      'type': 'property',
+      'name': 'track-list',
+      'loadId': getLoadId(),
+      'value': [
+        {'id': 1, 'type': 'sub', 'selected': selected},
+      ],
+    });
+    Future<void> cues(String? text, {int? loadId}) => _nativeEvent({
+      'type': 'property',
+      'name': 'subtitle-cues',
+      'loadId': loadId ?? getLoadId(),
+      'value': text == null
+          ? <Object>[]
+          : [
+              {
+                'align': 2,
+                'lines': [
+                  [
+                    {'text': text},
+                  ],
+                ],
+              },
+            ],
+    });
+    String? current(ValueListenable<SubtitleCues> source) =>
+        source.value.isEmpty
+        ? null
+        : source.value.cues.single.lines.single.single.text;
+    Future<void> result(MethodCall call, bool success) => _nativeEvent({
+      'type': 'trackResult',
+      'requestId': call.arguments['requestId'],
+      'loadId': call.arguments['loadId'],
+      'success': success,
+    });
+    Future<void> load() async {
+      final loading = coordinator.loadInitialMedia(
+        Uri.parse('file:///subtitle-reconciliation-fixture.mkv'),
+      );
+      await pumpEventQueue(times: 3);
+      await _nativeEvent({
+        'type': 'state',
+        'state': 'playing',
+        'loadId': getLoadId(),
+      });
+      await loading;
+    }
+
+    setUp(() async {
+      rejection = null;
+      delayedInvoke = null;
+      autoLifecycle = false;
+      calls.clear();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'selectTrack' && delayedInvoke != null) {
+          final pending = delayedInvoke!;
+          delayedInvoke = null;
+          await pending.future;
+        }
+        if (autoLifecycle && call.method == 'stop') {
+          await _nativeEvent({
+            'type': 'stopResult',
+            'stopId': call.arguments['stopId'],
+            'success': true,
+          });
+        }
+        if (autoLifecycle && call.method == 'load') {
+          await _nativeEvent({
+            'type': 'state',
+            'state': 'playing',
+            'loadId': call.arguments['loadId'],
+          });
+        }
+        if (call.method == 'selectTrack' && rejection != null) {
+          throw PlatformException(code: rejection!);
+        }
+        return null;
+      });
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      player = MethodChannelNativePlayer();
+      await player.initialize();
+      coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(() async {
+        coordinator.dispose();
+        await player.dispose();
+        guide.dispose();
+        lineup.dispose();
+        messenger.setMockMethodCallHandler(channel, null);
+      });
+      await load();
+    });
+    for (final failure in ['command_queue_full', 'trackResult']) {
+      test(
+        'rejected subtitle Off resumes current cues without another track list: $failure',
+        () async {
+          await tracks(true);
+          await cues('fixture before request');
+          rejection = failure == 'trackResult' ? null : failure;
+          final off = coordinator.selectTrack(PlayerTrackType.subtitle, null);
+          await pumpEventQueue(times: 2);
+          expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+          if (failure == 'trackResult') {
+            await cues('fixture during pending Off');
+          }
+          if (failure == 'trackResult') {
+            await result(
+              calls.lastWhere((c) => c.method == 'selectTrack'),
+              false,
+            );
+          }
+          await off;
+          if (failure == 'trackResult') {
+            expect(
+              current(coordinator.subtitleCues),
+              'fixture during pending Off',
+            );
+          }
+          await cues('fixture after rejection');
+          expect(current(player.subtitleCues), 'fixture after rejection');
+          expect(current(coordinator.subtitleCues), 'fixture after rejection');
+          expect(coordinator.status.state, PlayerState.playing);
+        },
+      );
+    }
+    test('Off snapshot then cue before selected snapshot retains the first long cue across both gates', () async {
+      await tracks(false);
+      await cues('fixture first long cue');
+      expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+      await tracks(true);
+      expect(current(player.subtitleCues), 'fixture first long cue');
+      expect(current(coordinator.subtitleCues), 'fixture first long cue');
+      var notifications = 0;
+      coordinator.addListener(() => notifications++);
+      await cues('fixture next cue');
+      expect(current(coordinator.subtitleCues), 'fixture next cue');
+      expect(notifications, 0);
+    });
+    test('empty, Off and stale-load events invalidate pending cues before selected observation', () async {
+      for (final invalidation in ['empty', 'off', 'stale']) {
+        await tracks(false);
+        await cues('fixture must not return');
+        switch (invalidation) {
+          case 'empty':
+            await cues(null);
+          case 'off':
+            await tracks(false);
+          case 'stale':
+            await cues('fixture stale', loadId: -1);
+        }
+        await tracks(true);
+        expect(player.subtitleCues.value.isEmpty, isTrue, reason: invalidation);
+        expect(
+          coordinator.subtitleCues.value.isEmpty,
+          isTrue,
+          reason: invalidation,
+        );
+      }
+    });
+    for (final terminal in ['ended', 'error']) {
+      test('pending cue cannot replay after $terminal', () async {
+        await tracks(false);
+        await cues('fixture pending before terminal');
+        autoLifecycle = true;
+        await _nativeEvent({
+          'type': 'state',
+          'state': terminal,
+          'loadId': getLoadId(),
+        });
+        await pumpEventQueue(times: 3);
+        await tracks(true);
+        await cues('fixture late after terminal');
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+      });
+    }
+    for (final outcome in ['invoke', 'trackResult']) {
+      for (final supersededBy in [
+        'load',
+        'stop',
+        'dispose',
+        'laterOff',
+        'laterOn',
+        'audio',
+      ]) {
+        test(
+          'late rejected Off ($outcome) respects newer $supersededBy state across both gates',
+          () async {
+            await tracks(true);
+            final oldLoad = getLoadId();
+            await cues('fixture before Off');
+            final heldInvoke = outcome == 'invoke' ? Completer<void>() : null;
+            delayedInvoke = heldInvoke;
+            final off = coordinator.selectTrack(PlayerTrackType.subtitle, null);
+            await pumpEventQueue(times: 2);
+            final oldRequest = calls.lastWhere(
+              (c) => c.method == 'selectTrack',
+            );
+            Future<void>? later;
+            switch (supersededBy) {
+              case 'load':
+                autoLifecycle = true;
+                await coordinator.tune('channel-b');
+                await tracks(false);
+              case 'stop':
+                autoLifecycle = true;
+                await coordinator.stop();
+              case 'dispose':
+                coordinator.dispose();
+                await player.dispose();
+              case 'laterOff':
+                later = coordinator.selectTrack(PlayerTrackType.subtitle, null);
+              case 'laterOn':
+                later = coordinator.selectTrack(PlayerTrackType.subtitle, 1);
+              case 'audio':
+                later = coordinator.selectTrack(PlayerTrackType.audio, 2);
+            }
+            await pumpEventQueue(times: 2);
+            if (heldInvoke != null) {
+              heldInvoke.completeError(
+                PlatformException(code: 'command_queue_full'),
+              );
+            } else {
+              await result(oldRequest, false);
+            }
+            await off;
+            if (supersededBy == 'laterOff') {
+              await cues('fixture while newer Off is pending');
+              expect(player.subtitleCues.value.isEmpty, isTrue);
+              expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+            }
+            if (later != null) {
+              final latestRequest = calls.lastWhere(
+                (c) => c.method == 'selectTrack',
+              );
+              await result(latestRequest, true);
+              if (supersededBy == 'laterOff') await tracks(false);
+              if (supersededBy == 'laterOn') await tracks(true);
+              await later;
+            }
+            await cues('fixture late old load', loadId: oldLoad);
+            if (supersededBy == 'laterOn' || supersededBy == 'audio') {
+              expect(
+                current(coordinator.subtitleCues),
+                'fixture late old load',
+              );
+            } else {
+              expect(
+                player.subtitleCues.value.isEmpty,
+                isTrue,
+                reason: supersededBy,
+              );
+              expect(
+                coordinator.subtitleCues.value.isEmpty,
+                isTrue,
+                reason: supersededBy,
+              );
+            }
+            if (supersededBy == 'load') {
+              // A delayed completion from the retired load must not revive its cue.
+              await tracks(true);
+              expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+              await cues('fixture new load');
+              expect(current(coordinator.subtitleCues), 'fixture new load');
+            }
+          },
+        );
+      }
+    }
+  });
   group('subtitle presentation', () {
     testWidgets(
       'device appearance shares native scale, coalesces and restores saved size',

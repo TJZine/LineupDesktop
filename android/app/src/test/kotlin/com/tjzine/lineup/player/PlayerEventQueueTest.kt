@@ -11,6 +11,26 @@ class PlayerEventQueueTest {
         QueuedEvent(1, null, mapOf("type" to "property", "name" to "subtitle-cues", "value" to value))
 
     @Test
+    fun clearSlotBecomesCurrentCueBeforeSelectedTrackSnapshotAtCapacity() {
+        val queue = PlayerEventQueue()
+        repeat(127) { queue.add(event(it, "trackResult")) }
+        queue.add(cues(emptyList()))
+        queue.add(QueuedEvent(1, null, mapOf("id" to 127, "type" to "property",
+            "name" to "track-list", "value" to listOf(mapOf("id" to 1, "selected" to true)))))
+        repeat(127) { queue.add(event(128 + it, "stopResult")) }
+        // The later current cue replaces the clear in its existing FIFO slot.
+        queue.add(cues(listOf("fixture current cue")))
+        assertEquals(256, queue.size) // 255 ordinary + one reserved cue
+        val events = generateSequence { queue.take() }.toList()
+        assertEquals((0 until 255).toList(),
+            events.filter { it.value["name"] != "subtitle-cues" }.map { it.value["id"] })
+        assertEquals("subtitle-cues", events[127].value["name"])
+        assertEquals(listOf("fixture current cue"), events[127].value["value"])
+        assertEquals("track-list", events[128].value["name"])
+        assertFalse(queue.consumeOverflow())
+    }
+
+    @Test
     fun firstCueUsesReservedSlotWithoutLosingCompletions() {
         val queue = PlayerEventQueue()
         repeat(255) { queue.add(event(it, if (it % 2 == 0) "trackResult" else "state")) }
