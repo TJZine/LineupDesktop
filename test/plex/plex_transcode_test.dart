@@ -984,6 +984,99 @@ void main() {
         isFalse,
       );
     });
+    for (final codec in ['h264', 'hevc', 'av1', 'vp9']) {
+      final profileName = codec == 'h264'
+          ? 'high'
+          : codec == 'vp9'
+          ? 'profile 0'
+          : 'main';
+      PlexProfile profileWithLevel(String? level) => buildProfile(
+        MediaCapabilities(
+          videoDecoders: [
+            VideoDecoderCapabilities(
+              codec: codec,
+              profiles: [profileName],
+              maxLevel: level,
+              maxBitrateKbps: 1000,
+              maxWidth: 3840,
+              maxHeight: 2160,
+            ),
+          ],
+          audioDecoders: ['aac'],
+          containers: ['mkv'],
+        ),
+        desktop: false,
+      );
+      PlexMediaFacts source(String? level, {int? bitrate}) => PlexMediaFacts(
+        container: 'mkv',
+        videoCodec: codec,
+        videoProfile: profileName,
+        bitDepth: 8,
+        width: 1920,
+        height: 1080,
+        maxLevel: level,
+        bitrateKbps: bitrate,
+        audioCodec: 'aac',
+      );
+      final confirmedLevel = codec == 'h264' || codec == 'hevc';
+      final bound = codec == 'h264' ? 52 : 153;
+      final profile = profileWithLevel(codec == 'h264' ? '5.2' : '5.1');
+      test('$codec populated capability emits only confirmed level policy', () {
+        final rows = profile.profileExtra
+            .split('+')
+            .where((row) => row.contains('name=video.level&'));
+        expect(
+          rows,
+          confirmedLevel
+              ? [
+                  'add-limitation(scope=videoCodec&scopeName=$codec&type=upperBound&name=video.level&value=$bound&replace=true)',
+                ]
+              : isEmpty,
+        );
+        expect(profile.profileExtra, isNot(contains('name=video.bitrate&')));
+        // Bitrate is deliberately deferred for both missing and above-bound facts.
+        expect(profile.eligible(source('$bound')), isTrue);
+        expect(profile.eligible(source('$bound', bitrate: 100000)), isTrue);
+      });
+      for (final level in <String?>[
+        codec == 'h264' ? '42' : '150',
+        '$bound',
+        '${bound + 1}',
+        null,
+        'unknown',
+        '0',
+        '-1',
+        '5.1',
+      ]) {
+        test('$codec source wire level $level respects confirmed bounds', () {
+          final numeric = int.tryParse(level ?? '');
+          expect(
+            profile.eligible(source(level)),
+            !confirmedLevel ||
+                (numeric != null && numeric > 0 && numeric <= bound),
+          );
+        });
+      }
+      test('$codec absent decoder level does not invent a bound', () {
+        final unbounded = profileWithLevel(null);
+        expect(unbounded.profileExtra, isNot(contains('name=video.level&')));
+        expect(unbounded.eligible(source(null)), isTrue);
+      });
+      test('$codec unknown decoder level is never sent as a limitation', () {
+        for (final level in [
+          'unknown',
+          'NaN',
+          'Infinity',
+          '0',
+          '-1',
+          '1e308',
+        ]) {
+          final unknown = profileWithLevel(level);
+          expect(unknown.profileExtra, isNot(contains('name=video.level&')));
+          expect(unknown.eligible(source('42')), !confirmedLevel);
+        }
+      });
+    }
     test('phone without HEVC exact profile', () {
       expect(
         buildProfile(_phone, desktop: false).profileExtra,

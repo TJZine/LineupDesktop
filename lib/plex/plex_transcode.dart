@@ -458,6 +458,9 @@ class PlexMediaFacts {
   final int? width;
   final int? height;
   final int? bitrateKbps;
+
+  /// Plex metadata level encoding: H.264 level × 10, HEVC level × 30.
+  /// Other codec levels are not currently used for local eligibility.
   final String? maxLevel;
   final int? dolbyVisionProfile;
   final String? audioCodec;
@@ -551,11 +554,9 @@ PlexProfile buildProfile(
       if (decoder.maxHeight != null) {
         limitation('video.height', '${decoder.maxHeight}');
       }
-      if (decoder.maxBitrateKbps != null) {
-        limitation('video.bitrate', '${decoder.maxBitrateKbps}');
-      }
-      if (decoder.maxLevel != null) {
-        limitation('video.level', _plexLevel(decoder.maxLevel!));
+      final level = _plexLevel(decoder);
+      if (level != null) {
+        limitation('video.level', '$level');
       }
       if (decoder.profiles.isNotEmpty) {
         limitation(
@@ -603,12 +604,7 @@ PlexProfile buildProfile(
             decoder.maxHeight != null &&
             facts.height! > 0 &&
             facts.height! <= decoder.maxHeight! &&
-            (decoder.maxBitrateKbps == null ||
-                (facts.bitrateKbps != null &&
-                    facts.bitrateKbps! <= decoder.maxBitrateKbps!)) &&
-            (decoder.maxLevel == null ||
-                (facts.maxLevel != null &&
-                    _withinLevel(facts.maxLevel!, decoder.maxLevel!))) &&
+            _withinLevel(facts.maxLevel, decoder) &&
             (facts.dolbyVisionProfile == null ||
                 decoder.dolbyVisionProfiles.contains(facts.dolbyVisionProfile)),
       );
@@ -630,15 +626,33 @@ int _maximumBitDepth(VideoDecoderCapabilities decoder) =>
     )
     ? 10
     : 8;
-bool _withinLevel(String source, String maximum) {
-  final value = double.tryParse(source);
-  final limit = double.tryParse(maximum);
-  return value != null && limit != null && value <= limit;
+// Only H.264 and HEVC level policy is confirmed. Bitrate and other codec
+// levels remain capability facts until their PMS decision policy is confirmed.
+int? _levelScale(String codec) => switch (codec) {
+  'h264' => 10,
+  'hevc' => 30,
+  _ => null,
+};
+
+int? _plexLevel(VideoDecoderCapabilities decoder) {
+  final scale = _levelScale(decoder.codec);
+  final value = double.tryParse(decoder.maxLevel ?? '');
+  if (scale == null || value == null || !value.isFinite || value <= 0) {
+    return null;
+  }
+  final encoded = value * scale;
+  if (!encoded.isFinite) return null;
+  final rounded = encoded.round();
+  return (encoded - rounded).abs() < 0.000001 ? rounded : null;
 }
 
-String _plexLevel(String level) {
-  final value = double.tryParse(level);
-  return value == null ? level : (value * 10).round().toString();
+bool _withinLevel(String? source, VideoDecoderCapabilities decoder) {
+  if (_levelScale(decoder.codec) == null || decoder.maxLevel == null) {
+    return true;
+  }
+  final limit = _plexLevel(decoder);
+  final value = int.tryParse(source ?? '');
+  return limit != null && value != null && value > 0 && value <= limit;
 }
 
 List<String> _plexVideoProfiles(VideoDecoderCapabilities decoder) => [
