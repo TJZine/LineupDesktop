@@ -105,7 +105,8 @@ class LineupBootstrap extends StatefulWidget {
   final String? initialMediaPath;
   final DateTime Function()? guideClock;
 
-  /// Null follows the host platform for the production composition root.
+  /// Production passes the profile resolved before runApp.
+  /// Null preserves the host fallback for alternate compositions.
   /// Tests and alternate compositions can inject the form factor explicitly.
   final DeviceProfile? profile;
 

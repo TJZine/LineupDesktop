@@ -20,6 +20,40 @@ notices work offline, and Android native-runtime notices are generated into the
 APK assets (see [Release packaging and runtime notices](#release-packaging-and-runtime-notices)). Android hides the Windows HDR-matching toggle and
 exposes Settings during onboarding and the Licenses row under Support.
 
+## Form factor
+
+Before Dart starts, `MainActivity.getDartEntrypointArgs` appends exactly one
+authoritative `--form-factor=tv|handheld` argument. It preserves other
+entrypoint arguments (including debug `--media`) and removes caller-supplied
+form-factor flags. Kotlin `DeviceForm.detect` is the single detection authority:
+television UI mode, the leanback system feature, or `amazon.hardware.fire_tv`
+means TV; all other cases mean handheld.
+
+The activity computes one immutable result, shared by entrypoint arguments and
+the diagnostic no-argument `lineup/platform.deviceProfile` method. The latter
+returns `{formFactor: "tv" | "handheld"}` and rejects non-null arguments with
+`invalid_arguments`. Docking or uiMode changes handled by the existing
+`configChanges` do not reclassify the running composition.
+
+Dart reads the argument synchronously before `runApp`, with no startup channel
+request or timeout. Only a missing or malformed Android form-factor argument
+reports through `FlutterError.reportError` and retains the TV fallback; reports
+never dump entrypoint arguments. Debug builds log only the resolved form factor.
+Other hosts retain their desktop profile without requiring a native argument.
+Android release builds still ignore development `--media` arguments.
+
+This contract requires the activity-created engine used by the current plain
+`FlutterActivity`. The pinned Flutter engine passes entrypoint arguments when
+starting that engine; cached or already-running engines skip that execution.
+Any future cached/prewarmed engine path must revise this contract first.
+
+The manifest no longer locks landscape. TV hardware retains its landscape
+orientation. Handheld orientation is temporarily unrestricted until the
+destination-specific Dart policy and approved handheld layouts are implemented.
+This detection baseline does not establish handheld UI acceptance. Fire OS
+detection is covered with a stubbed system feature in JVM tests; physical Fire
+TV and Android 9 TV detection remain acceptance checklist items.
+
 ## Playback adapter
 
 `MainActivity` composes native default-z-order video, a Media3 SubtitleView and

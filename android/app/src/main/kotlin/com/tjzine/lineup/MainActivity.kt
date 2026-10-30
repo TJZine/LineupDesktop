@@ -12,6 +12,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    // This activity creates its engine. Entrypoint arguments and diagnostics
+    // share one fact even if uiMode changes while the activity remains alive.
+    private val deviceForm by lazy { DeviceForm.detect(this) }
     private var nativePlayer: NativePlayerAdapter? = null
     private var platformChannel: MethodChannel? = null
     private var platformDispatcher: PlatformChannel? = null
@@ -20,6 +23,13 @@ class MainActivity : FlutterActivity() {
         AndroidBackInput(systemBackCallbacks = Build.VERSION.SDK_INT >= 33) {
             flutterEngine?.navigationChannel?.popRoute()
         }
+    }
+
+    override fun getDartEntrypointArgs(): List<String> {
+        val otherArguments = super.getDartEntrypointArgs().orEmpty().filterNot {
+            it == "--form-factor" || it.startsWith("--form-factor=")
+        }
+        return otherArguments + "--form-factor=${deviceForm.wireValue}"
     }
 
     override fun getBackgroundMode() = BackgroundMode.transparent
@@ -56,7 +66,7 @@ class MainActivity : FlutterActivity() {
             channel.invokeMethod("keyboardVisibilityChanged", visible)
         }
         keyboardVisibility = visibility
-        val dispatcher = PlatformChannel(this, visibility)
+        val dispatcher = PlatformChannel(this, visibility, deviceForm = deviceForm)
         platformDispatcher = dispatcher
         platformChannel = channel.also {
             it.setMethodCallHandler(dispatcher)
