@@ -363,6 +363,271 @@ sizes, the protected Player baseline) and the rendered evidence. Extra renders:
 - **Limits:** widget captures, not devices; text scale in the harness is
   linear; no system bars, IME or TalkBack speech were rendered.
 
+## Part 2 direction (agreed by the maintainer, October 30)
+
+**Why it changed.** The first part 2 renders fitted the desktop composition onto
+phones. The maintainer judged them not releasable. A research pass looked at the
+phone and iPad apps of Channels, YouTube TV (including the maintainer's phone
+screenshots), Fubo, Philo, Frndly, Plex, Pluto TV, Xfinity, Spectrum and DIRECTV
+(store screenshots; no sign-in). The direction below takes what fits Lineup's
+product rather than copying any one app:
+- Lineup channels have no network logos; they have a number, a name, and Plex
+  artwork for every program.
+- Personal lineups are small (about 5 to 40 channels).
+- Everything is scheduled; there is no on-demand or DVR destination.
+- The Cinema Continuity signature (the playing picture with the program-color
+  bleed above the schedule) already matches Plex's phone Live TV pattern.
+
+**Agreed decisions** (they define items 3, 4 and 6, and amend item 2 on handheld):
+
+1. **Guide, pattern A, adapted to Lineup.** One channel per row:
+   - a channel tile with the number and short name;
+   - an on-now card with the program artwork thumbnail, title, time left and an
+     amber progress line;
+   - later programs continue to the right, and horizontal swipe moves every row
+     through time together under a ruler;
+   - when something is playing, the picture and its color bleed are pinned above
+     the rows;
+   - a program sheet carries the details.
+   - Portrait tablets use the same rows and show two or three programs each.
+     Windows that qualify for Wide (≥ 1280×720 dp), and the short-wide Handheld
+     windows already rendering well at 0.9, keep the desktop Guide.
+   - Rejected: the dense classic grid (B), which is built for very large
+     lineups and is the worst for touch and readability; a separate On Now
+     card view (C), which has no future schedule, while A's artwork carries
+     most of its appeal.
+2. **Navigation, amending part 1 item 2a on handheld only.**
+   - Phones get a bottom tab bar: Guide, Channels, Settings.
+   - Portrait tablets get a side navigation rail with the same destinations.
+   - Desktop-composition windows keep the approved header and Lineup menu.
+   - Item 2b (Back by visible surface stack) is unchanged. Switching tabs is
+     not a Back step; Back from a tab's root returns to Guide, then backgrounds
+     the app.
+3. **Player in phone portrait.**
+   - The video is pinned at the top.
+   - Below it: the now-playing details, the Subtitles, Audio and Sleep chips,
+     then channel rows. Tapping a row switches channels in place.
+   - Rotating to landscape gives full screen with today's OSD (4R).
+   - A visible minimize control (and a swipe down) shrinks the video to a mini
+     player docked above the tab bar.
+4. **Tap behavior, revising MD-4's "tap inspects" principle.**
+   - Tapping an on-now program tunes that channel.
+   - Tapping a later program, or long-pressing any program, opens the program
+     sheet with a visible Watch action.
+   - Every tune still has a visible equivalent.
+
+**Unchanged from earlier in part 2:** Settings becomes a list that opens each
+category as its own page on phones. Onboarding keeps its current single column;
+phones hide the QR code and its "scan with your phone" line. Keyboard hints
+are hidden on touch devices.
+
+**Next:** build these in the specimen at the approved 0.9 scale, render
+them for every handheld size with the touch and text-scale audits, and append
+items 3, 4, 5 and 6 with exact rules for approval.
+
+## Part 2 items (approved by the maintainer on October 30, 2026, as drafted)
+
+**Evidence.** Real widgets in the specimen at 0.9, behind specimen-only
+switches:
+- `debugHandheldGuideA` (`lib/guide/guide_handheld_specimen.dart`);
+- `debugHandheldTabs` (`lib/app/lineup_shell.dart`);
+- `debugHandheldPlayerPortrait` (`lib/playback/player_handheld_specimen.dart`);
+- `debugHandheldSettingsList` (`lib/app/settings_view.dart`);
+- `debugHandheldOnboarding` (`lib/app/onboarding_view.dart`).
+
+The harness profile is `p4`, with new scenes `guide-sheet`, `phone-watch`
+(Player, audio sheet, minimize, Channels and Settings with the mini player) and
+`phone-settings`. Sheets:
+- `sheets/part2-phone.png`: phone 412×915;
+- `sheets/part2-tablet-fold.png`: 800×1280 portrait tablet and 690×840 fold;
+- `sheets/part2-text-scale.png`: 130 % and 200 %;
+- `sheets/part2-tile-words.png`.
+
+The touch audit is in `audit/summary.md` (`p4-*`).
+
+**Measured results.**
+- Text 1.0: every scene passes at every size.
+- Text 1.3 and 2.0: every UI-A surface passes after the fixes below. The only
+  remaining exceptions come from the Channels management page
+  (`channels_view.dart:370`), which belongs to UI-B and is out of scope here.
+- Touch: every Guide, Player, Settings, sheet and tab target is ≥ 48 dp. The
+  audit's remaining entries are rows clipped at a scroll edge, plus existing
+  48-cu links ("Copy code", "‹ Profiles") that rule 1c already covers.
+- The audit caught and fixed two defects:
+  - Guide tiles, Guide cards and the tabs exposed a button label with no tap
+    action, so TalkBack could not activate them. Semantics now carries
+    `onTap` and `onLongPress`.
+  - Icon buttons were 43–47 dp. They now have a 54–56 cu minimum.
+
+**Class rule shared by items 2–6.** The "portrait composition" applies to a
+Handheld window that is portrait or narrower than 933 cu (840 dp): phones,
+portrait tablets and foldable inner screens. Short-wide Handheld windows and
+Wide windows keep the desktop compositions.
+
+### Item 2 amendment: tab bar and mini player
+
+- **Bottom tab bar** in the portrait composition: Guide, Channels, Settings.
+  - Height 78 cu plus the bottom safe inset; labels may scale to 1.3, and the
+    bar grows with them.
+  - Selected tab: a 64×32 cu pill in the selected-surface color, with
+    primary-text icon and label. Others use muted text.
+  - Hidden while the Player is showing.
+  - Portrait tablets use the same bar (YouTube TV and Plex on iPad do), so
+    there is no separate rail.
+  - The hamburger Lineup menu is not shown where the bar is. Channels still
+    shows it in the specimen; H1 removes it.
+- **Mini player** above the bar on Channels and Settings while playback has a
+  surface:
+  - 76 cu, scaling to 1.3;
+  - a 16:9 live video thumbnail, title, "N · Channel", and play/pause;
+  - tapping it opens the Player.
+  - The Guide tab shows its pinned picture instead. Only one video surface
+    exists at a time; the most recently mounted surface owns the rectangle.
+- **Back (2b) with tabs:** a tab root's Back goes to Guide; Guide's Back
+  backgrounds the app. Settings detail goes back to the Settings list.
+
+### Item 3: Guide (portrait composition)
+
+- **Header:**
+  - logo mark (34 cu) and "Guide" (Instrument Sans 30, which yields space when
+    needed);
+  - a "Now" text button that returns to live and resets the swipe;
+  - "Filter by library" and "Search channels" icon buttons (54 cu). They open
+    the existing library picker and search field as sheets; H2 renders those
+    for review;
+  - header text is capped at 1.3.
+- **Pinned picture**, shown when a live picture exists:
+  - 16:9 at full width, under the header. Tapping it opens the Player.
+  - Under it, a now-strip with the program-color bleed (artwork color at 45 %
+    over the primary surface), "N · Channel", the title (Instrument 24) and a
+    progress bar.
+  - With nothing playing, there is no picture and the rows start under the
+    header.
+- **Ruler:** "Today" in the tile column, labels every 30 minutes, and a coral
+  now-line across the rows.
+- **Rows:**
+  - height 84 cu (phone) or 80 (tablet), times the text scale capped at 1.3;
+  - row text is capped at 1.3 (a named clamp under rule 1d).
+- **Channel tile:**
+  - 100 cu wide (phone) or 120 (tablet);
+  - number in Instrument 26, name at 12 cu on up to two lines;
+  - the name wraps only between words; a word that cannot fit shrinks the
+    text scale, never below 1.0;
+  - tapping the tile tunes; the tuned channel uses the tuned-surface color.
+- **Time scale:**
+  - phone: 30 minutes is 55 % of the program width;
+  - tablet: 75 minutes fills the program width;
+  - origin is the controller's window start; a horizontal swipe moves every
+    row and the ruler together, clamped to the window.
+- **Program cards:**
+  - surfaces: elevated for on-now, primary for later, selected for the tuned
+    channel's on-now card; 8 cu radius; 6 cu gaps;
+  - a 2:3 poster appears only on an on-now card ≥ 150 cu wide whose program
+    has a poster;
+  - title (show title first) at 17 cu, weight 500;
+  - second line: on now, "27m left" or "● Watching · 43m left"; later, the
+    start time;
+  - a 3 cu amber progress line runs along the bottom of on-now cards;
+  - text stays in view while a card's start scrolls off.
+- **Tap:**
+  - on-now card or channel tile: tunes;
+  - later card: opens the program sheet;
+  - long-press on any card: opens the program sheet.
+- **Program sheet:**
+  - a bottom modal, 20 cu top radius, scrolling, at most 90 % of the height;
+  - a program-color gradient (artwork color at 50 % over the primary surface,
+    fading into it), a drag handle, and a 104 cu poster;
+  - "N · Channel", the title (Instrument 30), the episode, and either
+    "start–end · Nm left" or "start–end · N min";
+  - media badges and up to 6 lines of synopsis;
+  - for a later program: "Airs at 11:00 PM. Watching tunes channel 2 now.";
+  - actions: "Watch channel N" (filled) and Close.
+- **States:**
+  - a loading row shows "Loading schedule…";
+  - a failed row shows "Schedule unavailable" with Retry;
+  - when every row fails, a full overlay shows "Schedules couldn't load" with
+    one Retry, and the rows stay quiet;
+  - with no channels, the existing "No channels yet" / "Set up channels"
+    state shows.
+- **Not changed:** the controller, the window model, the scheduling.
+
+### Item 4: Player
+
+- **Portrait composition**, with no auto-hiding OSD:
+  - The video is 16:9 at full width under the status inset. On the video sit
+    a minimize chevron (56 cu, top left; goes to Guide with the pinned
+    picture), a full-screen button (56 cu, bottom right; rotates to the
+    landscape full screen of 4R), and a 4 cu amber progress line along the
+    bottom.
+  - Below it:
+    - "N · Channel";
+    - the title (Instrument 30);
+    - episode facts;
+    - "start–end · Nm left · Up next X";
+    - Subtitles, Audio and Sleep outlined chips (54 cu tall), showing the
+      selected track's short label.
+  - Then a "CHANNELS" list:
+    - each row is at least 76 cu: a number block, the title, "Channel · Nm
+      left" and a progress line;
+    - the tuned row uses the selected surface and shows "● Watching";
+    - tapping another row tunes it in place.
+- **Pickers** open as bottom sheets at 62 % height over a scrim, on a Material
+  surface:
+  - the track sheet: a title, Done, and 64 cu rows with the primary text and
+    secondary facts, plus a check on the selected row; Subtitles lists Off
+    first;
+  - the sleep sheet: Off, 30 minutes, 1 hour, 90 minutes.
+- **Stopped or error, in portrait:**
+  - inside the video box: the title (Instrument 26) and the reason on up to
+    two lines;
+  - below the details: Retry (when available) and "Or choose another channel
+    below.";
+  - the full-screen slate does not fit a 16:9 phone box (measured), so it is
+    not used in portrait.
+- **Landscape and short-wide windows:**
+  - the existing full-screen Player and the protected OSD;
+  - handheld adds 48 dp hit regions (1c) and hides keyboard hints ("Up/Down
+    Browse · Enter Tune · Esc Close") on touch;
+  - the Mini Guide stays available there.
+
+### Item 5: Onboarding
+
+- **Single column:** keep the current layout at 0.9 (measured fit, 0
+  undersized targets in welcome, servers and profiles).
+- **QR code:** phones (display shortest side < 600 dp) hide the QR code, the
+  "or" divider and "Or scan with your phone"; Open browser stays the primary
+  action. Tablets keep the QR code.
+- **PIN:** keep the in-app keypad, whose keys measure ≥ 48 dp. Do not use the
+  system numeric keyboard.
+- **Profile picker, written rule** (a specimen attempt showed the current
+  card cannot simply be narrowed):
+  - phones show compact profile tiles, two columns below 600 dp and three
+    above;
+  - tiles have an 88 dp avatar, the name underneath, and badges that fit on
+    one line;
+  - H4 renders this for review before merging.
+
+### Item 6: Settings
+
+- **List page**, in Handheld windows narrower than 900 cu:
+  - category rows at least 84 cu tall: the label (control, 18) over the
+    description (15), with a chevron;
+  - no origin "‹ Back to …" link where the tab bar is shown.
+- **Category page:**
+  - an "‹ All settings" text button above it;
+  - the existing category heading and rows;
+  - the "Settings" title is not repeated.
+- **Back (2b):** category page → list → Guide tab.
+- **Rows shown on handheld:**
+  - the onboarding Settings entry and the Licenses row are shown;
+  - the HDR "Match display HDR" row is hidden through the MD-18 signal. The
+    specimen still shows it, because M2's gating is not in this tree;
+  - the subtitle UI record governs the Subtitles category.
+
+**Approved October 30, 2026:** items 2 (amendment), 3, 4, 5 and 6, as drafted.
+The profile-picker grid (item 5) is a written rule; H4 renders it for review
+before merging.
+
 ## Next
 
 The orchestrator copies the approved part 1 into
