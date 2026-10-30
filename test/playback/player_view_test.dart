@@ -127,6 +127,7 @@ void main() {
       expect(rebuilt, isNot(contains('_Osd')));
       fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
+      final beforeNowPlaying = tester.widget<Slider>(find.byType(Slider)).value;
       rebuilt.clear();
       fixture.native.emitState(
         PlayerState.playing,
@@ -136,7 +137,7 @@ void main() {
       await tester.pump();
       expect(
         tester.widget<Slider>(find.byType(Slider)).value,
-        greaterThan(before),
+        greaterThan(beforeNowPlaying),
       );
       expect(rebuilt, isNot(contains('PlayerView')));
       expect(rebuilt, isNot(contains('_NowPlaying')));
