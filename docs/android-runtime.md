@@ -188,6 +188,17 @@ adb -s emulator-5554 exec-out screencap -p > /tmp/lineup-android.png
 Raw logcat and dumps are private evidence. Never commit credentials, tokens,
 server addresses, account names or media titles.
 
+## Debug session measurements
+
+The alternate [fixture entrypoint](../tool/android/fixtures/README.md#e6-session-preparation-debug-only-playback-acceptance-not-run)
+has a debug-only synthetic HLS case and an in-memory live-session input path for
+later authorized E6 measurements. Live capabilities are never command arguments,
+intents or files; the sender requires an explicitly assigned emulator and existing
+forward. Media3 exception logging is suppressed only for the debug live case,
+and the raw-log collector refuses that case. No production bootstrap, coordinator
+or Player UI changes are involved. These offline tools have not established
+emulator/Fire TV playback, offset600/`EXT-X-START`, HDR or audio acceptance.
+
 ## Storage and backup
 
 `FileAppStore` retains its existing application-support directory and format

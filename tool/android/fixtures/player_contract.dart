@@ -1,9 +1,13 @@
 // Disposable emulator runtime check: real Dart transport + production Android adapter.
-// This entrypoint never reads app state, credentials, Plex, or private media.
+// Never reads app state or credentials; live E6 URLs arrive only in memory.
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+
+import 'session_probe.dart';
+
 import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 
@@ -53,6 +57,18 @@ Future<void> _run(List<String> args) async {
   final mode =
       args.where((a) => a.startsWith('--case=')).firstOrNull?.substring(7) ??
       'contract';
+  final sessionMode = mode == 'session-hls' || mode == 'session-live';
+  final cancelled = Completer<void>();
+  void cancel() {
+    if (!cancelled.isCompleted) cancelled.complete();
+  }
+
+  final lifecycle = sessionMode
+      ? AppLifecycleListener(onPause: cancel, onDetach: cancel)
+      : null;
+  bool active() =>
+      !cancelled.isCompleted &&
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
   var phase = 'initialize';
   player.events.listen((event) {
     if (event.status.state == PlayerState.error ||
@@ -83,6 +99,10 @@ Future<void> _run(List<String> args) async {
   }
 
   try {
+    if ((mode == 'session-hls' || mode == 'session-live') && !kDebugMode) {
+      throw const SessionProbeFailure('debug_required');
+    }
+    if (sessionMode && !active()) throw const SessionProbeFailure('cancelled');
     await player.initialize();
     if (!player.fullscreen) throw StateError('initial_fullscreen');
     await player.setFullscreen(false);
@@ -103,6 +123,27 @@ Future<void> _run(List<String> args) async {
       const PlayerVideoRect(left: 0, top: 0, width: 960, height: 540, scale: 2),
     );
     _fact('initialized');
+    if (sessionMode) {
+      phase = 'session-input';
+      if (!active()) throw const SessionProbeFailure('cancelled');
+      final request = mode == 'session-hls'
+          ? SessionProbeRequest(
+              Uri.parse('https://localhost:18443/session/index.m3u8'),
+              0,
+              8,
+            )
+          : await receiveSessionProbe(cancelled: cancelled.future);
+      phase = 'session-measurement';
+      await measureSessionProbe(
+        player,
+        request,
+        record: _fact,
+        cancelled: cancelled.future,
+        active: active,
+      );
+      _fact('PASS', {'case': mode});
+      return;
+    }
     if (mode == 'release-isolation') {
       phase = 'release-isolation';
       try {
@@ -402,9 +443,15 @@ Future<void> _run(List<String> args) async {
   } catch (e) {
     _fact('FAIL', {
       'at': phase,
-      'code': e is PlayerUnavailable ? e.failureCode : 'assertion_or_timeout',
+      'code': e is PlayerUnavailable
+          ? e.failureCode
+          : e is SessionProbeFailure
+          ? e.code
+          : 'assertion_or_timeout',
     });
   } finally {
+    cancel();
+    lifecycle?.dispose();
     try {
       await player.dispose();
       _fact('disposed');

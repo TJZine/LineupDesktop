@@ -120,3 +120,71 @@ frame timestamps. The collector accumulates overlapping PID-filtered snapshots
 instead of overwriting them, preserving early facts even when a device's logcat
 ring wraps. Subtitle snapshots are timed observations; check their pixels against
 the native selection history before attributing each image to a specific codec. It never clears global logs, uninstalls or erases app data.
+
+## E6 session preparation (debug only; playback acceptance not run)
+
+`player_contract.dart --case=session-hls` loads the fixed synthetic
+`/session/index.m3u8` fixture as `plexSession` through the production Dart
+transport and Android adapter. It sends no token and no player start position.
+After a separately authorized emulator assignment, the existing collector accepts
+`--case session-hls`; its ordinary fixture server and reverse-port prerequisites
+still apply. Build this alternate entrypoint with the pinned toolchain:
+
+```sh
+LINEUP_ANDROID_SIGNING=debug-key flutter build apk --debug --no-pub --target-platform android-arm,android-arm64 --target tool/android/fixtures/player_contract.dart
+```
+
+The later live mode is `--case=session-live`. It is rejected outside a Dart debug
+build. Before native engine creation, Android's debug build suppresses Media3's
+third-party logging for this case, because exception objects can contain capability
+URLs. Lineup's fixed sanitized events and measurement records remain enabled.
+Start each fixture case in a fresh app process, as the existing runner does;
+the Media3 log suppression lasts for that debug process. Release and other
+cases do not activate it.
+
+Live mode accepts one JSON message through a debug-only IPv4 loopback listener
+on device port 18445. It closes the listener and peer after input, on pause/detach,
+on refusal or after a 60-second total input deadline. Input is capped at 32 KiB.
+Fields are `variant` (validated token-free HTTPS URI), `offsetSeconds` (an integer
+0–86400) and optional `observeSeconds` (1–30, default8). No token or player-start
+field is accepted. The offset is only a measurement label: for E6, the separately
+authorized server request must itself use `offset=600`; the player receives no
+explicit start position, preserving the playlist's own `EXT-X-START` behavior.
+
+**No live request or emulator playback is authorized by this preparation.** The
+maintainer's E6 request list, emulator assignment, installation, forward allocation
+and session teardown remain separate. Firestick access and its PD-1A/B ports are
+reserved; the sender refuses physical-device serials. No device or port action
+was performed while implementing these tools.
+
+After explicit emulator authorization and assignment, an operator may create a
+forward using the assigned serial and an explicitly reserved host port:
+
+```sh
+adb -s ASSIGNED_EMULATOR_SERIAL forward tcp:ASSIGNED_HOST_PORT tcp:18445
+```
+
+A trusted in-memory T0/E6 harness can then invoke
+`python3 tool/android/fixtures/deliver_session.py --serial ASSIGNED_EMULATOR_SERIAL --port ASSIGNED_HOST_PORT`
+with the JSON bytes on its subprocess stdin. Never put the capability in argv,
+an intent, a shell command/history, an environment variable or a file. The sender
+refuses terminal input, caps stdin at 32 KiB with a10-second deadline, verifies
+that this exact emulator already owns the forward and performs no launch,
+installation or forwarding action. Only fixed `E6_INPUT_ACCEPTED` or
+`E6_INPUT_REFUSED` is printed; acceptance acknowledges input delivery, not playback.
+Remove only the assigned forward after the authorized run.
+
+`session-ready` and `session-sample` records contain only elapsed milliseconds,
+observed position/duration milliseconds, state and the offset label. Duration0
+means the current Dart transport has no positive duration observation. A pass
+requires readiness, at least400ms of progress during the observation window and
+no stopped/error/ended state. These facts measure the backend timeline; they do
+not establish HDR appearance, decoded audio fidelity or T4 position policy.
+
+The raw-log collector `run_contract.py` deliberately refuses `session-live`.
+Never use raw logcat/dumps or screenshots for a live capability run. A separately
+reviewed E6 collector must discard raw lines in memory and retain only allowlisted
+sanitized facts; no capability URL or raw exception may reach an evidence file.
+Until actual emulator/device observations are made, HLS playback,
+`EXT-X-START`, offset600 position/duration, HDR and audio conversion remain E6
+acceptance work.
