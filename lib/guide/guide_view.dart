@@ -384,6 +384,7 @@ class _GuideViewState extends State<GuideView>
   late final AnimationController _activityPulse;
   ScrollController? _scroll;
   Timer? _clockTimer;
+  late final ValueNotifier<DateTime> _presentationClock;
   int _visibleRows = 8;
   double? _effectiveRowHeight;
   bool _rowHeightAdjustmentScheduled = false;
@@ -391,6 +392,7 @@ class _GuideViewState extends State<GuideView>
   bool _viewportRequestScheduled = false;
   _GuideViewportDemand? _lastViewportDemand;
   String? _lastFocusedChannelId;
+  String? _lastNowLabel;
 
   ({
     Size size,
@@ -445,6 +447,7 @@ class _GuideViewState extends State<GuideView>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _lastFocusedChannelId = widget.controller.focusedChannelId;
+    _presentationClock = ValueNotifier(widget.controller.now);
     _searchController.text = widget.controller.searchQuery;
     _observedSearchQuery = widget.controller.searchQuery;
     _searchContentGeneration = widget.controller.lineup.contentGeneration;
@@ -455,6 +458,7 @@ class _GuideViewState extends State<GuideView>
     );
     widget.controller.refreshForPresentation();
     widget.controller.addListener(_changed);
+    widget.controller.focus.addListener(_focusChanged);
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _refreshClock();
     });
@@ -464,7 +468,8 @@ class _GuideViewState extends State<GuideView>
   void _refreshClock() {
     if (!mounted) return;
     widget.controller.refreshForPresentation();
-    setState(() {});
+    _presentationClock.value = widget.controller.now;
+    _focusChanged();
   }
 
   @override
@@ -493,7 +498,9 @@ class _GuideViewState extends State<GuideView>
       ..dispose();
     _activityPulse.dispose();
     widget.controller.removeListener(_changed);
+    widget.controller.focus.removeListener(_focusChanged);
     _clockTimer?.cancel();
+    _presentationClock.dispose();
     _scroll
       ?..removeListener(_scrolled)
       ..dispose();
@@ -593,10 +600,22 @@ class _GuideViewState extends State<GuideView>
       );
     }
     _syncActivityPulse();
+    setState(() {});
+    _focusChanged();
+  }
+
+  void _focusChanged() {
+    if (!mounted) return;
+    final nowLabel = _guideNowLabel(widget.controller);
+    if (_lastNowLabel != null && _lastNowLabel != nowLabel) {
+      // The control's width can change at a window boundary. Recompute its
+      // layout only for that clock transition, not every focus notification.
+      setState(() {});
+    }
+    _lastNowLabel = nowLabel;
     final focusedChannelId = widget.controller.focusedChannelId;
     final revealFocus = focusedChannelId != _lastFocusedChannelId;
     _lastFocusedChannelId = focusedChannelId;
-    setState(() {});
     if (!revealFocus) return;
     if (_revealScheduled) return;
     _revealScheduled = true;
@@ -915,6 +934,7 @@ class _GuideViewState extends State<GuideView>
 
   Widget _toolbar(GuideLayoutPolicy policy) => _Toolbar(
     controller: widget.controller,
+    clock: _presentationClock,
     compact: policy.compact,
     watchingChannelId: widget.watchingChannelId,
     onClose: widget.onClose,
@@ -926,15 +946,22 @@ class _GuideViewState extends State<GuideView>
 
   Widget _showcase(GuideLayoutPolicy policy) => SizedBox(
     height: policy.showcaseHeight,
-    child: _GuideShowcase(
-      controller: widget.controller,
-      picture: widget.pictureInPicture,
-      showIdleArtwork: widget.showIdleArtwork,
-      pictureWidth: policy.pictureWidth,
-      compactLogo: policy.compactLogo,
-      minimumIdentityWidth: policy.minimumIdentityWidth,
-      playbackMessage: widget.playbackMessage,
-      onOpenPlayer: widget.onOpenPlayer,
+    child: ListenableBuilder(
+      listenable: Listenable.merge([
+        widget.controller.focus,
+        widget.controller.selection,
+        _presentationClock,
+      ]),
+      builder: (context, _) => _GuideShowcase(
+        controller: widget.controller,
+        picture: widget.pictureInPicture,
+        showIdleArtwork: widget.showIdleArtwork,
+        pictureWidth: policy.pictureWidth,
+        compactLogo: policy.compactLogo,
+        minimumIdentityWidth: policy.minimumIdentityWidth,
+        playbackMessage: widget.playbackMessage,
+        onOpenPlayer: widget.onOpenPlayer,
+      ),
     ),
   );
 
@@ -967,7 +994,6 @@ class _GuideViewState extends State<GuideView>
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final now = widget.controller.now;
               final visible = GuideGeometry.visibleRows(
                 scrollOffset: scroll.hasClients ? scroll.offset : 0,
                 viewportHeight:
@@ -997,33 +1023,46 @@ class _GuideViewState extends State<GuideView>
                   constraints.maxWidth -
                   policy.channelRailWidth -
                   _guideTimelineGutter;
-              final fraction =
-                  now.difference(widget.controller.windowStart).inMicroseconds /
-                  widget.controller.windowEnd
-                      .difference(widget.controller.windowStart)
-                      .inMicroseconds;
               return Stack(
                 children: [
-                  if (fraction >= 0 && fraction < 1)
-                    Positioned(
-                      left:
-                          policy.channelRailWidth +
-                          _guideTimelineGutter +
-                          timelineWidth * fraction,
-                      top: 0,
-                      bottom: 0,
-                      child: Semantics(
-                        container: true,
-                        label: 'Current time',
-                        child: IgnorePointer(
-                          child: Container(
-                            key: const Key('guide-now-line'),
-                            width: 2,
-                            color: LineupTheme.of(context).liveAccent,
+                  ListenableBuilder(
+                    listenable: Listenable.merge([
+                      widget.controller.focus,
+                      _presentationClock,
+                    ]),
+                    builder: (context, _) {
+                      final now = widget.controller.now;
+                      final fraction =
+                          now
+                              .difference(widget.controller.windowStart)
+                              .inMicroseconds /
+                          widget.controller.windowEnd
+                              .difference(widget.controller.windowStart)
+                              .inMicroseconds;
+                      if (!(fraction >= 0 && fraction < 1)) {
+                        return const SizedBox.shrink();
+                      }
+                      return Positioned(
+                        left:
+                            policy.channelRailWidth +
+                            _guideTimelineGutter +
+                            timelineWidth * fraction,
+                        top: 0,
+                        bottom: 0,
+                        child: Semantics(
+                          container: true,
+                          label: 'Current time',
+                          child: IgnorePointer(
+                            child: Container(
+                              key: const Key('guide-now-line'),
+                              width: 2,
+                              color: LineupTheme.of(context).liveAccent,
+                            ),
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
+                  ),
                   Column(
                     children: [
                       _TimeHeader(
@@ -1056,6 +1095,7 @@ class _GuideViewState extends State<GuideView>
                                   numberColumnWidth: _numberColumnWidth,
                                   watchingChannelId: widget.watchingChannelId,
                                   controller: widget.controller,
+                                  clock: _presentationClock,
                                   railWidth: policy.channelRailWidth,
                                   hideSchedule: _allVisibleFailed,
                                   showProvenance:
@@ -1064,7 +1104,6 @@ class _GuideViewState extends State<GuideView>
                                           MediaQuery.textScalerOf(context)
                                               .scale(1),
                                   onTune: widget.onTune,
-                                  now: now,
                                   activityPulse: _activityPulse,
                                   onGridKey: _gridKey,
                                 ),
@@ -1144,6 +1183,7 @@ class _GuideViewState extends State<GuideView>
   @override
   Widget build(BuildContext context) {
     final channels = widget.controller.channels;
+    _lastNowLabel = _guideNowLabel(widget.controller);
     final roles = LineupTheme.of(context);
     return ScaffoldMessenger(
       child: Scaffold(
@@ -1294,6 +1334,7 @@ class _ClassicGuideSurface extends StatelessWidget {
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.controller,
+    required this.clock,
     required this.watchingChannelId,
     required this.compact,
     required this.onClose,
@@ -1303,6 +1344,7 @@ class _Toolbar extends StatelessWidget {
     required this.onKeyEvent,
   });
   final GuideController controller;
+  final Listenable clock;
   final String? watchingChannelId;
   final bool compact;
   final LineupMenuCallback onClose;
@@ -1317,14 +1359,10 @@ class _Toolbar extends StatelessWidget {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final enlargedControls = textScale > 1;
     final roles = LineupTheme.of(context);
-    final now = controller.now.toLocal();
     final localizations = MaterialLocalizations.of(context);
     final tunedChannel = controller.lineup.channels
         .where((channel) => channel.id == watchingChannelId)
         .firstOrNull;
-    final tunedProgram = tunedChannel == null
-        ? null
-        : controller.currentProgram(tunedChannel.id);
     final showPlaying =
         tunedChannel != null && controller.lineup.settings.nowWatchingBanner;
     final showDate = size.width >= 1100;
@@ -1347,22 +1385,36 @@ class _Toolbar extends StatelessWidget {
             if (showPlaying) ...[
               SizedBox(width: 20.0),
               Expanded(
-                child: Text(
-                  '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
-                  key: const Key('guide-now-playing-context'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: supportingStyle,
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([controller.focus, clock]),
+                  builder: (context, _) {
+                    final tunedProgram = controller.currentProgram(
+                      tunedChannel.id,
+                    );
+                    return Text(
+                      '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
+                      key: const Key('guide-now-playing-context'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: supportingStyle,
+                    );
+                  },
                 ),
               ),
             ] else
               const Spacer(),
             if (showDate)
-              Text(
-                '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}',
-                key: const Key('guide-current-date-time'),
-                maxLines: 1,
-                style: supportingStyle.copyWith(color: roles.mutedText),
+              ListenableBuilder(
+                listenable: Listenable.merge([controller.focus, clock]),
+                builder: (context, _) {
+                  final now = controller.now.toLocal();
+                  return Text(
+                    '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}',
+                    key: const Key('guide-current-date-time'),
+                    maxLines: 1,
+                    style: supportingStyle.copyWith(color: roles.mutedText),
+                  );
+                },
               ),
             SizedBox(width: 8),
             Builder(
@@ -2538,34 +2590,121 @@ class _TimeHeader extends StatelessWidget {
   }
 }
 
+/// Rebuild only the cursor-dependent surface whose selected facts changed.
+class _GuideCursorBuilder extends StatefulWidget {
+  const _GuideCursorBuilder({
+    required this.controller,
+    required this.select,
+    required this.builder,
+    this.child,
+    this.clock,
+    super.key,
+  });
+  final GuideController controller;
+  final Listenable? clock;
+  final Object Function() select;
+  final Widget Function(BuildContext, Widget?) builder;
+  final Widget? child;
+  @override
+  State<_GuideCursorBuilder> createState() => _GuideCursorBuilderState();
+}
+
+class _GuideCursorBuilderState extends State<_GuideCursorBuilder> {
+  late Object _value;
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.select();
+    widget.controller.focus.addListener(_changed);
+    widget.controller.selection.addListener(_changed);
+    widget.clock?.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(_GuideCursorBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.focus.removeListener(_changed);
+      oldWidget.controller.selection.removeListener(_changed);
+      widget.controller.focus.addListener(_changed);
+      widget.controller.selection.addListener(_changed);
+    }
+    if (oldWidget.clock != widget.clock) {
+      oldWidget.clock?.removeListener(_changed);
+      widget.clock?.addListener(_changed);
+    }
+    _value = widget.select();
+  }
+
+  void _changed() {
+    final next = widget.select();
+    if (_value == next) return;
+    setState(() => _value = next);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.focus.removeListener(_changed);
+    widget.controller.selection.removeListener(_changed);
+    widget.clock?.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, widget.child);
+}
+
 class _GuideRow extends StatelessWidget {
   const _GuideRow({
     required this.channel,
     required this.controller,
+    required this.clock,
     required this.watchingChannelId,
     required this.railWidth,
     required this.numberColumnWidth,
     required this.showProvenance,
     required this.hideSchedule,
     required this.onTune,
-    required this.now,
     required this.activityPulse,
     required this.onGridKey,
   });
   final Channel channel;
   final GuideController controller;
+  final Listenable clock;
   final String? watchingChannelId;
   final double railWidth;
   final double numberColumnWidth;
   final bool showProvenance;
   final bool hideSchedule;
   final Future<void> Function(String channelId) onTune;
-  final DateTime now;
   final Animation<double> activityPulse;
   final FocusOnKeyEventCallback onGridKey;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _GuideCursorBuilder(
+    key: ValueKey('guide-row-cursor-${channel.id}'),
+    controller: controller,
+    select: () => (
+      channel.id == controller.focusedChannelId,
+      channel.id == controller.focusedChannelId &&
+          controller.focusedProgramId == null,
+      channel.id == controller.selectedChannelId,
+    ),
+    child: hideSchedule
+        ? const SizedBox.expand()
+        : _Programs(
+            channel: channel,
+            data: controller.row(channel.id),
+            controller: controller,
+            clock: clock,
+            onTune: onTune,
+            activityPulse: activityPulse,
+            onGridKey: onGridKey,
+          ),
+    builder: (context, programs) => _build(context, programs!),
+  );
+
+  Widget _build(BuildContext context, Widget programs) {
     final roles = LineupTheme.of(context);
     final focusedChannel = channel.id == controller.focusedChannelId;
     final focusChannelRail =
@@ -2580,7 +2719,6 @@ class _GuideRow extends StatelessWidget {
             roles.focusBorder.withValues(alpha: 0.24),
             roles.primarySurface,
           );
-    final data = controller.row(channel.id);
     void focusCurrentProgram() {
       final current = controller.currentProgram(channel.id);
       if (current != null) {
@@ -2778,19 +2916,7 @@ class _GuideRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: _guideTimelineGutter),
-          Expanded(
-            child: hideSchedule
-                ? const SizedBox.expand()
-                : _Programs(
-                    channel: channel,
-                    data: data,
-                    controller: controller,
-                    onTune: onTune,
-                    now: now,
-                    activityPulse: activityPulse,
-                    onGridKey: onGridKey,
-                  ),
-          ),
+          Expanded(child: programs),
         ],
       ),
     );
@@ -2802,16 +2928,16 @@ class _Programs extends StatelessWidget {
     required this.channel,
     required this.data,
     required this.controller,
+    required this.clock,
     required this.onTune,
-    required this.now,
     required this.activityPulse,
     required this.onGridKey,
   });
   final Channel channel;
   final GuideRowData data;
   final GuideController controller;
+  final Listenable clock;
   final Future<void> Function(String channelId) onTune;
-  final DateTime now;
   final Animation<double> activityPulse;
   final FocusOnKeyEventCallback onGridKey;
 
@@ -2860,7 +2986,7 @@ class _Programs extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 for (final program in data.programs)
-                  _programCell(program, constraints.maxWidth, now),
+                  _programCell(program, constraints.maxWidth),
                 Positioned(
                   left: 0,
                   top: 0,
@@ -2907,11 +3033,7 @@ class _Programs extends StatelessWidget {
     );
   }
 
-  Widget _programCell(
-    GuideProgram program,
-    double viewportWidth,
-    DateTime now,
-  ) {
+  Widget _programCell(GuideProgram program, double viewportWidth) {
     final rect = GuideGeometry.programRect(
       windowStart: controller.windowStart,
       windowEnd: controller.windowEnd,
@@ -2919,36 +3041,98 @@ class _Programs extends StatelessWidget {
       programEnd: program.scheduled.end,
       viewportWidth: viewportWidth,
     );
-    final current = program.isCurrentAt(now);
-    return _ProgramCell(
+    return _GuideCursorBuilder(
       key: ValueKey(program.id),
-      program: program,
-      focused: program.id == controller.focusedProgramId,
-      selected: program.id == controller.selectedProgramId,
-      current: current,
-      nowOffset: current
-          ? viewportWidth *
-                    now.difference(controller.windowStart).inMicroseconds /
-                    controller.windowEnd
-                        .difference(controller.windowStart)
-                        .inMicroseconds -
-                rect.left
-          : null,
-      past: !program.scheduled.end.isAfter(now),
-      left: rect.left,
-      width: rect.width,
-      onTap: () => controller.focusProgram(program),
-      onDoubleTap: () {
-        if (!program.isCurrentAt(controller.now)) {
-          controller.focusProgram(program);
-          return;
-        }
-        controller.selectProgram(program);
-        unawaited(onTune(channel.id));
+      controller: controller,
+      clock: clock,
+      select: () => (
+        program.id == controller.focusedProgramId,
+        program.id == controller.selectedProgramId,
+        program.isCurrentAt(controller.now),
+        !program.scheduled.end.isAfter(controller.now),
+      ),
+      child: _ProgramNowLine(
+        controller: controller,
+        clock: clock,
+        program: program,
+        viewportWidth: viewportWidth,
+        cellLeft: rect.left,
+        cellWidth: rect.width,
+      ),
+      builder: (context, nowLine) {
+        final now = controller.now;
+        final current = program.isCurrentAt(now);
+        return _ProgramCell(
+          program: program,
+          focused: program.id == controller.focusedProgramId,
+          selected: program.id == controller.selectedProgramId,
+          current: current,
+          nowLine: nowLine!,
+          past: !program.scheduled.end.isAfter(now),
+          left: rect.left,
+          width: rect.width,
+          onTap: () => controller.focusProgram(program),
+          onDoubleTap: () {
+            if (!program.isCurrentAt(controller.now)) {
+              controller.focusProgram(program);
+              return;
+            }
+            controller.selectProgram(program);
+            unawaited(onTune(channel.id));
+          },
+          reduceMotion: controller.lineup.settings.reduceMotion,
+        );
       },
-      reduceMotion: controller.lineup.settings.reduceMotion,
     );
   }
+}
+
+class _ProgramNowLine extends StatelessWidget {
+  const _ProgramNowLine({
+    required this.controller,
+    required this.clock,
+    required this.program,
+    required this.viewportWidth,
+    required this.cellLeft,
+    required this.cellWidth,
+  });
+  final GuideController controller;
+  final Listenable clock;
+  final GuideProgram program;
+  final double viewportWidth;
+  final double cellLeft;
+  final double cellWidth;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([controller.focus, clock]),
+    builder: (context, _) {
+      final now = controller.now;
+      final x =
+          viewportWidth *
+              now.difference(controller.windowStart).inMicroseconds /
+              controller.windowEnd
+                  .difference(controller.windowStart)
+                  .inMicroseconds -
+          cellLeft;
+      if (!program.isCurrentAt(now) || !(x >= 0 && x < cellWidth)) {
+        return const SizedBox.shrink();
+      }
+      return Positioned(
+        // The cell's one-pixel border is inside its timeline geometry.
+        left: x - 1,
+        top: 0,
+        bottom: 0,
+        child: IgnorePointer(
+          child: ColoredBox(
+            key: const Key('guide-cell-now-line'),
+            color: LineupTheme.of(context).liveAccent,
+            child: const SizedBox(width: 2),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _ScheduleStatus extends StatelessWidget {
@@ -3062,8 +3246,7 @@ class _ProgramCell extends StatefulWidget {
     required this.onTap,
     required this.reduceMotion,
     this.onDoubleTap,
-    this.nowOffset,
-    super.key,
+    required this.nowLine,
   });
   final GuideProgram program;
   final bool focused;
@@ -3075,7 +3258,7 @@ class _ProgramCell extends StatefulWidget {
   final VoidCallback onTap;
   final bool reduceMotion;
   final VoidCallback? onDoubleTap;
-  final double? nowOffset;
+  final Widget nowLine;
 
   @override
   State<_ProgramCell> createState() => _ProgramCellState();
@@ -3150,24 +3333,7 @@ class _ProgramCellState extends State<_ProgramCell> {
                       width: 1,
                       child: ColoredBox(color: roles.subtleBorder),
                     ),
-                    if (widget.nowOffset case final x?
-                        when x >= 0 && x < widget.width)
-                      Positioned(
-                        left:
-                            x -
-                            border.dimensions
-                                .resolve(Directionality.of(context))
-                                .left,
-                        top: 0,
-                        bottom: 0,
-                        child: IgnorePointer(
-                          child: ColoredBox(
-                            key: const Key('guide-cell-now-line'),
-                            color: roles.liveAccent,
-                            child: const SizedBox(width: 2),
-                          ),
-                        ),
-                      ),
+                    widget.nowLine,
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 9,
@@ -3241,12 +3407,9 @@ class _ProgramCellContent extends StatelessWidget {
         final time =
             '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
         final liveWidth = current ? 7 + gap : 0.0;
-        final titleWidth = _textWidth(
-          primaryTitle,
-          titleStyle,
-          scaler,
-          direction,
-        );
+        final titleWidth = episodeCode == null
+            ? 0.0
+            : _textWidth(primaryTitle, titleStyle, scaler, direction);
         final tagWidth = episodeCode == null
             ? 0.0
             : _textWidth(episodeCode, tagStyle, scaler, direction);
@@ -3343,35 +3506,107 @@ class _ProgramCellContent extends StatelessWidget {
   }
 }
 
+enum _GuideTextMetricKind { height, width }
+
+typedef _GuideTextMetricKey = ({
+  _GuideTextMetricKind kind,
+  String text,
+  TextStyle? style,
+  TextScaler scaler,
+  TextDirection direction,
+});
+
+// Entries survive Guide route disposal. Repeated unconstrained measurements
+// were a measured entry cost; retain only scalar results, never painters/context.
+final _guideTextMetrics = _GuideTextMetrics();
+
+class _GuideTextMetrics {
+  _GuideTextMetrics() {
+    PaintingBinding.instance.systemFonts.addListener(_entries.clear);
+  }
+
+  static const maximumEntries = 512;
+  final _entries = <_GuideTextMetricKey, double>{};
+
+  double measure(_GuideTextMetricKey key, double Function() calculate) {
+    final cached = _entries.remove(key);
+    if (cached != null) {
+      _entries[key] = cached;
+      return cached;
+    }
+    final result = calculate();
+    debugGuideTextMeasureCount++;
+    _entries[key] = result;
+    if (_entries.length > maximumEntries) _entries.remove(_entries.keys.first);
+    return result;
+  }
+}
+
+@visibleForTesting
+int debugGuideTextMeasureCount = 0;
+
+@visibleForTesting
+int get debugGuideTextCacheEntryCount => _guideTextMetrics._entries.length;
+
+@visibleForTesting
+void debugResetGuideTextMetrics() {
+  _guideTextMetrics._entries.clear();
+  debugGuideTextMeasureCount = 0;
+}
+
+@visibleForTesting
+double debugMeasureGuideTextWidth(String text) => _textWidth(
+  text,
+  const TextStyle(fontSize: 18),
+  TextScaler.noScaling,
+  TextDirection.ltr,
+);
+
 double _textHeight(
   TextStyle? style,
   TextScaler scaler,
   TextDirection direction,
-) {
-  final painter = TextPainter(
-    text: TextSpan(text: 'Ag', style: style),
-    textDirection: direction,
-    textScaler: scaler,
-    maxLines: 1,
-  )..layout();
-  final height = painter.height.ceilToDouble();
-  painter.dispose();
-  return height;
-}
+) => _guideTextMetrics.measure(
+  (
+    kind: _GuideTextMetricKind.height,
+    text: 'Ag',
+    style: style,
+    scaler: scaler,
+    direction: direction,
+  ),
+  () {
+    final painter = TextPainter(
+      text: TextSpan(text: 'Ag', style: style),
+      textDirection: direction,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final height = painter.height.ceilToDouble();
+    painter.dispose();
+    return height;
+  },
+);
 
 double _textWidth(
   String text,
   TextStyle? style,
   TextScaler scaler,
   TextDirection direction,
-) {
-  return TextPainter.computeWidth(
+) => _guideTextMetrics.measure(
+  (
+    kind: _GuideTextMetricKind.width,
+    text: text,
+    style: style,
+    scaler: scaler,
+    direction: direction,
+  ),
+  () => TextPainter.computeWidth(
     text: TextSpan(text: text, style: style),
     textDirection: direction,
     textScaler: scaler,
     maxLines: 1,
-  );
-}
+  ),
+);
 
 Size _guideMeasuredText(
   BuildContext context,
