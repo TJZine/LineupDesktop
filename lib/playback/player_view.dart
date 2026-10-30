@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
@@ -74,7 +75,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   FocusNode get _sleepFocus => _controls[_PlayerControl.sleep]!;
   _PlayerControl _lastAction = _PlayerControl.subtitles;
   PlayerOverlay? _trackOrigin;
-  bool get _androidTv => LineupTheme.of(context).androidTv;
+  bool get _isTv => DeviceProfile.of(context).isTv;
   var _sleepAnchor = LayerLink();
   Timer? _visibleClockTimer;
   var _appActive = true;
@@ -104,7 +105,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted &&
-          _androidTv &&
+          _isTv &&
           widget.controller.overlay == PlayerOverlay.nowPlaying) {
         _focusTvAction(first: true);
       }
@@ -171,11 +172,87 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
+  Object? _lastHiddenFacts;
+  Object? _lastBottomPanelFacts;
+  Duration? _lastPosition;
+  List<PlayerTrack> _lastTracks = const [];
+
+  // Keep this next to the consumers: the bottom panel's timing/progress widgets
+  // subscribe separately. Other notifications (including Guide enrichment with
+  // unchanged position) still refresh the complete presentation.
+  Object get _bottomPanelFacts {
+    final controller = widget.controller;
+    final program = controller.currentProgram;
+    final next = controller.nextProgram;
+    final sleepRemaining = controller.sleepRemaining;
+    return (
+      _hiddenFacts,
+      controller.duration,
+      controller.telemetry,
+      program?.id,
+      program?.scheduled.item,
+      next?.id,
+      next?.scheduled.item,
+      controller.presentedState,
+      controller.playbackToggleWillPause,
+      controller.fullscreen,
+      controller.sleepDuration,
+      controller.sleepDeadline,
+      sleepRemaining == null ? null : (sleepRemaining.inSeconds / 60).ceil(),
+      controller.sleepPickerOpen,
+      controller.lineup.contentGeneration,
+    );
+  }
+
+  // These are the facts read by the hidden Player chrome and PlayerSurface.
+  // Position is visible only on the stopped/error slate at its zero boundary.
+  Object get _hiddenFacts {
+    final controller = widget.controller;
+    return (
+      controller.overlay,
+      controller.overlayPresentationGeneration,
+      controller.currentChannel,
+      controller.status.state,
+      controller.status.message,
+      controller.error,
+      controller.canRetry,
+      controller.notice,
+      controller.busyLabel,
+      controller.cursorVisible,
+      controller.channelTagWindowActive,
+      controller.displayHoldActive,
+      controller.tuning,
+      controller.hasPlaybackIntent,
+      controller.lineup.settings,
+      controller.error != null || controller.status.state == PlayerState.error
+          ? controller.position == Duration.zero
+          : null,
+    );
+  }
+
   void _changed() {
     if (!mounted) return;
     _syncVisibleClockTimer();
     final nextOverlay = widget.controller.overlay;
-    if (_androidTv) {
+    final hiddenFacts = _hiddenFacts;
+    final bottomPanelFacts = _bottomPanelFacts;
+    final hiddenUnchanged = _lastHiddenFacts == hiddenFacts;
+    final positionOnly =
+        _lastPosition != widget.controller.position &&
+        _lastBottomPanelFacts == bottomPanelFacts &&
+        listEquals(_lastTracks, widget.controller.tracks);
+    _lastHiddenFacts = hiddenFacts;
+    _lastBottomPanelFacts = bottomPanelFacts;
+    _lastPosition = widget.controller.position;
+    _lastTracks = widget.controller.tracks;
+    if (_renderedOverlay == nextOverlay &&
+        ((nextOverlay == PlayerOverlay.none && hiddenUnchanged) ||
+            ((nextOverlay == PlayerOverlay.osd ||
+                    nextOverlay == PlayerOverlay.nowPlaying) &&
+                positionOnly))) {
+      return;
+    }
+    if (_isTv) {
       final enteringTracks =
           nextOverlay == PlayerOverlay.audioTracks ||
           nextOverlay == PlayerOverlay.subtitleTracks;
@@ -277,7 +354,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                     ?.controller ==
                 widget.controller &&
             _keyboardInput &&
-            !_androidTv) {
+            !_isTv) {
           widget.controller.overlayFocusChanged(nextOverlay, generation, true);
         }
       });
@@ -312,13 +389,13 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   bool _trackKeyboardInput(KeyEvent event) {
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
       _keyboardInput = true;
-      if (_androidTv &&
+      if (_isTv &&
           _rootFocus.hasFocus &&
           widget.controller.overlay == PlayerOverlay.osd &&
           !widget.controller.sleepPickerOpen) {
         widget.controller.showOsd();
       }
-      if (!_androidTv && _rootFocus.hasFocus && !_rootFocus.hasPrimaryFocus) {
+      if (!_isTv && _rootFocus.hasFocus && !_rootFocus.hasPrimaryFocus) {
         widget.controller.overlayFocusChanged(
           widget.controller.overlay,
           widget.controller.overlayPresentationGeneration,
@@ -345,7 +422,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
           resolvePlayerKey(
             LogicalKeyboardKey.goBack,
             overlay: controller.overlay,
-            androidTv: _androidTv,
+            tvRemote: _isTv,
             dvr: controller.lineup.settings.dvrControlsEnabled,
             unsupported: controller.status.state == PlayerState.unsupported,
             initialPress: true,
@@ -364,7 +441,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     }
     final controller = widget.controller;
     var tvOsdAtBottom = false;
-    if (_androidTv &&
+    if (_isTv &&
         {
           LogicalKeyboardKey.goBack,
           LogicalKeyboardKey.escape,
@@ -373,7 +450,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       if (event is KeyRepeatEvent) return KeyEventResult.handled;
       return handleBack() ? KeyEventResult.handled : KeyEventResult.ignored;
     }
-    if (_androidTv && !controller.sleepPickerOpen) {
+    if (_isTv && !controller.sleepPickerOpen) {
       final key = event.logicalKey;
       final overlay = controller.overlay;
       final slateFocused =
@@ -471,7 +548,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       resolvePlayerKey(
         event.logicalKey,
         overlay: controller.overlay,
-        androidTv: _androidTv,
+        tvRemote: _isTv,
         dvr: controller.lineup.settings.dvrControlsEnabled,
         unsupported: controller.status.state == PlayerState.unsupported,
         initialPress: event is KeyDownEvent,
@@ -483,7 +560,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
             (event.logicalKey == LogicalKeyboardKey.arrowDown &&
                     (controller.overlay == PlayerOverlay.none ||
                         controller.overlay == PlayerOverlay.osd)) ||
-                (_androidTv &&
+                (_isTv &&
                     (event.logicalKey == LogicalKeyboardKey.info ||
                         event.logicalKey == LogicalKeyboardKey.keyI))
             ? controller.currentProgram != null
@@ -570,7 +647,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         unawaited(controller.tuneMiniGuideSelection());
       case PlayerAction.showOsd:
         controller.showOsd();
-        if (_androidTv) _focusTvAction(first: true);
+        if (_isTv) _focusTvAction(first: true);
       case PlayerAction.showOsdFromInfo:
         controller.showOsd();
       case PlayerAction.togglePlayback:
@@ -671,6 +748,10 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    _lastHiddenFacts = _hiddenFacts;
+    _lastBottomPanelFacts = _bottomPanelFacts;
+    _lastPosition = controller.position;
+    _lastTracks = controller.tracks;
     final overlay = controller.overlay;
     final infoProgram = overlay == PlayerOverlay.programInfo
         ? controller.currentProgram
@@ -815,7 +896,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                           controller.overlayFocusChanged(
                             overlay,
                             presentationGeneration,
-                            focused && _keyboardInput && !_androidTv,
+                            focused && _keyboardInput && !_isTv,
                           );
                         },
                         child: switch (overlay) {
@@ -1024,7 +1105,7 @@ class _PlayerInsets {
     final horizontal = (MediaQuery.sizeOf(context).width * 0.05)
         .clamp(24.0, 96.0)
         .toDouble();
-    final tv = LineupTheme.of(context).androidTv;
+    final tv = DeviceProfile.of(context).isTv;
     final safe = tv
         ? LineupCanvas.contentInsets(
             context,
@@ -1116,32 +1197,10 @@ class _Osd extends StatelessWidget {
     final leftInset = insets.left;
     final rightInset = insets.right;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
-    final bottomInset = roles.androidTv
+    final bottomInset = DeviceProfile.of(context).isTv
         ? math.max(12.0, safe.bottom) + (dvrControlsEnabled ? 40 : 0)
         : 12.0 + (dvrControlsEnabled ? 40 : 0);
     final program = controller.currentProgram;
-    final next = controller.nextProgram;
-    final scheduleTiming =
-        detailsExpanded &&
-        controller.duration <= Duration.zero &&
-        program != null;
-    final timingDuration = scheduleTiming
-        ? program.scheduled.end.difference(program.scheduled.start)
-        : controller.duration;
-    final duration = timingDuration.inMilliseconds;
-    final rawPosition = scheduleTiming
-        ? controller.guide.now
-              .difference(program.scheduled.start)
-              .inMilliseconds
-        : controller.position.inMilliseconds;
-    final position = duration > 0
-        ? rawPosition.clamp(0, duration)
-        : rawPosition < 0
-        ? 0
-        : rawPosition;
-    final sliderMax = (duration > 0 ? duration : 1).toDouble();
-    final sliderPosition = position.toDouble().clamp(0.0, sliderMax);
-    final displayedPosition = Duration(milliseconds: position.toInt());
     final audioAvailable = controller.tracks.any(
       (track) => track.type == PlayerTrackType.audio,
     );
@@ -1149,8 +1208,6 @@ class _Osd extends StatelessWidget {
       (track) => track.type == PlayerTrackType.subtitle,
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
-    final sliderInteractive =
-        controller.duration > Duration.zero && !unsupported;
     final expanded = !LineupLayout.isCompactWidth(size.width);
     final horizontal = size.width >= 1200 && size.height >= 640;
 
@@ -1303,7 +1360,7 @@ class _Osd extends StatelessWidget {
             icon: const Icon(Icons.menu, semanticLabel: 'Lineup menu'),
           ),
         ),
-      if (!roles.androidTv)
+      if (!DeviceProfile.of(context).isTv)
         IconButton(
           style: actionStyle,
           tooltip: controller.fullscreen ? 'Exit full screen' : 'Full screen',
@@ -1381,13 +1438,6 @@ class _Osd extends StatelessWidget {
         ],
       ],
     );
-    final progressValue = duration <= 0 ? 0.0 : position.toDouble() / duration;
-    final remaining = duration <= 0
-        ? null
-        : _wholeMinutesLeft(
-            displayedPosition,
-            Duration(milliseconds: duration),
-          );
     final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: roles.secondaryText,
       fontSize: 18,
@@ -1399,39 +1449,10 @@ class _Osd extends StatelessWidget {
           : _statusLabel(controller.presentedState) ?? 'Ready',
       style: osdSecondaryStyle,
     );
-    final progress = Row(
-      key: const Key('player-osd-progress-block'),
-      children: [
-        Expanded(
-          child: Text(
-            [
-              '${_duration(displayedPosition)} / ${_duration(timingDuration)}',
-              ?remaining,
-            ].join(' • '),
-            key: const Key('player-osd-timing'),
-            style: osdSecondaryStyle?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ),
-        if (next != null) ...[
-          SizedBox(width: 16),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'Up next • ${_time(context, next.scheduled.start)} • '
-                '${next.scheduled.item.title}',
-                key: const Key('player-osd-next'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: osdSecondaryStyle,
-              ),
-            ),
-          ),
-        ],
-      ],
+    final progress = _OsdProgress(
+      controller: controller,
+      detailsExpanded: detailsExpanded,
+      part: _OsdProgressPart.timing,
     );
     Widget actionGroup(List<Widget> children) =>
         Row(mainAxisSize: MainAxisSize.min, children: children);
@@ -1503,65 +1524,15 @@ class _Osd extends StatelessWidget {
         },
       ),
     );
-    // The slider portal keeps the same fade/semantics ancestry as its lane.
-    // On TV only its interactive target moves inside the content-safe bounds.
-    final slider = Overlay.wrap(
-      key: ValueKey(sliderInteractive),
-      clipBehavior: Clip.none,
-      child: SliderTheme(
-        data: SliderTheme.of(context).copyWith(
-          trackHeight: 4,
-          activeTrackColor: Colors.transparent,
-          inactiveTrackColor: Colors.transparent,
-          thumbShape: SliderComponentShape.noThumb,
-          overlayShape: SliderComponentShape.noOverlay,
-        ),
-        child: Slider(
-          label: roles.androidTv ? 'Playback progress' : null,
-          semanticFormatterCallback: roles.androidTv
-              ? (value) =>
-                    '${_duration(Duration(milliseconds: value.round()))} of ${_duration(timingDuration)}'
-              : null,
-          value: sliderPosition,
-          max: sliderMax,
-          onChanged: sliderInteractive
-              ? (value) =>
-                    controller.seekTo(Duration(milliseconds: value.round()))
-              : null,
-        ),
-      ),
+    final slider = _OsdProgress(
+      controller: controller,
+      detailsExpanded: detailsExpanded,
+      part: _OsdProgressPart.slider,
     );
-    final progressLine = Positioned(
-      key: const Key('player-osd-progress-line'),
-      left: 0,
-      right: 0,
-      bottom: 0,
-      child: SizedBox(
-        height: 40,
-        child: Semantics(
-          hidden: roles.androidTv && dvrControlsEnabled,
-          label: 'Playback progress',
-          value:
-              '${_duration(displayedPosition)} of ${_duration(timingDuration)}',
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: SizedBox(
-                  height: 4,
-                  child: LinearProgressIndicator(
-                    value: progressValue,
-                    color: roles.progressFill,
-                    backgroundColor: roles.progressTrack,
-                  ),
-                ),
-              ),
-              if (dvrControlsEnabled && !roles.androidTv) slider,
-            ],
-          ),
-        ),
-      ),
+    final progressLine = _OsdProgress(
+      controller: controller,
+      detailsExpanded: detailsExpanded,
+      part: _OsdProgressPart.line,
     );
     return Stack(
       fit: StackFit.expand,
@@ -1570,9 +1541,9 @@ class _Osd extends StatelessWidget {
           alignment: Alignment.bottomCenter,
           child: SafeArea(
             top: false,
-            left: !roles.androidTv,
-            right: !roles.androidTv,
-            bottom: !roles.androidTv,
+            left: !DeviceProfile.of(context).isTv,
+            right: !DeviceProfile.of(context).isTv,
+            bottom: !DeviceProfile.of(context).isTv,
             child: _BottomPanelExpansion(
               child: CustomPaint(
                 painter: _OsdPanelMaterial(
@@ -1616,7 +1587,7 @@ class _Osd extends StatelessWidget {
                                     (dvrControlsEnabled ? 40 : 0) +
                                     // The additive compact More info action must
                                     // not crop the shelf's four cast/role pairs.
-                                    (roles.androidTv ? 52 : 0),
+                                    (DeviceProfile.of(context).isTv ? 52 : 0),
                               ),
                             ),
                             const SizedBox(height: 20),
@@ -1687,7 +1658,7 @@ class _Osd extends StatelessWidget {
             anchorFocus: sleepFocus,
           ),
         progressLine,
-        if (dvrControlsEnabled && roles.androidTv)
+        if (dvrControlsEnabled && DeviceProfile.of(context).isTv)
           Positioned(
             key: const Key('player-safe-dvr-target'),
             left: safe.left,
@@ -1722,6 +1693,165 @@ class _OsdTitle extends StatelessWidget {
         style: LineupTypography.osdTitle.copyWith(
           color: LineupTheme.of(context).primaryText,
           shadows: _overlayTextShadow,
+        ),
+      ),
+    );
+  }
+}
+
+enum _OsdProgressPart { timing, line, slider }
+
+class _OsdProgress extends StatelessWidget {
+  const _OsdProgress({
+    required this.controller,
+    required this.detailsExpanded,
+    required this.part,
+  });
+  final PlayerCoordinator controller;
+  final bool detailsExpanded;
+  final _OsdProgressPart part;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: controller,
+    builder: (context, _) => _build(context),
+  );
+
+  Widget _build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
+    final program = controller.currentProgram;
+    final next = controller.nextProgram;
+    final scheduleTiming =
+        detailsExpanded &&
+        controller.duration <= Duration.zero &&
+        program != null;
+    final timingDuration = scheduleTiming
+        ? program.scheduled.end.difference(program.scheduled.start)
+        : controller.duration;
+    final duration = timingDuration.inMilliseconds;
+    final rawPosition = scheduleTiming
+        ? controller.guide.now
+              .difference(program.scheduled.start)
+              .inMilliseconds
+        : controller.position.inMilliseconds;
+    final position = duration > 0
+        ? rawPosition.clamp(0, duration)
+        : rawPosition < 0
+        ? 0
+        : rawPosition;
+    final sliderMax = (duration > 0 ? duration : 1).toDouble();
+    final sliderPosition = position.toDouble().clamp(0.0, sliderMax);
+    final displayedPosition = Duration(milliseconds: position.toInt());
+    final progressValue = duration <= 0 ? 0.0 : position.toDouble() / duration;
+    final remaining = duration <= 0
+        ? null
+        : _wholeMinutesLeft(
+            displayedPosition,
+            Duration(milliseconds: duration),
+          );
+    final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: roles.secondaryText,
+      fontSize: 18,
+      fontWeight: FontWeight.w400,
+    );
+    if (part == _OsdProgressPart.timing) {
+      return Row(
+        key: const Key('player-osd-progress-block'),
+        children: [
+          Expanded(
+            child: Text(
+              [
+                '${_duration(displayedPosition)} / ${_duration(timingDuration)}',
+                ?remaining,
+              ].join(' • '),
+              key: const Key('player-osd-timing'),
+              style: osdSecondaryStyle?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          if (next != null) ...[
+            SizedBox(width: 16),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Up next • ${_time(context, next.scheduled.start)} • '
+                  '${next.scheduled.item.title}',
+                  key: const Key('player-osd-next'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: osdSecondaryStyle,
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+    final sliderInteractive =
+        controller.duration > Duration.zero &&
+        controller.status.state != PlayerState.unsupported;
+    // The slider portal keeps the same fade/semantics ancestry as its lane.
+    // On TV only its interactive target moves inside the content-safe bounds.
+    final slider = Overlay.wrap(
+      key: ValueKey(sliderInteractive),
+      clipBehavior: Clip.none,
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 4,
+          activeTrackColor: Colors.transparent,
+          inactiveTrackColor: Colors.transparent,
+          thumbShape: SliderComponentShape.noThumb,
+          overlayShape: SliderComponentShape.noOverlay,
+        ),
+        child: Slider(
+          label: DeviceProfile.of(context).isTv ? 'Playback progress' : null,
+          semanticFormatterCallback: DeviceProfile.of(context).isTv
+              ? (value) =>
+                    '${_duration(Duration(milliseconds: value.round()))} of ${_duration(timingDuration)}'
+              : null,
+          value: sliderPosition,
+          max: sliderMax,
+          onChanged: sliderInteractive
+              ? (value) =>
+                    controller.seekTo(Duration(milliseconds: value.round()))
+              : null,
+        ),
+      ),
+    );
+    if (part == _OsdProgressPart.slider) return slider;
+    return Positioned(
+      key: const Key('player-osd-progress-line'),
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: SizedBox(
+        height: 40,
+        child: Semantics(
+          hidden: DeviceProfile.of(context).isTv && dvrControlsEnabled,
+          label: 'Playback progress',
+          value:
+              '${_duration(displayedPosition)} of ${_duration(timingDuration)}',
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: SizedBox(
+                  height: 4,
+                  child: LinearProgressIndicator(
+                    value: progressValue,
+                    color: roles.progressFill,
+                    backgroundColor: roles.progressTrack,
+                  ),
+                ),
+              ),
+              if (dvrControlsEnabled && !DeviceProfile.of(context).isTv) slider,
+            ],
+          ),
         ),
       ),
     );
@@ -1914,7 +2044,8 @@ class _NowPlaying extends StatelessWidget {
                                 );
                             final summary = item.summary;
                             var summaryClamped = false;
-                            if (roles.androidTv && summary != null) {
+                            if (DeviceProfile.of(context).isTv &&
+                                summary != null) {
                               final painter =
                                   TextPainter(
                                     text: TextSpan(
@@ -2024,7 +2155,7 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ),
                                 ],
-                                if (roles.androidTv &&
+                                if (DeviceProfile.of(context).isTv &&
                                     (summaryClamped || cast.length > 4)) ...[
                                   const SizedBox(height: 8),
                                   TextButton(
@@ -2676,7 +2807,7 @@ class _MiniGuide extends StatelessWidget {
     final contentInset = (horizontal
         ? (large ? 48.0 : 32.0)
         : roles.overlaySafeArea);
-    final contentPadding = roles.androidTv
+    final contentPadding = DeviceProfile.of(context).isTv
         ? LineupCanvas.contentInsets(
             context,
             minimum: EdgeInsets.fromLTRB(contentInset, 12, contentInset, 16),
@@ -2691,9 +2822,9 @@ class _MiniGuide extends StatelessWidget {
         builder: (context) => Align(
           alignment: Alignment.topCenter,
           child: SafeArea(
-            top: !roles.androidTv,
-            left: !roles.androidTv,
-            right: !roles.androidTv,
+            top: !DeviceProfile.of(context).isTv,
+            left: !DeviceProfile.of(context).isTv,
+            right: !DeviceProfile.of(context).isTv,
             bottom: false,
             child: CustomPaint(
               painter: _MiniGuideFadePainter(
@@ -2873,7 +3004,7 @@ class _MiniGuide extends StatelessWidget {
                               runSpacing: 4,
                               children: [
                                 Text(
-                                  roles.androidTv
+                                  DeviceProfile.of(context).isTv
                                       ? 'Up/Down Browse · Select Tune · Back Close'
                                       : 'Up / Down · Browse · Enter Tune · Esc Close',
                                   style: TextStyle(
@@ -2958,19 +3089,18 @@ class _MiniGuideRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
     final focused = channel.id == controller.miniGuideChannelId;
     return LineupRowSurface(
-      selected: roles.androidTv
+      selected: DeviceProfile.of(context).isTv
           ? channel.id == controller.watchingChannelId
           : focused,
-      focused: roles.androidTv && focused,
+      focused: DeviceProfile.of(context).isTv && focused,
       child: Builder(
         builder: (context) {
           final roles = LineupTheme.of(context);
           final foreground = roles.primaryText;
           final filledFocus =
-              roles.androidTv &&
+              DeviceProfile.of(context).isTv &&
               roles.focusTreatment == LineupFocusTreatment.fill &&
               LineupFocusScope.visible(context, focused);
           final tuned = channel.id == controller.watchingChannelId;
@@ -3278,7 +3408,7 @@ class _SleepTimerPicker extends StatelessWidget {
         .clamp(240.0, double.infinity)
         .toDouble();
     var followerOffset = const Offset(0, -8);
-    if (roles.androidTv) {
+    if (DeviceProfile.of(context).isTv) {
       final safe = LineupCanvas.contentInsets(context);
       final root = Overlay.of(context).context.findRenderObject();
       final target = anchorFocus.context?.findRenderObject();
@@ -3314,8 +3444,9 @@ class _SleepTimerPicker extends StatelessWidget {
     // A newly opened TV picker must take focus from its invoking action.
     // Its selected preset can autofocus within this fresh scope; without it,
     // the already-focused OSD scope keeps the arrow keys on the action row.
-    Widget pickerFocus(Widget child) =>
-        roles.androidTv ? FocusScope(autofocus: true, child: child) : child;
+    Widget pickerFocus(Widget child) => DeviceProfile.of(context).isTv
+        ? FocusScope(autofocus: true, child: child)
+        : child;
     return Positioned.fill(
       child: Align(
         alignment: Alignment.topLeft,
@@ -3774,7 +3905,7 @@ class _TracksState extends State<_Tracks> {
             key: const Key('playback-options-footer'),
             padding: EdgeInsets.only(top: 20),
             child: Text(
-              roles.androidTv
+              DeviceProfile.of(context).isTv
                   ? 'Up/Down Browse · Select Choose · Back Close'
                   : 'Up/Down Browse · Enter Select · Esc Close',
               style: textTheme.bodySmall?.copyWith(color: supportingText),
@@ -4099,7 +4230,6 @@ class _PlaybackDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final railWidth = math.min(constraints.maxWidth * 0.4, 600.0);
@@ -4107,7 +4237,7 @@ class _PlaybackDrawer extends StatelessWidget {
         final basePadding = constraints.maxWidth <= 800
             ? EdgeInsets.all(20)
             : EdgeInsets.fromLTRB(36, 48, 48, 36);
-        final padding = roles.androidTv
+        final padding = DeviceProfile.of(context).isTv
             ? LineupCanvas.contentInsets(
                 context,
                 minimum: basePadding,
@@ -4202,12 +4332,12 @@ class _StatusBug extends StatelessWidget {
     return Align(
       alignment: Alignment.topRight,
       child: SafeArea(
-        left: !roles.androidTv,
-        top: !roles.androidTv,
-        right: !roles.androidTv,
-        bottom: !roles.androidTv,
+        left: !DeviceProfile.of(context).isTv,
+        top: !DeviceProfile.of(context).isTv,
+        right: !DeviceProfile.of(context).isTv,
+        bottom: !DeviceProfile.of(context).isTv,
         child: Padding(
-          padding: roles.androidTv
+          padding: DeviceProfile.of(context).isTv
               ? LineupCanvas.contentInsets(
                   context,
                   minimum: const EdgeInsets.all(24),
@@ -4270,7 +4400,7 @@ class _StoppedSlate extends StatelessWidget {
       child: Center(
         child: SingleChildScrollView(
           child: Padding(
-            padding: roles.androidTv
+            padding: DeviceProfile.of(context).isTv
                 ? LineupCanvas.contentInsets(
                     context,
                     minimum: const EdgeInsets.all(24),
@@ -4306,12 +4436,14 @@ class _StoppedSlate extends StatelessWidget {
                       children: [
                         if (controller.canRetry)
                           FilledButton(
-                            autofocus: roles.androidTv,
+                            autofocus: DeviceProfile.of(context).isTv,
                             onPressed: controller.retry,
                             child: const Text('Retry'),
                           ),
                         OutlinedButton(
-                          autofocus: roles.androidTv && !controller.canRetry,
+                          autofocus:
+                              DeviceProfile.of(context).isTv &&
+                              !controller.canRetry,
                           onPressed: controller.showMiniGuide,
                           child: const Text('Browse channels'),
                         ),
@@ -4329,7 +4461,7 @@ class _StoppedSlate extends StatelessWidget {
         ),
       ),
     );
-    if (!roles.androidTv) return slate;
+    if (!DeviceProfile.of(context).isTv) return slate;
     final active =
         controller.overlay == PlayerOverlay.none ||
         controller.overlay == PlayerOverlay.error;
@@ -4534,7 +4666,7 @@ Color _overlayColor(
         .withValues(alpha: _overlayOpacity(controller, more: more));
 
 Widget _consumeOverlayPadding(BuildContext context, Widget child) {
-  final consume = LineupTheme.of(context).androidTv;
+  final consume = DeviceProfile.of(context).isTv;
   return MediaQuery.removePadding(
     context: context,
     removeLeft: consume,

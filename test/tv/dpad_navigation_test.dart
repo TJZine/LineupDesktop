@@ -114,7 +114,7 @@ void main() {
           addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
           final pending = Completer<void>();
           final fixture = UiFixture(
-            androidTv: true,
+            profile: profileFor(true),
             controller: _RejectedPinController(
               name: 'A deliberately long profile name with a second line and an ellipsis',
               pending: pending,
@@ -190,7 +190,7 @@ void main() {
     (tester) async {
       final fixture = UiFixture(
         controller: _RejectedPinController(),
-        androidTv: true,
+        profile: profileFor(true),
       );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
@@ -256,7 +256,7 @@ void main() {
     (tester) async {
       final fixture = UiFixture(
         controller: _RejectedPinController(current: true),
-        androidTv: true,
+        profile: profileFor(true),
       );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
@@ -282,7 +282,7 @@ void main() {
     'Channels search uses closed navigation focus and explicit Select editing',
     (tester) async {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: LineupScenario(
           stage: SetupStage.ready,
           channels: [
@@ -336,7 +336,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: LineupScenario(
         stage: SetupStage.channelSetup,
         libraries: [
@@ -419,34 +419,38 @@ void main() {
         var applyCalls = 0;
         bool? consent;
         await tester.pumpWidget(
-          MaterialApp(
-            builder: LineupCanvas.builder,
-            theme: LineupTheme.forName(
-              LineupThemeName.emberSteel,
-              androidTv: true,
-            ),
-            home: Scaffold(
-              body: SafeArea(
-                child: LineupFocusScope(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: SetupReviewStep(
-                      review: review,
-                      notice: null,
-                      removalConfirmed: false,
-                      sourceOrder: const [],
-                      sourceLabel: (_) => 'Manual',
-                      initialFilter: SetupReviewFilter.all,
-                      initialSearch: '',
-                      onFilterChanged: (_) {},
-                      onSearchChanged: (_) {},
-                      isGeneratedSourceConfirmedGone: (_) => false,
-                      onBack: () {},
-                      onModeChanged: (_) {},
-                      onRemovalChanged: (_, _) {},
-                      onRemovalConfirmationChanged: (value) => consent = value,
-                      onApply: () => applyCalls++,
-                      onViewLineup: () {},
+          DeviceProfileScope(
+            profile: profileFor(true),
+            child: MaterialApp(
+              builder: LineupCanvas.builder,
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(true).formFactor,
+              ),
+              home: Scaffold(
+                body: SafeArea(
+                  child: LineupFocusScope(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: SetupReviewStep(
+                        review: review,
+                        notice: null,
+                        removalConfirmed: false,
+                        sourceOrder: const [],
+                        sourceLabel: (_) => 'Manual',
+                        initialFilter: SetupReviewFilter.all,
+                        initialSearch: '',
+                        onFilterChanged: (_) {},
+                        onSearchChanged: (_) {},
+                        isGeneratedSourceConfirmedGone: (_) => false,
+                        onBack: () {},
+                        onModeChanged: (_) {},
+                        onRemovalChanged: (_, _) {},
+                        onRemovalConfirmationChanged: (value) =>
+                            consent = value,
+                        onApply: () => applyCalls++,
+                        onViewLineup: () {},
+                      ),
                     ),
                   ),
                 ),
@@ -555,7 +559,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: const LineupScenario(
         stage: SetupStage.channelSetup,
         libraries: [
@@ -594,7 +598,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: LineupScenario(
         stage: SetupStage.ready,
         channels: [_reviewChannel(1)],

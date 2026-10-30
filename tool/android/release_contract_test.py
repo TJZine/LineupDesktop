@@ -1,5 +1,7 @@
 """Portable negative controls for Android manifest and immutable notice checks."""
 import importlib.util
+import hashlib
+import io
 from pathlib import Path
 import tempfile
 import os
@@ -21,6 +23,60 @@ manifest = module('manifest', 'check-manifest.py')
 
 
 class ReleaseContractTest(unittest.TestCase):
+    def test_notice_check_fetches_current_terms_without_trusting_disk_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            url = 'https://example.invalid/terms.txt'
+            terms = b'Current terms\n'
+            cache = root / 'license-cache'
+            cache.mkdir()
+            cached = cache / (hashlib.sha256(url.encode()).hexdigest() + '.txt')
+            cached.write_bytes(terms)
+            modules = root / 'modules'
+            report = []
+            for artifact in ('first', 'second'):
+                pom = modules / 'example' / artifact / '1' / f'{artifact}-1.pom'
+                pom.parent.mkdir(parents=True)
+                pom.write_text(
+                    '<project xmlns="http://maven.apache.org/POM/4.0.0">'
+                    '<licenses><license><name>Example terms</name>'
+                    f'<url>{url}</url></license></licenses></project>')
+                report.append(f'+--- example:{artifact}:1')
+            output = root / 'assets'
+            args = ('\n'.join(report), output, [modules], None, cache, 'fixture')
+            with patch.object(generator.urllib.request, 'urlopen') as fetch:
+                generator.generate(*args)
+                fetch.assert_not_called()
+            original = {p.relative_to(output): p.read_bytes()
+                        for p in output.rglob('*') if p.is_file()}
+
+            cases = (
+                ('stale cache', b'Old terms\n', terms, None),
+                ('invalid cache', b'\xff', terms, None),
+                ('matching cache, changed upstream', terms, b'New upstream terms\n', 'notices differ'),
+                ('empty upstream', terms, b'', 'invalid size'),
+                ('oversized upstream', terms, b'x' * (generator.MAX_DOCUMENT_BYTES + 1), 'invalid size'),
+                ('non-UTF-8 upstream', terms, b'\xff', 'not UTF-8'),
+            )
+            for name, cached_terms, upstream_terms, error in cases:
+                with self.subTest(name=name):
+                    cached.write_bytes(cached_terms)
+                    with patch.object(generator.urllib.request, 'urlopen',
+                                      return_value=io.BytesIO(upstream_terms)) as fetch:
+                        if error:
+                            with self.assertRaisesRegex(generator.GenerationError, error):
+                                generator.generate(*args, check=True)
+                        else:
+                            generator.generate(*args, check=True)
+                        fetch.assert_called_once()
+                    self.assertEqual(cached_terms, cached.read_bytes())
+                    self.assertEqual(original, {p.relative_to(output): p.read_bytes()
+                                                for p in output.rglob('*') if p.is_file()})
+            with patch.object(generator.urllib.request, 'urlopen', side_effect=OSError('offline')):
+                with self.assertRaisesRegex(generator.GenerationError, 'Cannot fetch'):
+                    generator.generate(*args, check=True)
+            self.assertEqual([], list(root.glob('lineup-android-licenses-*')))
+
     def test_back_opt_in_is_required(self):
         root = Path(__file__).resolve().parents[2]
         xml = (root / 'android/app/src/main/AndroidManifest.xml').read_text()

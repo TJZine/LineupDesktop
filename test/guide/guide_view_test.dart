@@ -26,6 +26,7 @@ import 'package:lineup_desktop/playback/native_video_surface.dart';
 import '../support/ui_fixture.dart' show FixturePlayer;
 import '../support/golden_test_support.dart' show loadPinnedTestFonts;
 import '../support/test_doubles.dart';
+import '../support/device_profile_test_support.dart';
 
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -43,6 +44,30 @@ final _narrowLogoPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAABQAAASwCAAAAADeIDU6AAAAWElEQVR4nO3IMQEAAAwCIPuX1gILsANO0kOklFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSinl1xx/t2e0Ivf9MAAAAABJRU5ErkJggg==',
 );
 const _artI1LogoColor = Color(0xFF19E6D4);
+
+Widget _guideCanvasBuilder(BuildContext context, Widget? child) {
+  return DeviceProfileScope(
+    profile: desktopProfile,
+    child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+  );
+}
+
+Widget _desktopCanvasChild(Widget child) => DeviceProfileScope(
+  profile: desktopProfile,
+  child: LineupCanvas(child: child),
+);
+
+Widget _guideTvCanvasBuilder(BuildContext context, Widget? child) =>
+    DeviceProfileScope(
+      profile: tvProfile,
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
+
+TransitionBuilder _guideCanvasBuilderFor(bool tv) =>
+    (_, child) => DeviceProfileScope(
+      profile: profileFor(tv),
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
 
 void main() {
   tearDown(debugResetClearLogoCache);
@@ -70,7 +95,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               focusNode: focus,
@@ -145,7 +170,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -255,7 +280,7 @@ void main() {
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: TextScaler.linear(textScale)),
-              child: LineupCanvas(child: child!),
+              child: _desktopCanvasChild(child!),
             ),
             home: GuideView(
               controller: guide,
@@ -365,7 +390,7 @@ void main() {
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: TextScaler.linear(scale)),
-              child: LineupCanvas(child: child!),
+              child: _desktopCanvasChild(child!),
             ),
             home: GuideView(
               controller: guide,
@@ -462,7 +487,7 @@ void main() {
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context)
                     .copyWith(textScaler: TextScaler.linear(textScale)),
-                child: LineupCanvas(child: child!),
+                child: _desktopCanvasChild(child!),
               ),
               home: GuideView(
                 controller: guide,
@@ -582,7 +607,7 @@ void main() {
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context)
                     .copyWith(textScaler: TextScaler.linear(textScale)),
-                child: LineupCanvas(child: child!),
+                child: _desktopCanvasChild(child!),
               ),
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
@@ -724,7 +749,7 @@ void main() {
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context)
                 .copyWith(textScaler: const TextScaler.linear(1.5)),
-            child: LineupCanvas(child: child!),
+            child: _desktopCanvasChild(child!),
           ),
           home: GuideView(
             controller: guide,
@@ -825,7 +850,7 @@ void main() {
       try {
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               pictureInPicture: const ColoredBox(color: Colors.black),
@@ -912,7 +937,7 @@ void main() {
       addTearDown(lineup.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
@@ -989,7 +1014,7 @@ void main() {
       for (final theme in LineupThemeName.values) {
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             theme: LineupTheme.forName(theme, largeFocusIndicators: true),
             home: GuideView(
               controller: guide,
@@ -1115,7 +1140,7 @@ void main() {
         guide.requestChannels(lineup.channels);
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               onClose: (_, _) {},
@@ -1176,7 +1201,7 @@ void main() {
       var setups = 0;
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1230,7 +1255,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1297,7 +1322,7 @@ void main() {
       addTearDown(guide.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1442,7 +1467,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1478,7 +1503,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1522,7 +1547,7 @@ void main() {
       final elapsed = Stopwatch()..start();
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1567,7 +1592,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1657,7 +1682,7 @@ void main() {
     final firstViewport = Stopwatch()..start();
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -1744,7 +1769,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1806,7 +1831,7 @@ void main() {
       guide.requestChannels(lineup.channels);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1895,7 +1920,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -1963,7 +1988,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -2093,7 +2118,7 @@ void main() {
         ..physicalSize = size;
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
@@ -2181,7 +2206,7 @@ void main() {
       ..physicalSize = const Size(1280, 720);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) => closes++,
@@ -2261,7 +2286,7 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(textScaler: const TextScaler.linear(1.25)),
-          child: LineupCanvas(child: child!),
+          child: _desktopCanvasChild(child!),
         ),
         home: GuideView(
           controller: guide,
@@ -2381,7 +2406,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -2474,7 +2499,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -2550,7 +2575,7 @@ void main() {
         ..physicalSize = size;
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const SizedBox.expand(),
@@ -2611,7 +2636,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -2674,7 +2699,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -2719,6 +2744,506 @@ void main() {
     );
   });
 
+  testWidgets(
+    'focused cells and clock chrome refresh across a program boundary before the periodic tick',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final start = DateTime.utc(2026, 1, 15, 12);
+      var now = start.add(const Duration(minutes: 9, seconds: 59));
+      final lineup = _Lineup(
+        2,
+        scenario: LineupScenario(
+          channels: List.generate(
+            2,
+            (index) => Channel(
+              id: 'channel-$index',
+              number: index + 1,
+              name: 'Channel $index',
+              source: ManualSource([
+                ChannelItem(
+                  id: 'earlier-$index',
+                  title: 'Earlier $index',
+                  duration: const Duration(minutes: 10),
+                ),
+                ChannelItem(
+                  id: 'next-$index',
+                  title: 'Next $index',
+                  duration: const Duration(minutes: 10),
+                ),
+              ]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: start,
+              shuffleSeed: index,
+            ),
+          ),
+          settings: const LineupSettings(
+            reduceMotion: true,
+            nowWatchingBanner: true,
+          ),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            watchingChannelId: 'channel-0',
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final earlier = guide
+          .row('channel-0')
+          .programs
+          .firstWhere((program) => program.scheduled.start == start);
+      final next = guide
+          .row('channel-1')
+          .programs
+          .firstWhere(
+            (program) =>
+                program.scheduled.start ==
+                start.add(const Duration(minutes: 10)),
+          );
+      guide.focusProgram(earlier);
+      await tester.pumpAndSettle();
+      Finder cell(GuideProgram program) => find.byKey(ValueKey(program.id));
+      String label(GuideProgram program) => tester
+          .widgetList<Semantics>(
+            find.descendant(
+              of: cell(program),
+              matching: find.byType(Semantics),
+            ),
+          )
+          .map((widget) => widget.properties.label ?? '')
+          .firstWhere(
+            (label) => label.startsWith(program.scheduled.item.title),
+          );
+      Finder marker(GuideProgram program) => find.descendant(
+        of: cell(program),
+        matching: find.byKey(const Key('guide-cell-now-line')),
+      );
+      expect(label(earlier), contains('currently airing'));
+      expect(label(next), contains('upcoming'));
+      expect(marker(earlier), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
+            .data,
+        '1 · Channel 0 — Earlier 0',
+      );
+      final oldNowLine = tester
+          .getTopLeft(find.byKey(const Key('guide-now-line')))
+          .dx;
+      final oldClock = tester
+          .widget<Text>(find.byKey(const Key('guide-current-date-time')))
+          .data;
+      now = start.add(const Duration(minutes: 10, seconds: 1));
+      guide.focusProgram(next);
+      await tester.pump();
+      expect(label(earlier), contains('ended'));
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
+            .data,
+        '1 · Channel 0 — Next 0',
+      );
+      expect(label(next), contains('currently airing'));
+      expect(marker(earlier), findsNothing);
+      expect(marker(next), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('guide-now-line'))).dx,
+        greaterThan(oldNowLine),
+      );
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('guide-current-date-time')))
+            .data,
+        isNot(oldClock),
+      );
+      // Repeating the same cursor must refresh its fractional marker too.
+      final markerBefore = tester.getTopLeft(marker(next)).dx;
+      final rebuilt = <Element>[];
+      debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element);
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      now = now.add(const Duration(seconds: 5));
+      guide.focusProgram(next);
+      await tester.pump();
+      expect(tester.getTopLeft(marker(next)).dx, greaterThan(markerBefore));
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        isEmpty,
+      );
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_Programs',
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  testWidgets(
+    'presentation clock updates markers and boundary cells without rebuilding the Guide layout',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final start = DateTime.utc(2026, 1, 15, 12);
+      var now = start.add(const Duration(minutes: 9, seconds: 15));
+      final lineup = _Lineup(
+        4,
+        scenario: LineupScenario(
+          channels: List.generate(
+            4,
+            (index) => Channel(
+              id: 'channel-$index',
+              number: index + 1,
+              name: 'Channel $index',
+              source: ManualSource([
+                ChannelItem(
+                  id: 'earlier-$index',
+                  title: 'Earlier $index',
+                  duration: const Duration(minutes: 10),
+                ),
+                ChannelItem(
+                  id: 'next-$index',
+                  title: 'Next $index',
+                  duration: const Duration(minutes: 110),
+                ),
+              ]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: start,
+              shuffleSeed: index,
+            ),
+          ),
+          settings: const LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final programs = [
+        for (var index = 0; index < 4; index++)
+          guide.row('channel-$index').programs,
+      ];
+      guide.focusProgram(programs.first[1]);
+      await tester.pumpAndSettle();
+      Finder cell(GuideProgram program) => find.byKey(ValueKey(program.id));
+      Finder marker(GuideProgram program) => find.descendant(
+        of: cell(program),
+        matching: find.byKey(const Key('guide-cell-now-line')),
+      );
+      final originalMarkers = [
+        for (final row in programs) tester.getTopLeft(marker(row.first)).dx,
+      ];
+      final rebuilt = <Element>[];
+      debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element);
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      void expectStableLayout() {
+        for (final type in [
+          'GuideView',
+          '_GuideRow',
+          '_Programs',
+          '_Toolbar',
+        ]) {
+          expect(
+            rebuilt.where(
+              (element) => element.widget.runtimeType.toString() == type,
+            ),
+            isEmpty,
+            reason: type,
+          );
+        }
+      }
+
+      now = now.add(const Duration(seconds: 30));
+      await tester.pump(const Duration(seconds: 30));
+      expectStableLayout();
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        isEmpty,
+      );
+      for (var index = 0; index < programs.length; index++) {
+        expect(
+          tester.getTopLeft(marker(programs[index].first)).dx,
+          greaterThan(originalMarkers[index]),
+        );
+      }
+      // An ordinary input refreshes every visible marker, but no unrelated text.
+      rebuilt.clear();
+      now = now.add(const Duration(seconds: 5));
+      guide.focusProgram(programs.first[1]);
+      await tester.pump();
+      expectStableLayout();
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        isEmpty,
+      );
+      final markerPositions = [
+        for (final row in programs) tester.getTopLeft(marker(row.first)).dx,
+      ];
+      expect(
+        markerPositions.every((x) => (x - markerPositions.first).abs() < .01),
+        isTrue,
+      );
+      expect(markerPositions.first, greaterThan(originalMarkers.first));
+      // On the next tick, all four old/current pairs cross a real boundary.
+      rebuilt.clear();
+      now = start.add(const Duration(minutes: 10, seconds: 15));
+      await tester.pump(const Duration(seconds: 30));
+      expectStableLayout();
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        hasLength(8),
+      );
+      for (final row in programs) {
+        expect(marker(row.first), findsNothing);
+        expect(marker(row[1]), findsOneWidget);
+        final semantics = tester.widgetList<Semantics>(
+          find.descendant(of: cell(row[1]), matching: find.byType(Semantics)),
+        );
+        expect(
+          semantics.any(
+            (widget) =>
+                widget.properties.label?.contains('currently airing') == true,
+          ),
+          isTrue,
+        );
+      }
+    },
+  );
+
+  testWidgets(
+    'focus rebuilds only affected rails and cells, preserving unrelated tickers',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final lineup = _Lineup(6);
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _guideTvCanvasBuilder,
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: FormFactor.tv,
+          ),
+          home: GuideView(
+            controller: guide,
+            pictureInPicture: const ColoredBox(color: Colors.black),
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      guide.focusProgram(guide.row(guide.focusedChannelId!).programs.first);
+      await tester.pumpAndSettle();
+      final oldChannel = guide.focusedChannelId!;
+      final oldProgram = guide.focusedProgramId!;
+      final rebuilt = <Element>[];
+      debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element);
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      guide.moveVertical(1);
+      await tester.pump();
+      final newChannel = guide.focusedChannelId!;
+      final newProgram = guide.focusedProgramId!;
+      final cursors = rebuilt
+          .where(
+            (element) =>
+                element.widget.runtimeType.toString() == '_GuideCursorBuilder',
+          )
+          .map((element) => (element.widget.key as ValueKey).value)
+          .toList();
+      expect(
+        cursors.where((key) => key.toString().startsWith('guide-row-cursor-')),
+        unorderedEquals([
+          'guide-row-cursor-$oldChannel',
+          'guide-row-cursor-$newChannel',
+        ]),
+      );
+      expect(
+        cursors.where((key) => !key.toString().startsWith('guide-row-cursor-')),
+        unorderedEquals([oldProgram, newProgram]),
+      );
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_ProgramCell',
+        ),
+        hasLength(2),
+      );
+      for (final element in rebuilt.where(
+        (element) => element.widget.runtimeType.toString() == 'FocusedTicker',
+      )) {
+        Object? programKey;
+        element.visitAncestorElements((ancestor) {
+          if (ancestor.widget.runtimeType.toString() != '_GuideCursorBuilder') {
+            return true;
+          }
+          programKey = (ancestor.widget.key as ValueKey).value;
+          return false;
+        });
+        expect([oldProgram, newProgram], contains(programKey));
+      }
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_Programs',
+        ),
+        isEmpty,
+      );
+      expect(
+        rebuilt.where(
+          (element) => element.widget.runtimeType.toString() == '_Toolbar',
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  testWidgets(
+    'Guide text metrics survive route disposal and respect style, scale and system fonts',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      debugResetGuideTextMetrics();
+      addTearDown(debugResetGuideTextMetrics);
+      final now = DateTime.utc(2026, 1, 15, 12, 15);
+      final lineup = _Lineup(6, anchor: now.subtract(const Duration(hours: 1)));
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      final baseTheme = LineupTheme.forName(
+        LineupThemeName.emberSteel,
+        formFactor: FormFactor.tv,
+      );
+      Future<void> show(ThemeData theme) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: _guideTvCanvasBuilder,
+            theme: theme,
+            home: GuideView(
+              controller: guide,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: (_, _) {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await show(baseTheme);
+      final measured = debugGuideTextMeasureCount;
+      expect(measured, greaterThan(0));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await show(baseTheme);
+      expect(
+        debugGuideTextMeasureCount,
+        measured,
+        reason: 'A new Guide route reuses exact prior metrics',
+      );
+      final changedStyle = baseTheme.copyWith(
+        textTheme: baseTheme.textTheme.copyWith(
+          bodySmall: baseTheme.textTheme.bodySmall!.copyWith(letterSpacing: 3),
+        ),
+      );
+      await show(changedStyle);
+      expect(debugGuideTextMeasureCount, greaterThan(measured));
+      final styled = debugGuideTextMeasureCount;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      expect(debugGuideTextMeasureCount, greaterThan(styled));
+      final scaled = debugGuideTextMeasureCount;
+      await tester.binding.handleSystemMessage({'type': 'fontsChange'});
+      expect(debugGuideTextCacheEntryCount, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await show(changedStyle);
+      expect(debugGuideTextMeasureCount, greaterThan(scaled));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'Guide text metrics stay bounded and retain recently used measurements',
+    (tester) async {
+      debugResetGuideTextMetrics();
+      addTearDown(debugResetGuideTextMetrics);
+      final first = debugMeasureGuideTextWidth('metric-0');
+      for (var index = 1; index < 512; index++) {
+        debugMeasureGuideTextWidth('metric-$index');
+      }
+      expect(debugGuideTextCacheEntryCount, 512);
+      expect(debugGuideTextMeasureCount, 512);
+      expect(debugMeasureGuideTextWidth('metric-0'), first);
+      expect(debugGuideTextMeasureCount, 512);
+      debugMeasureGuideTextWidth('metric-new');
+      expect(debugGuideTextCacheEntryCount, 512);
+      expect(debugGuideTextMeasureCount, 513);
+      expect(debugMeasureGuideTextWidth('metric-0'), first);
+      expect(debugGuideTextMeasureCount, 513);
+      debugMeasureGuideTextWidth('metric-1');
+      expect(
+        debugGuideTextMeasureCount,
+        514,
+        reason: 'The least recently used entry was evicted',
+      );
+      expect(debugGuideTextCacheEntryCount, 512);
+    },
+  );
+
   testWidgets('TV focus moves reuse Guide control measurements', (
     tester,
   ) async {
@@ -2736,8 +3261,11 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        builder: _guideTvCanvasBuilder,
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(true).formFactor,
+        ),
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -2814,8 +3342,11 @@ void main() {
       addTearDown(guide.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
-          theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: tv),
+          builder: _guideCanvasBuilderFor(tv),
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(tv).formFactor,
+          ),
           home: GuideView(
             controller: guide,
             showIdleArtwork: true,
@@ -2932,7 +3463,7 @@ void main() {
       addTearDown(guide.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideTvCanvasBuilder,
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
@@ -2981,7 +3512,7 @@ void main() {
     });
   }
 
-  for (final (surface, androidTv, padded) in [
+  for (final (surface, isTv, padded) in [
     ('desktop', false, false),
     ('desktop', false, true),
     ('tv', true, false),
@@ -3039,9 +3570,9 @@ void main() {
             child: MaterialApp(
               theme: LineupTheme.forName(
                 LineupThemeName.emberSteel,
-                androidTv: androidTv,
+                formFactor: profileFor(isTv).formFactor,
               ),
-              builder: LineupCanvas.builder,
+              builder: _guideCanvasBuilderFor(isTv),
               home: GuideView(
                 controller: guide,
                 focusNode: focus,
@@ -3107,8 +3638,11 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
+        builder: _guideTvCanvasBuilder,
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(true).formFactor,
+        ),
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -3176,7 +3710,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
@@ -3229,7 +3763,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -3279,7 +3813,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -3319,7 +3853,7 @@ void main() {
     final tunes = <String>[];
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -3378,7 +3912,7 @@ void main() {
         addTearDown(lineup.dispose);
         await tester.pumpWidget(
           MaterialApp(
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
             home: Scaffold(
               body: GuideView(
@@ -3444,7 +3978,7 @@ void main() {
           key: boundaryKey,
           child: MaterialApp(
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               onClose: (_, _) {},
@@ -3529,7 +4063,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             scaffoldMessengerKey: shellMessenger,
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
             home: Scaffold(
               body: ValueListenableBuilder<bool>(
@@ -3589,7 +4123,7 @@ void main() {
       addTearDown(guide.dispose);
       addTearDown(lineup.dispose);
       Widget app() => MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
         home: GuideView(
           controller: guide,
@@ -3687,7 +4221,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(LineupThemeName.emberSteel),
-            builder: LineupCanvas.builder,
+            builder: _guideCanvasBuilder,
             home: GuideView(
               controller: guide,
               onClose: (_, _) {},
@@ -3840,7 +4374,7 @@ void main() {
       addTearDown(grid.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: Focus(
             onKeyEvent: (_, event) {
               if (event is KeyDownEvent &&
@@ -4038,7 +4572,7 @@ void main() {
       addTearDown(lineup.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -4125,7 +4659,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           home: Focus(
             canRequestFocus: false,
             onKeyEvent: (_, event) {
@@ -4208,7 +4742,7 @@ void main() {
     var appChords = 0;
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: Focus(
           onKeyEvent: (_, event) {
             if (event is KeyDownEvent &&
@@ -4315,7 +4849,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
@@ -4373,7 +4907,7 @@ void main() {
       now = guide.windowStart.add(const Duration(hours: 1));
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _guideCanvasBuilder,
           theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
@@ -4434,7 +4968,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -4496,7 +5030,7 @@ void main() {
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: const TextScaler.linear(2)),
-              child: LineupCanvas(child: child!),
+              child: _desktopCanvasChild(child!),
             ),
             home: GuideView(
               controller: guide,
@@ -4531,7 +5065,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
@@ -4553,7 +5087,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},
@@ -4586,7 +5120,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
@@ -4621,7 +5155,7 @@ void main() {
     );
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
-      builder: LineupCanvas.builder,
+      builder: _guideCanvasBuilder,
       home: GuideView(
         controller: guide,
         onClose: (_, _) {},
@@ -4685,7 +5219,7 @@ void main() {
     );
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
-      builder: LineupCanvas.builder,
+      builder: _guideCanvasBuilder,
       home: GuideView(
         controller: guide,
         onClose: (_, _) {},
@@ -4767,7 +5301,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _guideCanvasBuilder,
         home: GuideView(
           controller: guide,
           onClose: (_, _) {},

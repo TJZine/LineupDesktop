@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,7 +30,7 @@ void main() {
       LineupBootstrap(
         player: native,
         controller: controller,
-        androidTv: true,
+        profile: profileFor(true),
         guideClock: () => _now,
       ),
     );
@@ -104,7 +106,7 @@ void main() {
       LineupBootstrap(
         player: native,
         controller: controller,
-        androidTv: false,
+        profile: profileFor(false),
         guideClock: () => _now,
       ),
     );
@@ -140,7 +142,7 @@ void main() {
           lineup: controller,
           guide: guide,
           clock: () => _now,
-          androidTv: true,
+          suspendInBackground: true,
         );
         addTearDown(controller.dispose);
         addTearDown(guide.dispose);

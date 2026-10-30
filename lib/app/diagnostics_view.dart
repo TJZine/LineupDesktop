@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../app_version.dart';
 import '../diagnostics/diagnostics.dart';
@@ -77,7 +78,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
   }
 
   KeyEventResult _readTechnicalDetails(FocusNode _, KeyEvent event) {
-    if (!LineupTheme.of(context).androidTv ||
+    if (!DeviceProfile.of(context).isTv ||
         !_technicalExpansion.isExpanded ||
         !_scroll.hasClients ||
         (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
@@ -373,7 +374,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               listenable: _technicalStates,
               builder: (context, _) {
                 final fill =
-                    roles.androidTv &&
+                    DeviceProfile.of(context).isTv &&
                     roles.focusTreatment == LineupFocusTreatment.fill &&
                     LineupFocusScope.visible(
                       context,

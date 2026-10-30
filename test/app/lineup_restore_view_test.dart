@@ -399,7 +399,7 @@ void main() {
             child: LineupBootstrap(
               controller: fixture.controller,
               player: native,
-              androidTv: true,
+              profile: profileFor(true),
             ),
           ),
         );

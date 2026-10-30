@@ -74,16 +74,19 @@ void main() {
           expect(controller.serverSelectionCanCancel, isTrue);
         }
         await tester.pumpWidget(
-          MaterialApp(
-            builder: LineupCanvas.builder,
-            theme: LineupTheme.forName(
-              LineupThemeName.emberSteel,
-              androidTv: true,
-            ),
-            home: UpstreamOnboardingView(
-              controller: controller,
-              onLogout: () async {},
-              openBrowser: () async {},
+          DeviceProfileScope(
+            profile: tvProfile,
+            child: MaterialApp(
+              builder: LineupCanvas.builder,
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(true).formFactor,
+              ),
+              home: UpstreamOnboardingView(
+                controller: controller,
+                onLogout: () async {},
+                openBrowser: () async {},
+              ),
             ),
           ),
         );
@@ -229,7 +232,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           builder: LineupCanvas.builder,
-          home: LineupShell(controller: controller, player: FixturePlayer()),
+          home: LineupShell(
+            controller: controller,
+            player: FixturePlayer(),
+            profile: desktopProfile,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -502,7 +509,7 @@ void main() {
     LineupController controller, {
     Future<void> Function()? browser,
     bool accountOrigin = false,
-    bool androidTv = false,
+    bool isTv = false,
     double textScale = 1,
     LineupThemeName themeName = LineupThemeName.emberSteel,
   }) async {
@@ -511,15 +518,18 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(textScaler: TextScaler.linear(textScale)),
-          child: LineupCanvas(
-            reduceMotion: controller.settings.reduceMotion,
-            child: child!,
+          child: DeviceProfileScope(
+            profile: profileFor(isTv),
+            child: LineupCanvas(
+              reduceMotion: controller.settings.reduceMotion,
+              child: child!,
+            ),
           ),
         ),
         theme: LineupTheme.forName(
           themeName,
           largeFocusIndicators: false,
-          androidTv: androidTv,
+          formFactor: profileFor(isTv).formFactor,
         ),
         home: UpstreamOnboardingView(
           controller: controller,
@@ -539,7 +549,7 @@ void main() {
         scenario: const LineupScenario(stage: SetupStage.profiles),
       );
       addTearDown(root.dispose);
-      await show(tester, root, androidTv: true);
+      await show(tester, root, isTv: true);
       final rootState = tester.state<UpstreamOnboardingViewState>(
         find.byType(UpstreamOnboardingView),
       );
@@ -559,7 +569,7 @@ void main() {
         ),
       );
       addTearDown(cancellable.dispose);
-      await show(tester, cancellable, androidTv: true);
+      await show(tester, cancellable, isTv: true);
       final state = tester.state<UpstreamOnboardingViewState>(
         find.byType(UpstreamOnboardingView),
       );
@@ -581,7 +591,7 @@ void main() {
       ),
     )..submitGate = Completer<void>();
     addTearDown(controller.dispose);
-    await show(tester, controller, androidTv: true);
+    await show(tester, controller, isTv: true);
     await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
     await tester.pump();
     for (final key in [
@@ -711,7 +721,7 @@ void main() {
       addTearDown(controller.dispose);
 
       try {
-        await show(tester, controller, androidTv: true);
+        await show(tester, controller, isTv: true);
 
         final navigation = tester
             .widgetList<Focus>(find.byType(Focus))
@@ -754,7 +764,7 @@ void main() {
           try {
             FocusManager.instance.highlightStrategy =
                 FocusHighlightStrategy.alwaysTouch;
-            await show(tester, controller, androidTv: tv, themeName: themeName);
+            await show(tester, controller, isTv: tv, themeName: themeName);
             final activeButton = find.widgetWithText(
               TextButton,
               'Active viewer',
@@ -883,7 +893,7 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await show(tester, controller, androidTv: true);
+    await show(tester, controller, isTv: true);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 160));
 
@@ -918,7 +928,7 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await show(tester, controller, androidTv: true);
+    await show(tester, controller, isTv: true);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 160));
 
@@ -1005,7 +1015,7 @@ void main() {
           browserCalls++;
           throw StateError('No browser on this synthetic TV.');
         },
-        androidTv: true,
+        isTv: true,
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pump();
@@ -2006,7 +2016,7 @@ void main() {
         ),
       );
       addTearDown(controller.dispose);
-      await show(tester, controller, accountOrigin: true, androidTv: tv);
+      await show(tester, controller, accountOrigin: true, isTv: tv);
       await tester.tap(find.byKey(const ValueKey('profile-card-profile')));
       await tester.pumpAndSettle();
 

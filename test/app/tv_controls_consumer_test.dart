@@ -27,7 +27,7 @@ void main() {
       tester.platformDispatcher.textScaleFactorTestValue = 1.3;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: const LineupScenario(stage: SetupStage.ready),
       );
       await tester.pumpWidget(fixture.build());
@@ -61,7 +61,7 @@ void main() {
       expect(tester.element(control), same(element));
       final scale = LineupCanvas.scaleFor(
         tester.view.physicalSize / tester.view.devicePixelRatio,
-        androidTv: true,
+        formFactor: profileFor(true).formFactor,
       );
       final frame = tester.getRect(surface);
       expect(
@@ -90,7 +90,7 @@ void main() {
           FocusHighlightStrategy.automatic,
     );
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: const LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(fixture.build());
@@ -146,7 +146,7 @@ void main() {
         debugDefaultTargetPlatformOverride = platform;
         try {
           final fixture = UiFixture(
-            androidTv: tv,
+            profile: profileFor(tv),
             controller: _IssueController(
               LineupScenario(
                 stage: SetupStage.ready,
