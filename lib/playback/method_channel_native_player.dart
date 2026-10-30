@@ -80,7 +80,10 @@ class MethodChannelNativePlayer implements NativePlayer {
   // Lifecycle, observed selection and requested Off are separate facts. Until
   // the first track snapshot, a valid current cue can establish display content.
   bool _subtitleCuesActive = false;
-  bool? _subtitleTrackSelected;
+  bool _subtitleTracksObserved = false;
+  int? _subtitleTrackId;
+  int? _subtitleCueTrackId;
+  bool _subtitleSelectionPending = false;
   bool _subtitleOffRequested = false;
   int _subtitleSelectionRevision = 0;
   SubtitleCues _latestSubtitleCues = const SubtitleCues.empty();
@@ -330,7 +333,9 @@ class MethodChannelNativePlayer implements NativePlayer {
     final requestedLoad = _activeLoadId;
     if (subtitleRevision != null) {
       _subtitleOffRequested = id == null;
-      _clearSubtitleCues();
+      _subtitleSelectionPending = true;
+      // Hide the public cue while retaining its native snapshot for rejection.
+      _hideSubtitleCues();
     }
     try {
       await _lifecycle;
@@ -366,8 +371,9 @@ class MethodChannelNativePlayer implements NativePlayer {
         if (failure != null) {
           Error.throwWithStackTrace(failure.$1, failure.$2);
         }
-        if (subtitleRevision == _subtitleSelectionRevision && id == null) {
-          _clearSubtitleCues();
+        if (subtitleRevision == _subtitleSelectionRevision) {
+          _subtitleSelectionPending = false;
+          if (id == null) _clearSubtitleCues();
         }
       } catch (error, stackTrace) {
         if (!pending.isCompleted) pending.completeError(error, stackTrace);
@@ -385,6 +391,7 @@ class MethodChannelNativePlayer implements NativePlayer {
         // Rejection did not change the observed selection. A later subtitle
         // request or retired load owns its own fence and cannot be undone here.
         _subtitleOffRequested = false;
+        _subtitleSelectionPending = false;
         _reconcileSubtitleCues();
       }
       rethrow;
@@ -636,6 +643,11 @@ class MethodChannelNativePlayer implements NativePlayer {
         // Queue coalescing may deliver a current cue before the selected track
         // snapshot. Retain only this bounded latest value until reconciliation.
         _latestSubtitleCues = cues;
+        // A cue received during selection may precede its track snapshot.
+        // Otherwise it belongs to the currently observed selected track.
+        _subtitleCueTrackId = _subtitleSelectionPending
+            ? null
+            : _subtitleTrackId;
         _reconcileSubtitleCues();
       }
       return;
@@ -760,13 +772,20 @@ class MethodChannelNativePlayer implements NativePlayer {
         _duration = _durationFromSeconds(value);
       case 'track-list':
         _tracks = List.unmodifiable(_decodeTracks(value));
-        _subtitleTrackSelected = _tracks.any(
-          (t) => t.type == PlayerTrackType.subtitle && t.selected,
-        );
-        if (_subtitleTrackSelected == false) {
+        final selectedSubtitle = _tracks
+            .where((t) => t.type == PlayerTrackType.subtitle && t.selected)
+            .firstOrNull;
+        _subtitleTracksObserved = true;
+        _subtitleTrackId = selectedSubtitle?.id;
+        if (_subtitleTrackId == null) {
           _subtitleOffRequested = false;
           _clearSubtitleCues();
+        } else if (_subtitleCueTrackId != null &&
+            _subtitleCueTrackId != _subtitleTrackId) {
+          // A pre-request cue cannot migrate to a different observed track.
+          _clearSubtitleCues();
         } else {
+          _subtitleCueTrackId = _subtitleTrackId;
           _reconcileSubtitleCues();
         }
       case 'video-format':
@@ -1079,14 +1098,17 @@ class MethodChannelNativePlayer implements NativePlayer {
     _subtitleCuesActive = false;
     ++_subtitleSelectionRevision;
     _subtitleOffRequested = false;
-    _subtitleTrackSelected = null;
+    _subtitleTracksObserved = false;
+    _subtitleTrackId = null;
+    _subtitleSelectionPending = false;
     _clearSubtitleCues();
   }
 
   void _reconcileSubtitleCues() {
+    if (!_subtitleSelectionPending) _subtitleCueTrackId ??= _subtitleTrackId;
     _subtitleCues.value =
         _subtitleCuesActive &&
-            _subtitleTrackSelected != false &&
+            (!_subtitleTracksObserved || _subtitleTrackId != null) &&
             !_subtitleOffRequested
         ? _latestSubtitleCues
         : const SubtitleCues.empty();
@@ -1094,6 +1116,11 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   void _clearSubtitleCues() {
     _latestSubtitleCues = const SubtitleCues.empty();
+    _subtitleCueTrackId = null;
+    _hideSubtitleCues();
+  }
+
+  void _hideSubtitleCues() {
     if (!_subtitleCues.value.isEmpty) {
       _subtitleCues.value = const SubtitleCues.empty();
     }
@@ -1101,8 +1128,10 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   void _resetMediaState({bool startPaused = false}) {
     _clearSubtitleCues();
-    _subtitleTrackSelected = null;
+    _subtitleTracksObserved = false;
+    _subtitleTrackId = null;
     _subtitleOffRequested = false;
+    _subtitleSelectionPending = false;
     _paused = startPaused;
     _position = Duration.zero;
     _duration = Duration.zero;

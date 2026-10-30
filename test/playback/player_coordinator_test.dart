@@ -40,12 +40,12 @@ void main() {
     var autoLifecycle = false;
     int getLoadId() =>
         calls.lastWhere((c) => c.method == 'load').arguments['loadId'] as int;
-    Future<void> tracks(bool selected) => _nativeEvent({
+    Future<void> tracks(bool selected, {int id = 1}) => _nativeEvent({
       'type': 'property',
       'name': 'track-list',
       'loadId': getLoadId(),
       'value': [
-        {'id': 1, 'type': 'sub', 'selected': selected},
+        {'id': id, 'type': 'sub', 'selected': selected},
       ],
     });
     Future<void> cues(String? text, {int? loadId}) => _nativeEvent({
@@ -140,6 +140,89 @@ void main() {
       });
       await load();
     });
+    for (final id in <int?>[null, 2]) {
+      for (final failure in ['command_queue_full', 'trackResult']) {
+        test(
+          'rejection restores pre-request cue with no new native events: id=$id $failure',
+          () async {
+            await tracks(true);
+            await cues('fixture unchanged long caption');
+            rejection = failure == 'trackResult' ? null : failure;
+            final selection = coordinator.selectTrack(
+              PlayerTrackType.subtitle,
+              id,
+            );
+            await pumpEventQueue(times: 2);
+            if (failure == 'trackResult') {
+              await result(
+                calls.lastWhere((c) => c.method == 'selectTrack'),
+                false,
+              );
+            }
+            await selection;
+            expect(
+              current(player.subtitleCues),
+              'fixture unchanged long caption',
+            );
+            expect(
+              current(coordinator.subtitleCues),
+              'fixture unchanged long caption',
+            );
+          },
+        );
+      }
+    }
+    for (final invalidation in ['empty', 'off', 'different-track', 'stale']) {
+      test(
+        'rejection cannot roll back native $invalidation observation',
+        () async {
+          await tracks(true);
+          await cues('fixture retired caption');
+          final selection = coordinator.selectTrack(
+            PlayerTrackType.subtitle,
+            2,
+          );
+          await pumpEventQueue(times: 2);
+          final request = calls.lastWhere((c) => c.method == 'selectTrack');
+          switch (invalidation) {
+            case 'empty':
+              await cues(null);
+            case 'off':
+              await tracks(false);
+            case 'different-track':
+              await tracks(true, id: 2);
+            case 'stale':
+              await cues('fixture stale', loadId: -1);
+          }
+          await result(request, false);
+          await selection;
+          expect(player.subtitleCues.value.isEmpty, isTrue);
+          expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+          await tracks(true, id: invalidation == 'different-track' ? 2 : 1);
+          expect(player.subtitleCues.value.isEmpty, isTrue);
+          expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+        },
+      );
+    }
+    test(
+      'fresh cue during selection belongs to the newly observed track',
+      () async {
+        await tracks(true);
+        await cues('fixture previous track');
+        final selection = coordinator.selectTrack(PlayerTrackType.subtitle, 2);
+        await pumpEventQueue(times: 2);
+        final request = calls.lastWhere((c) => c.method == 'selectTrack');
+        await cues('fixture newly selected track');
+        await tracks(true, id: 2);
+        await result(request, false);
+        await selection;
+        expect(current(player.subtitleCues), 'fixture newly selected track');
+        expect(
+          current(coordinator.subtitleCues),
+          'fixture newly selected track',
+        );
+      },
+    );
     for (final failure in ['command_queue_full', 'trackResult']) {
       test(
         'rejected subtitle Off resumes current cues without another track list: $failure',
@@ -149,7 +232,11 @@ void main() {
           rejection = failure == 'trackResult' ? null : failure;
           final off = coordinator.selectTrack(PlayerTrackType.subtitle, null);
           await pumpEventQueue(times: 2);
-          expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+          if (failure == 'trackResult') {
+            expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+          } else {
+            expect(current(coordinator.subtitleCues), 'fixture before request');
+          }
           if (failure == 'trackResult') {
             await cues('fixture during pending Off');
           }
