@@ -338,6 +338,9 @@ class _LineupShellState extends State<LineupShell> {
       if (destination != ShellDestination.guide &&
           destination != ShellDestination.player) {
         _handheldOrigins.add(ShellDestination.guide);
+        if (destination == ShellDestination.diagnostics) {
+          _handheldOrigins.add(ShellDestination.settings);
+        }
       }
       return;
     }

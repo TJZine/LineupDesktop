@@ -380,6 +380,49 @@ void main() {
     expect(backgrounded, 0);
   });
 
+  for (final visibleBack in [false, true]) {
+    handheldTest(
+      'portrait Diagnostics retains Settings parent after wide resize with ${visibleBack ? 'visible' : 'OS'} Back',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1280);
+        final fixture = _ready();
+        await showFixture(tester, fixture);
+        await tester.pumpAndSettle();
+        final loads = fixture.player.loads.length;
+        final selected = fixture.controller.currentChannelId;
+        await tester.tap(find.byKey(const ValueKey('handheld-tab-settings')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Support').first);
+        await tester.tap(find.text('Support').first);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Open Diagnostics'));
+        await tester.tap(find.text('Open Diagnostics'));
+        await tester.pumpAndSettle();
+        tester.view.physicalSize = const Size(1280, 800);
+        await tester.pumpAndSettle();
+        await focusElsewhere(tester);
+        if (visibleBack) {
+          await tester.tap(find.text('‹ Settings · Support'));
+        } else {
+          await tester.binding.handlePopRoute();
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Open Diagnostics'), findsOneWidget);
+        expect(find.text('‹ Back to Guide'), findsOneWidget);
+        await focusElsewhere(tester);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+        expect(fixture.player.loads.length, loads);
+        expect(fixture.controller.currentChannelId, selected);
+        await focusElsewhere(tester);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(backgrounded, 1);
+      },
+    );
+  }
+
   handheldTest(
     'resize across composition classes preserves destination, selection and playback owner',
     (tester) async {
