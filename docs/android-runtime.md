@@ -32,7 +32,10 @@ means TV; all other cases mean handheld.
 The activity computes one immutable result, shared by entrypoint arguments and
 the diagnostic no-argument `lineup/platform.deviceProfile` method. The latter
 returns `{formFactor: "tv" | "handheld"}` and rejects non-null arguments with
-`invalid_arguments`. Docking or uiMode changes handled by the existing
+`invalid_arguments`. Its committed test consumer is
+[DeviceFormTest](../android/app/src/test/kotlin/com/tjzine/lineup/DeviceFormTest.kt),
+which exercises phone/TV replies, argument rejection and the supplied immutable
+snapshot. Startup itself does not call this method. Docking or uiMode changes handled by the existing
 `configChanges` do not reclassify the running composition.
 
 Dart reads the argument synchronously before `runApp`, with no startup channel
@@ -256,3 +259,8 @@ unsupported audio cannot use an FFmpeg extension. Built-in ASS styling is
 limited. The Studio manual editor and air check remain reachable but are not
 TV-accepted. Physical playback, HDR/DV, passthrough, remote feel and viewing-
 distance readability require their own device/human acceptance.
+
+
+The mobile startup's pending TV36 rendering classification and physical Fire OS
+detection are tracked in the [final acceptance obligations](open-obligations.md#android-mobile-startup-final-acceptance-october-30-2026).
+They have not passed final acceptance.

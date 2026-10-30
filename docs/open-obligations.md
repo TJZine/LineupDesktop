@@ -1273,3 +1273,24 @@ unverified here. V-06 remains open, live Cancel/Retry pending, V-07 unverified,
 VM graphics work stopped and the beta unaccepted. Before any later disk change,
 establish the backup/destination and review the installer assessment qualification;
 do not bypass signing/security checks or erase an HDD as an automatic workaround.
+
+
+## Android mobile startup final acceptance (October 30, 2026)
+
+The M3 startup integration retains two verification gaps for the final mobile
+acceptance pass. Integration approval does not mark either item passed.
+
+- **TV36 rendering-error classification and final layout:** the M3 emulator
+  probe recorded four generic rendering-library FlutterError reports during
+  initial Guide and Guide return. Its payload omits exception text and stacks.
+  Visible overflow in synthetic two-minute Guide cells is consistent with the
+  held fixture issue, but another rendering error cannot be excluded. The
+  final emulator pass must retain full rendering diagnostics, classify the
+  reports and verify final Guide/Player behavior. Startup, moving-media and
+  inset observations do not establish zero-error or full TV-layout acceptance.
+- **Physical Fire OS form-factor detection:** Robolectric feature stubs and
+  Android TV emulators do not establish detection on Fire OS hardware. In the
+  maintainer's separately authorized batched physical pass, verify the final
+  signed candidate resolves as TV through its native entrypoint argument,
+  without a missing/malformed-argument fallback. Physical-device operations,
+  including use of the Fire TV stick, remain outside this implementation run.
