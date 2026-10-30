@@ -42,7 +42,7 @@ Future<void> showSettings(
   await tester.pumpWidget(
     MaterialApp(
       theme: LineupTheme.forName(
-        LineupThemeName.emberSteel,
+        controller.settings.theme,
         largeFocusIndicators: controller.settings.largeFocusIndicators,
         formFactor: profileFor(tv).formFactor,
       ),
@@ -111,6 +111,125 @@ void subtitleTest(
 
 void main() {
   setUpAll(loadPinnedTestFonts);
+
+  for (final config in [
+    for (final theme in LineupThemeName.values)
+      for (final large in [false, true]) (theme: theme, large: large, tv: true),
+    (theme: LineupThemeName.emberSteel, large: false, tv: false),
+  ]) {
+    subtitleTest('subtitle row ink follows focus ${config.theme.name} '
+        'tv=${config.tv} large=${config.large}', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          settings: LineupSettings(
+            theme: config.theme,
+            largeFocusIndicators: config.large,
+          ),
+        ),
+      );
+      addTearDown(controller.dispose);
+      await showSettings(tester, controller, tv: config.tv);
+      final roles = LineupTheme.of(tester.element(find.byType(SettingsView)));
+      final rail = tester
+          .widget<TextButton>(
+            find.widgetWithText(TextButton, 'Subtitles').first,
+          )
+          .focusNode!;
+      Color paintedText(Finder text) => tester
+          .renderObject<RenderParagraph>(
+            find.descendant(of: text, matching: find.byType(RichText)),
+          )
+          .text
+          .style!
+          .color!;
+      double contrast(Color a, Color b) {
+        final first = a.computeLuminance();
+        final second = b.computeLuminance();
+        return (first > second)
+            ? (first + .05) / (second + .05)
+            : (second + .05) / (first + .05);
+      }
+
+      for (final (name, label, helper) in [
+        (
+          'Device',
+          'Use device subtitle settings',
+          'Uses the caption style from Android settings. Position and Bold stay here.',
+        ),
+        ('Size', 'Size', null),
+        ('Bold', 'Bold', null),
+        (
+          'Styled',
+          'Apply my style to styled subtitles',
+          'ASS/SSA dialogue uses your style. Signs and author positioning are dropped.',
+        ),
+      ]) {
+        await reveal(tester, field(name));
+        final row = find.byKey(ValueKey('subtitle-row-subtitle$name'));
+        final labelText = find.descendant(of: row, matching: find.text(label));
+        final helperText = helper == null
+            ? null
+            : find.descendant(of: row, matching: find.text(helper));
+        expect(paintedText(labelText), roles.primaryText);
+        if (helperText != null) {
+          expect(paintedText(helperText), roles.secondaryText);
+        }
+        final size = tester.getSize(row);
+        final node = name == 'Size'
+            ? dropdown<SubtitleSize>(tester, name).focusNode!
+            : tester.widget<Switch>(field(name)).focusNode!;
+        node.requestFocus();
+        await tester.pumpAndSettle();
+        expect(node.hasFocus, isTrue);
+        expect(tester.getSize(row), size);
+        final fill = find.descendant(
+          of: row,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Container &&
+                widget.decoration is BoxDecoration &&
+                (widget.decoration! as BoxDecoration).color ==
+                    roles.focusedSurface,
+          ),
+        );
+        expect(fill, config.tv ? findsOneWidget : findsNothing);
+        expect(
+          paintedText(labelText),
+          config.tv ? roles.onFocus : roles.primaryText,
+        );
+        if (helperText != null) {
+          expect(
+            paintedText(helperText),
+            config.tv ? roles.focusSecondaryText : roles.secondaryText,
+          );
+        }
+        if (config.tv) {
+          final background =
+              (tester.widget<Container>(fill).decoration! as BoxDecoration)
+                  .color!;
+          expect(
+            contrast(paintedText(labelText), background),
+            greaterThanOrEqualTo(4.5),
+          );
+          if (helperText != null) {
+            expect(
+              contrast(paintedText(helperText), background),
+              greaterThanOrEqualTo(4.5),
+            );
+          }
+        }
+        rail.requestFocus();
+        await tester.pumpAndSettle();
+        expect(rail.hasFocus, isTrue);
+        expect(paintedText(labelText), roles.primaryText);
+        if (helperText != null) {
+          expect(paintedText(helperText), roles.secondaryText);
+        }
+        expect(fill, findsNothing);
+      }
+    });
+  }
 
   subtitleTest(
     'repeated choices keep focus, deduplicate, and compose with reset in action order',
