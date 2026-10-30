@@ -561,7 +561,6 @@ class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
   @override
   Widget build(BuildContext context) {
     _measure();
-    final roles = LineupTheme.of(context);
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -588,6 +587,8 @@ class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
             LineupToggleSurface(
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  // The TV surface supplies contrasting ink to descendants.
+                  final roles = LineupTheme.of(context);
                   final inset = DeviceProfile.of(context).isTv ? 16.0 : 0.0;
                   final controlWidth = widget.toggle
                       ? 56.0
