@@ -23,7 +23,9 @@ class SubtitleFonts {
       // the other failure unhandled while playback continues with Standard.
       final data = await Future.wait([
         for (final weight in ['Regular', 'Bold'])
-          _assets.load('assets/fonts/subtitles/${font.storageKey}/$weight.ttf'),
+          _readFontAsset(
+            'assets/fonts/subtitles/${font.storageKey}/$weight.ttf',
+          ),
       ]);
       final loader = FontLoader(font.fontFamily);
       for (final bytes in data) {
@@ -37,6 +39,11 @@ class SubtitleFonts {
       return false;
     }
   });
+
+  // AssetBundle implementations may return SynchronousFuture (including
+  // Flutter's test bundle). Future.wait requires asynchronous then callbacks;
+  // normalize here, also capturing synchronous throws from either weight.
+  Future<ByteData> _readFontAsset(String path) async => _assets.load(path);
 }
 
 /// Transparent, noninteractive paint over the entire presentation rectangle.
