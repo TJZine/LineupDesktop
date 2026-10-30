@@ -218,6 +218,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _noticeTimer;
   Timer? _busyTimer;
   Timer? _channelStepTimer;
+  Timer? _channelStepWindowTimer;
   Timer? _channelTagTimer;
   int? _channelTagTuneGeneration;
   Completer<bool>? _channelStepCompletion;
@@ -976,8 +977,15 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }) {
     if (_disposed || _backgroundSuspended) return Future.value(false);
     _resumeAfterBackground = null;
+    final continuingStep = channelStep && _channelStepWindowTimer != null;
     _cancelPendingChannelStep(clearTarget: !channelStep);
-    if (channelStep) _channelStepTargetId = channelId;
+    if (channelStep) {
+      _channelStepTargetId = channelId;
+      _channelStepWindowTimer?.cancel();
+      _channelStepWindowTimer = Timer(const Duration(milliseconds: 250), () {
+        _channelStepWindowTimer = null;
+      });
+    }
     final deadline = _sleepDeadline;
     if (deadline != null && !_clock().isBefore(deadline)) {
       return _expireSleepTimer(_sleepEpoch).then((_) => false);
@@ -1017,9 +1025,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       return operation;
     }
 
-    if (!channelStep) return dispatch();
-    // Each step publishes and supersedes older intent immediately. Only the
-    // target remaining after a quiet interval enters the serialized load queue.
+    if (!channelStep || !continuingStep) return dispatch();
+    // The leading step enters the queue immediately. Further steps publish and
+    // supersede intent, then enqueue the final target after a quiet interval.
     final completion = _channelStepCompletion = Completer<bool>();
     _channelStepTimer = Timer(const Duration(milliseconds: 250), () {
       _channelStepTimer = null;
@@ -1659,7 +1667,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _channelStepTimer = null;
     _channelStepCompletion?.complete(false);
     _channelStepCompletion = null;
-    if (clearTarget) _channelStepTargetId = null;
+    if (clearTarget) {
+      _channelStepTargetId = null;
+      _channelStepWindowTimer?.cancel();
+      _channelStepWindowTimer = null;
+    }
   }
 
   Future<void> togglePlayback() {

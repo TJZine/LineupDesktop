@@ -110,7 +110,10 @@ python3 tool/android/generate-licenses.py --gradle-project android \
 ```
 
 Add `--check` to verify the same graph without changing the asset tree; the
-Android CI job runs this check too. Flutter engine
+Android CI job runs this check too. Check mode bypasses the disk license cache
+and fetches each distinct license URL once, so stale cached text cannot cause
+false drift or conceal upstream changes. A failed fetch fails the check.
+Flutter engine
 artifacts are the explicit exception: their Maven POMs omit license metadata,
 so the generator embeds the exact `LICENSE` file from the selected Flutter SDK.
 Unknown or incomplete metadata fails closed; the generator never assumes a

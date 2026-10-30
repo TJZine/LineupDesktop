@@ -457,6 +457,7 @@ def generate(
             "",
         ]
         dependency_lines: list[str] = []
+        downloaded_licenses: dict[str, bytes] = {}
         for coordinate, name, url, relative, known_hash in sorted(entries):
             if relative in seen_paths:
                 continue
@@ -467,7 +468,14 @@ def generate(
                 assert flutter_root is not None
                 data = read_utf8(flutter_root / "LICENSE")
             else:
-                data = download_license(url, license_cache)
+                # Checks must observe current upstream bytes: even a cache
+                # matching the committed hash could conceal upstream drift.
+                # Fetch each URL once so all modules use the same observation.
+                if url not in downloaded_licenses:
+                    downloaded_licenses[url] = download_license(
+                        url, None if check else license_cache
+                    )
+                data = downloaded_licenses[url]
             digest = hashlib.sha256(data).hexdigest()
             if known_hash and known_hash != digest:
                 raise GenerationError(f"Flutter license hash changed while generating {relative}.")
@@ -546,7 +554,10 @@ def main() -> int:
     )
     parser.add_argument("--flutter-root")
     parser.add_argument("--flutter-version", default="unknown")
-    parser.add_argument("--license-cache", type=Path)
+    parser.add_argument(
+        "--license-cache", type=Path,
+        help="Cache fetched texts during generation; ignored by --check",
+    )
     parser.add_argument(
         "--check", action="store_true",
         help="Fail on asset drift without modifying output",
