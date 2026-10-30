@@ -85,6 +85,86 @@ void main() {
       }
     },
   );
+  test('approved final metrics and per-cue clearance use painted bounds', () {
+    expect(SubtitlePainter.outlineStrokeEm, .10);
+    expect(SubtitlePainter.shadowOffsetEm, .06);
+    expect(SubtitlePainter.shadowBlurEm, .06);
+    expect(SubtitlePainter.backgroundInsetEm, .2);
+
+    const size = Size(600, 300);
+    final p = painter(
+      const SubtitleStyle(
+        edge: SubtitleEdge.outline,
+        windowOpacity: SubtitleBoxOpacity.full,
+        backgroundOpacity: SubtitleBoxOpacity.full,
+      ),
+    );
+    final bottom = fixture(align: 1).cues.single;
+    final bounds = p.renderedBlockBounds(bottom, size);
+    final text = p.layout(bottom, size);
+    final textBounds = p.origin(bottom, size, text.size) & text.size;
+    expect(
+      bounds.bottom,
+      closeTo(textBounds.bottom + .25 * p.emFor(size), .00001),
+    );
+    expect(bounds.left, closeTo(textBounds.left - .25 * p.emFor(size), .00001));
+    text.dispose();
+    expect(
+      p.clearanceLift(bottom, size, panelTop: bounds.bottom - 10),
+      closeTo(10 + .02 * size.height, .00001),
+    );
+    final noRoomLift = p.clearanceLift(bottom, size, panelTop: 0);
+    expect(bounds.top - noRoomLift, lessThan(0));
+    expect(bounds.bottom - noRoomLift, closeTo(-.02 * size.height, .00001));
+    expect(
+      p.clearanceLift(fixture(align: 5).cues.single, size, panelTop: 0),
+      0,
+    );
+    expect(
+      p.clearanceLift(fixture(align: 7).cues.single, size, panelTop: 0),
+      0,
+    );
+  });
+
+  testWidgets('panel reporter maps the material feather into the layer', (
+    tester,
+  ) async {
+    final avoidance = SubtitlePanelAvoidance();
+    final presentationKey = GlobalKey();
+    addTearDown(avoidance.dispose);
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            SubtitleLayer(
+              cues: ValueNotifier(fixture()),
+              appearance: ValueNotifier(const SubtitleStyle().resolve()),
+              avoidance: avoidance,
+              presentationKey: presentationKey,
+            ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: SubtitlePanelReporter(
+                avoidance: avoidance,
+                presentationKey: presentationKey,
+                feather: 55,
+                child: const SizedBox(height: 50, width: double.infinity),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    final layer = tester.renderObject<RenderBox>(find.byType(SubtitleLayer));
+    expect(
+      avoidance.value.highestPanelTop,
+      closeTo(layer.size.height - 50 - 55, .00001),
+    );
+  });
+
   test('cue emphasis and viewer bold both survive styled spans', () {
     final cue = SubtitleCue(
       align: 2,
