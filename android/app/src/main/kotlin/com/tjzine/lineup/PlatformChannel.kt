@@ -20,12 +20,23 @@ class PlatformChannel(
     private val licenseResources: LicenseResources = LicenseResources(activity.assets),
     private val licenseExecutor: ExecutorService = Executors.newSingleThreadExecutor(),
     private val deviceForm: DeviceForm = DeviceForm.detect(activity),
+    private val publish: (String, Any?) -> Unit = { _, _ -> },
 ) : MethodChannel.MethodCallHandler, AutoCloseable {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val closed = AtomicBoolean(false)
+    private var watchingWindowFacts = false
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "watchWindowFacts", "unwatchWindowFacts" -> {
+                if (call.arguments != null) {
+                    result.error("invalid_arguments", "${call.method} accepts no arguments.", null)
+                    return
+                }
+                watchingWindowFacts = call.method == "watchWindowFacts" && !closed.get()
+                publishWindowFacts()
+                result.success(true)
+            }
             "deviceProfile" -> {
                 if (call.arguments != null) {
                     result.error("invalid_arguments", "deviceProfile accepts no arguments.", null)
@@ -85,6 +96,13 @@ class PlatformChannel(
         }
     }
 
+    /** Activity facts only. Dart decides whether any orientation restriction applies. */
+    fun publishWindowFacts() {
+        if (watchingWindowFacts && !closed.get()) {
+            publish("multiWindowChanged", activity.isInMultiWindowMode)
+        }
+    }
+
     private fun enqueueLicenseOperation(
         result: MethodChannel.Result,
         operation: () -> Any?,
@@ -127,6 +145,7 @@ class PlatformChannel(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        watchingWindowFacts = false
         licenseExecutor.shutdownNow()
     }
 

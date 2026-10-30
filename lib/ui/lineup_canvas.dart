@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'lineup_focus.dart';
 import '../platform/device_profile.dart';
 
+enum LineupComposition { wide, handheld }
+
 /// The single design-canvas owner, above the Navigator and all its overlays.
 /// Layout and MediaQuery use canvas pixels; painting and input use window pixels.
 class LineupCanvas extends StatelessWidget {
@@ -17,10 +19,56 @@ class LineupCanvas extends StatelessWidget {
   final Widget child;
   final bool reduceMotion;
 
+  static LineupComposition compositionFor(
+    Size window, {
+    FormFactor formFactor = FormFactor.desktop,
+  }) =>
+      formFactor == FormFactor.handheld &&
+          (window.width < 1280 || window.height < 720)
+      ? LineupComposition.handheld
+      : LineupComposition.wide;
+
+  static LineupComposition compositionOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_CanvasSafeInsets>()
+          ?.composition ??
+      LineupComposition.wide;
+
+  /// Shared surface rule from UI-A Part 2. This is separate from the
+  /// two-class scale policy: short-wide Handheld windows use desktop layouts.
+  static bool usesPortraitCompositionFor(
+    Size window, {
+    FormFactor formFactor = FormFactor.desktop,
+  }) =>
+      compositionFor(window, formFactor: formFactor) ==
+          LineupComposition.handheld &&
+      (window.height > window.width ||
+          window.width / scaleFor(window, formFactor: formFactor) < 933);
+
+  static bool usesPortraitCompositionOf(BuildContext context) =>
+      usesPortraitCompositionFor(
+        windowSizeOf(context),
+        formFactor: DeviceProfile.of(context).formFactor,
+      );
+
+  /// Window dp, before the design-canvas transform. Surface breakpoints must
+  /// not accidentally classify a window using its enlarged canvas dimensions.
+  static Size windowSizeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_CanvasSafeInsets>()?.window ??
+      MediaQuery.sizeOf(context);
+
+  /// Minimum canvas extent whose transformed hit region is 48 window dp.
+  static double minimumTouchExtentOf(BuildContext context) =>
+      DeviceProfile.of(context).isHandheld ? 48 / scaleOf(context) : 0;
+
   static double scaleFor(
     Size window, {
     FormFactor formFactor = FormFactor.desktop,
-  }) => formFactor == FormFactor.tv
+  }) =>
+      compositionFor(window, formFactor: formFactor) ==
+          LineupComposition.handheld
+      ? 0.9
+      : formFactor == FormFactor.tv
       ? math.min(window.width / 1920, window.height / 1080)
       : math.max(0.8, math.min(window.width / 1920, window.height / 1080));
 
@@ -91,6 +139,8 @@ class LineupCanvas extends StatelessWidget {
                 child: _CanvasSafeInsets(
                   insets: padding / scale,
                   scale: scale,
+                  window: window,
+                  composition: compositionFor(window, formFactor: formFactor),
                   child: LineupFocusScope(child: child),
                 ),
               ),
@@ -106,12 +156,19 @@ class _CanvasSafeInsets extends InheritedWidget {
   const _CanvasSafeInsets({
     required this.insets,
     required this.scale,
+    required this.window,
+    required this.composition,
     required super.child,
   });
   final EdgeInsets insets;
   final double scale;
+  final Size window;
+  final LineupComposition composition;
 
   @override
   bool updateShouldNotify(_CanvasSafeInsets oldWidget) =>
-      insets != oldWidget.insets || scale != oldWidget.scale;
+      insets != oldWidget.insets ||
+      scale != oldWidget.scale ||
+      window != oldWidget.window ||
+      composition != oldWidget.composition;
 }

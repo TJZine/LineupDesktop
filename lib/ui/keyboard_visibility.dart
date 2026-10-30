@@ -1,58 +1,33 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../platform/platform_events.dart';
+
 /// Observed OS visibility, independent of keyboard size or text input state.
 /// Null means no truthful observation is available (including unsupported OSes).
 class PlatformKeyboardVisibility extends ValueNotifier<bool?> {
-  PlatformKeyboardVisibility({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('lineup/platform'),
-      super(null) {
-    // Native may publish its initial fact before the watch acknowledgement.
-    _channel.setMethodCallHandler(_handleCall);
-    unawaited(_watch());
+  PlatformKeyboardVisibility({MethodChannel? channel}) : super(null) {
+    _unsubscribe = PlatformEvents(channel: channel).subscribe(
+      event: 'keyboardVisibilityChanged',
+      watch: 'watchKeyboardVisibility',
+      unwatch: 'unwatchKeyboardVisibility',
+      accepts: (observed) => observed is bool,
+      onEvent: (observed) {
+        if (!_disposed && observed is bool) value = observed;
+      },
+    );
   }
 
-  final MethodChannel _channel;
+  late final VoidCallback _unsubscribe;
   bool _disposed = false;
-
-  Future<void> _watch() async {
-    try {
-      await _channel.invokeMethod<Object?>('watchKeyboardVisibility');
-      // The acknowledgement describes support, never the observed state. In
-      // particular, it cannot overwrite a newer callback with hidden/unknown.
-    } on MissingPluginException {
-      // A host without the observer leaves visibility unknown.
-    } on PlatformException {
-      // An unavailable optional platform observation must not fail startup.
-    }
-  }
-
-  Future<void> _handleCall(MethodCall call) async {
-    if (_disposed || call.method != 'keyboardVisibilityChanged') return;
-    final observed = call.arguments;
-    if (observed is bool) value = observed;
-  }
 
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _channel.setMethodCallHandler(null);
-    unawaited(_unwatch());
+    _unsubscribe();
     super.dispose();
-  }
-
-  Future<void> _unwatch() async {
-    try {
-      await _channel.invokeMethod<void>('unwatchKeyboardVisibility');
-    } on MissingPluginException {
-      // Unwatch is also optional and idempotent on older hosts.
-    } on PlatformException {
-      // Local callback ownership has already been retired.
-    }
   }
 }
 

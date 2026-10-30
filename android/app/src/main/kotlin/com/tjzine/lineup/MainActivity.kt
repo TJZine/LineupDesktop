@@ -1,5 +1,6 @@
 package com.tjzine.lineup
 
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
@@ -54,6 +55,16 @@ class MainActivity : FlutterActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        platformDispatcher?.publishWindowFacts()
+    }
+
+    override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        platformDispatcher?.publishWindowFacts()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus) backInput.cancelPendingPress()
@@ -68,7 +79,10 @@ class MainActivity : FlutterActivity() {
             channel.invokeMethod("keyboardVisibilityChanged", visible)
         }
         keyboardVisibility = visibility
-        val dispatcher = PlatformChannel(this, visibility, deviceForm = deviceForm)
+        val dispatcher = PlatformChannel(
+            this, visibility, deviceForm = deviceForm,
+            publish = { method, value -> channel.invokeMethod(method, value) },
+        )
         platformDispatcher = dispatcher
         platformChannel = channel.also {
             it.setMethodCallHandler(dispatcher)

@@ -4,6 +4,45 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 import '../plex/plex_models.dart';
 import 'app_theme.dart';
 import 'lineup_focus.dart';
+import 'lineup_canvas.dart';
+
+/// Reserves symmetric, nonoverlapping touch space around an unchanged visual.
+/// The layout reservation matters: painting a larger hit box outside a tight
+/// parent would neither receive hits reliably nor separate neighboring targets.
+class LineupTouchTarget extends StatelessWidget {
+  const LineupTouchTarget({
+    required this.child,
+    required this.onPressed,
+    super.key,
+  });
+
+  final Widget child;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!DeviceProfile.of(context).isHandheld) return child;
+    final extent = LineupCanvas.minimumTouchExtentOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) => Semantics(
+        onTap: onPressed,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
+          onTap: onPressed,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: extent, minHeight: extent),
+            child: Center(
+              widthFactor: 1,
+              heightFactor: 1,
+              child: ConstrainedBox(constraints: constraints, child: child),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class LineupCompactControls extends StatelessWidget {
   const LineupCompactControls({required this.child, super.key});
@@ -91,35 +130,38 @@ class LineupNavigationRow extends StatelessWidget {
             ),
           ),
         ),
-        child: TextButton(
-          focusNode: focusNode,
-          autofocus: autofocus,
+        child: LineupTouchTarget(
           onPressed: onPressed,
-          style:
-              LineupTheme.buttonStyle(
-                roles,
-                LineupButtonTier.text,
-                focusVisible: LineupFocusScope.visible(context),
-              ).copyWith(
-                shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
-                alignment: Alignment.centerLeft,
-                foregroundColor: WidgetStateProperty.resolveWith(
-                  (states) =>
-                      roles.focusTreatment == LineupFocusTreatment.fill &&
-                          states.contains(WidgetState.focused)
-                      ? roles.onFocus
-                      : selected
-                      ? roles.primaryText
-                      : roles.secondaryText,
+          child: TextButton(
+            focusNode: focusNode,
+            autofocus: autofocus,
+            onPressed: onPressed,
+            style:
+                LineupTheme.buttonStyle(
+                  roles,
+                  LineupButtonTier.text,
+                  focusVisible: LineupFocusScope.visible(context),
+                ).copyWith(
+                  shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+                  alignment: Alignment.centerLeft,
+                  foregroundColor: WidgetStateProperty.resolveWith(
+                    (states) =>
+                        roles.focusTreatment == LineupFocusTreatment.fill &&
+                            states.contains(WidgetState.focused)
+                        ? roles.onFocus
+                        : selected
+                        ? roles.primaryText
+                        : roles.secondaryText,
+                  ),
+                  padding: const WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  textStyle: const WidgetStatePropertyAll(
+                    LineupTypography.control,
+                  ),
                 ),
-                padding: const WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-                textStyle: const WidgetStatePropertyAll(
-                  LineupTypography.control,
-                ),
-              ),
-          child: child,
+            child: child,
+          ),
         ),
       ),
     );
@@ -350,18 +392,21 @@ class LineupProfileAvatar extends StatelessWidget {
   }
 }
 
-IconButton lineupArrowButton({
+Widget lineupArrowButton({
   Key? key,
   required IconData icon,
   required VoidCallback? onPressed,
   String? tooltip,
   FocusNode? focusNode,
-}) => IconButton(
-  key: key,
+}) => LineupTouchTarget(
   onPressed: onPressed,
-  tooltip: tooltip,
-  focusNode: focusNode,
-  icon: Icon(icon, semanticLabel: tooltip),
+  child: IconButton(
+    key: key,
+    onPressed: onPressed,
+    tooltip: tooltip,
+    focusNode: focusNode,
+    icon: Icon(icon, semanticLabel: tooltip),
+  ),
 );
 
 /// Toggleable's focus highlight can stay suppressed in Android touch mode even
@@ -900,17 +945,20 @@ class LineupInlineLink extends StatelessWidget {
   final bool autofocus;
 
   @override
-  Widget build(BuildContext context) => TextButton(
+  Widget build(BuildContext context) => LineupTouchTarget(
     onPressed: onPressed,
-    focusNode: focusNode,
-    autofocus: autofocus,
-    style: LineupTheme.buttonStyle(
-      LineupTheme.of(context),
-      LineupButtonTier.link,
-      compact: true,
-      focusVisible: LineupFocusScope.visible(context),
+    child: TextButton(
+      onPressed: onPressed,
+      focusNode: focusNode,
+      autofocus: autofocus,
+      style: LineupTheme.buttonStyle(
+        LineupTheme.of(context),
+        LineupButtonTier.link,
+        compact: true,
+        focusVisible: LineupFocusScope.visible(context),
+      ),
+      child: child,
     ),
-    child: child,
   );
 }
 

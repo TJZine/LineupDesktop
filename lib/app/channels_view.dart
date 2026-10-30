@@ -26,6 +26,9 @@ class ChannelsView extends StatefulWidget {
     required this.onOpenPlayer,
     required this.onOpenMenu,
     required this.menuFocusNode,
+    this.onBack,
+    this.showNavigationMenu = true,
+    this.backLabel = '‹ Back to Guide',
     this.focusNode,
     this.clock,
     super.key,
@@ -36,6 +39,9 @@ class ChannelsView extends StatefulWidget {
   final VoidCallback onOpenPlayer;
   final LineupMenuCallback onOpenMenu;
   final FocusNode menuFocusNode;
+  final VoidCallback? onBack;
+  final bool showNavigationMenu;
+  final String backLabel;
   final FocusNode? focusNode;
   final DateTime Function()? clock;
 
@@ -308,7 +314,7 @@ class ChannelsViewState extends State<ChannelsView> {
             mode: mode,
             channel: _studioChannel,
             onBack: closeStudio,
-            onOpenMenu: widget.onOpenMenu,
+            onOpenMenu: widget.showNavigationMenu ? widget.onOpenMenu : null,
             menuFocusNode: widget.menuFocusNode,
             onSaved: (id) {
               _returnFocusId = id;
@@ -365,7 +371,19 @@ class ChannelsViewState extends State<ChannelsView> {
       topBar: LineupTopBar(
         menuKey: const Key('channels-app-menu'),
         menuFocusNode: widget.menuFocusNode,
-        onOpenMenu: widget.onOpenMenu,
+        onOpenMenu: widget.showNavigationMenu ? widget.onOpenMenu : null,
+        trailing: widget.onBack == null
+            ? null
+            : Align(
+                alignment: Alignment.centerRight,
+                child: LineupTouchTarget(
+                  onPressed: widget.onBack,
+                  child: TextButton(
+                    onPressed: widget.onBack,
+                    child: Text(widget.backLabel),
+                  ),
+                ),
+              ),
       ),
       child: Column(
         children: [

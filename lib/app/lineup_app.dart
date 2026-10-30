@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../playback/native_player.dart';
 import '../persistence/app_store.dart';
 import '../platform/device_profile.dart';
+import '../platform/handheld_system_ui.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
@@ -154,6 +155,11 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   DeviceProfile get _profile =>
       widget.profile ?? DeviceProfile.fallbackFor(defaultTargetPlatform);
 
+  Widget _startupSurface(Widget child) =>
+      _profile.host == TargetPlatform.android && _profile.isHandheld
+      ? HandheldSystemUi(playerVisible: false, osdVisible: true, child: child)
+      : child;
+
   void _configureKeyboardVisibility() {
     if (_profile.isTv && widget.keyboardVisibility == null) {
       _ownedKeyboardVisibility ??= PlatformKeyboardVisibility();
@@ -267,17 +273,19 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               final error = snapshot.error;
-              return _StartupFailureBody(
-                requiredEngineFailure:
-                    error is PlayerUnavailable &&
-                    error.failureCode == 'required_engine_unavailable',
-                unsupportedStateFormatFailure:
-                    error is UnsupportedStateFormatException,
+              return _startupSurface(
+                _StartupFailureBody(
+                  requiredEngineFailure:
+                      error is PlayerUnavailable &&
+                      error.failureCode == 'required_engine_unavailable',
+                  unsupportedStateFormatFailure:
+                      error is UnsupportedStateFormatException,
+                ),
               );
             }
             if (snapshot.connectionState != ConnectionState.done &&
                 !(_nativeInitialized && _restoreStarted)) {
-              return const _StartupProgress();
+              return _startupSurface(const _StartupProgress());
             }
             return Stack(
               children: [

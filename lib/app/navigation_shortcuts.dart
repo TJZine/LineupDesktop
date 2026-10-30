@@ -38,9 +38,14 @@ class AndroidBackScope extends StatefulWidget {
   const AndroidBackScope({
     required this.child,
     this.onUnhandledBack,
+    this.onSystemBack,
     super.key,
   });
   final bool Function()? onUnhandledBack;
+
+  /// OS route Back on touch follows visible surfaces. Keyboard Esc retains
+  /// the focused-control path, as do desktop and TV.
+  final bool Function()? onSystemBack;
   final Widget child;
 
   static bool claims(BuildContext context) =>
@@ -85,6 +90,10 @@ class _AndroidBackScopeState extends State<AndroidBackScope> {
 
   void _systemBack(bool didPop, Object? result) {
     if (didPop || ModalRoute.of(context)?.isCurrent != true) return;
+    if (widget.onSystemBack case final dispatch?) {
+      if (!dispatch()) _background();
+      return;
+    }
     const event = KeyDownEvent(
       physicalKey: PhysicalKeyboardKey.browserBack,
       logicalKey: LogicalKeyboardKey.goBack,

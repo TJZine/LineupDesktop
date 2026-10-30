@@ -14,9 +14,11 @@ import '../playback/native_player.dart';
 import '../playback/player_coordinator.dart';
 import '../playback/player_view.dart';
 import '../platform/device_profile.dart';
+import '../platform/handheld_system_ui.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
+import 'handheld_navigation.dart';
 import 'channel_setup_view.dart';
 import 'channels_view.dart';
 import 'diagnostics_view.dart';
@@ -49,6 +51,7 @@ class _LineupShellState extends State<LineupShell> {
       ? ShellDestination.guide
       : ShellDestination.player;
   ShellDestination? _settingsReturnDestination;
+  ShellDestination _channelsReturnDestination = ShellDestination.guide;
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey<PlayerViewState>();
@@ -116,7 +119,7 @@ class _LineupShellState extends State<LineupShell> {
       lineup: widget.controller,
       guide: _guide,
       clock: widget.guideClock,
-      suspendInBackground: widget.profile.isTv,
+      suspendInBackground: widget.profile.isTv || widget.profile.isHandheld,
     );
     _player.setPlayerDestinationVisible(
       _destination == ShellDestination.player,
@@ -139,6 +142,9 @@ class _LineupShellState extends State<LineupShell> {
     _player.canRetry,
     _player.status.state,
     _player.status.message,
+    widget.profile.isHandheld
+        ? (_player.overlay, _player.sleepPickerOpen)
+        : null,
     _player.currentChannel?.id,
     _player.currentProgram?.scheduled.item.title,
     _destination == ShellDestination.diagnostics ? _player.telemetry : null,
@@ -157,6 +163,7 @@ class _LineupShellState extends State<LineupShell> {
     final stage = widget.controller.stage;
     final returnedToApp =
         _lastStage != SetupStage.ready && stage == SetupStage.ready;
+    if (widget.profile.isHandheld && _lastStage != stage) _routeIntent++;
     if (widget.profile.isTv) {
       if (_lastStage != stage) _routeIntent++;
       if (_lastStage == SetupStage.channelSetup &&
@@ -306,6 +313,85 @@ class _LineupShellState extends State<LineupShell> {
     };
   }
 
+  bool get _portraitComposition => LineupCanvas.usesPortraitCompositionFor(
+    LineupCanvas.windowSizeOf(context),
+    formFactor: widget.profile.formFactor,
+  );
+
+  ShellDestination get _channelsBackDestination => _portraitComposition
+      ? ShellDestination.guide
+      : _channelsReturnDestination == ShellDestination.player &&
+            !_hasPlaybackSurface
+      ? ShellDestination.guide
+      : _channelsReturnDestination;
+
+  void _returnFromChannels() => unawaited(_select(_channelsBackDestination));
+
+  /// The OS route ingress is independent of touch/keyboard focus. Navigator
+  /// popup/dialog routes resolve before this root claim; shell overlays and
+  /// destination-owned states then resolve in visible stacking order.
+  bool _handleHandheldBack() {
+    if (_appMenu != null) {
+      _closeAppMenu();
+      return true;
+    }
+    if (_licensesOpen) {
+      _licensesKey.currentState?.back();
+      return true;
+    }
+    if (_onboardingSupport) {
+      setState(() => _onboardingSupport = false);
+      return true;
+    }
+    if (_selectionPending) return true;
+    final controller = widget.controller;
+    if (controller.stage != SetupStage.ready) {
+      if (controller.restoringSavedLineup) return false;
+      if (controller.stage == SetupStage.channelSetup) {
+        return _setupKey.currentState?.handleBack() ?? true;
+      }
+      // The leaf distinguishes cancellable steps, idle roots and protected
+      // in-flight state commits. Back never implicitly signs out.
+      return _onboardingKey.currentState?.handleBack() ?? true;
+    }
+    switch (_destination) {
+      case ShellDestination.guide:
+        if (_guide.searchQuery.isNotEmpty) {
+          _guide.setSearchQuery('');
+          return true;
+        }
+        // H2 owns the program-sheet and search-sheet route presentations.
+        return false;
+      case ShellDestination.channels:
+        if (_channelsKey.currentState?.handleBack() != true)
+          _returnFromChannels();
+        return true;
+      case ShellDestination.settings:
+        if (_settingsBackDestination == null) return false;
+        _returnFromSettings();
+        return true;
+      case ShellDestination.diagnostics:
+        _settingsCategory = SettingsCategory.support;
+        unawaited(_select(ShellDestination.settings));
+        return true;
+      case ShellDestination.player:
+        if (_player.sleepPickerOpen ||
+            _player.overlay == PlayerOverlay.audioTracks ||
+            _player.overlay == PlayerOverlay.subtitleTracks ||
+            _player.overlay == PlayerOverlay.programInfo) {
+          return _playerKey.currentState?.handleBack() ?? true;
+        }
+        if (_player.overlay == PlayerOverlay.miniGuide ||
+            _player.overlay == PlayerOverlay.nowPlaying) {
+          _player.showOsd();
+        } else {
+          // OS Back never dismisses the OSD as an intermediate state.
+          unawaited(_select(ShellDestination.guide));
+        }
+        return true;
+    }
+  }
+
   bool _handleTvBack() {
     if (_appMenu != null) {
       _closeAppMenu();
@@ -397,7 +483,7 @@ class _LineupShellState extends State<LineupShell> {
         return;
       }
       if (!mounted ||
-          (widget.profile.isTv &&
+          ((widget.profile.isTv || widget.profile.isHandheld) &&
               (intent != _routeIntent ||
                   stage != widget.controller.stage ||
                   scope != _scopeStamp))) {
@@ -407,7 +493,9 @@ class _LineupShellState extends State<LineupShell> {
         if (destination == ShellDestination.settings &&
             _destination != ShellDestination.settings &&
             _destination != ShellDestination.diagnostics) {
-          _settingsReturnDestination = _destination;
+          _settingsReturnDestination = _portraitComposition
+              ? ShellDestination.guide
+              : _destination;
         } else if (destination != ShellDestination.settings &&
             destination != ShellDestination.diagnostics) {
           _settingsReturnDestination = null;
@@ -420,6 +508,13 @@ class _LineupShellState extends State<LineupShell> {
               ? ShellDestination.channels
               : ShellDestination.guide;
         }
+      }
+      if (widget.profile.isHandheld &&
+          destination == ShellDestination.channels &&
+          _destination != ShellDestination.channels) {
+        _channelsReturnDestination = _portraitComposition
+            ? ShellDestination.guide
+            : _destination;
       }
       final committed = proposed == null ? null : _validTvLocation(proposed);
       final routeDestination = committed?.destination ?? destination;
@@ -446,7 +541,9 @@ class _LineupShellState extends State<LineupShell> {
   bool get _hasPlaybackSurface =>
       _player.hasPlaybackIntent || _player.error != null;
 
-  ShellDestination? get _settingsBackDestination => widget.profile.isTv
+  ShellDestination? get _settingsBackDestination => _portraitComposition
+      ? ShellDestination.guide
+      : widget.profile.isTv
       ? _validTvLocation(_tvSettings.origin).destination
       : _settingsReturnDestination == ShellDestination.player &&
             !_hasPlaybackSurface
@@ -862,7 +959,9 @@ class _LineupShellState extends State<LineupShell> {
         CustomSingleChildLayout(
           delegate: _AnchoredMenuLayout(
             anchor,
-            insets: DeviceProfile.of(context).isTv
+            insets:
+                (DeviceProfile.of(context).isTv ||
+                    DeviceProfile.of(context).isHandheld)
                 ? LineupCanvas.contentInsets(
                     context,
                     minimum: const EdgeInsets.all(16),
@@ -1067,10 +1166,26 @@ class _LineupShellState extends State<LineupShell> {
     final rooted = defaultTargetPlatform == TargetPlatform.android
         ? AndroidBackScope(
             onUnhandledBack: widget.profile.isTv ? _handleTvBack : null,
+            onSystemBack: widget.profile.isHandheld
+                ? _handleHandheldBack
+                : null,
             child: child,
           )
         : child;
-    return DeviceProfileScope(profile: widget.profile, child: rooted);
+    final managed =
+        widget.profile.host == TargetPlatform.android &&
+            widget.profile.isHandheld
+        ? HandheldSystemUi(
+            playerVisible:
+                widget.controller.stage == SetupStage.ready &&
+                _destination == ShellDestination.player &&
+                !_licensesOpen,
+            osdVisible:
+                _player.overlay != PlayerOverlay.none || _appMenu != null,
+            child: rooted,
+          )
+        : rooted;
+    return DeviceProfileScope(profile: widget.profile, child: managed);
   }
 
   Widget _buildShell(BuildContext context) {
@@ -1178,7 +1293,7 @@ class _LineupShellState extends State<LineupShell> {
       focusNode: _guideFocus,
       onClose: _closeGuide,
       onBack: widget.profile.isTv ? _handleTvBack : null,
-      onOpenMenu: _openAppMenu,
+      onOpenMenu: _portraitComposition ? null : _openAppMenu,
       pictureInPicture: guideHasPicture
           ? PlayerSurface(controller: _player, showErrors: true)
           : GuidePlaybackPlaceholder(
@@ -1204,14 +1319,16 @@ class _LineupShellState extends State<LineupShell> {
       subtitleAppearance: _player.subtitleAppearance,
       focusNode: _settingsFocus,
       menuFocusNode: _settingsMenuFocus,
-      onOpenMenu: _openAppMenu,
+      onOpenMenu: _portraitComposition ? null : _openAppMenu,
       backLabel:
           '‹ Back to ${switch (_settingsBackDestination) {
             ShellDestination.player => "Player",
             ShellDestination.channels => "Channels",
             _ => "Guide",
           }}',
-      onBack: _settingsBackDestination == null ? null : _returnFromSettings,
+      onBack: _portraitComposition || _settingsBackDestination == null
+          ? null
+          : _returnFromSettings,
       category: _settingsCategory,
       onCategoryChanged: (category) => setState(() {
         _settingsCategory = category;
@@ -1238,12 +1355,26 @@ class _LineupShellState extends State<LineupShell> {
         menuFocusNode: _channelsMenuFocus,
         onOpenMenu: _openAppMenu,
         onOpenPlayer: () => unawaited(_select(ShellDestination.player)),
+        showNavigationMenu: !_portraitComposition,
+        onBack: widget.profile.isHandheld && !_portraitComposition
+            ? _returnFromChannels
+            : null,
+        backLabel:
+            '‹ Back to ${switch (_channelsBackDestination) {
+              ShellDestination.player => 'Player',
+              ShellDestination.settings => 'Settings',
+              ShellDestination.diagnostics => 'Diagnostics',
+              ShellDestination.channels => 'Channels',
+              ShellDestination.guide => 'Guide',
+            }}',
       ),
       ShellDestination.settings => Stack(
         fit: StackFit.expand,
         children: [
-          if (hasPlaybackSurface)
-            PlayerSurface(controller: _player, showSubtitles: false),
+          if (hasPlaybackSurface && !_portraitComposition)
+            PlayerSurface(controller: _player, showSubtitles: false)
+          else if (widget.profile.isHandheld)
+            const SizedBox.shrink(),
           _settingsWithLicenses(settingsView),
         ],
       ),
@@ -1269,6 +1400,8 @@ class _LineupShellState extends State<LineupShell> {
       ShellDestination.player => playerView,
     };
     final roles = LineupTheme.of(context);
+    final showTabs =
+        _portraitComposition && _destination != ShellDestination.player;
     final routeColor =
         _destination == ShellDestination.settings ||
             _destination == ShellDestination.player ||
@@ -1315,8 +1448,32 @@ class _LineupShellState extends State<LineupShell> {
             ),
           )
         : SafeArea(
+            bottom: !showTabs,
             child: ColoredBox(color: routeColor, child: routeView),
           );
+    // Keep the same route parent across rotation/class changes so local
+    // selection, drafts and scroll state are not recreated with the chrome.
+    final content = widget.profile.isHandheld
+        ? Column(
+            children: [
+              Expanded(child: paintedRoute),
+              if (showTabs &&
+                  hasPlaybackSurface &&
+                  (_destination == ShellDestination.channels ||
+                      _destination == ShellDestination.settings))
+                HandheldMiniPlayer(
+                  controller: _player,
+                  onOpenPlayer: () =>
+                      unawaited(_select(ShellDestination.player)),
+                ),
+              if (showTabs)
+                HandheldTabBar(
+                  destination: _destination,
+                  onSelect: (destination) => unawaited(_select(destination)),
+                ),
+            ],
+          )
+        : paintedRoute;
     return _withGlobalKeys(
       Scaffold(
         backgroundColor: Colors.transparent,
@@ -1332,7 +1489,7 @@ class _LineupShellState extends State<LineupShell> {
                 visible: TooltipVisibility.of(context) && _appMenu == null,
                 child: ExcludeFocus(
                   excluding: _appMenu != null,
-                  child: paintedRoute,
+                  child: content,
                 ),
               ),
             ),
