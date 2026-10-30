@@ -247,7 +247,7 @@ void main() {
           ..devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final semantics = tester.ensureSemantics();
-        addTearDown(semantics.dispose);
+
         final menuFocus = FocusNode();
         addTearDown(menuFocus.dispose);
         await tester.pumpWidget(
@@ -302,8 +302,9 @@ void main() {
             current != null;
             current = current.parent
           ) {
-            if (current.transform case final transform?)
+            if (current.transform case final transform?) {
               rect = MatrixUtils.transformRect(transform, rect);
+            }
           }
           expect(
             rect.width,
@@ -316,6 +317,7 @@ void main() {
             reason: node.getSemanticsData().label,
           );
         }
+        semantics.dispose();
       },
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channels_view.dart';
+import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/handheld_navigation.dart';
 import 'package:lineup_desktop/app/navigation_shortcuts.dart';
 import 'package:lineup_desktop/app/settings_view.dart';
@@ -29,7 +30,6 @@ void main() {
   var backgrounded = 0;
   setUp(() {
     backgrounded = 0;
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(platform, (call) async {
           if (call.method == 'moveTaskToBack') backgrounded++;
@@ -37,10 +37,24 @@ void main() {
         });
   });
   tearDown(() {
-    debugDefaultTargetPlatformOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(platform, null);
   });
+
+  void navigationTest(String name, WidgetTesterCallback body) {
+    testWidgets(name, (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        await body(tester);
+      } finally {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
 
   Future<void> tab(WidgetTester tester, String name) async {
     await tester.tap(find.byKey(ValueKey('handheld-tab-$name')));
@@ -49,7 +63,7 @@ void main() {
 
   // 800x1280 exercises the approved tablet bar without attributing existing
   // phone Channels/UI-B overflows to the new navigation foundation.
-  testWidgets(
+  navigationTest(
     'portrait tablet tabs, mini player and surface transfer add no history or reload',
     (tester) async {
       tester.view
@@ -129,7 +143,7 @@ void main() {
     },
   );
 
-  testWidgets(
+  navigationTest(
     'resize keeps the Settings element and selection while transferring its output',
     (tester) async {
       tester.view
@@ -177,7 +191,7 @@ void main() {
   );
 
   for (final scale in [1.0, 1.3, 2.0]) {
-    testWidgets(
+    navigationTest(
       'phone mini player keeps one 16:9 output and accessible separate actions at text $scale',
       (tester) async {
         tester.view
@@ -255,7 +269,7 @@ void main() {
 
   for (final size in [const Size(360, 800), const Size(800, 1280)]) {
     for (final scale in [1.0, 1.3, 2.0]) {
-      testWidgets(
+      navigationTest(
         'tabs grow locally with safe bottom and 48dp targets at $size text $scale',
         (tester) async {
           tester.view

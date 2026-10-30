@@ -27,8 +27,9 @@ class HandheldSystemUiPolicy {
     if (multiWindow != false ||
         displaySize.isEmpty ||
         !displaySize.isFinite ||
-        displaySize.shortestSide >= 600)
+        displaySize.shortestSide >= 600) {
       return const [];
+    }
     return playerVisible
         ? const [
             DeviceOrientation.portraitUp,
@@ -85,8 +86,9 @@ class _HandheldSystemUiState extends State<HandheldSystemUi>
       unwatch: 'unwatchWindowFacts',
       accepts: (fact) => fact is bool,
       onEvent: (fact) {
-        if (mounted && _multiWindow != fact)
+        if (mounted && _multiWindow != fact) {
           setState(() => _multiWindow = fact as bool);
+        }
       },
     );
   }

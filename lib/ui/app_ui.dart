@@ -63,12 +63,14 @@ class LineupHeading extends StatelessWidget {
 
         TextScaler fit(String word) {
           if (width(word, scaler) <= constraints.maxWidth ||
-              width(word, scaler) <= width(word, TextScaler.noScaling))
+              width(word, scaler) <= width(word, TextScaler.noScaling)) {
             return scaler;
+          }
           // Keep the role's text-1.0 floor, even when an exceptionally long
           // unscaled word cannot fit. Never split or silently shrink below it.
-          if (width(word, TextScaler.noScaling) >= constraints.maxWidth)
+          if (width(word, TextScaler.noScaling) >= constraints.maxWidth) {
             return TextScaler.noScaling;
+          }
           var low = 0.0;
           var high = 1.0;
           for (var step = 0; step < 16; step++) {

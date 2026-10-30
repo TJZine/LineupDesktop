@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
@@ -47,12 +48,30 @@ void main() {
       addTearDown(tester.view.reset);
       try {
         await body(tester);
+      } finally {
+        elsewhere.unfocus();
+        await tester.pump();
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
-      } finally {
         debugDefaultTargetPlatformOverride = null;
       }
     });
+  }
+
+  Future<void> navigate(WidgetTester tester, String name) async {
+    if (find.byType(PlayerView).evaluate().isNotEmpty) {
+      final key = switch (name) {
+        'Channels' => LogicalKeyboardKey.digit2,
+        'Settings' => LogicalKeyboardKey.digit3,
+        _ => throw StateError('Unhandled test navigation: $name'),
+      };
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      return;
+    }
+    await openDestination(tester, name);
   }
 
   Future<void> focusElsewhere(WidgetTester tester) async {
@@ -140,14 +159,7 @@ void main() {
   ) async {
     final fixture = UiFixture(
       profile: _handheld,
-      scenario: LineupScenario(
-        stage: SetupStage.linking,
-        activePin: PlexPin(
-          id: 7,
-          code: 'ABCD',
-          expiresAt: _now.add(const Duration(minutes: 4)),
-        ),
-      ),
+      scenario: LineupScenario(stage: SetupStage.linking),
     );
     await showFixture(tester, fixture);
     await tester.pumpAndSettle();
@@ -192,8 +204,8 @@ void main() {
       final fixture = _ready();
       await showFixture(tester, fixture);
       await tester.pumpAndSettle();
-      await openDestination(tester, 'Player');
-      await openDestination(tester, 'Channels');
+      await navigate(tester, 'Player');
+      await navigate(tester, 'Channels');
       expect(find.text('‹ Back to Player'), findsOneWidget);
       await focusElsewhere(tester);
       final loads = fixture.player.loads.length;
@@ -203,7 +215,7 @@ void main() {
       expect(find.byType(PlayerView), findsOneWidget);
       expect(fixture.player.loads.length, loads);
       expect(fixture.controller.currentChannelId, selected);
-      await openDestination(tester, 'Channels');
+      await navigate(tester, 'Channels');
       await tester.tap(find.text('‹ Back to Player'));
       await tester.pumpAndSettle();
       expect(find.byType(PlayerView), findsOneWidget);
@@ -217,7 +229,7 @@ void main() {
       final fixture = _ready();
       await showFixture(tester, fixture);
       await tester.pumpAndSettle();
-      await openDestination(tester, 'Player');
+      await navigate(tester, 'Player');
       final controller = tester
           .widget<PlayerView>(find.byType(PlayerView))
           .controller;
@@ -241,6 +253,14 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(controller.overlay, PlayerOverlay.osd);
+      final tuning = controller.tune('channel');
+      await tester.pump();
+      await tester.pump();
+      expect(await tuning, isTrue, reason: controller.error);
+      fixture.player.emit(
+        const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+      );
+      await tester.pumpAndSettle();
       controller.showNowPlaying();
       await tester.pumpAndSettle();
       expect(controller.overlay, PlayerOverlay.nowPlaying);
@@ -261,7 +281,7 @@ void main() {
       final fixture = _ready();
       await showFixture(tester, fixture);
       await tester.pumpAndSettle();
-      await openDestination(tester, 'Settings');
+      await navigate(tester, 'Settings');
       await tester.tap(
         find.byKey(const ValueKey('settings-field-Player overlays')),
       );
@@ -284,7 +304,7 @@ void main() {
     final fixture = _ready();
     await showFixture(tester, fixture);
     await tester.pumpAndSettle();
-    await openDestination(tester, 'Settings');
+    await navigate(tester, 'Settings');
     await tester.tap(find.text('Support').first);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Open Diagnostics'));
@@ -303,7 +323,7 @@ void main() {
       final fixture = _ready();
       await showFixture(tester, fixture);
       await tester.pumpAndSettle();
-      await openDestination(tester, 'Player');
+      await navigate(tester, 'Player');
       final original = tester.state<PlayerViewState>(find.byType(PlayerView));
       final loads = fixture.player.loads.length;
       final selected = fixture.controller.currentChannelId;
@@ -340,6 +360,7 @@ void main() {
       await tester.pump();
       expect(fixture.player.stops, 1);
       await tester.pumpWidget(const SizedBox.shrink());
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     },
   );
@@ -350,26 +371,47 @@ UiFixture _ready() => UiFixture(
   player: FixturePlayer.preloaded()
     ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
   guideClock: () => _now,
-  scenario: LineupScenario(
-    stage: SetupStage.ready,
-    settings: const LineupSettings(reduceMotion: true),
-    currentChannelId: 'channel',
-    channels: [
-      Channel(
-        id: 'channel',
-        number: 7,
-        name: 'Channel',
-        source: const ManualSource([
-          ChannelItem(
-            id: 'program',
-            title: 'Program',
-            duration: Duration(hours: 24),
-          ),
-        ]),
-        playbackMode: PlaybackMode.sequential,
-        anchor: _now.subtract(const Duration(hours: 1)),
-        shuffleSeed: 1,
-      ),
-    ],
+  controller: _BackController(
+    scenario: LineupScenario(
+      stage: SetupStage.ready,
+      settings: const LineupSettings(reduceMotion: true),
+      currentChannelId: 'channel',
+      channels: [
+        Channel(
+          id: 'channel',
+          number: 7,
+          name: 'Channel',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'program',
+              title: 'Program',
+              duration: Duration(hours: 24),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: _now.subtract(const Duration(hours: 1)),
+          shuffleSeed: 1,
+        ),
+      ],
+    ),
   ),
 );
+
+class _BackController extends FixtureController {
+  _BackController({required super.scenario});
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    (channel.source as ManualSource).items,
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+  );
+
+  @override
+  LineupPlaybackRequest playbackFor(String itemId) =>
+      LineupPlaybackRequest.parts([
+        LineupPlaybackPart(
+          uri: Uri.parse('https://synthetic.invalid/$itemId.mkv'),
+          duration: const Duration(hours: 24),
+        ),
+      ]);
+}

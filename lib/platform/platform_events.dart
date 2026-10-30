@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show VoidCallback;
 
 /// One callback owner per platform channel, with independently watched facts.
 /// Consumers share subscriptions rather than replacing each other's handler.
@@ -56,8 +55,9 @@ final class PlatformEvents {
       ..hasValue = true
       ..value = call.arguments;
     for (final listener in List.of(observation.listeners)) {
-      if (observation.listeners.contains(listener))
+      if (observation.listeners.contains(listener)) {
         listener.onEvent(call.arguments);
+      }
     }
   }
 

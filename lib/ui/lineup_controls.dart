@@ -24,18 +24,20 @@ class LineupTouchTarget extends StatelessWidget {
     if (!DeviceProfile.of(context).isHandheld) return child;
     final extent = LineupCanvas.minimumTouchExtentOf(context);
     return LayoutBuilder(
-      builder: (context, constraints) => Semantics(
-        onTap: onPressed,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          excludeFromSemantics: true,
+      builder: (context, constraints) => MergeSemantics(
+        child: Semantics(
           onTap: onPressed,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minWidth: extent, minHeight: extent),
-            child: Center(
-              widthFactor: 1,
-              heightFactor: 1,
-              child: ConstrainedBox(constraints: constraints, child: child),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            excludeFromSemantics: true,
+            onTap: onPressed,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: extent, minHeight: extent),
+              child: Center(
+                widthFactor: 1,
+                heightFactor: 1,
+                child: ConstrainedBox(constraints: constraints, child: child),
+              ),
             ),
           ),
         ),
