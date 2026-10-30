@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../../channels/channel.dart';
 import '../../plex/plex_models.dart';
@@ -181,7 +182,7 @@ class SetupLibraryStep extends StatelessWidget {
     Widget actionLabel(String label) => Builder(
       builder: (context) => Text(
         label,
-        style: roles.androidTv
+        style: DeviceProfile.of(context).isTv
             ? actionStyle.copyWith(color: LineupTheme.of(context).primaryText)
             : actionStyle,
       ),
@@ -202,7 +203,7 @@ class SetupLibraryStep extends StatelessWidget {
             TextButton(
               key: const ValueKey('setup-switch-server'),
               style: TextButton.styleFrom(
-                padding: LineupTheme.of(context).androidTv
+                padding: DeviceProfile.of(context).isTv
                     ? const EdgeInsets.symmetric(horizontal: 20)
                     : EdgeInsets.zero,
                 minimumSize: const Size(0, 48),
@@ -213,7 +214,7 @@ class SetupLibraryStep extends StatelessWidget {
             ),
           if (!scanning && data.channelSetupCanCancel)
             TextButton(
-              style: roles.androidTv
+              style: DeviceProfile.of(context).isTv
                   ? TextButton.styleFrom(minimumSize: const Size(0, 48))
                   : null,
               onPressed: onCancelSetup,
@@ -254,11 +255,15 @@ class SetupLibraryStep extends StatelessWidget {
                 FilledButton(
                   key: const ValueKey('setup-switch-server'),
                   focusNode:
-                      roles.androidTv && !data.busy && data.canSwitchServer
+                      DeviceProfile.of(context).isTv &&
+                          !data.busy &&
+                          data.canSwitchServer
                       ? entryFocusNode
                       : null,
                   autofocus:
-                      roles.androidTv && !data.busy && data.canSwitchServer,
+                      DeviceProfile.of(context).isTv &&
+                      !data.busy &&
+                      data.canSwitchServer,
                   onPressed: data.canSwitchServer ? onSwitchServer : null,
                   child: const Text('Switch server'),
                 ),
@@ -266,7 +271,7 @@ class SetupLibraryStep extends StatelessWidget {
             )
           : scanning
           ? TextButton(
-              autofocus: roles.androidTv,
+              autofocus: DeviceProfile.of(context).isTv,
               onPressed: onCancelScan,
               child: actionLabel('Cancel scan'),
             )
@@ -297,7 +302,7 @@ class SetupLibraryStep extends StatelessWidget {
     final body = LayoutBuilder(
       builder: (context, constraints) {
         final singleScroll =
-            roles.androidTv ||
+            DeviceProfile.of(context).isTv ||
             constraints.maxHeight < 800 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.5;
         final list = ListView.separated(
@@ -360,10 +365,13 @@ class SetupLibraryStep extends StatelessWidget {
                   ),
                 ),
               ),
-            if (!roles.androidTv) ...[const SizedBox(height: 24), footer],
+            if (!DeviceProfile.of(context).isTv) ...[
+              const SizedBox(height: 24),
+              footer,
+            ],
           ],
         );
-        if (roles.androidTv) {
+        if (DeviceProfile.of(context).isTv) {
           return Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
@@ -394,7 +402,7 @@ class SetupLibraryStep extends StatelessWidget {
         );
       },
     );
-    return roles.androidTv
+    return DeviceProfile.of(context).isTv
         ? FocusTraversalGroup(
             policy: SetupVerticalTraversalPolicy(),
             child: body,
@@ -457,13 +465,13 @@ class SetupLibraryStep extends StatelessWidget {
                   mixed: value == null,
                   child: TextButton(
                     focusNode:
-                        roles.androidTv &&
+                        DeviceProfile.of(context).isTv &&
                             data.libraryScanStatus !=
                                 LibraryScanStatus.scanning &&
                             editable
                         ? entryFocusNode
                         : null,
-                    autofocus: roles.androidTv && editable,
+                    autofocus: DeviceProfile.of(context).isTv && editable,
                     style: const ButtonStyle(
                       padding: WidgetStatePropertyAll(
                         EdgeInsets.symmetric(horizontal: 8),
@@ -538,7 +546,7 @@ class SetupLibraryStep extends StatelessWidget {
   }
 
   Widget _libraryRow(BuildContext context, PlexLibrary library, int index) {
-    final tv = LineupTheme.of(context).androidTv;
+    final tv = DeviceProfile.of(context).isTv;
     final selected = selectedLibraryIds.contains(library.id);
     final row = LayoutBuilder(
       builder: (context, constraints) {
@@ -708,7 +716,7 @@ class SetupLibraryStep extends StatelessWidget {
       return roles.secondaryText;
     }
     final focusedTv =
-        roles.androidTv &&
+        DeviceProfile.of(context).isTv &&
         LineupFocusScope.visible(context, Focus.of(context).hasFocus);
     return focusedTv ? roles.primaryText : Theme.of(context).colorScheme.error;
   }

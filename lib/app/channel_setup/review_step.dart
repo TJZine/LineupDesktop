@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
@@ -237,7 +238,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_entryFocusIsEligible && LineupTheme.of(context).androidTv) {
+      if (_entryFocusIsEligible && DeviceProfile.of(context).isTv) {
         _searchFocus.requestFocus();
       }
     });
@@ -291,7 +292,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
       footer: Focus(
         canRequestFocus: false,
         skipTraversal: true,
-        onKeyEvent: LineupTheme.of(context).androidTv ? _footerKey : null,
+        onKeyEvent: DeviceProfile.of(context).isTv ? _footerKey : null,
         onFocusChange: _footerFocusChanged,
         child: SetupFooter(
           configuration: true,
@@ -303,7 +304,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               child: const Text('Back to configure'),
             ),
           ],
-          summary: LineupTheme.of(context).androidTv && _rosterFocused
+          summary: DeviceProfile.of(context).isTv && _rosterFocused
               ? Text(
                   'Press right on any channel to jump here',
                   key: const ValueKey('review-footer-hint'),
@@ -316,7 +317,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                   focusNode: _primaryFocus,
                   onPressed: widget.onViewLineup,
                   child: Text(
-                    LineupTheme.of(context).androidTv
+                    DeviceProfile.of(context).isTv
                         ? 'Open guide'
                         : 'View lineup',
                   ),
@@ -347,7 +348,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
             ],
             _reviewOverview(),
             if (_missingSources.isNotEmpty &&
-                !LineupTheme.of(context).androidTv) ...[
+                !DeviceProfile.of(context).isTv) ...[
               const SizedBox(height: 16),
               _missingSourceReview(),
             ],
@@ -360,7 +361,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                 child: child,
               ),
           ];
-          if (LineupTheme.of(context).androidTv) {
+          if (DeviceProfile.of(context).isTv) {
             return _roster(leading: orderedIntro, includeRemoval: true);
           }
           if (constraints.maxHeight < 650 ||
@@ -386,7 +387,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         },
       ),
     );
-    return LineupTheme.of(context).androidTv
+    return DeviceProfile.of(context).isTv
         ? FocusTraversalGroup(
             policy: SetupVerticalTraversalPolicy(),
             child: body,
@@ -1029,7 +1030,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   );
 
   Widget _reviewRow(SetupReviewEntry entry, int index) {
-    if (!LineupTheme.of(context).androidTv) {
+    if (!DeviceProfile.of(context).isTv) {
       return _reviewRowContent(context, entry);
     }
     return FocusTraversalOrder(
@@ -1055,7 +1056,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   Widget _reviewRowContent(BuildContext context, SetupReviewEntry entry) {
     final roles = LineupTheme.of(context);
     final focusedTv =
-        roles.androidTv &&
+        DeviceProfile.of(context).isTv &&
         LineupFocusScope.visible(context, Focus.of(context).hasFocus);
     final textTheme = Theme.of(context).textTheme;
     final nameStyle = textTheme.bodyMedium!.copyWith(
@@ -1136,8 +1137,8 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               ],
             )
           : Focus(
-              canRequestFocus: roles.androidTv,
-              skipTraversal: !roles.androidTv,
+              canRequestFocus: DeviceProfile.of(context).isTv,
+              skipTraversal: !DeviceProfile.of(context).isTv,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 16, 52, 16),
                 child: content,

@@ -43,7 +43,10 @@ void main() {
               ),
             ),
           );
-          final fixture = UiFixture(controller: controller, androidTv: true);
+          final fixture = UiFixture(
+            controller: controller,
+            profile: profileFor(true),
+          );
           final capture = GlobalKey();
           await tester.pumpWidget(
             RepaintBoundary(key: capture, child: fixture.build()),

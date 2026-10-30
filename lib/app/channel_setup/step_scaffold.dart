@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../../ui/app_theme.dart';
 
@@ -20,7 +21,7 @@ class SetupStage extends StatelessWidget {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final singleScroll =
-        !LineupTheme.of(context).androidTv &&
+        !DeviceProfile.of(context).isTv &&
         (media.size.width < 900 ||
             media.size.height < 720 ||
             media.textScaler.scale(14) >= 24);

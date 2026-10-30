@@ -123,7 +123,17 @@ class NativePlayerControllerTest {
         Result().also { controller.call(method, args, it) }
 
     private fun initialize() {
-        assertEquals(mapOf("clientApiVersion" to 1), call("initialize").value)
+        assertEquals(
+            mapOf(
+                "clientApiVersion" to 1,
+                "capabilities" to
+                    mapOf(
+                        "displayMatching" to false,
+                        "fullscreen" to "fixed",
+                    ),
+            ),
+            call("initialize").value,
+        )
         host.drain()
         host.events.clear()
     }

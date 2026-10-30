@@ -12,6 +12,7 @@ import 'package:lineup_desktop/ui/focus_ink.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/settings_view.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
@@ -263,7 +264,7 @@ void main() {
       tester,
     ) async {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: LineupScenario(stage: stage),
       );
       await tester.pumpWidget(
@@ -288,7 +289,7 @@ void main() {
             const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
           );
         final fixture = UiFixture(
-          androidTv: true,
+          profile: profileFor(true),
           player: native,
           scenario: const LineupScenario(stage: SetupStage.ready),
         );
@@ -379,7 +380,7 @@ void main() {
     'stranded Channels manual picker unwinds locally before dirty guard and watch parent',
     (tester) async {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: LineupScenario(
           stage: SetupStage.ready,
           channels: [
@@ -756,7 +757,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: const LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(Focus(focusNode: outside, child: fixture.build()));
@@ -779,7 +780,7 @@ void main() {
     'Browse survives Channels Settings Diagnostics and Licenses detours',
     (tester) async {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         player: FixturePlayer()
           ..emit(
             const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
@@ -839,7 +840,7 @@ void main() {
       'held $key makes one transition; empty editing Backspace stays local',
       (tester) async {
         final fixture = UiFixture(
-          androidTv: true,
+          profile: profileFor(true),
           scenario: const LineupScenario(stage: SetupStage.ready),
         );
         await tester.pumpWidget(
@@ -882,7 +883,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: const LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(Focus(focusNode: outside, child: fixture.build()));
@@ -919,7 +920,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       player: FixturePlayer()
         ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
       scenario: const LineupScenario(stage: SetupStage.ready),
@@ -959,7 +960,7 @@ void main() {
     'scope retirement while dirty guard awaits cannot commit proposed Settings',
     (tester) async {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: const LineupScenario(stage: SetupStage.ready),
       );
       await tester.pumpWidget(
@@ -1436,19 +1437,22 @@ Future<void> _pump(
   bool largeFocus = false,
 }) async {
   await tester.pumpWidget(
-    Focus(
-      focusNode: outside,
-      child: MaterialApp(
-        theme: LineupTheme.forName(
-          LineupThemeName.emberSteel,
-          largeFocusIndicators: largeFocus,
-          androidTv: true,
-        ),
-        builder: LineupCanvas.builder,
-        home: LineupShell(
-          player: player ?? FixturePlayer(),
-          controller: controller,
-          androidTv: true,
+    DeviceProfileScope(
+      profile: profileFor(true),
+      child: Focus(
+        focusNode: outside,
+        child: MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            largeFocusIndicators: largeFocus,
+            formFactor: profileFor(true).formFactor,
+          ),
+          builder: LineupCanvas.builder,
+          home: LineupShell(
+            player: player ?? FixturePlayer(),
+            controller: controller,
+            profile: profileFor(true),
+          ),
         ),
       ),
     ),

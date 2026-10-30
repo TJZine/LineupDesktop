@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
@@ -74,9 +75,9 @@ class LicensesViewState extends State<LicensesView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final androidTv = LineupTheme.of(context).androidTv;
+    final isTv = DeviceProfile.of(context).isTv;
     for (final page in _pages) {
-      page.selection.skipTraversal = androidTv;
+      page.selection.skipTraversal = isTv;
     }
   }
 
@@ -136,7 +137,7 @@ class LicensesViewState extends State<LicensesView> {
     final roles = LineupTheme.of(context);
     final page = _page;
     final item = page.item;
-    page.selection.skipTraversal = roles.androidTv;
+    page.selection.skipTraversal = DeviceProfile.of(context).isTv;
     final parent = _pages.length == 1
         ? 'Support'
         : _pages[_pages.length - 2].item?.title ?? 'Licenses';
@@ -168,9 +169,10 @@ class LicensesViewState extends State<LicensesView> {
                               thumbVisibility: true,
                               child: Focus(
                                 focusNode: page.content,
-                                skipTraversal: roles.androidTv,
+                                skipTraversal: DeviceProfile.of(context).isTv,
                                 canRequestFocus:
-                                    !roles.androidTv || item?.read != null,
+                                    !DeviceProfile.of(context).isTv ||
+                                    item?.read != null,
                                 onKeyEvent: (_, event) =>
                                     _scrollKey(page, event),
                                 child: SelectionArea(
@@ -249,7 +251,8 @@ class LicensesViewState extends State<LicensesView> {
         animation: page.content,
         builder: (context, _) {
           final roles = LineupTheme.of(context);
-          final tvDocument = roles.androidTv && page.item?.read != null;
+          final tvDocument =
+              DeviceProfile.of(context).isTv && page.item?.read != null;
           final focused = LineupFocusScope.visible(
             context,
             tvDocument && page.content.hasPrimaryFocus,
@@ -291,7 +294,7 @@ class LicensesViewState extends State<LicensesView> {
       return KeyEventResult.ignored;
     }
     final position = page.scroll.position;
-    if (LineupTheme.of(context).androidTv) {
+    if (DeviceProfile.of(context).isTv) {
       // Back and Copy are actions; only the explicit reading owner consumes
       // document arrows. Loading/failure pages retain ordinary Retry traversal.
       final readable = page.item?.read != null && page.copy.context != null;
@@ -465,7 +468,7 @@ class LicensesViewState extends State<LicensesView> {
                 alignment: Alignment.centerLeft,
                 child: TextButton(
                   focusNode: page.copy,
-                  style: LineupTheme.of(context).androidTv
+                  style: DeviceProfile.of(context).isTv
                       ? LineupTheme.buttonStyle(
                           LineupTheme.of(context),
                           LineupButtonTier.text,

@@ -31,7 +31,7 @@ void main() {
       Widget app() => LineupBootstrap(
         controller: controller,
         player: player,
-        androidTv: tv,
+        profile: profileFor(tv),
       );
       await tester.pumpWidget(app());
       await tester.pumpAndSettle();
@@ -59,7 +59,7 @@ void main() {
       LineupBootstrap(
         controller: FixtureController(),
         player: FixturePlayer(),
-        androidTv: true,
+        profile: profileFor(true),
         keyboardVisibility: visibility,
       ),
     );

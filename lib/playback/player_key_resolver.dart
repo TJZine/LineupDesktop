@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 
-import '../ui/lineup_focus.dart' show androidTvKeyAlias;
+import '../ui/lineup_focus.dart' show tvRemoteKeyAlias;
 import 'player_coordinator.dart';
 
 sealed class PlayerCommand {
@@ -91,7 +91,7 @@ final _pageKeys = {LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
 PlayerCommand resolvePlayerKey(
   LogicalKeyboardKey key, {
   required PlayerOverlay overlay,
-  required bool androidTv,
+  required bool tvRemote,
   required bool dvr,
   required bool unsupported,
   required bool initialPress,
@@ -104,10 +104,10 @@ PlayerCommand resolvePlayerKey(
   if (commandPressed) return PlayerAction.ignored;
   // Android TV's Menu key is a shell action, not the optional Info command.
   // Resolve it before the shared TV aliases turn contextMenu into keyI.
-  if (androidTv && key == LogicalKeyboardKey.contextMenu) {
+  if (tvRemote && key == LogicalKeyboardKey.contextMenu) {
     return PlayerAction.openMenu;
   }
-  key = androidTvKeyAlias(key, androidTv: androidTv) ?? key;
+  key = tvRemoteKeyAlias(key, enabled: tvRemote) ?? key;
   if (_backKeys.contains(key)) {
     return switch (overlay) {
       PlayerOverlay.none => PlayerAction.backToGuide,
@@ -221,7 +221,7 @@ PlayerCommand resolvePlayerKey(
   }
   if (key == LogicalKeyboardKey.arrowDown &&
       (overlay == PlayerOverlay.none || overlay == PlayerOverlay.osd)) {
-    if (androidTv) {
+    if (tvRemote) {
       if (overlay == PlayerOverlay.none) return PlayerAction.showOsd;
       return tvOsdAtBottom && hasProgram
           ? PlayerAction.showNowPlaying
@@ -234,7 +234,7 @@ PlayerCommand resolvePlayerKey(
   if (initialPress && key == LogicalKeyboardKey.keyI) {
     return nowPlaying
         ? PlayerAction.showOsdFromInfo
-        : androidTv && !hasProgram
+        : tvRemote && !hasProgram
         ? PlayerAction.showOsd
         : PlayerAction.showNowPlaying;
   }
