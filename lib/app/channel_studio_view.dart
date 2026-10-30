@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
 import '../channels/content_resolver.dart';

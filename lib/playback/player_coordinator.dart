@@ -38,7 +38,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     required this.lineup,
     required this.guide,
     this.overlayTimeout,
-    this.androidTv = false,
+    this.suspendInBackground = false,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
     _indexChannels();
@@ -64,7 +64,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
-    if (androidTv) {
+    if (suspendInBackground) {
       WidgetsBinding.instance.addObserver(this);
       final lifecycle = WidgetsBinding.instance.lifecycleState;
       if (lifecycle == AppLifecycleState.hidden ||
@@ -92,7 +92,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   final LineupController lineup;
   final GuideController guide;
   final Duration? overlayTimeout;
-  final bool androidTv;
+  final bool suspendInBackground;
   bool _backgroundSuspended = false;
   // Null means no captured intent; false keeps an explicit/untuned stop from
   // being recaptured as play while native stop acknowledgement is pending.
@@ -742,7 +742,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!androidTv || _disposed) return;
+    if (!suspendInBackground || _disposed) return;
     switch (state) {
       case AppLifecycleState.hidden || AppLifecycleState.paused:
         unawaited(setApplicationForeground(false));
@@ -758,7 +758,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setApplicationForeground(bool foreground) async {
-    if (!androidTv || _disposed) return;
+    if (!suspendInBackground || _disposed) return;
     if (foreground) {
       if (!_backgroundSuspended) {
         if (_resumeAfterBackground == true) _resumeAfterBackground = null;
@@ -2453,7 +2453,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
-    if (androidTv) WidgetsBinding.instance.removeObserver(this);
+    if (suspendInBackground) WidgetsBinding.instance.removeObserver(this);
     _resumeAfterBackground = false;
     _displayMatching.dispose();
     unawaited(_cancelPlayerSubscription(_displaySubscription));

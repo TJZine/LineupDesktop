@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -34,7 +36,7 @@ void main() {
     double scale = 1,
     VoidCallback? back,
     LineupThemeName theme = LineupThemeName.emberSteel,
-    bool androidTv = false,
+    bool isTv = false,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -45,14 +47,17 @@ void main() {
         theme: LineupTheme.forName(
           theme,
           largeFocusIndicators: true,
-          androidTv: androidTv,
+          formFactor: profileFor(isTv).formFactor,
         ),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(scale),
             disableAnimations: true,
           ),
-          child: LineupCanvas(child: child!),
+          child: DeviceProfileScope(
+            profile: profileFor(isTv),
+            child: LineupCanvas(child: child!),
+          ),
         ),
         home: Scaffold(
           body: RepaintBoundary(
@@ -139,7 +144,7 @@ void main() {
               ]),
             ],
           ),
-        ], androidTv: true);
+        ], isTv: true);
         final roles = LineupTheme.of(tester.element(find.byType(LicensesView)));
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
@@ -277,7 +282,7 @@ void main() {
             ),
           ],
         ),
-      ], androidTv: true);
+      ], isTv: true);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pump();
@@ -533,7 +538,7 @@ void main() {
             tester,
             [LicenseSource('Native runtime', () async => groups)],
             size: size,
-            androidTv: android,
+            isTv: android,
           );
           await tester.pumpAndSettle();
           for (final group in groups) {
@@ -548,7 +553,10 @@ void main() {
                     find.byKey(const Key('license-render')),
                   )
                   .toImage(
-                    pixelRatio: LineupCanvas.scaleFor(size, androidTv: android),
+                    pixelRatio: LineupCanvas.scaleFor(
+                      size,
+                      formFactor: profileFor(android).formFactor,
+                    ),
                   );
               final bytes = await image.toByteData(
                 format: ui.ImageByteFormat.png,

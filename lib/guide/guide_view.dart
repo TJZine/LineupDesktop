@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
@@ -706,12 +707,8 @@ class _GuideViewState extends State<GuideView>
     }
     final rawKey = event.logicalKey;
     final key =
-        androidTvKeyAlias(
-          rawKey,
-          androidTv: LineupTheme.of(context).androidTv,
-        ) ??
+        tvRemoteKeyAlias(rawKey, enabled: DeviceProfile.of(context).isTv) ??
         rawKey;
-    final roles = LineupTheme.of(context);
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
         keyboard.isControlPressed ||
@@ -729,7 +726,8 @@ class _GuideViewState extends State<GuideView>
       return KeyEventResult.handled;
     }
     final isAndroidTvMenu =
-        roles.androidTv && rawKey == LogicalKeyboardKey.contextMenu;
+        DeviceProfile.of(context).isTv &&
+        rawKey == LogicalKeyboardKey.contextMenu;
     if (key == LogicalKeyboardKey.keyI &&
         isAndroidTvMenu &&
         widget.onOpenMenu != null) {
@@ -773,9 +771,9 @@ class _GuideViewState extends State<GuideView>
       return KeyEventResult.ignored;
     }
     final key =
-        androidTvKeyAlias(
+        tvRemoteKeyAlias(
           event.logicalKey,
-          androidTv: LineupTheme.of(context).androidTv,
+          enabled: DeviceProfile.of(context).isTv,
         ) ??
         event.logicalKey;
     final keyboard = HardwareKeyboard.instance;
@@ -784,7 +782,7 @@ class _GuideViewState extends State<GuideView>
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
     if (key == LogicalKeyboardKey.arrowUp) {
-      if (LineupTheme.of(context).androidTv &&
+      if (DeviceProfile.of(context).isTv &&
           widget.controller.focusedChannelIndex == 0) {
         _focusNearestToolbarControl();
       } else {
@@ -895,16 +893,16 @@ class _GuideViewState extends State<GuideView>
   }
 
   KeyEventResult _toolbarKey(FocusNode node, KeyEvent event) {
-    if (!LineupTheme.of(context).androidTv) {
+    if (!DeviceProfile.of(context).isTv) {
       return KeyEventResult.ignored;
     }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
     final key =
-        androidTvKeyAlias(
+        tvRemoteKeyAlias(
           event.logicalKey,
-          androidTv: LineupTheme.of(context).androidTv,
+          enabled: DeviceProfile.of(context).isTv,
         ) ??
         event.logicalKey;
     final gridFocus = widget.focusNode ?? _guideFocus;
@@ -1210,7 +1208,7 @@ class _GuideViewState extends State<GuideView>
                     widget.controller,
                   ),
                 );
-                if (roles.androidTv) {
+                if (DeviceProfile.of(context).isTv) {
                   final theme = Theme.of(context);
                   final direction = Directionality.of(context);
                   final retry = theme.textButtonTheme.style!;
@@ -1704,7 +1702,7 @@ class _GuideControls extends StatelessWidget {
     );
     final enlargedControls = textScale > 1;
     final roles = LineupTheme.of(context);
-    final menuTheme = roles.androidTv ? Theme.of(context) : null;
+    final menuTheme = DeviceProfile.of(context).isTv ? Theme.of(context) : null;
     final libraryIds = controller.availableLibraryIds.toList()..sort();
     final selectedLibrary = controller.libraryFilterId;
     final selectedLibraryName = selectedLibrary == null
@@ -1722,19 +1720,19 @@ class _GuideControls extends StatelessWidget {
             builder: (context) => DropdownButton<String?>(
               key: const Key('guide-library-picker'),
               focusNode: libraryFocus,
-              style: roles.androidTv
+              style: DeviceProfile.of(context).isTv
                   ? controlStyle.copyWith(
                       color: LineupTheme.of(context).primaryText,
                     )
                   : controlStyle,
-              iconEnabledColor: roles.androidTv
+              iconEnabledColor: DeviceProfile.of(context).isTv
                   ? LineupTheme.of(context).secondaryText
                   : null,
               isExpanded: true,
-              isDense: roles.androidTv || enlargedControls,
+              isDense: DeviceProfile.of(context).isTv || enlargedControls,
               padding: EdgeInsets.symmetric(horizontal: _guideEdgeContentInset),
               iconSize: 24,
-              itemHeight: roles.androidTv || enlargedControls
+              itemHeight: DeviceProfile.of(context).isTv || enlargedControls
                   ? null
                   : controlHeight,
               value: selectedLibrary,
@@ -1962,12 +1960,12 @@ class _GuideControls extends StatelessWidget {
               builder: (context) => DropdownButton<int>(
                 key: const Key('guide-hours'),
                 focusNode: hoursFocus,
-                style: roles.androidTv
+                style: DeviceProfile.of(context).isTv
                     ? controlStyle.copyWith(
                         color: LineupTheme.of(context).primaryText,
                       )
                     : controlStyle,
-                iconEnabledColor: roles.androidTv
+                iconEnabledColor: DeviceProfile.of(context).isTv
                     ? LineupTheme.of(context).secondaryText
                     : null,
                 isDense: enlargedControls,
@@ -2019,7 +2017,7 @@ class _GuideControls extends StatelessWidget {
       onKeyEvent: onKeyEvent,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final measured = roles.androidTv
+          final measured = DeviceProfile.of(context).isTv
               ? _GuideControlsMetrics.resolve(
                   context,
                   controller,
@@ -2130,7 +2128,7 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
             Size(widget.pictureWidth, height),
           ).destination
         : Size.zero;
-    final bleed = LineupTheme.of(context).androidTv
+    final bleed = DeviceProfile.of(context).isTv
         ? LineupCanvas.fullSafeInsetsOf(context)
         : EdgeInsets.zero;
     final details =
@@ -2345,13 +2343,13 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
           SizedBox(
             width: widget.pictureWidth,
             child: CustomPaint(
-              painter: LineupTheme.of(context).androidTv
+              painter: DeviceProfile.of(context).isTv
                   ? _PictureSurroundPainter(
                       color: LineupTheme.of(context).deepBackground,
                     )
                   : null,
               child: Align(
-                alignment: LineupTheme.of(context).androidTv
+                alignment: DeviceProfile.of(context).isTv
                     ? Alignment.topLeft
                     : Alignment.center,
                 child: AspectRatio(
@@ -2823,7 +2821,9 @@ class _GuideRow extends StatelessWidget {
                                 .style
                                 .copyWith(
                                   fontSize: showProvenance ? 16 : 14,
-                                  color: focusChannelRail && roles.androidTv
+                                  color:
+                                      focusChannelRail &&
+                                          DeviceProfile.of(context).isTv
                                       ? roles.focusMutedText
                                       : roles.mutedText,
                                 );
@@ -2870,7 +2870,9 @@ class _GuideRow extends StatelessWidget {
                                                 size: 14,
                                                 color:
                                                     focusChannelRail &&
-                                                        roles.androidTv
+                                                        DeviceProfile.of(
+                                                          context,
+                                                        ).isTv
                                                     ? roles.focusSecondaryText
                                                     : roles.secondaryText,
                                               ),
@@ -2884,7 +2886,9 @@ class _GuideRow extends StatelessWidget {
                                                   style: supportStyle.copyWith(
                                                     color:
                                                         focusChannelRail &&
-                                                            roles.androidTv
+                                                            DeviceProfile.of(
+                                                              context,
+                                                            ).isTv
                                                         ? roles
                                                               .focusSecondaryText
                                                         : roles.secondaryText,
@@ -3830,7 +3834,7 @@ class _Details extends StatelessWidget {
         ),
       ),
     );
-    final margin = roles.androidTv
+    final margin = DeviceProfile.of(context).isTv
         ? LineupCanvas.fullSafeInsetsOf(context)
         : EdgeInsets.zero;
     // Only paint bleeds beyond the route's safe content. Keep the information
@@ -4024,7 +4028,7 @@ class _ProgramDetails extends StatelessWidget {
         final mergeFacts = dense && !enlarged;
         final gap = dense ? 4.0 : 10.0;
         final desktopLogoHeight = compactLogo || dense ? 42.0 : 64.0;
-        final logoHeight = roles.androidTv
+        final logoHeight = DeviceProfile.of(context).isTv
             ? math.max(
                 desktopLogoHeight,
                 _lineHeight(context, _GuideStyles.title),
@@ -4081,8 +4085,10 @@ class _ProgramDetails extends StatelessWidget {
                   ? '$timeLine · $factsLine'
                   : timeLine,
               key: const Key('guide-program-meta'),
-              maxLines: roles.androidTv ? 1 : null,
-              overflow: roles.androidTv ? TextOverflow.ellipsis : null,
+              maxLines: DeviceProfile.of(context).isTv ? 1 : null,
+              overflow: DeviceProfile.of(context).isTv
+                  ? TextOverflow.ellipsis
+                  : null,
               style: metadataStyle,
             ),
             if (!mergeFacts && factsLine.isNotEmpty) ...[
@@ -4090,14 +4096,16 @@ class _ProgramDetails extends StatelessWidget {
               Text(
                 factsLine,
                 key: const Key('guide-info-genres'),
-                maxLines: roles.androidTv ? 1 : null,
-                overflow: roles.androidTv ? TextOverflow.ellipsis : null,
+                maxLines: DeviceProfile.of(context).isTv ? 1 : null,
+                overflow: DeviceProfile.of(context).isTv
+                    ? TextOverflow.ellipsis
+                    : null,
                 style: metadataStyle,
               ),
             ],
             if (badges.isNotEmpty) ...[
               SizedBox(height: gap),
-              if (roles.androidTv)
+              if (DeviceProfile.of(context).isTv)
                 Row(
                   key: const Key('guide-program-badges'),
                   mainAxisSize: MainAxisSize.min,
@@ -4139,7 +4147,7 @@ class _ProgramDetails extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (roles.androidTv && hasSynopsis)
+                  if (DeviceProfile.of(context).isTv && hasSynopsis)
                     SizedBox(
                       width: math.max(
                         minimumIdentityWidth,
@@ -4150,7 +4158,7 @@ class _ProgramDetails extends StatelessWidget {
                   else
                     Expanded(
                       flex: hasSynopsis ? identityFlex : 1,
-                      child: roles.androidTv
+                      child: DeviceProfile.of(context).isTv
                           ? identity
                           : SingleChildScrollView(child: identity),
                     ),
@@ -4244,8 +4252,10 @@ class _GuideMediaBadge extends StatelessWidget {
         child: Text(
           label,
           style: _GuideStyles.badge(context),
-          maxLines: roles.androidTv ? 1 : null,
-          overflow: roles.androidTv ? TextOverflow.ellipsis : null,
+          maxLines: DeviceProfile.of(context).isTv ? 1 : null,
+          overflow: DeviceProfile.of(context).isTv
+              ? TextOverflow.ellipsis
+              : null,
         ),
       ),
     );

@@ -18,27 +18,30 @@ void main() {
   Future<void> show(
     WidgetTester tester,
     FixtureController controller, {
-    bool androidTv = false,
+    bool isTv = false,
     bool largeFocus = false,
     VoidCallback? onRecordingSettings,
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        builder: LineupCanvas.builder,
-        theme: LineupTheme.forName(
-          LineupThemeName.emberSteel,
-          largeFocusIndicators: largeFocus,
-          androidTv: androidTv,
-        ),
-        home: RepaintBoundary(
-          key: const Key('diagnostic-render'),
-          child: Scaffold(
-            body: DiagnosticsView(
-              controller: controller,
-              playback: const PlaybackDiagnosticSnapshot(
-                state: PlayerState.stopped,
+      DeviceProfileScope(
+        profile: profileFor(isTv),
+        child: MaterialApp(
+          builder: LineupCanvas.builder,
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            largeFocusIndicators: largeFocus,
+            formFactor: profileFor(isTv).formFactor,
+          ),
+          home: RepaintBoundary(
+            key: const Key('diagnostic-render'),
+            child: Scaffold(
+              body: DiagnosticsView(
+                controller: controller,
+                playback: const PlaybackDiagnosticSnapshot(
+                  state: PlayerState.stopped,
+                ),
+                onRecordingSettings: onRecordingSettings ?? () {},
               ),
-              onRecordingSettings: onRecordingSettings ?? () {},
             ),
           ),
         ),
@@ -60,7 +63,7 @@ void main() {
         try {
           final controller = FixtureController();
           addTearDown(controller.dispose);
-          await show(tester, controller, androidTv: true, largeFocus: large);
+          await show(tester, controller, isTv: true, largeFocus: large);
           await tester.pumpAndSettle();
           final technical = find.byKey(
             const PageStorageKey('diagnostic-technical-details'),
@@ -148,7 +151,7 @@ void main() {
         await show(
           tester,
           controller,
-          androidTv: true,
+          isTv: true,
           onRecordingSettings: () => recordingCalls++,
         );
         await tester.pumpAndSettle();

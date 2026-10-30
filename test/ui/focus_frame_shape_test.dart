@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -20,37 +22,41 @@ void main() {
     final large = ValueNotifier(false);
     addTearDown(large.dispose);
     await tester.pumpWidget(
-      ValueListenableBuilder<bool>(
-        valueListenable: large,
-        builder: (context, enabled, _) => MaterialApp(
-          theme: LineupTheme.forName(
-            LineupThemeName.emberSteel,
-            androidTv: true,
-            largeFocusIndicators: enabled,
-          ),
-          builder: LineupCanvas.builder,
-          home: Scaffold(
-            body: Column(
-              children: [
-                TextButton(
-                  autofocus: true,
-                  onPressed: () {},
-                  child: const Text('Start'),
-                ),
-                LineupToggleSurface(
-                  child: SwitchListTile(
-                    value: enabled,
-                    title: const Text('Large focus indicators'),
-                    onChanged: (value) => large.value = value,
+      DeviceProfileScope(
+        profile: tvProfile,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: large,
+          builder: (context, enabled, _) => MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(true).formFactor,
+              largeFocusIndicators: enabled,
+            ),
+            builder: LineupCanvas.builder,
+            home: Scaffold(
+              body: Column(
+                children: [
+                  TextButton(
+                    autofocus: true,
+                    onPressed: () {},
+                    child: const Text('Start'),
                   ),
-                ),
-              ],
+                  LineupToggleSurface(
+                    child: SwitchListTile(
+                      value: enabled,
+                      title: const Text('Large focus indicators'),
+                      onChanged: (value) => large.value = value,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.byType(LineupRowSurface), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     final element = tester.element(find.byType(SwitchListTile));
@@ -78,7 +84,7 @@ void main() {
         MaterialApp(
           theme: LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
             largeFocusIndicators: true,
           ),
           home: Builder(
@@ -149,7 +155,7 @@ void main() {
           MaterialApp(
             theme: LineupTheme.forName(
               name,
-              androidTv: true,
+              formFactor: profileFor(true).formFactor,
               largeFocusIndicators: true,
             ),
             home: Builder(
@@ -220,7 +226,7 @@ void main() {
           MaterialApp(
             theme: LineupTheme.forName(
               LineupThemeName.emberSteel,
-              androidTv: tv,
+              formFactor: profileFor(tv).formFactor,
               largeFocusIndicators: large,
             ),
             home: Builder(

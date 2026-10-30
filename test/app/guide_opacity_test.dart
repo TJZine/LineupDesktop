@@ -64,7 +64,7 @@ void main() {
         'TV Guide paint surrounds native aperture at $scale Large $large',
         (tester) async {
           final fixture = _readyFixture(
-            androidTv: true,
+            isTv: true,
             playerState: const PlayerStatus(
               state: PlayerState.ready,
               message: 'Synthetic player surface',
@@ -191,7 +191,7 @@ Future<void> _expectClassicOpacity(
 UiFixture _readyFixture({
   LineupScenario? scenario,
   PlayerStatus? playerState,
-  bool androidTv = false,
+  bool isTv = false,
 }) {
   final player = FixturePlayer();
   if (playerState != null) {
@@ -216,7 +216,7 @@ UiFixture _readyFixture({
     ),
   );
   return UiFixture(
-    androidTv: androidTv,
+    profile: profileFor(isTv),
     controller: controller,
     player: player,
     guideClock: () => _fixedNow,

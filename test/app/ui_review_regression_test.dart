@@ -11,7 +11,7 @@ import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
-import 'package:lineup_desktop/app/lineup_shell.dart';
+import 'package:lineup_desktop/app/settings_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
@@ -23,6 +23,12 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 
 import '../support/ui_fixture.dart';
+
+Widget _desktopCanvasBuilder(BuildContext context, Widget? child) =>
+    DeviceProfileScope(
+      profile: desktopProfile,
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
 
 void main() {
   testWidgets('profile cards expose one complete semantic control', (
@@ -71,7 +77,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         home: LineupNavigationRow(
           key: const ValueKey('navigation-row'),
           selected: false,
@@ -99,7 +105,7 @@ void main() {
   testWidgets('Swiss notices keep square production corners', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         theme: LineupTheme.forName(LineupThemeName.swiss),
         home: const LineupNotice(message: 'Unavailable'),
       ),
@@ -139,7 +145,10 @@ void main() {
       ),
     );
     addTearDown(controller.dispose);
-    final fixture = UiFixture(controller: controller, androidTv: true);
+    final fixture = UiFixture(
+      controller: controller,
+      profile: profileFor(true),
+    );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     tester
@@ -182,7 +191,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         home: Align(
           child: SizedBox(
             width: 800,
@@ -405,7 +414,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () => showDialog<void>(
@@ -778,7 +787,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         home: UpstreamChannelSetupView(controller: controller),
       ),
     );
@@ -821,7 +830,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         home: UpstreamChannelSetupView(controller: controller),
       ),
     );
@@ -862,7 +871,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         home: UpstreamChannelSetupView(controller: controller),
       ),
     );
@@ -946,7 +955,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _desktopCanvasBuilder,
           home: UpstreamChannelSetupView(controller: controller),
         ),
       );
@@ -978,7 +987,7 @@ void main() {
     addTearDown(outsideFocus.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _desktopCanvasBuilder,
         home: Column(
           children: [
             TextButton(
@@ -1018,7 +1027,7 @@ Future<void> _openChannelEditor(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
-      builder: LineupCanvas.builder,
+      builder: _desktopCanvasBuilder,
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () => showDialog<void>(

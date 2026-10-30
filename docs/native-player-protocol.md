@@ -35,7 +35,7 @@ The native result is `null` unless a result map is shown.
 
 | Method | Arguments and bounds | Result and errors |
 | --- | --- | --- |
-| `initialize` | None | `{clientApiVersion: int}`. Errors: `required_engine_unavailable`, `initialize_failed`. Initialization advances the native lifecycle generation, resets display matching revision, and purges queued display events. |
+| `initialize` | None | `{clientApiVersion: int, capabilities?: {displayMatching: bool, fullscreen: "window" \| "systemBars" \| "fixed"}}`. `capabilities` is optional for desktop adapters and is sent by Android; when present, both fields are required and malformed data fails initialization. Errors: `required_engine_unavailable`, `initialize_failed`. Initialization advances the native lifecycle generation, resets display matching revision, and purges queued display events. |
 | `dispose` | None | `null` after the worker has finished. `dispose_in_progress` if another disposal is pending. Repeated disposal is successful. |
 | `setDisplayMatching` | `revision: int >= 0`, `session: bool`, `desired: "hdr"`, `"sdr"`, or `"unknown"` | `null`; `invalid_argument` for malformed data or a native revision that is not strictly increasing. Dart ignores a revision that is not newer before making the call. |
 | `load` | `uri: String`, 1–32,768 bytes; `loadId: int >= 0`; `plexToken: String?`, either null or 1–8,192 printable ASCII bytes from `0x21`–`0x7e`; `startPaused: bool?`; `startSeconds: num?`, omitted or finite and >= 0 (explicit null is invalid) | `null`; `invalid_argument`, `insecure_media_uri`, or `command_queue_full`. An authenticated load requires an HTTPS URI with an authority. |
@@ -424,7 +424,12 @@ with Media3 **1.11.1**; it does not use or duplicate the desktop libmpv core.
 The Dart composition root selects the existing method-channel transport on
 Android. Plex, schedule joins, recovery, persistence and navigation remain Dart
 policy. `clientApiVersion: 1` is an Android adapter constant, not an mpv version.
-Dart's historical local ready message is unchanged for desktop compatibility.
+Android also sends `capabilities: {displayMatching: false, fullscreen: "fixed"}`
+in its initialize reply. Dart's historical local ready message is unchanged
+for desktop compatibility. Desktop adapters may omit `capabilities`; Dart then
+uses the host defaults: Windows supports display matching and window fullscreen,
+while macOS supports window fullscreen only. Before initialization and after
+dispose, capabilities are unavailable (`false`, `fixed`).
 
 `NativePlayerController` validates codec values, admits at most 64 commands and
 128 KiB of URI/header data, and owns load/stop/request correlation. Commands and

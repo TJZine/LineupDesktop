@@ -44,7 +44,7 @@ void main() {
         await tester.binding.setSurfaceSize(size);
         addTearDown(() => tester.binding.setSurfaceSize(null));
         final fixture = UiFixture(
-          androidTv: tv,
+          profile: profileFor(tv),
           guideClock: () => DateTime(2026, 1, 15, 12),
           scenario: const LineupScenario(stage: SetupStage.ready),
         );
@@ -106,7 +106,7 @@ void main() {
         fixture.controller.dispose();
         for (final stage in [SetupStage.profiles, SetupStage.channelSetup]) {
           final onboarding = UiFixture(
-            androidTv: tv,
+            profile: profileFor(tv),
             scenario: LineupScenario(
               stage: stage,
               profile: const PlexHomeUser(
@@ -166,7 +166,7 @@ void main() {
             ),
           );
           final fixture = UiFixture(
-            androidTv: true,
+            profile: profileFor(true),
             scenario: LineupScenario(
               stage: SetupStage.profiles,
               profiles: profiles,
@@ -223,7 +223,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final fixture = UiFixture(
         guideClock: () => DateTime(2026, 1, 15, 12),
-        androidTv: true,
+        profile: profileFor(true),
         scenario: LineupScenario(
           stage: SetupStage.ready,
           settings: LineupSettings(theme: theme),
@@ -308,11 +308,17 @@ void main() {
     final node = FocusNode();
     addTearDown(node.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
-        builder: LineupCanvas.builder,
-        home: Scaffold(
-          body: LineupTopBar(onOpenMenu: (_, _) {}, menuFocusNode: node),
+      DeviceProfileScope(
+        profile: profileFor(true),
+        child: MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(true).formFactor,
+          ),
+          builder: LineupCanvas.builder,
+          home: Scaffold(
+            body: LineupTopBar(onOpenMenu: (_, _) {}, menuFocusNode: node),
+          ),
         ),
       ),
     );
@@ -321,7 +327,7 @@ void main() {
     final logo = find.byType(Image);
     final scale = LineupCanvas.scaleFor(
       tester.view.physicalSize / tester.view.devicePixelRatio,
-      androidTv: true,
+      formFactor: profileFor(true).formFactor,
     );
     expect(
       tester.getTopLeft(logo).dx - tester.getTopLeft(button).dx,
@@ -334,7 +340,7 @@ void main() {
   ) async {
     const user = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: const LineupScenario(
         stage: SetupStage.profiles,
         profile: user,
@@ -368,48 +374,51 @@ void main() {
           }
         });
         await tester.pumpWidget(
-          MaterialApp(
-            theme: LineupTheme.forName(
-              LineupThemeName.emberSteel,
-              androidTv: true,
-              largeFocusIndicators: true,
-            ),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(context)
-                  .copyWith(disableAnimations: reduceMotion),
-              child: LineupCanvas(child: child!),
-            ),
-            home: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  width: 500,
-                  height: 300,
-                  child: SingleChildScrollView(
-                    key: const Key('viewport'),
-                    padding: const EdgeInsets.all(30),
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < nodes.length; i++)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 24),
-                            child: LineupRowSurface(
-                              key: ValueKey('row-$i'),
-                              selected: false,
-                              scaleOnFocus: true,
-                              child: SizedBox(
-                                height: 180,
-                                child: Align(
-                                  alignment: Alignment.topCenter,
-                                  child: TextButton(
-                                    focusNode: nodes[i],
-                                    onPressed: () {},
-                                    child: Text('Row $i'),
+          DeviceProfileScope(
+            profile: profileFor(true),
+            child: MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(true).formFactor,
+                largeFocusIndicators: true,
+              ),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(disableAnimations: reduceMotion),
+                child: LineupCanvas(child: child!),
+              ),
+              home: Scaffold(
+                body: Center(
+                  child: SizedBox(
+                    width: 500,
+                    height: 300,
+                    child: SingleChildScrollView(
+                      key: const Key('viewport'),
+                      padding: const EdgeInsets.all(30),
+                      child: Column(
+                        children: [
+                          for (var i = 0; i < nodes.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: LineupRowSurface(
+                                key: ValueKey('row-$i'),
+                                selected: false,
+                                scaleOnFocus: true,
+                                child: SizedBox(
+                                  height: 180,
+                                  child: Align(
+                                    alignment: Alignment.topCenter,
+                                    child: TextButton(
+                                      focusNode: nodes[i],
+                                      onPressed: () {},
+                                      child: Text('Row $i'),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -434,7 +443,7 @@ void main() {
           final overflow = (reduceMotion ? 0 : 180 * .03) + 6;
           final scale = LineupCanvas.scaleFor(
             tester.view.physicalSize / tester.view.devicePixelRatio,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
           );
           expect(
             row.top - overflow * scale,
@@ -452,7 +461,7 @@ void main() {
     'O3 Settings labels have 16cu padding in normal and Large modes',
     (tester) async {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: const LineupScenario(stage: SetupStage.ready),
       );
       await tester.pumpWidget(fixture.build());
@@ -470,7 +479,7 @@ void main() {
               .first;
           final scale = LineupCanvas.scaleFor(
             tester.view.physicalSize / tester.view.devicePixelRatio,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
           );
           expect(
             tester.getTopLeft(title).dx - tester.getTopLeft(surface).dx,

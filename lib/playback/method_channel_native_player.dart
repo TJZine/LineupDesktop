@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'native_player.dart';
@@ -69,6 +70,7 @@ class MethodChannelNativePlayer implements NativePlayer {
   int? _activeLoadId;
   int? _activeGeneration;
   bool _initialized = false;
+  PlayerCapabilities _capabilities = const PlayerCapabilities.unavailable();
   bool _paused = false;
   int _displayRevision = 0;
   DisplayMatchingReport _displayReport = const DisplayMatchingReport.initial();
@@ -101,11 +103,15 @@ class MethodChannelNativePlayer implements NativePlayer {
   bool get fullscreen => _fullscreen;
 
   @override
+  PlayerCapabilities get capabilities => _capabilities;
+
+  @override
   Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;
 
   @override
   Future<void> initialize() => _serializeLifecycle(() async {
     if (_initialized) return;
+    _capabilities = const PlayerCapabilities.unavailable();
     _displayRevision = 0;
     _displayReport = const DisplayMatchingReport.initial();
     if (_handlerOwner != null && !identical(_handlerOwner, this)) {
@@ -121,8 +127,22 @@ class MethodChannelNativePlayer implements NativePlayer {
       await _handleNativeCall(call);
     });
     try {
-      await _invokeNative<Object?>('initialize');
+      final reply = await _invokeNative<Object?>('initialize');
+      try {
+        _capabilities = _decodeCapabilities(reply);
+        if (kDebugMode) {
+          debugPrint(
+            'LineupPlayer initialize_reply '
+            'displayMatching=${_capabilities.displayMatching} '
+            'fullscreen=${_capabilities.fullscreen.name}',
+          );
+        }
+      } catch (error, stackTrace) {
+        await _bestEffortInitializationDispose();
+        Error.throwWithStackTrace(error, stackTrace);
+      }
     } catch (_) {
+      _capabilities = const PlayerCapabilities.unavailable();
       _fullscreen = false;
       ++_nativeEventEpoch;
       if (identical(_handlerOwner, this)) {
@@ -363,6 +383,7 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   @override
   Future<void> dispose() => _serializeLifecycle(() async {
+    _capabilities = const PlayerCapabilities.unavailable();
     _fullscreen = false;
     ++_nativeEventEpoch;
     final stop = _pendingStop;
@@ -422,6 +443,47 @@ class MethodChannelNativePlayer implements NativePlayer {
         failureCode: code,
       );
     }
+  }
+
+  Future<void> _bestEffortInitializationDispose() async {
+    try {
+      await _invokeNative<void>('dispose');
+    } catch (_) {
+      // Initialization already failed validation. Teardown is best effort so
+      // the Dart handler can still retire this native lifetime.
+    }
+  }
+
+  static PlayerCapabilities _decodeCapabilities(Object? reply) {
+    final hostDefaults = PlayerCapabilities.forHost(defaultTargetPlatform);
+    if (reply is! Map) return hostDefaults;
+    final result = Map<Object?, Object?>.from(reply);
+    if (!result.containsKey('capabilities')) return hostDefaults;
+    final raw = result['capabilities'];
+    if (raw is! Map) {
+      throw const PlayerUnavailable(
+        'The native player returned malformed capabilities.',
+        failureCode: 'initialize_failed',
+      );
+    }
+    final capabilities = Map<Object?, Object?>.from(raw);
+    final displayMatching = capabilities['displayMatching'];
+    final fullscreen = switch (capabilities['fullscreen']) {
+      'window' => PlayerFullscreenMode.window,
+      'systemBars' => PlayerFullscreenMode.systemBars,
+      'fixed' => PlayerFullscreenMode.fixed,
+      _ => null,
+    };
+    if (displayMatching is! bool || fullscreen == null) {
+      throw const PlayerUnavailable(
+        'The native player returned malformed capabilities.',
+        failureCode: 'initialize_failed',
+      );
+    }
+    return PlayerCapabilities(
+      displayMatching: displayMatching,
+      fullscreen: fullscreen,
+    );
   }
 
   void _requireInitialized() {

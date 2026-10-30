@@ -1,11 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, ValueListenable, defaultTargetPlatform;
+    show ValueListenable, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../playback/native_player.dart';
 import '../persistence/app_store.dart';
+import '../platform/device_profile.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
@@ -27,17 +28,22 @@ const _requiredEngineFailureMessage =
 /// programs' backdrops warm and still admits one unresized 3840x2160 decode
 /// (33.2 MB) from a consumer that cannot cover-resize, while bounding the
 /// cache well below the default on a 1.7 GB device under memory pressure.
-const androidTvImageCacheBytes = 48 << 20;
+const tvImageCacheBytes = 48 << 20;
 
 /// Applies the platform's decoded-image cache budget. Desktop keeps Flutter's
 /// default.
-void configureImageCache(ImageCache cache, {required bool androidTv}) {
-  if (androidTv) cache.maximumSizeBytes = androidTvImageCacheBytes;
+void configureImageCache(ImageCache cache, {required bool isTv}) {
+  if (isTv) cache.maximumSizeBytes = tvImageCacheBytes;
 }
 
 class LineupStartup extends StatefulWidget {
-  const LineupStartup({required this.createBootstrap, super.key});
+  const LineupStartup({
+    required this.profile,
+    required this.createBootstrap,
+    super.key,
+  });
 
+  final DeviceProfile profile;
   final Future<LineupBootstrap> Function() createBootstrap;
 
   @override
@@ -59,21 +65,24 @@ class _LineupStartupState extends State<LineupStartup> {
       future: _composition,
       builder: (context, snapshot) {
         if (snapshot.hasData) return snapshot.requireData;
-        return MaterialApp(
-          title: 'Lineup Desktop',
-          debugShowCheckedModeBanner: false,
-          theme: LineupTheme.forName(
-            LineupThemeName.emberSteel,
-            largeFocusIndicators: false,
-            androidTv: defaultTargetPlatform == TargetPlatform.android,
+        return DeviceProfileScope(
+          profile: widget.profile,
+          child: MaterialApp(
+            title: 'Lineup Desktop',
+            debugShowCheckedModeBanner: false,
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              largeFocusIndicators: false,
+              formFactor: widget.profile.formFactor,
+            ),
+            builder: LineupCanvas.builder,
+            home: snapshot.hasError
+                ? const _StartupFailureBody(
+                    requiredEngineFailure: false,
+                    unsupportedStateFormatFailure: false,
+                  )
+                : const _StartupProgress(),
           ),
-          builder: LineupCanvas.builder,
-          home: snapshot.hasError
-              ? const _StartupFailureBody(
-                  requiredEngineFailure: false,
-                  unsupportedStateFormatFailure: false,
-                )
-              : const _StartupProgress(),
         );
       },
     );
@@ -86,7 +95,7 @@ class LineupBootstrap extends StatefulWidget {
     required this.controller,
     this.initialMediaPath,
     this.guideClock,
-    this.androidTv,
+    this.profile,
     this.keyboardVisibility,
     super.key,
   });
@@ -98,7 +107,7 @@ class LineupBootstrap extends StatefulWidget {
 
   /// Null follows the host platform for the production composition root.
   /// Tests and alternate compositions can inject the form factor explicitly.
-  final bool? androidTv;
+  final DeviceProfile? profile;
 
   /// An injected observation source remains owned by its caller.
   final ValueListenable<bool?>? keyboardVisibility;
@@ -141,11 +150,11 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   bool _restoreStarted = false;
 
   PlatformKeyboardVisibility? _ownedKeyboardVisibility;
-  bool get _androidTv =>
-      widget.androidTv ?? defaultTargetPlatform == TargetPlatform.android;
+  DeviceProfile get _profile =>
+      widget.profile ?? DeviceProfile.fallbackFor(defaultTargetPlatform);
 
   void _configureKeyboardVisibility() {
-    if (_androidTv && widget.keyboardVisibility == null) {
+    if (_profile.isTv && widget.keyboardVisibility == null) {
       _ownedKeyboardVisibility ??= PlatformKeyboardVisibility();
     } else {
       _ownedKeyboardVisibility?.dispose();
@@ -225,84 +234,87 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   @override
   Widget build(BuildContext context) {
     final settings = _settings;
-    final androidTv = _androidTv;
-    return MaterialApp(
-      title: 'Lineup Desktop',
-      debugShowCheckedModeBanner: false,
-      theme: LineupTheme.forName(
-        settings.theme,
-        largeFocusIndicators: settings.largeFocusIndicators,
-        androidTv: androidTv,
-      ),
-      themeAnimationDuration: settings.reduceMotion
-          ? Duration.zero
-          : kThemeAnimationDuration,
-      builder: (context, child) {
-        final canvas = LineupCanvas(
-          reduceMotion: settings.reduceMotion,
-          child: child!,
-        );
-        return androidTv
-            ? KeyboardVisibilityScope(
-                visibility:
-                    widget.keyboardVisibility ?? _ownedKeyboardVisibility!,
-                child: canvas,
-              )
-            : canvas;
-      },
-      home: FutureBuilder<void>(
-        future: _startup,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            final error = snapshot.error;
-            return _StartupFailureBody(
-              requiredEngineFailure:
-                  error is PlayerUnavailable &&
-                  error.failureCode == 'required_engine_unavailable',
-              unsupportedStateFormatFailure:
-                  error is UnsupportedStateFormatException,
-            );
-          }
-          if (snapshot.connectionState != ConnectionState.done &&
-              !(_nativeInitialized && _restoreStarted)) {
-            return const _StartupProgress();
-          }
-          return Stack(
-            children: [
-              LineupShell(
-                androidTv: androidTv,
-                player: widget.player,
-                controller: widget.controller,
-                initialMediaPath: widget.initialMediaPath,
-                guideClock: widget.guideClock,
-              ),
-              if (_startupRecoveryNotice case final notice?)
-                SafeArea(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: Semantics(
-                      container: true,
-                      liveRegion: true,
-                      label: notice,
-                      child: Material(
-                        child: MaterialBanner(
-                          content: ExcludeSemantics(child: Text(notice)),
-                          actions: [
-                            TextButton(
-                              onPressed: widget
-                                  .controller
-                                  .dismissStartupRecoveryNotice,
-                              child: const Text('Dismiss'),
-                            ),
-                          ],
+    final profile = _profile;
+    return DeviceProfileScope(
+      profile: profile,
+      child: MaterialApp(
+        title: 'Lineup Desktop',
+        debugShowCheckedModeBanner: false,
+        theme: LineupTheme.forName(
+          settings.theme,
+          largeFocusIndicators: settings.largeFocusIndicators,
+          formFactor: profile.formFactor,
+        ),
+        themeAnimationDuration: settings.reduceMotion
+            ? Duration.zero
+            : kThemeAnimationDuration,
+        builder: (context, child) {
+          final canvas = LineupCanvas(
+            reduceMotion: settings.reduceMotion,
+            child: child!,
+          );
+          return profile.isTv
+              ? KeyboardVisibilityScope(
+                  visibility:
+                      widget.keyboardVisibility ?? _ownedKeyboardVisibility!,
+                  child: canvas,
+                )
+              : canvas;
+        },
+        home: FutureBuilder<void>(
+          future: _startup,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              final error = snapshot.error;
+              return _StartupFailureBody(
+                requiredEngineFailure:
+                    error is PlayerUnavailable &&
+                    error.failureCode == 'required_engine_unavailable',
+                unsupportedStateFormatFailure:
+                    error is UnsupportedStateFormatException,
+              );
+            }
+            if (snapshot.connectionState != ConnectionState.done &&
+                !(_nativeInitialized && _restoreStarted)) {
+              return const _StartupProgress();
+            }
+            return Stack(
+              children: [
+                LineupShell(
+                  profile: profile,
+                  player: widget.player,
+                  controller: widget.controller,
+                  initialMediaPath: widget.initialMediaPath,
+                  guideClock: widget.guideClock,
+                ),
+                if (_startupRecoveryNotice case final notice?)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Semantics(
+                        container: true,
+                        liveRegion: true,
+                        label: notice,
+                        child: Material(
+                          child: MaterialBanner(
+                            content: ExcludeSemantics(child: Text(notice)),
+                            actions: [
+                              TextButton(
+                                onPressed: widget
+                                    .controller
+                                    .dismissStartupRecoveryNotice,
+                                child: const Text('Dismiss'),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }

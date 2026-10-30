@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,23 +17,29 @@ void main() {
     addTearDown(next.dispose);
     addTearDown(navigation.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
-        home: Scaffold(
-          body: LineupFocusScope(
-            child: Column(
-              children: [
-                LineupTextFieldActivation(
-                  focusNode: navigation,
-                  builder: (context, focus, done) =>
-                      TextField(focusNode: focus, onEditingComplete: done),
-                ),
-                TextButton(
-                  focusNode: next,
-                  onPressed: () {},
-                  child: const Text('Next'),
-                ),
-              ],
+      DeviceProfileScope(
+        profile: profileFor(true),
+        child: MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(true).formFactor,
+          ),
+          home: Scaffold(
+            body: LineupFocusScope(
+              child: Column(
+                children: [
+                  LineupTextFieldActivation(
+                    focusNode: navigation,
+                    builder: (context, focus, done) =>
+                        TextField(focusNode: focus, onEditingComplete: done),
+                  ),
+                  TextButton(
+                    focusNode: next,
+                    onPressed: () {},
+                    child: const Text('Next'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

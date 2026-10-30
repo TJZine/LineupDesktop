@@ -25,6 +25,12 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../support/ui_fixture.dart';
 
+Widget _studioDesktopCanvasBuilder(BuildContext context, Widget? child) =>
+    DeviceProfileScope(
+      profile: desktopProfile,
+      child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+    );
+
 void main() {
   testWidgets('Studio rundown icon actions expose accessible names', (
     tester,
@@ -794,7 +800,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _studioDesktopCanvasBuilder,
         home: Scaffold(
           body: ChannelStudioView(
             controller: controller,
@@ -901,7 +907,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _studioDesktopCanvasBuilder,
         home: Scaffold(
           body: ChannelStudioView(
             controller: controller,
@@ -946,7 +952,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _studioDesktopCanvasBuilder,
         home: Scaffold(
           body: ChannelStudioView(
             controller: controller,
@@ -1711,7 +1717,7 @@ void main() {
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: LineupCanvas.builder,
+          builder: _studioDesktopCanvasBuilder,
           home: Scaffold(
             body: ChannelStudioView(
               key: key,
@@ -1774,7 +1780,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _studioDesktopCanvasBuilder,
         home: Scaffold(
           body: ChannelStudioView(
             key: key,
@@ -2833,7 +2839,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        builder: LineupCanvas.builder,
+        builder: _studioDesktopCanvasBuilder,
         home: Scaffold(
           body: ChannelStudioView(
             key: key,
@@ -5218,7 +5224,7 @@ void main() {
       addTearDown(controller.dispose);
       try {
         await tester.pumpWidget(
-          UiFixture(controller: controller, androidTv: true).build(),
+          UiFixture(controller: controller, profile: profileFor(true)).build(),
         );
         await tester.pumpAndSettle();
         await openDestination(tester, 'Channels');
@@ -5336,7 +5342,7 @@ void main() {
       addTearDown(controller.dispose);
       try {
         await tester.pumpWidget(
-          UiFixture(controller: controller, androidTv: true).build(),
+          UiFixture(controller: controller, profile: profileFor(true)).build(),
         );
         await tester.pumpAndSettle();
         await openDestination(tester, 'Channels');
@@ -5427,7 +5433,7 @@ void main() {
       addTearDown(controller.dispose);
       try {
         await tester.pumpWidget(
-          UiFixture(controller: controller, androidTv: true).build(),
+          UiFixture(controller: controller, profile: profileFor(true)).build(),
         );
         await tester.pumpAndSettle();
         await openDestination(tester, 'Channels');
@@ -5743,7 +5749,7 @@ void main() {
   group('Studio text fields use TV navigation and Select editing', () {
     final tvTheme = LineupTheme.forName(
       LineupThemeName.emberSteel,
-      androidTv: true,
+      formFactor: profileFor(true).formFactor,
     );
 
     _studioTvTest('station name and number edit only after Select', (
@@ -5754,7 +5760,12 @@ void main() {
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
-        _studio(controller, ChannelStudioMode.createCustom, theme: tvTheme),
+        _studio(
+          controller,
+          ChannelStudioMode.createCustom,
+          theme: tvTheme,
+          profile: tvProfile,
+        ),
       );
       await _settleAirCheck(tester);
       final name = find.byKey(const Key('studio-name'));
@@ -5808,6 +5819,7 @@ void main() {
           ChannelStudioMode.editCustom,
           channel: channel,
           theme: tvTheme,
+          profile: tvProfile,
         ),
       );
       await _settleAirCheck(tester);
@@ -5842,7 +5854,12 @@ void main() {
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
-        _studio(controller, ChannelStudioMode.createCustom, theme: tvTheme),
+        _studio(
+          controller,
+          ChannelStudioMode.createCustom,
+          theme: tvTheme,
+          profile: tvProfile,
+        ),
       );
       await _settleAirCheck(tester);
       await _openStudioFilter(tester, 'genre');
@@ -6037,12 +6054,16 @@ Widget _studio(
   TextScaler? textScaler,
   ThemeData? theme,
   bool disableAnimations = false,
+  DeviceProfile profile = desktopProfile,
 }) => MaterialApp(
   theme: theme,
   builder: (context, child) => MediaQuery(
     data: MediaQuery.of(context)
         .copyWith(textScaler: textScaler, disableAnimations: disableAnimations),
-    child: LineupCanvas(child: child!),
+    child: DeviceProfileScope(
+      profile: profile,
+      child: LineupCanvas(child: child!),
+    ),
   ),
   home: Scaffold(
     body: ChannelStudioView(
@@ -6584,7 +6605,7 @@ class _RecoveryHarnessState extends State<_RecoveryHarness> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    builder: LineupCanvas.builder,
+    builder: _studioDesktopCanvasBuilder,
     home: Scaffold(
       body: open
           ? ChannelStudioView(
