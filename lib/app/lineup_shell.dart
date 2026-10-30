@@ -51,7 +51,7 @@ class _LineupShellState extends State<LineupShell> {
       ? ShellDestination.guide
       : ShellDestination.player;
   ShellDestination? _settingsReturnDestination;
-  ShellDestination _channelsReturnDestination = ShellDestination.guide;
+  final List<ShellDestination> _handheldOrigins = [];
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey<PlayerViewState>();
@@ -194,6 +194,7 @@ class _LineupShellState extends State<LineupShell> {
         _retireSetup();
       }
       if (stage == SetupStage.welcome) {
+        _handheldOrigins.clear();
         _tvLocation = const _TvHome();
         _destination = ShellDestination.guide;
       }
@@ -319,12 +320,50 @@ class _LineupShellState extends State<LineupShell> {
     formFactor: widget.profile.formFactor,
   );
 
-  ShellDestination get _channelsBackDestination => _portraitComposition
-      ? ShellDestination.guide
-      : _channelsReturnDestination == ShellDestination.player &&
-            !_hasPlaybackSurface
-      ? ShellDestination.guide
-      : _channelsReturnDestination;
+  ShellDestination get _handheldBackDestination {
+    final origin = _handheldOrigins.lastOrNull ?? ShellDestination.guide;
+    return origin == ShellDestination.player && !_hasPlaybackSurface
+        ? ShellDestination.guide
+        : origin;
+  }
+
+  ShellDestination get _channelsBackDestination =>
+      _portraitComposition ? ShellDestination.guide : _handheldBackDestination;
+
+  // Unique ancestors retain each parent's context. Revisiting an ancestor
+  // consumes its child context instead of recording a new forward origin.
+  void _recordHandheldRoute(ShellDestination destination) {
+    if (_portraitComposition) {
+      _handheldOrigins.clear();
+      if (destination != ShellDestination.guide &&
+          destination != ShellDestination.player) {
+        _handheldOrigins.add(ShellDestination.guide);
+      }
+      return;
+    }
+    if (destination == ShellDestination.guide ||
+        destination == ShellDestination.player) {
+      _handheldOrigins.clear();
+      return;
+    }
+    void visit(ShellDestination next, ShellDestination from) {
+      final ancestor = _handheldOrigins.indexOf(next);
+      if (ancestor >= 0) {
+        _handheldOrigins.removeRange(ancestor, _handheldOrigins.length);
+      } else if (next != from) {
+        _handheldOrigins.add(from);
+      }
+    }
+
+    if (destination == ShellDestination.diagnostics &&
+        _destination != ShellDestination.settings &&
+        _destination != ShellDestination.diagnostics) {
+      visit(ShellDestination.settings, _destination);
+      visit(destination, ShellDestination.settings);
+    } else {
+      visit(destination, _destination);
+    }
+  }
 
   void _returnFromChannels() => unawaited(_select(_channelsBackDestination));
 
@@ -491,7 +530,11 @@ class _LineupShellState extends State<LineupShell> {
                   scope != _scopeStamp))) {
         return;
       }
-      if (!widget.profile.isTv && widget.controller.stage == SetupStage.ready) {
+      if (widget.profile.isHandheld &&
+          widget.controller.stage == SetupStage.ready) {
+        _recordHandheldRoute(destination);
+      } else if (!widget.profile.isTv &&
+          widget.controller.stage == SetupStage.ready) {
         if (destination == ShellDestination.settings &&
             _destination != ShellDestination.settings &&
             _destination != ShellDestination.diagnostics) {
@@ -510,13 +553,6 @@ class _LineupShellState extends State<LineupShell> {
               ? ShellDestination.channels
               : ShellDestination.guide;
         }
-      }
-      if (widget.profile.isHandheld &&
-          destination == ShellDestination.channels &&
-          _destination != ShellDestination.channels) {
-        _channelsReturnDestination = _portraitComposition
-            ? ShellDestination.guide
-            : _destination;
       }
       final committed = proposed == null ? null : _validTvLocation(proposed);
       final routeDestination = committed?.destination ?? destination;
@@ -545,6 +581,8 @@ class _LineupShellState extends State<LineupShell> {
 
   ShellDestination? get _settingsBackDestination => _portraitComposition
       ? ShellDestination.guide
+      : widget.profile.isHandheld
+      ? _handheldBackDestination
       : widget.profile.isTv
       ? _validTvLocation(_tvSettings.origin).destination
       : _settingsReturnDestination == ShellDestination.player &&
@@ -819,7 +857,7 @@ class _LineupShellState extends State<LineupShell> {
       return KeyEventResult.handled;
     }
     if (_destination == ShellDestination.settings &&
-        _settingsReturnDestination != null &&
+        _settingsBackDestination != null &&
         _appMenu == null &&
         (event.logicalKey == LogicalKeyboardKey.escape ||
             event.logicalKey == LogicalKeyboardKey.backspace ||

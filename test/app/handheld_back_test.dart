@@ -223,6 +223,69 @@ void main() {
     },
   );
 
+  for (final first in ['Channels', 'Settings']) {
+    for (final visibleBack in [false, true]) {
+      handheldTest(
+        'wide nested $first preserves parent origins with ${visibleBack ? 'visible' : 'OS'} Back',
+        (tester) async {
+          final fixture = _ready();
+          await showFixture(tester, fixture);
+          await tester.pumpAndSettle();
+          final second = first == 'Channels' ? 'Settings' : 'Channels';
+          final loads = fixture.player.loads.length;
+          final selected = fixture.controller.currentChannelId;
+          await navigate(tester, first);
+          await navigate(tester, second);
+          await focusElsewhere(tester);
+          if (visibleBack) {
+            await tester.tap(find.text('‹ Back to $first'));
+          } else {
+            await tester.binding.handlePopRoute();
+          }
+          await tester.pumpAndSettle();
+          expect(find.text('‹ Back to Guide'), findsOneWidget);
+          await focusElsewhere(tester);
+          if (visibleBack) {
+            await tester.tap(find.text('‹ Back to Guide'));
+          } else {
+            await tester.binding.handlePopRoute();
+          }
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+          expect(fixture.player.loads.length, loads);
+          expect(fixture.controller.currentChannelId, selected);
+          expect(backgrounded, 0);
+          await focusElsewhere(tester);
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(backgrounded, 1);
+        },
+      );
+    }
+  }
+
+  for (final first in ['Channels', 'Settings']) {
+    handheldTest('wide forward re-entry to $first consumes the child origin', (
+      tester,
+    ) async {
+      final fixture = _ready();
+      await showFixture(tester, fixture);
+      await tester.pumpAndSettle();
+      final loads = fixture.player.loads.length;
+      final selected = fixture.controller.currentChannelId;
+      await navigate(tester, first);
+      await navigate(tester, first == 'Channels' ? 'Settings' : 'Channels');
+      await navigate(tester, first);
+      expect(find.text('‹ Back to Guide'), findsOneWidget);
+      await focusElsewhere(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(fixture.player.loads.length, loads);
+      expect(fixture.controller.currentChannelId, selected);
+    });
+  }
+
   handheldTest(
     'Player picker then Mini Guide and Now Playing resolve before Player to Guide',
     (tester) async {
