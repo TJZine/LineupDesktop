@@ -3403,12 +3403,9 @@ class _ProgramCellContent extends StatelessWidget {
         final time =
             '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
         final liveWidth = current ? 7 + gap : 0.0;
-        final titleWidth = _textWidth(
-          primaryTitle,
-          titleStyle,
-          scaler,
-          direction,
-        );
+        final titleWidth = episodeCode == null
+            ? 0.0
+            : _textWidth(primaryTitle, titleStyle, scaler, direction);
         final tagWidth = episodeCode == null
             ? 0.0
             : _textWidth(episodeCode, tagStyle, scaler, direction);
@@ -3505,35 +3502,107 @@ class _ProgramCellContent extends StatelessWidget {
   }
 }
 
+enum _GuideTextMetricKind { height, width }
+
+typedef _GuideTextMetricKey = ({
+  _GuideTextMetricKind kind,
+  String text,
+  TextStyle? style,
+  TextScaler scaler,
+  TextDirection direction,
+});
+
+// Entries survive Guide route disposal. Repeated unconstrained measurements
+// were a measured entry cost; retain only scalar results, never painters/context.
+final _guideTextMetrics = _GuideTextMetrics();
+
+class _GuideTextMetrics {
+  _GuideTextMetrics() {
+    PaintingBinding.instance.systemFonts.addListener(_entries.clear);
+  }
+
+  static const maximumEntries = 512;
+  final _entries = <_GuideTextMetricKey, double>{};
+
+  double measure(_GuideTextMetricKey key, double Function() calculate) {
+    final cached = _entries.remove(key);
+    if (cached != null) {
+      _entries[key] = cached;
+      return cached;
+    }
+    final result = calculate();
+    debugGuideTextMeasureCount++;
+    _entries[key] = result;
+    if (_entries.length > maximumEntries) _entries.remove(_entries.keys.first);
+    return result;
+  }
+}
+
+@visibleForTesting
+int debugGuideTextMeasureCount = 0;
+
+@visibleForTesting
+int get debugGuideTextCacheEntryCount => _guideTextMetrics._entries.length;
+
+@visibleForTesting
+void debugResetGuideTextMetrics() {
+  _guideTextMetrics._entries.clear();
+  debugGuideTextMeasureCount = 0;
+}
+
+@visibleForTesting
+double debugMeasureGuideTextWidth(String text) => _textWidth(
+  text,
+  const TextStyle(fontSize: 18),
+  TextScaler.noScaling,
+  TextDirection.ltr,
+);
+
 double _textHeight(
   TextStyle? style,
   TextScaler scaler,
   TextDirection direction,
-) {
-  final painter = TextPainter(
-    text: TextSpan(text: 'Ag', style: style),
-    textDirection: direction,
-    textScaler: scaler,
-    maxLines: 1,
-  )..layout();
-  final height = painter.height.ceilToDouble();
-  painter.dispose();
-  return height;
-}
+) => _guideTextMetrics.measure(
+  (
+    kind: _GuideTextMetricKind.height,
+    text: 'Ag',
+    style: style,
+    scaler: scaler,
+    direction: direction,
+  ),
+  () {
+    final painter = TextPainter(
+      text: TextSpan(text: 'Ag', style: style),
+      textDirection: direction,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final height = painter.height.ceilToDouble();
+    painter.dispose();
+    return height;
+  },
+);
 
 double _textWidth(
   String text,
   TextStyle? style,
   TextScaler scaler,
   TextDirection direction,
-) {
-  return TextPainter.computeWidth(
+) => _guideTextMetrics.measure(
+  (
+    kind: _GuideTextMetricKind.width,
+    text: text,
+    style: style,
+    scaler: scaler,
+    direction: direction,
+  ),
+  () => TextPainter.computeWidth(
     text: TextSpan(text: text, style: style),
     textDirection: direction,
     textScaler: scaler,
     maxLines: 1,
-  );
-}
+  ),
+);
 
 Size _guideMeasuredText(
   BuildContext context,

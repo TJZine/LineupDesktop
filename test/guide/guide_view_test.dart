@@ -3120,6 +3120,105 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Guide text metrics survive route disposal and respect style, scale and system fonts',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      debugResetGuideTextMetrics();
+      addTearDown(debugResetGuideTextMetrics);
+      final now = DateTime.utc(2026, 1, 15, 12, 15);
+      final lineup = _Lineup(6, anchor: now.subtract(const Duration(hours: 1)));
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      final baseTheme = LineupTheme.forName(
+        LineupThemeName.emberSteel,
+        androidTv: true,
+      );
+      Future<void> show(ThemeData theme) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            theme: theme,
+            home: GuideView(
+              controller: guide,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: (_, _) {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await show(baseTheme);
+      final measured = debugGuideTextMeasureCount;
+      expect(measured, greaterThan(0));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await show(baseTheme);
+      expect(
+        debugGuideTextMeasureCount,
+        measured,
+        reason: 'A new Guide route reuses exact prior metrics',
+      );
+      final changedStyle = baseTheme.copyWith(
+        textTheme: baseTheme.textTheme.copyWith(
+          bodySmall: baseTheme.textTheme.bodySmall!.copyWith(letterSpacing: 3),
+        ),
+      );
+      await show(changedStyle);
+      expect(debugGuideTextMeasureCount, greaterThan(measured));
+      final styled = debugGuideTextMeasureCount;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      expect(debugGuideTextMeasureCount, greaterThan(styled));
+      final scaled = debugGuideTextMeasureCount;
+      await tester.binding.handleSystemMessage({'type': 'fontsChange'});
+      expect(debugGuideTextCacheEntryCount, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await show(changedStyle);
+      expect(debugGuideTextMeasureCount, greaterThan(scaled));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'Guide text metrics stay bounded and retain recently used measurements',
+    (tester) async {
+      debugResetGuideTextMetrics();
+      addTearDown(debugResetGuideTextMetrics);
+      final first = debugMeasureGuideTextWidth('metric-0');
+      for (var index = 1; index < 512; index++) {
+        debugMeasureGuideTextWidth('metric-$index');
+      }
+      expect(debugGuideTextCacheEntryCount, 512);
+      expect(debugGuideTextMeasureCount, 512);
+      expect(debugMeasureGuideTextWidth('metric-0'), first);
+      expect(debugGuideTextMeasureCount, 512);
+      debugMeasureGuideTextWidth('metric-new');
+      expect(debugGuideTextCacheEntryCount, 512);
+      expect(debugGuideTextMeasureCount, 513);
+      expect(debugMeasureGuideTextWidth('metric-0'), first);
+      expect(debugGuideTextMeasureCount, 513);
+      debugMeasureGuideTextWidth('metric-1');
+      expect(
+        debugGuideTextMeasureCount,
+        514,
+        reason: 'The least recently used entry was evicted',
+      );
+      expect(debugGuideTextCacheEntryCount, 512);
+    },
+  );
+
   testWidgets('TV focus moves reuse Guide control measurements', (
     tester,
   ) async {
