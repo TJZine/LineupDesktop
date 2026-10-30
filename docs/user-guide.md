@@ -200,6 +200,10 @@ styling. The settings apply by track type:
 | ASS/SSA | Size; all appearance settings when Apply my style is on | Size; all appearance settings when Apply my style is on |
 | Image subtitles (PGS, VobSub, DVB) | Size and Position; large subtitles may extend beyond the picture | Size and Position; subtitles stay inside the picture |
 
+On Android, a paused seek can omit overlapping ASS/SSA dialogue in both styling modes.
+This is a [Media3 seek limitation](android-runtime.md#subtitle-presentation-and-device-captions);
+changing the style cannot recreate events the engine skipped.
+
 On TV, Right enters the subtitle controls from the category rail, Up/Down move
 between enabled controls, and Left returns to Subtitles in the rail. Select
 opens a menu at the current value; when the status is Custom it starts at
