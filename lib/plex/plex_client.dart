@@ -1299,6 +1299,12 @@ class PlexClient {
     PlexSessionRequest request,
     String token,
   ) async {
+    if (request.profile.transcodeTarget == null) {
+      throw const PlexException(
+        'session-unsupported',
+        'This device has no supported Plex session target.',
+      );
+    }
     final start = _sessionUri(
       server,
       '/video/:/transcode/universal/start.m3u8',

@@ -463,9 +463,32 @@ class PlexMediaFacts {
   final String? audioCodec;
 }
 
+class PlexTranscodeTarget {
+  PlexTranscodeTarget._(Iterable<String> video, Iterable<String> audio)
+    : videoCodecs = List.unmodifiable(video),
+      audioCodecs = List.unmodifiable(audio);
+
+  final List<String> videoCodecs;
+  final List<String> audioCodecs;
+
+  String get _directive =>
+      'add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mp4&videoCodec=${videoCodecs.join(',')}&audioCodec=${audioCodecs.join(',')}&replace=true)';
+}
+
 class PlexProfile {
-  const PlexProfile({required this.profileExtra, required this.eligible});
+  PlexProfile._({
+    required String? directPlayProfile,
+    required List<String> limitations,
+    required this.transcodeTarget,
+    required this.eligible,
+  }) : profileExtra = [
+         ?directPlayProfile,
+         if (transcodeTarget != null) transcodeTarget._directive,
+         ...limitations,
+       ].join('+');
+
   final String profileExtra;
+  final PlexTranscodeTarget? transcodeTarget;
   final bool Function(PlexMediaFacts facts) eligible;
 }
 
@@ -481,18 +504,28 @@ PlexProfile buildProfile(
     ...c.audioPassthrough.map(_plexAudioCodec),
   }.toList()..sort();
   final containers = c.containers.toSet().toList()..sort();
-  final targets = desktop
+  final videoTargets = desktop
+      ? ['hevc', 'h264']
+      : c.known
+      ? ['hevc', 'h264'].where(videos.contains).toList()
+      : <String>[];
+  final audioTargets = desktop
       ? ['aac', 'ac3', 'eac3']
-      : ['aac', 'ac3', 'eac3'].where(audio.contains).toList();
-  final directives = <String>[
-    if (desktop)
-      'add-direct-play-profile(type=videoProfile&container=*&videoCodec=*&audioCodec=*&subtitleCodec=*&replace=true)'
-    else if (c.known &&
-        containers.isNotEmpty &&
-        videos.isNotEmpty &&
-        audio.isNotEmpty)
-      'add-direct-play-profile(type=videoProfile&container=${containers.join(',')}&videoCodec=${videos.join(',')}&audioCodec=${audio.join(',')}&protocol=http&replace=true)',
-    'add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mp4&videoCodec=hevc,h264&audioCodec=${targets.join(',')}&replace=true)',
+      : c.known
+      ? ['aac', 'ac3', 'eac3'].where(audio.contains).toList()
+      : <String>[];
+  final target = videoTargets.isNotEmpty && audioTargets.isNotEmpty
+      ? PlexTranscodeTarget._(videoTargets, audioTargets)
+      : null;
+  final directPlayProfile = desktop
+      ? 'add-direct-play-profile(type=videoProfile&container=*&videoCodec=*&audioCodec=*&subtitleCodec=*&replace=true)'
+      : c.known &&
+            containers.isNotEmpty &&
+            videos.isNotEmpty &&
+            audio.isNotEmpty
+      ? 'add-direct-play-profile(type=videoProfile&container=${containers.join(',')}&videoCodec=${videos.join(',')}&audioCodec=${audio.join(',')}&protocol=http&replace=true)'
+      : null;
+  final limitations = <String>[
     'add-limitation(scope=videoAudioCodec&scopeName=*&type=upperBound&name=audio.channels&value=8&replace=true)',
   ];
   if (!desktop && c.known) {
@@ -503,7 +536,7 @@ PlexProfile buildProfile(
         String type = 'upperBound',
         String field = 'value',
       }) {
-        directives.add(
+        limitations.add(
           'add-limitation(scope=videoCodec&scopeName=${decoder.codec}&type=$type&name=$name&$field=$value&replace=true)',
         );
       }
@@ -534,14 +567,16 @@ PlexProfile buildProfile(
       }
       if (const {'h264', 'hevc', 'av1'}.contains(decoder.codec)) {
         // E2 confirms this DV match-list form; absent DV is optional for SDR/HDR10.
-        directives.add(
+        limitations.add(
           'add-limitation(scope=videoCodec&scopeName=${decoder.codec}&type=match&name=video.DOVIProfile&list=${decoder.dolbyVisionProfiles.join('|')}&isRequired=false&replace=true)',
         );
       }
     }
   }
-  return PlexProfile(
-    profileExtra: directives.join('+'),
+  return PlexProfile._(
+    directPlayProfile: directPlayProfile,
+    limitations: limitations,
+    transcodeTarget: target,
     eligible: (facts) {
       if (desktop) return true;
       if (!c.known ||

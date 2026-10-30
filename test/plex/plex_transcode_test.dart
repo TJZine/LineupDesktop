@@ -81,7 +81,276 @@ const _fireLimitations =
     '+add-limitation(scope=videoCodec&scopeName=av1&type=match&name=video.profile&list=main&replace=true)'
     '+add-limitation(scope=videoCodec&scopeName=av1&type=match&name=video.DOVIProfile&list=10&isRequired=false&replace=true)';
 
+const _targetFixtures = [
+  (
+    name: 'desktop ignores Android probe availability',
+    capabilities: MediaCapabilities.unknown,
+    desktop: true,
+    video: ['hevc', 'h264'],
+    audio: ['aac', 'ac3', 'eac3'],
+  ),
+  (
+    name: 'phone without HEVC',
+    capabilities: _phone,
+    desktop: false,
+    video: ['h264'],
+    audio: ['aac'],
+  ),
+  (
+    name: 'HEVC only',
+    capabilities: MediaCapabilities(
+      videoDecoders: [VideoDecoderCapabilities(codec: 'hevc')],
+      audioDecoders: ['ac3'],
+    ),
+    desktop: false,
+    video: ['hevc'],
+    audio: ['ac3'],
+  ),
+  (
+    name: 'both in reverse order with duplicates',
+    capabilities: MediaCapabilities(
+      videoDecoders: [
+        VideoDecoderCapabilities(codec: 'h264'),
+        VideoDecoderCapabilities(codec: 'hevc'),
+        VideoDecoderCapabilities(codec: 'h264'),
+      ],
+      audioDecoders: ['eac3', 'aac', 'aac', 'flac'],
+    ),
+    desktop: false,
+    video: ['hevc', 'h264'],
+    audio: ['aac', 'eac3'],
+  ),
+  (
+    name: 'other video codecs are not HLS targets',
+    capabilities: MediaCapabilities(
+      videoDecoders: [
+        VideoDecoderCapabilities(codec: 'av1'),
+        VideoDecoderCapabilities(codec: 'h264'),
+        VideoDecoderCapabilities(codec: 'vp9'),
+        VideoDecoderCapabilities(codec: 'h265'),
+      ],
+      audioDecoders: ['aac'],
+    ),
+    desktop: false,
+    video: ['h264'],
+    audio: ['aac'],
+  ),
+  (
+    name: 'unknown probe',
+    capabilities: MediaCapabilities.unknown,
+    desktop: false,
+    video: <String>[],
+    audio: <String>[],
+  ),
+  (
+    name: 'unknown probe with untrusted populated lists',
+    capabilities: MediaCapabilities(
+      known: false,
+      videoDecoders: [
+        VideoDecoderCapabilities(codec: 'h264'),
+        VideoDecoderCapabilities(codec: 'hevc'),
+      ],
+      audioDecoders: ['aac'],
+    ),
+    desktop: false,
+    video: <String>[],
+    audio: <String>[],
+  ),
+  (
+    name: 'no video decoders',
+    capabilities: MediaCapabilities(audioDecoders: ['aac']),
+    desktop: false,
+    video: <String>[],
+    audio: <String>[],
+  ),
+  (
+    name: 'AV1 only',
+    capabilities: MediaCapabilities(
+      videoDecoders: [VideoDecoderCapabilities(codec: 'av1')],
+      audioDecoders: ['aac'],
+    ),
+    desktop: false,
+    video: <String>[],
+    audio: <String>[],
+  ),
+  (
+    name: 'no audio decoders',
+    capabilities: MediaCapabilities(
+      videoDecoders: [VideoDecoderCapabilities(codec: 'h264')],
+    ),
+    desktop: false,
+    video: <String>[],
+    audio: <String>[],
+  ),
+  (
+    name: 'no supported HLS audio target',
+    capabilities: MediaCapabilities(
+      videoDecoders: [VideoDecoderCapabilities(codec: 'h264')],
+      audioDecoders: ['flac'],
+    ),
+    desktop: false,
+    video: <String>[],
+    audio: <String>[],
+  ),
+  (
+    name: 'supported passthrough audio target',
+    capabilities: MediaCapabilities(
+      videoDecoders: [VideoDecoderCapabilities(codec: 'h264')],
+      audioDecoders: ['flac'],
+      audioPassthrough: ['eac3'],
+    ),
+    desktop: false,
+    video: ['h264'],
+    audio: ['eac3'],
+  ),
+];
+
 void main() {
+  group('confirmed session targets', () {
+    for (final fixture in _targetFixtures) {
+      test('${fixture.name}: declaration and immutable target facts agree', () {
+        final profile = buildProfile(
+          fixture.capabilities,
+          desktop: fixture.desktop,
+        );
+        final target = profile.transcodeTarget;
+        final directives = profile.profileExtra
+            .split('+')
+            .where(
+              (directive) => directive.startsWith('add-transcode-target('),
+            );
+        if (fixture.video.isEmpty) {
+          expect(target, isNull);
+          expect(directives, isEmpty);
+        } else {
+          expect(target, isNotNull);
+          expect(target!.videoCodecs, fixture.video);
+          expect(target.audioCodecs, fixture.audio);
+          expect(directives, [
+            'add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mp4&videoCodec=${fixture.video.join(',')}&audioCodec=${fixture.audio.join(',')}&replace=true)',
+          ]);
+          expect(target.videoCodecs.clear, throwsUnsupportedError);
+          expect(target.audioCodecs.clear, throwsUnsupportedError);
+        }
+        if (!fixture.desktop && !fixture.capabilities.known) {
+          expect(
+            profile.eligible(
+              const PlexMediaFacts(
+                container: 'mkv',
+                videoCodec: 'h264',
+                videoProfile: 'high',
+                bitDepth: 8,
+                width: 1920,
+                height: 1080,
+                audioCodec: 'aac',
+              ),
+            ),
+            isFalse,
+          );
+        }
+      });
+
+      test(
+        '${fixture.name}: decision allowed, start requires a declared target',
+        () async {
+          final profile = buildProfile(
+            fixture.capabilities,
+            desktop: fixture.desktop,
+          );
+          final request = PlexSessionRequest(
+            ratingKey: '42',
+            sessionId: _session,
+            profile: profile,
+          );
+          final requests = <http.Request>[];
+          final client = PlexClient(
+            clientIdentifier: 'synthetic-client',
+            httpClient: MockClient((request) async {
+              requests.add(request);
+              if (requests.length == 1 &&
+                  request.url.path == '/video/:/transcode/universal/decision') {
+                return http.Response(
+                  '{"MediaContainer":{"generalDecisionCode":1001,"directPlayDecisionCode":3001}}',
+                  200,
+                );
+              }
+              if (fixture.video.isNotEmpty &&
+                  requests.length == 2 &&
+                  request.url.path ==
+                      '/video/:/transcode/universal/start.m3u8') {
+                return http.Response(_master, 200);
+              }
+              fail('Unexpected request');
+            }),
+          );
+          addTearDown(client.close);
+          expect(
+            (await client.transcodeDecision(
+              _server,
+              request,
+              'synthetic-token',
+            )).method,
+            PlexPlaybackMethod.directStream,
+          );
+          if (fixture.video.isEmpty) {
+            await expectLater(
+              client.startTranscodeSession(_server, request, 'synthetic-token'),
+              throwsA(
+                isA<PlexException>()
+                    .having(
+                      (error) => error.code,
+                      'code',
+                      'session-unsupported',
+                    )
+                    .having(
+                      (error) => error.message,
+                      'message',
+                      'This device has no supported Plex session target.',
+                    ),
+              ),
+            );
+            expect(
+              requests,
+              hasLength(1),
+              reason: 'An undeclared target must be refused before HTTP',
+            );
+            expect(
+              requests.single.headers['X-Plex-Client-Profile-Extra'],
+              isNot(contains('add-transcode-target(')),
+            );
+          } else {
+            await client.startTranscodeSession(
+              _server,
+              request,
+              'synthetic-token',
+            );
+            expect(requests, hasLength(2));
+          }
+          expect(
+            requests.map(
+              (request) => request.url.queryParameters['directPlay'],
+            ),
+            fixture.video.isEmpty ? ['1'] : ['1', '0'],
+          );
+          for (final request in requests) {
+            expect(
+              request.headers['X-Plex-Client-Profile-Extra'],
+              profile.profileExtra,
+            );
+            expect(request.headers['X-Plex-Client-Profile-Name'], 'Generic');
+            expect(request.headers['X-Plex-Token'], 'synthetic-token');
+            expect(request.followRedirects, isFalse);
+            expect(request.url.toString(), isNot(contains('synthetic-token')));
+            expect(
+              request.url.queryParameters.keys.map((key) => key.toLowerCase()),
+              isNot(contains('x-plex-token')),
+            );
+          }
+        },
+      );
+    }
+  });
+
   group('session HTTP boundary', () {
     test('decision, start, ping, stop and PUT have exact shapes and header-only token', () async {
       final extra = buildProfile(MediaCapabilities.desktop, desktop: true);
@@ -719,7 +988,7 @@ void main() {
       expect(
         buildProfile(_phone, desktop: false).profileExtra,
         'add-direct-play-profile(type=videoProfile&container=mkv,mp4&videoCodec=h264&audioCodec=aac&protocol=http&replace=true)'
-        '+add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mp4&videoCodec=hevc,h264&audioCodec=aac&replace=true)+$_channels'
+        '+add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mp4&videoCodec=h264&audioCodec=aac&replace=true)+$_channels'
         '+add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.bitDepth&value=8&replace=true)'
         '+add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.width&value=1920&replace=true)'
         '+add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.height&value=1080&replace=true)'
