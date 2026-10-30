@@ -12,7 +12,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, sdk = [28, 30, 36])
+// The repository pins Java 17; Robolectric's API 36 image needs Java 21.
+// Actual API 36 window/lifecycle behavior remains an emulator acceptance gate.
+@Config(manifest = Config.NONE, sdk = [28, 30])
 class WindowFactsTest {
     @Test
     fun observationUsesActualActivityModeAndRetiresOnUnwatchAndClose() {
