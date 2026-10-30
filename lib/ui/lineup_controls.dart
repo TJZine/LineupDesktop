@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../plex/plex_models.dart';
 import 'app_theme.dart';
@@ -370,7 +371,7 @@ class LineupToggleSurface extends StatelessWidget {
   const LineupToggleSurface({required this.child, super.key});
   final Widget child;
   @override
-  Widget build(BuildContext context) => LineupTheme.of(context).androidTv
+  Widget build(BuildContext context) => DeviceProfile.of(context).isTv
       ? LineupRowSurface(selected: false, child: child)
       : child;
 }
@@ -399,7 +400,7 @@ class _LineupFocusRevealState extends State<LineupFocusReveal> {
   void _focusChanged(bool value) {
     _focused = value;
     widget.onFocusChange?.call(value);
-    if (!value || !LineupTheme.of(context).androidTv) return;
+    if (!value || !DeviceProfile.of(context).isTv) return;
     // Traversal reveals the child control. Also reveal the whole context,
     // including any card expansion and optional outer focus frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -690,7 +691,7 @@ Widget lineupDropdownField<T>({
 }) {
   final baseTheme = Theme.of(context);
   final dropdownColor = LineupTheme.of(context).elevatedSurface;
-  final tv = LineupTheme.of(context).androidTv;
+  final tv = DeviceProfile.of(context).isTv;
   Widget field(BuildContext context) {
     final roles = LineupTheme.of(context);
     return DropdownButtonFormField<T>(

@@ -498,6 +498,9 @@ class _Player implements NativePlayer {
       MediaCapabilities.desktop;
 
   @override
+  PlayerCapabilities get capabilities => const PlayerCapabilities.unavailable();
+
+  @override
   bool get fullscreen => false;
   @override
   Stream<bool> get fullscreenChanges => const Stream.empty();

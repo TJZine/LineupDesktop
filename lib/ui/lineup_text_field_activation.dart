@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart';
+import 'package:lineup_desktop/platform/device_profile.dart';
 
 import 'app_theme.dart';
 import 'keyboard_visibility.dart';
@@ -224,7 +225,7 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    if (!roles.androidTv) {
+    if (!DeviceProfile.of(context).isTv) {
       return widget.builder(context, widget.focusNode, null);
     }
     final focused =

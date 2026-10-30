@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../platform/device_profile.dart';
 import '../settings/lineup_settings.dart';
 import 'focus_ink.dart';
 
@@ -24,7 +25,6 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     required this.focusMutedText,
     required this.focusTreatment,
     required this.largeFocusIndicators,
-    required this.androidTv,
     required this.subtleBorder,
     required this.defaultBorder,
     required this.focusBorder,
@@ -54,7 +54,6 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
   final Color focusMutedText;
   final LineupFocusTreatment focusTreatment;
   final bool largeFocusIndicators;
-  final bool androidTv;
   final Color subtleBorder;
   final Color defaultBorder;
   final Color focusBorder;
@@ -85,7 +84,6 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     Color? focusMutedText,
     LineupFocusTreatment? focusTreatment,
     bool? largeFocusIndicators,
-    bool? androidTv,
     Color? subtleBorder,
     Color? defaultBorder,
     Color? focusBorder,
@@ -114,7 +112,6 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     focusMutedText: focusMutedText ?? this.focusMutedText,
     focusTreatment: focusTreatment ?? this.focusTreatment,
     largeFocusIndicators: largeFocusIndicators ?? this.largeFocusIndicators,
-    androidTv: androidTv ?? this.androidTv,
     subtleBorder: subtleBorder ?? this.subtleBorder,
     defaultBorder: defaultBorder ?? this.defaultBorder,
     focusBorder: focusBorder ?? this.focusBorder,
@@ -158,7 +155,6 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
       largeFocusIndicators: t < 0.5
           ? largeFocusIndicators
           : other.largeFocusIndicators,
-      androidTv: t < 0.5 ? androidTv : other.androidTv,
       subtleBorder: Color.lerp(subtleBorder, other.subtleBorder, t)!,
       defaultBorder: Color.lerp(defaultBorder, other.defaultBorder, t)!,
       focusBorder: Color.lerp(focusBorder, other.focusBorder, t)!,
@@ -195,7 +191,6 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
           focusMutedText == other.focusMutedText &&
           focusTreatment == other.focusTreatment &&
           largeFocusIndicators == other.largeFocusIndicators &&
-          androidTv == other.androidTv &&
           subtleBorder == other.subtleBorder &&
           defaultBorder == other.defaultBorder &&
           focusBorder == other.focusBorder &&
@@ -226,7 +221,6 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     focusMutedText,
     focusTreatment,
     largeFocusIndicators,
-    androidTv,
     subtleBorder,
     defaultBorder,
     focusBorder,
@@ -249,10 +243,10 @@ abstract final class LineupTheme {
   static ThemeData forName(
     LineupThemeName name, {
     bool largeFocusIndicators = false,
-    bool androidTv = false,
+    FormFactor formFactor = FormFactor.desktop,
   }) {
     final basePalette = _palette(name);
-    final tvFillFocus = androidTv;
+    final tvFillFocus = formFactor == FormFactor.tv;
     final tvFocus = switch (name) {
       LineupThemeName.slatePine => (
         fill: const Color(0xFFD3DECF),
@@ -296,7 +290,6 @@ abstract final class LineupTheme {
       focusBorder: tvFillFocus ? tvFocus.border : basePalette.focusBorder,
       focusBorderWidth: largeFocusIndicators ? 5 : 3,
       largeFocusIndicators: largeFocusIndicators,
-      androidTv: androidTv,
       focusTreatment: tvFillFocus
           ? LineupFocusTreatment.fill
           : LineupFocusTreatment.ring,
@@ -711,7 +704,6 @@ abstract final class LineupTheme {
       focusMutedText: Color(0xFF978B76),
       focusTreatment: LineupFocusTreatment.ring,
       largeFocusIndicators: false,
-      androidTv: false,
       subtleBorder: Color(0xFF2B261E),
       defaultBorder: Color(0xFF494031),
       focusBorder: Color(0xFFF0D39A),
@@ -795,7 +787,6 @@ abstract final class LineupTheme {
       focusMutedText: onFocus.withValues(alpha: 0.72),
       focusTreatment: LineupFocusTreatment.ring,
       largeFocusIndicators: false,
-      androidTv: false,
       subtleBorder: Colors.white.withValues(alpha: 0.08),
       defaultBorder: Colors.white.withValues(alpha: 0.12),
       focusBorder: focusBorder ?? const Color(0xFFF0D39A),

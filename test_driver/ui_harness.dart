@@ -95,6 +95,8 @@ class HarnessController extends LineupController {
 class HarnessPlayer implements NativePlayer {
   @override
   bool fullscreen = false;
+  @override
+  PlayerCapabilities get capabilities => const PlayerCapabilities.unavailable();
   final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
   @override
   Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;

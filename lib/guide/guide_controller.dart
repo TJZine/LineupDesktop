@@ -58,6 +58,8 @@ abstract final class GuideGeometry {
   }
 }
 
+typedef GuideCursor = ({String? channelId, String? programId});
+
 enum GuideLoadState { loading, retrying, ready, error }
 
 enum GuideArtworkKind { poster, backdrop, clearLogo }
@@ -170,6 +172,31 @@ class GuideController extends ChangeNotifier {
   int? _projectionNotificationGeneration;
   int? _projectionNotificationContentGeneration;
   double _verticalRowPosition = 0;
+
+  final _focus = _GuideFocusSignal();
+  final _selection = ValueNotifier<GuideCursor>((
+    channelId: null,
+    programId: null,
+  ));
+  Listenable get focus => _focus;
+  ValueListenable<GuideCursor> get selection => _selection;
+
+  void _publishCursor() {
+    // Explicit focus refreshes details against the current presentation clock,
+    // even when the virtual cursor stays on the same program.
+    _focus.publish();
+    _selection.value = (
+      channelId: _selected?.channelId,
+      programId: _selected?.programId,
+    );
+  }
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    _publishCursor();
+    super.notifyListeners();
+  }
 
   List<Channel> get channels => _visibleChannels;
 
@@ -623,7 +650,7 @@ class GuideController extends ChangeNotifier {
     _focusedProgramId = program.id;
     _focusTime = _programFocusTime(program);
     _retainInspection();
-    notifyListeners();
+    _publishCursor();
   }
 
   void selectProgram(GuideProgram program) {
@@ -632,7 +659,7 @@ class GuideController extends ChangeNotifier {
     _selected = (channelId: program.channelId, programId: program.id);
     _focusTime = _programFocusTime(program);
     _retainInspection();
-    notifyListeners();
+    _publishCursor();
   }
 
   GuideProgram? selectFocusedProgram() {
@@ -671,7 +698,7 @@ class GuideController extends ChangeNotifier {
         );
       }
     }
-    notifyListeners();
+    _publishCursor();
   }
 
   void page(int offset, int visibleRows) {
@@ -693,13 +720,13 @@ class GuideController extends ChangeNotifier {
     if (offset > 0 && current == -1 && programs.isNotEmpty) {
       _focusedProgramId = programs.first.id;
       _retainInspection();
-      notifyListeners();
+      _publishCursor();
       return;
     }
     if (offset < 0 && !canBrowseEarlier && current <= 0) {
       _focusedProgramId = null;
       _retainInspection();
-      notifyListeners();
+      _publishCursor();
       return;
     }
     if (current >= 0 &&
@@ -726,7 +753,7 @@ class GuideController extends ChangeNotifier {
       _selectAtFocusTime();
     }
     _retainInspection();
-    notifyListeners();
+    _publishCursor();
   }
 
   void playToNow() {
@@ -752,7 +779,7 @@ class GuideController extends ChangeNotifier {
     } else if (!_inspectionActive) {
       final previous = _focusedProgramId;
       _selectAtFocusTime();
-      if (previous != _focusedProgramId) notifyListeners();
+      if (previous != _focusedProgramId) _publishCursor();
     }
   }
 
@@ -769,7 +796,7 @@ class GuideController extends ChangeNotifier {
     if (target == _windowStart) {
       if (halfHours < 0) {
         _focusedProgramId = null;
-        notifyListeners();
+        _publishCursor();
       }
       return;
     }
@@ -1344,6 +1371,8 @@ class GuideController extends ChangeNotifier {
       if (!waiter.isCompleted) waiter.complete();
     }
     _rowWaiters.clear();
+    _focus.dispose();
+    _selection.dispose();
     super.dispose();
   }
 }
@@ -1449,4 +1478,8 @@ class _CastEntry {
   CastView? view;
   DateTime? failedAt;
   bool complete = false;
+}
+
+class _GuideFocusSignal extends ChangeNotifier {
+  void publish() => notifyListeners();
 }

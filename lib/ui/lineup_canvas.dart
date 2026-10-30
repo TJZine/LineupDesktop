@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'lineup_focus.dart';
-import 'app_theme.dart';
+import '../platform/device_profile.dart';
 
 /// The single design-canvas owner, above the Navigator and all its overlays.
 /// Layout and MediaQuery use canvas pixels; painting and input use window pixels.
@@ -17,7 +17,10 @@ class LineupCanvas extends StatelessWidget {
   final Widget child;
   final bool reduceMotion;
 
-  static double scaleFor(Size window, {bool androidTv = false}) => androidTv
+  static double scaleFor(
+    Size window, {
+    FormFactor formFactor = FormFactor.desktop,
+  }) => formFactor == FormFactor.tv
       ? math.min(window.width / 1920, window.height / 1080)
       : math.max(0.8, math.min(window.width / 1920, window.height / 1080));
 
@@ -58,12 +61,12 @@ class LineupCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final androidTv = LineupTheme.of(context).androidTv;
+    final formFactor = DeviceProfile.of(context).formFactor;
     return LayoutBuilder(
       builder: (context, constraints) {
         final window = constraints.biggest;
         if (window.isEmpty || !window.isFinite) return const SizedBox.shrink();
-        final scale = scaleFor(window, androidTv: androidTv);
+        final scale = scaleFor(window, formFactor: formFactor);
         final canvas = window / scale;
         final padding = media.padding;
         return ClipRect(

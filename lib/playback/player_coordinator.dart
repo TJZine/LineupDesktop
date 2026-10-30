@@ -38,7 +38,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     required this.lineup,
     required this.guide,
     this.overlayTimeout,
-    this.androidTv = false,
+    this.suspendInBackground = false,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
     _indexChannels();
@@ -64,7 +64,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
-    if (androidTv) {
+    if (suspendInBackground) {
       WidgetsBinding.instance.addObserver(this);
       final lifecycle = WidgetsBinding.instance.lifecycleState;
       if (lifecycle == AppLifecycleState.hidden ||
@@ -92,7 +92,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   final LineupController lineup;
   final GuideController guide;
   final Duration? overlayTimeout;
-  final bool androidTv;
+  final bool suspendInBackground;
   bool _backgroundSuspended = false;
   // Null means no captured intent; false keeps an explicit/untuned stop from
   // being recaptured as play while native stop acknowledgement is pending.
@@ -112,6 +112,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _noticeTimer;
   Timer? _busyTimer;
   Timer? _channelStepTimer;
+  Timer? _channelStepWindowTimer;
   Timer? _channelTagTimer;
   int? _channelTagTuneGeneration;
   Completer<bool>? _channelStepCompletion;
@@ -741,7 +742,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!androidTv || _disposed) return;
+    if (!suspendInBackground || _disposed) return;
     switch (state) {
       case AppLifecycleState.hidden || AppLifecycleState.paused:
         unawaited(setApplicationForeground(false));
@@ -757,7 +758,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setApplicationForeground(bool foreground) async {
-    if (!androidTv || _disposed) return;
+    if (!suspendInBackground || _disposed) return;
     if (foreground) {
       if (!_backgroundSuspended) {
         if (_resumeAfterBackground == true) _resumeAfterBackground = null;
@@ -851,8 +852,15 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }) {
     if (_disposed || _backgroundSuspended) return Future.value(false);
     _resumeAfterBackground = null;
+    final continuingStep = channelStep && _channelStepWindowTimer != null;
     _cancelPendingChannelStep(clearTarget: !channelStep);
-    if (channelStep) _channelStepTargetId = channelId;
+    if (channelStep) {
+      _channelStepTargetId = channelId;
+      _channelStepWindowTimer?.cancel();
+      _channelStepWindowTimer = Timer(const Duration(milliseconds: 250), () {
+        _channelStepWindowTimer = null;
+      });
+    }
     final deadline = _sleepDeadline;
     if (deadline != null && !_clock().isBefore(deadline)) {
       return _expireSleepTimer(_sleepEpoch).then((_) => false);
@@ -892,9 +900,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       return operation;
     }
 
-    if (!channelStep) return dispatch();
-    // Each step publishes and supersedes older intent immediately. Only the
-    // target remaining after a quiet interval enters the serialized load queue.
+    if (!channelStep || !continuingStep) return dispatch();
+    // The leading step enters the queue immediately. Further steps publish and
+    // supersede intent, then enqueue the final target after a quiet interval.
     final completion = _channelStepCompletion = Completer<bool>();
     _channelStepTimer = Timer(const Duration(milliseconds: 250), () {
       _channelStepTimer = null;
@@ -1531,7 +1539,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _channelStepTimer = null;
     _channelStepCompletion?.complete(false);
     _channelStepCompletion = null;
-    if (clearTarget) _channelStepTargetId = null;
+    if (clearTarget) {
+      _channelStepTargetId = null;
+      _channelStepWindowTimer?.cancel();
+      _channelStepWindowTimer = null;
+    }
   }
 
   Future<void> togglePlayback() {
@@ -2441,7 +2453,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
-    if (androidTv) WidgetsBinding.instance.removeObserver(this);
+    if (suspendInBackground) WidgetsBinding.instance.removeObserver(this);
     _resumeAfterBackground = false;
     _displayMatching.dispose();
     unawaited(_cancelPlayerSubscription(_displaySubscription));

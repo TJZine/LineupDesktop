@@ -180,31 +180,34 @@ void main() {
         final capture = GlobalKey();
         try {
           await tester.pumpWidget(
-            RepaintBoundary(
-              key: capture,
-              child: MaterialApp(
-                debugShowCheckedModeBanner: false,
-                theme: LineupTheme.forName(
-                  configuration.theme,
-                  androidTv: configuration.tv,
-                  largeFocusIndicators: large,
-                ),
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(context)
-                      .copyWith(textScaler: TextScaler.linear(scale)),
-                  child: LineupCanvas(child: child!),
-                ),
-                home: SafeArea(
-                  child: GuideView(
-                    controller: guide,
-                    playbackMessage: message,
-                    pictureInPicture: _pictureForState(
-                      configuration.state,
-                      () => retryCalls++,
+            DeviceProfileScope(
+              profile: profileFor(configuration.tv),
+              child: RepaintBoundary(
+                key: capture,
+                child: MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: LineupTheme.forName(
+                    configuration.theme,
+                    formFactor: profileFor(configuration.tv).formFactor,
+                    largeFocusIndicators: large,
+                  ),
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(textScaler: TextScaler.linear(scale)),
+                    child: LineupCanvas(child: child!),
+                  ),
+                  home: SafeArea(
+                    child: GuideView(
+                      controller: guide,
+                      playbackMessage: message,
+                      pictureInPicture: _pictureForState(
+                        configuration.state,
+                        () => retryCalls++,
+                      ),
+                      onOpenMenu: (_, _) {},
+                      onClose: (_, _) {},
+                      onTune: (_) async {},
                     ),
-                    onOpenMenu: (_, _) {},
-                    onClose: (_, _) {},
-                    onTune: (_) async {},
                   ),
                 ),
               ),
@@ -881,7 +884,7 @@ void _stabilityTests() {
           final pictureState = ValueNotifier('idle');
           final baseTheme = LineupTheme.forName(
             LineupThemeName.emberSteel,
-            androidTv: true,
+            formFactor: profileFor(true).formFactor,
             largeFocusIndicators: large,
           );
           final theme = ValueNotifier(baseTheme);
@@ -889,26 +892,29 @@ void _stabilityTests() {
           final semantics = tester.ensureSemantics();
           try {
             await tester.pumpWidget(
-              ValueListenableBuilder<ThemeData>(
-                valueListenable: theme,
-                builder: (context, value, child) => MaterialApp(
-                  theme: value,
-                  builder: (context, child) => MediaQuery(
-                    data: MediaQuery.of(context)
-                        .copyWith(textScaler: TextScaler.linear(scale)),
-                    child: LineupCanvas(
-                      child: Theme(data: value, child: child!),
+              DeviceProfileScope(
+                profile: profileFor(true),
+                child: ValueListenableBuilder<ThemeData>(
+                  valueListenable: theme,
+                  builder: (context, value, child) => MaterialApp(
+                    theme: value,
+                    builder: (context, child) => MediaQuery(
+                      data: MediaQuery.of(context)
+                          .copyWith(textScaler: TextScaler.linear(scale)),
+                      child: LineupCanvas(
+                        child: Theme(data: value, child: child!),
+                      ),
                     ),
-                  ),
-                  home: SafeArea(
-                    child: ValueListenableBuilder<String>(
-                      valueListenable: pictureState,
-                      builder: (context, state, child) => GuideView(
-                        controller: guide,
-                        pictureInPicture: _pictureForState(state, () {}),
-                        onClose: (_, _) {},
-                        onTune: (_) async {},
-                        onOpenMenu: (_, _) {},
+                    home: SafeArea(
+                      child: ValueListenableBuilder<String>(
+                        valueListenable: pictureState,
+                        builder: (context, state, child) => GuideView(
+                          controller: guide,
+                          pictureInPicture: _pictureForState(state, () {}),
+                          onClose: (_, _) {},
+                          onTune: (_) async {},
+                          onOpenMenu: (_, _) {},
+                        ),
                       ),
                     ),
                   ),

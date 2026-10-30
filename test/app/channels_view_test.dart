@@ -19,13 +19,13 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
-  for (final androidTv in [true, false]) {
+  for (final isTv in [true, false]) {
     testWidgets(
-      'bulk-selected channel rows show checked state on the checkbox only (TV: $androidTv)',
+      'bulk-selected channel rows show checked state on the checkbox only (TV: $isTv)',
       (tester) async {
         await tester.pumpWidget(
           UiFixture(
-            androidTv: androidTv,
+            profile: profileFor(isTv),
             scenario: LineupScenario(
               stage: SetupStage.ready,
               channels: [
@@ -88,7 +88,7 @@ void main() {
     try {
       await tester.pumpWidget(
         UiFixture(
-          androidTv: true,
+          profile: profileFor(true),
           scenario: LineupScenario(
             stage: SetupStage.ready,
             channels: [_channel('back', 2, 'Back channel')],
@@ -172,7 +172,7 @@ void main() {
       addTearDown(controller.dispose);
       try {
         await tester.pumpWidget(
-          UiFixture(controller: controller, androidTv: true).build(),
+          UiFixture(controller: controller, profile: profileFor(true)).build(),
         );
         await tester.pumpAndSettle();
         await openDestination(tester, 'Channels');
@@ -295,7 +295,10 @@ void main() {
             ),
           );
           await tester.pumpWidget(
-            UiFixture(controller: controller, androidTv: true).build(),
+            UiFixture(
+              controller: controller,
+              profile: profileFor(true),
+            ).build(),
           );
           await tester.pumpAndSettle();
           // Establish selection through existing controls. Reading and the dialog's
@@ -686,7 +689,7 @@ void main() {
           LineupBootstrap(
             controller: controller,
             player: FixturePlayer(),
-            androidTv: true,
+            profile: profileFor(true),
             keyboardVisibility: visibility,
           ),
         );

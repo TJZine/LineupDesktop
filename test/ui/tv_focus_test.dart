@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,15 +15,21 @@ void main() {
     final focusNode = FocusNode();
     addTearDown(focusNode.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        theme: LineupTheme.forName(LineupThemeName.emberSteel, androidTv: true),
-        builder: LineupCanvas.builder,
-        home: Scaffold(
-          body: LineupRowSurface(
-            selected: true,
-            child: Focus(
-              focusNode: focusNode,
-              child: const _RoleProbe(key: ValueKey('role-probe')),
+      DeviceProfileScope(
+        profile: tvProfile,
+        child: MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(true).formFactor,
+          ),
+          builder: LineupCanvas.builder,
+          home: Scaffold(
+            body: LineupRowSurface(
+              selected: true,
+              child: Focus(
+                focusNode: focusNode,
+                child: const _RoleProbe(key: ValueKey('role-probe')),
+              ),
             ),
           ),
         ),
@@ -64,28 +72,31 @@ void main() {
       final focusNode = FocusNode();
       addTearDown(focusNode.dispose);
       await tester.pumpWidget(
-        MaterialApp(
-          theme: LineupTheme.forName(
-            LineupThemeName.emberSteel,
-            androidTv: true,
-            largeFocusIndicators: true,
-          ),
-          builder: (context, child) => LineupCanvas.builder(
-            context,
-            MediaQuery(
-              data: MediaQuery.of(context).copyWith(disableAnimations: true),
-              child: child!,
+        DeviceProfileScope(
+          profile: tvProfile,
+          child: MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(true).formFactor,
+              largeFocusIndicators: true,
             ),
-          ),
-          home: Scaffold(
-            body: LineupRowSurface(
-              selected: false,
-              scaleOnFocus: true,
-              child: TextButton(
-                autofocus: true,
-                focusNode: focusNode,
-                onPressed: () {},
-                child: const Text('Row'),
+            builder: (context, child) => LineupCanvas.builder(
+              context,
+              MediaQuery(
+                data: MediaQuery.of(context).copyWith(disableAnimations: true),
+                child: child!,
+              ),
+            ),
+            home: Scaffold(
+              body: LineupRowSurface(
+                selected: false,
+                scaleOnFocus: true,
+                child: TextButton(
+                  autofocus: true,
+                  focusNode: focusNode,
+                  onPressed: () {},
+                  child: const Text('Row'),
+                ),
               ),
             ),
           ),

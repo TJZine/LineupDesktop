@@ -79,6 +79,8 @@ class HarnessLoggingPlayer implements NativePlayer {
   @override
   bool get fullscreen => _player.fullscreen;
   @override
+  PlayerCapabilities get capabilities => _player.capabilities;
+  @override
   Stream<bool> get fullscreenChanges => _player.fullscreenChanges;
 
   final NativePlayer _player;

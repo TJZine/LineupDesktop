@@ -19,7 +19,7 @@ void main() {
       final geometry = <bool, Map<String, Rect>>{};
       for (final tv in [false, true]) {
         final fixture = UiFixture(
-          androidTv: tv,
+          profile: profileFor(tv),
           scenario: LineupScenario(stage: stage),
           guideClock: () => DateTime(2026, 1, 15, 12),
         );

@@ -18,6 +18,7 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/test_doubles.dart';
+import '../support/device_profile_test_support.dart';
 
 void main() {
   for (final size in [const Size(1280, 720), const Size(1920, 1080)]) {
@@ -363,6 +364,7 @@ Future<void> _showSetup(
       home: LineupShell(
         controller: fixture.controller,
         player: createPlatformNativePlayer(isWindows: false, isMacOS: false),
+        profile: desktopProfile,
       ),
     ),
   );

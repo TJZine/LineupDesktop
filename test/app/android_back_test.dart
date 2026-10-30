@@ -42,7 +42,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: const LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(fixture.build());
@@ -62,7 +62,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       player: FixturePlayer()
         ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
       scenario: const LineupScenario(stage: SetupStage.ready),
@@ -89,7 +89,7 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture(
-      androidTv: true,
+      profile: profileFor(true),
       scenario: const LineupScenario(stage: SetupStage.welcome),
     );
     await tester.pumpWidget(fixture.build());
@@ -113,7 +113,7 @@ void main() {
     'Android onboarding recovers a real control after stranded focus and resume',
     (tester) async {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: const LineupScenario(stage: SetupStage.welcome),
       );
       await tester.pumpWidget(fixture.build());
@@ -138,7 +138,7 @@ void main() {
     'one predictive Back leaves PIN without also cancelling Profiles',
     (tester) async {
       final fixture = UiFixture(
-        androidTv: true,
+        profile: profileFor(true),
         scenario: const LineupScenario(
           stage: SetupStage.profiles,
           profileSelectionOrigin: SetupStage.servers,

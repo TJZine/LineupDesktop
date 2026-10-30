@@ -8,8 +8,9 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 
 import 'test_doubles.dart';
-
+import 'device_profile_test_support.dart';
 export 'test_doubles.dart';
+export 'device_profile_test_support.dart';
 
 /// Deterministic UI states for widget tests. This file is not imported by the
 /// production composition root.
@@ -19,7 +20,7 @@ class UiFixture {
     LineupScenario? scenario,
     FixturePlayer? player,
     this.guideClock,
-    this.androidTv = false,
+    this.profile = desktopProfile,
   }) : assert(controller == null || scenario == null),
        controller = controller ?? FixtureController(scenario: scenario),
        player = player ?? FixturePlayer();
@@ -27,13 +28,13 @@ class UiFixture {
   final FixtureController controller;
   final FixturePlayer player;
   final DateTime Function()? guideClock;
-  final bool androidTv;
+  final DeviceProfile? profile;
 
   Widget build() => LineupBootstrap(
     player: player,
     controller: controller,
     guideClock: guideClock,
-    androidTv: androidTv,
+    profile: profile,
   );
 }
 

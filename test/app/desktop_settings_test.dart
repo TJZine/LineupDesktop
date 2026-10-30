@@ -1,4 +1,5 @@
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/settings_view.dart';
 
 import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
@@ -8,7 +9,6 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
-import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
@@ -162,7 +162,7 @@ void main() {
         (TargetPlatform.android, false, true),
       ]) {
         debugDefaultTargetPlatformOverride = platform;
-        await _showSettings(tester, controller, androidTv: tv);
+        await _showSettings(tester, controller, isTv: tv);
         await _openCategory(tester, SettingsCategory.playback);
         expect(
           find.text('Match display HDR in fullscreen'),
@@ -173,7 +173,7 @@ void main() {
       }
 
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      await _showSettings(tester, controller, androidTv: false);
+      await _showSettings(tester, controller, isTv: false);
       await _openCategory(tester, SettingsCategory.playback);
       expect(find.text('Match display HDR in fullscreen'), findsOneWidget);
     } finally {
@@ -374,15 +374,18 @@ void main() {
 Future<void> _showSettings(
   WidgetTester tester,
   FixtureController controller, {
-  bool androidTv = false,
+  bool isTv = false,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
-      builder: LineupCanvas.builder,
+      builder: (context, child) => DeviceProfileScope(
+        profile: profileFor(isTv),
+        child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+      ),
       theme: LineupTheme.forName(
         LineupThemeName.emberSteel,
         largeFocusIndicators: false,
-        androidTv: androidTv,
+        formFactor: profileFor(isTv).formFactor,
       ),
       home: RepaintBoundary(
         key: const Key('desktop-settings-render'),

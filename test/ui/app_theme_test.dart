@@ -1,3 +1,5 @@
+import '../support/device_profile_test_support.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
@@ -7,7 +9,10 @@ void main() {
   test('TV typography roles preserve desktop sizes in every palette', () {
     for (final name in LineupThemeName.values) {
       for (final tv in [false, true]) {
-        final theme = LineupTheme.forName(name, androidTv: tv);
+        final theme = LineupTheme.forName(
+          name,
+          formFactor: profileFor(tv).formFactor,
+        );
         final roles = theme.extension<LineupThemeRoles>()!;
         expect(theme.textTheme.labelSmall!.fontSize, 14);
         expect(theme.textTheme.titleSmall!.fontSize, 16);
@@ -119,17 +124,15 @@ void main() {
         .extension<LineupThemeRoles>()!;
     final tv = LineupTheme.forName(
       LineupThemeName.emberSteel,
-      androidTv: true,
+      formFactor: profileFor(true).formFactor,
     ).extension<LineupThemeRoles>()!;
     final directv = LineupTheme.forName(
       LineupThemeName.directv,
-      androidTv: true,
+      formFactor: profileFor(true).formFactor,
     ).extension<LineupThemeRoles>()!;
 
     expect(desktop.focusTreatment, LineupFocusTreatment.ring);
-    expect(desktop.androidTv, isFalse);
     expect(tv.focusTreatment, LineupFocusTreatment.fill);
-    expect(tv.androidTv, isTrue);
     expect(tv.focusedSurface, const Color(0xFFE9DCC3));
     expect(tv.focusedInsetSurface, const Color(0xFFD7C7A8));
     expect(tv.onFocus, const Color(0xFF090806));
@@ -176,7 +179,7 @@ void main() {
     for (final name in LineupThemeName.values) {
       final roles = LineupTheme.forName(
         name,
-        androidTv: true,
+        formFactor: profileFor(true).formFactor,
       ).extension<LineupThemeRoles>()!;
       expect(roles.focusTreatment, LineupFocusTreatment.fill);
       expect([
@@ -193,11 +196,11 @@ void main() {
   test('TV field focus fills without a border except in large-focus mode', () {
     final normal = LineupTheme.forName(
       LineupThemeName.emberSteel,
-      androidTv: true,
+      formFactor: profileFor(true).formFactor,
     ).extension<LineupThemeRoles>()!;
     final large = LineupTheme.forName(
       LineupThemeName.emberSteel,
-      androidTv: true,
+      formFactor: profileFor(true).formFactor,
       largeFocusIndicators: true,
     ).extension<LineupThemeRoles>()!;
 
