@@ -276,29 +276,120 @@ void CorrelationAndPressure(WindowsNativePlayer& player, native_test::Messenger&
     NativePlayerTestAccess::Queue(player, generation, {{Value("type"), Value("property")}});
   }
   NativePlayerTestAccess::Drain(player);
-  Check(messenger.events.size() == 256, "property pressure stays bounded");
+  Check(messenger.events.size() == 255, "property pressure stays bounded");
   Check(std::count_if(messenger.events.begin(), messenger.events.end(), [](const Map& event) {
     return Has(event, "type", Value("stopResult"));
   }) == 1, "property pressure preserves critical acknowledgment");
   messenger.events.clear();
   NativePlayerTestAccess::Queue(player, generation, {{Value("type"), Value("trackResult")}});
-  for (int i = 0; i < 255; ++i) {
+  for (int i = 0; i < 254; ++i) {
     NativePlayerTestAccess::Queue(player, generation, {{Value("type"), Value("state")}});
   }
   NativePlayerTestAccess::Queue(player, generation, {{Value("type"), Value("property")}});
   NativePlayerTestAccess::Drain(player);
-  Check(messenger.events.size() == 256 && Has(messenger.events[0], "type", Value("trackResult")),
+  Check(messenger.events.size() == 255 && Has(messenger.events[0], "type", Value("trackResult")),
         "incoming property cannot evict non-property acknowledgment");
   messenger.events.clear();
   NativePlayerTestAccess::Queue(player, generation, {{Value("type"), Value("trackResult")}});
-  for (int i = 0; i < 256; ++i) {
+  for (int i = 0; i < 255; ++i) {
     NativePlayerTestAccess::Queue(player, generation, {{Value("type"), Value("state")}});
   }
   NativePlayerTestAccess::Drain(player);
-  Check(messenger.events.size() == 256 &&
+  Check(messenger.events.size() == 255 &&
         std::none_of(messenger.events.begin(), messenger.events.end(), [](const Map& event) {
           return Has(event, "type", Value("trackResult"));
         }), "non-property saturation evicts oldest ack; caller timeout/retry is required");
+  messenger.events.clear();
+}
+
+// Exercise the real adapter conversion + Flutter method codec around the
+// core's reserved cue slot. Portable core tests cannot establish this boundary.
+void CueReservation(WindowsNativePlayer& player, native_test::Messenger& messenger) {
+  const auto generation = NativePlayerTestAccess::Generation(player);
+  const flutter::EncodableList segments{Value(Map{{Value("text"), Value("fixture")}})};
+  const flutter::EncodableList lines{Value(segments)};
+  const Value fixture_cues = Value(flutter::EncodableList{
+      Value(Map{{Value("align"), Value(int64_t{2})}, {Value("lines"), Value(lines)}})});
+  const Value empty_cues = Value(flutter::EncodableList{});
+  const auto completion = [&](int64_t id) {
+    NativePlayerTestAccess::Queue(player, generation,
+        {{Value("type"), Value("stopResult")}, {Value("stopId"), Value(id)},
+         {Value("success"), Value(true)}});
+  };
+  const auto cue = [&](bool clear) {
+    NativePlayerTestAccess::Queue(player, generation,
+        {{Value("type"), Value("property")}, {Value("name"), Value("subtitle-cues")},
+         {Value("loadId"), Value(int64_t{77})},
+         {Value("value"), clear ? empty_cues : fixture_cues}});
+  };
+  const auto telemetry = [&] {
+    NativePlayerTestAccess::Queue(player, generation,
+        {{Value("type"), Value("property")}, {Value("name"), Value("time-pos")},
+         {Value("loadId"), Value(int64_t{77})}, {Value("value"), Value(1.0)}});
+  };
+  const auto is_cue = [](const Map& event) {
+    return Has(event, "type", Value("property")) &&
+           Has(event, "name", Value("subtitle-cues"));
+  };
+  const auto check_completions = [&](size_t cue_position, int64_t first_id, const Value& cues) {
+    Check(messenger.events.size() == 256, "adapter retains 255 completions plus one reserved cue");
+    int64_t id = first_id;
+    for (size_t i = 0; i < messenger.events.size(); ++i) {
+      const auto& event = messenger.events[i];
+      if (i == cue_position) {
+        Check(is_cue(event) && Has(event, "loadId", Value(int64_t{77})) &&
+              Has(event, "value", cues), "cue FIFO position/load/payload survive adapter codec");
+      } else {
+        Check(Has(event, "type", Value("stopResult")) &&
+              Has(event, "stopId", Value(id++)) && Has(event, "success", Value(true)),
+              "all admitted completion identities retain FIFO order through adapter codec");
+      }
+    }
+    Check(id == first_id + 255, "all 255 completion identities checked");
+  };
+
+  for (int64_t id = 1; id <= 255; ++id) completion(id);
+  cue(false);
+  NativePlayerTestAccess::Drain(player);
+  check_completions(255, 1, fixture_cues);
+  messenger.events.clear();
+
+  for (int64_t id = 1; id <= 127; ++id) completion(id);
+  cue(false);
+  for (int64_t id = 128; id <= 255; ++id) completion(id);
+  cue(true);
+  cue(true);
+  telemetry();  // Cannot displace an acknowledgment or the pending clear.
+  NativePlayerTestAccess::Drain(player);
+  check_completions(127, 1, empty_cues);
+  messenger.events.clear();
+
+  cue(true);
+  for (int i = 0; i < 255; ++i) telemetry();
+  for (int64_t id = 1; id <= 300; ++id) completion(id);
+  for (int i = 0; i < 300; ++i) telemetry();
+  NativePlayerTestAccess::Drain(player);
+  check_completions(0, 46, empty_cues);
+  messenger.events.clear();
+
+  // Flush stale wakeups from the synchronous pressure cases, then require a
+  // cue-only batch to arrive through the actual HWND message/wakeup route.
+  MSG pending{};
+  while (::PeekMessage(&pending, nullptr, 0, 0, PM_REMOVE)) {
+    ::TranslateMessage(&pending);
+    ::DispatchMessage(&pending);
+  }
+  messenger.events.clear();
+  cue(false);
+  Check(messenger.events.empty(), "cue event waits for platform message processing");
+  native_test::PumpUntil([&] {
+    return std::any_of(messenger.events.begin(), messenger.events.end(), [&](const Map& event) {
+      return is_cue(event) && Has(event, "loadId", Value(int64_t{77})) &&
+             Has(event, "value", fixture_cues);
+    });
+  }, "cue-only batch wakes platform and arrives through production codec");
+  Check(std::count_if(messenger.events.begin(), messenger.events.end(), is_cue) == 1,
+        "cue-only wakeup delivers one pending cue");
   messenger.events.clear();
 }
 
@@ -468,6 +559,7 @@ int main() {
                                TestOperations());
     window.player = &player;
     CorrelationAndPressure(player, messenger);
+    CueReservation(player, messenger);
     Commands(player, messenger);
     Lifecycle(window, player, messenger);
     window.player = nullptr;
