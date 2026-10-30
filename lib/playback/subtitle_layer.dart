@@ -267,6 +267,7 @@ class _SubtitlePanelReporterRenderObject extends RenderProxyBox {
     }
     _presentationKey = presentationKey;
     _feather = feather;
+    _avoidance.markNeedsPaint();
     _scheduleReport();
   }
 
@@ -291,6 +292,7 @@ class _SubtitlePanelReporterRenderObject extends RenderProxyBox {
   @override
   void performLayout() {
     super.performLayout();
+    _avoidance.markNeedsPaint();
     _scheduleReport();
   }
 

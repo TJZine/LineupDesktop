@@ -331,6 +331,95 @@ void main() {
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
   });
 
+  testWidgets('SD-17 raster keeps cue clear during panel motion', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    addTearDown(() {
+      fixture.player.closeOverlay();
+      fixture.dispose();
+    });
+    await fixture.lineup.updateSettings(
+      (settings) => settings.copyWith(
+        subtitleStyle: settings.subtitleStyle.copyWith(
+          textColor: SubtitleColor.cyan,
+          edge: SubtitleEdge.none,
+          windowOpacity: SubtitleBoxOpacity.off,
+          backgroundOpacity: SubtitleBoxOpacity.off,
+        ),
+      ),
+    );
+    fixture.native.subtitleCues.value = SubtitleCues([
+      SubtitleCue(
+        align: 1,
+        lines: [
+          [const SubtitleSegment(text: 'Current frame cue')],
+        ],
+      ),
+    ]);
+    final captureKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: captureKey,
+        child: MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> expectRasterClearance() async {
+      final pixels = await _captureBoundaryPixels(tester, captureKey);
+      final cue = _cyanBounds(pixels);
+      expect(cue, isNotNull);
+      final panelBox = tester.renderObject<RenderBox>(
+        find.byKey(const Key('player-osd-surface')),
+      );
+      final layerBox = tester.renderObject<RenderBox>(
+        find.byType(SubtitleLayer),
+      );
+      final panelTop = panelBox.localToGlobal(const Offset(0, -55)).dy;
+      final layerTop = layerBox.localToGlobal(Offset.zero).dy;
+      final layerBottom = layerBox
+          .localToGlobal(Offset(0, layerBox.size.height))
+          .dy;
+      final scale = (layerBottom - layerTop) / layerBox.size.height;
+      expect(
+        cue!.bottom,
+        lessThanOrEqualTo(panelTop - .02 * layerBox.size.height * scale + 2),
+      );
+    }
+
+    fixture.player.showOsd();
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectRasterClearance();
+
+    await tester.pumpAndSettle();
+    fixture.player.showNowPlaying();
+    fixture.native.subtitleCues.value = SubtitleCues([
+      SubtitleCue(
+        align: 1,
+        lines: [
+          [const SubtitleSegment(text: 'Cue arrived during expansion')],
+        ],
+      ),
+    ]);
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectRasterClearance();
+
+    fixture.player.showOsd();
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectRasterClearance();
+
+    fixture.player.closeOverlay();
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectRasterClearance();
+  });
+
   for (final tv in [false, true]) {
     for (final reduceMotion in [false, true]) {
       testWidgets('channel tag motion tv=$tv reduceMotion=$reduceMotion', (
@@ -9398,6 +9487,53 @@ Future<void> _r2Capture(WidgetTester tester, GlobalKey key, String name) async {
         .writeAsBytes(bytes!.buffer.asUint8List());
     image.dispose();
   });
+}
+
+typedef _Raster = ({Uint8List pixels, int width, int height});
+
+Future<_Raster> _captureBoundaryPixels(
+  WidgetTester tester,
+  GlobalKey key,
+) async {
+  final raster = await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final result = (
+      pixels: bytes!.buffer.asUint8List(),
+      width: image.width,
+      height: image.height,
+    );
+    image.dispose();
+    return result;
+  });
+  return raster!;
+}
+
+Rect? _cyanBounds(_Raster raster) {
+  var left = raster.width;
+  var top = raster.height;
+  var right = -1;
+  var bottom = -1;
+  for (var y = 0; y < raster.height; y++) {
+    for (var x = 0; x < raster.width; x++) {
+      final index = (y * raster.width + x) * 4;
+      final red = raster.pixels[index];
+      final green = raster.pixels[index + 1];
+      final blue = raster.pixels[index + 2];
+      final alpha = raster.pixels[index + 3];
+      if (red < 100 && green > 120 && blue > 120 && alpha > 100) {
+        left = math.min(left, x);
+        top = math.min(top, y);
+        right = math.max(right, x);
+        bottom = math.max(bottom, y);
+      }
+    }
+  }
+  return right < 0
+      ? null
+      : Rect.fromLTRB(left.toDouble(), top.toDouble(), right + 1, bottom + 1);
 }
 
 _Fixture _amendmentFixture({
