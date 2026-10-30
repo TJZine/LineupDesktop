@@ -11,8 +11,14 @@ class PlayerEventQueueTest {
         QueuedEvent(1, null, mapOf("type" to "property", "name" to "subtitle-cues", "value" to value))
 
     @Test
-    fun clearSlotBecomesCurrentCueBeforeSelectedTrackSnapshotAtCapacity() {
+    fun successfulResultCanDrainBeforeCueReplacesClearAheadOfTrackSnapshotAtCapacity() {
         val queue = PlayerEventQueue()
+        // The execution reply can drain in an earlier batch, before the engine
+        // independently observes the cue and selected track.
+        queue.add(QueuedEvent(1, null, mapOf("type" to "trackResult",
+            "requestId" to 1, "loadId" to 1, "success" to true)))
+        assertEquals(true, queue.take()!!.value["success"])
+        assertEquals(0, queue.size)
         repeat(127) { queue.add(event(it, "trackResult")) }
         queue.add(cues(emptyList()))
         queue.add(QueuedEvent(1, null, mapOf("id" to 127, "type" to "property",

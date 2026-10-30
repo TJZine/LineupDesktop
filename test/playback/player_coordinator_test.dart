@@ -140,6 +140,60 @@ void main() {
       });
       await load();
     });
+    for (final batch in ['clear-delivered', 'clear-coalesced']) {
+      for (final completion in ['before-cue', 'after-cue', 'after-track']) {
+        test(
+          'successful selection separates execution and observation: $batch $completion',
+          () async {
+            await tracks(true);
+            await cues('fixture A');
+            final selection = coordinator.selectTrack(
+              PlayerTrackType.subtitle,
+              2,
+            );
+            await pumpEventQueue(times: 2);
+            final request = calls.lastWhere((c) => c.method == 'selectTrack');
+            if (batch == 'clear-delivered') await cues(null);
+            if (completion == 'before-cue') {
+              await result(request, true);
+              await selection;
+            }
+            await cues('fixture B');
+            if (completion == 'after-cue') {
+              await result(request, true);
+              await selection;
+            }
+            await tracks(true, id: 2);
+            if (completion == 'after-track') {
+              await result(request, true);
+              await selection;
+            }
+            expect(current(player.subtitleCues), 'fixture B');
+            expect(current(coordinator.subtitleCues), 'fixture B');
+          },
+        );
+      }
+      test(
+        'automatic fresh cue precedes selected ID without a Dart request: $batch',
+        () async {
+          await tracks(true);
+          await cues('fixture A');
+          if (batch == 'clear-delivered') await cues(null);
+          await cues('fixture B');
+          await tracks(true, id: 2);
+          expect(current(player.subtitleCues), 'fixture B');
+          expect(current(coordinator.subtitleCues), 'fixture B');
+        },
+      );
+    }
+    test('automatic native clear without a replacement cue invalidates prior content', () async {
+      await tracks(true);
+      await cues('fixture A');
+      await cues(null);
+      await tracks(true, id: 2);
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      expect(coordinator.subtitleCues.value.isEmpty, isTrue);
+    });
     for (final id in <int?>[null, 2]) {
       for (final failure in ['command_queue_full', 'trackResult']) {
         test(
