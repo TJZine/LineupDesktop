@@ -1201,6 +1201,7 @@ class _LineupShellState extends State<LineupShell> {
     );
     final settingsView = SettingsView(
       controller: controller,
+      subtitleAppearance: _player.subtitleAppearance,
       focusNode: _settingsFocus,
       menuFocusNode: _settingsMenuFocus,
       onOpenMenu: _openAppMenu,

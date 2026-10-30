@@ -157,6 +157,52 @@ selected. Channels uses the persistent management rail. Settings uses one
 immersive category rail and, when playback is active, keeps the same Player
 surface behind it.
 
+## Subtitle appearance
+
+Open **Settings → Subtitles** to change the global subtitle style. The preview
+uses sample text at its actual playback size, independent of the application's
+text size. It stays visible while the controls scroll. On narrow screens or
+with large application text, its crop shrinks to leave room for the focused
+control; the subtitle text itself is not scaled down.
+
+Choose **Standard**, **Drop shadow**, **Classic box**, **High contrast**, or
+**Light**, then adjust Size (50%–300%), Position, text color and opacity, Font,
+Bold, Edge style and color, and the Background and Window. Background paints
+behind each line; Window paints one box behind the caption. Their color controls
+become available when their opacity is above Off. Edge color is available when
+Edge style is above None. The seven fonts are bundled and require no download.
+**Custom** means the current look does not match a preset. Presets change only
+the look; they preserve Size, Position, Font, Bold and both subtitle toggles.
+
+Changes appear immediately in the preview while saving. A save failure restores
+the previous value and shows feedback under its control. Later queued choices
+remain in order. **Reset to standard** restores all Lineup subtitle preferences
+except **Use device subtitle settings**, which it preserves.
+
+On Android, **Use device subtitle settings** uses the caption style and size
+from Android settings for all subtitle formats. Position and Bold stay in
+Lineup. The Lineup look, font and size controls are disabled while device style
+is on. Lineup still uses that style when Android's captions switch is off. Until
+a device style is available, the preview uses the saved Lineup style; a failed
+refresh retains the latest valid device style. Other platforms use Lineup's
+settings.
+
+**Apply my style to styled subtitles** makes ASS/SSA dialogue use your look.
+Signs and author positioning are dropped. Leave it off to preserve authored
+styling. The settings apply by track type:
+
+| Track kind | Windows / macOS | Android TV, Fire OS, phone/tablet |
+| --- | --- | --- |
+| Plain text (SRT, WebVTT, mov_text, CEA-608/708) | All appearance settings; WebVTT cue positions are unavailable | All appearance settings; WebVTT and CEA-608 positions map to top, middle or bottom |
+| ASS/SSA | Size; all appearance settings when Apply my style is on | Size; all appearance settings when Apply my style is on |
+| Image subtitles (PGS, VobSub, DVB) | Size and Position; large subtitles may extend beyond the picture | Size and Position; subtitles stay inside the picture |
+
+On TV, Right enters the subtitle controls from the category rail, Up/Down move
+between enabled controls, and Left returns to Subtitles in the rail. Select
+opens a menu at the current value; when the status is Custom it starts at
+Standard. Select applies a choice, and Back cancels the menu without changing
+the preview. A control stays focused and available during its own save.
+
 ## Guide
 
 Lineup distinguishes four identities that may be visible at the same time:

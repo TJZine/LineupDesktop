@@ -410,6 +410,7 @@ String _categoryLabel(SettingsCategory category) => switch (category) {
   SettingsCategory.appearance => 'Appearance',
   SettingsCategory.guide => 'Guide',
   SettingsCategory.playback => 'Playback',
+  SettingsCategory.subtitles => 'Subtitles',
   SettingsCategory.accessibility => 'Accessibility',
   SettingsCategory.account => 'Account',
   SettingsCategory.support => 'Support',
@@ -419,6 +420,8 @@ String _categoryContent(SettingsCategory category) => switch (category) {
   SettingsCategory.appearance => 'Use title artwork',
   SettingsCategory.guide => 'Show now playing in Guide',
   SettingsCategory.playback => 'DVR playback controls',
+  SettingsCategory.subtitles =>
+    'Applies to text subtitles. Image subtitles follow Size and Position only.',
   SettingsCategory.accessibility => 'Large focus indicators',
   SettingsCategory.account => 'Signed-in Plex account',
   SettingsCategory.support => 'Diagnostics',
