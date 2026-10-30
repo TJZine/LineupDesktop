@@ -3406,7 +3406,8 @@ class _ProgramCellContent extends StatelessWidget {
         );
         final time =
             '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
-        final liveWidth = current ? 7 + gap : 0.0;
+        final showLiveIndicator = current && constraints.maxWidth >= 7 + gap;
+        final liveWidth = showLiveIndicator ? 7 + gap : 0.0;
         final titleWidth = episodeCode == null
             ? 0.0
             : _textWidth(primaryTitle, titleStyle, scaler, direction);
@@ -3434,7 +3435,7 @@ class _ProgramCellContent extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  if (current) ...[
+                  if (showLiveIndicator) ...[
                     Container(
                       key: const Key('guide-airing-dot'),
                       width: 7,

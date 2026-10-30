@@ -157,6 +157,91 @@ void main() {
     });
   }
 
+  for (final duration in [
+    const Duration(minutes: 3),
+    const Duration(hours: 24),
+  ]) {
+    final narrow = duration.inMinutes == 3;
+    testWidgets(
+      'current Guide cell ${narrow ? 'omits live marker below 19 cu' : 'retains normal-width live marker'}',
+      (tester) async {
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = const Size(1280, 720);
+        addTearDown(tester.view.reset);
+        final anchor = DateTime(2026, 10, 30, 12);
+        final now = anchor.add(const Duration(minutes: 1));
+        final lineup = _Lineup(
+          1,
+          scenario: LineupScenario(
+            settings: const LineupSettings(reduceMotion: true),
+            channels: [
+              Channel(
+                id: 'live',
+                number: 1,
+                name: 'Live',
+                source: ManualSource([
+                  ChannelItem(
+                    id: 'current',
+                    title: 'Current program',
+                    duration: duration,
+                  ),
+                ]),
+                playbackMode: PlaybackMode.sequential,
+                anchor: anchor,
+                shuffleSeed: 0,
+              ),
+            ],
+          ),
+        );
+        addTearDown(lineup.dispose);
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        addTearDown(guide.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: _guideCanvasBuilder,
+            home: GuideView(
+              controller: guide,
+              onClose: (_, _) {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final current = guide
+            .row('live')
+            .programs
+            .singleWhere((p) => p.isCurrentAt(now));
+        final cell = find.byKey(ValueKey(current.id));
+        expect(cell, findsOneWidget);
+        // The production cell's 9-cu horizontal padding and 1-cu border
+        // leave less than the dot + gap budget in the short-program case.
+        final contentWidth = tester.getSize(cell).width - 2 * (9 + 1);
+        expect(
+          contentWidth,
+          narrow ? allOf(greaterThan(0), lessThan(19)) : greaterThan(19),
+        );
+        expect(
+          find.descendant(
+            of: cell,
+            matching: find.byKey(const Key('guide-airing-dot')),
+          ),
+          narrow ? findsNothing : findsOneWidget,
+        );
+        final semantics = tester.widget<Semantics>(
+          find.descendant(of: cell, matching: find.byType(Semantics)).first,
+        );
+        expect(semantics.properties.label, endsWith(', currently airing'));
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('Guide toolbar icons expose explicit accessible names', (
     tester,
   ) async {
