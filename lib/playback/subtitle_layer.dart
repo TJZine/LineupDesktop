@@ -68,7 +68,44 @@ final class SubtitlePanelAvoidance
   SubtitlePanelAvoidance() : super(const SubtitlePanelAvoidanceState.empty());
 
   final _panels = <Object, Rect>{};
+  final _reporters = <_SubtitlePanelReporterRenderObject>{};
+  final _paintInvalidation = ChangeNotifier();
   var _disposed = false;
+
+  Listenable get repaint => _paintInvalidation;
+
+  void markNeedsPaint() {
+    if (_disposed) return;
+    _paintInvalidation.notifyListeners();
+  }
+
+  /// Reads the panel transforms that are current for this paint pass.
+  ///
+  /// The notifier value is still published after layout for ordinary widget
+  /// invalidation, but a transformed panel can move without a new layout or
+  /// a reporter paint. Reading the attached reporters here keeps subtitle
+  /// clearance tied to the same frame as the panel's actual presentation.
+  double? get currentHighestPanelTop {
+    if (_disposed || _reporters.isEmpty) return null;
+    double? top;
+    var hasCurrentBounds = false;
+    for (final reporter in _reporters) {
+      final bounds = reporter.currentBounds;
+      if (bounds == null) continue;
+      hasCurrentBounds = true;
+      top = top == null ? bounds.top : math.min(top, bounds.top);
+    }
+    return hasCurrentBounds ? top : value.highestPanelTop;
+  }
+
+  void _attachReporter(_SubtitlePanelReporterRenderObject reporter) {
+    if (_disposed) return;
+    _reporters.add(reporter);
+  }
+
+  void _detachReporter(_SubtitlePanelReporterRenderObject reporter) {
+    _reporters.remove(reporter);
+  }
 
   void update(Object id, Rect bounds) {
     if (_disposed) return;
@@ -88,14 +125,65 @@ final class SubtitlePanelAvoidance
     value = SubtitlePanelAvoidanceState._(
       List<Rect>.unmodifiable(_panels.values),
     );
+    markNeedsPaint();
   }
 
   @override
   void dispose() {
     _disposed = true;
     _panels.clear();
+    _reporters.clear();
+    _paintInvalidation.dispose();
     super.dispose();
   }
+}
+
+/// Repaints subtitle clearance while an ancestor transition moves a panel.
+/// The child is not rebuilt; the painter reads the current render geometry.
+class SubtitlePanelAnimationRepaint extends StatefulWidget {
+  const SubtitlePanelAnimationRepaint({
+    required this.avoidance,
+    required this.animation,
+    required this.child,
+    super.key,
+  });
+
+  final SubtitlePanelAvoidance avoidance;
+  final Listenable animation;
+  final Widget child;
+
+  @override
+  State<SubtitlePanelAnimationRepaint> createState() =>
+      _SubtitlePanelAnimationRepaintState();
+}
+
+class _SubtitlePanelAnimationRepaintState
+    extends State<SubtitlePanelAnimationRepaint> {
+  @override
+  void initState() {
+    super.initState();
+    widget.animation.addListener(_onTick);
+  }
+
+  @override
+  void didUpdateWidget(SubtitlePanelAnimationRepaint oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.animation, widget.animation)) {
+      oldWidget.animation.removeListener(_onTick);
+      widget.animation.addListener(_onTick);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.animation.removeListener(_onTick);
+    super.dispose();
+  }
+
+  void _onTick() => widget.avoidance.markNeedsPaint();
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Reports a panel's painted top, including the material painter's feather,
@@ -143,6 +231,19 @@ class _SubtitlePanelReporterRenderObject extends RenderProxyBox {
   double _feather;
   var _reportScheduled = false;
 
+  Rect? get currentBounds {
+    if (!attached || !hasSize) return null;
+    final presentation = _presentationKey.currentContext?.findRenderObject();
+    if (presentation is! RenderBox || !presentation.hasSize) return null;
+    final topLeft = presentation.globalToLocal(
+      localToGlobal(Offset(0, -_feather)),
+    );
+    final topRight = presentation.globalToLocal(
+      localToGlobal(Offset(size.width, -_feather)),
+    );
+    return Rect.fromPoints(topLeft, topRight);
+  }
+
   void update({
     required SubtitlePanelAvoidance avoidance,
     required GlobalKey presentationKey,
@@ -150,10 +251,12 @@ class _SubtitlePanelReporterRenderObject extends RenderProxyBox {
   }) {
     if (!identical(_avoidance, avoidance)) {
       final previous = _avoidance;
+      previous._detachReporter(this);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         previous.remove(this);
       });
       _avoidance = avoidance;
+      _avoidance._attachReporter(this);
     }
     _presentationKey = presentationKey;
     _feather = feather;
@@ -166,16 +269,16 @@ class _SubtitlePanelReporterRenderObject extends RenderProxyBox {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _reportScheduled = false;
       if (!attached || !hasSize) return;
-      final presentation = _presentationKey.currentContext?.findRenderObject();
-      if (presentation is! RenderBox || !presentation.hasSize) return;
-      final topLeft = presentation.globalToLocal(
-        localToGlobal(Offset(0, -_feather)),
-      );
-      final topRight = presentation.globalToLocal(
-        localToGlobal(Offset(size.width, -_feather)),
-      );
-      _avoidance.update(this, Rect.fromPoints(topLeft, topRight));
+      final bounds = currentBounds;
+      if (bounds != null) _avoidance.update(this, bounds);
     });
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _avoidance._attachReporter(this);
+    _scheduleReport();
   }
 
   @override
@@ -194,6 +297,7 @@ class _SubtitlePanelReporterRenderObject extends RenderProxyBox {
   @override
   void detach() {
     final avoidance = _avoidance;
+    avoidance._detachReporter(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!attached) avoidance.remove(this);
     });
@@ -254,6 +358,7 @@ class _SubtitleLayerState extends State<SubtitleLayer> {
                             ? font.fontFamily
                             : 'Inter',
                         avoidance: avoidance,
+                        panelAvoidance: widget.avoidance,
                       ),
                       child: const SizedBox.expand(),
                     );
@@ -278,11 +383,13 @@ class SubtitlePainter extends CustomPainter {
     required this.appearance,
     required this.fontFamily,
     this.avoidance,
-  });
+    this.panelAvoidance,
+  }) : super(repaint: panelAvoidance?.repaint);
   final SubtitleCues cues;
   final SubtitleAppearance appearance;
   final String fontFamily;
   final SubtitlePanelAvoidanceState? avoidance;
+  final SubtitlePanelAvoidance? panelAvoidance;
 
   static const outlineStrokeEm = .10;
   static const shadowOffsetEm = .06;
@@ -372,9 +479,10 @@ class SubtitlePainter extends CustomPainter {
   }
 
   Rect _paintedBounds(TextPainter text, Offset offset, double em) {
-    var bounds = offset & text.size;
+    final textBounds = offset & text.size;
+    var bounds = textBounds;
     if (Color(appearance.windowColor).a > 0) {
-      bounds = bounds.inflate(.25 * em);
+      bounds = bounds.expandToInclude(textBounds.inflate(.25 * em));
     }
     if (Color(appearance.backgroundColor).a > 0) {
       for (final line in _lineBounds(text, offset)) {
@@ -395,7 +503,7 @@ class SubtitlePainter extends CustomPainter {
         SubtitleEdge.raised || SubtitleEdge.depressed => .03,
         SubtitleEdge.none => 0.0,
       };
-      bounds = bounds.inflate(edgeOutset * em);
+      bounds = bounds.expandToInclude(textBounds.inflate(edgeOutset * em));
     }
     return bounds;
   }
@@ -424,6 +532,10 @@ class SubtitlePainter extends CustomPainter {
     return math.max(0, bounds.bottom - (panelTop - .02 * size.height));
   }
 
+  double? get panelTopForPaint => panelAvoidance == null
+      ? avoidance?.highestPanelTop
+      : panelAvoidance!.currentHighestPanelTop;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
@@ -443,13 +555,16 @@ class SubtitlePainter extends CustomPainter {
         continue;
       }
       final text = layout(cue, size);
-      var offset = origin(cue, size, text.size);
-      final panelTop = avoidance?.highestPanelTop;
+      final normalOffset = origin(cue, size, text.size);
+      var offset = normalOffset;
+      final panelTop = panelTopForPaint;
       if (panelTop != null && (cue.align - 1) ~/ 3 == 0) {
-        offset = offset.translate(
-          0,
-          -clearanceLift(cue, size, panelTop: panelTop),
+        final bounds = _paintedBounds(text, normalOffset, em);
+        final lift = math.max(
+          0.0,
+          bounds.bottom - (panelTop - .02 * size.height),
         );
+        offset = normalOffset.translate(0, -lift);
       }
       canvas.drawRect(
         (offset & text.size).inflate(.25 * em),
@@ -526,5 +641,6 @@ class SubtitlePainter extends CustomPainter {
       !identical(cues, oldDelegate.cues) ||
       !identical(appearance, oldDelegate.appearance) ||
       !identical(avoidance, oldDelegate.avoidance) ||
+      !identical(panelAvoidance, oldDelegate.panelAvoidance) ||
       fontFamily != oldDelegate.fontFamily;
 }

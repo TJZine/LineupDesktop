@@ -806,12 +806,16 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                       if (childOverlay != PlayerOverlay.osd) {
                         return transitioned;
                       }
-                      return SlideTransition(
-                        position: Tween(
-                          begin: const Offset(0, 1),
-                          end: Offset.zero,
-                        ).animate(fade),
-                        child: transitioned,
+                      return SubtitlePanelAnimationRepaint(
+                        avoidance: _subtitleAvoidance,
+                        animation: fade,
+                        child: SlideTransition(
+                          position: Tween(
+                            begin: const Offset(0, 1),
+                            end: Offset.zero,
+                          ).animate(fade),
+                          child: transitioned,
+                        ),
                       );
                     },
                     child: _OverlayTextTheme(

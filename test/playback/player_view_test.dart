@@ -241,28 +241,63 @@ void main() {
     final reporter = tester.widget<SubtitlePanelReporter>(
       find.byType(SubtitlePanelReporter),
     );
+    expect(find.byType(SubtitlePanelAnimationRepaint), findsOneWidget);
     final osdTop = reporter.avoidance.value.highestPanelTop!;
+
+    void expectCurrentPanelTop() {
+      final panelBox = tester.renderObject<RenderBox>(
+        find.byKey(const Key('player-osd-surface')),
+      );
+      final layerBox = tester.renderObject<RenderBox>(
+        find.byType(SubtitleLayer),
+      );
+      final expected = layerBox.globalToLocal(
+        panelBox.localToGlobal(const Offset(0, -55)),
+      );
+      final paint =
+          tester
+                  .widget<CustomPaint>(
+                    find.descendant(
+                      of: find.byType(SubtitleLayer),
+                      matching: find.byType(CustomPaint),
+                    ),
+                  )
+                  .painter!
+              as SubtitlePainter;
+      expect(paint.panelTopForPaint, closeTo(expected.dy, .5));
+      expect(
+        reporter.avoidance.currentHighestPanelTop,
+        closeTo(expected.dy, .5),
+      );
+    }
+
+    expectCurrentPanelTop();
 
     fixture.player.showNowPlaying();
     await tester.pump(const Duration(milliseconds: 100));
     expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
     final transitionTop = reporter.avoidance.value.highestPanelTop!;
     expect(transitionTop, lessThanOrEqualTo(osdTop));
 
     await tester.pumpAndSettle();
     expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
     final nowPlayingTop = reporter.avoidance.value.highestPanelTop!;
     expect(nowPlayingTop, lessThan(osdTop));
 
     fixture.player.showOsd();
     await tester.pump(const Duration(milliseconds: 100));
     expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
     await tester.pumpAndSettle();
     expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
 
     fixture.player.closeOverlay();
     await tester.pump(const Duration(milliseconds: 100));
     expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
     await tester.pumpAndSettle();
     expect(reporter.avoidance.value.panels, isEmpty);
   });

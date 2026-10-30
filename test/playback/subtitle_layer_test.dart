@@ -101,6 +101,14 @@ void main() {
     );
     final bottom = fixture(align: 1).cues.single;
     final bounds = p.renderedBlockBounds(bottom, size);
+    final text = p.layout(bottom, size);
+    final textBounds = p.origin(bottom, size, text.size) & text.size;
+    expect(
+      bounds.bottom,
+      closeTo(textBounds.bottom + .25 * p.emFor(size), .00001),
+    );
+    expect(bounds.left, closeTo(textBounds.left - .25 * p.emFor(size), .00001));
+    text.dispose();
     expect(
       p.clearanceLift(bottom, size, panelTop: bounds.bottom - 10),
       closeTo(10 + .02 * size.height, .00001),
