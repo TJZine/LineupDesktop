@@ -64,6 +64,88 @@ TransitionBuilder _playerCanvasBuilderFor(bool tv) =>
 void main() {
   tearDown(debugResetClearLogoCache);
 
+  testWidgets(
+    'hidden progress leaves Player subtree idle and visible OSD progress stays live',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        overlayTimeout: const Duration(minutes: 1),
+        dvrControlsEnabled: true,
+      );
+      addTearDown(fixture.dispose);
+      await fixture.player.tune('channel');
+      fixture.native.emitState(PlayerState.playing);
+      await tester.pump();
+      await tester.pump();
+      fixture.player.closeOverlay();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final rebuilt = <String>[];
+      debugOnRebuildDirtyWidget = (element, _) =>
+          rebuilt.add(element.widget.runtimeType.toString());
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      fixture.native.emitState(
+        PlayerState.playing,
+        at: const Duration(minutes: 11),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(fixture.player.position, const Duration(minutes: 11));
+      expect(rebuilt, isEmpty);
+      fixture.native.emitState(
+        PlayerState.buffering,
+        at: const Duration(minutes: 11),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(rebuilt, contains('PlayerView'));
+      expect(find.bySemanticsLabel('Buffering playback'), findsOneWidget);
+      fixture.native.emitState(
+        PlayerState.playing,
+        at: const Duration(minutes: 11),
+      );
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      final before = tester.widget<Slider>(find.byType(Slider)).value;
+      rebuilt.clear();
+      fixture.native.emitState(
+        PlayerState.playing,
+        at: const Duration(minutes: 12),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.widget<Slider>(find.byType(Slider)).value,
+        greaterThan(before),
+      );
+      expect(rebuilt, isNot(contains('PlayerView')));
+      expect(rebuilt, isNot(contains('_Osd')));
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+      rebuilt.clear();
+      fixture.native.emitState(
+        PlayerState.playing,
+        at: const Duration(minutes: 13),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.widget<Slider>(find.byType(Slider)).value,
+        greaterThan(before),
+      );
+      expect(rebuilt, isNot(contains('PlayerView')));
+      expect(rebuilt, isNot(contains('_NowPlaying')));
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
   for (final tv in [false, true]) {
     for (final reduceMotion in [false, true]) {
       testWidgets('channel tag motion tv=$tv reduceMotion=$reduceMotion', (
@@ -2002,6 +2084,7 @@ void main() {
       ),
     );
     await fixture.player.tune('channel');
+    unawaited(fixture.player.nextChannel());
     final step = fixture.player.nextChannel();
     fixture.native._events.add(
       PlayerEvent(
