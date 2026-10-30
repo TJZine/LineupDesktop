@@ -77,6 +77,11 @@ Each item: **Recommended** (what I ask you to approve), then the alternatives re
     - At short heights or large text, **shrink only the preview's visible crop** until one complete focused row fits in the scroll viewport, including its focus frame and any save feedback.
     - Never reduce the `SubtitleLayer` reference-frame height or the subtitle em size to make room.
     - This was approved by the maintainer on October 29. U1 adds matched captures at the A2/A boundary and at text scale 2.
+  - **Conditional heading scroll (maintainer-approved amendment, October 29, 2026):**
+    - Only when the focused row, its save feedback and focus clearance still cannot fit after the preview crop and its adjoining gap reach zero, the Subtitles heading and helper join the detail scroll content, as shown in `ui/adaptive-feedback/compare-saving.png` and `compare-error.png`.
+    - The global Settings header, rail, typography, controls and rows remain unchanged. Every normal fitting layout must render pixel-identically.
+    - Entering or leaving this exception must keep the focused control fully visible and focused. The layout must not oscillate as Saving or error feedback appears and disappears on the same row.
+    - U1 must test both transition focus/visibility and same-row feedback stability. The `SubtitleLayer` reference-frame height and subtitle em size remain unchanged.
   - **What it shows (amended, R-3):**
     - **The displayed Settings value,** including accepted selections whose save is still pending, like every other Settings row. Highlighting an option in an open menu never changes it.
     - Back cancels only the open menu. A failed save restores the committed value and recomposes the other pending changes, matching the rows.
