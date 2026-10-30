@@ -611,6 +611,8 @@ void main() {
   for (final config in [
     (size: const Size(1920, 1080), text: 1.0, tv: false),
     (size: const Size(1280, 720), text: 1.0, tv: false),
+    (size: const Size(1260, 720), text: 1.0, tv: false),
+    (size: const Size(1262, 720), text: 1.0, tv: false),
     (size: const Size(721, 720), text: 1.0, tv: false),
     (size: const Size(412, 915), text: 1.0, tv: false),
     (size: const Size(1920, 1080), text: 2.0, tv: false),
@@ -641,6 +643,18 @@ void main() {
         tester.element(find.byType(SubtitleLayer)),
       );
       expect(layer.height, closeTo(canvas.shortestSide, .01));
+      final previewRect = tester.getRect(
+        find.byKey(const ValueKey('subtitle-preview')),
+      );
+      final rowsRect = tester.getRect(
+        find.byKey(const ValueKey('subtitle-rows')),
+      );
+      if (config.size.width == 1260) {
+        expect(previewRect.bottom, lessThanOrEqualTo(rowsRect.top));
+      }
+      if (config.size.width == 1262) {
+        expect(previewRect.left, greaterThanOrEqualTo(rowsRect.right));
+      }
       await reveal(tester, field('Size'));
       dropdown<SubtitleSize>(tester, 'Size').focusNode!.requestFocus();
       await tester.pumpAndSettle();

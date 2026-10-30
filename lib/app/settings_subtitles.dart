@@ -95,13 +95,16 @@ extension _SubtitleSettingsPage on _SettingsViewState {
       label,
       Semantics(
         label: label == 'Bold' ? 'Text Bold' : label,
-        child: Switch(
-          key: ValueKey('subtitle-field-${key.name}'),
-          focusNode: _subtitleNode(key),
-          value: value,
-          padding: EdgeInsets.zero,
-          onChanged: (item) =>
-              _changeSubtitle(key, (current) => change(current, item)),
+        child: SizedBox(
+          height: 48,
+          child: Switch(
+            key: ValueKey('subtitle-field-${key.name}'),
+            focusNode: _subtitleNode(key),
+            value: value,
+            padding: EdgeInsets.zero,
+            onChanged: (item) =>
+                _changeSubtitle(key, (current) => change(current, item)),
+          ),
         ),
       ),
       helper: helper,
@@ -513,6 +516,7 @@ class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
                                 child: Text(
                                   widget.label,
                                   style: LineupTypography.control.copyWith(
+                                    height: 1.2,
                                     color: widget.enabled
                                         ? roles.primaryText
                                         : roles.mutedText,
@@ -607,9 +611,9 @@ class _SubtitlePreview extends StatelessWidget {
       border: Border.all(color: LineupTheme.of(context).subtleBorder),
       borderRadius: BorderRadius.circular(8),
     ),
-    clipBehavior: Clip.antiAlias,
     child: LayoutBuilder(
-      builder: (context, constraints) => ClipRect(
+      builder: (context, constraints) => ClipRRect(
+        borderRadius: BorderRadius.circular(8),
         child: OverflowBox(
           alignment: Alignment.bottomCenter,
           minHeight: frameHeight,
