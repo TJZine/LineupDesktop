@@ -40,6 +40,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     required this.guide,
     this.overlayTimeout,
     this.suspendInBackground = false,
+    this.resumeOnInactive = false,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
     subtitleAppearance = SubtitleAppearanceSource(lineup: lineup);
@@ -199,6 +200,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   final GuideController guide;
   final Duration? overlayTimeout;
   final bool suspendInBackground;
+
+  /// Handheld windows can become visible in split-screen without input focus.
+  /// TV keeps its existing resumed-only recovery; desktop remains opted out.
+  final bool resumeOnInactive;
   bool _backgroundSuspended = false;
   // Null means no captured intent; false keeps an explicit/untuned stop from
   // being recaptured as play while native stop acknowledgement is pending.
@@ -881,7 +886,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       case AppLifecycleState.inactive:
         // Observe intent without stopping: native onStop can publish Stopped
         // before Flutter's hidden/paused message reaches this coordinator.
-        if (!_backgroundSuspended) _resumeAfterBackground ??= hasPlaybackIntent;
+        if (_backgroundSuspended && resumeOnInactive) {
+          // Flutter's inactive is visible, including a nonfocused split-screen
+          // pane. Reuse the owned stop/tune queue and current schedule policy.
+          unawaited(setApplicationForeground(true));
+        } else if (!_backgroundSuspended) {
+          _resumeAfterBackground ??= hasPlaybackIntent;
+        }
       case AppLifecycleState.detached:
         break;
     }
@@ -2543,6 +2554,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (_contentGeneration != lineup.contentGeneration ||
         activeChannelChanged) {
+      // A captured handheld visibility intent belongs to the old content
+      // scope, not whichever account/source is published while hidden.
+      if (resumeOnInactive) _resumeAfterBackground = false;
       _contentGeneration = lineup.contentGeneration;
       ++_controlGeneration;
       ++_seekGeneration;

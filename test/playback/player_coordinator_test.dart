@@ -1563,6 +1563,146 @@ void main() {
     }
   });
 
+  group('handheld visible without focus lifecycle', () {
+    test('inactive playing is inert; paused to inactive retunes the current schedule once', () async {
+      final f = _ContinuationFixture(isHandheld: true);
+      addTearDown(f.close);
+      await f.coordinator.tune('channel-0');
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      await pumpEventQueue();
+      expect(f.player.stops, 0);
+      expect(f.player.loads, hasLength(1));
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await pumpEventQueue();
+      expect(f.player.stops, 1);
+      expect(f.player.loads, hasLength(1));
+      expect(await f.coordinator.tune('channel-b'), isFalse);
+      await f.lineup.setCurrentChannel('channel-b');
+      f.now = f.now.add(const Duration(seconds: 310));
+      // Framework synthesizes hidden on the way from paused to inactive.
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+      await pumpEventQueue();
+      expect(f.player.loads, hasLength(1));
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      await pumpEventQueue();
+      expect(f.player.loads, hasLength(2));
+      expect(f.coordinator.currentChannel?.id, 'channel-b');
+      expect(f.lineup.lastPlaybackItemId, 'short-2');
+      expect(f.player.loadStartPositions.last, const Duration(seconds: 70));
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(f.player.loads, hasLength(2));
+    });
+
+    for (final reason in ['idle', 'stop', 'sleep', 'scope', 'disposed']) {
+      test('$reason cannot be revived by visible/inactive recovery', () async {
+        final player = _EventPlayer()
+          ..status = const PlayerStatus(
+            state: PlayerState.idle,
+            message: 'Idle',
+          );
+        final f = _ContinuationFixture(player: player, isHandheld: true);
+        addTearDown(f.close);
+        if (reason != 'idle') await f.coordinator.tune('channel-0');
+        if (reason == 'sleep') {
+          f.coordinator.setSleepTimer(const Duration(minutes: 1));
+        }
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        await f.coordinator.setApplicationForeground(false);
+        if (reason == 'stop') await f.coordinator.stop();
+        if (reason == 'sleep') f.now = f.now.add(const Duration(minutes: 2));
+        if (reason == 'scope') f.lineup.changeContentScope();
+        if (reason == 'disposed') {
+          f.coordinator.dispose();
+          f.disposed = true;
+        }
+        final loads = f.player.loads.length;
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        await pumpEventQueue();
+        expect(f.player.loads, hasLength(loads));
+        if (reason != 'disposed') {
+          expect(f.coordinator.hasPlaybackIntent, isFalse);
+        }
+      });
+    }
+
+    test('visible recovery waits for cleanup and a later hidden transition supersedes it', () async {
+      final p = _PreemptibleLoadPlayer(blockStop: true);
+      final f = _ContinuationFixture(player: p, isHandheld: true);
+      addTearDown(f.close);
+      addTearDown(() {
+        if (!p.releaseStop.isCompleted) p.releaseStop.complete();
+      });
+      final initial = f.coordinator.tune('channel-0');
+      await p.loadStarted.future;
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+      await p.stopStarted.future;
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      await pumpEventQueue();
+      expect(p.loads, hasLength(1));
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+      p.releaseStop.complete();
+      await pumpEventQueue();
+      expect(await initial, isFalse);
+      expect(p.loads, hasLength(1));
+      f.now = f.now.add(const Duration(seconds: 40));
+      f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      await pumpEventQueue();
+      expect(p.loads, hasLength(2));
+      expect(p.loadStartPositions.last, const Duration(seconds: 40));
+    });
+
+    test(
+      'pending user stop cannot be recaptured during inactive recovery',
+      () async {
+        final p = _PreemptibleLoadPlayer(blockStop: true);
+        final f = _ContinuationFixture(player: p, isHandheld: true);
+        addTearDown(f.close);
+        addTearDown(() {
+          if (!p.releaseStop.isCompleted) p.releaseStop.complete();
+        });
+        final initial = f.coordinator.tune('channel-0');
+        await p.loadStarted.future;
+        final stopping = f.coordinator.stop();
+        await p.stopStarted.future;
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        p.releaseStop.complete();
+        await stopping;
+        await pumpEventQueue();
+        expect(await initial, isFalse);
+        expect(p.loads, hasLength(1));
+      },
+    );
+
+    test('TV remains suspended at inactive until resumed; desktop ignores lifecycle', () async {
+      for (final tv in [true, false]) {
+        final f = _ContinuationFixture(isTv: tv);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        for (final state in [
+          AppLifecycleState.inactive,
+          AppLifecycleState.hidden,
+          AppLifecycleState.paused,
+          AppLifecycleState.hidden,
+          AppLifecycleState.inactive,
+        ]) {
+          f.coordinator.didChangeAppLifecycleState(state);
+        }
+        await pumpEventQueue();
+        expect(f.player.loads, hasLength(1));
+        expect(f.player.stops, tv ? 1 : 0);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await pumpEventQueue();
+        expect(f.player.loads, hasLength(tv ? 2 : 1));
+      }
+    });
+  });
+
   group('Android background lifecycle', () {
     test(
       'inactive is inert; background stops once and resumes current schedule',
@@ -9814,6 +9954,7 @@ class _ContinuationFixture {
     _EventPlayer? player,
     bool recoverAuthorization = false,
     bool isTv = false,
+    bool isHandheld = false,
     _TestLineup? lineupController,
   }) : lineup =
            lineupController ??
@@ -9847,7 +9988,8 @@ class _ContinuationFixture {
       lineup: lineup,
       guide: guide,
       clock: () => now,
-      suspendInBackground: isTv,
+      suspendInBackground: isTv || isHandheld,
+      resumeOnInactive: isHandheld,
     );
   }
   DateTime now = DateTime(2026, 10, 10, 12);

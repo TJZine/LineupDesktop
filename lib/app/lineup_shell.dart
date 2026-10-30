@@ -120,6 +120,7 @@ class _LineupShellState extends State<LineupShell> {
       guide: _guide,
       clock: widget.guideClock,
       suspendInBackground: widget.profile.isTv || widget.profile.isHandheld,
+      resumeOnInactive: widget.profile.isHandheld,
     );
     _player.setPlayerDestinationVisible(
       _destination == ShellDestination.player,
@@ -363,8 +364,9 @@ class _LineupShellState extends State<LineupShell> {
         // H2 owns the program-sheet and search-sheet route presentations.
         return false;
       case ShellDestination.channels:
-        if (_channelsKey.currentState?.handleBack() != true)
+        if (_channelsKey.currentState?.handleBack() != true) {
           _returnFromChannels();
+        }
         return true;
       case ShellDestination.settings:
         if (_settingsBackDestination == null) return false;
