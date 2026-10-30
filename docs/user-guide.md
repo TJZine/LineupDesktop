@@ -163,7 +163,10 @@ Open **Settings → Subtitles** to change the global subtitle style. The preview
 uses sample text at its actual playback size, independent of the application's
 text size. It stays visible while the controls scroll. On narrow screens or
 with large application text, its crop shrinks to leave room for the focused
-control; the subtitle text itself is not scaled down.
+control; the subtitle text itself is not scaled down. If the complete focused
+control and save feedback still cannot fit after the preview disappears, the
+Subtitles heading and helper scroll with the controls. The global Settings
+header and category navigation stay fixed.
 
 Choose **Standard**, **Drop shadow**, **Classic box**, **High contrast**, or
 **Light**, then adjust Size (50%–300%), Position, text color and opacity, Font,

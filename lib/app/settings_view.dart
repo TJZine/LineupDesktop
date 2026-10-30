@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/services.dart';
 
 import '../playback/subtitle_appearance_source.dart';
@@ -80,6 +81,14 @@ class _SettingsViewState extends State<SettingsView> {
   final _subtitleFocus = <_SettingKey, FocusNode>{};
   final _subtitleHeights = <_SettingKey, double>{};
   _SettingKey? _focusedSubtitle;
+  final _subtitlePageKey = GlobalKey();
+  final _subtitleHeadingKey = GlobalKey();
+  double _subtitlePinnedHeadingHeight = 0;
+  bool _subtitleHeadingIsPinned = true;
+  Size? _subtitlePageSize;
+  _SettingKey? _subtitleHeadingScrollRow;
+  Object? _subtitleHeadingExitToken;
+  double _subtitleRepinningSpace = 0;
 
   bool _saving(_SettingKey key) => _pendingSaves.any((p) => p.key == key);
   final Map<_SettingKey, String> _errors = {};
@@ -106,6 +115,13 @@ class _SettingsViewState extends State<SettingsView> {
     if (oldWidget.subtitleAppearance != widget.subtitleAppearance) {
       oldWidget.subtitleAppearance?.removeListener(_appearanceChanged);
       widget.subtitleAppearance?.addListener(_appearanceChanged);
+    }
+    if (oldWidget.category != widget.category &&
+        widget.category != SettingsCategory.subtitles) {
+      _focusedSubtitle = null;
+      _subtitleHeadingScrollRow = null;
+      _subtitleHeadingExitToken = null;
+      _subtitleRepinningSpace = 0;
     }
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
@@ -330,7 +346,15 @@ class _SettingsViewState extends State<SettingsView> {
                   : null,
               autofocus: category == _category && !_categoryFocusPlaced,
               onPressed: () {
-                setState(() => _localCategory = category);
+                setState(() {
+                  _localCategory = category;
+                  if (category != SettingsCategory.subtitles) {
+                    _focusedSubtitle = null;
+                    _subtitleHeadingScrollRow = null;
+                    _subtitleHeadingExitToken = null;
+                    _subtitleRepinningSpace = 0;
+                  }
+                });
                 widget.onCategoryChanged?.call(category);
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted && category == _category) {
@@ -695,15 +719,120 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  void _subtitleMeasured(_SettingKey key, double height, bool focused) {
+  bool _subtitleMeasured(
+    _SettingKey key,
+    double height,
+    bool focused,
+    ValueChanged<double> alignBeforeRepinning,
+  ) {
+    final page = _subtitlePageKey.currentContext?.findRenderObject();
+    final heading = _subtitleHeadingKey.currentContext?.findRenderObject();
+    final pageSize = page is RenderBox && page.hasSize ? page.size : null;
+    // A scrolling heading may wrap in the narrower A2 rows column. Only its
+    // pinned measurement defines the space the normal layout would reserve.
+    final resizedFullWidthHeading =
+        pageSize != null &&
+        pageSize != _subtitlePageSize &&
+        !_subtitleUsesColumns(context, pageSize.width);
+    final headingHeight =
+        (_subtitleHeadingIsPinned || resizedFullWidthHeading) &&
+            heading is RenderBox &&
+            heading.hasSize
+        ? heading.size.height
+        : _subtitlePinnedHeadingHeight;
+    final geometryChanged =
+        pageSize != _subtitlePageSize ||
+        headingHeight != _subtitlePinnedHeadingHeight;
+    if (geometryChanged &&
+        !focused &&
+        _subtitleHeadingScrollRow != null &&
+        _subtitleFocus.values.any((node) => node.hasFocus)) {
+      // Every row is laid out. Let the focus owner's measurement, rather
+      // than a preceding row's, decide how to leave the expanded viewport.
+      return false;
+    }
+    if (geometryChanged) {
+      _subtitleHeadingExitToken = null;
+      _subtitleRepinningSpace = 0;
+    }
+    var scrollRow = geometryChanged ? null : _subtitleHeadingScrollRow;
+    var managedReveal = focused && _subtitleHeadingExitToken != null;
+    if (focused) {
+      final changingRow = _focusedSubtitle != key;
+      if (changingRow) scrollRow = null;
+      final clearance = _displaySettings.largeFocusIndicators
+          ? LineupFocusFrame.contentClearance * 2
+          : 0.0;
+      if (pageSize != null &&
+          height + clearance > pageSize.height - headingHeight) {
+        _subtitleHeadingExitToken = null;
+        _subtitleRepinningSpace = 0;
+        managedReveal = false;
+        scrollRow = key;
+      } else if ((changingRow || geometryChanged) &&
+          _subtitleHeadingScrollRow != null) {
+        // The old expanded viewport may expose a row above the future pinned
+        // heading. Place its complete context at the shared bottom first;
+        // repinning on the following frame cannot hide or recycle its control.
+        scrollRow = _subtitleHeadingScrollRow;
+        managedReveal = true;
+        final exit = Object();
+        _subtitleHeadingExitToken = exit;
+        final columns = _subtitleUsesColumns(context, pageSize!.width);
+        final preview = _subtitlePreviewCrop(
+          availableHeight: pageSize.height - headingHeight,
+          frameHeight: MediaQuery.sizeOf(context).shortestSide,
+          rowHeight: height,
+          clearance: clearance,
+          columns: columns,
+          scrollingHeading: false,
+        );
+        // Reserve the returning preview at the bottom first. This makes the
+        // expanded and pinned scroll ranges equal, even at the end of the list.
+        _subtitleRepinningSpace = columns ? 0 : preview.height + preview.gap;
+        // Allow a resize or a preceding reveal to finish layout before asking
+        // for another scroll offset. Then repin after that offset is laid out.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !identical(_subtitleHeadingExitToken, exit)) return;
+          if (!(_subtitleFocus[key]?.hasFocus ?? false)) {
+            setState(() {
+              _subtitleHeadingExitToken = null;
+              _subtitleRepinningSpace = 0;
+            });
+            return;
+          }
+          alignBeforeRepinning(columns ? 0 : preview.height + preview.gap);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !identical(_subtitleHeadingExitToken, exit)) return;
+            setState(() {
+              _subtitleHeadingExitToken = null;
+              _subtitleRepinningSpace = 0;
+              if (_subtitleFocus[key]?.hasFocus ?? false) {
+                _subtitleHeadingScrollRow = null;
+              }
+            });
+          });
+          WidgetsBinding.instance.scheduleFrame();
+        });
+        WidgetsBinding.instance.scheduleFrame();
+      }
+    }
     if (_subtitleHeights[key] == height &&
-        (!focused || _focusedSubtitle == key)) {
-      return;
+        (!focused || _focusedSubtitle == key) &&
+        !geometryChanged &&
+        scrollRow == _subtitleHeadingScrollRow) {
+      return managedReveal;
     }
     setState(() {
       _subtitleHeights[key] = height;
+      _subtitlePageSize = pageSize;
+      _subtitlePinnedHeadingHeight = headingHeight;
+      // Once required, retain this mode for the same focused row through
+      // Saving/error removal. Another row or viewport starts a new decision.
+      _subtitleHeadingScrollRow = scrollRow;
       if (focused) _focusedSubtitle = key;
     });
+    return managedReveal;
   }
 
   List<Widget> _settingControl<T>(

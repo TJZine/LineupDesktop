@@ -1,5 +1,33 @@
 part of 'settings_view.dart';
 
+bool _subtitleUsesColumns(BuildContext context, double detailWidth) =>
+    !LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width) &&
+    MediaQuery.textScalerOf(context).scale(1) < 2 &&
+    detailWidth * .54 - 32 >= 560;
+
+({double height, double gap}) _subtitlePreviewCrop({
+  required double availableHeight,
+  required double frameHeight,
+  required double rowHeight,
+  required double clearance,
+  required bool columns,
+  required bool scrollingHeading,
+}) {
+  if (scrollingHeading) return (height: 0, gap: 0);
+  final available = math.max(0.0, availableHeight);
+  final requested = columns
+      ? math.min(math.max(0.0, available - 24), .72 * frameHeight)
+      : .36 * frameHeight;
+  final budget = math.max(0.0, available - rowHeight - clearance);
+  final gap = columns ? 0.0 : math.min(8.0, budget);
+  return (
+    height: columns
+        ? math.min(requested, available)
+        : math.min(requested, math.max(0.0, budget - gap)),
+    gap: gap,
+  );
+}
+
 extension _SubtitleSettingsPage on _SettingsViewState {
   FocusNode _subtitleNode(_SettingKey key) =>
       _subtitleFocus.putIfAbsent(key, () => FocusNode(debugLabel: key.name));
@@ -29,7 +57,10 @@ extension _SubtitleSettingsPage on _SettingsViewState {
       action: action,
       feedback: _settingFeedback(key),
       control: control,
-      onMeasured: (height, focused) => _subtitleMeasured(key, height, focused),
+      focusNode: _subtitleNode(key),
+      revealToken: _subtitleHeadingScrollRow,
+      onMeasured: (height, focused, align) =>
+          _subtitleMeasured(key, height, focused, align),
     );
     Widget dropdown<T>(
       _SettingKey key,
@@ -300,83 +331,114 @@ extension _SubtitleSettingsPage on _SettingsViewState {
         }
         return KeyEventResult.ignored;
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SettingsSection(
-            title: 'Subtitles',
-            trailingGap: 16,
-            description: _SettingsViewState._categoryDescription(
-              SettingsCategory.subtitles,
+      child: LayoutBuilder(
+        key: _subtitlePageKey,
+        builder: (context, pageConstraints) {
+          final scrollHeading = _subtitleHeadingScrollRow != null;
+          _subtitleHeadingIsPinned = !scrollHeading;
+          final heading = KeyedSubtree(
+            key: _subtitleHeadingKey,
+            child: _SettingsSection(
+              title: 'Subtitles',
+              trailingGap: 16,
+              description: _SettingsViewState._categoryDescription(
+                SettingsCategory.subtitles,
+              ),
+              children: const [],
             ),
-            children: const [],
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final frame = MediaQuery.sizeOf(context).shortestSide;
-                final compact =
-                    LineupLayout.isCompactWidth(
-                      MediaQuery.sizeOf(context).width,
-                    ) ||
-                    MediaQuery.textScalerOf(context).scale(1) >= 2;
-                final wide = !compact && constraints.maxWidth * .54 - 32 >= 560;
-                final clearance = LineupTheme.of(context).largeFocusIndicators
-                    ? LineupFocusFrame.contentClearance * 2
-                    : 0.0;
-                final requested = wide
-                    ? math.min(
-                        math.max(0.0, constraints.maxHeight - 24),
-                        .72 * frame,
-                      )
-                    : .36 * frame;
-                // Reserve the complete focus context. The empty preview's gap
-                // can collapse only after its visible crop has reached zero.
-                final previewBudget = math.max(
-                  0.0,
-                  constraints.maxHeight - rowHeight - clearance,
-                );
-                final gap = wide ? 0.0 : math.min(8.0, previewBudget);
-                final crop = wide
-                    ? math.min(requested, constraints.maxHeight)
-                    : math.min(requested, math.max(0.0, previewBudget - gap));
-                final preview = _SubtitlePreview(
-                  height: crop,
-                  frameHeight: frame,
-                  appearance: appearance,
-                );
-                final rows = ListView(
-                  key: const ValueKey('subtitle-rows'),
-                  padding: EdgeInsets.symmetric(vertical: clearance / 2),
-                  children: children,
-                );
-                return wide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              scrollHeading
+                  ? const SizedBox.shrink(
+                      key: ValueKey('subtitle-scrolling-heading'),
+                    )
+                  : heading,
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final frame = MediaQuery.sizeOf(context).shortestSide;
+                    final wide = _subtitleUsesColumns(
+                      context,
+                      constraints.maxWidth,
+                    );
+                    final clearance =
+                        LineupTheme.of(context).largeFocusIndicators
+                        ? LineupFocusFrame.contentClearance * 2
+                        : 0.0;
+                    // Keep the full reference frame; reserve the complete row
+                    // first, then shrink its preview crop and empty gap.
+                    final crop = _subtitlePreviewCrop(
+                      availableHeight: constraints.maxHeight,
+                      frameHeight: frame,
+                      rowHeight: rowHeight,
+                      clearance: clearance,
+                      columns: wide,
+                      scrollingHeading: scrollHeading,
+                    );
+                    final preview = _SubtitlePreview(
+                      height: crop.height,
+                      frameHeight: frame,
+                      appearance: appearance,
+                    );
+                    // Sixteen fixed controls do not need virtualized rows.
+                    // Eager layout keeps their offsets exact while the heading
+                    // moves and text reflows during a viewport change.
+                    final rows = SingleChildScrollView(
+                      key: const ValueKey('subtitle-rows'),
+                      padding: EdgeInsets.symmetric(vertical: clearance / 2),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(
-                            width: constraints.maxWidth * .54 - 32,
-                            height: constraints.maxHeight,
-                            child: rows,
-                          ),
-                          const SizedBox(width: 32),
-                          SizedBox(
-                            width: constraints.maxWidth * .46,
-                            child: preview,
-                          ),
+                          if (scrollHeading) heading,
+                          // Preserve the old list's per-row paint boundaries,
+                          // including input borders at fractional canvas scales.
+                          for (final child in children)
+                            RepaintBoundary(
+                              key: child.key == null
+                                  ? null
+                                  : ValueKey(('subtitle-paint', child.key)),
+                              child: child,
+                            ),
+                          if (_subtitleRepinningSpace > 0)
+                            SizedBox(
+                              key: const ValueKey('subtitle-repinning-space'),
+                              height: _subtitleRepinningSpace,
+                            ),
                         ],
-                      )
-                    : Column(
-                        children: [
-                          preview,
-                          SizedBox(height: gap),
-                          Expanded(child: rows),
-                        ],
-                      );
-              },
-            ),
-          ),
-        ],
+                      ),
+                    );
+                    return wide
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: constraints.maxWidth * .54 - 32,
+                                height: constraints.maxHeight,
+                                child: rows,
+                              ),
+                              const SizedBox(width: 32),
+                              SizedBox(
+                                width: constraints.maxWidth * .46,
+                                child: preview,
+                              ),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              preview,
+                              SizedBox(height: crop.gap),
+                              Expanded(child: rows),
+                            ],
+                          );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -416,6 +478,8 @@ class _SubtitleSettingRow extends StatefulWidget {
     required this.enabled,
     required this.toggle,
     required this.onMeasured,
+    required this.focusNode,
+    required this.revealToken,
     this.action = false,
     this.helper,
     super.key,
@@ -427,14 +491,26 @@ class _SubtitleSettingRow extends StatefulWidget {
   final bool enabled;
   final bool toggle;
   final bool action;
-  final void Function(double height, bool focused) onMeasured;
+  final FocusNode focusNode;
+  final Object? revealToken;
+  final bool Function(
+    double height,
+    bool focused,
+    ValueChanged<double> alignBeforeRepinning,
+  )
+  onMeasured;
   @override
   State<_SubtitleSettingRow> createState() => _SubtitleSettingRowState();
 }
 
 class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
-  bool _focused = false;
   double? _lastHeight;
+  @override
+  void didUpdateWidget(covariant _SubtitleSettingRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.revealToken != widget.revealToken) _measure(reveal: true);
+  }
+
   void _measure({bool reveal = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -442,13 +518,36 @@ class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
       if (box is! RenderBox || !box.hasSize) return;
       final changed = _lastHeight != box.size.height;
       _lastHeight = box.size.height;
-      widget.onMeasured(box.size.height, _focused);
-      if (_focused && (changed || reveal)) {
+      final managedReveal = widget.onMeasured(
+        box.size.height,
+        widget.focusNode.hasFocus,
+        (previewExtent) {
+          final position = Scrollable.of(context).position;
+          final clearance = LineupTheme.of(context).largeFocusIndicators
+              ? LineupFocusFrame.contentClearance
+              : 0.0;
+          final viewport = RenderAbstractViewport.of(box);
+          final bottom = box
+              .localToGlobal(Offset(0, box.size.height), ancestor: viewport)
+              .dy;
+          final targetBottom =
+              position.viewportDimension - previewExtent - clearance;
+          // Keep room for the returning preview in current viewport units.
+          position.jumpTo(
+            (position.pixels + bottom - targetBottom).clamp(
+              position.minScrollExtent,
+              position.maxScrollExtent,
+            ),
+          );
+        },
+      );
+      // A heading transition owns its reveal until the new viewport is ready.
+      if (!managedReveal && widget.focusNode.hasFocus && (changed || reveal)) {
         final clearance = LineupTheme.of(context).largeFocusIndicators
             ? LineupFocusFrame.contentClearance
             : 0.0;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _focused && box.attached) {
+          if (mounted && widget.focusNode.hasFocus && box.attached) {
             box.showOnScreen(
               rect: (Offset.zero & box.size).inflate(clearance),
               duration: Duration.zero,
@@ -467,7 +566,6 @@ class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
       canRequestFocus: false,
       skipTraversal: true,
       onFocusChange: (focused) {
-        _focused = focused;
         _measure(reveal: focused);
       },
       child: Column(

@@ -497,6 +497,294 @@ void main() {
   );
 
   subtitleTest(
+    'heading scroll retains focus and stays latched through same-row feedback',
+    (tester) async {
+      final store = _QueuedStore();
+      final controller = FixtureController(
+        store: store,
+        scenario: const LineupScenario(
+          settings: LineupSettings(largeFocusIndicators: true),
+        ),
+      );
+      addTearDown(controller.dispose);
+      await showSettings(
+        tester,
+        controller,
+        size: const Size(412, 915),
+        text: 2,
+      );
+      await reveal(tester, field('Styled'));
+      final styled = tester.widget<Switch>(field('Styled'));
+      styled.focusNode!.requestFocus();
+      await tester.pumpAndSettle();
+      final mode = find.byKey(const ValueKey('subtitle-scrolling-heading'));
+      expect(mode, findsNothing);
+      final referenceHeight = tester.getSize(find.byType(SubtitleLayer)).height;
+
+      Future<void> frames(
+        String name,
+        FocusNode node,
+        String rowName,
+        bool scrolling, {
+        bool transition = false,
+      }) async {
+        Rect? settledViewport = transition
+            ? null
+            : tester.getRect(find.byKey(const ValueKey('subtitle-rows')));
+        for (var frame = 0; frame < 24; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(node.hasFocus, isTrue, reason: '$name focus frame$frame');
+          final control = tester.getRect(field(rowName));
+          final viewportNow = tester.getRect(
+            find.byKey(const ValueKey('subtitle-rows')),
+          );
+          expect(
+            control.top,
+            greaterThanOrEqualTo(viewportNow.top - .1),
+            reason: '$name visible control frame$frame',
+          );
+          expect(
+            control.bottom,
+            lessThanOrEqualTo(viewportNow.bottom + .1),
+            reason: '$name visible control frame$frame',
+          );
+          if (!transition || frame >= 3) {
+            expect(
+              mode,
+              scrolling ? findsOneWidget : findsNothing,
+              reason: '$name mode frame$frame',
+            );
+            if (settledViewport != null) {
+              expect(
+                viewportNow,
+                settledViewport,
+                reason: '$name immediate stable viewport frame$frame',
+              );
+            }
+          }
+          if (frame < 3) continue;
+          final viewport = tester.getRect(
+            find.byKey(const ValueKey('subtitle-rows')),
+          );
+          final row = tester.getRect(
+            find.byKey(ValueKey('subtitle-row-subtitle$rowName')),
+          );
+          // Six canvas units per side include the full large focus treatment.
+          final clearance =
+              6 * LineupCanvas.scaleOf(tester.element(field(rowName)));
+          expect(
+            row.top - clearance,
+            greaterThanOrEqualTo(viewport.top - .1),
+            reason: '$name top frame$frame',
+          );
+          expect(
+            row.bottom + clearance,
+            lessThanOrEqualTo(viewport.bottom + .1),
+            reason: '$name bottom frame$frame',
+          );
+          expect(
+            tester.getSize(find.byType(SubtitleLayer)).height,
+            referenceHeight,
+          );
+          if (settledViewport != null) {
+            expect(
+              viewport,
+              settledViewport,
+              reason: '$name stable viewport frame$frame',
+            );
+          }
+          settledViewport = viewport;
+        }
+      }
+
+      styled.onChanged!(true);
+      await tester.pump(const Duration(milliseconds: 350));
+      await frames(
+        'enter Saving',
+        styled.focusNode!,
+        'Styled',
+        true,
+        transition: true,
+      );
+      expect(find.text('Saving…'), findsOneWidget);
+      store.finish();
+      await frames('success removes Saving', styled.focusNode!, 'Styled', true);
+      expect(find.text('Saving…'), findsNothing);
+
+      tester.widget<Switch>(field('Styled')).onChanged!(false);
+      await tester.pump(const Duration(milliseconds: 350));
+      await frames('second Saving', styled.focusNode!, 'Styled', true);
+      store.finish(fail: true);
+      await frames('error replaces Saving', styled.focusNode!, 'Styled', true);
+      expect(find.textContaining('Could not save.'), findsOneWidget);
+      tester.widget<Switch>(field('Styled')).onChanged!(false);
+      await frames('retry removes error', styled.focusNode!, 'Styled', true);
+      expect(find.textContaining('Could not save.'), findsNothing);
+      store.finish();
+      await frames('retry success', styled.focusNode!, 'Styled', true);
+
+      await reveal(tester, field('Bold'));
+      final bold = tester.widget<Switch>(field('Bold'));
+      bold.focusNode!.requestFocus();
+      await frames(
+        'leave for fitting row',
+        bold.focusNode!,
+        'Bold',
+        false,
+        transition: true,
+      );
+      await reveal(tester, field('Styled'));
+      styled.focusNode!.requestFocus();
+      await frames(
+        'return without feedback',
+        styled.focusNode!,
+        'Styled',
+        false,
+        transition: true,
+      );
+    },
+  );
+
+  subtitleTest(
+    'viewport and category changes release the conditional heading without losing focus',
+    (tester) async {
+      final store = _QueuedStore();
+      final controller = FixtureController(
+        store: store,
+        scenario: const LineupScenario(
+          settings: LineupSettings(largeFocusIndicators: true),
+        ),
+      );
+      addTearDown(controller.dispose);
+      await showSettings(
+        tester,
+        controller,
+        size: const Size(412, 915),
+        text: 2,
+      );
+      await reveal(tester, field('Styled'));
+      final toggle = tester.widget<Switch>(field('Styled'));
+      toggle.focusNode!.requestFocus();
+      await tester.pumpAndSettle();
+      toggle.onChanged!(true);
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('subtitle-scrolling-heading')),
+        findsOneWidget,
+      );
+      store.finish();
+      await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(1920, 1080);
+      for (var frame = 0; frame < 24; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(toggle.focusNode!.hasFocus, isTrue);
+        final control = tester.getRect(field('Styled'));
+        final currentViewport = tester.getRect(
+          find.byKey(const ValueKey('subtitle-rows')),
+        );
+        expect(control.top, greaterThanOrEqualTo(currentViewport.top - .1));
+        expect(control.bottom, lessThanOrEqualTo(currentViewport.bottom + .1));
+        if (frame < 3) continue;
+        expect(
+          find.byKey(const ValueKey('subtitle-scrolling-heading')),
+          findsNothing,
+        );
+        final viewport = tester.getRect(
+          find.byKey(const ValueKey('subtitle-rows')),
+        );
+        final row = tester.getRect(
+          find.byKey(const ValueKey('subtitle-row-subtitleStyled')),
+        );
+        expect(row.top - 6, greaterThanOrEqualTo(viewport.top - .1));
+        expect(row.bottom + 6, lessThanOrEqualTo(viewport.bottom + .1));
+        expect(tester.getSize(find.byType(SubtitleLayer)).height, 1080);
+      }
+      tester.view.physicalSize = const Size(412, 915);
+      await tester.pumpAndSettle();
+      tester.widget<Switch>(field('Styled')).onChanged!(false);
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('subtitle-scrolling-heading')),
+        findsOneWidget,
+      );
+      store.finish();
+      await tester.pumpAndSettle();
+      final appearance = find.widgetWithText(TextButton, 'Appearance').first;
+      await tester.ensureVisible(appearance);
+      await tester.tap(appearance);
+      await tester.pumpAndSettle();
+      final subtitles = find.widgetWithText(TextButton, 'Subtitles').first;
+      await tester.ensureVisible(subtitles);
+      await tester.tap(subtitles);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('subtitle-scrolling-heading')),
+        findsNothing,
+      );
+    },
+  );
+
+  subtitleTest('leaving for the rail cancels an in-flight heading transition', (
+    tester,
+  ) async {
+    final store = _QueuedStore();
+    final controller = FixtureController(
+      store: store,
+      scenario: const LineupScenario(
+        settings: LineupSettings(largeFocusIndicators: true),
+      ),
+    );
+    addTearDown(controller.dispose);
+    await showSettings(tester, controller, size: const Size(412, 915), text: 2);
+    await reveal(tester, field('Styled'));
+    final styled = tester.widget<Switch>(field('Styled'));
+    styled.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    styled.onChanged!(true);
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    store.finish();
+    await tester.pumpAndSettle();
+    await reveal(tester, field('Bold'));
+    tester.widget<Switch>(field('Bold')).focusNode!.requestFocus();
+    final transitionSpace = find.byKey(
+      const ValueKey('subtitle-repinning-space'),
+    );
+    for (
+      var frame = 0;
+      frame < 6 && transitionSpace.evaluate().isEmpty;
+      frame++
+    ) {
+      await tester.pump();
+    }
+    expect(transitionSpace, findsOneWidget);
+    final rail = tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Subtitles').first)
+        .focusNode!;
+    rail.requestFocus();
+    for (var frame = 0; frame < 8; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(rail.hasFocus, isTrue);
+      if (frame >= 2) {
+        expect(
+          find.byKey(const ValueKey('subtitle-repinning-space')),
+          findsNothing,
+        );
+      }
+    }
+    await reveal(tester, field('Styled'));
+    styled.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    expect(styled.focusNode!.hasFocus, isTrue);
+    expect(
+      find.byKey(const ValueKey('subtitle-repinning-space')),
+      findsNothing,
+    );
+  });
+
+  subtitleTest(
     'Font menu uses production families and opening menus never changes preview',
     (tester) async {
       final controller = FixtureController();
