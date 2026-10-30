@@ -113,6 +113,189 @@ void main() {
     },
   );
 
+  testWidgets('SD-17 follows panel geometry and moves only bottom cues', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richProgram: true,
+      dvrControlsEnabled: true,
+    );
+    addTearDown(() {
+      fixture.player.closeOverlay();
+      fixture.dispose();
+    });
+    fixture.native.subtitleCues.value = SubtitleCues([
+      SubtitleCue(
+        align: 1,
+        lines: [
+          [const SubtitleSegment(text: 'Bottom cue')],
+        ],
+      ),
+      SubtitleCue(
+        align: 5,
+        lines: [
+          [const SubtitleSegment(text: 'Middle cue')],
+        ],
+      ),
+      SubtitleCue(
+        align: 7,
+        lines: [
+          [const SubtitleSegment(text: 'Top cue')],
+        ],
+      ),
+    ]);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    final reporter = tester.widget<SubtitlePanelReporter>(
+      find.byType(SubtitlePanelReporter),
+    );
+    final panelBox = tester.renderObject<RenderBox>(
+      find.byKey(const Key('player-osd-surface')),
+    );
+    final layerBox = tester.renderObject<RenderBox>(find.byType(SubtitleLayer));
+    final expectedPanelTop = layerBox.globalToLocal(
+      panelBox.localToGlobal(const Offset(0, -55)),
+    );
+    expect(reporter.avoidance.value.highestPanelTop, isNotNull);
+    expect(
+      reporter.avoidance.value.highestPanelTop,
+      closeTo(expectedPanelTop.dy, .5),
+    );
+    final paint =
+        tester
+                .widget<CustomPaint>(
+                  find.descendant(
+                    of: find.byType(SubtitleLayer),
+                    matching: find.byType(CustomPaint),
+                  ),
+                )
+                .painter!
+            as SubtitlePainter;
+    expect(paint.avoidance, same(reporter.avoidance.value));
+    expect(
+      paint.clearanceLift(
+        fixture.native.subtitleCues.value.cues.first,
+        layerBox.size,
+        panelTop: reporter.avoidance.value.highestPanelTop!,
+      ),
+      greaterThan(0),
+    );
+    expect(
+      paint.clearanceLift(
+        fixture.native.subtitleCues.value.cues[1],
+        layerBox.size,
+        panelTop: reporter.avoidance.value.highestPanelTop!,
+      ),
+      0,
+    );
+    expect(
+      paint.clearanceLift(
+        fixture.native.subtitleCues.value.cues[2],
+        layerBox.size,
+        panelTop: reporter.avoidance.value.highestPanelTop!,
+      ),
+      0,
+    );
+    fixture.player.closeOverlay();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('SD-17 retains retiring geometry and resizes Now Playing', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 1080));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    addTearDown(() {
+      fixture.player.closeOverlay();
+      fixture.dispose();
+    });
+    fixture.native.subtitleCues.value = SubtitleCues([
+      SubtitleCue(
+        align: 1,
+        lines: [
+          [const SubtitleSegment(text: 'Transition cue')],
+        ],
+      ),
+    ]);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    final reporter = tester.widget<SubtitlePanelReporter>(
+      find.byType(SubtitlePanelReporter),
+    );
+    final osdTop = reporter.avoidance.value.highestPanelTop!;
+
+    fixture.player.showNowPlaying();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    final transitionTop = reporter.avoidance.value.highestPanelTop!;
+    expect(transitionTop, lessThanOrEqualTo(osdTop));
+
+    await tester.pumpAndSettle();
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    final nowPlayingTop = reporter.avoidance.value.highestPanelTop!;
+    expect(nowPlayingTop, lessThan(osdTop));
+
+    fixture.player.showOsd();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    await tester.pumpAndSettle();
+    expect(reporter.avoidance.value.panels, hasLength(1));
+
+    fixture.player.closeOverlay();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    await tester.pumpAndSettle();
+    expect(reporter.avoidance.value.panels, isEmpty);
+  });
+
+  testWidgets('SD-17 settles immediately with Reduce Motion', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    addTearDown(() {
+      fixture.player.closeOverlay();
+      fixture.dispose();
+    });
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pump();
+    final reporter = tester.widget<SubtitlePanelReporter>(
+      find.byType(SubtitlePanelReporter),
+    );
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+  });
+
   for (final tv in [false, true]) {
     for (final reduceMotion in [false, true]) {
       testWidgets('channel tag motion tv=$tv reduceMotion=$reduceMotion', (
