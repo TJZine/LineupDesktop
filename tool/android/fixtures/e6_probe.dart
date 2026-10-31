@@ -514,6 +514,79 @@ Future<ServerSocket> bindE6Input({
   }
 }
 
+/// One LF frame, with a persistent completed state to reject any later bytes.
+class E6LineInput {
+  final _bytes = <int>[];
+  int receivedBytes = 0;
+  bool complete = false;
+  bool add(List<int> chunk) {
+    if (receivedBytes + chunk.length > e6InputLimit) {
+      receivedBytes = e6InputLimit;
+      throw const E6Failure('input_cap');
+    }
+    receivedBytes += chunk.length;
+    for (final byte in chunk) {
+      if (complete) throw const E6Failure('extra_input');
+      if (byte == 10) {
+        complete = true;
+      } else {
+        _bytes.add(byte);
+      }
+    }
+    return complete;
+  }
+
+  List<int> takeFrame() {
+    if (!complete) throw const E6Failure('invalid_input');
+    final frame = List<int>.of(_bytes);
+    _bytes.clear();
+    return frame;
+  }
+
+  void discard() => _bytes.clear();
+}
+
+class E6PlaybackStatus {
+  E6PlaybackStatus(this.bridge);
+  final E6Bridge bridge;
+  var phase = 'starting';
+  var receivedBytes = 0, flushedBytes = 0;
+  var responseAttempted = false, started = false;
+  bool _sealed = false;
+  String? failureCode;
+  void fail(String code) {
+    failureCode ??= code;
+  }
+
+  Future<void> publish(String next, {bool finalStatus = false}) async {
+    if (_sealed) {
+      throw const E6Failure('channel_failed');
+    }
+    if (finalStatus) {
+      _sealed = true;
+    }
+    phase = next;
+    started = true;
+    try {
+      final reply = await bridge
+          .call('transportStatus', {
+            'mode': 'playback',
+            'phase': phase,
+            'receivedBytes': receivedBytes,
+            'responseAttempted': responseAttempted,
+            'flushedBytes': flushedBytes,
+            'failureCode': failureCode,
+          })
+          .timeout(const Duration(seconds: 10));
+      if (reply is! Map || reply.length != 1 || reply['stored'] != true) {
+        throw const E6Failure('channel_failed');
+      }
+    } catch (_) {
+      throw const E6Failure('channel_failed');
+    }
+  }
+}
+
 /// Owns lifecycle before binding, then advertises only a resumed, listening receiver.
 /// [show] installs the fixture and invokes its callback after the first Flutter frame.
 Future<void> startE6Fixture(
@@ -525,13 +598,17 @@ Future<void> startE6Fixture(
   Duration startupTimeout = const Duration(seconds: 30),
   Duration teardownTimeout = const Duration(seconds: 15),
 }) async {
-  if (!kDebugMode) throw const E6Failure('debug_required');
+  if (!kDebugMode) {
+    throw const E6Failure('debug_required');
+  }
   final cancelled = Completer<void>();
   final resumed = Completer<void>();
   final firstFrame = Completer<void>();
   final expired = Completer<void>();
   void cancel() {
-    if (!cancelled.isCompleted) cancelled.complete();
+    if (!cancelled.isCompleted) {
+      cancelled.complete();
+    }
   }
 
   void lifecycleChanged(AppLifecycleState state) {
@@ -547,7 +624,9 @@ Future<void> startE6Fixture(
   final binding = WidgetsBinding.instance;
   // Register before any await: startup can receive pause/detach while binding.
   final lifecycle = AppLifecycleListener(onStateChange: lifecycleChanged);
-  if (binding.lifecycleState == AppLifecycleState.resumed) resumed.complete();
+  if (binding.lifecycleState == AppLifecycleState.resumed) {
+    resumed.complete();
+  }
   final timer = Timer(startupTimeout, expired.complete);
   bool active() =>
       !cancelled.isCompleted &&
@@ -558,20 +637,31 @@ Future<void> startE6Fixture(
     expired.future.then<T>((_) => throw const E6Failure('input_timeout')),
   ]);
   void guard() {
-    if (expired.isCompleted) throw const E6Failure('input_timeout');
-    if (!active()) throw const E6Failure('cancelled');
+    if (expired.isCompleted) {
+      throw const E6Failure('input_timeout');
+    }
+    if (!active()) {
+      throw const E6Failure('cancelled');
+    }
   }
 
+  final transport = E6PlaybackStatus(bridge);
   ServerSocket? server;
   var delegated = false;
   try {
+    await startup(transport.publish('starting'));
     server = await startup(
       bindE6Input(cancelled: cancelled.future, bind: bind),
     );
-    if (cancelled.isCompleted) throw const E6Failure('cancelled');
+    if (cancelled.isCompleted) {
+      throw const E6Failure('cancelled');
+    }
     show(() {
-      if (!firstFrame.isCompleted) firstFrame.complete();
+      if (!firstFrame.isCompleted) {
+        firstFrame.complete();
+      }
     });
+    await startup(transport.publish('waiting_resumed'));
     await startup(Future.wait([firstFrame.future, resumed.future]));
     guard();
     delegated = true;
@@ -579,6 +669,7 @@ Future<void> startE6Fixture(
       player,
       bridge,
       baseline: baseline,
+      transportStatus: transport,
       prebound: server,
       cancelled: cancelled.future,
       active: active,
@@ -595,7 +686,14 @@ Future<void> startE6Fixture(
         timer.cancel();
       },
     );
-  } catch (_) {
+  } catch (error) {
+    transport.fail(
+      error is E6Failure && error.code == 'input_timeout'
+          ? 'startup_deadline'
+          : error is E6Failure && error.code == 'cancelled'
+          ? 'cancelled'
+          : 'io_failure',
+    );
     // No capability is read before receiver ownership; never report raw startup errors.
     cancel();
   } finally {
@@ -606,6 +704,7 @@ Future<void> startE6Fixture(
         player,
         bridge,
         baseline: baseline,
+        transportStatus: transport,
         prebound: server,
         cancelled: cancelled.future,
         active: () => false,
@@ -617,7 +716,8 @@ Future<void> startE6Fixture(
   }
 }
 
-/// Owns both halves of the sole peer until release evidence and terminal output.
+/// Keeps the peer's input subscribed through observation: LF ends the sole frame,
+/// not the receive side. EOF/extra input before output completion cancels the load.
 Future<void> receiveAndObserveE6(
   NativePlayer player,
   E6Bridge bridge, {
@@ -630,65 +730,81 @@ Future<void> receiveAndObserveE6(
   Duration inputTimeout = const Duration(seconds: 60),
   Duration activeTimeout = const Duration(seconds: 90),
   Duration teardownTimeout = const Duration(seconds: 15),
+  E6PlaybackStatus? transportStatus,
 }) async {
   if (!kDebugMode) {
     throw const E6Failure('debug_required');
   }
-  if (!active()) {
-    await prebound?.close();
-    await observeE6(
-      player,
-      bridge,
-      _inactiveRequest(),
-      cancelled: Future.value(),
-      active: () => false,
-      record: (_) async {},
-      teardownTimeout: teardownTimeout,
-    );
-    return;
-  }
+  final transport = transportStatus ?? E6PlaybackStatus(bridge);
+  final input = E6LineInput();
   ServerSocket? server = prebound;
   Socket? peer;
   StreamSubscription<Socket>? incoming;
-  final chosen = Completer<Socket>();
-  var closed = false;
+  StreamSubscription<Uint8List>? reader;
+  final chosen = Completer<Socket>(), framed = Completer<List<int>>();
+  var closed = false, closing = false, observed = false;
+  var outputBytes = 0;
   final localCancel = Completer<void>();
-  void cancel() {
+  void cancel([String code = 'cancelled']) {
+    transport.fail(code);
     if (!localCancel.isCompleted) {
       localCancel.complete();
     }
   }
 
-  unawaited(
-    cancelled.then((_) {
-      cancel();
-    }),
-  );
-  var outputBytes = 0;
-  var observed = false;
-  Future<void> write(Object value) async {
-    final line = '${jsonEncode(value)}\n';
-    final size = utf8.encode(line).length;
+  unawaited(cancelled.then((_) => cancel()));
+  Future<T> receiving<T>(Future<T> work) => Future.any<T>([
+    work,
+    localCancel.future.then<T>((_) => throw const E6Failure('cancelled')),
+  ]);
+  Future<void> send(String text, {bool announce = false}) async {
+    final size = utf8.encode(text).length;
     if (size > 16384 || outputBytes + size > e6OutputLimit) {
+      transport.fail('output_cap');
       throw const E6Failure('event_overflow');
     }
     outputBytes += size;
+    transport.responseAttempted = true;
     try {
-      peer!.write(line);
-      await peer!.flush().timeout(const Duration(seconds: 5));
+      peer!.write(text);
     } catch (_) {
-      cancel();
+      cancel('peer_closed');
       throw const E6Failure('peer_lost');
+    }
+    if (announce) {
+      await transport.publish('reply_attempt');
+    }
+    try {
+      await peer!.flush().timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      cancel('exchange_deadline');
+      throw const E6Failure('peer_lost');
+    } catch (_) {
+      cancel('peer_closed');
+      throw const E6Failure('peer_lost');
+    }
+    transport.flushedBytes += size;
+    if (announce) {
+      await transport.publish('reply_flushed');
     }
   }
 
+  Future<void> write(Object value) => send('${jsonEncode(value)}\n');
   try {
+    if (!transport.started) {
+      await transport.publish('starting');
+    }
+    if (!active()) {
+      throw const E6Failure('cancelled');
+    }
     final binding = prebound == null
         ? bindE6Input(cancelled: localCancel.future, bind: bind)
         : Future.value(prebound);
     unawaited(
       binding.then((value) async {
-        if (closed) await value.close();
+        if (closed) {
+          await value.close();
+        }
       }, onError: (Object _) {}),
     );
     server = await binding;
@@ -699,31 +815,53 @@ Future<void> receiveAndObserveE6(
       (socket) {
         if (closed || chosen.isCompleted) {
           socket.destroy();
-        } else {
-          peer = socket;
-          chosen.complete(socket);
+          return;
         }
+        peer = socket;
+        reader = socket.listen(
+          (chunk) {
+            try {
+              final complete = input.add(chunk);
+              transport.receivedBytes = input.receivedBytes;
+              if (complete && !framed.isCompleted) {
+                framed.complete(input.takeFrame());
+              }
+            } on E6Failure catch (error) {
+              transport.receivedBytes = input.receivedBytes;
+              cancel(error.code == 'input_cap' ? 'input_cap' : 'extra_input');
+            }
+          },
+          onError: (Object error) {
+            cancel(error is SocketException ? 'peer_closed' : 'io_failure');
+          },
+          onDone: () {
+            if (!closing) {
+              cancel('peer_closed');
+            }
+          },
+        );
+        chosen.complete(socket);
       },
       onError: (Object _) {
-        if (!chosen.isCompleted) {
-          chosen.completeError(const E6Failure('input_failed'));
-        }
+        cancel('io_failure');
       },
     );
-    if (onListening != null) await onListening();
+    await transport.publish('listening');
+    if (onListening != null) {
+      await receiving(onListening());
+    }
     if (!active() || localCancel.isCompleted) {
       throw const E6Failure('cancelled');
     }
-    Future<E6Request> input() async {
-      // The sole peer is closed/destroyed by this function's finally.
-      // ignore: close_sinks
-      final socket = await chosen.future;
-      final bytes = <int>[];
-      await for (final chunk in socket) {
-        if (bytes.length + chunk.length > e6InputLimit) {
-          throw const E6Failure('invalid_input');
-        }
-        bytes.addAll(chunk);
+    Future<E6Request> readFrame() async {
+      await chosen.future;
+      if (!active() || localCancel.isCompleted) {
+        throw const E6Failure('cancelled');
+      }
+      await transport.publish('peer_accepted');
+      final bytes = await framed.future;
+      if (!active() || localCancel.isCompleted) {
+        throw const E6Failure('cancelled');
       }
       try {
         return parseE6Request(
@@ -731,23 +869,25 @@ Future<void> receiveAndObserveE6(
           baseline: baseline,
         );
       } on E6Failure {
+        transport.fail('invalid_probe');
         rethrow;
       } catch (_) {
+        transport.fail('invalid_probe');
         throw const E6Failure('invalid_input');
       }
     }
 
-    final request =
-        await Future.any([
-          input(),
-          localCancel.future.then<E6Request>(
-            (_) => throw const E6Failure('cancelled'),
-          ),
-        ]).timeout(
-          inputTimeout,
-          onTimeout: () => throw const E6Failure('input_timeout'),
-        );
-    // Stop accepting peers immediately; the chosen peer remains bidirectional.
+    final request = await receiving(readFrame()).timeout(
+      inputTimeout,
+      onTimeout: () {
+        transport.fail('exchange_deadline');
+        throw const E6Failure('input_timeout');
+      },
+    );
+    if (!active() || localCancel.isCompleted) {
+      throw const E6Failure('cancelled');
+    }
+    await transport.publish('input_complete');
     await incoming.cancel();
     incoming = null;
     await server.close();
@@ -755,9 +895,7 @@ Future<void> receiveAndObserveE6(
     if (!active() || localCancel.isCompleted) {
       throw const E6Failure('cancelled');
     }
-    peer!.write('accepted\n');
-    outputBytes = 9;
-    await peer!.flush().timeout(const Duration(seconds: 5));
+    await send('accepted\n', announce: true);
     observed = true;
     final terminal = await observeE6(
       player,
@@ -772,15 +910,21 @@ Future<void> receiveAndObserveE6(
           : activeTimeout,
       teardownTimeout: teardownTimeout,
     );
+    closing = true;
     await write(terminal);
-    await peer!.close().timeout(const Duration(seconds: 5));
   } catch (error) {
+    if (transport.failureCode == null) {
+      transport.fail(
+        error is E6Failure && error.code == 'cancelled'
+            ? 'cancelled'
+            : 'io_failure',
+      );
+    }
     closed = true;
     await incoming?.cancel();
     incoming = null;
     await server?.close();
     server = null;
-    // Input failures cannot load a capability. Release is still real and awaited.
     if (!observed) {
       final terminal = await observeE6(
         player,
@@ -794,8 +938,21 @@ Future<void> receiveAndObserveE6(
           }
         },
         teardownTimeout: teardownTimeout,
-        initialFailure: error is E6Failure ? error.code : 'input_failed',
+        initialFailure:
+            error is E6Failure &&
+                {
+                  'invalid_input',
+                  'input_timeout',
+                  'cancelled',
+                  'channel_failed',
+                  'baseline_private_refused',
+                  'peer_lost',
+                  'event_overflow',
+                }.contains(error.code)
+            ? error.code
+            : 'input_failed',
       );
+      closing = true;
       if (peer != null) {
         try {
           await write(terminal);
@@ -804,10 +961,50 @@ Future<void> receiveAndObserveE6(
     }
   } finally {
     closed = true;
-    cancel();
+    closing = true;
+    final clock = Stopwatch()..start();
+    Future<void> finish(Future<void> Function() operation) async {
+      final left = teardownTimeout - clock.elapsed;
+      if (left <= Duration.zero) {
+        throw const E6Failure('peer_lost');
+      }
+      await operation().timeout(left);
+    }
+
+    try {
+      if (peer != null) {
+        await finish(() => peer!.close().timeout(const Duration(seconds: 5)));
+      }
+    } catch (_) {
+      transport.fail('peer_closed');
+    }
     peer?.destroy();
-    await incoming?.cancel();
-    await server?.close();
+    try {
+      await finish(() async {
+        await reader?.cancel();
+        await incoming?.cancel();
+        await server?.close();
+      });
+    } catch (_) {
+      transport.fail('io_failure');
+    }
+    input.discard();
+    // Native observation cancel already closed the player gate. Playback status
+    // stays writable afterward so this records the actual final flush count.
+    try {
+      await finish(
+        () => transport.publish(
+          transport.failureCode == null
+              ? 'closed'
+              : transport.failureCode == 'cancelled'
+              ? 'cancelled'
+              : 'failed',
+          finalStatus: true,
+        ),
+      );
+    } catch (_) {
+      /* The host retains the earlier partial public status and stops. */
+    }
   }
 }
 

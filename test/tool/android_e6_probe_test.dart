@@ -52,9 +52,17 @@ class Bridge implements E6Bridge {
   final drains = <Object?>[];
   bool cancelled = false;
   bool missingRelease = false;
+  final statuses = <Map<String, Object?>>[];
+  Future<void> Function(Map<String, Object?>)? statusHook;
   @override
   Future<Object?> call(String method, [Map<String, Object?>? arguments]) async {
     calls.add(method);
+    if (method == 'transportStatus') {
+      final facts = Map<String, Object?>.of(arguments!);
+      statuses.add(facts);
+      await statusHook?.call(facts);
+      return {'stored': true};
+    }
     return switch (method) {
       'capabilities' => {
         'debugEnabled': true,
@@ -152,11 +160,12 @@ class Player implements NativePlayer {
   }
 }
 
-// In-memory loopback peer: models one accepted socket and the host's write half-close.
+// In-memory LF peer keeps its write side open until fixture closure.
 class StartupPeer extends Stream<Uint8List> implements Socket {
   StartupPeer() {
-    incoming.add(Uint8List.fromList(utf8.encode(jsonEncode(inputFields()))));
-    unawaited(incoming.close());
+    incoming.add(
+      Uint8List.fromList(utf8.encode('${jsonEncode(inputFields())}\n')),
+    );
   }
   static Map<String, dynamic> inputFields() => input();
   final incoming = StreamController<Uint8List>();
@@ -171,6 +180,7 @@ class StartupPeer extends Stream<Uint8List> implements Socket {
   @override
   void destroy() {
     destroyed = true;
+    unawaited(incoming.close());
   }
 
   @override
@@ -287,6 +297,50 @@ Future<Map<String, Object?>> run(
   pollInterval: Duration.zero,
   activeTimeout: timeout,
 );
+Future<({String? output, Bridge bridge, Player player})> wireExchange(
+  List<int> wire, {
+  bool halfClose = false,
+  bool baseline = false,
+  Duration inputTimeout = const Duration(seconds: 1),
+  Bridge? bridge,
+  Player? player,
+}) async {
+  final b = bridge ?? Bridge(), p = player ?? Player();
+  final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0),
+      port = server.port;
+  final task = receiveAndObserveE6(
+    p,
+    b,
+    baseline: baseline,
+    prebound: server,
+    cancelled: Completer<void>().future,
+    active: () => true,
+    inputTimeout: inputTimeout,
+    activeTimeout: const Duration(seconds: 2),
+  );
+  final peer = await Socket.connect(InternetAddress.loopbackIPv4, port);
+  final response = peer
+      .cast<List<int>>()
+      .transform(utf8.decoder)
+      .join()
+      .then<String?>(
+        (text) => text,
+        onError: (Object error) {
+          if (error is SocketException) return null;
+          throw StateError('Unexpected test socket error');
+        },
+      );
+  peer.add(wire);
+  await peer.flush();
+  if (halfClose) await peer.close();
+  final output = await response.timeout(const Duration(seconds: 3));
+  await task;
+  peer.destroy();
+  final rebound = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+  await rebound.close();
+  return (output: output, bridge: b, player: p);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
@@ -475,7 +529,7 @@ void main() {
     expect(result['result'], 'failed');
     expect(jsonEncode(facts), isNot(contains('secret')));
   });
-  test('socket half-close retains bidirectional ACK/facts/terminal and closes listener', () async {
+  test('LF keeps host write side open through ACK/facts/terminal and closes listener', () async {
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final port = server.port;
     final p = Player(), b = Bridge();
@@ -489,9 +543,8 @@ void main() {
     );
     final peer = await Socket.connect(InternetAddress.loopbackIPv4, port);
     final received = peer.cast<List<int>>().transform(utf8.decoder).join();
-    peer.write(jsonEncode(input()));
+    peer.write('${jsonEncode(input())}\n');
     await peer.flush();
-    await peer.close();
     final text = await received.timeout(const Duration(seconds: 3));
     await task;
     final lines = const LineSplitter().convert(text);
@@ -973,6 +1026,228 @@ void main() {
         },
       ).timeout(const Duration(seconds: 1));
       expect(peer.output.toString(), startsWith('accepted\n'));
+    },
+  );
+  test(
+    'LF framer preserves payload across arbitrary chunks and counts delimiter',
+    () {
+      final bytes = utf8.encode('{"probe":1}\n');
+      for (var split = 0; split <= bytes.length; split++) {
+        final reader = E6LineInput();
+        reader.add(bytes.sublist(0, split));
+        reader.add(bytes.sublist(split));
+        expect(reader.complete, true);
+        expect(reader.receivedBytes, bytes.length);
+        expect(utf8.decode(reader.takeFrame()), '{"probe":1}');
+      }
+    },
+  );
+  test(
+    'LF framer cap includes delimiter and permanently rejects later bytes',
+    () {
+      final exact = E6LineInput();
+      exact.add(List.filled(32767, 32));
+      exact.add([10]);
+      expect(exact.receivedBytes, 32768);
+      expect(exact.complete, true);
+      expect(
+        () => exact.add([10]),
+        throwsA(isA<E6Failure>().having((e) => e.code, 'code', 'input_cap')),
+      );
+      final late = E6LineInput();
+      late.add([123, 125, 10]);
+      late.takeFrame();
+      expect(
+        () => late.add([32]),
+        throwsA(isA<E6Failure>().having((e) => e.code, 'code', 'extra_input')),
+      );
+      expect(
+        () => E6LineInput().add([123, 125, 10, 10]),
+        throwsA(isA<E6Failure>()),
+      );
+    },
+  );
+  test(
+    'real TCP accepts exactly32768 bytes including LF without host half-close',
+    () async {
+      final body = utf8.encode(jsonEncode(input()));
+      final wire = [...body, ...List.filled(32767 - body.length, 32), 10];
+      final observed = await wireExchange(wire);
+      expect(observed.output, startsWith('accepted\n'));
+      expect(observed.player.loadedKind, LoadKind.plexSession);
+      final status = observed.bridge.statuses.last;
+      expect(status['mode'], 'playback');
+      expect(status['phase'], 'closed');
+      expect(status['failureCode'], isNull);
+      expect(status['receivedBytes'], 32768);
+      expect(status['flushedBytes'], utf8.encode(observed.output!).length);
+      expect(
+        observed.bridge.calls.indexOf('cancel'),
+        lessThan(observed.bridge.calls.lastIndexOf('transportStatus')),
+      );
+    },
+  );
+  test('real TCP rejects32769 bytes with LF beyond the input cap', () async {
+    final body = utf8.encode(jsonEncode(input()));
+    final observed = await wireExchange([
+      ...body,
+      ...List.filled(32768 - body.length, 32),
+      10,
+    ]);
+    expect(observed.output ?? '', isNot(startsWith('accepted\n')));
+    expect(observed.player.calls, isNot(contains('load')));
+    expect(observed.bridge.statuses.last['failureCode'], 'input_cap');
+    expect(observed.bridge.statuses.last['receivedBytes'], 32768);
+  });
+  test(
+    'valid JSON without LF times out and EOF cannot substitute for delimiter',
+    () async {
+      for (final halfClose in [false, true]) {
+        final observed = await wireExchange(
+          utf8.encode(jsonEncode(input())),
+          halfClose: halfClose,
+          inputTimeout: const Duration(milliseconds: 40),
+        );
+        expect(observed.player.calls, isNot(contains('load')));
+        expect(observed.output ?? '', isNot(startsWith('accepted\n')));
+        expect(
+          observed.bridge.statuses.last['failureCode'],
+          halfClose ? 'peer_closed' : 'exchange_deadline',
+        );
+      }
+    },
+  );
+  test(
+    'empty delimiter and a second same-chunk frame never load media',
+    () async {
+      for (final wire in [
+        <int>[10],
+        utf8.encode('${jsonEncode(input())}\n\n'),
+      ]) {
+        final observed = await wireExchange(wire);
+        expect(observed.player.calls, isNot(contains('load')));
+        expect(observed.output ?? '', isNot(startsWith('accepted\n')));
+        expect(
+          observed.bridge.statuses.last['failureCode'],
+          wire.length == 1 ? 'invalid_probe' : 'extra_input',
+        );
+      }
+    },
+  );
+  test('later extra input after load cancels observation and reports transport error', () async {
+    final b = Bridge()..drains.addAll(List.filled(100, snapshot()));
+    final p = Player()..loadGate = Completer<void>();
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final task = receiveAndObserveE6(
+      p,
+      b,
+      baseline: false,
+      prebound: server,
+      cancelled: Completer<void>().future,
+      active: () => true,
+      activeTimeout: const Duration(seconds: 2),
+    );
+    final peer = await Socket.connect(
+      InternetAddress.loopbackIPv4,
+      server.port,
+    );
+    final response = peer.cast<List<int>>().transform(utf8.decoder).join();
+    final wire = utf8.encode('${jsonEncode(input())}\n');
+    peer.add(wire);
+    await peer.flush();
+    await p.loadStarted.future;
+    peer.write('x');
+    await peer.flush();
+    final text = await response;
+    await task;
+    peer.destroy();
+    expect(p.calls.where((c) => c == 'load').length, 1);
+    expect(p.calls, containsAllInOrder(['load', 'stop', 'dispose']));
+    final status = b.statuses.last;
+    expect(status['phase'], 'failed');
+    expect(status['failureCode'], 'extra_input');
+    expect(status['receivedBytes'], wire.length + 1);
+    expect(status['flushedBytes'], utf8.encode(text).length);
+  });
+  test('media failure remains in NDJSON while fully delivered transport stays closed', () async {
+    final b = Bridge()
+      ..drains.add(snapshot(ready: true, terminal: true, result: 'failed'));
+    final observed = await wireExchange(
+      utf8.encode('${jsonEncode(input())}\n'),
+      bridge: b,
+    );
+    final terminal =
+        jsonDecode(const LineSplitter().convert(observed.output!).last) as Map;
+    expect(terminal['result'], 'failed');
+    expect(b.statuses.last['phase'], 'closed');
+    expect(b.statuses.last['failureCode'], isNull);
+  });
+  test(
+    'playback status is exact, monotone and contains no capability values',
+    () async {
+      final observed = await wireExchange(
+        utf8.encode('${jsonEncode(input())}\n'),
+      );
+      var received = 0, flushed = 0;
+      var attempted = false;
+      for (final status in observed.bridge.statuses) {
+        expect(status.keys.toSet(), {
+          'mode',
+          'phase',
+          'receivedBytes',
+          'responseAttempted',
+          'flushedBytes',
+          'failureCode',
+        });
+        expect(status['mode'], 'playback');
+        expect(status['receivedBytes'], inInclusiveRange(received, 32768));
+        expect(status['flushedBytes'], inInclusiveRange(flushed, 1048576));
+        if (attempted) expect(status['responseAttempted'], true);
+        received = status['receivedBytes']! as int;
+        flushed = status['flushedBytes']! as int;
+        attempted = status['responseAttempted']! as bool;
+      }
+      expect(
+        jsonEncode(observed.bridge.statuses),
+        isNot(contains('localhost')),
+      );
+      expect(
+        observed.bridge.statuses.last['flushedBytes'],
+        utf8.encode(observed.output!).length,
+      );
+    },
+  );
+  test(
+    'final playback status seals against late asynchronous phase writes',
+    () async {
+      final b = Bridge();
+      final status = E6PlaybackStatus(b);
+      await status.publish('closed', finalStatus: true);
+      await expectLater(
+        status.publish('peer_accepted'),
+        throwsA(isA<E6Failure>()),
+      );
+      expect(b.calls, ['transportStatus']);
+      expect(b.statuses.single['phase'], 'closed');
+    },
+  );
+  test(
+    'LF baseline refusal preserves the original fixed fact-channel reason',
+    () async {
+      final request = input({
+        'variant': 'https://private.invalid/video/:/transcode/universal/session/synthetic/base/index.m3u8',
+      });
+      final observed = await wireExchange(
+        utf8.encode('${jsonEncode(request)}\n'),
+        baseline: true,
+      );
+      expect(observed.player.calls, isNot(contains('load')));
+      expect(observed.bridge.statuses.last['failureCode'], 'invalid_probe');
+      final terminal = jsonDecode(
+        const LineSplitter().convert(observed.output!).last,
+      ) as Map;
+      expect(terminal['failureCode'], 'baseline_private_refused');
+      expect(observed.output, isNot(contains('private.invalid')));
     },
   );
 }

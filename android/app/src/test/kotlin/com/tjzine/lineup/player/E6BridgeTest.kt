@@ -163,4 +163,66 @@ class E6BridgeTest {
         catch (error: FlutterException) { assertEquals("invalid_probe", error.code) }
         normal.close()
     }
+
+    @Test fun observedAndBaselinePlaybackInitializeFreshStatusAndAtomicReadiness() {
+        for (selector in listOf("--e6-observe", "--e6-public-baseline")) {
+            val status = java.io.File(context.cacheDir, "e6-transport-status")
+            status.writeText("stale public status")
+            java.io.File(context.cacheDir, "e6-transport-status.tmp").writeText("stale public temporary")
+            java.io.File(context.cacheDir, "e6-ready.tmp").writeText("stale public temporary")
+            val messenger = Messenger(); val b = bridge(messenger, listOf("--case=session-live", selector))
+            assertTrue(b.enabled); assertFalse(status.exists())
+            assertFalse(java.io.File(context.cacheDir, "e6-transport-status.tmp").exists())
+            assertFalse(java.io.File(context.cacheDir, "e6-ready.tmp").exists())
+            assertEquals(mapOf("ready" to true), messenger.call("markInputReady"))
+            assertTrue(java.io.File(context.cacheDir, "e6-ready").length() <= 128)
+            assertFalse(java.io.File(context.cacheDir, "e6-ready.tmp").exists())
+            assertEquals(mapOf("stored" to true), messenger.call("transportStatus", transportFacts("playback")))
+            val record = org.json.JSONObject(status.readText())
+            assertEquals("playback", record.getString("mode"))
+            assertEquals(android.os.Process.myPid(), record.getInt("pid"))
+            // The actual E6 fixture's existing configure/claim route is unchanged.
+            messenger.call("configure", e6Input())
+            assertNotNull(b.claim())
+            b.close(); assertTrue(status.exists())
+        }
+    }
+
+    @Test fun playbackCanPublishFinalFlushAfterCancelWithoutReopeningPlayerGate() {
+        val messenger = Messenger(); val b = bridge(messenger)
+        messenger.call("markInputReady")
+        messenger.call("transportStatus", transportFacts("playback"))
+        messenger.call("cancel")
+        assertEquals(mapOf("stored" to true), messenger.call("transportStatus",
+            transportFacts("playback", "closed", 32768) + mapOf("responseAttempted" to true, "flushedBytes" to 1048576L)))
+        val file = java.io.File(context.cacheDir, "e6-transport-status")
+        val expected = file.readBytes()
+        assertEquals(1048576L, org.json.JSONObject(file.readText()).getLong("flushedBytes"))
+        try { messenger.call("configure", e6Input()); fail("cancelled configure") }
+        catch (error: FlutterException) { assertEquals("unexpected_load", error.code) }
+        try { b.claim(); fail("cancelled claim") }
+        catch (error: E6Failure) { assertEquals("unexpected_load", error.code) }
+        try { messenger.call("markInputReady"); fail("cancelled readiness") }
+        catch (error: FlutterException) { assertEquals("invalid_config", error.code) }
+        val queuedHandler = messenger.handlers.getValue("lineup/e6")
+        b.close(); assertArrayEquals(expected, file.readBytes())
+        // A message queued before handler removal still must not publish after close.
+        val queued = StandardMethodCodec.INSTANCE.encodeMethodCall(MethodCall("transportStatus",
+            transportFacts("playback", "closed", 32768) + mapOf("responseAttempted" to true, "flushedBytes" to 1048576L)))
+            .apply { rewind() }
+        var response: ByteBuffer? = null
+        queuedHandler.onMessage(queued) { response = it }
+        try { StandardMethodCodec.INSTANCE.decodeEnvelope(response!!.apply { rewind() }); fail("closed status") }
+        catch (error: FlutterException) { assertEquals("invalid_probe", error.code) }
+        assertArrayEquals(expected, file.readBytes())
+        assertFalse(java.io.File(context.cacheDir, "e6-ready").exists())
+    }
+
+    @Test fun disabledBridgeDoesNotClearOrInitializePlaybackStatus() {
+        val file = java.io.File(context.cacheDir, "e6-transport-status")
+        file.writeText("existing public record")
+        val messenger = Messenger(); val b = bridge(messenger, emptyList())
+        assertFalse(b.enabled); assertTrue(messenger.handlers.isEmpty())
+        b.close(); assertEquals("existing public record", file.readText())
+    }
 }

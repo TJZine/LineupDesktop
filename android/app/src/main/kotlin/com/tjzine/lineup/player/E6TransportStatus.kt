@@ -27,7 +27,7 @@ internal class E6TransportStatus(cache: File, private val mode: String, private 
         if (input.keys != keys || input["mode"] != mode || input["phase"] !in phases)
             throw E6Failure("invalid_probe")
         val count = integer(input["receivedBytes"], 32768)
-        val output = integer(input["flushedBytes"], 1024)
+        val output = integer(input["flushedBytes"], if (mode == "playback") 1024L * 1024 else 1024L)
         val response = input["responseAttempted"] as? Boolean ?: throw E6Failure("invalid_probe")
         val failure = input["failureCode"]
         if (failure != null && failure !in failures || count < received || output < flushed ||
@@ -42,7 +42,7 @@ internal class E6TransportStatus(cache: File, private val mode: String, private 
     }
 
     companion object {
-        val modes = setOf("eof", "line")
+        val modes = setOf("eof", "line", "playback")
         val phases = setOf("starting", "waiting_resumed", "listening", "peer_accepted", "input_eof",
             "input_complete", "input_incomplete", "reply_attempt", "reply_flushed", "closed", "failed", "cancelled")
         val failures = setOf("invalid_probe", "input_cap", "extra_input", "peer_closed", "io_failure", "cancelled",

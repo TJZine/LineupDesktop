@@ -20,22 +20,23 @@ internal class E6Bridge(context: Context, messenger: BinaryMessenger, private va
         (("--e6-observe" in arguments) xor ("--e6-public-baseline" in arguments)) &&
         (!transportRequested || transportMode != null && "--e6-observe" in arguments)
     private val baseline = "--e6-public-baseline" in arguments
+    private val statusMode = transportMode ?: "playback"
     private val channel = if (enabled) MethodChannel(messenger, "lineup/e6") else null
     private var current: E6Observation? = null
     private var claimed = false
     private var cancelled = false
+    private var closed = false
     private var inputReadyNs: Long? = null
     private val readyFile by lazy { java.io.File(context.cacheDir, "e6-ready") }
     private val pid = android.os.Process.myPid()
     private var transportInitializationFailed = false
-    private val transportStatus = if (enabled && transportMode != null) try {
-        E6TransportStatus(context.cacheDir, transportMode, pid)
+    private val transportStatus = if (enabled) try {
+        E6TransportStatus(context.cacheDir, statusMode, pid)
     } catch (_: Exception) { transportInitializationFailed = true; null } else null
 
     init {
         if (enabled) {
-            if (transportMode == null) readyFile.delete()
-            else try {
+            try {
                 java.nio.file.Files.deleteIfExists(readyFile.toPath())
                 java.nio.file.Files.deleteIfExists(java.io.File(context.cacheDir, "e6-ready.tmp").toPath())
             } catch (_: Exception) { transportInitializationFailed = true }
@@ -47,7 +48,10 @@ internal class E6Bridge(context: Context, messenger: BinaryMessenger, private va
                     throw E6Failure("invalid_probe")
                 when (call.method) {
                     "transportStatus" -> {
-                        if (cancelled) throw E6Failure("invalid_probe")
+                        // Playback closes its request gate before native teardown
+                        // and the final socket flush. Only its public status
+                        // remains writable; no player/initialization gate reopens.
+                        if (closed || cancelled && statusMode != "playback") throw E6Failure("invalid_probe")
                         if (transportInitializationFailed) throw E6Failure("io_failure")
                         val status = transportStatus ?: throw E6Failure("invalid_probe")
                         status.store(call.arguments)
@@ -60,8 +64,7 @@ internal class E6Bridge(context: Context, messenger: BinaryMessenger, private va
                         // Public coordination only: no capability, metadata or diagnostics.
                         inputReadyNs = System.nanoTime()
                         val publicReady = "{\"protocol\":1,\"pid\":$pid,\"ready\":true}"
-                        if (transportMode == null) readyFile.writeText(publicReady, Charsets.UTF_8)
-                        else E6TransportStatus.publish(readyFile, publicReady.toByteArray(Charsets.UTF_8), 128)
+                        E6TransportStatus.publish(readyFile, publicReady.toByteArray(Charsets.UTF_8), 128)
                         result.success(mapOf("ready" to true))
                     }
                     "configure" -> {
@@ -97,6 +100,7 @@ internal class E6Bridge(context: Context, messenger: BinaryMessenger, private va
     fun claim(): E6Observation? {
         if (transportRequested) throw E6Failure("invalid_probe")
         if (!enabled) return null
+        if (cancelled) throw E6Failure("unexpected_load")
         if (claimed) throw E6Failure("unexpected_load")
         val observation = current ?: throw E6Failure("invalid_config")
         claimed = true
@@ -110,7 +114,7 @@ internal class E6Bridge(context: Context, messenger: BinaryMessenger, private va
         } catch (_: Exception) { /* Never delete a replacement/unknown owner. */ }
     }
 
-    fun close() { cancelled = true; current?.cancel(); if (enabled) clearOwnMarker(); channel?.setMethodCallHandler(null) }
+    fun close() { closed = true; cancelled = true; current?.cancel(); if (enabled) clearOwnMarker(); channel?.setMethodCallHandler(null) }
 
     companion object {
         internal fun capabilities(enabled: Boolean): Map<String, Any> {

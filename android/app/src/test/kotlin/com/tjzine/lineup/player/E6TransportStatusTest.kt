@@ -127,4 +127,35 @@ class E6TransportStatusTest {
         assertArrayEquals(bytes, ready.readBytes())
         assertFalse(File(root, "e6-ready.tmp").exists())
     }
+
+    @Test fun playbackUsesFullE6OutputBoundWhileRetainingTheSmallPublicRecord() {
+        val root = temporary.newFolder(); val status = E6TransportStatus(root, "playback", 4312)
+        val file = File(root, "e6-transport-status")
+        rejected { status.store(facts(mode = "playback", flushed = 1048577L, attempted = true)) }
+        rejected { status.store(facts(mode = "playback", received = 32769)) }
+        status.store(facts(mode = "playback", phase = "closed", received = 32768,
+            attempted = true, flushed = 1048576L))
+        val record = JSONObject(file.readText())
+        assertEquals(1048576L, record.getLong("flushedBytes"))
+        assertEquals(32768, record.getInt("receivedBytes"))
+        assertTrue(file.length() <= 512)
+        assertFalse(File(root, "e6-transport-status.tmp").exists())
+    }
+
+    @Test fun playbackRejectsPrivateSchemaAndCounterRegressionWithoutRewritingFinalFacts() {
+        val root = temporary.newFolder(); val status = E6TransportStatus(root, "playback", 4312)
+        status.store(facts(mode = "playback", phase = "reply_flushed", received = 128,
+            attempted = true, flushed = 1200))
+        val file = File(root, "e6-transport-status"); val expected = file.readBytes()
+        val invalid = listOf(facts(mode = "playback") + ("variant" to "PRIVATE_SENTINEL"),
+            facts(mode = "playback", phase = "PRIVATE_SENTINEL", received = 128, attempted = true, flushed = 1200),
+            facts(mode = "playback", failure = "PRIVATE_SENTINEL", received = 128, attempted = true, flushed = 1200),
+            facts(mode = "playback", received = 127, attempted = true, flushed = 1200),
+            facts(mode = "playback", received = 128, attempted = true, flushed = 1199))
+        for (input in invalid) {
+            rejected { status.store(input) }
+            assertArrayEquals(expected, file.readBytes())
+        }
+        assertFalse(file.readText().contains("PRIVATE"))
+    }
 }
