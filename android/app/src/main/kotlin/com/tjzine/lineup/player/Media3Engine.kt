@@ -7,6 +7,7 @@ import androidx.media3.common.*
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
@@ -28,14 +29,16 @@ internal class Media3Engine(
     private val subtitles: SubtitleView,
     private val sizeChanged: (VideoSize) -> Unit,
     private val keepScreenOn: (Boolean) -> Unit,
-    createPlayer: (Context) -> ExoPlayer = {
-        ExoPlayer.Builder(it).setLoadControl(PlaybackMemory.loadControl(it)).build()
-    },
+    createPlayer: ((Context) -> ExoPlayer)? = null,
+    private val e6: E6Observation? = null,
 ) : PlayerEngine {
+    private val e6Renderers = e6?.takeUnless { it.config.baseline }?.let { E6Renderers(context, it) }
     // The default builder owns an exclusive playback thread. Media3 quits it only
     // after releaseInternal finishes renderer/source teardown. Keep that public
     // thread handle: release() returning (or isReleased) cannot prove completion.
-    private val player = createPlayer(context).also {
+    private val player = (createPlayer?.invoke(context) ?: (
+        e6Renderers?.let { ExoPlayer.Builder(context, it) } ?: ExoPlayer.Builder(context)
+    ).setLoadControl(PlaybackMemory.loadControl(context)).build()).also {
         it.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
@@ -78,6 +81,7 @@ internal class Media3Engine(
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
     private var client: OkHttpClient? = null
     private var http: OkHttpDataSource.Factory? = null
+    private var e6Http: E6Http? = null
     private var closed = false
     private var released = false
     private var observer: PlayerEngine.Listener? = null
@@ -96,19 +100,37 @@ internal class Media3Engine(
     override fun load(media: MediaLoad, listener: PlayerEngine.Listener) {
         check(observer == null && !closed)
         observer = listener
+        if (e6 != null && !e6.accepts(media)) {
+            e6.fail("unexpected_load")
+            listener.failure("source_open_error")
+            return
+        }
         if (media.uri.toHttpUrlOrNull()?.isHttps != true) {
             listener.failure("source_open_error")
             return
         }
-        val network = MediaHttp.forLoad(
+        val ordinaryNetwork = MediaHttp.forLoad(
             if (media.kind == LoadKind.plexSession) media.uri.toHttpUrlOrNull() else null,
         )
+        val guard = e6?.let { E6Http(it) }
+        e6Http = guard
+        val network = if (guard == null) ordinaryNetwork else ordinaryNetwork.newBuilder()
+            .retryOnConnectionFailure(false).addInterceptor(guard).build()
         client = network
         val source = OkHttpDataSource.Factory(network)
         if (media.kind == LoadKind.direct && media.token != null)
             source.setDefaultRequestProperties(mapOf("X-Plex-Token" to media.token))
         http = source
-        if (debug) {
+        if (e6 != null && guard != null) {
+            e6.attach(player, guard) {
+                guard.closeGate()
+                // Cancellation socket IO belongs off the application Looper.
+                cleanupExecutor.execute { network.dispatcher.cancelAll() }
+            }
+            if (e6Renderers != null) player.setVideoFrameMetadataListener { ptsUs, releaseNs, _, _ ->
+                e6Renderers.frame(ptsUs, releaseNs)
+            }
+        } else if (debug) {
             var lastTimestamp: Long? = null
             player.setVideoFrameMetadataListener { ptsUs, _, _, _ ->
                 val previous = lastTimestamp
@@ -123,7 +145,7 @@ internal class Media3Engine(
                 override fun onPlaybackStateChanged(state: Int) {
                     if (closed) return
                     when (state) {
-                        Player.STATE_READY -> listener.ready(observedPaused())
+                        Player.STATE_READY -> { e6?.ready(); listener.ready(observedPaused()) }
                         Player.STATE_ENDED -> listener.ended()
                     }
                 }
@@ -135,6 +157,11 @@ internal class Media3Engine(
                         )) {
                         listener.property("pause", observedPaused())
                     }
+                }
+
+                override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo, reason: Int) {
+                    if (!closed && reason == Player.DISCONTINUITY_REASON_SEEK) e6?.discontinuity()
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -152,9 +179,13 @@ internal class Media3Engine(
                             else -> null
                         }
                     if (unsupported != null) {
+                        e6?.emit("format", mapOf("decoderSupport" to "unsupported"))
+                        e6?.fail(unsupported)
                         listener.failure(unsupported)
                         return
                     }
+                    e6?.emit("format", mapOf("decoderSupport" to if (value.containsType(C.TRACK_TYPE_VIDEO) &&
+                        value.containsType(C.TRACK_TYPE_AUDIO)) "supported" else "unknown"))
                     listener.property("track-list", tracks.encode(value))
                 }
 
@@ -163,12 +194,17 @@ internal class Media3Engine(
                 }
 
                 override fun onVideoSizeChanged(size: VideoSize) {
-                    if (!closed) sizeChanged(size)
+                    if (!closed) {
+                        sizeChanged(size)
+                        e6?.emit("format", mapOf("width" to size.width.takeIf { it > 0 },
+                            "height" to size.height.takeIf { it > 0 }))
+                    }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
                     if (closed) return
                     val (code, status) = Media3Failure.classify(error)
+                    e6?.playerFailure(error, code)
                     listener.failure(code, status)
                 }
             }
@@ -184,6 +220,7 @@ internal class Media3Engine(
                 ) {
                     if (!closed && !firstFrame) {
                         firstFrame = true
+                        if (e6Renderers == null) e6?.renderedFirstFrame(renderTimeMs)
                         listener.firstFrame(player.currentPosition)
                     }
                 }
@@ -203,9 +240,21 @@ internal class Media3Engine(
                     reuse: androidx.media3.exoplayer.DecoderReuseEvaluation?,
                 ) {
                     if (closed) return
+                    e6?.format(format, true)
                     listener.property("video-codec", Media3Tracks.codec(format))
                     listener.property("video-format", Media3Tracks.bounded(format.sampleMimeType))
                     listener.property("video-params", Media3Tracks.videoParams(format))
+                }
+
+                override fun onAudioInputFormatChanged(time: AnalyticsListener.EventTime, format: Format,
+                    reuse: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
+                    if (!closed) e6?.format(format, false)
+                }
+
+                override fun onLoadCompleted(time: AnalyticsListener.EventTime,
+                    info: androidx.media3.exoplayer.source.LoadEventInfo,
+                    data: androidx.media3.exoplayer.source.MediaLoadData) {
+                    if (!closed) guard?.loadCompleted(info.uri, info.elapsedRealtimeMs, info.loadDurationMs)
                 }
             }
         )
@@ -218,7 +267,7 @@ internal class Media3Engine(
         player.setSeekParameters(SeekParameters.EXACT)
         val mediaSource = createSource(
             media,
-            source,
+            guard?.factory(network) ?: source,
             GuardedExtractorsFactory { fact ->
                 if (debug && fact["phase"] == "fragment-seek") {
                     val position = fact["position"] as Long
@@ -234,6 +283,7 @@ internal class Media3Engine(
                     }
                 }
             },
+            e6,
         )
         if (media.kind == LoadKind.plexSession) player.setMediaSource(mediaSource)
         else player.setMediaSource(mediaSource, milliseconds(media.startSeconds))
@@ -252,8 +302,10 @@ internal class Media3Engine(
     }
 
     override fun seek(seconds: Double, exact: Boolean) {
+        if (e6 != null && !e6.beforeSeek(seconds, exact)) return
         player.setSeekParameters(if (exact) SeekParameters.EXACT else SeekParameters.PREVIOUS_SYNC)
         player.seekTo(milliseconds(seconds))
+        e6?.seekAck()
     }
 
     override fun select(type: String, id: Long?): Boolean {
@@ -286,6 +338,7 @@ internal class Media3Engine(
             return
         }
         val firstAttempt = !closed
+        e6Http?.closeGate()
         closed = true
         observer = null
         handler.removeCallbacks(progress)
@@ -319,8 +372,8 @@ internal class Media3Engine(
         val timedOutThisAttempt = firstAttempt && releaseTimedOut
         val returned = releaseReturned
         cleanupExecutor.execute {
-            val decoderSuccess =
-                if (returned) {
+            var decoderSuccess =
+                if (returned && e6Http == null) {
                     try {
                         playbackThread.join(1000)
                         !playbackThread.isAlive
@@ -332,13 +385,26 @@ internal class Media3Engine(
             val networkSuccess =
                 try {
                     closingNetwork?.dispatcher?.cancelAll()
-                    true
+                    e6Http?.awaitDrained(closingNetwork) ?: true
                 } catch (_: Exception) {
                     false
                 }
+            if (e6Http != null && returned) {
+                // Debug request cancellation/drain may be what lets Media3's
+                // queued renderer/source release finish. Fence the real thread
+                // after that work, within the fixture's 15-second teardown cap.
+                decoderSuccess = try {
+                    playbackThread.join(5000)
+                    !playbackThread.isAlive
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    false
+                }
+            }
             handler.post {
                 if (!networkSuccess) client = closingNetwork
                 released = decoderSuccess && networkSuccess
+                e6?.release(released, playbackThread.isAlive, networkSuccess)
                 complete(released)
             }
         }
@@ -347,11 +413,17 @@ internal class Media3Engine(
     companion object {
         internal fun createSource(
             media: MediaLoad,
-            source: OkHttpDataSource.Factory,
+            source: DataSource.Factory,
             extractors: ExtractorsFactory,
+            e6: E6Observation? = null,
         ): MediaSource =
             if (media.kind == LoadKind.plexSession)
-                HlsMediaSource.Factory(source).createMediaSource(MediaItem.fromUri(media.uri))
+                HlsMediaSource.Factory(source).apply {
+                    if (e6 != null) {
+                        setLoadErrorHandlingPolicy(E6NoRetry())
+                        if (!e6.config.baseline) setExtractorFactory(E6Extractors(e6))
+                    }
+                }.createMediaSource(MediaItem.fromUri(media.uri))
             else ProgressiveMediaSource.Factory(source, extractors)
                 .createMediaSource(MediaItem.fromUri(media.uri))
 

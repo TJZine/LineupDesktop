@@ -20,7 +20,7 @@ import kotlin.math.roundToInt
 
 /** Activity composition root installs [view] below Flutter, keeping video default-z-order. */
 @UnstableApi
-class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMessenger) {
+class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMessenger, e6Arguments: List<String> = emptyList()) {
     val view = FrameLayout(activity)
     private val video = SurfaceView(activity)
     // White text with a black outline and no box, like libmpv's default; Media3's
@@ -39,6 +39,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
             )
         }
     private val handler = Handler(Looper.getMainLooper())
+    private val e6 = E6Bridge(activity, messenger, handler, e6Arguments)
     private val channel = MethodChannel(messenger, "lineup/native_player")
     private var rectangle = VideoRect(0.0, 0.0, 0.0, 0.0, 1.0)
     private var videoSize = VideoSize.UNKNOWN
@@ -47,7 +48,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
             object : PlayerHost {
                 override fun firstFrame(generation: Long, loadId: Long, positionMs: Long) {
                     if (
-                        activity.applicationInfo.flags and
+                        !e6.enabled && activity.applicationInfo.flags and
                             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
                     ) {
                         android.util.Log.i(
@@ -59,7 +60,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
 
                 override fun fragmentSeek(generation: Long, loadId: Long, position: Long) {
                     if (
-                        activity.applicationInfo.flags and
+                        !e6.enabled && activity.applicationInfo.flags and
                             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
                     ) {
                         android.util.Log.i(
@@ -75,7 +76,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                     presentationTimeUs: Long,
                 ) {
                     if (
-                        activity.applicationInfo.flags and
+                        !e6.enabled && activity.applicationInfo.flags and
                             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
                     ) {
                         android.util.Log.i(
@@ -92,7 +93,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                     accepted: Boolean,
                 ) {
                     if (
-                        activity.applicationInfo.flags and
+                        !e6.enabled && activity.applicationInfo.flags and
                             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
                     ) {
                         android.util.Log.i(
@@ -128,6 +129,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                             layoutVideo()
                         },
                         ::keepScreenOn,
+                        e6 = e6.claim(),
                     )
 
                 override fun event(value: Map<String, Any?>) {
@@ -209,6 +211,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
     }
 
     fun close() {
+        e6.close()
         channel.setMethodCallHandler(null)
         controller.close()
         (view.parent as? ViewGroup)?.removeView(view)
