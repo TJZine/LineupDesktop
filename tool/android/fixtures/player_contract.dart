@@ -2,7 +2,6 @@
 // Never reads app state or credentials; live E6 URLs arrive only in memory.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -15,34 +14,23 @@ import 'package:lineup_desktop/playback/native_player.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  ServerSocket? e6Input;
   if (kDebugMode &&
       args.contains('--case=session-live') &&
       (args.contains('--e6-observe') ||
           args.contains('--e6-public-baseline'))) {
-    try {
-      // The native public readiness marker follows this actual listen backlog.
-      e6Input = await bindE6Input();
-      final ready = await const MethodChannelE6Bridge()
-          .call('markInputReady')
-          .timeout(const Duration(seconds: 10));
-      if (ready is! Map || ready.length != 1 || ready['ready'] != true) {
-        throw const E6Failure('channel_failed');
-      }
-    } catch (_) {
-      await e6Input?.close();
-      try {
-        await const MethodChannelE6Bridge()
-            .call('cancel')
-            .timeout(const Duration(seconds: 10));
-      } catch (_) {}
-      return;
-    }
+    await startE6Fixture(
+      MethodChannelNativePlayer(),
+      const MethodChannelE6Bridge(),
+      baseline: args.contains('--e6-public-baseline'),
+      show: (firstFrame) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => firstFrame());
+        runApp(const MaterialApp(home: _FixtureOverlay()));
+      },
+    );
+    return;
   }
   runApp(const MaterialApp(home: _FixtureOverlay()));
-  WidgetsBinding.instance.addPostFrameCallback(
-    (_) => _run(args, e6Input: e6Input),
-  );
+  WidgetsBinding.instance.addPostFrameCallback((_) => _run(args));
 }
 
 class _FixtureOverlay extends StatelessWidget {
@@ -80,37 +68,11 @@ Future<void> _wait(bool Function() condition, {int seconds = 12}) async {
   }
 }
 
-Future<void> _run(List<String> args, {ServerSocket? e6Input}) async {
+Future<void> _run(List<String> args) async {
   final player = MethodChannelNativePlayer();
   final mode =
       args.where((a) => a.startsWith('--case=')).firstOrNull?.substring(7) ??
       'contract';
-  if (mode == 'session-live' &&
-      (args.contains('--e6-observe') ||
-          args.contains('--e6-public-baseline'))) {
-    final cancelled = Completer<void>();
-    void cancel() {
-      if (!cancelled.isCompleted) cancelled.complete();
-    }
-
-    final lifecycle = AppLifecycleListener(onPause: cancel, onDetach: cancel);
-    try {
-      await receiveAndObserveE6(
-        player,
-        const MethodChannelE6Bridge(),
-        baseline: args.contains('--e6-public-baseline'),
-        prebound: e6Input,
-        cancelled: cancelled.future,
-        active: () =>
-            !cancelled.isCompleted &&
-            WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
-      );
-    } finally {
-      cancel();
-      lifecycle.dispose();
-    }
-    return;
-  }
   final sessionMode = mode == 'session-hls' || mode == 'session-live';
   final cancelled = Completer<void>();
   void cancel() {

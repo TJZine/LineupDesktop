@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 
 import 'e6_schema.dart';
@@ -513,6 +514,109 @@ Future<ServerSocket> bindE6Input({
   }
 }
 
+/// Owns lifecycle before binding, then advertises only a resumed, listening receiver.
+/// [show] installs the fixture and invokes its callback after the first Flutter frame.
+Future<void> startE6Fixture(
+  NativePlayer player,
+  E6Bridge bridge, {
+  required bool baseline,
+  required void Function(VoidCallback firstFrame) show,
+  Future<ServerSocket> Function()? bind,
+  Duration startupTimeout = const Duration(seconds: 30),
+  Duration teardownTimeout = const Duration(seconds: 15),
+}) async {
+  if (!kDebugMode) throw const E6Failure('debug_required');
+  final cancelled = Completer<void>();
+  final resumed = Completer<void>();
+  final firstFrame = Completer<void>();
+  final expired = Completer<void>();
+  void cancel() {
+    if (!cancelled.isCompleted) cancelled.complete();
+  }
+
+  void lifecycleChanged(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      cancel();
+    }
+    if (state == AppLifecycleState.resumed && !resumed.isCompleted) {
+      resumed.complete();
+    }
+  }
+
+  final binding = WidgetsBinding.instance;
+  // Register before any await: startup can receive pause/detach while binding.
+  final lifecycle = AppLifecycleListener(onStateChange: lifecycleChanged);
+  if (binding.lifecycleState == AppLifecycleState.resumed) resumed.complete();
+  final timer = Timer(startupTimeout, expired.complete);
+  bool active() =>
+      !cancelled.isCompleted &&
+      binding.lifecycleState == AppLifecycleState.resumed;
+  Future<T> startup<T>(Future<T> operation) => Future.any<T>([
+    operation,
+    cancelled.future.then<T>((_) => throw const E6Failure('cancelled')),
+    expired.future.then<T>((_) => throw const E6Failure('input_timeout')),
+  ]);
+  void guard() {
+    if (expired.isCompleted) throw const E6Failure('input_timeout');
+    if (!active()) throw const E6Failure('cancelled');
+  }
+
+  ServerSocket? server;
+  var delegated = false;
+  try {
+    server = await startup(
+      bindE6Input(cancelled: cancelled.future, bind: bind),
+    );
+    if (cancelled.isCompleted) throw const E6Failure('cancelled');
+    show(() {
+      if (!firstFrame.isCompleted) firstFrame.complete();
+    });
+    await startup(Future.wait([firstFrame.future, resumed.future]));
+    guard();
+    delegated = true;
+    await receiveAndObserveE6(
+      player,
+      bridge,
+      baseline: baseline,
+      prebound: server,
+      cancelled: cancelled.future,
+      active: active,
+      teardownTimeout: teardownTimeout,
+      onListening: () async {
+        guard();
+        final ready = await startup(
+          bridge.call('markInputReady').timeout(const Duration(seconds: 10)),
+        );
+        if (ready is! Map || ready.length != 1 || ready['ready'] != true) {
+          throw const E6Failure('channel_failed');
+        }
+        guard();
+        timer.cancel();
+      },
+    );
+  } catch (_) {
+    // No capability is read before receiver ownership; never report raw startup errors.
+    cancel();
+  } finally {
+    timer.cancel();
+    if (!delegated) {
+      cancel();
+      await receiveAndObserveE6(
+        player,
+        bridge,
+        baseline: baseline,
+        prebound: server,
+        cancelled: cancelled.future,
+        active: () => false,
+        teardownTimeout: teardownTimeout,
+      );
+    }
+    cancel();
+    lifecycle.dispose();
+  }
+}
+
 /// Owns both halves of the sole peer until release evidence and terminal output.
 Future<void> receiveAndObserveE6(
   NativePlayer player,
@@ -522,6 +626,7 @@ Future<void> receiveAndObserveE6(
   required bool Function() active,
   Future<ServerSocket> Function()? bind,
   ServerSocket? prebound,
+  Future<void> Function()? onListening,
   Duration inputTimeout = const Duration(seconds: 60),
   Duration activeTimeout = const Duration(seconds: 90),
   Duration teardownTimeout = const Duration(seconds: 15),
@@ -605,6 +710,10 @@ Future<void> receiveAndObserveE6(
         }
       },
     );
+    if (onListening != null) await onListening();
+    if (!active() || localCancel.isCompleted) {
+      throw const E6Failure('cancelled');
+    }
     Future<E6Request> input() async {
       // The sole peer is closed/destroyed by this function's finally.
       // ignore: close_sinks

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 
 import '../../tool/android/fixtures/e6_probe.dart';
@@ -99,6 +100,8 @@ class Player implements NativePlayer {
   String? token;
   Duration? start;
   final seeks = <Duration>[];
+  SeekMode? lastSeekMode;
+  PlayerVideoRect? rectangle;
   @override
   Future<void> initialize() async {
     calls.add('initialize');
@@ -124,7 +127,7 @@ class Player implements NativePlayer {
 
   @override
   Future<void> seek(Duration position, {SeekMode mode = SeekMode.exact}) async {
-    expect(mode, SeekMode.exact);
+    lastSeekMode = mode;
     seeks.add(position);
     loadGate?.complete();
   }
@@ -132,7 +135,7 @@ class Player implements NativePlayer {
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async {
     calls.add('rectangle');
-    expect(rect.width, 960);
+    rectangle = rect;
   }
 
   @override
@@ -147,6 +150,120 @@ class Player implements NativePlayer {
     await disposeGate;
     if (failDispose) throw StateError('secret error');
   }
+}
+
+// In-memory loopback peer: models one accepted socket and the host's write half-close.
+class StartupPeer extends Stream<Uint8List> implements Socket {
+  StartupPeer() {
+    incoming.add(Uint8List.fromList(utf8.encode(jsonEncode(inputFields()))));
+    unawaited(incoming.close());
+  }
+  static Map<String, dynamic> inputFields() => input();
+  final incoming = StreamController<Uint8List>();
+  final output = StringBuffer();
+  bool destroyed = false;
+  @override
+  void write(Object? value) => output.write(value);
+  @override
+  Future<void> flush() async {}
+  @override
+  Future<void> close() async {}
+  @override
+  void destroy() {
+    destroyed = true;
+  }
+
+  @override
+  StreamSubscription<Uint8List> listen(
+    void Function(Uint8List)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return incoming.stream.listen(
+      onData,
+      onError: onError,
+      onDone: () {
+        onDone?.call();
+      },
+      cancelOnError: cancelOnError,
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class StartupServer extends Stream<Socket> implements ServerSocket {
+  final peers = StreamController<Socket>();
+  bool listening = false, closed = false;
+  int connections = 0;
+  bool connectionWasReady = false;
+  void connect(StartupPeer peer) {
+    connectionWasReady = listening && !closed;
+    connections++;
+    peers.add(peer);
+  }
+
+  @override
+  StreamSubscription<Socket> listen(
+    void Function(Socket)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    listening = true;
+    return peers.stream.listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    );
+  }
+
+  @override
+  Future<ServerSocket> close() async {
+    closed = true;
+    unawaited(peers.close());
+    return this;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class StartupBridge extends Bridge {
+  Future<Object?> Function()? ready;
+  bool marker = false;
+  @override
+  Future<Object?> call(String method, [Map<String, Object?>? arguments]) async {
+    if (method == 'markInputReady') {
+      calls.add(method);
+      marker = true;
+      if (ready != null) return await ready!();
+      return {'ready': true};
+    }
+    if (method == 'cancel') marker = false;
+    return super.call(method, arguments);
+  }
+}
+
+void resumeBinding(WidgetsBinding binding) {
+  if (binding.lifecycleState == AppLifecycleState.paused) {
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  }
+  if (binding.lifecycleState == AppLifecycleState.hidden) {
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  }
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+}
+
+void pauseBinding(WidgetsBinding binding) {
+  if (binding.lifecycleState == AppLifecycleState.resumed) {
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  }
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
 }
 
 Future<Map<String, Object?>> run(
@@ -273,6 +390,7 @@ void main() {
         },
       );
       expect(p.loadedKind, LoadKind.plexSession);
+      expect(p.rectangle?.width, 960);
       expect(p.token, isNull);
       expect(p.start, isNull);
       expect(p.seeks, isEmpty);
@@ -297,6 +415,7 @@ void main() {
             ]);
       expect((await run(p, b, seek: true))['result'], 'complete');
       expect(p.seeks, [const Duration(seconds: 21)]);
+      expect(p.lastSeekMode, SeekMode.exact);
     },
   );
   test('already inactive never loads but does real cleanup', () async {
@@ -638,4 +757,222 @@ void main() {
     expect(calls.first.method, 'capabilities');
     expect(calls.last.method, 'drain');
   });
+  test('entrypoint waits for resumed after inactive first frame before one connection', () async {
+    final binding = WidgetsBinding.instance;
+    resumeBinding(binding);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    final server = StartupServer(),
+        peer = StartupPeer(),
+        bridge = StartupBridge(),
+        player = Player();
+    final frame = Completer<VoidCallback>(),
+        events = <String>[],
+        readyChecks = <bool>[];
+    bridge.ready = () async {
+      events.add('mark');
+      readyChecks.addAll([
+        server.listening,
+        events.contains('firstFrame'),
+        binding.lifecycleState == AppLifecycleState.resumed,
+      ]);
+      server.connect(peer);
+      events.add('connect');
+      return {'ready': true};
+    };
+    final task = startE6Fixture(
+      player,
+      bridge,
+      baseline: true,
+      bind: () async {
+        events.add('bind');
+        return server;
+      },
+      show: (callback) {
+        events.add('show');
+        frame.complete(callback);
+      },
+    );
+    final callback = await frame.future;
+    events.add('firstFrame');
+    callback();
+    await Future<void>.delayed(Duration.zero);
+    expect(events, ['bind', 'show', 'firstFrame']);
+    expect(bridge.marker, false);
+    expect(server.listening, false);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await task;
+    expect(events, containsAllInOrder(['firstFrame', 'mark', 'connect']));
+    expect(readyChecks, [true, true, true]);
+    expect(server.connections, 1);
+    expect(server.connectionWasReady, true);
+    expect(peer.output.toString(), startsWith('accepted\n'));
+    expect(
+      jsonDecode(const LineSplitter().convert(peer.output.toString()).last),
+      containsPair('result', 'complete'),
+    );
+    expect(bridge.marker, false);
+    expect(server.closed, true);
+    expect(peer.destroyed, true);
+  });
+  test(
+    'pause during initial resumed wait closes listener without marker or load',
+    () async {
+      final binding = WidgetsBinding.instance;
+      resumeBinding(binding);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      final server = StartupServer(),
+          bridge = StartupBridge(),
+          player = Player(),
+          frame = Completer<VoidCallback>();
+      final task = startE6Fixture(
+        player,
+        bridge,
+        baseline: true,
+        bind: () async => server,
+        show: frame.complete,
+      );
+      (await frame.future)();
+      pauseBinding(binding);
+      await task;
+      expect(server.closed, true);
+      expect(bridge.calls, isNot(contains('markInputReady')));
+      expect(player.calls, isNot(contains('load')));
+      resumeBinding(binding);
+    },
+  );
+  test(
+    'detach during startup wait cannot later resume or publish readiness',
+    () async {
+      final binding = WidgetsBinding.instance;
+      resumeBinding(binding);
+      pauseBinding(binding);
+      final server = StartupServer(),
+          bridge = StartupBridge(),
+          player = Player(),
+          frame = Completer<VoidCallback>();
+      final task = startE6Fixture(
+        player,
+        bridge,
+        baseline: true,
+        bind: () async => server,
+        show: frame.complete,
+      );
+      (await frame.future)();
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
+      await task;
+      resumeBinding(binding);
+      await Future<void>.delayed(Duration.zero);
+      expect(server.closed, true);
+      expect(bridge.calls, isNot(contains('markInputReady')));
+      expect(player.calls, isNot(contains('load')));
+    },
+  );
+  test('pause after marker publication removes marker and ignores late ready reply', () async {
+    final binding = WidgetsBinding.instance;
+    resumeBinding(binding);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    final server = StartupServer(),
+        bridge = StartupBridge(),
+        player = Player(),
+        frame = Completer<VoidCallback>();
+    final reply = Completer<Object?>(), marked = Completer<void>();
+    bridge.ready = () {
+      marked.complete();
+      return reply.future;
+    };
+    final task = startE6Fixture(
+      player,
+      bridge,
+      baseline: true,
+      bind: () async => server,
+      show: frame.complete,
+    );
+    (await frame.future)();
+    resumeBinding(binding);
+    await marked.future;
+    expect(bridge.marker, true);
+    expect(server.listening, true);
+    pauseBinding(binding);
+    await task;
+    expect(bridge.marker, false);
+    expect(server.closed, true);
+    expect(player.calls, isNot(contains('load')));
+    reply.complete({'ready': true});
+    resumeBinding(binding);
+    await Future<void>.delayed(Duration.zero);
+    expect(bridge.calls.where((c) => c == 'markInputReady').length, 1);
+    expect(player.calls, isNot(contains('load')));
+  });
+  test(
+    'startup owns pause cancellation before asynchronous bind returns',
+    () async {
+      final binding = WidgetsBinding.instance;
+      resumeBinding(binding);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      final pending = Completer<ServerSocket>(),
+          server = StartupServer(),
+          bridge = StartupBridge(),
+          player = Player();
+      var shown = false;
+      final task = startE6Fixture(
+        player,
+        bridge,
+        baseline: true,
+        bind: () => pending.future,
+        show: (_) {
+          shown = true;
+        },
+      );
+      pauseBinding(binding);
+      await task;
+      pending.complete(server);
+      await Future<void>.delayed(Duration.zero);
+      expect(server.closed, true);
+      expect(shown, false);
+      expect(bridge.calls, isNot(contains('markInputReady')));
+      expect(player.calls, isNot(contains('load')));
+      resumeBinding(binding);
+    },
+  );
+  test('initial resumed deadline closes prebound socket without a readiness marker', () async {
+    final binding = WidgetsBinding.instance;
+    resumeBinding(binding);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    final server = StartupServer(),
+        bridge = StartupBridge(),
+        player = Player(),
+        frame = Completer<VoidCallback>();
+    final task = startE6Fixture(
+      player,
+      bridge,
+      baseline: true,
+      bind: () async => server,
+      show: frame.complete,
+      startupTimeout: const Duration(milliseconds: 15),
+    );
+    (await frame.future)();
+    await task;
+    expect(server.closed, true);
+    expect(bridge.calls, isNot(contains('markInputReady')));
+    expect(player.calls, isNot(contains('load')));
+    resumeBinding(binding);
+  });
+  test(
+    'listener callback accepts one buffered peer before starting input read',
+    () async {
+      final server = StartupServer(), peer = StartupPeer();
+      await receiveAndObserveE6(
+        Player(),
+        Bridge(),
+        baseline: true,
+        prebound: server,
+        cancelled: Completer<void>().future,
+        active: () => true,
+        onListening: () async {
+          server.connect(peer);
+        },
+      ).timeout(const Duration(seconds: 1));
+      expect(peer.output.toString(), startsWith('accepted\n'));
+    },
+  );
 }
