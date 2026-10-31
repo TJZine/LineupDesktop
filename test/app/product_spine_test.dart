@@ -92,6 +92,7 @@ void main() {
         player: nativePlayer,
         lineup: controller,
         guide: guide,
+        clock: () => _ProductPlex.now,
       );
       addTearDown(player.dispose);
 
@@ -207,6 +208,7 @@ void main() {
         player: restoredNativePlayer,
         lineup: controller,
         guide: restoredGuide,
+        clock: () => _ProductPlex.now,
       );
       addTearDown(restoredPlayer.dispose);
       await restoredPlayer.tune(controller.channels.first.id);

@@ -392,6 +392,370 @@ void main() {
     });
   });
 
+  group('scheduled live join freshness', () {
+    for (final positionBeforeReady in [false, true]) {
+      test(
+        'production READY ${positionBeforeReady ? 'after' : 'before'} position observation',
+        () async {
+          const channel = MethodChannel('lineup/native_player');
+          final messenger =
+              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+          final calls = <MethodCall>[];
+          int? id;
+          messenger.setMockMethodCallHandler(channel, (call) async {
+            calls.add(call);
+            if (call.method == 'load') id = call.arguments['loadId'] as int;
+            return null;
+          });
+          addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+          final lineup = _TestLineup();
+          var now = lineup.channels.last.anchor.add(
+            const Duration(seconds: 10),
+          );
+          final guide = GuideController(
+            lineup: lineup,
+            clock: () => now,
+            loadSchedule: (channel) async => _schedule(channel),
+          );
+          final player = MethodChannelNativePlayer();
+          await player.initialize();
+          final c = PlayerCoordinator(
+            player: player,
+            lineup: lineup,
+            guide: guide,
+            clock: () => now,
+          );
+          addTearDown(lineup.dispose);
+          addTearDown(guide.dispose);
+          addTearDown(player.dispose);
+          addTearDown(c.dispose);
+          final tune = c.tune('channel-b');
+          await pumpEventQueue();
+          now = now.add(const Duration(seconds: 13));
+          Future<void> position() => _nativeEvent({
+            'type': 'property',
+            'loadId': id,
+            'name': 'time-pos',
+            'value': 0,
+          });
+          if (positionBeforeReady) await position();
+          await _nativeEvent({
+            'type': 'state',
+            'loadId': id,
+            'state': 'playing',
+          });
+          expect(await tune, isTrue);
+          final seeks = calls.where((call) => call.method == 'seek').toList();
+          expect(seeks, hasLength(positionBeforeReady ? 1 : 0));
+          if (positionBeforeReady) {
+            expect(seeks.single.arguments['seconds'], 23.0);
+            expect(seeks.single.arguments['mode'], 'keyframes');
+          } else {
+            // No native position was available at the readiness decision. It is
+            // unproven, not zero lag; no deferred timer or post-commit chase.
+            await position();
+            expect(calls.where((call) => call.method == 'seek'), isEmpty);
+          }
+          expect(player.position, Duration.zero);
+        },
+      );
+    }
+
+    for (final sample in [
+      (delay: 4999, observed: 30000, seek: false),
+      (delay: 5000, observed: 30000, seek: true),
+      (delay: 13000, observed: 30000, seek: true),
+      (delay: 13000, observed: 43000, seek: false),
+      (delay: 13000, observed: 50000, seek: false),
+    ]) {
+      test('forward observed lag ${sample.delay}/${sample.observed}', () async {
+        final p = _BlockingEventPlayer();
+        final f = _ContinuationFixture(player: p);
+        addTearDown(f.close);
+        f.now = f.now.add(const Duration(seconds: 30));
+        final tune = f.coordinator.tune('channel-b');
+        await p.firstLoadStarted.future;
+        f.now = f.now.add(Duration(milliseconds: sample.delay));
+        p.position = Duration(milliseconds: sample.observed);
+        p.emitStatus(
+          PlayerState.playing,
+          generation: p.loadGenerations.last,
+          positionUpdated: true,
+        );
+        await pumpEventQueue();
+        p.releaseFirstLoad.complete();
+        expect(await tune, isTrue);
+        expect(
+          p.seeks,
+          sample.seek
+              ? [Duration(milliseconds: 30000 + sample.delay)]
+              : isEmpty,
+        );
+        expect(p.seekModes, sample.seek ? [SeekMode.keyframes] : isEmpty);
+        // The fake accepts a seek without reporting a landing. Policy must not
+        // fabricate an observed position or chase that unchanged observation.
+        expect(f.coordinator.position, Duration(milliseconds: sample.observed));
+      });
+    }
+
+    for (final intent in ['none', 'pause', 'explicit seek']) {
+      test(
+        '$intent while corrective seek is pending cannot repeat catchup',
+        () async {
+          final p = _BlockingLiveJoinSeekPlayer();
+          final f = _ContinuationFixture(player: p);
+          addTearDown(f.close);
+          f.now = f.now.add(const Duration(seconds: 30));
+          final tune = f.coordinator.tune('channel-b');
+          await p.firstLoadStarted.future;
+          f.now = f.now.add(const Duration(seconds: 13));
+          p.position = const Duration(seconds: 30);
+          p.emitStatus(
+            PlayerState.playing,
+            generation: p.loadGenerations.last,
+            positionUpdated: true,
+          );
+          await pumpEventQueue();
+          p.releaseFirstLoad.complete();
+          await p.firstSeekStarted.future;
+          expect(p.seeks, [const Duration(seconds: 43)]);
+          f.now = f.now.add(const Duration(seconds: 10));
+          final control = switch (intent) {
+            'pause' => f.coordinator.pause(),
+            'explicit seek' => f.coordinator.seekTo(
+              const Duration(seconds: 90),
+            ),
+            _ => null,
+          };
+          p.releaseFirstSeek.complete();
+          expect(await tune, isTrue);
+          if (control != null) await control;
+          expect(
+            p.seeks,
+            intent == 'explicit seek'
+                ? [const Duration(seconds: 43), const Duration(seconds: 90)]
+                : [const Duration(seconds: 43)],
+          );
+          expect(
+            p.seekModes,
+            intent == 'explicit seek'
+                ? [SeekMode.keyframes, SeekMode.exact]
+                : [SeekMode.keyframes],
+          );
+          expect(p.plays, 0);
+          expect(f.coordinator.position, const Duration(seconds: 30));
+        },
+      );
+    }
+
+    for (final programBoundary in [false, true]) {
+      test('reloads current ${programBoundary ? 'program' : 'part'}', () async {
+        final p = _BlockingEventPlayer();
+        final f = _ContinuationFixture(
+          player: p,
+          parts: _parts(
+            first: const Duration(seconds: 60),
+            second: const Duration(seconds: 60),
+          ),
+        );
+        addTearDown(f.close);
+        f.now = f.now.add(Duration(seconds: programBoundary ? 115 : 50));
+        final tune = f.coordinator.tune('channel-b');
+        await p.firstLoadStarted.future;
+        p.position = Duration(seconds: programBoundary ? 55 : 50);
+        p.emitStatus(
+          PlayerState.playing,
+          generation: p.loadGenerations.last,
+          positionUpdated: true,
+        );
+        await pumpEventQueue();
+        f.now = f.now.add(Duration(seconds: programBoundary ? 10 : 20));
+        p.releaseFirstLoad.complete();
+        expect(await tune, isTrue);
+        expect(p.loads, hasLength(2));
+        expect(
+          p.loads.last.path,
+          programBoundary ? '/part-1.mkv' : '/part-2.mkv',
+        );
+        expect(
+          p.loadStartPositions.last,
+          Duration(seconds: programBoundary ? 5 : 10),
+        );
+        expect(
+          f.coordinator.currentProgram!.scheduled.item.id,
+          programBoundary ? 'short-1' : 'short-0',
+        );
+        expect(p.seeks, isEmpty);
+      });
+    }
+
+    test(
+      'another preparation boundary fails instead of reloading forever',
+      () async {
+        final p = _BlockingJoinBoundaryPlayer();
+        final f = _ContinuationFixture(player: p);
+        addTearDown(f.close);
+        f.now = f.now.add(const Duration(seconds: 115));
+        final tune = f.coordinator.tune('channel-b');
+        await p.firstLoadStarted.future;
+        f.now = f.now.add(const Duration(seconds: 10));
+        p.releaseFirstLoad.complete();
+        await p.secondLoadStarted.future;
+        f.now = f.now.add(const Duration(seconds: 120));
+        p.releaseSecondLoad.complete();
+        expect(await tune, isFalse);
+        expect(p.loads, hasLength(2));
+        expect(p.seeks, isEmpty);
+        expect(
+          f.coordinator.currentProgram?.scheduled.item.id,
+          isNot('short-1'),
+        );
+      },
+    );
+
+    for (final intent in [
+      'pause',
+      'pause then resume',
+      'play',
+      'explicit seek',
+    ]) {
+      test('$intent during preparation preserves its join intent', () async {
+        final p = _BlockingEventPlayer();
+        final f = _ContinuationFixture(player: p);
+        addTearDown(f.close);
+        f.now = f.now.add(const Duration(seconds: 30));
+        final tune = f.coordinator.tune('channel-b');
+        await p.firstLoadStarted.future;
+        f.now = f.now.add(const Duration(seconds: 13));
+        p.position = const Duration(seconds: 30);
+        p.emitStatus(
+          PlayerState.playing,
+          generation: p.loadGenerations.last,
+          positionUpdated: true,
+        );
+        await pumpEventQueue();
+        final control = intent == 'explicit seek'
+            ? f.coordinator.seekTo(const Duration(seconds: 90))
+            : intent == 'play'
+            ? f.coordinator.play()
+            : f.coordinator.pause();
+        await pumpEventQueue();
+        Future<void>? resume;
+        if (intent == 'pause then resume') resume = f.coordinator.play();
+        // Native may publish playing while the user's pause is still pending.
+        p.emitStatus(
+          PlayerState.playing,
+          generation: p.loadGenerations.last,
+          positionUpdated: true,
+        );
+        p.releaseFirstLoad.complete();
+        expect(await tune, isTrue);
+        await control;
+        if (resume != null) await resume;
+        expect(
+          p.seeks,
+          intent == 'explicit seek'
+              ? [const Duration(seconds: 90)]
+              : intent == 'play'
+              ? [const Duration(seconds: 43)]
+              : isEmpty,
+        );
+        expect(p.plays, ['pause then resume', 'play'].contains(intent) ? 1 : 0);
+        if (intent == 'pause') {
+          await f.coordinator.play();
+          expect(p.seeks, isEmpty);
+          expect(p.plays, 1);
+        }
+      });
+    }
+
+    for (final retire in ['tune', 'stop', 'sleep', 'dispose', 'scope']) {
+      test('$retire retires delayed join ownership', () async {
+        final p = _BlockingEventPlayer();
+        final f = _ContinuationFixture(player: p);
+        addTearDown(f.close);
+        f.now = f.now.add(const Duration(seconds: 30));
+        final tune = f.coordinator.tune('channel-b');
+        await p.firstLoadStarted.future;
+        p.position = const Duration(seconds: 30);
+        p.emitStatus(
+          PlayerState.playing,
+          generation: p.loadGenerations.last,
+          positionUpdated: true,
+        );
+        await pumpEventQueue();
+        Future<bool>? nextTune;
+        Future<void>? stopping;
+        switch (retire) {
+          case 'tune':
+            nextTune = f.coordinator.tune('channel-0');
+          case 'stop':
+            stopping = f.coordinator.stop();
+          case 'sleep':
+            f.coordinator.setSleepTimer(const Duration(seconds: 5));
+          case 'dispose':
+            f.coordinator.dispose();
+            f.disposed = true;
+          case 'scope':
+            f.lineup.changeContentScope();
+        }
+        f.now = f.now.add(const Duration(seconds: 13));
+        p.releaseFirstLoad.complete();
+        expect(await tune, isFalse);
+        if (stopping != null) await stopping;
+        if (nextTune != null) expect(await nextTune, isTrue);
+        expect(p.seeks, isEmpty);
+        expect(p.plays, 0);
+      });
+    }
+
+    for (final explicit in [false, true]) {
+      test(
+        'authorization replacement retains ${explicit ? 'explicit' : 'live'} intent',
+        () async {
+          final p = _BlockingJoinBoundaryPlayer();
+          final lineup = _TestLineup(
+            recoverAuthorization: true,
+            blockAuthorizationRecovery: true,
+          );
+          final f = _ContinuationFixture(player: p, lineupController: lineup);
+          addTearDown(f.close);
+          f.now = f.now.add(const Duration(seconds: 30));
+          final tune = f.coordinator.tune('channel-b');
+          await p.firstLoadStarted.future;
+          p.emitError(
+            generation: p.loadGenerations.last,
+            failureCode: 'http_error',
+            httpStatus: 401,
+            recoverable: true,
+          );
+          await lineup.recoveryStarted.future;
+          p.releaseFirstLoad.complete();
+          lineup.finishRecovery.complete();
+          await p.secondLoadStarted.future;
+          f.now = f.now.add(const Duration(seconds: 13));
+          p.position = const Duration(seconds: 30);
+          p.emitStatus(
+            PlayerState.playing,
+            generation: p.loadGenerations.last,
+            positionUpdated: true,
+          );
+          await pumpEventQueue();
+          final seek = explicit
+              ? f.coordinator.seekTo(const Duration(seconds: 90))
+              : null;
+          p.releaseSecondLoad.complete();
+          expect(await tune, isTrue);
+          if (seek != null) await seek;
+          expect(p.loads, hasLength(2));
+          expect(lineup.recoveryCalls, 1);
+          expect(p.seeks, [Duration(seconds: explicit ? 90 : 43)]);
+          expect(p.seekModes, [explicit ? SeekMode.exact : SeekMode.keyframes]);
+        },
+      );
+    }
+  });
+
   group('Android background lifecycle', () {
     test(
       'inactive is inert; background stops once and resumes current schedule',
@@ -9255,6 +9619,7 @@ class _EventPlayer extends _Player {
     PlayerState state, {
     int? generation,
     bool tracksUpdated = false,
+    bool positionUpdated = false,
   }) {
     _events.add(
       PlayerEvent(
@@ -9265,6 +9630,7 @@ class _EventPlayer extends _Player {
         tracks: tracks,
         generation: generation,
         tracksUpdated: tracksUpdated,
+        positionUpdated: positionUpdated,
       ),
     );
   }
@@ -9867,3 +10233,9 @@ class _BlockingDisplayPlayer extends _DisplayPlayer {
     await releaseSecondLoad.future;
   }
 }
+
+class _BlockingJoinBoundaryPlayer extends _BlockingSecondLoadPlayer
+    with _BlocksFirstLoad {}
+
+class _BlockingLiveJoinSeekPlayer extends _BlockingFirstSeekPlayer
+    with _BlocksFirstLoad {}
