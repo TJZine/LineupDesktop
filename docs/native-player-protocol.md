@@ -708,3 +708,16 @@ p0 dialogue and i/b/u/an remain. A failed decorator track falls back to stock
 native drawing even when `lineupDrawsStyled` is true; existing decoded cues also
 fall back without reload or a playback-error event. Native drawing receives
 stock-equivalent cues with private metadata removed.
+
+Pinned Media3 1.11.1 can lose overlapping SSA events after a paused same-load
+seek when several events share a start timestamp. A stock parser control
+reproduced the loss independently of the decorator: on V1's synthetic
+`subtitle-ass-dialogue.mkv` overlap fixture, native input counts were three at a
+fresh 7-second start, one after
+seeking that load to 13 seconds, and three at a fresh 13-second start. The
+candidate and stock-parser OFF-mode captures were byte-identical in all three
+cases. The fresh-load result is a recovery control, not a passing seek result.
+Sample-queue selection provides a source-supported explanation; the internal
+seek branch was not directly traced. Lineup can style only delivered cues and
+adds no timeline cache or forced reload. Stock SSA vector commands may appear
+as literal text; this feature does not add vector rendering parity.

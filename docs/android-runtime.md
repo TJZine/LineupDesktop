@@ -277,3 +277,10 @@ input/rewrite scratch is capped at 64 KiB, 64 events and 256 style transitions;
 there is no second parser, extra buffered timeline or retained raw-event cache.
 An empty public parse releases SsaParser's reference to rewritten scratch after
 each packet. HLS/transcoding is not wired to this decorator.
+
+Media3 1.11.1 has an observed SSA overlap limitation: a paused same-load seek can
+omit dialogue events with a shared start timestamp. A stock-parser control
+reproduced the same native output, so changing Lineup styling cannot reconstruct
+the missing events. See the [protocol's SSA limitation](native-player-protocol.md#android-subtitle-mechanisms)
+for the control and its scope. Fresh-load recovery does not establish that the
+failed seek works.
