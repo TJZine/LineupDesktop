@@ -118,11 +118,13 @@ class HandheldMiniPlayer extends StatelessWidget {
   const HandheldMiniPlayer({
     required this.controller,
     required this.onOpenPlayer,
+    this.showSubtitles = true,
     super.key,
   });
 
   final PlayerCoordinator controller;
   final VoidCallback onOpenPlayer;
+  final bool showSubtitles;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -166,7 +168,10 @@ class HandheldMiniPlayer extends StatelessWidget {
                           children: [
                             AspectRatio(
                               aspectRatio: 16 / 9,
-                              child: PlayerSurface(controller: controller),
+                              child: PlayerSurface(
+                                controller: controller,
+                                showSubtitles: showSubtitles,
+                              ),
                             ),
                             Expanded(
                               child: ColoredBox(

@@ -1506,6 +1506,7 @@ class _LineupShellState extends State<LineupShell> {
                       _destination == ShellDestination.settings))
                 HandheldMiniPlayer(
                   controller: _player,
+                  showSubtitles: _destination != ShellDestination.settings,
                   onOpenPlayer: () =>
                       unawaited(_select(ShellDestination.player)),
                 ),
