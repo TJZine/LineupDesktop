@@ -20,6 +20,7 @@ import '../ui/app_ui.dart';
 import '../ui/lineup_canvas.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
+import 'subtitle_layer.dart';
 import 'player_coordinator.dart';
 import 'player_key_resolver.dart';
 import 'player_track_label.dart';
@@ -58,6 +59,8 @@ enum _PlayerControl {
 
 class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   final _trackDisplays = PlayerTrackDisplayCache();
+  final _subtitleAvoidance = SubtitlePanelAvoidance();
+  final _subtitleLayerKey = GlobalKey();
   late PlayerOverlay _renderedOverlay;
   late int _bottomPanelGeneration;
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
@@ -119,6 +122,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _visibleClockTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
+    _subtitleAvoidance.dispose();
     _internalRootFocus.dispose();
     for (final node in _controls.values) {
       node.dispose();
@@ -809,6 +813,8 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                   PlayerSurface(
                     controller: controller,
                     fullPlayer: true,
+                    subtitleAvoidance: _subtitleAvoidance,
+                    subtitleLayerKey: _subtitleLayerKey,
                     onClose: () {
                       controller.showFullGuide();
                       widget.openGuide();
@@ -880,12 +886,16 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                       if (childOverlay != PlayerOverlay.osd) {
                         return transitioned;
                       }
-                      return SlideTransition(
-                        position: Tween(
-                          begin: const Offset(0, 1),
-                          end: Offset.zero,
-                        ).animate(fade),
-                        child: transitioned,
+                      return SubtitlePanelAnimationRepaint(
+                        avoidance: _subtitleAvoidance,
+                        animation: fade,
+                        child: SlideTransition(
+                          position: Tween(
+                            begin: const Offset(0, 1),
+                            end: Offset.zero,
+                          ).animate(fade),
+                          child: transitioned,
+                        ),
                       );
                     },
                     child: _OverlayTextTheme(
@@ -905,6 +915,8 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                             detailsExpanded:
                                 overlay == PlayerOverlay.nowPlaying,
                             controller: controller,
+                            subtitleAvoidance: _subtitleAvoidance,
+                            subtitleLayerKey: _subtitleLayerKey,
                             openMenu: widget.openMenu,
                             menuFocus: _menuFocus,
                             sleepFocus: _sleepFocus,
@@ -977,14 +989,20 @@ class PlayerSurface extends StatelessWidget {
   const PlayerSurface({
     required this.controller,
     this.showErrors = false,
+    this.showSubtitles = true,
     this.fullPlayer = false,
+    this.subtitleAvoidance,
+    this.subtitleLayerKey,
     this.onClose,
     super.key,
   });
 
   final PlayerCoordinator controller;
   final bool showErrors;
+  final bool showSubtitles;
   final bool fullPlayer;
+  final SubtitlePanelAvoidance? subtitleAvoidance;
+  final GlobalKey? subtitleLayerKey;
   final VoidCallback? onClose;
 
   @override
@@ -1019,6 +1037,13 @@ class PlayerSurface extends StatelessWidget {
           ColoredBox(color: roles.deepBackground)
         else
           NativeVideoSurface(player: controller.player),
+        if (showSubtitles)
+          SubtitleLayer(
+            avoidance: fullPlayer ? subtitleAvoidance : null,
+            cues: controller.subtitleCues,
+            appearance: controller.subtitleAppearance,
+            presentationKey: fullPlayer ? subtitleLayerKey : null,
+          ),
         if (unsupported) _Unsupported(message: controller.status.message),
         if (preparing) const _Loading(label: 'Preparing playback'),
         if (!hasError && !preparing && state == PlayerState.buffering)
@@ -1174,6 +1199,8 @@ class _Osd extends StatelessWidget {
     required this.sleepAnchor,
     required this.restoreSleepFocus,
     required this.controls,
+    required this.subtitleAvoidance,
+    required this.subtitleLayerKey,
     this.openMenu,
     this.detailsExpanded = false,
   });
@@ -1186,6 +1213,8 @@ class _Osd extends StatelessWidget {
   final LayerLink sleepAnchor;
   final VoidCallback restoreSleepFocus;
   final Map<_PlayerControl, FocusNode> controls;
+  final SubtitlePanelAvoidance subtitleAvoidance;
+  final GlobalKey subtitleLayerKey;
 
   @override
   Widget build(BuildContext context) {
@@ -1545,103 +1574,109 @@ class _Osd extends StatelessWidget {
             right: !DeviceProfile.of(context).isTv,
             bottom: !DeviceProfile.of(context).isTv,
             child: _BottomPanelExpansion(
-              child: CustomPaint(
-                painter: _OsdPanelMaterial(
-                  color: _overlayColor(context, controller, more: .62),
-                  collapsedFade:
-                      !detailsExpanded &&
-                      controller.lineup.settings.overlayTransparency ==
-                          OverlayTransparency.moreTransparent,
-                ),
-                child: Container(
-                  key: const Key('player-osd-surface'),
-                  width: double.infinity,
-                  padding: EdgeInsets.fromLTRB(
-                    leftInset,
-                    detailsExpanded
-                        ? 20
-                        : horizontal
-                        ? (size.height >= 900 ? 44 : 20)
-                        : (size.height >= 720 ? 56 : 40),
-                    rightInset,
-                    bottomInset,
+              child: SubtitlePanelReporter(
+                avoidance: subtitleAvoidance,
+                presentationKey: subtitleLayerKey,
+                feather: _OsdPanelMaterial.feather,
+                child: CustomPaint(
+                  painter: _OsdPanelMaterial(
+                    color: _overlayColor(context, controller, more: .62),
+                    collapsedFade:
+                        !detailsExpanded &&
+                        controller.lineup.settings.overlayTransparency ==
+                            OverlayTransparency.moreTransparent,
                   ),
-                  child: _consumeOverlayPadding(
-                    context,
-                    Semantics(
-                      container: true,
-                      label: 'Playback controls',
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (detailsExpanded) ...[
-                            _NowPlaying(
-                              closeFocus: controls[_PlayerControl.close]!,
-                              moreInfoFocus: controls[_PlayerControl.moreInfo]!,
-                              controller: controller,
-                              maxHeight: math.max(
-                                80,
-                                size.height -
-                                    (wrapActions ? 280 : 190) -
-                                    (dvrControlsEnabled ? 40 : 0) +
-                                    // The additive compact More info action must
-                                    // not crop the shelf's four cast/role pairs.
-                                    (DeviceProfile.of(context).isTv ? 52 : 0),
+                  child: Container(
+                    key: const Key('player-osd-surface'),
+                    width: double.infinity,
+                    padding: EdgeInsets.fromLTRB(
+                      leftInset,
+                      detailsExpanded
+                          ? 20
+                          : horizontal
+                          ? (size.height >= 900 ? 44 : 20)
+                          : (size.height >= 720 ? 56 : 40),
+                      rightInset,
+                      bottomInset,
+                    ),
+                    child: _consumeOverlayPadding(
+                      context,
+                      Semantics(
+                        container: true,
+                        label: 'Playback controls',
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (detailsExpanded) ...[
+                              _NowPlaying(
+                                closeFocus: controls[_PlayerControl.close]!,
+                                moreInfoFocus:
+                                    controls[_PlayerControl.moreInfo]!,
+                                controller: controller,
+                                maxHeight: math.max(
+                                  80,
+                                  size.height -
+                                      (wrapActions ? 280 : 190) -
+                                      (dvrControlsEnabled ? 40 : 0) +
+                                      // The additive compact More info action must
+                                      // not crop the shelf's four cast/role pairs.
+                                      (DeviceProfile.of(context).isTv ? 52 : 0),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 20),
-                            if (horizontal && !wrapActions)
+                              const SizedBox(height: 20),
+                              if (horizontal && !wrapActions)
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Expanded(child: playbackStatus),
+                                    const SizedBox(width: 24),
+                                    groupedActions,
+                                  ],
+                                )
+                              else ...[
+                                playbackStatus,
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: groupedActions,
+                                ),
+                              ],
+                            ] else if (horizontal && !wrapActions)
                               Row(
+                                key: const Key('player-osd-horizontal-layout'),
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  Expanded(child: playbackStatus),
-                                  const SizedBox(width: 24),
+                                  Expanded(child: identity),
+                                  SizedBox(width: 24),
                                   groupedActions,
                                 ],
                               )
                             else ...[
-                              playbackStatus,
-                              const SizedBox(height: 6),
+                              KeyedSubtree(
+                                key: horizontal
+                                    ? const Key('player-osd-horizontal-layout')
+                                    : null,
+                                child: identity,
+                              ),
+                              SizedBox(height: 6),
                               Align(
                                 alignment: Alignment.centerRight,
-                                child: groupedActions,
+                                child: wrapActions
+                                    ? groupedActions
+                                    : Row(
+                                        key: const Key(
+                                          'player-osd-stacked-controls',
+                                        ),
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [groupedActions],
+                                      ),
                               ),
                             ],
-                          ] else if (horizontal && !wrapActions)
-                            Row(
-                              key: const Key('player-osd-horizontal-layout'),
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Expanded(child: identity),
-                                SizedBox(width: 24),
-                                groupedActions,
-                              ],
-                            )
-                          else ...[
-                            KeyedSubtree(
-                              key: horizontal
-                                  ? const Key('player-osd-horizontal-layout')
-                                  : null,
-                              child: identity,
-                            ),
-                            SizedBox(height: 6),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: wrapActions
-                                  ? groupedActions
-                                  : Row(
-                                      key: const Key(
-                                        'player-osd-stacked-controls',
-                                      ),
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [groupedActions],
-                                    ),
-                            ),
+                            SizedBox(height: 10),
+                            progress,
                           ],
-                          SizedBox(height: 10),
-                          progress,
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -4705,12 +4740,13 @@ ButtonStyle _playerActionStyle(BuildContext context) {
 
 class _OsdPanelMaterial extends CustomPainter {
   const _OsdPanelMaterial({required this.color, required this.collapsedFade});
+  static const feather = 55.0;
+
   final Color color;
   final bool collapsedFade;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const feather = 55.0;
     final bounds = Rect.fromLTWH(
       0,
       -feather,

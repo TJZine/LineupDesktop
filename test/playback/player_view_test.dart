@@ -24,9 +24,11 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
+import 'package:lineup_desktop/playback/subtitle_layer.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/settings/subtitle_style.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 
@@ -63,6 +65,361 @@ TransitionBuilder _playerCanvasBuilderFor(bool tv) =>
 
 void main() {
   tearDown(debugResetClearLogoCache);
+
+  testWidgets(
+    'surface subtitles stay above native video and can be hidden for Settings',
+    (tester) async {
+      final f = _Fixture(PlayerState.playing);
+      addTearDown(f.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: PlayerSurface(controller: f.player),
+        ),
+      );
+      f.native.subtitleCues.value = SubtitleCues([
+        SubtitleCue(
+          align: 2,
+          lines: [
+            [const SubtitleSegment(text: 'Fixture caption')],
+          ],
+        ),
+      ]);
+      await tester.pump();
+      final stack = tester.widget<Stack>(
+        find
+            .ancestor(
+              of: find.byType(NativeVideoSurface),
+              matching: find.byType(Stack),
+            )
+            .first,
+      );
+      expect(stack.children[0], isA<NativeVideoSurface>());
+      expect(stack.children[1], isA<SubtitleLayer>());
+      expect(
+        find.descendant(
+          of: find.byType(SubtitleLayer),
+          matching: find.byType(CustomPaint),
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: PlayerSurface(controller: f.player, showSubtitles: false),
+        ),
+      );
+      expect(find.byType(SubtitleLayer), findsNothing);
+      expect(find.byType(NativeVideoSurface), findsOneWidget);
+    },
+  );
+
+  testWidgets('SD-17 follows panel geometry and moves only bottom cues', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richProgram: true,
+      dvrControlsEnabled: true,
+    );
+    addTearDown(() {
+      fixture.player.closeOverlay();
+      fixture.dispose();
+    });
+    fixture.native.subtitleCues.value = SubtitleCues([
+      SubtitleCue(
+        align: 1,
+        lines: [
+          [const SubtitleSegment(text: 'Bottom cue')],
+        ],
+      ),
+      SubtitleCue(
+        align: 5,
+        lines: [
+          [const SubtitleSegment(text: 'Middle cue')],
+        ],
+      ),
+      SubtitleCue(
+        align: 7,
+        lines: [
+          [const SubtitleSegment(text: 'Top cue')],
+        ],
+      ),
+    ]);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    final reporter = tester.widget<SubtitlePanelReporter>(
+      find.byType(SubtitlePanelReporter),
+    );
+    final panelBox = tester.renderObject<RenderBox>(
+      find.byKey(const Key('player-osd-surface')),
+    );
+    final layerBox = tester.renderObject<RenderBox>(find.byType(SubtitleLayer));
+    final expectedPanelTop = layerBox.globalToLocal(
+      panelBox.localToGlobal(const Offset(0, -55)),
+    );
+    expect(reporter.avoidance.value.highestPanelTop, isNotNull);
+    expect(
+      reporter.avoidance.value.highestPanelTop,
+      closeTo(expectedPanelTop.dy, .5),
+    );
+    final paint =
+        tester
+                .widget<CustomPaint>(
+                  find.descendant(
+                    of: find.byType(SubtitleLayer),
+                    matching: find.byType(CustomPaint),
+                  ),
+                )
+                .painter!
+            as SubtitlePainter;
+    expect(paint.avoidance, same(reporter.avoidance.value));
+    expect(
+      paint.clearanceLift(
+        fixture.native.subtitleCues.value.cues.first,
+        layerBox.size,
+        panelTop: reporter.avoidance.value.highestPanelTop!,
+      ),
+      greaterThan(0),
+    );
+    expect(
+      paint.clearanceLift(
+        fixture.native.subtitleCues.value.cues[1],
+        layerBox.size,
+        panelTop: reporter.avoidance.value.highestPanelTop!,
+      ),
+      0,
+    );
+    expect(
+      paint.clearanceLift(
+        fixture.native.subtitleCues.value.cues[2],
+        layerBox.size,
+        panelTop: reporter.avoidance.value.highestPanelTop!,
+      ),
+      0,
+    );
+    fixture.player.closeOverlay();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('SD-17 retains retiring geometry and resizes Now Playing', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 1080));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    addTearDown(() {
+      fixture.player.closeOverlay();
+      fixture.dispose();
+    });
+    fixture.native.subtitleCues.value = SubtitleCues([
+      SubtitleCue(
+        align: 1,
+        lines: [
+          [const SubtitleSegment(text: 'Transition cue')],
+        ],
+      ),
+    ]);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    final reporter = tester.widget<SubtitlePanelReporter>(
+      find.byType(SubtitlePanelReporter),
+    );
+    expect(find.byType(SubtitlePanelAnimationRepaint), findsOneWidget);
+    final osdTop = reporter.avoidance.value.highestPanelTop!;
+
+    void expectCurrentPanelTop() {
+      final panelBox = tester.renderObject<RenderBox>(
+        find.byKey(const Key('player-osd-surface')),
+      );
+      final layerBox = tester.renderObject<RenderBox>(
+        find.byType(SubtitleLayer),
+      );
+      final expected = layerBox.globalToLocal(
+        panelBox.localToGlobal(const Offset(0, -55)),
+      );
+      final paint =
+          tester
+                  .widget<CustomPaint>(
+                    find.descendant(
+                      of: find.byType(SubtitleLayer),
+                      matching: find.byType(CustomPaint),
+                    ),
+                  )
+                  .painter!
+              as SubtitlePainter;
+      expect(paint.panelTopForPaint, closeTo(expected.dy, .5));
+      expect(
+        reporter.avoidance.currentHighestPanelTop,
+        closeTo(expected.dy, .5),
+      );
+    }
+
+    expectCurrentPanelTop();
+
+    fixture.player.showNowPlaying();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
+    final transitionTop = reporter.avoidance.value.highestPanelTop!;
+    expect(transitionTop, lessThanOrEqualTo(osdTop));
+
+    await tester.pumpAndSettle();
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
+    final nowPlayingTop = reporter.avoidance.value.highestPanelTop!;
+    expect(nowPlayingTop, lessThan(osdTop));
+
+    fixture.player.showOsd();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
+    await tester.pumpAndSettle();
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
+
+    fixture.player.closeOverlay();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    expectCurrentPanelTop();
+    await tester.pumpAndSettle();
+    expect(reporter.avoidance.value.panels, isEmpty);
+  });
+
+  testWidgets('SD-17 settles immediately with Reduce Motion', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    addTearDown(() {
+      fixture.player.closeOverlay();
+      fixture.dispose();
+    });
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pump();
+    final reporter = tester.widget<SubtitlePanelReporter>(
+      find.byType(SubtitlePanelReporter),
+    );
+    expect(reporter.avoidance.value.panels, hasLength(1));
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+  });
+
+  testWidgets('SD-17 raster keeps cue clear during panel motion', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    addTearDown(() {
+      fixture.player.closeOverlay();
+      fixture.dispose();
+    });
+    await fixture.lineup.updateSettings(
+      (settings) => settings.copyWith(
+        subtitleStyle: settings.subtitleStyle.copyWith(
+          textColor: SubtitleColor.cyan,
+          edge: SubtitleEdge.none,
+          windowOpacity: SubtitleBoxOpacity.off,
+          backgroundOpacity: SubtitleBoxOpacity.off,
+        ),
+      ),
+    );
+    fixture.native.subtitleCues.value = SubtitleCues([
+      SubtitleCue(
+        align: 1,
+        lines: [
+          [const SubtitleSegment(text: 'Current frame cue')],
+        ],
+      ),
+    ]);
+    final captureKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: captureKey,
+        child: MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> expectRasterClearance() async {
+      final pixels = await _captureBoundaryPixels(tester, captureKey);
+      final cue = _cyanBounds(pixels);
+      expect(cue, isNotNull);
+      final panelBox = tester.renderObject<RenderBox>(
+        find.byKey(const Key('player-osd-surface')),
+      );
+      final layerBox = tester.renderObject<RenderBox>(
+        find.byType(SubtitleLayer),
+      );
+      final panelTop = panelBox.localToGlobal(const Offset(0, -55)).dy;
+      final layerTop = layerBox.localToGlobal(Offset.zero).dy;
+      final layerBottom = layerBox
+          .localToGlobal(Offset(0, layerBox.size.height))
+          .dy;
+      final scale = (layerBottom - layerTop) / layerBox.size.height;
+      expect(
+        cue!.bottom,
+        lessThanOrEqualTo(panelTop - .02 * layerBox.size.height * scale + 2),
+      );
+    }
+
+    fixture.player.showOsd();
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectRasterClearance();
+
+    await tester.pumpAndSettle();
+    fixture.player.showNowPlaying();
+    fixture.native.subtitleCues.value = SubtitleCues([
+      SubtitleCue(
+        align: 1,
+        lines: [
+          [const SubtitleSegment(text: 'Cue arrived during expansion')],
+        ],
+      ),
+    ]);
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectRasterClearance();
+
+    fixture.player.showOsd();
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectRasterClearance();
+
+    fixture.player.closeOverlay();
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectRasterClearance();
+  });
 
   testWidgets(
     'hidden progress leaves Player subtree idle and visible OSD progress stays live',
@@ -8945,6 +9302,17 @@ String _statusLabelForTest(PlayerState state) => switch (state) {
 };
 
 class _Native implements NativePlayer {
+  @override
+  final ValueNotifier<SubtitleCues> subtitleCues = ValueNotifier<SubtitleCues>(
+    const SubtitleCues.empty(),
+  );
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {}
+
   _Native(
     PlayerState state, {
     this.failLoad = false,
@@ -9204,6 +9572,53 @@ Future<void> _r2Capture(WidgetTester tester, GlobalKey key, String name) async {
         .writeAsBytes(bytes!.buffer.asUint8List());
     image.dispose();
   });
+}
+
+typedef _Raster = ({Uint8List pixels, int width, int height});
+
+Future<_Raster> _captureBoundaryPixels(
+  WidgetTester tester,
+  GlobalKey key,
+) async {
+  final raster = await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final result = (
+      pixels: bytes!.buffer.asUint8List(),
+      width: image.width,
+      height: image.height,
+    );
+    image.dispose();
+    return result;
+  });
+  return raster!;
+}
+
+Rect? _cyanBounds(_Raster raster) {
+  var left = raster.width;
+  var top = raster.height;
+  var right = -1;
+  var bottom = -1;
+  for (var y = 0; y < raster.height; y++) {
+    for (var x = 0; x < raster.width; x++) {
+      final index = (y * raster.width + x) * 4;
+      final red = raster.pixels[index];
+      final green = raster.pixels[index + 1];
+      final blue = raster.pixels[index + 2];
+      final alpha = raster.pixels[index + 3];
+      if (red < 100 && green > 120 && blue > 120 && alpha > 100) {
+        left = math.min(left, x);
+        top = math.min(top, y);
+        right = math.max(right, x);
+        bottom = math.max(bottom, y);
+      }
+    }
+  }
+  return right < 0
+      ? null
+      : Rect.fromLTRB(left.toDouble(), top.toDouble(), right + 1, bottom + 1);
 }
 
 _Fixture _amendmentFixture({

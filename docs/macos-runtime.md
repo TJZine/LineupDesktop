@@ -623,3 +623,22 @@ This is an engineering list of review items, not legal advice.
 - HarfBuzz 14.6.0: <https://github.com/harfbuzz/harfbuzz/releases/tag/14.6.0>
 - FriBidi 1.0.17: <https://github.com/fribidi/fribidi/releases/tag/v1.0.17>
 - Little CMS 2.19.1: <https://github.com/mm2/Little-CMS/releases/tag/lcms2.19.1>
+
+## Subtitle presentation
+
+The shared core uses the pinned mpv subtitle decoder classification and privately
+observes codec and ASS cue text. Flutter draws converted text (including lavf
+`ssa`); libmpv retains native ASS author styling and bitmap geometry, with scale
+applied and image-only positioning. Styled ASS can opt into Lineup's dialogue
+rendering; signs, drawings and author positioning are then excluded. See the
+[desktop subtitle protocol](native-player-protocol.md#desktop-subtitle-decoding-and-presentation)
+for ordering, bounded cues, suppression and privacy rules. No native font assets
+or device caption preferences are introduced on macOS.
+
+Primary suppression uses `sub-visibility=no`; the invisible unstyled libass style
+is an additional backstop. Bitmap scaling is not clamped and large subtitles can
+extend outside the frame. Portable CTests and an application build cover separate
+contracts from actual target-runtime rendering. Fixture-only pinned-runtime
+Cocoa captures can establish suppression and unchanged ASS/bitmap output; they
+do not establish integrated Flutter cue placement, physical HDR brightness,
+signed distribution or Windows rendering.

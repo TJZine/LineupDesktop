@@ -46,6 +46,7 @@ The native result is `null` unless a result map is shown.
 | `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
 | `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
+| `setSubtitlePresentation` | `scale: num`, finite, 0.25–4.0; `imageRaise: num`, finite, 0–0.25; `lineupDrawsStyled: bool`; all required | `null`, `not_initialized`, or `invalid_argument`; Android may return `native_command_error` for unexpected exceptions. Never `command_queue_full`. |
 | `setVolume` | `volume: num`, finite and 0–100 inclusive | `null`, `invalid_argument`, or `command_queue_full`. |
 
 `loadId` is non-negative in the native `load` parser, while Dart-generated
@@ -156,6 +157,7 @@ Forwarded properties are:
 | --- | --- |
 | `pause` | bool |
 | `time-pos`, `duration` | finite mpv doubles; Dart clamps missing, negative, or non-finite values to zero duration |
+| `subtitle-cues` | list of at most 8 cues; ephemeral media content, parsed separately from `PlayerEvent` (see Subtitles) |
 | `track-list` | list of at most 256 track maps |
 | `video-format`, `video-codec`, `current-vo`, `hwdec-current` | bounded strings, at most 4,096 bytes each |
 | `video-params` | map with `w`, `h`, `pixelformat`, `hw-pixelformat`, `primaries`, `gamma`, `colormatrix`, and `sig-peak` |
@@ -322,18 +324,27 @@ its report and media state on initialize/dispose.
 
 ## Queue capacity and eviction
 
-The native event queue holds 256 events. When it is full, the policy in
-`PlayerCore::QueueEvent` in `native/player_core/player_core.cpp` is:
+The native event queues hold at most 256 events, with one slot reserved for
+at most one pending `subtitle-cues` event. Ordinary telemetry and completions
+have a 255-event budget even before the first cue arrives. First cue admission
+uses the reserved slot without evicting a completion or causing overflow.
+A newer cue or clear replaces the pending cue in place, preserving its FIFO
+position. Cues are exempt from ordinary capacity eviction.
 
-1. Find and evict the oldest queued `property` event, regardless of the type
-   of the incoming event.
-2. If no queued property exists, drop an incoming `property` event.
-3. If no queued property exists and the incoming event is not a property, evict
-   the oldest event of any type and admit the incoming event.
+At the 255 ordinary-event limit, `PlayerCore::QueueEvent` in
+`native/player_core/player_core.cpp` retains this policy for ordinary events:
+
+1. Find and evict the oldest queued ordinary `property` event, regardless of
+   the type of the incoming ordinary event.
+2. If no queued ordinary property exists, drop an incoming ordinary `property`.
+3. If no queued ordinary property exists and the incoming ordinary event is not
+   a property, evict the oldest ordinary event and admit the incoming event.
 
 This policy protects state, stop, track, and display completions when property
-telemetry is under pressure. It is separate from the native command queue's
-64-entry/128-KiB admission limit.
+telemetry is under pressure. Genuine non-cue completion overflow retains its
+existing platform behavior; reserving a cue slot does not mask it. The event
+budget is separate from the native command queue's 64-entry/128-KiB admission
+limit.
 
 ## Presentation obligations
 
@@ -439,8 +450,12 @@ Dispose retires its generation and queued credentials before asynchronously
 releasing the engine and replying. Decoder/view operations stay on the application
 looper; cancellation and TLS pool closure run on an IO worker. Stop/dispose and
 successor loads wait for that cleanup, which is coalesced across concurrent
-retirement requests. A failed release retains cleanup responsibility for retry. Events use the 256-entry property-first
-queue above; essential-event overflow terminates the current load with
+retirement requests. A failed release retains cleanup responsibility for retry.
+Events use the 256-entry property-first
+queue above, with one slot reserved for the latest `subtitle-cues` (including a
+clear) and 255 for ordinary events. First cue admission never evicts a completion;
+replacements keep their queue position. Essential ordinary-event overflow
+terminates the current load with
 `event_queue_overflow`. Retired events are filtered again at delivery.
 
 The engine publishes `loading` once and `playing` only on its first READY,
@@ -533,3 +548,176 @@ integrated acceptance remain separately recorded target/human obligations.
   unavailable/unknown diagnostic, but they are not the same serialized value.
 - Dart-generated load IDs start at 1 although the native `load` parser also
   accepts 0. The stricter positive rule remains required for `selectTrack`.
+
+## Subtitles
+
+Dart owns persisted style, defaults and plain-text rendering. Native owns decoder
+classification: plain text is Lineup-drawn, native ASS is engine-drawn unless
+`lineupDrawsStyled` is true, and image subtitles always remain engine-drawn.
+`scale` affects engine subtitles; `imageRaise` moves only image subtitles.
+Lineup text uses its own concrete appearance in the presentation rectangle.
+
+`setSubtitlePresentation` is player-scoped (no `loadId`). It applies to the
+current and later loads until replaced or disposed. Native keeps one pending
+latest-value slot, separate from the ordinary command queue. Acceptance before
+another command guarantees application before that command executes. Desktop
+applies changes within one worker poll. Dispose resets presentation; Dart sends
+again before the next load after initialization. Invalid arguments leave the
+current presentation unchanged; unknown extra keys are ignored. Rendering is
+unobserved: application failures never become playback errors or track results.
+
+The coordinator sends without awaiting immediately before load, and coalesces
+committed settings updates while a call is in flight. Rejection clears its sent
+value for retry on the next load and records only an allowlisted error code.
+Cue updates never emit a general Player snapshot or coordinator notification.
+Malformed cues are skipped with a fixed message. Cues clear on replacement load,
+stop, terminal state, subtitle-off, stale-load rejection and disposal.
+
+The coordinator owns one `SubtitleAppearanceSource` for its app/controller
+scope. Engine presentation, Player text and the Settings preview consume this
+same resolved value. The coordinator retains it even without Flutter cues;
+additional consumers may `retain()` and release without registering another
+channel handler. The source cancels the device subscription when no consumer
+requires device style, and disposes its client with the coordinator.
+
+On Android, with `useDeviceStyle` enabled, device `fontScale` supplies the
+**same effective scale for every subtitle format**, including engine-drawn ASS
+and images, regardless of the OS captions enabled switch. Positive device
+scales are clamped to the protocol's 0.25–4.0 range before either painting or
+sending. Until the initial asynchronous device read completes, both use the
+saved Lineup scale; load never awaits that read. Device changes and a refresh
+on application resume update that shared appearance and coalesce through the
+existing native command rules. Color-only device changes send no presentation
+command. Disabling device style restores the saved Lineup appearance and
+scale. Position, Bold and the styled-subtitle toggle remain Lineup's choices;
+device-derived values are never persisted. Desktop never invokes the Android
+caption channel. Canceled/disposed reads and callbacks cannot publish or send.
+
+**Event: `property` with name `subtitle-cues`:**
+
+- Value: a list of at most 8 cues; an empty list clears. Each cue is
+  `{align: int 1–9 (numeric-keypad position; 2 = bottom center), lines: [[segment, …], …]}`
+  with at most 8 lines per cue and 32 segments per line. A segment is
+  `{text: String, italic?: bool, bold?: bool, underline?: bool}`. Total text
+  across the value is at most 4 KiB UTF-8; native truncates at a character
+  boundary and drops excess cues, lines or segments rather than failing.
+- Load-scoped like the existing property events (carries the current
+  `loadId`; Dart drops stale ones). **Replace in place, never evicted:** both
+  bounded queues (`PlayerCore::QueueEvent` and Android `PlayerEventQueue.add`)
+  enforce the same rule: a new
+  `subtitle-cues` replaces any undelivered `subtitle-cues` at its position, and
+  the capacity eviction skips it so a pending clear cannot be evicted. At most
+  one `subtitle-cues` is ever queued. One of the existing 256 total slots is
+  always reserved for it, leaving 255 ordinary-event slots even when no cue is
+  pending. First cue admission cannot evict a completion or cause overflow;
+  total capacity remains 256, including a pending cue or clear.
+- Emitted **only while the selected subtitle track is Lineup-drawn**.
+  When the selection changes to an engine-drawn track or to none, and on stop,
+  end, error and new load, native emits (or Dart synthesizes) an empty list.
+- Embedded colors, fonts and positions inside plain-text cues are dropped,
+  except alignment: SRT/ASS `{\anN}` tags (mpv) and Media3 cue line/position
+  map to `align` (top/middle/bottom × left/center/right). Media3 fractional
+  lines (WebVTT) map by thirds; CEA-608's `LINE_TYPE_NUMBER` rows
+  (`Cea608Decoder.java:1050`) map positive rows in the top third to top and the
+  rest to bottom, and negative rows (counted from the bottom) to bottom. On
+  desktop, ffmpeg's WebVTT decoder drops cue settings, so WebVTT positions apply
+  on Android only. Italic, bold and underline are kept.
+- Cue text is media content: never logged, exported or retained after clearing.
+
+**Separate channel `lineup/device_captions` (Android only).** Not part of
+the player protocol, because it is not player-scoped:
+
+- `read` → `{enabled: bool, fontScale: num, foreground: int?, background: int?, window: int?, edgeType: "none"|"outline"|"dropShadow"|"raised"|"depressed"|null, edgeColor: int?, typeface: "standard"|"monoSans"|"serif"|"monoSerif"|"casual"|"cursive"|"smallCaps"|null}`.
+  Unset device values are null and Dart uses the Standard value for them.
+  ARGB ints may arrive as 32- or 64-bit integers. `enabled` is the system
+  captions switch; Lineup uses the device **style** whether or not that switch
+  is on (the viewer asked for it explicitly), and the Settings row says so when
+  it is off.
+- Native calls `changed` with the same map when a `CaptioningChangeListener`
+  fires. It registers while Dart has called `listen` and unregisters on
+  `cancel` or activity destruction.
+- Desktop has no handler; Dart never calls it there (host-gated).
+
+### Desktop subtitle decoding and presentation
+
+Windows and macOS share the libmpv subtitle implementation in
+`native/player_core`. A pending `setSubtitlePresentation` value is taken under
+the same mutex as the next command batch and applied before that batch. It
+uses no command-queue slot or URI/header budget and adds no worker wake
+primitive; idle changes are picked up by the existing 50 ms poll. Rejected
+subtitle properties are logged with their fixed property name and libmpv error,
+without publishing a playback failure; unchanged property values are not retried
+on every cue.
+
+At mpv `3186d369`, codec `ass` is native styled ASS. The bitmap codecs are
+`hdmv_pgs_subtitle`, `dvd_subtitle`, `dvb_subtitle`, `xsub`, and the default
+bitmap configurations of `dvb_teletext` and `arib_caption`. Every other codec,
+including lavf `ssa`, is treated as converted text. Recheck this classification
+against `sd_ass` and `sd_lavc` when upgrading libmpv.
+
+The core observes the selected codec and `sub-text/ass` privately. Neither raw
+property is forwarded or logged. Codec and text notifications may arrive in
+either order; cached text is reclassified when the codec arrives. Converted text
+(and native ASS when opted in) uses `sub-visibility=no`; an invisible unstyled
+libass style is also installed as a track-switch backstop. Native ASS and bitmap
+subtitles retain their engine rendering. Scale applies to both; `sub-pos` is
+raised only for bitmap tracks and reset to 100 for other tracks, preserving
+authored ASS positioning.
+
+Cue conversion retains alignment and italic/bold/underline runs, drops other
+overrides, and bounds the input scan/cache to 64 KiB and the output to the common
+cue limits. Opted-in native ASS excludes whole events containing positioning,
+clipping or positive drawing-mode (`\p` > 0) tags, even if a later `\p0` resets
+the mode. A `\p0` reset alone retains dialogue, emphasis and alignment. Cues belong to the active observed load; obsolete observations
+are discarded. Load, subtitle selection, stop, end, error and disposal discard
+cached media text. Explicit clears accompany previously published text; the
+Dart transport also clears at its load/stop/dispose boundaries. Pending cue
+updates replace in place and remain exempt from both telemetry and completion
+eviction, including empty clears. Cue text is never diagnostic content.
+
+### Android subtitle mechanisms
+
+Android accepts `setSubtitlePresentation` on the application looper, separately
+from the 64-command media queue. The adapter retains its latest validated value
+for the current and subsequent engines. Disposal clears that value and resets
+the persistent SubtitleView's cues, embedded-style flags and default sizes.
+
+Media3 routes the selected text format using its sample MIME (the original MIME
+in `Format.codecs` for pre-parsed `application/x-media3-cues`). SSA remains
+native unless `lineupDrawsStyled` is true. PGS, VobSub, DVB and every bitmap cue
+remain native. Other text is encoded as bounded `subtitle-cues`; native text
+painting is suppressed. Track changes clear both outputs and route the latest
+cue list again. Presentation changes transform the original cues again, avoiding
+cumulative scale. Fractional SSA font sizes scale individually; the fallback
+font size compensates for video letterboxing relative to the presentation rect.
+Supported start-anchored fractional bitmap rectangles scale about bottom-center,
+raise, and clamp inside the frame; unsupported anchors/unset dimensions retain
+the decoder's geometry.
+
+The independent Android `lineup/device_captions` channel registers its
+CaptioningManager listener only between `listen` and `cancel`, and removes it on
+activity cleanup. Reads and `changed` events use nullable fields for unset OS
+style values, unsigned 64-bit ARGB colors, and the protocol's seven typeface
+keys. Device style remains available while the system captions switch is off.
+Subtitle processing exceptions use fixed debug-only messages without content.
+
+For Direct Play SSA, private nonvisual cue metadata retains event classification
+through Media3's pre-parsed cue codec. It adds no wire fields. Lineup mode drops
+whole sign events (pos/move/org/clip/iclip) and positive drawing-mode events;
+p0 dialogue and i/b/u/an remain. A failed decorator track falls back to stock
+native drawing even when `lineupDrawsStyled` is true; existing decoded cues also
+fall back without reload or a playback-error event. Native drawing receives
+stock-equivalent cues with private metadata removed.
+
+Pinned Media3 1.11.1 can lose overlapping SSA events after a paused same-load
+seek when several events share a start timestamp. A stock parser control
+reproduced the loss independently of the decorator: on V1's synthetic
+`subtitle-ass-dialogue.mkv` overlap fixture, native input counts were three at a
+fresh 7-second start, one after
+seeking that load to 13 seconds, and three at a fresh 13-second start. The
+candidate and stock-parser OFF-mode captures were byte-identical in all three
+cases. The fresh-load result is a recovery control, not a passing seek result.
+Sample-queue selection provides a source-supported explanation; the internal
+seek branch was not directly traced. Lineup can style only delivered cues and
+adds no timeline cache or forced reload. Stock SSA vector commands may appear
+as literal text; this feature does not add vector rendering parity.

@@ -23,6 +23,7 @@ import org.robolectric.annotation.Config
 class NativePlayerAdapterTest {
     private class Messenger : BinaryMessenger {
         var handler: BinaryMessenger.BinaryMessageHandler? = null
+        var lastError: String? = null
 
         override fun send(channel: String, message: ByteBuffer?) {}
 
@@ -42,7 +43,12 @@ class NativePlayerAdapterTest {
         fun call(method: String, arguments: Any? = null) {
             val message = StandardMethodCodec.INSTANCE.encodeMethodCall(MethodCall(method, arguments))
             message.rewind()
-            handler!!.onMessage(message) {}
+            lastError = null
+            handler!!.onMessage(message) { response ->
+                response?.rewind()
+                try { StandardMethodCodec.INSTANCE.decodeEnvelope(response!!) }
+                catch (error: io.flutter.plugin.common.FlutterException) { lastError = error.code }
+            }
         }
     }
 
@@ -131,4 +137,58 @@ class NativePlayerAdapterTest {
         assertNull(style.typeface)
         adapter.close()
     }
+    @Test
+    fun presentationCorrectsSizeForLetterboxingAndDisposeResetsThePersistentView() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val messenger = Messenger()
+        val adapter = NativePlayerAdapter(activity, messenger)
+        val subtitles = (0 until adapter.view.childCount).map(adapter.view::getChildAt)
+            .filterIsInstance<SubtitleView>().single()
+        messenger.call("initialize")
+        NativePlayerAdapter::class.java.getDeclaredField("videoSize").apply { isAccessible = true }
+            .set(adapter, androidx.media3.common.VideoSize(2390, 1000))
+        messenger.call("setSubtitlePresentation", mapOf("scale" to 2, "imageRaise" to 0, "lineupDrawsStyled" to false))
+        for ((width, height) in listOf(960.0 to 540.0, 320.0 to 180.0)) {
+            messenger.call("setVideoRect", rect(width, height))
+            val fraction = SubtitleView::class.java.getDeclaredField("defaultTextSize")
+                .apply { isAccessible = true }.getFloat(subtitles)
+            assertEquals(0.0533f * 2 * (height * 2).toFloat() / subtitles.layoutParams.height, fraction, 0.00001f)
+        }
+        subtitles.setCues(listOf(androidx.media3.common.text.Cue.Builder().setText("fixture").build()))
+        messenger.call("dispose")
+        val style = SubtitleView::class.java.getDeclaredField("style").apply { isAccessible = true }.get(subtitles)
+        assertEquals(CaptionStyleCompat.DEFAULT, style)
+        assertEquals(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION,
+            SubtitleView::class.java.getDeclaredField("defaultTextSize").apply { isAccessible = true }.getFloat(subtitles))
+        assertEquals(emptyList<Any>(), SubtitleView::class.java.getDeclaredField("cues").apply { isAccessible = true }.get(subtitles))
+        adapter.close()
+    }
+
+    @Test
+    @Config(shadows = [FailingSubtitleView::class])
+    fun subtitleViewFailureCannotPreventDisposal() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val messenger = Messenger()
+        val adapter = NativePlayerAdapter(activity, messenger)
+        messenger.call("initialize")
+        val subtitles = (0 until adapter.view.childCount).map(adapter.view::getChildAt)
+            .filterIsInstance<SubtitleView>().single()
+        org.robolectric.shadow.api.Shadow.extract<FailingSubtitleView>(subtitles).fail = true
+        messenger.call("dispose")
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertNull(messenger.lastError)
+        messenger.call("setSubtitlePresentation", mapOf("scale" to 1, "imageRaise" to 0, "lineupDrawsStyled" to false))
+        assertEquals("not_initialized", messenger.lastError)
+        adapter.close()
+    }
+
+    @org.robolectric.annotation.Implements(SubtitleView::class)
+    class FailingSubtitleView : org.robolectric.shadows.ShadowViewGroup() {
+        var fail = false
+        @org.robolectric.annotation.Implementation
+        fun setCues(cues: List<androidx.media3.common.text.Cue>?) {
+            if (fail) throw IllegalStateException("fixture")
+        }
+    }
+
 }
