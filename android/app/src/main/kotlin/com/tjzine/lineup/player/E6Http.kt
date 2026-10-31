@@ -10,7 +10,9 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import java.io.IOException
 import java.util.IdentityHashMap
 import java.util.Collections
+import java.util.concurrent.TimeUnit
 import okhttp3.Call
+import okhttp3.ConnectionPool
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -32,6 +34,31 @@ internal class E6NoRetry : DefaultLoadErrorHandlingPolicy(0) {
 
 @UnstableApi
 internal class E6Http(private val observation: E6Observation) : Interceptor {
+    /** The engine and socket tests share this exact debug-only client policy. */
+    fun debugClient(ordinary: okhttp3.OkHttpClient): okhttp3.OkHttpClient = ordinary.newBuilder()
+        // A finite HTTP/1.0 peer may close without Connection: close. With
+        // recovery disabled, an idle pooled socket can fail the next physical
+        // request before headers. Do not retain idle connections in this debug
+        // measurement; leave the ordinary application's pool untouched.
+        .connectionPool(ConnectionPool(0, 5, TimeUnit.MINUTES))
+        .retryOnConnectionFailure(false).addInterceptor(this)
+        .addNetworkInterceptor { chain ->
+            val response = chain.proceed(chain.request())
+            // OkHttp4.12 can follow 503/Retry-After:0 (and coalesced421)
+            // despite retryOnConnectionFailure=false. Reject before its
+            // follow-up loop; the outer guard still counts pre-connect failures.
+            if (response.code !in listOf(200, 206)) {
+                chain.call().cancel()
+                var closed = false
+                try { response.close(); closed = true } catch (_: Exception) { }
+                throw NetworkStatusFailure(response.code,
+                    if (response.code == 404) "http_404" else "unexpected_status", closed)
+            }
+            response
+        }.build()
+
+    private class NetworkStatusFailure(val status: Int, val code: String, val closeConfirmed: Boolean) : IOException(code)
+
     private val config = observation.config
     private val references = linkedMapOf(config.variant to E6Reference("variant", null, null))
     private val failures = mutableSetOf<HttpUrl>()
@@ -210,10 +237,12 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
             try { response?.close() } catch (_: Exception) { synchronized(this) { unconfirmedClose += chain.call() } }
             synchronized(this) {
                 failures += chain.request().url
+                if (error is NetworkStatusFailure && !error.closeConfirmed) unconfirmedClose += chain.call()
             }
-            val code = (error as? E6Failure)?.code ?: "io_failure"
+            val code = (error as? E6Failure)?.code ?: (error as? NetworkStatusFailure)?.code ?: "io_failure"
+            val status = response?.code ?: (error as? NetworkStatusFailure)?.status
             try {
-                receipt(ticket, response?.code, if (response?.code == 404) "http_404" else "failed", 0)
+                receipt(ticket, status, if (status == 404) "http_404" else "failed", 0)
             } finally {
                 synchronized(this) { if (chain.call() !in unconfirmedClose) calls.remove(chain.call()) }
             }

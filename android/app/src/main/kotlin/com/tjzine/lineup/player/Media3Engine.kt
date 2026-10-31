@@ -114,8 +114,7 @@ internal class Media3Engine(
         )
         val guard = e6?.let { E6Http(it) }
         e6Http = guard
-        val network = if (guard == null) ordinaryNetwork else ordinaryNetwork.newBuilder()
-            .retryOnConnectionFailure(false).addInterceptor(guard).build()
+        val network = if (guard == null) ordinaryNetwork else guard.debugClient(ordinaryNetwork)
         client = network
         val source = OkHttpDataSource.Factory(network)
         if (media.kind == LoadKind.direct && media.token != null)
