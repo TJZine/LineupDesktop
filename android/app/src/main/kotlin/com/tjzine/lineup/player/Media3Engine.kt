@@ -7,6 +7,7 @@ import androidx.media3.common.*
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ExoTimeoutException
@@ -262,7 +263,7 @@ internal class Media3Engine(
         player.setSeekParameters(SeekParameters.EXACT)
         player.setMediaSource(
             ProgressiveMediaSource.Factory(
-                    source,
+                    DataSource.Factory { BufferedProgressiveDataSource(source.createDataSource()) },
                     GuardedExtractorsFactory { fact ->
                         if (debug && fact["phase"] == "fragment-seek") {
                             val position = fact["position"] as Long
