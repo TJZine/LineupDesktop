@@ -1201,6 +1201,7 @@ class _LineupShellState extends State<LineupShell> {
     );
     final settingsView = SettingsView(
       controller: controller,
+      subtitleAppearance: _player.subtitleAppearance,
       focusNode: _settingsFocus,
       menuFocusNode: _settingsMenuFocus,
       onOpenMenu: _openAppMenu,
@@ -1241,7 +1242,8 @@ class _LineupShellState extends State<LineupShell> {
       ShellDestination.settings => Stack(
         fit: StackFit.expand,
         children: [
-          if (hasPlaybackSurface) PlayerSurface(controller: _player),
+          if (hasPlaybackSurface)
+            PlayerSurface(controller: _player, showSubtitles: false),
           _settingsWithLicenses(settingsView),
         ],
       ),

@@ -94,7 +94,7 @@ void main() {
               await _key(tester, LogicalKeyboardKey.arrowDown);
               await _key(tester, LogicalKeyboardKey.arrowDown);
               await _key(tester, LogicalKeyboardKey.select);
-              for (var i = 0; i < 4; i++) {
+              for (var i = 0; i < 5; i++) {
                 await _key(tester, LogicalKeyboardKey.arrowDown);
               }
               await _key(tester, LogicalKeyboardKey.select);

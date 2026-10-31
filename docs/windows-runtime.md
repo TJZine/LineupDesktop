@@ -103,3 +103,20 @@ package excludes it.
 - exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/88bdc4db67bb476a7606921eb2d68b273440d59b>
 - exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613>
 - Microsoft VC runtime redistribution terms: <https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution>
+
+## Subtitle presentation
+
+The shared core classifies subtitles against the pinned mpv decoder paths (see
+[desktop subtitle protocol](native-player-protocol.md#desktop-subtitle-decoding-and-presentation)).
+Flutter draws converted text, including lavf `ssa`; libmpv draws native `ass`
+unless the viewer opts into Lineup styling, and always draws bitmap subtitles.
+Primary text suppression uses `sub-visibility=no`, with an invisible unstyled
+libass style as a backstop. Native ASS retains author styling and positioning.
+Size scales engine subtitles; Position affects images only. Large bitmap scales
+can extend beyond the frame because mpv does not clamp their geometry.
+
+Portable fake-libmpv tests establish parsing, ordering, bounds, nonfatal property
+failures and lifecycle behavior. macOS pinned-runtime suppression captures do
+not establish Windows rendering, HDR text brightness or physical playback.
+Those remain Windows CI and physical acceptance obligations for the integrated
+candidate.

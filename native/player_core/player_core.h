@@ -10,6 +10,7 @@
 #include <deque>
 #include <functional>
 #include <memory>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -22,6 +23,7 @@
 #include "player_core/mpv_operations.h"
 #include "player_core/native_playback_state.h"
 #include "player_core/value.h"
+#include "player_core/subtitle_cues.h"
 
 namespace lineup::player {
 
@@ -110,7 +112,8 @@ class PlayerCore {
   void Dispose(Reply reply);
   // Starts an asynchronous disposal without a channel reply.
   void BeginDispose();
-  // Validates and queues load/play/pause/seek/stop/selectTrack/setVolume.
+  // Validates load/play/pause/seek/stop/selectTrack/setVolume and the
+  // player-scoped latest-value subtitle presentation.
   // Returns not_initialized for any method before initialization. Returns
   // std::nullopt for an initialized call the core does not own; the platform
   // then handles it or reports it as not implemented. `arguments` is null
@@ -202,17 +205,30 @@ class PlayerCore {
   struct VolumeCommand {
     double volume;
   };
+  struct SubtitlePresentation {
+    double scale = 1;
+    double image_raise = 0;
+    bool lineup_draws_styled = false;
+  };
   using QueuedCommand = std::variant<LoadCommand, PlayCommand, PauseCommand,
                                      SeekCommand, StopCommand, TrackCommand,
                                      VolumeCommand>;
 
   friend struct PlayerCoreTestAccess;
+  friend struct SubtitleCoreTestAccess;
 
   CallResult HandleLoad(ValueMap* arguments);
   std::optional<TrackCommand> ParseTrack(const ValueMap& arguments);
   void FinishDispose();
   bool QueueCommand(QueuedCommand command);
   void RunCommand(QueuedCommand& command, uint64_t generation);
+  void RunPendingCommands(uint64_t generation);
+  void ApplySubtitlePresentation(SubtitlePresentation presentation, uint64_t generation);
+  void UpdateSubtitleRouting(uint64_t generation);
+  void ClearSubtitleCues(uint64_t generation, std::optional<int64_t> load_id);
+  void PublishSubtitleCues(uint64_t generation);
+  void SetSubtitleNumber(const char* name, double value);
+  void SetSubtitleVisibility(bool visible);
   void StartEventThread();
   void StopEventThread();
   void EventLoop(uint64_t generation);
@@ -235,6 +251,15 @@ class PlayerCore {
   std::atomic<bool> wakeup_posted_{false};
   std::mutex command_mutex_;
   std::deque<QueuedCommand> commands_;
+  // Only this slot is shared with the platform thread. All following subtitle
+  // state is worker-owned and reset after the worker has joined on disposal.
+  std::optional<SubtitlePresentation> pending_subtitle_presentation_;
+  SubtitlePresentation subtitle_presentation_;
+  SubtitleCodec subtitle_codec_ = SubtitleCodec::none;
+  std::string subtitle_text_;
+  bool subtitle_has_cues_ = false;
+  std::optional<int64_t> subtitle_retired_load_;
+  std::map<std::string, double> subtitle_property_values_;
   size_t queued_command_bytes_ = 0;
   std::mutex event_mutex_;
   std::deque<QueuedEvent> events_;

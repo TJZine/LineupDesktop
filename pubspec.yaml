@@ -38,6 +38,12 @@ flutter:
     - assets/branding/lineup-wordmark.png
     - assets/fonts/instrumentsans/OFL.txt
     - assets/fonts/inter/OFL.txt
+    - assets/fonts/subtitles/monoSans/
+    - assets/fonts/subtitles/serif/
+    - assets/fonts/subtitles/monoSerif/
+    - assets/fonts/subtitles/casual/
+    - assets/fonts/subtitles/cursive/
+    - assets/fonts/subtitles/smallCaps/
     - assets/licenses/
   fonts:
     - family: Instrument Sans
