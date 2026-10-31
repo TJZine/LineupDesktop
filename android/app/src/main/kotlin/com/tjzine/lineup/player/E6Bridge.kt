@@ -11,8 +11,14 @@ import io.flutter.plugin.common.MethodChannel
 
 /** Opt-in fixture seam; never installed as an alternative production load protocol. */
 internal class E6Bridge(context: Context, messenger: BinaryMessenger, private val handler: Handler, arguments: List<String>) {
+    private val transportSelectors = arguments.filter { it.startsWith("--e6-transport") }
+    private val transportRequested = BuildConfig.DEBUG && transportSelectors.isNotEmpty()
+    private val transportMode = transportSelectors.singleOrNull()?.let {
+        when (it) { "--e6-transport=eof" -> "eof"; "--e6-transport=line" -> "line"; else -> null }
+    }
     val enabled = BuildConfig.DEBUG && "--case=session-live" in arguments &&
-        (("--e6-observe" in arguments) xor ("--e6-public-baseline" in arguments))
+        (("--e6-observe" in arguments) xor ("--e6-public-baseline" in arguments)) &&
+        (!transportRequested || transportMode != null && "--e6-observe" in arguments)
     private val baseline = "--e6-public-baseline" in arguments
     private val channel = if (enabled) MethodChannel(messenger, "lineup/e6") else null
     private var current: E6Observation? = null
@@ -21,19 +27,41 @@ internal class E6Bridge(context: Context, messenger: BinaryMessenger, private va
     private var inputReadyNs: Long? = null
     private val readyFile by lazy { java.io.File(context.cacheDir, "e6-ready") }
     private val pid = android.os.Process.myPid()
+    private var transportInitializationFailed = false
+    private val transportStatus = if (enabled && transportMode != null) try {
+        E6TransportStatus(context.cacheDir, transportMode, pid)
+    } catch (_: Exception) { transportInitializationFailed = true; null } else null
 
     init {
-        if (enabled) readyFile.delete()
+        if (enabled) {
+            if (transportMode == null) readyFile.delete()
+            else try {
+                java.nio.file.Files.deleteIfExists(readyFile.toPath())
+                java.nio.file.Files.deleteIfExists(java.io.File(context.cacheDir, "e6-ready.tmp").toPath())
+            } catch (_: Exception) { transportInitializationFailed = true }
+        }
         channel?.setMethodCallHandler { call, result ->
             if (!enabled) result.error("observer_disabled", "E6 observer unavailable", null)
             else try {
+                if (transportRequested && call.method in setOf("configure", "drain", "capabilities"))
+                    throw E6Failure("invalid_probe")
                 when (call.method) {
+                    "transportStatus" -> {
+                        if (cancelled) throw E6Failure("invalid_probe")
+                        if (transportInitializationFailed) throw E6Failure("io_failure")
+                        val status = transportStatus ?: throw E6Failure("invalid_probe")
+                        status.store(call.arguments)
+                        result.success(mapOf("stored" to true))
+                    }
                     "markInputReady" -> {
                         if (call.arguments != null || current != null || inputReadyNs != null || cancelled)
                             throw E6Failure("invalid_config")
+                        if (transportInitializationFailed) throw E6Failure("io_failure")
                         // Public coordination only: no capability, metadata or diagnostics.
                         inputReadyNs = System.nanoTime()
-                        readyFile.writeText("{\"protocol\":1,\"pid\":$pid,\"ready\":true}", Charsets.UTF_8)
+                        val publicReady = "{\"protocol\":1,\"pid\":$pid,\"ready\":true}"
+                        if (transportMode == null) readyFile.writeText(publicReady, Charsets.UTF_8)
+                        else E6TransportStatus.publish(readyFile, publicReady.toByteArray(Charsets.UTF_8), 128)
                         result.success(mapOf("ready" to true))
                     }
                     "configure" -> {
@@ -67,6 +95,7 @@ internal class E6Bridge(context: Context, messenger: BinaryMessenger, private va
     }
 
     fun claim(): E6Observation? {
+        if (transportRequested) throw E6Failure("invalid_probe")
         if (!enabled) return null
         if (claimed) throw E6Failure("unexpected_load")
         val observation = current ?: throw E6Failure("invalid_config")
@@ -81,7 +110,7 @@ internal class E6Bridge(context: Context, messenger: BinaryMessenger, private va
         } catch (_: Exception) { /* Never delete a replacement/unknown owner. */ }
     }
 
-    fun close() { current?.cancel(); if (enabled) clearOwnMarker(); channel?.setMethodCallHandler(null) }
+    fun close() { cancelled = true; current?.cancel(); if (enabled) clearOwnMarker(); channel?.setMethodCallHandler(null) }
 
     companion object {
         internal fun capabilities(enabled: Boolean): Map<String, Any> {

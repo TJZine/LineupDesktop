@@ -97,4 +97,70 @@ class E6BridgeTest {
         assertTrue(caps.filterKeys { it != "apiLevel" }.values.all { it is Boolean })
         b.close()
     }
+
+    private fun transportFacts(mode: String = "eof", phase: String = "starting", received: Int = 0) =
+        mapOf("mode" to mode, "phase" to phase, "receivedBytes" to received,
+            "responseAttempted" to false, "flushedBytes" to 0, "failureCode" to null)
+
+    @Test fun transportRequiresExactlyOneValidModeAndNeverFallsBackToPlayback() {
+        val common = listOf("--case=session-live", "--e6-observe")
+        for (args in listOf(common + "--e6-transport", common + "--e6-transport=other",
+            common + listOf("--e6-transport=eof", "--e6-transport=line"),
+            common + listOf("--e6-transport=eof", "--e6-transport=eof"),
+            listOf("--case=session-live", "--e6-public-baseline", "--e6-transport=eof"),
+            listOf("--case=session-live", "--e6-transport=eof"))) {
+            val messenger = Messenger(); val b = bridge(messenger, args)
+            assertFalse(b.enabled); assertTrue(messenger.handlers.isEmpty())
+            try { b.claim(); fail("transport must never claim a player") }
+            catch (error: E6Failure) { assertEquals("invalid_probe", error.code) }
+            b.close()
+        }
+    }
+
+    @Test fun validTransportModesRejectEveryPlayerAndCodecBridgePath() {
+        for (mode in listOf("eof", "line")) {
+            val messenger = Messenger(); val b = bridge(messenger,
+                listOf("--case=session-live", "--e6-observe", "--e6-transport=$mode"))
+            assertTrue(b.enabled)
+            for (method in listOf("configure", "drain", "capabilities")) {
+                try { messenger.call(method, if (method == "configure") mapOf("unexpected" to true) else null); fail("blocked") }
+                catch (error: FlutterException) { assertEquals("invalid_probe", error.code); assertNull(error.details) }
+            }
+            try { b.claim(); fail("blocked player claim") } catch (error: E6Failure) { assertEquals("invalid_probe", error.code) }
+            assertEquals(mapOf("stored" to true), messenger.call("transportStatus", transportFacts(mode)))
+            b.close()
+        }
+    }
+
+    @Test fun transportStatusInjectsOwnPidAndPreservesFinalIncompleteFactsAfterCancel() {
+        val messenger = Messenger(); val b = bridge(messenger,
+            listOf("--case=session-live", "--e6-observe", "--e6-transport=eof"))
+        assertEquals(mapOf("ready" to true), messenger.call("markInputReady"))
+        val ready = java.io.File(context.cacheDir, "e6-ready")
+        assertTrue(ready.exists()); assertFalse(java.io.File(context.cacheDir, "e6-ready.tmp").exists())
+        assertEquals(mapOf("stored" to true), messenger.call("transportStatus",
+            transportFacts(phase = "input_incomplete", received = 7)))
+        val file = java.io.File(context.cacheDir, "e6-transport-status")
+        val before = file.readBytes()
+        val record = org.json.JSONObject(file.readText())
+        assertEquals(android.os.Process.myPid(), record.getInt("pid")); assertEquals(1, record.getInt("protocol"))
+        assertEquals("input_incomplete", record.getString("phase")); assertTrue(record.isNull("failureCode"))
+        messenger.call("cancel"); assertFalse(ready.exists())
+        try { messenger.call("transportStatus", transportFacts(phase = "closed", received = 7)); fail("cancel guard") }
+        catch (error: FlutterException) { assertEquals("invalid_probe", error.code) }
+        b.close(); assertArrayEquals(before, file.readBytes())
+        assertFalse(java.io.File(context.cacheDir, "e6-transport-status.tmp").exists())
+    }
+
+    @Test fun statusModeMismatchAndOrdinaryE6CallsCannotWriteTransportFacts() {
+        val messenger = Messenger(); val b = bridge(messenger,
+            listOf("--case=session-live", "--e6-observe", "--e6-transport=line"))
+        try { messenger.call("transportStatus", transportFacts()); fail("mode mismatch") }
+        catch (error: FlutterException) { assertEquals("invalid_probe", error.code) }
+        b.close()
+        val normalMessenger = Messenger(); val normal = bridge(normalMessenger)
+        try { normalMessenger.call("transportStatus", transportFacts()); fail("not transport mode") }
+        catch (error: FlutterException) { assertEquals("invalid_probe", error.code) }
+        normal.close()
+    }
 }
