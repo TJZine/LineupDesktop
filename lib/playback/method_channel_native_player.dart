@@ -688,7 +688,11 @@ class MethodChannelNativePlayer implements NativePlayer {
       case 'video-target-params':
         _applyVideoTargetParameters(value);
     }
-    _emit(tracksUpdated: name == 'track-list' && value is List);
+    _emit(
+      tracksUpdated: name == 'track-list' && value is List,
+      positionUpdated:
+          name == 'time-pos' && value is num && value.isFinite && value >= 0,
+    );
   }
 
   Duration _durationFromSeconds(Object? value) {
@@ -1006,7 +1010,7 @@ class MethodChannelNativePlayer implements NativePlayer {
     _emit();
   }
 
-  void _emit({bool tracksUpdated = false}) {
+  void _emit({bool tracksUpdated = false, bool positionUpdated = false}) {
     if (_events.isClosed) return;
     _events.add(
       PlayerEvent(
@@ -1016,6 +1020,7 @@ class MethodChannelNativePlayer implements NativePlayer {
         telemetry: _telemetry,
         tracks: _tracks,
         tracksUpdated: tracksUpdated,
+        positionUpdated: positionUpdated,
         generation: _activeGeneration,
       ),
     );

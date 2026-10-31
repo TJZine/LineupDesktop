@@ -399,6 +399,7 @@ class PlayerEvent {
     required this.telemetry,
     required this.tracks,
     this.tracksUpdated = false,
+    this.positionUpdated = false,
     this.generation,
   });
 
@@ -411,6 +412,10 @@ class PlayerEvent {
   /// A track-list property update arrived for this load, including an empty list.
   /// Other events may carry the reset snapshot without establishing no video.
   final bool tracksUpdated;
+
+  /// This event carries a valid current-load native time-pos observation,
+  /// including zero. Reset/status snapshots do not establish a landing.
+  final bool positionUpdated;
 
   /// Identifies the media load associated with this event.
   ///

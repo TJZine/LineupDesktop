@@ -2223,6 +2223,75 @@ void main() {
     expect(player.status.state, PlayerState.error);
   });
 
+  test(
+    'position provenance distinguishes reset and READY from native zero',
+    () async {
+      final ids = <int>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'load') ids.add(call.arguments['loadId'] as int);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final events = <PlayerEvent>[];
+      final subscription = player.events.listen(events.add);
+      addTearDown(subscription.cancel);
+      Future<void> ready(int id) => _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': id,
+        'state': 'playing',
+      });
+      Future<void> position(int id, Object? value) => _sendNativeEvent(
+        messenger,
+        {'type': 'property', 'loadId': id, 'name': 'time-pos', 'value': value},
+      );
+      final load = player.load(
+        Uri.parse('https://media.test/first'),
+        generation: 7,
+      );
+      await pumpEventQueue();
+      expect(events.last.position, Duration.zero);
+      expect(events.last.positionUpdated, isFalse);
+      await ready(ids.single);
+      await load;
+      expect(events.last.positionUpdated, isFalse);
+      await position(ids.single, 0);
+      expect(events.last.position, Duration.zero);
+      expect(events.last.positionUpdated, isTrue);
+      for (final invalid in [null, '0', double.nan, double.infinity, -1]) {
+        await position(ids.single, invalid);
+        expect(events.last.positionUpdated, isFalse);
+      }
+      await position(ids.single, 1.25);
+      expect(events.last.positionUpdated, isTrue);
+      expect(events.last.position, const Duration(milliseconds: 1250));
+      await ready(ids.single);
+      expect(events.last.positionUpdated, isFalse);
+      final next = player.load(
+        Uri.parse('https://media.test/second'),
+        generation: 8,
+      );
+      await pumpEventQueue();
+      expect(events.last.generation, 8);
+      expect(events.last.position, Duration.zero);
+      expect(events.last.positionUpdated, isFalse);
+      final beforeStale = events.length;
+      await position(ids.first, 50);
+      expect(events, hasLength(beforeStale));
+      await ready(ids.last);
+      await next;
+      expect(events.last.positionUpdated, isFalse);
+      await position(ids.last, 0);
+      expect(events.last.positionUpdated, isTrue);
+      await player.dispose();
+      final beforeDisposed = events.length;
+      await position(ids.last, 70);
+      expect(events, hasLength(beforeDisposed));
+    },
+  );
+
   test('load timeout retires its load id', () async {
     var loadId = 0;
     messenger.setMockMethodCallHandler(channel, (call) async {

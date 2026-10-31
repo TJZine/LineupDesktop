@@ -144,6 +144,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   bool get _preservePresentation => _continuationGeneration == _tuneGeneration;
   int _controlGeneration = 0;
   int _playbackIntentRevision = 0;
+  // A pause retires pending live-join correction even if Play follows.
+  int _pauseIntentRevision = 0;
   bool _userPaused = false;
   int _trackSelectionGeneration = 0;
   int _seekGeneration = 0;
@@ -500,6 +502,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (terminal &&
         (event.status.state == PlayerState.error || load?.replacing != true)) {
       _displayMatching.cancelLoad();
+    }
+    if (!terminal && event.positionUpdated) {
+      load?.observedPosition = event.position;
     }
     if (event.position > Duration.zero) {
       load?.lastPositivePosition = event.position;
@@ -892,9 +897,18 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || generation != _tuneGeneration) {
       return Future.value(false);
     }
+    final joinSeekGeneration = _seekGeneration;
+    final joinPauseRevision = _pauseIntentRevision;
     Future<bool> dispatch() {
       final operation = _tuneOperations.then(
-        (_) => _performTune(channelId, generation, nativeStop, endedProgram),
+        (_) => _performTune(
+          channelId,
+          generation,
+          nativeStop,
+          endedProgram,
+          joinSeekGeneration,
+          joinPauseRevision,
+        ),
       );
       _tuneOperations = operation.then<void>((_) {}).catchError((_) {});
       return operation;
@@ -941,6 +955,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     int generation,
     Future<void>? nativeStop,
     GuideProgram? endedProgram,
+    int joinSeekGeneration,
+    int joinPauseRevision,
   ) async {
     if (generation != _tuneGeneration) return false;
     if (nativeStop != null) {
@@ -1028,6 +1044,20 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
             ? elapsed
             : null,
       );
+      if (endedProgram == null) {
+        final joined = await _reconcileLiveJoin(
+          channelId,
+          program,
+          request,
+          eligible: () =>
+              ownsTune() &&
+              joinSeekGeneration == _seekGeneration &&
+              joinPauseRevision == _pauseIntentRevision &&
+              !_userPaused,
+        );
+        program = joined.$1;
+        request = joined.$2;
+      }
       _invalidateAuthorizationRecovery();
       if (replaced != null) _releaseActive(ifRequest: replaced);
       if (generation != _tuneGeneration) {
@@ -1080,6 +1110,129 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       return await fail(error);
     } finally {
       if (generation == _tuneGeneration) _resolvingProgram = null;
+    }
+  }
+
+  /// Reconcile only a scheduled live join, never an explicit playback target.
+  /// One boundary reload and the existing single authorization retry per load
+  /// bound this work; observed landing remains the native player's responsibility.
+  Future<(GuideProgram, LineupPlaybackRequest)> _reconcileLiveJoin(
+    String channelId,
+    GuideProgram program,
+    LineupPlaybackRequest request, {
+    required bool Function() eligible,
+  }) async {
+    var replacedBoundary = false;
+    // Two scheduled identities, each with at most one authorization replacement,
+    // and one decision plus one post-seek check per load.
+    for (var attempt = 0; attempt < 8; attempt++) {
+      if (await _expireSleepIfNeeded()) throw const _PlaybackSuperseded();
+      if (!eligible()) {
+        _debugLiveJoin(null, false);
+        return (program, request);
+      }
+      final load = _activeLoad;
+      if (load == null || !_ownsLoad(load)) throw const _PlaybackSuperseded();
+      final now = _clock();
+      final current = guide.currentProgram(channelId, now);
+      if (current == null) {
+        // A deleted channel retains its already admitted orphaned playback.
+        _debugLiveJoin(null, false);
+        return (program, request);
+      }
+      final elapsed = now.difference(current.scheduled.start);
+      final part = current.id == program.id
+          ? _partForPosition(request, elapsed)
+          : null;
+      if (current.id != program.id ||
+          (part != null && part.$1 != load.partIndex)) {
+        _debugLiveJoin(null, false);
+        if (replacedBoundary) {
+          throw const PlayerUnavailable(
+            'The scheduled join changed during preparation.',
+          );
+        }
+        replacedBoundary = true;
+        if (current.id != program.id) {
+          program = current;
+          _resolvingProgram = current;
+          request = await _loadPlayback(
+            lineup.playbackFor(current.scheduled.item.id),
+            initialPosition: elapsed,
+          );
+        } else {
+          final next = await _loadPartAtPosition(
+            request,
+            part!.$1,
+            part.$2,
+            seekMode: SeekMode.keyframes,
+          );
+          if (next == null) throw const _PlaybackSuperseded();
+          request = next;
+        }
+        continue;
+      }
+      final observed = load.observedPosition;
+      final lag = part == null || observed == null ? null : part.$2 - observed;
+      final correct =
+          lag != null &&
+          lag >= const Duration(seconds: 5) &&
+          !load.liveJoinCorrected;
+      if (!correct) {
+        _debugLiveJoin(lag?.inMilliseconds, false);
+        return (program, request);
+      }
+      load.target = part!.$2;
+      load.seekMode = SeekMode.keyframes;
+      load.pending = true;
+      final operation = _completePartLoad(
+        load,
+        scheduledTarget: () {
+          // Readiness completion yields once more. Refresh at command dispatch so
+          // a pause/explicit seek or schedule boundary in that gap still wins.
+          if (!eligible() ||
+              load.liveJoinCorrected ||
+              (_sleepDeadline != null && !_clock().isBefore(_sleepDeadline!))) {
+            _debugLiveJoin(null, false);
+            return null;
+          }
+          final dispatchTime = _clock();
+          final current = guide.currentProgram(channelId, dispatchTime);
+          final destination = current?.id == program.id
+              ? _partForPosition(
+                  request,
+                  dispatchTime.difference(program.scheduled.start),
+                )
+              : null;
+          final observed = load.observedPosition;
+          final lag =
+              destination != null &&
+                  destination.$1 == load.partIndex &&
+                  observed != null
+              ? destination.$2 - observed
+              : null;
+          final issue = lag != null && lag >= const Duration(seconds: 5);
+          _debugLiveJoin(lag?.inMilliseconds, issue);
+          if (!issue) return null;
+          load.liveJoinCorrected = true;
+          return destination!.$2;
+        },
+      );
+      load.operation = operation;
+      final next = await operation;
+      if (next == null) throw const _PlaybackSuperseded();
+      request = next;
+      // Authorization replacement has its own observed landing and load identity.
+      // Recheck program/part ownership before commit, without repeating this seek.
+    }
+    throw const PlayerUnavailable('The scheduled join did not settle.');
+  }
+
+  static void _debugLiveJoin(int? lagMs, bool seekIssued) {
+    if (kDebugMode) {
+      debugPrint(
+        'live_join lagMs=${lagMs ?? 0} observed=${lagMs == null ? 0 : 1} seekIssued=${seekIssued ? 1 : 0}',
+      );
     }
   }
 
@@ -1231,7 +1384,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       load.tuneGeneration == _tuneGeneration &&
       identical(_activeLoad, load);
 
-  Future<LineupPlaybackRequest?> _completePartLoad(_PlaybackLoad load) async {
+  Future<LineupPlaybackRequest?> _completePartLoad(
+    _PlaybackLoad load, {
+    Duration? Function()? scheduledTarget,
+  }) async {
     try {
       Object? failure;
       StackTrace? failureStack;
@@ -1250,12 +1406,27 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         Error.throwWithStackTrace(failure, failureStack!);
       }
       while (load.target != null) {
-        final target = load.target!;
+        var target = load.target!;
         final mode = load.seekMode;
+        var scheduledCorrection = false;
+        if (mode == SeekMode.keyframes && scheduledTarget != null) {
+          final refreshed = scheduledTarget();
+          if (refreshed == null) {
+            if (load.target == target && load.seekMode == mode) {
+              load.target = null;
+            }
+            break;
+          }
+          target = refreshed;
+          load.target = target;
+          scheduledCorrection = true;
+        }
         // The initial join belongs to native load options. Readiness/status
         // can overwrite resumePosition; it must not decide seek ownership.
         // Exact overrides still dispatch even at the same numeric target.
-        if (mode == SeekMode.exact || target != load.nativeStartPosition) {
+        if (scheduledCorrection ||
+            mode == SeekMode.exact ||
+            target != load.nativeStartPosition) {
           try {
             await player.seek(target, mode: mode);
           } catch (_) {
@@ -1823,6 +1994,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final awaitingTuneLoad = _awaitingTuneLoad;
     _userPaused = paused;
     if (paused) {
+      ++_pauseIntentRevision;
       _displayMatching.userPause();
     } else {
       _displayMatching.userPlay();
@@ -2543,6 +2715,7 @@ class _PlaybackLoad {
   final Duration? startTarget;
   // Immutable record of the initial target passed to NativePlayer.load.
   final Duration? nativeStartPosition;
+  Duration? observedPosition;
   Duration lastPositivePosition = Duration.zero;
   Duration? lastPositiveDuration;
   Duration? target;
@@ -2552,6 +2725,7 @@ class _PlaybackLoad {
   Duration resumePosition = Duration.zero;
   bool replacing;
   bool pending = true;
+  bool liveJoinCorrected = false;
   late final Future<void> readiness;
   Future<LineupPlaybackRequest?>? operation;
   _AuthorizationRecovery? recovery;
