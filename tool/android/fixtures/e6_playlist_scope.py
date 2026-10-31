@@ -136,3 +136,166 @@ def validate(data, *, variant, offset_us, target, durations_us):
         raise ScopeFailure('duration_mismatch', index=first)
     return {'init': init, 'media': refs, 'durations_us': durations, 'start_us': start or 0, 'start_present': start is not None,
             'target': actual_target, 'media_sequence': sequence}
+
+
+# Repeated segment/rendition tags are not duplicate declarations. These are the
+# singleton declarations in this finite fixture, including MAP (one init only).
+SHAPE_SINGLETONS = frozenset(('EXTM3U', 'EXT-X-VERSION', 'EXT-X-TARGETDURATION',
+    'EXT-X-MEDIA-SEQUENCE', 'EXT-X-MAP', 'EXT-X-START', 'EXT-X-ENDLIST',
+    'EXT-X-PLAYLIST-TYPE', 'EXT-X-INDEPENDENT-SEGMENTS'))
+EXTINF_CLASSES = frozenset(('integer', 'decimal_le_6', 'decimal_gt_6', 'has_title'))
+
+
+def inspect_shape(data, *, variant, offset_us, target, durations_us):
+    """Value-free non-short-circuit observation, never an authorization parser.
+
+    Formatting defects do not hide later tags/defects. Strip BOM/leading space
+    only in this observation pass to recognize their shape, never for validate.
+    Unparseable fields do not invent numeric/timing comparison results.
+    """
+    if len(data) > 1024 * 1024: raise ValueError('response_byte_cap')
+    failures = set()
+    try: validate(data, variant=variant, offset_us=offset_us, target=target, durations_us=durations_us)
+    except ScopeFailure as error: failures.add(error.reason)
+    try: text = data.decode('utf-8')
+    except UnicodeDecodeError:
+        failures.add('utf8_format')
+        text = data.decode('utf-8', errors='replace')
+
+    def whitespace(c):
+        return c in '\t\n\v\f\r\x1c\x1d\x1e\x1f' or unicodedata.category(c) in ('Zs', 'Zl', 'Zp')
+
+    def number(raw, bits, reason):
+        try: return _integer(raw, bits, reason)
+        except ScopeFailure:
+            failures.add(reason)
+            return None
+
+    def uri(raw):
+        try: return reference(raw, variant)
+        except ScopeFailure:
+            failures.add('reference_scope')
+            return None
+
+    lines = [line for line in re.split(r'\r\n|\n|\r', text) if line]
+    tag_counts, names, formats = {}, set(), set()
+    other_count = 0
+    bom = '\ufeff' in text
+    leading = False
+    map_seen = map_tag_seen = sequence_seen = first_media = ended = pending = False
+    map_before = False
+    init_refs, media_refs, durations = set(), set(), []
+    targets, starts = [], []
+    duration_known = True
+    first_content = True
+    for original in lines:
+        line = original
+        # Preserve the defect flags, then keep observing the rest of the line.
+        prefix = 0
+        while prefix < len(line) and (line[prefix] == '\ufeff' or whitespace(line[prefix])):
+            if whitespace(line[prefix]): leading = True
+            failures.add('bom_or_whitespace')
+            prefix += 1
+        line = line[prefix:]
+        if not line: continue
+        if first_content:
+            if line != '#EXTM3U': failures.add('header_format')
+            first_content = False
+        if line.startswith('#'):
+            tag = line.split(':', 1)[0][1:]
+            if tag in TAGS:
+                names.add(tag)
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                if tag == 'EXT-X-MEDIA-SEQUENCE': sequence_seen = True
+                if tag == 'EXT-X-MAP': map_tag_seen = True
+            else:
+                other_count += 1
+        else:
+            if not pending: failures.add('segment_structure')
+            if not map_seen: failures.add('map_position')
+            if ended or len(durations) >= 10000: failures.add('segment_structure')
+            if not first_media:
+                map_before = map_tag_seen
+                first_media = True
+            value = uri(line)
+            if value is not None:
+                if value in init_refs or value in media_refs: failures.add('reference_scope')
+                media_refs.add(value)
+            pending = False
+            continue
+
+        if line == '#EXTM3U' and tag_counts['EXTM3U'] == 1:
+            continue
+        if line.startswith('#EXT-X-TARGETDURATION:'):
+            value = number(line.split(':', 1)[1], 32, 'target_mismatch')
+            if value is not None:
+                targets.append(value)
+                if not 1 <= value <= 120 or target is not None and value != target:
+                    failures.add('target_mismatch')
+        elif line.startswith('#EXT-X-MEDIA-SEQUENCE:'):
+            sequence_seen = True
+            value = number(line.split(':', 1)[1], 64, 'media_sequence_mismatch')
+            if value is not None:
+                if value != 0: failures.add('media_sequence_mismatch')
+        elif line.startswith('#EXT-X-MAP:'):
+            map_seen = True
+            match = re.fullmatch(r'#EXT-X-MAP:URI="([^"]+)"', line)
+            if not match: failures.add('map_format')
+            else:
+                value = uri(match[1])
+                if value is not None:
+                    if value in media_refs: failures.add('reference_scope')
+                    init_refs.add(value)
+        elif line.startswith('#EXT-X-START:'):
+            match = re.fullmatch(r'#EXT-X-START:TIME-OFFSET=([0-9]+(?:\.[0-9]{1,6})?)', line)
+            if not match: failures.add('start_format')
+            else:
+                try:
+                    value = _micros(match[1], 'start_format')
+                    starts.append(value)
+                    if value != offset_us: failures.add('start_mismatch')
+                except ScopeFailure: failures.add('start_format')
+        elif line.startswith('#EXTINF:'):
+            if pending or ended: failures.add('segment_structure')
+            pending = True
+            value, comma, title = line[len('#EXTINF:'):].partition(',')
+            if comma and title: formats.add('has_title')
+            if re.fullmatch(r'[0-9]+', value): formats.add('integer')
+            elif re.fullmatch(r'[0-9]+\.[0-9]+', value):
+                formats.add('decimal_le_6' if len(value.split('.', 1)[1]) <= 6 else 'decimal_gt_6')
+            match = re.fullmatch(r'#EXTINF:([0-9]+(?:\.[0-9]{1,6})?),', line)
+            if not match:
+                failures.add('extinf_format')
+                duration_known = False
+            else:
+                try:
+                    value = _micros(match[1], 'extinf_format')
+                    durations.append(value)
+                    if not 0 < value <= 120000000: failures.add('segment_structure')
+                except ScopeFailure:
+                    failures.add('extinf_format')
+                    duration_known = False
+        elif line == '#EXT-X-ENDLIST':
+            if ended or pending: failures.add('endlist_format')
+            ended = True
+        elif line.startswith('#EXT-X-VERSION:'):
+            value = number(line.split(':', 1)[1], 32, 'version_format')
+            if value is not None and not 1 <= value <= 10: failures.add('version_format')
+        elif line in ('#EXT-X-PLAYLIST-TYPE:VOD', '#EXT-X-INDEPENDENT-SEGMENTS'): pass
+        else: failures.add('unknown_tag')
+
+    if first_content: failures.add('header_format')
+    if not ended or not map_seen or pending: failures.add('segment_structure')
+    if not targets: failures.add('target_mismatch')
+    if not sequence_seen: failures.add('missing_media_sequence')
+    if not starts and offset_us != 0 and tag_counts.get('EXT-X-START', 0) == 0:
+        failures.add('start_mismatch')
+    if duration_known and durations_us is not None and durations != durations_us:
+        failures.add('duration_mismatch')
+    if any(tag_counts.get(tag, 0) > 1 for tag in ('EXT-X-TARGETDURATION', 'EXT-X-MEDIA-SEQUENCE', 'EXT-X-MAP', 'EXT-X-START')):
+        failures.add('duplicate_tag')
+    return {'failing_reasons': sorted(failures), 'tag_names': sorted(names),
+            'other_tag_count': other_count, 'media_sequence_present': sequence_seen,
+            'map_before_first_segment': map_before, 'bom_present': bom,
+            'leading_whitespace_present': leading, 'extinf_format_classes': sorted(formats),
+            'duplicate_tag_count': sum(max(0, tag_counts.get(tag, 0) - 1) for tag in SHAPE_SINGLETONS)}
