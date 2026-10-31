@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -127,6 +129,69 @@ void main() {
     expect(second.videoRects.last.width, 0);
   });
 
+  testWidgets('same bounds publish subtitle visibility and deduplicate it', (
+    tester,
+  ) async {
+    final player = FakeNativePlayer();
+    Widget surface(bool show) => MaterialApp(
+      home: NativeVideoSurface(player: player, showSubtitles: show),
+    );
+    await tester.pumpWidget(surface(true));
+    await tester.pumpWidget(surface(false));
+    await tester.pumpWidget(surface(false));
+    await tester.pumpWidget(surface(true));
+    expect(player.videoRects.map((rect) => rect.showSubtitles), [
+      true,
+      false,
+      true,
+    ]);
+    expect(player.videoRects.map((rect) => rect.width).toSet(), hasLength(1));
+    expect(player.videoRects.toSet(), hasLength(2));
+  });
+
+  testWidgets(
+    'successor owns visibility even after old disposal and command error',
+    (tester) async {
+      final player = _PendingRectPlayer();
+      Widget surface(String key, bool show) => MaterialApp(
+        home: NativeVideoSurface(
+          key: ValueKey(key),
+          player: player,
+          showSubtitles: show,
+        ),
+      );
+      await tester.pumpWidget(surface('channels', true));
+      await tester.pumpWidget(surface('settings', false));
+      player.pending.completeError(StateError('old surface command failed'));
+      await tester.pump();
+      expect(tester.takeException(), isStateError);
+      await tester.pumpWidget(surface('settings', false));
+      expect(player.videoRects.map((rect) => rect.showSubtitles), [
+        true,
+        false,
+      ]);
+      expect(player.videoRects.every((rect) => rect.width > 0), isTrue);
+      await tester.pumpWidget(surface('player', true));
+      expect(player.videoRects.last.showSubtitles, isTrue);
+    },
+  );
+
+  testWidgets('failed current presentation retries on its next build', (
+    tester,
+  ) async {
+    final player = _PendingRectPlayer();
+    Widget surface() => MaterialApp(
+      home: NativeVideoSurface(player: player, showSubtitles: false),
+    );
+    await tester.pumpWidget(surface());
+    player.pending.completeError(StateError('surface command failed'));
+    await tester.pump();
+    expect(tester.takeException(), isStateError);
+    await tester.pumpWidget(surface());
+    expect(player.videoRects, hasLength(2));
+    expect(player.videoRects.every((rect) => !rect.showSubtitles), isTrue);
+  });
+
   for (final window in const [Size(1920, 1080), Size(3840, 2160)]) {
     for (final dpr in [1.0, 1.5, 2.0]) {
       testWidgets('accumulated video bounds at $window DPR $dpr', (
@@ -181,5 +246,15 @@ void main() {
         );
       });
     }
+  }
+}
+
+class _PendingRectPlayer extends FakeNativePlayer {
+  final pending = Completer<void>();
+
+  @override
+  Future<void> setVideoRect(PlayerVideoRect rect) {
+    videoRects.add(rect);
+    return videoRects.length == 1 ? pending.future : Future<void>.value();
   }
 }

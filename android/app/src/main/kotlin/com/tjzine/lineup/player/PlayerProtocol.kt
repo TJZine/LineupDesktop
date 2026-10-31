@@ -27,6 +27,7 @@ internal data class VideoRect(
     val width: Double,
     val height: Double,
     val scale: Double,
+    val showSubtitles: Boolean = true,
 )
 
 internal sealed interface PlayerCommand {
@@ -155,6 +156,7 @@ internal object PlayerProtocol {
                 number(a["width"]),
                 number(a["height"]),
                 number(a["scale"]),
+                if (a.containsKey("showSubtitles")) boolean(a["showSubtitles"]) else true,
             )
         if (r.scale <= 0) invalid()
         return r

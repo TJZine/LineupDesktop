@@ -43,7 +43,7 @@ The native result is `null` unless a result map is shown.
 | `pause` | None | `null` or `command_queue_full`. |
 | `seek` | `seconds: num`, finite and >= 0; `mode: "exact"` or `"keyframes"`, optional, default `"exact"` | `null`, `invalid_argument`, or `command_queue_full`. |
 | `stop` | `stopId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `stopResult`. |
-| `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0` | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
+| `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0`; optional Android `showSubtitles` boolean (omitted means `true`) | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
 | `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
 | `setSubtitlePresentation` | `scale: num`, finite, 0.25–4.0; `imageRaise: num`, finite, 0–0.25; `lineupDrawsStyled: bool`; all required | `null`, `not_initialized`, or `invalid_argument`; Android may return `native_command_error` for unexpected exceptions. Never `command_queue_full`. |
@@ -512,9 +512,18 @@ the coordinator's join/user-seek policy or desktop behavior.
 Presentation uses a default-z-order native video `SurfaceView`, native
 `SubtitleView`, then Flutter with both transparent background and surface render
 mode. The rectangle is logical top-left × scale, with aspect fit including pixel
-aspect ratio; zero size hides presentation while retaining media. A zero rectangle
-hides the video `SurfaceView` itself (releasing its surface; Media3 reattaches on
-show), never only its container: a visible 0x0 SurfaceView skips surface updates
+aspect ratio; zero size hides presentation while retaining media. The optional
+`setVideoRect.showSubtitles` boolean controls only Android's native SubtitleView
+visibility, in the same surface update as geometry. Explicit null or non-boolean
+values fail with `invalid_argument`; omission restores visible captions. False
+keeps video, native cue updates, track selection, appearance and the media session
+alive. Returning to a surface with true restores current native cues. Dart's
+`NativeVideoSurface` includes this field in deduplication and latest-mounted
+surface ownership, so equal geometry still publishes visibility changes and an
+old surface cannot override its successor on disposal. Windows and macOS currently
+ignore this optional field; it does not suppress their engine-drawn subtitles.
+A zero rectangle hides the video `SurfaceView` itself (releasing its surface;
+Media3 reattaches on show), never only its container: a visible 0x0 SurfaceView skips surface updates
 on Android 11/12, so backgrounding would orphan its layer and later loads would
 render black. It persists
 across loads/stops. Native views have no input or accessibility ownership.

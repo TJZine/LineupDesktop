@@ -226,6 +226,9 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
         val shown = fitWidth > 0 && fitHeight > 0
         view.visibility = if (shown) View.VISIBLE else View.INVISIBLE
         video.visibility = if (shown) View.VISIBLE else View.INVISIBLE
+        // Presentation belongs to the same surface update as geometry. Keep
+        // Media3 cues and selection alive while Settings shows only its preview.
+        subtitles.visibility = if (shown && r.showSubtitles) View.VISIBLE else View.INVISIBLE
         video.layoutParams = FrameLayout.LayoutParams(fitWidth, fitHeight, Gravity.CENTER)
         subtitles.layoutParams = FrameLayout.LayoutParams(fitWidth, fitHeight, Gravity.CENTER)
         updateSubtitles {

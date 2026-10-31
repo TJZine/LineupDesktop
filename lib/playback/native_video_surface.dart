@@ -5,9 +5,14 @@ import 'package:flutter/material.dart';
 import 'native_player.dart';
 
 class NativeVideoSurface extends StatefulWidget {
-  const NativeVideoSurface({required this.player, super.key});
+  const NativeVideoSurface({
+    required this.player,
+    this.showSubtitles = true,
+    super.key,
+  });
 
   final NativePlayer player;
+  final bool showSubtitles;
 
   @override
   State<NativeVideoSurface> createState() => _NativeVideoSurfaceState();
@@ -88,15 +93,19 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
       width: bounds.width,
       height: bounds.height,
       scale: MediaQuery.devicePixelRatioOf(context),
+      showSubtitles: widget.showSubtitles,
     );
     if (rect == _lastRect) return;
     _lastRect = rect;
+    final player = widget.player;
     unawaited(
-      widget.player.setVideoRect(rect).catchError((
-        Object error,
-        StackTrace stack,
-      ) {
-        if (mounted && _lastRect == rect) _lastRect = null;
+      player.setVideoRect(rect).catchError((Object error, StackTrace stack) {
+        if (mounted &&
+            identical(widget.player, player) &&
+            identical(_owners[player], this) &&
+            _lastRect == rect) {
+          _lastRect = null;
+        }
         FlutterError.reportError(
           FlutterErrorDetails(
             exception: error,

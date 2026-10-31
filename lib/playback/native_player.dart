@@ -444,6 +444,7 @@ class PlayerVideoRect {
     required this.width,
     required this.height,
     required this.scale,
+    this.showSubtitles = true,
   });
 
   final double left;
@@ -452,6 +453,10 @@ class PlayerVideoRect {
   final double height;
   final double scale;
 
+  /// Native subtitle presentation on Android; does not change track selection.
+  /// Desktop adapters currently ignore this field.
+  final bool showSubtitles;
+
   @override
   bool operator ==(Object other) =>
       other is PlayerVideoRect &&
@@ -459,10 +464,12 @@ class PlayerVideoRect {
       top == other.top &&
       width == other.width &&
       height == other.height &&
-      scale == other.scale;
+      scale == other.scale &&
+      showSubtitles == other.showSubtitles;
 
   @override
-  int get hashCode => Object.hash(left, top, width, height, scale);
+  int get hashCode =>
+      Object.hash(left, top, width, height, scale, showSubtitles);
 }
 
 enum PlayerTrackType { video, audio, subtitle }

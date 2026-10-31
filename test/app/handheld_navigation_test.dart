@@ -13,7 +13,6 @@ import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
-import 'package:lineup_desktop/playback/subtitle_cues.dart';
 import 'package:lineup_desktop/playback/subtitle_layer.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -117,11 +116,13 @@ void main() {
         ),
       );
       expect(liveCaptions, findsOneWidget);
+      expect(fixture.player.videoRects.last.showSubtitles, isTrue);
       await tab(tester, 'settings');
       expect(find.byType(SettingsView), findsOneWidget);
       expect(find.byType(HandheldMiniPlayer), findsOneWidget);
       expect(find.byType(NativeVideoSurface), findsOneWidget);
       expect(liveCaptions, findsNothing);
+      expect(fixture.player.videoRects.last.showSubtitles, isFalse);
       expect(fixture.player.subtitleCues.value, same(cues));
       expect(find.text('‹ Back to Channels'), findsNothing);
       await tester.tap(find.byKey(const Key('handheld-mini-playback')));
@@ -130,6 +131,7 @@ void main() {
       await tester.tap(find.byKey(const Key('handheld-mini-open')));
       await tester.pumpAndSettle();
       expect(find.byType(PlayerView), findsOneWidget);
+      expect(fixture.player.videoRects.last.showSubtitles, isTrue);
       expect(find.byType(HandheldTabBar), findsNothing);
       expect(find.byType(HandheldMiniPlayer), findsNothing);
       expect(find.byType(NativeVideoSurface), findsOneWidget);

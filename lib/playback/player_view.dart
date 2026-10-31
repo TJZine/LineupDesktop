@@ -1036,7 +1036,10 @@ class PlayerSurface extends StatelessWidget {
         if (unsupported)
           ColoredBox(color: roles.deepBackground)
         else
-          NativeVideoSurface(player: controller.player),
+          NativeVideoSurface(
+            player: controller.player,
+            showSubtitles: showSubtitles,
+          ),
         if (showSubtitles)
           SubtitleLayer(
             avoidance: fullPlayer ? subtitleAvoidance : null,

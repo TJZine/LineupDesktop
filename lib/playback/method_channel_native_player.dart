@@ -320,6 +320,7 @@ class MethodChannelNativePlayer implements NativePlayer {
     'width': rect.width,
     'height': rect.height,
     'scale': rect.scale,
+    'showSubtitles': rect.showSubtitles,
   });
 
   @override

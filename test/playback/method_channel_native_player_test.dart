@@ -1542,6 +1542,7 @@ void main() {
         width: 640,
         height: 360,
         scale: 2,
+        showSubtitles: false,
       ),
     );
     await player.setFullscreen(true);
@@ -1575,6 +1576,7 @@ void main() {
       'width': 640.0,
       'height': 360.0,
       'scale': 2.0,
+      'showSubtitles': false,
     });
     expect(calls[4].arguments, {'fullscreen': true});
     expect(calls[5].arguments, {
@@ -1590,6 +1592,24 @@ void main() {
       'requestId': 2,
     });
     expect(calls[7].arguments, {'volume': 42.5});
+    await player.setVideoRect(
+      const PlayerVideoRect(
+        left: 12,
+        top: 34,
+        width: 640,
+        height: 360,
+        scale: 2,
+      ),
+    );
+    expect(calls.last.method, 'setVideoRect');
+    expect(calls.last.arguments, {
+      'left': 12.0,
+      'top': 34.0,
+      'width': 640.0,
+      'height': 360.0,
+      'scale': 2.0,
+      'showSubtitles': true,
+    });
   });
 
   test(

@@ -117,6 +117,55 @@ class NativePlayerAdapterTest {
     }
 
     @Test
+    fun surfacePresentationHidesNativeCuesAndRestoresWithoutReplacingVideoOrCues() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val messenger = Messenger()
+        val adapter = NativePlayerAdapter(activity, messenger)
+        activity.setContentView(adapter.view)
+        messenger.call("initialize")
+        val video = (0 until adapter.view.childCount).map(adapter.view::getChildAt)
+            .filterIsInstance<SurfaceView>().single()
+        val subtitles = (0 until adapter.view.childCount).map(adapter.view::getChildAt)
+            .filterIsInstance<SubtitleView>().single()
+        val cues = listOf(
+            androidx.media3.common.text.Cue.Builder().setText("native styled dialogue").build(),
+            androidx.media3.common.text.Cue.Builder().setBitmap(
+                android.graphics.Bitmap.createBitmap(8, 8, android.graphics.Bitmap.Config.ARGB_8888)
+            ).build(),
+        )
+        val cuesField = SubtitleView::class.java.getDeclaredField("cues").apply { isAccessible = true }
+        subtitles.setCues(cues)
+        messenger.call("setVideoRect", rect(320.0, 180.0))
+        var retainedCues = cuesField.get(subtitles)
+        val retainedVideo = video.holder
+        repeat(2) {
+            messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to false))
+            assertNull(messenger.lastError)
+            assertEquals(View.INVISIBLE, subtitles.visibility)
+            assertEquals(View.VISIBLE, video.visibility)
+            org.junit.Assert.assertSame(retainedVideo, video.holder)
+            org.junit.Assert.assertSame(retainedCues, cuesField.get(subtitles))
+            // Decoder delivery keeps updating the hidden view. Restore the newest
+            // cues, rather than a snapshot captured when entering Settings.
+            subtitles.setCues(cues + androidx.media3.common.text.Cue.Builder().setText("new cue").build())
+            retainedCues = cuesField.get(subtitles)
+            assertEquals(View.INVISIBLE, subtitles.visibility)
+            messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to true))
+            assertEquals(View.VISIBLE, subtitles.visibility)
+            org.junit.Assert.assertSame(retainedCues, cuesField.get(subtitles))
+        }
+        messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to false))
+        messenger.call("setVideoRect", rect(320.0, 180.0))
+        assertEquals(View.VISIBLE, subtitles.visibility)
+        for (invalid in listOf(null, 0, "false")) {
+            messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to invalid))
+            assertEquals("invalid_argument", messenger.lastError)
+            assertEquals(View.VISIBLE, subtitles.visibility)
+        }
+        adapter.close()
+    }
+
+    @Test
     fun textSubtitlesAreOutlinedWithoutABackgroundBox() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val adapter = NativePlayerAdapter(activity, Messenger())
