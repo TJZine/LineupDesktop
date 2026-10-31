@@ -7,7 +7,29 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
 
 /** In-memory capability. No URI, identifier or exception text is a fact. */
-internal class E6Failure(val code: String) : IOException(code)
+internal class E6Failure(val code: String, val scopeReason: String? = null,
+    val scopeTag: String? = null, val scopeIndex: Int? = null) : IOException(code) {
+    fun scopeFacts(): Map<String, Any?> = if (code == "playlist_scope" && scopeReason in E6PlaylistScope.reasons)
+        mapOf("playlistScopeReason" to scopeReason,
+            "playlistScopeTag" to scopeTag?.takeIf { it in E6PlaylistScope.tags || it == "other_tag" },
+            "playlistScopeIndex" to scopeIndex?.takeIf { scopeReason == "duration_mismatch" && it in 0..10000 })
+        else emptyMap()
+}
+
+/** RFC 8216 section 4.3 names only; never echo a server-supplied tag or attribute. */
+internal object E6PlaylistScope {
+    val reasons = setOf("unknown_tag", "missing_media_sequence", "extinf_format", "bom_or_whitespace",
+        "map_position", "target_mismatch", "start_mismatch", "duration_mismatch", "reference_scope",
+        "utf8_format", "header_format", "duplicate_tag", "media_sequence_mismatch", "map_format",
+        "start_format", "endlist_format", "version_format", "segment_structure", "reference_changed")
+    val tags = setOf("EXTM3U", "EXT-X-VERSION", "EXTINF", "EXT-X-BYTERANGE", "EXT-X-DISCONTINUITY",
+        "EXT-X-KEY", "EXT-X-MAP", "EXT-X-PROGRAM-DATE-TIME", "EXT-X-DATERANGE", "EXT-X-TARGETDURATION",
+        "EXT-X-MEDIA-SEQUENCE", "EXT-X-DISCONTINUITY-SEQUENCE", "EXT-X-ENDLIST", "EXT-X-PLAYLIST-TYPE",
+        "EXT-X-I-FRAMES-ONLY", "EXT-X-MEDIA", "EXT-X-STREAM-INF", "EXT-X-I-FRAME-STREAM-INF",
+        "EXT-X-SESSION-DATA", "EXT-X-SESSION-KEY", "EXT-X-INDEPENDENT-SEGMENTS", "EXT-X-START")
+    fun failure(reason: String, tag: String? = null, index: Int? = null): Nothing =
+        throw E6Failure("playlist_scope", reason, tag, index)
+}
 
 internal data class E6Config(
     val variant: HttpUrl,
@@ -103,15 +125,22 @@ internal data class E6Config(
 
 internal data class E6Reference(val kind: String, val ordinal: Int?, val filenameIndex: Long?)
 
-/** Parse only the approved finite single-variant scope, without changing the playlist. */
+/** Existing strict scope, now with value-free rejection facts. No playlist rewriting. */
 internal fun E6Config.playlist(bytes: ByteArray): Map<HttpUrl, E6Reference> {
     if (bytes.size > 1024 * 1024) throw E6Failure("response_byte_cap")
     val text = try {
         Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
             .decode(java.nio.ByteBuffer.wrap(bytes)).toString()
-    } catch (_: Exception) { throw E6Failure("playlist_scope") }
+    } catch (_: Exception) { E6PlaylistScope.failure("utf8_format") }
     val lines = text.lineSequence().map { it.trimEnd('\r') }.filter { it.isNotEmpty() }.toList()
-    if (lines.firstOrNull() != "#EXTM3U") throw E6Failure("playlist_scope")
+    fun lexical(line: String) {
+        if (line.firstOrNull() == '\uFEFF' || line.firstOrNull()?.isWhitespace() == true)
+            E6PlaylistScope.failure("bom_or_whitespace")
+    }
+    lines.firstOrNull()?.let(::lexical)
+    if (lines.firstOrNull() != "#EXTM3U") E6PlaylistScope.failure("header_format")
+    fun ref(raw: String): HttpUrl = try { reference(raw) }
+        catch (_: E6Failure) { E6PlaylistScope.failure("reference_scope") }
     var map: HttpUrl? = null
     var target: Int? = null
     var sequence: Long? = null
@@ -121,50 +150,53 @@ internal fun E6Config.playlist(bytes: ByteArray): Map<HttpUrl, E6Reference> {
     val durations = mutableListOf<Long>()
     val refs = linkedMapOf<HttpUrl, E6Reference>()
     for (line in lines.drop(1)) {
+        lexical(line)
         when {
             line.startsWith("#EXT-X-TARGETDURATION:") -> {
-                if (target != null) throw E6Failure("playlist_scope")
-                target = line.substringAfter(':').toIntOrNull() ?: throw E6Failure("playlist_scope")
+                if (target != null) E6PlaylistScope.failure("duplicate_tag")
+                target = line.substringAfter(':').toIntOrNull() ?: E6PlaylistScope.failure("target_mismatch")
             }
             line.startsWith("#EXT-X-MEDIA-SEQUENCE:") -> {
-                if (sequence != null) throw E6Failure("playlist_scope")
-                sequence = line.substringAfter(':').toLongOrNull() ?: throw E6Failure("playlist_scope")
+                if (sequence != null) E6PlaylistScope.failure("duplicate_tag")
+                sequence = line.substringAfter(':').toLongOrNull() ?: E6PlaylistScope.failure("media_sequence_mismatch")
             }
             line.startsWith("#EXT-X-MAP:") -> {
                 val match = Regex("#EXT-X-MAP:URI=\"([^\"]+)\"").matchEntire(line)
-                    ?: throw E6Failure("playlist_scope")
-                if (map != null) throw E6Failure("playlist_scope")
-                map = reference(match.groupValues[1])
+                    ?: E6PlaylistScope.failure("map_format")
+                if (map != null) E6PlaylistScope.failure("duplicate_tag")
+                map = ref(match.groupValues[1])
             }
             line.startsWith("#EXT-X-START:") -> {
-                if (start != null) throw E6Failure("playlist_scope")
+                if (start != null) E6PlaylistScope.failure("duplicate_tag")
                 val match = Regex("#EXT-X-START:TIME-OFFSET=([0-9]+(?:\\.[0-9]{1,6})?)")
-                    .matchEntire(line) ?: throw E6Failure("playlist_scope")
+                    .matchEntire(line) ?: E6PlaylistScope.failure("start_format")
                 start = try { BigDecimal(match.groupValues[1]).movePointRight(6).longValueExact() }
-                    catch (_: ArithmeticException) { throw E6Failure("playlist_scope") }
+                    catch (_: ArithmeticException) { E6PlaylistScope.failure("start_format") }
             }
             line.startsWith("#EXTINF:") -> {
-                if (pending != null || end) throw E6Failure("playlist_scope")
+                if (pending != null || end) E6PlaylistScope.failure("segment_structure")
                 val match = Regex("#EXTINF:([0-9]+(?:\\.[0-9]{1,6})?),").matchEntire(line)
-                    ?: throw E6Failure("playlist_scope")
+                    ?: E6PlaylistScope.failure("extinf_format")
                 pending = try { BigDecimal(match.groupValues[1]).movePointRight(6).longValueExact() }
-                    catch (_: ArithmeticException) { throw E6Failure("playlist_scope") }
+                    catch (_: ArithmeticException) { E6PlaylistScope.failure("extinf_format") }
             }
             line == "#EXT-X-ENDLIST" -> {
-                if (end || pending != null) throw E6Failure("playlist_scope")
+                if (end || pending != null) E6PlaylistScope.failure("endlist_format")
                 end = true
             }
             line.startsWith("#EXT-X-VERSION:") -> {
-                if (line.substringAfter(':').toIntOrNull() !in 1..10) throw E6Failure("playlist_scope")
+                if (line.substringAfter(':').toIntOrNull() !in 1..10) E6PlaylistScope.failure("version_format")
             }
             line == "#EXT-X-PLAYLIST-TYPE:VOD" || line == "#EXT-X-INDEPENDENT-SEGMENTS" -> Unit
-            line.startsWith('#') -> throw E6Failure("playlist_scope")
+            line.startsWith('#') -> E6PlaylistScope.failure("unknown_tag",
+                line.substringBefore(':').removePrefix("#").takeIf { it in E6PlaylistScope.tags } ?: "other_tag")
             else -> {
-                val duration = pending ?: throw E6Failure("playlist_scope")
-                if (map == null || duration <= 0 || duration > 120_000_000 || end || durations.size >= 10_000)
-                    throw E6Failure("playlist_scope")
-                val uri = reference(line)
-                if (uri == map || refs.containsKey(uri)) throw E6Failure("playlist_scope")
+                val duration = pending ?: E6PlaylistScope.failure("segment_structure")
+                if (map == null) E6PlaylistScope.failure("map_position")
+                if (duration <= 0 || duration > 120_000_000 || end || durations.size >= 10_000)
+                    E6PlaylistScope.failure("segment_structure")
+                val uri = ref(line)
+                if (uri == map || refs.containsKey(uri)) E6PlaylistScope.failure("reference_scope")
                 val basename = uri.pathSegments.last()
                 val index = if (Regex("(?:0|[1-9][0-9]{0,17})\\.m4s").matches(basename))
                     basename.substringBefore('.').toLongOrNull() else null
@@ -174,9 +206,15 @@ internal fun E6Config.playlist(bytes: ByteArray): Map<HttpUrl, E6Reference> {
             }
         }
     }
-    if (!end || map == null || pending != null || target != this.target || sequence != 0L ||
-        (start ?: 0L) != offsetUs || durations != durationsUs)
-        throw E6Failure("playlist_scope")
+    if (!end || map == null || pending != null) E6PlaylistScope.failure("segment_structure")
+    if (target != this.target) E6PlaylistScope.failure("target_mismatch")
+    if (sequence == null) E6PlaylistScope.failure("missing_media_sequence")
+    if (sequence != 0L) E6PlaylistScope.failure("media_sequence_mismatch")
+    if ((start ?: 0L) != offsetUs) E6PlaylistScope.failure("start_mismatch")
+    if (durations != durationsUs) {
+        val first = (0 until maxOf(durations.size, durationsUs.size)).first { durations.getOrNull(it) != durationsUs.getOrNull(it) }
+        E6PlaylistScope.failure("duration_mismatch", index = first)
+    }
     refs[map] = E6Reference("init", null, null)
     return refs
 }

@@ -672,6 +672,66 @@
       "nullable": true,
       "min": -9223372036854775808,
       "max": 9223372036854775807
+    },
+    "playlistScopeReason": {
+      "type": "string",
+      "nullable": true,
+      "enum": [
+        "unknown_tag",
+        "missing_media_sequence",
+        "extinf_format",
+        "bom_or_whitespace",
+        "map_position",
+        "target_mismatch",
+        "start_mismatch",
+        "duration_mismatch",
+        "reference_scope",
+        "utf8_format",
+        "header_format",
+        "duplicate_tag",
+        "media_sequence_mismatch",
+        "map_format",
+        "start_format",
+        "endlist_format",
+        "version_format",
+        "segment_structure",
+        "reference_changed"
+      ]
+    },
+    "playlistScopeTag": {
+      "type": "string",
+      "nullable": true,
+      "enum": [
+        "EXTM3U",
+        "EXT-X-VERSION",
+        "EXTINF",
+        "EXT-X-BYTERANGE",
+        "EXT-X-DISCONTINUITY",
+        "EXT-X-KEY",
+        "EXT-X-MAP",
+        "EXT-X-PROGRAM-DATE-TIME",
+        "EXT-X-DATERANGE",
+        "EXT-X-TARGETDURATION",
+        "EXT-X-MEDIA-SEQUENCE",
+        "EXT-X-DISCONTINUITY-SEQUENCE",
+        "EXT-X-ENDLIST",
+        "EXT-X-PLAYLIST-TYPE",
+        "EXT-X-I-FRAMES-ONLY",
+        "EXT-X-MEDIA",
+        "EXT-X-STREAM-INF",
+        "EXT-X-I-FRAME-STREAM-INF",
+        "EXT-X-SESSION-DATA",
+        "EXT-X-SESSION-KEY",
+        "EXT-X-INDEPENDENT-SEGMENTS",
+        "EXT-X-START",
+        "other_tag"
+      ]
+    },
+    "playlistScopeIndex": {
+      "type": "integer",
+      "nullable": true,
+      "min": 0,
+      "max": 10000
     }
   },
   "events": {

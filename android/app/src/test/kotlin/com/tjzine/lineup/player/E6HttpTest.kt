@@ -97,7 +97,14 @@ class E6HttpTest {
         rejected { f.read() }
         rejected { f.read("0.m4s") }
         assertEquals(1, f.dispatched)
-        assertEquals("playlist_scope", f.observation.drain()["failureCode"])
+        val drain = f.observation.drain()
+        assertEquals("playlist_scope", drain["failureCode"])
+        @Suppress("UNCHECKED_CAST")
+        val failure = (drain["events"] as List<Map<String, Any?>>).single { it["event"] == "failure" }
+        assertEquals("unknown_tag", failure["playlistScopeReason"])
+        assertEquals("EXT-X-STREAM-INF", failure["playlistScopeTag"])
+        assertNull(failure["playlistScopeIndex"])
+        assertFalse(failure.toString().contains("other.m3u8"))
     }
 
     @Test fun noErrorRetryAndNoRedirectDispatchAtAnyPhase() {

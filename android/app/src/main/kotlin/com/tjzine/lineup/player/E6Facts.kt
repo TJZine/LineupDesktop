@@ -5,6 +5,8 @@ import org.json.JSONObject
 /** Closed wire vocabulary shared with the debug collector. Never accept external strings here. */
 internal object E6Facts {
     val enums = mapOf(
+        "playlistScopeReason" to E6PlaylistScope.reasons,
+        "playlistScopeTag" to (E6PlaylistScope.tags + "other_tag"),
         "event" to setOf("configured", "load", "ready", "frame_first", "rendered_first_frame",
             "position", "seek_request", "seek_ack", "seek_discontinuity", "renderer_reset",
             "output_change", "seek_result", "http_attempt", "http_result", "media_completed",
@@ -34,7 +36,7 @@ internal object E6Facts {
         "firstPostSeekAttempt", "firstPostSeekHttpSuccess", "firstPostSeekCompleted", "rangePresent",
         "eof", "debugEnabled", "arm64", "h2641080", "aac", "hevcMain10", "hevc3840x1600",
         "baseline", "noErrorRetry", "hlsOffsetInitialized", "late", "decoderHardware")
-    val numbers = setOf("monoNs", "runOrdinal", "requestedOffsetUs", "seekEpoch", "commandSeekEpoch", "outputEpoch", "frameEpoch",
+    val numbers = setOf("playlistScopeIndex", "monoNs", "runOrdinal", "requestedOffsetUs", "seekEpoch", "commandSeekEpoch", "outputEpoch", "frameEpoch",
         "callbackPtsUs", "releaseTimeNs", "callbackMonoNs", "rendererOffsetUs", "hlsOffsetUs", "decoderBufferUs",
         "extractorPtsUs", "extractorRequestedDeltaUs", "hypothesisSourceUs", "hypothesisRequestedDeltaUs",
         "frameWindowUs", "frameWindowPositionDeltaUs", "extractorPositionDeltaUs", "hypothesisPositionDeltaUs",

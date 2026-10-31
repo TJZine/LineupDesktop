@@ -91,11 +91,13 @@ internal class E6Observation(
         }
     }
 
-    @Synchronized fun fail(code: String) {
+    fun fail(error: E6Failure) = fail(error.code, error.scopeFacts())
+
+    @Synchronized fun fail(code: String, fields: Map<String, Any?> = emptyMap()) {
         if (result == "failed" || result == "complete" && code == "cancelled") return
         val safe = code.takeIf { it in E6Facts.enums.getValue("failureCode") } ?: "playback_error"
         terminal = true; result = "failed"; failure = safe
-        emit("failure", mapOf("failureCode" to safe))
+        emit("failure", fields + mapOf("failureCode" to safe))
         handler.removeCallbacks(tick)
         handler.post { cancelIo?.invoke() }
     }

@@ -225,7 +225,7 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
                 val parsed = config.playlist(bytes)
                 synchronized(this) {
                     if (references.size > 1 && references.filterValues { it.kind != "variant" } != parsed)
-                        throw E6Failure("playlist_scope")
+                        E6PlaylistScope.failure("reference_changed")
                     references.putAll(parsed)
                 }
                 observation.emit("load", mapOf("returnedStartUs" to config.offsetUs,
@@ -246,8 +246,9 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
             } finally {
                 synchronized(this) { if (chain.call() !in unconfirmedClose) calls.remove(chain.call()) }
             }
-            observation.fail(code)
-            throw E6Failure(code)
+            val failure = error as? E6Failure ?: E6Failure(code)
+            observation.fail(failure)
+            throw failure
         }
     }
 

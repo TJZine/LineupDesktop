@@ -13,6 +13,35 @@ class E6ConfigTest {
         try { action(); fail("must reject") } catch (error: E6Failure) { if (code != null) assertEquals(code, error.code) }
     }
 
+    @Test fun sharedHostNativePlaylistRejectionVectors() {
+        var directory = java.io.File(System.getProperty("user.dir")).absoluteFile
+        while (!java.io.File(directory, "tool/android/fixtures/e6_playlist_scope_cases.json").isFile)
+            directory = directory.parentFile ?: error("missing shared scope cases")
+        val rows = org.json.JSONArray(java.io.File(directory, "tool/android/fixtures/e6_playlist_scope_cases.json").readText())
+        val config = E6Config.parse(e6Input() + mapOf("sourceDurationMs" to 20000,
+            "expectedDurationsSeconds" to listOf(10, 10)), false)
+        for (i in 0 until rows.length()) {
+            val row = rows.getJSONObject(i)
+            val name = row.getString("name")
+            val bytes = if (row.has("hex")) row.getString("hex").chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                else row.getString("text").toByteArray(Charsets.UTF_8)
+            try {
+                val candidate = if (row.has("variant")) E6Config.parse(e6Input(uri = row.getString("variant")) +
+                    mapOf("sourceDurationMs" to 20000, "expectedDurationsSeconds" to listOf(10, 10)), false) else config
+                assertEquals(name, 3, candidate.playlist(bytes).size)
+                assertTrue(name, row.isNull("reason"))
+            } catch (error: E6Failure) {
+                assertFalse(name, row.isNull("reason"))
+                assertEquals(name, "playlist_scope", error.code)
+                assertEquals(name, row.getString("reason"), error.scopeReason)
+                assertEquals(name, if (row.isNull("tag")) null else row.getString("tag"), error.scopeTag)
+                assertEquals(name, if (row.isNull("index")) null else row.getInt("index"), error.scopeIndex)
+                assertTrue(name, E6Facts.valid(mapOf("event" to "failure", "failureCode" to error.code) + error.scopeFacts()))
+                assertFalse(name, error.scopeFacts().toString().contains("PRIVATE_SENTINEL"))
+            }
+        }
+    }
+
     @Test fun exactInputWhitelistAndPublicBaselineGate() {
         assertTrue(E6Config.parse(e6Input(), true).baseline)
         rejects("baseline_private_refused") { E6Config.parse(e6Input(seek = true), true) }
