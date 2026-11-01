@@ -23,7 +23,8 @@
         "format",
         "release",
         "failure",
-        "capabilities"
+        "capabilities",
+        "seek_ready"
       ]
     },
     "mode": {
@@ -31,7 +32,8 @@
       "nullable": true,
       "enum": [
         "default",
-        "seek_after_ready"
+        "seek_after_ready",
+        "corrected_copy_seek"
       ]
     },
     "sourceClass": {
@@ -733,6 +735,12 @@
       "nullable": true,
       "min": 0,
       "max": 10000
+    },
+    "seekEffectiveTargetUs": {
+      "type": "integer",
+      "nullable": true,
+      "min": -9223372036854775808,
+      "max": 9223372036854775807
     }
   },
   "events": {
@@ -836,6 +844,11 @@
         "aac",
         "hevcMain10",
         "hevc3840x1600"
+      ]
+    },
+    "seek_ready": {
+      "required": [
+        "event"
       ]
     }
   },

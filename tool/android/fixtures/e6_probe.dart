@@ -25,7 +25,8 @@ class E6Request {
   E6Request._(this.fields, this.variant);
   final Map<String, Object?> fields;
   final Uri variant;
-  bool get seek => fields['mode'] == 'seek_after_ready';
+  bool get correctedCopySeek => fields['mode'] == 'corrected_copy_seek';
+  bool get seek => fields['mode'] == 'seek_after_ready' || correctedCopySeek;
   int get offsetSeconds => fields['offsetSeconds'] as int;
   bool get public => variant.host == 'localhost' && variant.port == 21443;
   @override
@@ -78,13 +79,21 @@ E6Request parseE6Request(Object? raw, {required bool baseline}) {
   if (!local && !privatePath) {
     invalid();
   }
-  if (!{'default', 'seek_after_ready'}.contains(raw['mode'])) {
+  if (!{
+    'default',
+    'seek_after_ready',
+    'corrected_copy_seek',
+  }.contains(raw['mode'])) {
     invalid();
   }
   if (baseline &&
       (text != 'https://localhost:21443/e6-clock/index.m3u8' ||
           raw['mode'] != 'default')) {
     invalid('baseline_private_refused');
+  }
+  if (raw['mode'] == 'corrected_copy_seek' &&
+      raw['expectedVideoCodec'] != 'h264') {
+    invalid();
   }
   final offset = raw['offsetSeconds'];
   final duration = raw['sourceDurationMs'];
@@ -260,6 +269,8 @@ Future<Map<String, Object?>> observeE6(
   var result = 'failed';
   var gate = false, stopped = false, disposed = false, released = false;
   var count = 0;
+  var sought = false;
+  int? correctedTargetUs;
   final counters = <String, Object?>{
     'variantAttempts': null,
     'initAttempts': null,
@@ -292,6 +303,51 @@ Future<Map<String, Object?>> observeE6(
 
   Future<void> emit(Map<String, dynamic> event, {bool teardown = false}) async {
     validateE6Fact(event);
+    if (event['event'] == 'seek_ready') {
+      final a = event['hlsOffsetUs'];
+      final c = event['callbackPtsUs'];
+      final r = event['decoderBufferUs'];
+      final o = event['rendererOffsetUs'];
+      final e = event['extractorPtsUs'];
+      final target = event['seekTargetUs'];
+      final effective = event['seekEffectiveTargetUs'];
+      if (!request.correctedCopySeek ||
+          event['mode'] != 'corrected_copy_seek' ||
+          correctedTargetUs != null ||
+          sought ||
+          event['clockKnown'] != true ||
+          event['bindingKnown'] != true ||
+          event['hlsOffsetInitialized'] != true ||
+          event['renderedAssociated'] != true ||
+          event['rendererRelationValid'] != true ||
+          event['requestedOffsetUs'] != request.offsetSeconds * 1000000 ||
+          event['seekEpoch'] != 0 ||
+          event['commandSeekEpoch'] != 0 ||
+          event['frameEpoch'] is! int ||
+          (event['frameEpoch'] as int) <= 0 ||
+          event['outputEpoch'] is! int ||
+          (event['outputEpoch'] as int) <= 0 ||
+          a is! int ||
+          c is! int ||
+          r is! int ||
+          o is! int ||
+          e is! int ||
+          target is! int ||
+          effective is! int) {
+        throw const E6Failure('seek_contract');
+      }
+      final raw = request.offsetSeconds * 1000000 + a + 10000000;
+      if (r - o != c || c - a != e) {
+        throw const E6Failure('clock_relation_invalid');
+      }
+      if (raw < 0 ||
+          raw >= (request.fields['sourceDurationMs'] as int) * 1000 ||
+          target != (raw ~/ 1000) * 1000 ||
+          effective != ((target / 1000000) * 1000).truncate() * 1000) {
+        throw const E6Failure('seek_contract');
+      }
+      correctedTargetUs = target;
+    }
     if (count >= e6FactLimit) {
       throw const E6Failure('event_overflow');
     }
@@ -314,7 +370,11 @@ Future<Map<String, Object?>> observeE6(
       await (teardown ? call('drain') : during(call('drain'))),
     );
     for (final event in value.events) {
-      await emit(validateE6Fact(event), teardown: teardown);
+      final fact = validateE6Fact(event);
+      if (fact['event'] == 'seek_ready' && !value.ready) {
+        throw const E6Failure('seek_contract');
+      }
+      await emit(fact, teardown: teardown);
     }
     return value;
   }
@@ -376,20 +436,26 @@ Future<Map<String, Object?>> observeE6(
             loadFailure = 'load_failed';
           },
         );
-    var sought = false;
     while (true) {
       guard();
       final value = await drain();
       if (!value.terminal && loadFailure != null) {
         throw E6Failure(loadFailure!);
       }
-      if (value.ready && request.seek && !sought && !value.terminal) {
+      if (value.ready &&
+          request.seek &&
+          !sought &&
+          !value.terminal &&
+          (!request.correctedCopySeek || correctedTargetUs != null)) {
         sought = true;
         try {
           await during(
             player
                 .seek(
-                  Duration(seconds: request.offsetSeconds),
+                  Duration(
+                    microseconds:
+                        correctedTargetUs ?? request.offsetSeconds * 1000000,
+                  ),
                   mode: SeekMode.exact,
                 )
                 .timeout(const Duration(seconds: 10)),

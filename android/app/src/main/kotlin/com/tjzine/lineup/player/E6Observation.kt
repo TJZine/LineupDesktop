@@ -52,6 +52,11 @@ internal class E6Observation(
     private var seekRequestNs: Long? = null
     private var seekPositionMs: Long? = null
     private var seekReset = false
+    private data class CorrectedSeek(
+        val frame: Frame, val adjuster: TimestampAdjuster, val targetUs: Long, val effectiveTargetUs: Long,
+        val durationMs: Long, val windowIndex: Int, val timeline: Timeline,
+    )
+    private var correctedSeek: CorrectedSeek? = null
     private var sampleOrigin: Long? = null
     private var sampleIndex = 0
     private var renderedReceiptNs: Long? = null
@@ -82,7 +87,7 @@ internal class E6Observation(
     @Synchronized fun emit(event: String, fields: Map<String, Any?> = emptyMap()) {
         try {
             queue.add(linkedMapOf<String, Any?>("event" to event, "monoNs" to now(), "runOrdinal" to runOrdinal,
-                "requestedOffsetUs" to config.offsetUs, "mode" to if (config.seek) "seek_after_ready" else "default",
+                "requestedOffsetUs" to config.offsetUs, "mode" to config.mode,
                 "sourceClass" to config.video, "seekEpoch" to seekEpoch, "commandSeekEpoch" to seekEpoch, "outputEpoch" to outputEpoch,
                 "frameEpoch" to frameEpoch, "sourceOriginProven" to false, "clockDomain" to "system_nano_time") + fields)
         } catch (error: E6Failure) {
@@ -125,12 +130,14 @@ internal class E6Observation(
     }
 
     @Synchronized fun outputChanged(offset: Long) {
+        if (config.correctedCopySeek && correctedSeek != null && seekEpoch == 0L) fail("seek_contract")
         rendererOffset = offset.takeUnless { it == C.TIME_UNSET }
         outputEpoch++
         emit("output_change", mapOf("rendererOffsetUs" to rendererOffset))
     }
 
     @Synchronized fun rendererReset(@Suppress("UNUSED_PARAMETER") sampleStreamIsResetToKeyFrame: Boolean = false) {
+        if (config.correctedCopySeek && correctedSeek != null && seekEpoch == 0L) fail("seek_contract")
         frameEpoch++
         resetSeekEpoch = seekEpoch
         if (seekEpoch > 0) seekReset = true
@@ -252,31 +259,100 @@ internal class E6Observation(
         maybeStart()
     }
 
+    /** One debug-only correction, frozen from a qualified pre-seek A0. */
+    private fun proposeCorrectedSeek() {
+        if (!config.correctedCopySeek || correctedSeek != null || seekEpoch != 0L || terminal || !ready || !renderedSeen) return
+        if (now() >= deadlineNs) { fail("active_deadline"); return }
+        val p = player ?: return
+        val matched = synchronized(this) { adjusters[0]?.toList() ?: emptyList() }
+        if (matched.size > 1 || unmatchedRendered) { fail("clock_bridge_unavailable"); return }
+        val adjuster = matched.singleOrNull() ?: return
+        val a0 = adjuster.timestampOffsetUs.takeUnless { it == C.TIME_UNSET } ?: return
+        val time = now()
+        val frame = synchronized(this) { frames.filter { candidate ->
+            candidate.seek == 0L && candidate.output == outputEpoch && candidate.reset == frameEpoch &&
+                candidate.release != null && candidate.release <= time && candidate.hls == a0 &&
+                candidate.offset == rendererOffset
+        }.maxWithOrNull(compareBy<Frame> { it.release }.thenBy { it.callback }) } ?: return
+        val basis = snapshot(frame)
+        if (basis["bindingKnown"] != true || basis["clockKnown"] != true ||
+            basis["renderedAssociated"] != true || basis["rendererRelationValid"] != true) return
+        val duration = p.duration.takeUnless { it == C.TIME_UNSET || it <= 0 } ?: return
+        val raw: Long
+        val durationUs: Long
+        try {
+            raw = Math.addExact(Math.addExact(config.offsetUs, a0), 10_000_000L)
+            durationUs = Math.multiplyExact(duration, 1000L)
+        } catch (_: ArithmeticException) { fail("seek_contract"); return }
+        if (raw < 0 || raw >= durationUs) { fail("seek_contract"); return }
+        // NativePlayer/Media3 consumes whole milliseconds. No clamp or retry.
+        val target = raw / 1000L * 1000L
+        // Preserve the actual existing Duration->Double->Media3 milliseconds
+        // conversion, including a possible additional 1ms floating-point drop.
+        val effective = ((target.toDouble() / 1_000_000.0) * 1000.0).toLong() * 1000L
+        correctedSeek = CorrectedSeek(frame, adjuster, target, effective, duration, p.currentMediaItemIndex, p.currentTimeline)
+        emit("seek_ready", basis + mapOf("seekTargetUs" to target, "seekEffectiveTargetUs" to effective))
+    }
+
+    private fun correctedBasisCurrent(proposal: CorrectedSeek): Boolean {
+        val p = player ?: return false
+        val f = proposal.frame
+        val matched = synchronized(this) { adjusters[0]?.toList() ?: emptyList() }
+        if (matched.size != 1 || matched.single() !== proposal.adjuster ||
+            proposal.adjuster.timestampOffsetUs != f.hls || f.output != outputEpoch || f.reset != frameEpoch ||
+            f.seek != 0L || f.offset != rendererOffset || unmatchedRendered ||
+            p.duration != proposal.durationMs || p.currentMediaItemIndex != proposal.windowIndex ||
+            p.currentTimeline !== proposal.timeline) return false
+        val basis = snapshot(f)
+        return basis["bindingKnown"] == true && basis["clockKnown"] == true &&
+            basis["renderedAssociated"] == true && basis["rendererRelationValid"] == true
+    }
+
+    private fun seekTargetUs(): Long? = if (config.correctedCopySeek) correctedSeek?.targetUs else config.offsetUs
+    private fun effectiveTargetUs(): Long? = if (config.correctedCopySeek) correctedSeek?.effectiveTargetUs else config.offsetUs
+    private fun correctedTargetFacts(): Map<String, Any?> = if (config.correctedCopySeek)
+        mapOf("seekEffectiveTargetUs" to effectiveTargetUs()) else emptyMap()
+
     fun beforeSeek(seconds: Double, exact: Boolean): Boolean {
         val p = player ?: return false.also { fail("seek_contract") }
-        if (!config.seek || !ready || seekEpoch != 0L || !exact || !seconds.isFinite() ||
-            kotlin.math.abs(seconds * 1_000_000 - config.offsetUs) > 0.01 || terminal) {
+        if (config.correctedCopySeek && now() >= deadlineNs) { fail("active_deadline"); return false }
+        val target = seekTargetUs()
+        if (!config.seek || !ready || seekEpoch != 0L || !exact || !seconds.isFinite() || target == null ||
+            kotlin.math.abs(seconds * 1_000_000 - target) > 0.01 || terminal ||
+            config.correctedCopySeek && (!correctedBasisCurrent(correctedSeek!!) ||
+                (seconds * 1000.0).toLong() * 1000L != correctedSeek!!.effectiveTargetUs)) {
             fail("seek_contract"); return false
         }
         seekPositionMs = p.currentPosition
         seekRequestNs = now()
         seekEpoch = 1L
-        emit("seek_request", snapshot(synchronized(this) { latest }) + mapOf("seekTargetUs" to config.offsetUs,
-            "seekPositionMs" to seekPositionMs, "seekExact" to exact, "seekRequestNs" to seekRequestNs))
+        emit("seek_request", snapshot(synchronized(this) { latest }) + mapOf("seekTargetUs" to target,
+            "seekPositionMs" to seekPositionMs, "seekExact" to exact, "seekRequestNs" to seekRequestNs) + correctedTargetFacts())
         // A zero-distance command may legitimately preserve the renderer epoch and current frame.
         maybeStart()
         return true
     }
 
-    fun seekAck() { emit("seek_ack", mapOf("seekTargetUs" to config.offsetUs, "seekExact" to true)) }
-    fun discontinuity() { if (!terminal) emit("seek_discontinuity", snapshot(synchronized(this) { latest })) }
+    fun seekAck() {
+        val target = seekTargetUs()
+        if (config.correctedCopySeek && (target == null || seekEpoch == 0L)) { fail("seek_contract"); return }
+        emit("seek_ack", mapOf("seekTargetUs" to target, "seekExact" to true) + correctedTargetFacts())
+    }
+    fun discontinuity() {
+        if (!terminal) emit("seek_discontinuity", snapshot(synchronized(this) { latest }) +
+            if (config.correctedCopySeek && seekEpoch > 0L) mapOf("seekTargetUs" to seekTargetUs()) + correctedTargetFacts() else emptyMap())
+    }
 
-    private fun noDistance(): Boolean = seekPositionMs?.let { it * 1000 == config.offsetUs } == true
+    private fun noDistance(): Boolean = seekPositionMs?.let { it * 1000 == effectiveTargetUs() } == true
 
     private fun attributable(frame: Frame?): Boolean = frame != null &&
         (!config.seek || seekEpoch > 0 && (frame.seek == seekEpoch && seekReset || noDistance() && !seekReset))
 
     private fun maybeStart() {
+        if (config.correctedCopySeek && seekEpoch == 0L) {
+            proposeCorrectedSeek()
+            return
+        }
         if (terminal || sampleOrigin != null || !renderedSeen) return
         val frame = synchronized(this) { if (config.seek && seekReset) postSeekFirst else initial }
         val confirmed = if (config.seek && seekReset) postSeekRendered === frame && frame != null else rendered === frame && frame != null
@@ -299,6 +375,8 @@ internal class E6Observation(
         if (sinceReady != null && sampleOrigin == null && time - sinceReady >= 15_000_000_000L) {
             fail("first_frame_deadline"); return
         }
+        if (config.correctedCopySeek && seekEpoch == 0L) proposeCorrectedSeek()
+        if (terminal) return
         val origin = sampleOrigin
         if (origin != null) {
             // Do not fabricate simultaneous samples if the application Looper was stalled.
@@ -312,12 +390,12 @@ internal class E6Observation(
             if (sampleIndex == 41) {
                 val frame = sampleFrame(time)
                 val first = if (config.seek && seekReset) postSeekFirst else initial
-                if (config.seek) emit("seek_result", snapshot(first) + mapOf("seekResult" to when {
+                if (config.seek) emit("seek_result", snapshot(first) + mapOf("seekTargetUs" to seekTargetUs(), "seekResult" to when {
                     noDistance() && !seekReset -> "seek_no_distance_no_new_epoch"
                     first != null && first.hls != null && first.offset != null && first.binding &&
                         postSeekRendered === first && attributable(first) && seekReset -> "post_seek_frame_observed"
                     else -> "seek_landing_unconfirmed"
-                }))
+                }) + correctedTargetFacts())
                 if (!ready || !config.baseline && (frame == null || !frame.binding || frame.hls == null || frame.offset == null ||
                         first == null || !first.binding || first.hls == null || first.offset == null ||
                         unmatchedRendered || (if (config.seek && seekReset) postSeekRendered !== first else rendered !== first) ||

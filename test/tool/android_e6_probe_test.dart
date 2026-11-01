@@ -513,6 +513,207 @@ void main() {
       expect(p.lastSeekMode, SeekMode.exact);
     },
   );
+  Map<String, Object?> proposal({
+    int a = -2053708,
+    int? target,
+    Map<String, Object?> changes = const {},
+  }) => {
+    'event': 'seek_ready',
+    'mode': 'corrected_copy_seek',
+    'requestedOffsetUs': 21000000,
+    'seekEpoch': 0,
+    'commandSeekEpoch': 0,
+    'outputEpoch': 1,
+    'frameEpoch': 1,
+    'positionMs': 20000,
+    'callbackPtsUs': 20000000,
+    'rendererOffsetUs': 1000000000000,
+    'decoderBufferUs': 1000020000000,
+    'hlsOffsetUs': a,
+    'extractorPtsUs': 20000000 - a,
+    'clockKnown': true,
+    'bindingKnown': true,
+    'hlsOffsetInitialized': true,
+    'renderedAssociated': true,
+    'rendererRelationValid': true,
+    'seekTargetUs': target ?? ((21000000 + a + 10000000) ~/ 1000) * 1000,
+    'seekEffectiveTargetUs':
+        (((target ?? ((21000000 + a + 10000000) ~/ 1000) * 1000) / 1000000) *
+                1000)
+            .truncate() *
+        1000,
+    ...changes,
+  };
+  Future<Map<String, Object?>> corrected(
+    Player p,
+    Bridge b, {
+    Duration timeout = const Duration(seconds: 1),
+  }) => observeE6(
+    p,
+    b,
+    parseE6Request(
+      input({
+        'mode': 'corrected_copy_seek',
+        'sourceDurationMs': 60000,
+        'expectedDurationsSeconds': [10, 10, 10, 10, 10, 10],
+      }),
+      baseline: false,
+    ),
+    cancelled: Completer<void>().future,
+    active: () => true,
+    record: (_) async {},
+    pollInterval: Duration.zero,
+    activeTimeout: timeout,
+  );
+  test('corrected copy mode preserves original offset and rejects baseline and HEVC', () {
+    final value = parseE6Request(
+      input({'mode': 'corrected_copy_seek'}),
+      baseline: false,
+    );
+    expect(value.seek, true);
+    expect(value.correctedCopySeek, true);
+    expect(value.offsetSeconds, 21);
+    expect(
+      () => parseE6Request(
+        input({'mode': 'corrected_copy_seek'}),
+        baseline: true,
+      ),
+      throwsA(isA<E6Failure>()),
+    );
+    expect(
+      () => parseE6Request(
+        input({'mode': 'corrected_copy_seek', 'expectedVideoCodec': 'hevc'}),
+        baseline: false,
+      ),
+      throwsA(isA<E6Failure>()),
+    );
+  });
+  test('corrected seek waits for qualified proposal then uses one effective ms target', () async {
+    for (final a in [-2053708, 2000123]) {
+      final p = Player()..loadGate = Completer<void>();
+      final b = Bridge()
+        ..drains.addAll([
+          snapshot(ready: true),
+          snapshot(ready: true, events: [proposal(a: a)]),
+          snapshot(ready: true),
+          snapshot(ready: true, terminal: true, result: 'complete'),
+        ]);
+      expect((await corrected(p, b))['result'], 'complete');
+      expect(p.seeks, [
+        Duration(microseconds: ((21000000 + a + 10000000) ~/ 1000) * 1000),
+      ]);
+      expect(p.loadedKind, LoadKind.plexSession);
+      expect(p.token, isNull);
+      expect(p.start, isNull);
+    }
+  });
+  test('corrected proposal rejects duplicate, preREADY, bad clock, target and missing binding', () async {
+    final cases = <List<Map<String, Object?>>>[
+      [proposal(), proposal()],
+      [
+        proposal(changes: {'clockKnown': false}),
+      ],
+      [
+        proposal(changes: {'hlsOffsetInitialized': false}),
+      ],
+      [
+        proposal(changes: {'renderedAssociated': false}),
+      ],
+      [
+        proposal(changes: {'seekEpoch': 1}),
+      ],
+      [
+        proposal(changes: {'frameEpoch': 0}),
+      ],
+      [
+        proposal(changes: {'requestedOffsetUs': 10000000}),
+      ],
+      [
+        proposal(changes: {'decoderBufferUs': 42}),
+      ],
+      [proposal(target: 21000000)],
+      [
+        proposal(changes: {'seekEffectiveTargetUs': 123}),
+      ],
+      [
+        proposal(changes: {'mode': 'default'}),
+      ],
+      [proposal(a: -32000000)],
+      [proposal(a: 40000000)],
+    ];
+    for (final events in cases) {
+      final p = Player(),
+          b = Bridge()..drains.add(snapshot(ready: true, events: events));
+      expect((await corrected(p, b))['result'], 'failed');
+      expect(p.seeks, isEmpty);
+      expect(p.calls, containsAll(['stop', 'dispose']));
+    }
+    final p = Player(),
+        b = Bridge()..drains.add(snapshot(ready: false, events: [proposal()]));
+    expect((await corrected(p, b))['failureCode'], 'seek_contract');
+    expect(p.seeks, isEmpty);
+  });
+  test(
+    'corrected mode never substitutes offset when proposal is absent',
+    () async {
+      final p = Player(),
+          b = Bridge()
+            ..drains.add(
+              snapshot(ready: true, terminal: true, result: 'complete'),
+            );
+      expect((await corrected(p, b))['failureCode'], 'seek_contract');
+      expect(p.seeks, isEmpty);
+    },
+  );
+  test(
+    'proposal in nominal mode is refused instead of causing an extra seek',
+    () async {
+      final p = Player(),
+          b = Bridge()..drains.add(snapshot(ready: true, events: [proposal()]));
+      expect((await run(p, b, seek: true))['failureCode'], 'seek_contract');
+      expect(p.seeks, isEmpty);
+    },
+  );
+  test(
+    'corrected target retains the observable one ms transport truncation',
+    () async {
+      final p = Player(),
+          b = Bridge()
+            ..drains.addAll([
+              snapshot(ready: true, events: [proposal(a: -29999000)]),
+              snapshot(ready: true, terminal: true, result: 'complete'),
+            ]);
+      expect(proposal(a: -29999000)['seekTargetUs'], 1001000);
+      expect(proposal(a: -29999000)['seekEffectiveTargetUs'], 1000000);
+      expect((await corrected(p, b))['result'], 'complete');
+      expect(p.seeks, [const Duration(microseconds: 1001000)]);
+    },
+  );
+  test(
+    'postseek adjuster changes remain facts and do not cause recomputation',
+    () async {
+      final p = Player(),
+          b = Bridge()
+            ..drains.addAll([
+              snapshot(ready: true, events: [proposal()]),
+              snapshot(
+                ready: true,
+                events: [
+                  {
+                    ...proposal(a: -3000000),
+                    'event': 'rendered_first_frame',
+                    'seekEpoch': 1,
+                    'commandSeekEpoch': 1,
+                    'frameEpoch': 2,
+                  },
+                ],
+              ),
+              snapshot(ready: true, terminal: true, result: 'complete'),
+            ]);
+      expect((await corrected(p, b))['result'], 'complete');
+      expect(p.seeks, [const Duration(microseconds: 28946000)]);
+    },
+  );
   test('already inactive never loads but does real cleanup', () async {
     final p = Player(), b = Bridge();
     expect((await run(p, b, active: () => false))['result'], 'failed');

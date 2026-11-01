@@ -40,7 +40,9 @@ internal data class E6Config(
     val target: Int,
     val durationsUs: List<Long>,
     val baseline: Boolean,
+    val correctedCopySeek: Boolean = false,
 ) {
+    val mode: String get() = if (correctedCopySeek) "corrected_copy_seek" else if (seek) "seek_after_ready" else "default"
     val namespace: String = variant.encodedPath.substringBeforeLast('/') + "/"
     val public: Boolean = variant.host == "localhost" && variant.port == 21443
     override fun toString() = "E6Config()"
@@ -82,7 +84,7 @@ internal data class E6Config(
                 .matches(uri.encodedPath)
             if (!local && !privatePath) throw E6Failure("unsafe_reference")
             val mode = map["mode"] as? String ?: throw E6Failure("invalid_config")
-            if (mode !in listOf("default", "seek_after_ready")) throw E6Failure("invalid_config")
+            if (mode !in listOf("default", "seek_after_ready", "corrected_copy_seek")) throw E6Failure("invalid_config")
             if (baseline && (text != "https://localhost:21443/e6-clock/index.m3u8" || mode != "default"))
                 throw E6Failure("baseline_private_refused")
             val offset = micros(map["offsetSeconds"])
@@ -94,7 +96,8 @@ internal data class E6Config(
             val duration = integer(map["sourceDurationMs"], 1, 43_200_000)
             val target = integer(map["expectedTargetDurationSeconds"], 1, 120).toInt()
             val video = map["expectedVideoCodec"] as? String ?: throw E6Failure("invalid_config")
-            if (video !in listOf("h264", "hevc")) throw E6Failure("invalid_config")
+            if (video !in listOf("h264", "hevc") || mode == "corrected_copy_seek" && video != "h264")
+                throw E6Failure("invalid_config")
             val rawDurations = map["expectedDurationsSeconds"] as? List<*> ?: throw E6Failure("invalid_config")
             if (rawDurations.isEmpty() || rawDurations.size > 10_000) throw E6Failure("invalid_config")
             val durations = rawDurations.map { micros(it).also { n ->
@@ -102,7 +105,8 @@ internal data class E6Config(
             } }
             if (kotlin.math.abs(durations.sum() - duration * 1000) > 1_000_000)
                 throw E6Failure("invalid_config")
-            return E6Config(uri, offset, mode == "seek_after_ready", duration, video, target, durations, baseline)
+            return E6Config(uri, offset, mode != "default", duration, video, target, durations, baseline,
+                mode == "corrected_copy_seek")
         }
 
         private fun integer(value: Any?, min: Long, max: Long): Long {
