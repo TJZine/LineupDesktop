@@ -30,8 +30,10 @@ class E6HttpTest {
         var status = 200
         var extraHeaders = emptyMap<String, String>()
         var body: ResponseBody? = null
+        var lastCall: okhttp3.Call? = null
         val client = OkHttpClient.Builder().retryOnConnectionFailure(false)
             .followRedirects(false).followSslRedirects(false).addInterceptor(guard).addInterceptor { chain ->
+                lastCall = chain.call()
                 dispatched++
                 val response = Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(status).message("fixture")
                 extraHeaders.forEach { (key, value) -> response.addHeader(key, value) }
@@ -235,6 +237,79 @@ class E6HttpTest {
         val final = facts.single { it["event"] == "http_result" && it["outcome"] == "failed" }
         assertEquals(1, final["attempt"]); assertNull(final["status"]); assertEquals(0L, final["bytes"])
         assertFalse(facts.toString().contains("private diagnostic"))
+    }
+
+    @Test fun blockedConsumerCloseFencesSameEpochBeforeUnderlyingCloseReturns() {
+        val f = Fixture(); f.read()
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val finish = java.util.concurrent.CountDownLatch(1)
+        f.body = object : ResponseBody() {
+            private val stream = object : okio.ForwardingSource(Buffer().write(ByteArray(65536))) {
+                override fun close() {
+                    entered.countDown()
+                    assertTrue(finish.await(3, java.util.concurrent.TimeUnit.SECONDS))
+                    super.close()
+                }
+            }.buffer()
+            override fun contentType() = null
+            override fun contentLength() = 65536L
+            override fun source() = stream
+        }
+        val source = f.factory.createDataSource()
+        source.open(DataSpec(Uri.parse(f.observation.config.reference("0.m4s").toString())))
+        assertEquals(4, source.read(ByteArray(4), 0, 4))
+        val closing = Thread { source.close() }.apply { start() }
+        assertTrue(entered.await(3, java.util.concurrent.TimeUnit.SECONDS))
+        try {
+            rejected { f.read("0.m4s") }
+            assertEquals("error_retry_refused", f.observation.drain()["failureCode"])
+            assertEquals(2, f.dispatched); assertEquals(1, f.guard.totals()["mediaAttempts"])
+            assertEquals(1, f.guard.activeCalls())
+        } finally { finish.countDown(); closing.join(3000) }
+        assertFalse(closing.isAlive); assertTrue(f.guard.awaitDrained(f.client, 1000))
+    }
+
+    @Test fun fullyReadBodyCancelledBeforeCloseStillRecordsCancelled() {
+        val f = Fixture(); f.read()
+        val source = f.factory.createDataSource()
+        source.open(DataSpec(Uri.parse(f.observation.config.reference("0.m4s").toString())))
+        assertEquals(32, source.read(ByteArray(32), 0, 32))
+        f.lastCall!!.cancel(); source.close()
+        assertFalse(f.observation.terminal)
+        val receipt = f.facts().single { it["event"] == "http_result" && it["kind"] == "media" && it["outcome"] != "headers" }
+        assertEquals("cancelled", receipt["outcome"]); assertEquals(32L, receipt["bytes"])
+        assertEquals(0, f.guard.activeCalls())
+    }
+
+    @Test fun cancelledShortEofAndCloseExceptionUseTheSameNonfatalClassification() {
+        for (throwOnClose in listOf(false, true)) {
+            val f = Fixture(); f.read()
+            f.body = object : ResponseBody() {
+                private val stream = object : okio.Source {
+                    override fun read(sink: Buffer, byteCount: Long): Long {
+                        f.lastCall!!.cancel()
+                        return -1
+                    }
+                    override fun timeout() = okio.Timeout.NONE
+                    override fun close() {
+                        if (throwOnClose) throw IOException("private cancelled close diagnostic")
+                    }
+                }.buffer()
+                override fun contentType() = null
+                override fun contentLength() = 32L
+                override fun source() = stream
+            }
+            rejected { f.read("0.m4s") }
+            assertFalse(f.observation.terminal)
+            val facts = f.facts()
+            assertFalse(facts.any { it["event"] == "failure" })
+            val terminal = facts.single { it["event"] == "http_result" && it["kind"] == "media" && it["outcome"] != "headers" }
+            assertEquals("cancelled", terminal["outcome"]); assertEquals(0L, terminal["bytes"])
+            assertEquals(if (throwOnClose) 1 else 0, f.guard.activeCalls())
+            // A cancelled close exception stays nonfatal, but cannot manufacture
+            // successful ownership release without a confirmed body close.
+            assertEquals(!throwOnClose, f.guard.awaitDrained(f.client, 1))
+        }
     }
 
     @Test fun failedSourceCloseRetainsOwnershipAndCannotConfirmDrain() {

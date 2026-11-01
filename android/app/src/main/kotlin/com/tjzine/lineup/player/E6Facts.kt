@@ -15,7 +15,7 @@ internal object E6Facts {
         "sourceClass" to setOf("h264", "hevc"),
         "playbackState" to setOf("idle", "buffering", "ready", "ended"),
         "kind" to setOf("variant", "init", "media"),
-        "outcome" to setOf("headers", "complete", "closed_early", "http_404", "failed"),
+        "outcome" to setOf("headers", "complete", "closed_early", "cancelled", "http_404", "failed"),
         "videoCodec" to setOf("h264", "hevc", "unknown"),
         "audioCodec" to setOf("aac", "unknown"),
         "transfer" to setOf("sdr", "pq", "hlg", "unknown"),

@@ -63,6 +63,7 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
     private val references = linkedMapOf(config.variant to E6Reference("variant", null, null))
     private val failures = mutableSetOf<HttpUrl>()
     private val successfulEpoch = mutableMapOf<HttpUrl, Long>()
+    private val interruptedEpoch = mutableMapOf<HttpUrl, Long>()
     private val calls = IdentityHashMap<Call, Boolean>()
     private val unconfirmedClose = Collections.newSetFromMap(IdentityHashMap<Call, Boolean>())
     private val attempts = mutableMapOf("variant" to 0, "init" to 0, "media" to 0)
@@ -131,7 +132,7 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
         val first: Boolean,
         val firstSeek: Boolean,
         val startMs: Long,
-    ) { var finalized = false }
+    ) { var finalized = false; @Volatile var ending: End? = null }
 
     @Synchronized private fun authorize(chain: Interceptor.Chain): Ticket {
         observation.requireActive()
@@ -149,6 +150,8 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
             throw E6Failure("invalid_range")
         if (request.url in failures) throw E6Failure("error_retry_refused")
         val epoch = tagged.epoch
+        if (interruptedEpoch[request.url]?.let { it >= epoch } == true)
+            throw E6Failure("error_retry_refused")
         if (reference.kind == "media" && successfulEpoch[request.url]?.let { it >= epoch } == true)
             throw E6Failure("error_retry_refused")
         val limit = when (reference.kind) { "media" -> 16; else -> 2 }
@@ -188,6 +191,39 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
         observation.emit("http_result", facts(ticket) + counts + mapOf("status" to status,
             "outcome" to outcome, "bytes" to bytes, "eof" to eof))
     }
+
+    /** A call end is classified once before close/cancel can alter its cause. */
+    private data class End(val outcome: String, val failure: E6Failure?)
+
+    @Synchronized private fun ended(ticket: Ticket, call: Call, error: Exception): End {
+        ticket.ending?.let { return it }
+        return classifyEnd(call, error).also { ticket.ending = it }
+    }
+
+    private fun classifyEnd(call: Call, error: Exception): End {
+        // Status/protocol guards may cancel their own Call. They remain genuine
+        // failures and cannot masquerade as a player-initiated cancellation.
+        if (error is NetworkStatusFailure) return End(if (error.status == 404) "http_404" else "failed", E6Failure(error.code))
+        if (error is E6Failure && error.code !in listOf("cancelled", "io_failure"))
+            return End(if (error.code == "http_404") "http_404" else "failed", error)
+        if (System.nanoTime() >= observation.deadlineNs) return End("failed", E6Failure("active_deadline"))
+        if (call.isCanceled()) {
+            val active = synchronized(this) { open && !observation.terminal }
+            return End("cancelled", if (active) null else E6Failure("cancelled"))
+        }
+        if (error is E6Failure && error.code == "cancelled") return End("cancelled", error)
+        return End("failed", error as? E6Failure ?: E6Failure("io_failure"))
+    }
+
+    @Synchronized private fun remember(uri: HttpUrl, ticket: Ticket, outcome: String) {
+        when (outcome) {
+            "cancelled", "closed_early" -> interruptedEpoch[uri] = maxOf(interruptedEpoch[uri] ?: -1, ticket.epoch)
+            "complete" -> successfulEpoch[uri] = maxOf(successfulEpoch[uri] ?: -1, ticket.epoch)
+            else -> failures += uri
+        }
+    }
+
+    private fun fail(end: End) { end.failure?.let(observation::fail) }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val ticket = try { authorize(chain) } catch (error: E6Failure) {
@@ -234,21 +270,19 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
             }
             return response.newBuilder().body(wrapped).build()
         } catch (error: Exception) {
+            val end = ended(ticket, chain.call(), error)
+            remember(chain.request().url, ticket, end.outcome)
             try { response?.close() } catch (_: Exception) { synchronized(this) { unconfirmedClose += chain.call() } }
-            synchronized(this) {
-                failures += chain.request().url
-                if (error is NetworkStatusFailure && !error.closeConfirmed) unconfirmedClose += chain.call()
-            }
-            val code = (error as? E6Failure)?.code ?: (error as? NetworkStatusFailure)?.code ?: "io_failure"
+            if (error is NetworkStatusFailure && !error.closeConfirmed)
+                synchronized(this) { unconfirmedClose += chain.call() }
             val status = response?.code ?: (error as? NetworkStatusFailure)?.status
             try {
-                receipt(ticket, status, if (status == 404) "http_404" else "failed", 0)
+                receipt(ticket, status, end.outcome, 0)
             } finally {
                 synchronized(this) { if (chain.call() !in unconfirmedClose) calls.remove(chain.call()) }
             }
-            val failure = error as? E6Failure ?: E6Failure(code)
-            observation.fail(failure)
-            throw failure
+            fail(end)
+            throw end.failure ?: E6Failure("cancelled")
         }
     }
 
@@ -274,62 +308,78 @@ internal class E6Http(private val observation: E6Observation) : Interceptor {
         var bytes = 0L
         var eof = false
         var finished = false
-        var failed = false
         val expected = body.contentLength()
+        fun failed(error: Exception): E6Failure {
+            val end = ended(ticket, call, error)
+            remember(uri, ticket, end.outcome)
+            fail(end)
+            return end.failure ?: E6Failure("cancelled")
+        }
         val stream = object : ForwardingSource(body.source()) {
             override fun read(sink: okio.Buffer, byteCount: Long): Long {
-                observation.requireActive()
-                if (byteCount == 0L) return 0
-                val allowed = try { synchronized(this@E6Http) {
-                    if (!open || observation.terminal) throw E6Failure("cancelled")
-                    minOf(byteCount, cap - bytes, 512L * 1024 * 1024 - totalBytes - reservedBytes)
-                        .also { if (it <= 0 && expected != bytes) throw E6Failure("response_byte_cap"); reservedBytes += it }
-                } } catch (error: E6Failure) { observation.fail(error.code); throw error }
-                if (allowed == 0L && expected == bytes) { eof = true; return -1 }
-                val n: Long
-                try { n = super.read(sink, allowed) } catch (error: Exception) {
-                    failed = true
-                    synchronized(this@E6Http) { reservedBytes -= allowed; failures += uri }
-                    observation.fail((error as? E6Failure)?.code ?: "io_failure")
-                    throw E6Failure((error as? E6Failure)?.code ?: "io_failure")
+                var reserved = 0L
+                try {
+                    observation.requireActive()
+                    if (byteCount == 0L) return 0
+                    val allowed = synchronized(this@E6Http) {
+                        if (!open || observation.terminal) throw E6Failure("cancelled")
+                        minOf(byteCount, cap - bytes, 512L * 1024 * 1024 - totalBytes - reservedBytes)
+                            .also { if (it <= 0 && expected != bytes) throw E6Failure("response_byte_cap"); reservedBytes += it }
+                    }
+                    reserved = allowed
+                    if (allowed == 0L && expected == bytes) { eof = true; return -1 }
+                    val n = super.read(sink, allowed)
+                    synchronized(this@E6Http) {
+                        reservedBytes -= reserved; reserved = 0
+                        if (n > 0) { totalBytes += n; bytes += n }
+                        if (n < 0) eof = true
+                    }
+                    if (n < 0 && expected >= 0 && bytes != expected) throw E6Failure("io_failure")
+                    return n
+                } catch (error: Exception) {
+                    synchronized(this@E6Http) { reservedBytes -= reserved }
+                    throw failed(error)
                 }
-                synchronized(this@E6Http) {
-                    reservedBytes -= allowed
-                    if (n > 0) { totalBytes += n; bytes += n }
-                    if (n < 0) eof = true
-                }
-                if (n < 0 && expected >= 0 && bytes != expected) {
-                    failed = true
-                    observation.fail("io_failure"); throw E6Failure("io_failure")
-                }
-                return n
             }
 
             override fun close() {
-                if (finished) return
-                finished = true
+                synchronized(this@E6Http) {
+                    if (finished) return
+                    finished = true
+                    val complete = eof || expected >= 0 && bytes == expected
+                    if (ticket.ending == null && System.nanoTime() >= observation.deadlineNs)
+                        failed(E6Failure("active_deadline"))
+                    if (ticket.ending == null && (call.isCanceled() ||
+                        !complete && (!open || observation.terminal)))
+                        failed(E6Failure("cancelled"))
+                    // Publish the phase fence before underlying close can block.
+                    // A later close exception can still promote a provisional
+                    // close/completion to permanent failure.
+                    remember(uri, ticket, ticket.ending?.outcome ?: if (complete) "complete" else "closed_early")
+                }
                 var closed = false
-                try { super.close(); closed = true } catch (_: Exception) {
-                    failed = true
-                    observation.fail("io_failure")
-                    throw E6Failure("io_failure")
+                var closeFailure: E6Failure? = null
+                try { super.close(); closed = true } catch (error: Exception) {
+                    closeFailure = failed(error)
                 } finally {
-                    val complete = !failed && (eof || expected >= 0 && bytes == expected)
+                    val end = ticket.ending
+                    val complete = end == null && (eof || expected >= 0 && bytes == expected)
+                    val outcome = end?.outcome ?: if (complete) "complete" else "closed_early"
                     synchronized(this@E6Http) {
                         if (!closed) unconfirmedClose += call
-                        if (complete) successfulEpoch[uri] = ticket.epoch else failures += uri
+                        remember(uri, ticket, outcome)
                         if (complete && ticket.reference.kind == "media") completed +=
                             Completed(uri, ticket, ticket.startMs, android.os.SystemClock.elapsedRealtime())
                     }
                     try {
-                        receipt(ticket, status, if (failed) "failed" else if (complete) "complete" else "closed_early", bytes, eof)
+                        receipt(ticket, status, outcome, bytes, eof)
                     } finally {
-                        // Ownership fences the final fact callback as well as
-                        // the socket/body close. Dispatcher completion alone
-                        // cannot make a later receipt safe to omit from drain.
+                        // Retain ownership through the final receipt and actual
+                        // body close; dispatcher completion is not a drain fence.
                         if (closed) synchronized(this@E6Http) { calls.remove(call) }
                     }
                 }
+                closeFailure?.let { throw it }
             }
         }.buffer()
         return object : ResponseBody() {

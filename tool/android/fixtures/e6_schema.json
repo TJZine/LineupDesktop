@@ -69,7 +69,8 @@
         "complete",
         "closed_early",
         "http_404",
-        "failed"
+        "failed",
+        "cancelled"
       ]
     },
     "videoCodec": {

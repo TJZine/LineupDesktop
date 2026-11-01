@@ -421,6 +421,47 @@ void main() {
       expect(() => validateE6Fact(bad), throwsA(isA<E6Failure>()));
     });
   }
+  test(
+    'player cancellation HTTP fact is forwarded without a fatal result',
+    () async {
+      final player = Player(), bridge = Bridge();
+      bridge.drains.add(
+        snapshot(
+          ready: true,
+          terminal: true,
+          result: 'complete',
+          events: [
+            {
+              'event': 'http_result',
+              'kind': 'media',
+              'attempt': 3,
+              'ordinal': 0,
+              'seekEpoch': 0,
+              'outcome': 'cancelled',
+              'status': null,
+              'bytes': 0,
+            },
+          ],
+        ),
+      );
+      final facts = <Map<String, dynamic>>[];
+      final result = await run(
+        player,
+        bridge,
+        record: (fact) async {
+          facts.add(fact);
+        },
+      );
+      expect(result['result'], 'complete');
+      expect(result['failureCode'], isNull);
+      expect(result['nativeReleased'], true);
+      expect(
+        facts.singleWhere((fact) => fact['event'] == 'http_result')['outcome'],
+        'cancelled',
+      );
+      expect(facts.where((fact) => fact['event'] == 'failure'), isEmpty);
+    },
+  );
   test('unknown clocks remain null', () {
     expect(
       validateE6Fact({
