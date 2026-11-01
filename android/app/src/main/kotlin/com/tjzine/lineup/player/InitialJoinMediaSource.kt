@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Applies the scheduled join tolerance once, without relaxing later user seeks. */
 @UnstableApi
 internal class InitialJoinMediaSource(source: MediaSource) : WrappingMediaSource(source) {
-    private val initialSeekParameters = SeekParameters(3_000_000, 0)
+    private val initialSeekParameters = SeekParameters(5_000_000, 0)
     private val initialSelection = AtomicBoolean(true)
 
     // Explicit seeks may arrive on the application looper before the playback

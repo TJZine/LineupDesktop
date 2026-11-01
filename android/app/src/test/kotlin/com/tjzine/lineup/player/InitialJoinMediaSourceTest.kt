@@ -69,17 +69,21 @@ class InitialJoinMediaSourceTest {
     }
 
     @Test
-    fun initialJoinSelectsOnlyKeyframesWithinThreeSecondsBeforeTarget() {
+    fun initialJoinSelectsOnlyKeyframesWithinFiveSecondsBeforeTarget() {
         for ((previous, expected) in listOf(
             9_000_000L to 9_000_000L,
-            7_000_000L to 7_000_000L,
-            6_999_999L to 10_000_000L,
+            5_000_000L to 5_000_000L,
+            4_999_999L to 10_000_000L,
         )) {
             val f = Fixture(previous, 10_100_000)
             assertEquals(expected, f.select(f.create(), 10_000_000))
             assertEquals(expected, f.selections.single())
             if (expected != 10_000_000L) {
-                assertEquals(SeekParameters(3_000_000, 0), f.adjustments.last())
+                assertEquals(SeekParameters(5_000_000, 0), f.adjustments.last())
+            } else {
+                // The bounded resolver alone would return target - tolerance.
+                // Out-of-window sync points must keep the exact target instead.
+                assertEquals(listOf(SeekParameters.PREVIOUS_SYNC), f.adjustments)
             }
         }
         val zero = Fixture(0, 4_000_000)

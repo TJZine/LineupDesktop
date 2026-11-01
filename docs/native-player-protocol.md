@@ -504,7 +504,7 @@ command error includes a URI, token or raw engine exception. The synthetic
 fixture CA is trusted only by debug builds; profile/release have no fixture CA
 or network-security override.
 
-Initial positions allow a sync point up to 3 seconds before the scheduled target,
+Initial positions allow a sync point up to 5 seconds before the scheduled target,
 never after it; if none fits, preparation keeps the exact target. The progressive
 source applies this tolerance only at its first track selection, since Media3
 1.11 does not apply player seek parameters to initial preparation. Preparation
