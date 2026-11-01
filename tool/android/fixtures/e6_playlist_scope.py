@@ -86,6 +86,7 @@ def validate(data, *, variant, offset_us, target, durations_us):
     init = actual_target = sequence = start = pending = None
     end = False
     durations, refs = [], []
+    ignored_lines = 0
     for line in lines[1:]:
         lexical(line)
         if line.startswith('#EXT-X-TARGETDURATION:'):
@@ -106,7 +107,7 @@ def validate(data, *, variant, offset_us, target, durations_us):
             start = _micros(match[1], 'start_format')
         elif line.startswith('#EXTINF:'):
             if pending is not None or end: raise ScopeFailure('segment_structure')
-            match = re.fullmatch(r'#EXTINF:([0-9]+(?:\.[0-9]{1,6})?),', line)
+            match = re.fullmatch(r'#EXTINF:([0-9]+(?:\.[0-9]{1,6})?),[^\r\n]*', line)
             if not match: raise ScopeFailure('extinf_format')
             pending = _micros(match[1], 'extinf_format')
         elif line == '#EXT-X-ENDLIST':
@@ -117,7 +118,10 @@ def validate(data, *, variant, offset_us, target, durations_us):
         elif line in ('#EXT-X-PLAYLIST-TYPE:VOD', '#EXT-X-INDEPENDENT-SEGMENTS'): pass
         elif line.startswith('#'):
             tag = line.split(':', 1)[0][1:]
-            raise ScopeFailure('unknown_tag', tag=tag if tag in TAGS else 'other_tag')
+            if tag in TAGS: raise ScopeFailure('unknown_tag', tag=tag)
+            ignored_lines += 1
+            if ignored_lines > 16 or len(line.encode('utf-8')) > 256:
+                raise ScopeFailure('unknown_tag', tag='other_tag')
         else:
             if pending is None: raise ScopeFailure('segment_structure')
             if init is None: raise ScopeFailure('map_position')
@@ -263,7 +267,7 @@ def inspect_shape(data, *, variant, offset_us, target, durations_us):
             if re.fullmatch(r'[0-9]+', value): formats.add('integer')
             elif re.fullmatch(r'[0-9]+\.[0-9]+', value):
                 formats.add('decimal_le_6' if len(value.split('.', 1)[1]) <= 6 else 'decimal_gt_6')
-            match = re.fullmatch(r'#EXTINF:([0-9]+(?:\.[0-9]{1,6})?),', line)
+            match = re.fullmatch(r'#EXTINF:([0-9]+(?:\.[0-9]{1,6})?),[^\r\n]*', line)
             if not match:
                 failures.add('extinf_format')
                 duration_known = False
@@ -282,7 +286,8 @@ def inspect_shape(data, *, variant, offset_us, target, durations_us):
             value = number(line.split(':', 1)[1], 32, 'version_format')
             if value is not None and not 1 <= value <= 10: failures.add('version_format')
         elif line in ('#EXT-X-PLAYLIST-TYPE:VOD', '#EXT-X-INDEPENDENT-SEGMENTS'): pass
-        else: failures.add('unknown_tag')
+        elif tag in TAGS or other_count > 16 or len(original.encode('utf-8')) > 256:
+            failures.add('unknown_tag')
 
     if first_content: failures.add('header_format')
     if not ended or not map_seen or pending: failures.add('segment_structure')

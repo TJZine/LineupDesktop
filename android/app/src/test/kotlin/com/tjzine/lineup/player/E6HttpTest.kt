@@ -92,6 +92,19 @@ class E6HttpTest {
         assertEquals(0, f.dispatched)
     }
 
+    @Test fun ignoredTextCannotAuthorizeUriAndTitlesNeverEnterFacts() {
+        val f = Fixture()
+        f.body = e6Playlist(0).replace("#EXTINF:", "#opaque:URI=\"key\"\n#EXTINF:")
+            .replace("10.000000,", "10.000000,PRIVATE_SENTINEL").toResponseBody()
+        f.read(); f.body = null
+        f.read("init.mp4"); f.read("0.m4s")
+        rejected { f.read("key") }
+        assertEquals(3, f.dispatched)
+        val facts = f.facts().toString()
+        assertFalse(facts.contains("PRIVATE_SENTINEL"))
+        assertFalse(facts.contains("opaque"))
+    }
+
     @Test fun malformedPlaylistCannotAuthorizeAnyChild() {
         val f = Fixture(); f.body = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nother.m3u8\n".toResponseBody()
         rejected { f.read() }

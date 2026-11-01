@@ -147,6 +147,7 @@ internal fun E6Config.playlist(bytes: ByteArray): Map<HttpUrl, E6Reference> {
     var start: Long? = null
     var end = false
     var pending: Long? = null
+    var ignoredLines = 0
     val durations = mutableListOf<Long>()
     val refs = linkedMapOf<HttpUrl, E6Reference>()
     for (line in lines.drop(1)) {
@@ -175,7 +176,7 @@ internal fun E6Config.playlist(bytes: ByteArray): Map<HttpUrl, E6Reference> {
             }
             line.startsWith("#EXTINF:") -> {
                 if (pending != null || end) E6PlaylistScope.failure("segment_structure")
-                val match = Regex("#EXTINF:([0-9]+(?:\\.[0-9]{1,6})?),").matchEntire(line)
+                val match = Regex("#EXTINF:([0-9]+(?:\\.[0-9]{1,6})?),[^\\r\\n]*").matchEntire(line)
                     ?: E6PlaylistScope.failure("extinf_format")
                 pending = try { BigDecimal(match.groupValues[1]).movePointRight(6).longValueExact() }
                     catch (_: ArithmeticException) { E6PlaylistScope.failure("extinf_format") }
@@ -188,8 +189,14 @@ internal fun E6Config.playlist(bytes: ByteArray): Map<HttpUrl, E6Reference> {
                 if (line.substringAfter(':').toIntOrNull() !in 1..10) E6PlaylistScope.failure("version_format")
             }
             line == "#EXT-X-PLAYLIST-TYPE:VOD" || line == "#EXT-X-INDEPENDENT-SEGMENTS" -> Unit
-            line.startsWith('#') -> E6PlaylistScope.failure("unknown_tag",
-                line.substringBefore(':').removePrefix("#").takeIf { it in E6PlaylistScope.tags } ?: "other_tag")
+            line.startsWith('#') -> {
+                val tag = line.substringBefore(':').removePrefix("#")
+                if (tag in E6PlaylistScope.tags) E6PlaylistScope.failure("unknown_tag", tag)
+                // Opaque comments/extensions: no attributes, URIs or state changes.
+                ignoredLines++
+                if (ignoredLines > 16 || line.toByteArray(Charsets.UTF_8).size > 256)
+                    E6PlaylistScope.failure("unknown_tag", "other_tag")
+            }
             else -> {
                 val duration = pending ?: E6PlaylistScope.failure("segment_structure")
                 if (map == null) E6PlaylistScope.failure("map_position")

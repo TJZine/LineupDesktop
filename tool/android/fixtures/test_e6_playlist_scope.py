@@ -25,7 +25,7 @@ class PlaylistScope(unittest.TestCase):
         valid=validate(text.encode(),variant='https://localhost:21443/e6-clock/index.m3u8',offset_us=0,target=None,durations_us=None)
         self.assertEqual(valid['target'],10)
         with self.assertRaises(ScopeFailure) as e:
-            validate(text.replace('#EXTINF:10,','#EXTINF:10,title').encode(),variant='https://localhost:21443/e6-clock/index.m3u8',offset_us=0,target=None,durations_us=None)
+            validate(text.replace('#EXTINF:10,','#EXTINF:10.0000001,title').encode(),variant='https://localhost:21443/e6-clock/index.m3u8',offset_us=0,target=None,durations_us=None)
         self.assertEqual(e.exception.reason,'extinf_format')
     def shape(self, data, **kwargs):
         return inspect_shape(data, variant='https://localhost:21443/e6-clock/index.m3u8',
@@ -44,7 +44,7 @@ class PlaylistScope(unittest.TestCase):
         shape = self.shape(data)
         self.assertEqual(first, 'bom_or_whitespace')
         self.assertEqual(set(shape['failing_reasons']), {'bom_or_whitespace','unknown_tag',
-            'target_mismatch','extinf_format','map_position','missing_media_sequence','duplicate_tag'})
+            'target_mismatch','map_position','missing_media_sequence','duplicate_tag','extinf_format'})
         self.assertEqual(shape['tag_names'], ['EXT-X-ENDLIST','EXT-X-KEY','EXT-X-MAP','EXT-X-TARGETDURATION','EXTINF','EXTM3U'])
         self.assertEqual(shape['other_tag_count'], 2)
         self.assertEqual(shape['duplicate_tag_count'], 1)

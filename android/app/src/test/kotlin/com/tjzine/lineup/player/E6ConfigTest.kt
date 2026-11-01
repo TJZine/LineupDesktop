@@ -42,6 +42,24 @@ class E6ConfigTest {
         }
     }
 
+    @Test fun titlesAndBoundedOpaqueLinesPreserveReferencesAndMedia3Timing() {
+        val config = E6Config.parse(e6Input(21), false)
+        val base = e6Playlist(21)
+        val decorated = base.replace("#EXTINF:", "#private-note:URI=\"https://other.invalid/key\"\n#EXTINF:")
+            .replace("10.000000,", "10.000000,PRIVATE_SENTINEL #EXT-X-KEY:URI=other")
+        assertEquals(config.playlist(base.toByteArray()), config.playlist(decorated.toByteArray()))
+        fun parsed(text: String) = androidx.media3.exoplayer.hls.playlist.HlsPlaylistParser().parse(
+            android.net.Uri.parse(config.variant.toString()), java.io.ByteArrayInputStream(text.toByteArray()))
+            as androidx.media3.exoplayer.hls.playlist.HlsMediaPlaylist
+        val ordinary = parsed(base)
+        val changed = parsed(decorated)
+        assertEquals(ordinary.durationUs, changed.durationUs)
+        assertEquals(ordinary.startOffsetUs, changed.startOffsetUs)
+        assertEquals(ordinary.mediaSequence, changed.mediaSequence)
+        assertEquals(ordinary.segments.map { Triple(it.url, it.durationUs, it.relativeStartTimeUs) },
+            changed.segments.map { Triple(it.url, it.durationUs, it.relativeStartTimeUs) })
+    }
+
     @Test fun exactInputWhitelistAndPublicBaselineGate() {
         assertTrue(E6Config.parse(e6Input(), true).baseline)
         rejects("baseline_private_refused") { E6Config.parse(e6Input(seek = true), true) }

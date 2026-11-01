@@ -72,7 +72,7 @@
   {
     "name": "title",
     "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,PRIVATE_SENTINEL\n0.m4s\n#EXTINF:10,PRIVATE_SENTINEL\n1.m4s\n#EXT-X-ENDLIST\n",
-    "reason": "extinf_format",
+    "reason": null,
     "tag": null,
     "index": null
   },
@@ -430,29 +430,29 @@
   {
     "name": "other_61",
     "text": "#EXTM3U\n#EXT-X-PRIVATE_SENTINEL:PRIVATE_SENTINEL\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
-    "reason": "unknown_tag",
-    "tag": "other_tag",
+    "reason": null,
+    "tag": null,
     "index": null
   },
   {
     "name": "other_62",
     "text": "#EXTM3U\n#EXT-X-KEY PRIVATE_SENTINEL:PRIVATE_SENTINEL\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
-    "reason": "unknown_tag",
-    "tag": "other_tag",
+    "reason": null,
+    "tag": null,
     "index": null
   },
   {
     "name": "other_63",
     "text": "#EXTM3U\n#private:PRIVATE_SENTINEL\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
-    "reason": "unknown_tag",
-    "tag": "other_tag",
+    "reason": null,
+    "tag": null,
     "index": null
   },
   {
     "name": "other_64",
     "text": "#EXTM3U\n#EXT-X-DEFINE:PRIVATE_SENTINEL\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
-    "reason": "unknown_tag",
-    "tag": "other_tag",
+    "reason": null,
+    "tag": null,
     "index": null
   },
   {
@@ -531,6 +531,160 @@
     "variant": "https://localhost/video/:/transcode/universal/session/owned/base/index.m3u8",
     "reason": "reference_scope",
     "tag": null,
+    "index": null
+  },
+  {
+    "name": "title_uri_is_not_reference",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,PRIVATE_SENTINEL https://other.invalid/a?token=PRIVATE_SENTINEL #EXT-X-KEY:URI=\"../key\"\n0.m4s\n#EXTINF:10,PRIVATE_SENTINEL https://other.invalid/a?token=PRIVATE_SENTINEL #EXT-X-KEY:URI=\"../key\"\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": null,
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "title_commas_unicode",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10.000000,title,more,\u00e9\ud83d\ude00\n0.m4s\n#EXTINF:10.000000,title,more,\u00e9\ud83d\ude00\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": null,
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "title_duration_still_strict",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10.0000001,title\n0.m4s\n#EXTINF:10.0000001,title\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "extinf_format",
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "title_negative_duration",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:-10,title\n0.m4s\n#EXTINF:-10,title\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "extinf_format",
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "title_missing_comma",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10 title\n0.m4s\n#EXTINF:10 title\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "extinf_format",
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "title_zero_duration",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:0,title\n0.m4s\n#EXTINF:0,title\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "segment_structure",
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "sixteen_comments",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n# comment0\n# comment1\n# comment2\n# comment3\n# comment4\n# comment5\n# comment6\n# comment7\n# comment8\n# comment9\n# comment10\n# comment11\n# comment12\n# comment13\n# comment14\n# comment15\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": null,
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "seventeen_comments",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n# comment0\n# comment1\n# comment2\n# comment3\n# comment4\n# comment5\n# comment6\n# comment7\n# comment8\n# comment9\n# comment10\n# comment11\n# comment12\n# comment13\n# comment14\n# comment15\n# comment16\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "unknown_tag",
+    "tag": "other_tag",
+    "index": null
+  },
+  {
+    "name": "opaque_ascii_256",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": null,
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "opaque_ascii_257",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "unknown_tag",
+    "tag": "other_tag",
+    "index": null
+  },
+  {
+    "name": "opaque_utf8_86",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9x\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": null,
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "opaque_utf8_87",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "unknown_tag",
+    "tag": "other_tag",
+    "index": null
+  },
+  {
+    "name": "opaque_utf8_88",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00abc\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": null,
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "opaque_utf8_89",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "unknown_tag",
+    "tag": "other_tag",
+    "index": null
+  },
+  {
+    "name": "opaque_references_ignored",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#opaque:URI=\"https://foreign.invalid/key\"\n#EXTINF:10,\n0.m4s\n#opaque:URI=\"https://foreign.invalid/key\"\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": null,
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "opaque_does_not_satisfy_map",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#opaque:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "map_position",
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "opaque_does_not_satisfy_sequence",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#opaque-sequence:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "missing_media_sequence",
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "opaque_does_not_clear_pending",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,title\n# comment\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "segment_structure",
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "opaque_before_header",
+    "text": "# comment\n#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "header_format",
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "rfc_repeated_header",
+    "text": "#EXTM3U\n#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n",
+    "reason": "unknown_tag",
+    "tag": "EXTM3U",
+    "index": null
+  },
+  {
+    "name": "comment_after_end",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n# trailing comment\n",
+    "reason": null,
+    "tag": null,
+    "index": null
+  },
+  {
+    "name": "comment_after_end_budget",
+    "text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXTINF:10,\n1.m4s\n#EXT-X-ENDLIST\n# end0\n# end1\n# end2\n# end3\n# end4\n# end5\n# end6\n# end7\n# end8\n# end9\n# end10\n# end11\n# end12\n# end13\n# end14\n# end15\n# end16\n",
+    "reason": "unknown_tag",
+    "tag": "other_tag",
     "index": null
   }
 ]
