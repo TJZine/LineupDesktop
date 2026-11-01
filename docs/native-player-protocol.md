@@ -504,9 +504,13 @@ command error includes a URI, token or raw engine exception. The synthetic
 fixture CA is trusted only by debug builds; profile/release have no fixture CA
 or network-security override.
 
-Initial positions use the approved exact Media3 preparation position, avoiding
-a later backward re-seek. Explicit `exact` and `keyframes` map to
-`SeekParameters.EXACT` and `PREVIOUS_SYNC`. This backend choice does not alter
+Initial positions allow a sync point up to 5 seconds before the scheduled target,
+never after it; if none fits, preparation keeps the exact target. The progressive
+source applies this tolerance only at its first track selection, since Media3
+1.11 does not apply player seek parameters to initial preparation. Preparation
+itself chooses the join position, avoiding a later backward re-seek. Explicit
+`exact` and `keyframes` seeks still map to `SeekParameters.EXACT` and
+`PREVIOUS_SYNC`. This backend choice does not alter
 the coordinator's join/user-seek policy or desktop behavior.
 
 Presentation uses a default-z-order native video `SurfaceView`, native

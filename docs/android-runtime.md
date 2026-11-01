@@ -27,7 +27,8 @@ transparent surface-rendered Flutter. `player/NativePlayerAdapter.kt` owns these
 passive views and the method channel; `NativePlayerController.kt` owns protocol
 validation, bounded queues, correlation and lifecycle fencing. A fresh
 `Media3Engine` belongs to each load. See the [Android protocol details](native-player-protocol.md#android-backend)
-for failure mapping, telemetry, exact initial joins and display limitations.
+for failure mapping, telemetry, bounded initial joins (up to 5 seconds early,
+otherwise exact) and display limitations.
 There is one authoritative Dart application; no Android Plex, schedule,
 persistence or navigation implementation exists beside it. Windows/macOS keep
 their existing libmpv adapters and transport contracts.

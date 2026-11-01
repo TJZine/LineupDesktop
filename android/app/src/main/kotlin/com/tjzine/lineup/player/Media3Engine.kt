@@ -73,6 +73,7 @@ internal class Media3Engine(
         )
     }
 
+    private var initialJoinSource: InitialJoinMediaSource? = null
     private val tracks = Media3Tracks()
     private val debug =
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -280,7 +281,8 @@ internal class Media3Engine(
                         }
                     }.apply { setSubtitleParserFactory(ssaParsers) },
                 )
-                .createMediaSource(MediaItem.fromUri(media.uri)),
+                .createMediaSource(MediaItem.fromUri(media.uri))
+                .let { InitialJoinMediaSource(it).also { source -> initialJoinSource = source } },
             milliseconds(media.startSeconds),
         )
         player.playWhenReady = !media.paused
@@ -298,6 +300,7 @@ internal class Media3Engine(
     }
 
     override fun seek(seconds: Double, exact: Boolean) {
+        initialJoinSource?.cancelInitialJoin()
         player.setSeekParameters(if (exact) SeekParameters.EXACT else SeekParameters.PREVIOUS_SYNC)
         player.seekTo(milliseconds(seconds))
     }
