@@ -23,5 +23,6 @@ internal object MediaHttp {
             .followRedirects(false)
             .followSslRedirects(false)
             .addInterceptor(OriginPolicy())
+            .addNetworkInterceptor(CancelOnAbandon())
             .build()
 }
