@@ -455,6 +455,64 @@ Channel layouts, pixel formats, output color and signal peak stay null when
 unavailable. Source BT.2020/PQ/HLG facts describe source metadata, not display
 appearance; `hwdec-current` is the observed decoder name and `current-vo` is null.
 
+### Session HLS adjustment fact
+
+Android `plexSession` engines additionally publish the optional `session-clock`
+property, correlated by the ordinary adapter-generation fence and outer `loadId`:
+
+```text
+{state: "pending"}
+{state: "ready", adjustmentUs: <signed integral microseconds>}
+{state: "unavailable", reason: <fixed reason>, diagnosticCode: "clock_unavailable"}
+```
+
+One clock belongs to one engine/load. A normal seek that resets Media3's
+adjuster returns `ready(A0)` to `pending`; initialized real video metadata from
+the newly loaded segment establishes `ready(A1)`. A buffered seek that retains
+its existing adjuster keeps its qualified basis. Same-object adjustment resets
+also require fresh initialized video metadata. An initialized zero is valid;
+`TIME_UNSET` is not zero. There is no wire revision or paired position field.
+`adjustmentUs` is the actual `TimestampAdjuster.timestampOffsetUs`, not raw PTS.
+Stock extraction remains authoritative: sample bytes, formats, flags, timestamps
+and extractor reuse/recreation are unchanged. Init data, empty pre-start media
+and audio samples cannot qualify readiness.
+
+A ready value may additionally contain `diagnosticCode: "clock_rebased"` when
+A1 differs from the prior qualified A by more than one video frame. A1 remains
+usable. The threshold uses actual video `Format.frameRate` when available;
+otherwise it uses the minimum positive spacing observed between accepted video
+sample PTS values of the replacement basis. With no frame-duration evidence,
+classification is deferred; no default FPS or playlist duration is substituted.
+The diagnostic remains present for the load once established.
+
+The supported precondition is full fMP4/MAP VOD at media sequence 0, one
+window/period at origin 0, with no alternate renditions/variants. Media3's public
+sniffer establishes the actual container, and its parsed manifest/timeline
+establishes scope. Unsupported container, missing MAP/video, non-VOD or alternate
+renditions stay pending without a guessed adjustment. HLS discontinuity,
+period/timeline mismatch (including gaps or partial/interstitial timing), invalid
+timestamps or simultaneous ambiguous adjusters are terminal unavailable.
+Fixed reasons are `discontinuity`, `period_mismatch`, `invalid_timestamp` and
+`ambiguous_adjuster`. Reasons carry no URI, exception or media identifier.
+
+The engine arms one serial replacement before `Player.seekTo`. A new binding
+without that permission, or while the prior binding is actively extracting,
+is ambiguous. Replaced extractor callbacks are ignored by their retired internal
+binding token. Load generation and retirement fences are unchanged. A replacement
+holds a pending publication barrier before fresh readiness. State transitions
+are protected from ordinary property eviction in the bounded native event queue;
+periodic repeats remain droppable. Exhausting critical queue capacity preserves
+the existing fail-closed overflow behavior.
+
+Clock unavailability is a diagnostic, **not a Player error**; native performs no
+seek, retry or fallback. `time-pos` remains raw Media3 position. T4 consumption
+and alignment policy are not implemented here: the alignment decision uses the
+first ready only, the alignment seek is the only in-session seek, and user seeks
+restart sessions. Post-seek ready(A1) updates position mapping only and must not
+trigger a second alignment seek.
+
+### Android engine failure mapping
+
 | Media3 observation | Native failure code |
 | --- | --- |
 | HTTP response failure | `http_error`, with a 4xx/5xx status when available |
@@ -479,8 +537,10 @@ nonfragmented sample seeks retain facts without treating sample bytes as boxes.
 Genuine audio-only/video-only and supported alternative tracks remain
 valid. Subtitles alone never cause an audio/video unsupported-type failure.
 
-Only `ProgressiveMediaSource` and an HTTP-only OkHttp data source are installed;
-there is no manifest, file, nested-reference or external-subtitle resolver.
+Direct Play uses the guarded `ProgressiveMediaSource`; `plexSession` selects
+`HlsMediaSource` explicitly and carries no token or explicit start position.
+HTTP-only OkHttp sources have no file/external-subtitle resolver. Session children
+are pinned to the load's exact HTTPS origin before the existing redirect policy.
 OkHttp automatic redirects are disabled. Each manual redirect must retain the
 original HTTPS scheme, normalized host and effective port, with a bounded hop
 count and no userinfo or token query parameter. Credentials are header-only;
@@ -489,8 +549,10 @@ command error includes a URI, token or raw engine exception. The synthetic
 fixture CA is trusted only by debug builds; profile/release have no fixture CA
 or network-security override.
 
-Initial positions use the approved exact Media3 preparation position, avoiding
-a later backward re-seek. Explicit `exact` and `keyframes` map to
+Direct Play initial positions use the approved exact Media3 preparation position,
+avoiding a later backward re-seek. Session loads reject `startSeconds`, including
+zero, and prepare without an explicit position so the HLS start applies.
+Explicit `exact` and `keyframes` map to
 `SeekParameters.EXACT` and `PREVIOUS_SYNC`. This backend choice does not alter
 the coordinator's join/user-seek policy or desktop behavior.
 

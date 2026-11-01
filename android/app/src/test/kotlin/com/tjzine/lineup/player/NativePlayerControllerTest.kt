@@ -554,4 +554,35 @@ class NativePlayerControllerTest {
         assertEquals("invalid_argument", invoke("mediaCapabilities", emptyMap<String, Any>()).error)
     }
 
+    @Test
+    fun sessionClockIsLoadCorrelatedNonFatalAndCannotLeakFromRetiredEngines() {
+        initialize()
+        load(extra = mapOf("kind" to "plexSession"))
+        host.drain()
+        val first = host.engines.single()
+        first.listener.ready(false)
+        first.listener.sessionClock(SessionHlsClock.State.Pending)
+        first.listener.sessionClock(SessionHlsClock.State.Ready(-10_000_000))
+        repeat(300) { first.listener.property("duration", it.toDouble()) }
+        first.listener.sessionClock(SessionHlsClock.State.Pending)
+        first.listener.sessionClock(SessionHlsClock.State.Ready(-11_000_000, true))
+        first.listener.property("time-pos", 17.0)
+        first.listener.sessionClock(SessionHlsClock.State.Unavailable(SessionHlsClock.Reason.DISCONTINUITY))
+        host.drain()
+        val properties = host.events.filter { it["name"] == "session-clock" }
+        assertEquals(listOf("pending", "ready", "pending", "ready", "unavailable"), properties.map { (it["value"] as Map<*,*>)["state"] })
+        assertEquals("clock_rebased", (properties[3]["value"] as Map<*,*>)["diagnosticCode"])
+        assertEquals("clock_unavailable", (properties.last()["value"] as Map<*,*>)["diagnosticCode"])
+        assertTrue(properties.all { it["loadId"] == 1L })
+        assertEquals(17.0, host.events.last { it["name"] == "time-pos" }["value"])
+        assertFalse(host.events.any { it["state"] == "error" })
+        val before = properties.size
+        load(2, mapOf("kind" to "plexSession")); host.drain()
+        first.listener.sessionClock(SessionHlsClock.State.Ready(0))
+        host.drain()
+        assertEquals(before, host.events.count { it["name"] == "session-clock" })
+        host.engines.last().listener.sessionClock(SessionHlsClock.State.Ready(0)); host.drain()
+        assertEquals(2L, host.events.last { it["name"] == "session-clock" }["loadId"])
+    }
+
 }

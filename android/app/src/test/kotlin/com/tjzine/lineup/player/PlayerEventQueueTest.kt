@@ -30,6 +30,21 @@ class PlayerEventQueueTest {
         assertFalse(queue.consumeOverflow())
     }
 
+    @Test fun clockTransitionsSurvivePropertyPressureAndRetainOrder() {
+        val queue = PlayerEventQueue()
+        queue.add(QueuedEvent(1, 1, mapOf("type" to "property", "id" to "pending"), true))
+        repeat(255) { queue.add(event(it, "property")) }
+        queue.add(QueuedEvent(1, 1, mapOf("type" to "property", "id" to "ready"), true))
+        repeat(300) { queue.add(event(it, "property")) }
+        val rows = generateSequence { queue.take() }.map { it.value["id"] }.toList()
+        assertEquals(listOf("pending", "ready"), rows.filterIsInstance<String>())
+        assertFalse(queue.consumeOverflow())
+        repeat(256) { queue.add(QueuedEvent(1, 1, mapOf("type" to "property"), true)) }
+        queue.add(QueuedEvent(1, 1, mapOf("type" to "property"), true))
+        assertEquals(256, queue.size)
+        assertTrue(queue.consumeOverflow()) // Exhausted critical capacity still fails closed.
+    }
+
     @Test
     fun essentialOverflowEvictsOldestAndSignalsOnce() {
         val queue = PlayerEventQueue()

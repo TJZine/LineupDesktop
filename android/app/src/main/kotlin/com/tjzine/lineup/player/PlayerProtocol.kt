@@ -176,6 +176,8 @@ internal interface PlayerEngine {
 
         fun sourceInitialization(revision: Int, accepted: Boolean) {}
 
+        fun sessionClock(state: SessionHlsClock.State) {}
+
         fun ready(paused: Boolean)
 
         fun ended()
@@ -224,6 +226,7 @@ internal data class QueuedEvent(
     val generation: Long,
     val epoch: Long?,
     val value: Map<String, Any?>,
+    val protectedTransition: Boolean = false,
 )
 
 internal class PlayerEventQueue {
@@ -236,12 +239,12 @@ internal class PlayerEventQueue {
 
     fun add(event: QueuedEvent) {
         if (queue.size == 256) {
-            val property = queue.indexOfFirst { it.value["type"] == "property" }
+            val property = queue.indexOfFirst { it.value["type"] == "property" && !it.protectedTransition }
             if (property >= 0) {
                 val iterator = queue.iterator()
                 repeat(property + 1) { iterator.next() }
                 iterator.remove()
-            } else if (event.value["type"] == "property") return
+            } else if (event.value["type"] == "property" && !event.protectedTransition) return
             else {
                 queue.removeFirst()
                 overflowed = true

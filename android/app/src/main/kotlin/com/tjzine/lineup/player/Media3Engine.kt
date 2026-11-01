@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.ExtractorsFactory
@@ -60,10 +61,12 @@ internal class Media3Engine(
     private var closed = false
     private var released = false
     private var observer: PlayerEngine.Listener? = null
+    private var sessionClock: SessionHlsClock? = null
     private val progress =
         object : Runnable {
             override fun run() {
                 if (closed) return
+                publishSessionClock()
                 val p = player.currentPosition
                 observer?.property("time-pos", p.coerceAtLeast(0) / 1000.0)
                 val d = player.duration
@@ -72,9 +75,23 @@ internal class Media3Engine(
             }
         }
 
+    // Always read current sticky state on the application looper. No queued
+    // loader callback captures a ready value that could outlive invalidation.
+    private fun publishSessionClock() {
+        if (closed) return
+        val clock = sessionClock ?: return
+        val manifest = player.currentManifest as? HlsManifest
+        manifest?.multivariantPlaylist?.let(clock::renditions)
+        clock.scope(player.currentTimeline, player.currentPeriodIndex, manifest?.mediaPlaylist)
+        if (player.playbackState == Player.STATE_READY &&
+            !player.currentTracks.containsType(C.TRACK_TYPE_VIDEO)) clock.unsupportedScope()
+        clock.publication()?.let { observer?.sessionClock(it) }
+    }
+
     override fun load(media: MediaLoad, listener: PlayerEngine.Listener) {
         check(observer == null && !closed)
         observer = listener
+        sessionClock = if (media.kind == LoadKind.plexSession) SessionHlsClock() else null
         if (media.uri.toHttpUrlOrNull()?.isHttps != true) {
             listener.failure("source_open_error")
             return
@@ -102,7 +119,10 @@ internal class Media3Engine(
                 override fun onPlaybackStateChanged(state: Int) {
                     if (closed) return
                     when (state) {
-                        Player.STATE_READY -> listener.ready(observedPaused())
+                        Player.STATE_READY -> {
+                            publishSessionClock()
+                            listener.ready(observedPaused())
+                        }
                         Player.STATE_ENDED -> listener.ended()
                     }
                 }
@@ -114,6 +134,16 @@ internal class Media3Engine(
                         )) {
                         listener.property("pause", observedPaused())
                     }
+                }
+
+                override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                    publishSessionClock()
+                }
+
+                override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo, reason: Int) {
+                    // An ordinary same-period seek is not itself a clock discontinuity.
+                    publishSessionClock()
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -134,6 +164,7 @@ internal class Media3Engine(
                         listener.failure(unsupported)
                         return
                     }
+                    publishSessionClock()
                     listener.property("track-list", tracks.encode(value))
                 }
 
@@ -216,6 +247,7 @@ internal class Media3Engine(
                     }
                 }
             },
+            sessionClock,
         )
         if (media.kind == LoadKind.plexSession) player.setMediaSource(mediaSource)
         else player.setMediaSource(mediaSource, milliseconds(media.startSeconds))
@@ -234,6 +266,7 @@ internal class Media3Engine(
     }
 
     override fun seek(seconds: Double, exact: Boolean) {
+        sessionClock?.seeking()
         player.setSeekParameters(if (exact) SeekParameters.EXACT else SeekParameters.PREVIOUS_SYNC)
         player.seekTo(milliseconds(seconds))
     }
@@ -269,6 +302,8 @@ internal class Media3Engine(
         }
         val firstAttempt = !closed
         closed = true
+        sessionClock?.retire()
+        sessionClock = null
         observer = null
         handler.removeCallbacks(progress)
         http?.setDefaultRequestProperties(emptyMap())
@@ -327,9 +362,12 @@ internal class Media3Engine(
             media: MediaLoad,
             source: DataSource.Factory,
             extractors: ExtractorsFactory,
+            clock: SessionHlsClock? = null,
         ): MediaSource =
             if (media.kind == LoadKind.plexSession)
-                HlsMediaSource.Factory(source).createMediaSource(MediaItem.fromUri(media.uri))
+                HlsMediaSource.Factory(source).apply {
+                    if (clock != null) setExtractorFactory(SessionHlsExtractors(clock))
+                }.createMediaSource(MediaItem.fromUri(media.uri))
             else ProgressiveMediaSource.Factory(source, extractors)
                 .createMediaSource(MediaItem.fromUri(media.uri))
 

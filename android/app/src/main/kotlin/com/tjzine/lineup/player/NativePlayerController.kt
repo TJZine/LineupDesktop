@@ -40,6 +40,7 @@ internal class NativePlayerController(
     ) {
         var ready = false
         var terminal = false
+        var clockState: SessionHlsClock.State? = null
     }
 
     fun call(method: String, arguments: Any?, reply: Reply) {
@@ -277,6 +278,15 @@ internal class NativePlayerController(
                     )
             }
 
+            override fun sessionClock(state: SessionHlsClock.State) {
+                if (!live(session)) return
+                val transition = session.clockState != state
+                session.clockState = state
+                queue(mapOf("type" to "property", "name" to "session-clock",
+                    "value" to SessionHlsClock.wire(state), "loadId" to session.loadId),
+                    session.epoch, transition)
+            }
+
             override fun ready(paused: Boolean) {
                 if (!live(session) || session.ready) return
                 session.ready = true
@@ -474,8 +484,8 @@ internal class NativePlayerController(
         retire {}
     }
 
-    private fun queue(value: Map<String, Any?>, mediaEpoch: Long? = null) {
-        events.add(QueuedEvent(generation, mediaEpoch, value))
+    private fun queue(value: Map<String, Any?>, mediaEpoch: Long? = null, protectedTransition: Boolean = false) {
+        events.add(QueuedEvent(generation, mediaEpoch, value, protectedTransition))
         if (!eventPosted) {
             eventPosted = true
             host.post {

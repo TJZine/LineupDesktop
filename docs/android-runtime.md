@@ -38,6 +38,22 @@ guarded progressive source and existing start handling. `mediaCapabilities`
 reads current decoder profiles, display HDR and Media3 audio-output capabilities
 on the application looper; Dart owns eligibility and conversion policy.
 
+`SessionHlsExtractors` decorates the pinned stock HLS factory for session loads.
+It reads the actual initialized timestamp adjustment after the first loaded
+fMP4 video sample; it does not add a renderer observer, custom HTTP client,
+second playlist parser or sample timestamp rewrite. The per-load `SessionHlsClock`
+publishes `pending`, `ready(adjustmentUs)` or terminal `unavailable(reason)` through
+the ordinary generation/load-correlated native property channel. A normal seek
+may replace the adjuster: pending is published before real initialized video
+qualifies the new A1. A changed A is usable, with `clock_rebased` when the change
+exceeds one actual video frame; unknown frame duration defers that diagnostic.
+Replaced callbacks are ignored, while simultaneous live bases, invalid clocks,
+HLS discontinuity and period/timeline mismatch become terminal unavailable with
+`clock_unavailable`, not a Player error. Unsupported fMP4/video preconditions
+stay pending. `time-pos` stays raw; Dart consumption and schedule alignment wait
+for T4. T4 aligns on first ready only; post-seek A1 updates position only.
+See the [clock wire contract](native-player-protocol.md#session-hls-adjustment-fact).
+
 There is one authoritative Dart application; no Android Plex, schedule,
 persistence or navigation implementation exists beside it. Windows/macOS keep
 their existing libmpv adapters and transport contracts.
