@@ -1,34 +1,16 @@
 // Disposable emulator runtime check: real Dart transport + production Android adapter.
-// Never reads app state or credentials; live E6 URLs arrive only in memory.
+// Never reads app state or credentials.
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
-import 'session_probe.dart';
-import 'e6_probe.dart';
-
 import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (kDebugMode &&
-      args.contains('--case=session-live') &&
-      (args.contains('--e6-observe') ||
-          args.contains('--e6-public-baseline'))) {
-    await startE6Fixture(
-      MethodChannelNativePlayer(),
-      const MethodChannelE6Bridge(),
-      baseline: args.contains('--e6-public-baseline'),
-      show: (firstFrame) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => firstFrame());
-        runApp(const MaterialApp(home: _FixtureOverlay()));
-      },
-    );
-    return;
-  }
   runApp(const MaterialApp(home: _FixtureOverlay()));
   WidgetsBinding.instance.addPostFrameCallback((_) => _run(args));
 }
@@ -68,12 +50,61 @@ Future<void> _wait(bool Function() condition, {int seconds = 12}) async {
   }
 }
 
+class _FixtureFailure implements Exception {
+  const _FixtureFailure(this.code);
+  final String code;
+}
+
+Future<void> _measureSyntheticSession(
+  NativePlayer player,
+  Future<void> cancelled,
+  bool Function() active,
+) async {
+  Future<void> checked(Future<void> operation) => Future.any([
+    operation,
+    cancelled.then<void>((_) => throw const _FixtureFailure('cancelled')),
+  ]);
+  void guard() {
+    if (!active()) throw const _FixtureFailure('cancelled');
+  }
+
+  guard();
+  final clock = Stopwatch()..start();
+  await checked(
+    player.load(
+      Uri.parse('https://localhost:18443/session/index.m3u8'),
+      kind: LoadKind.plexSession,
+    ),
+  );
+  guard();
+  void sample(String phase) => _fact(phase, {
+    'offsetSeconds': 0,
+    'elapsedMs': clock.elapsedMilliseconds,
+    'positionMs': player.position.inMilliseconds,
+    'durationMs': player.duration.inMilliseconds,
+    'state': player.status.state.name,
+  });
+  sample('session-ready');
+  final initial = player.position;
+  for (var i = 0; i < 32; i++) {
+    await checked(Future<void>.delayed(const Duration(milliseconds: 250)));
+    guard();
+    if (player.status.state != PlayerState.playing) {
+      throw const _FixtureFailure('playback_failed');
+    }
+    sample('session-sample');
+  }
+  if (player.position < initial + const Duration(milliseconds: 400)) {
+    throw const _FixtureFailure('no_progress');
+  }
+}
+
 Future<void> _run(List<String> args) async {
   final player = MethodChannelNativePlayer();
   final mode =
       args.where((a) => a.startsWith('--case=')).firstOrNull?.substring(7) ??
       'contract';
-  final sessionMode = mode == 'session-hls' || mode == 'session-live';
+  final sessionMode = mode == 'session-hls';
   final cancelled = Completer<void>();
   void cancel() {
     if (!cancelled.isCompleted) cancelled.complete();
@@ -115,10 +146,10 @@ Future<void> _run(List<String> args) async {
   }
 
   try {
-    if ((mode == 'session-hls' || mode == 'session-live') && !kDebugMode) {
-      throw const SessionProbeFailure('debug_required');
+    if (sessionMode && !kDebugMode) {
+      throw const _FixtureFailure('debug_required');
     }
-    if (sessionMode && !active()) throw const SessionProbeFailure('cancelled');
+    if (sessionMode && !active()) throw const _FixtureFailure('cancelled');
     await player.initialize();
     if (!player.fullscreen) throw StateError('initial_fullscreen');
     await player.setFullscreen(false);
@@ -140,23 +171,8 @@ Future<void> _run(List<String> args) async {
     );
     _fact('initialized');
     if (sessionMode) {
-      phase = 'session-input';
-      if (!active()) throw const SessionProbeFailure('cancelled');
-      final request = mode == 'session-hls'
-          ? SessionProbeRequest(
-              Uri.parse('https://localhost:18443/session/index.m3u8'),
-              0,
-              8,
-            )
-          : await receiveSessionProbe(cancelled: cancelled.future);
       phase = 'session-measurement';
-      await measureSessionProbe(
-        player,
-        request,
-        record: _fact,
-        cancelled: cancelled.future,
-        active: active,
-      );
+      await _measureSyntheticSession(player, cancelled.future, active);
       _fact('PASS', {'case': mode});
       return;
     }
@@ -461,7 +477,7 @@ Future<void> _run(List<String> args) async {
       'at': phase,
       'code': e is PlayerUnavailable
           ? e.failureCode
-          : e is SessionProbeFailure
+          : e is _FixtureFailure
           ? e.code
           : 'assertion_or_timeout',
     });

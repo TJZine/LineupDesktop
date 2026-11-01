@@ -49,10 +49,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        DebugSessionLogging.configure(BuildConfig.DEBUG, getDartEntrypointArgs().orEmpty())
         super.configureFlutterEngine(flutterEngine)
-        nativePlayer = NativePlayerAdapter(this, flutterEngine.dartExecutor.binaryMessenger,
-            getDartEntrypointArgs().orEmpty())
+        nativePlayer = NativePlayerAdapter(this, flutterEngine.dartExecutor.binaryMessenger)
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "lineup/platform")
         val visibility = KeyboardVisibilityObserver(this) { visible ->
             channel.invokeMethod("keyboardVisibilityChanged", visible)

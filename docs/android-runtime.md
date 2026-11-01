@@ -191,16 +191,15 @@ adb -s emulator-5554 exec-out screencap -p > /tmp/lineup-android.png
 Raw logcat and dumps are private evidence. Never commit credentials, tokens,
 server addresses, account names or media titles.
 
-## Debug session measurements
+## Synthetic session checks
 
-The alternate [fixture entrypoint](../tool/android/fixtures/README.md#e6-session-preparation-debug-only-playback-acceptance-not-run)
-has a debug-only synthetic HLS case and an in-memory live-session input path for
-later authorized E6 measurements. Live capabilities are never command arguments,
-intents or files; the sender requires an explicitly assigned emulator and existing
-forward. Media3 exception logging is suppressed only for the debug live case,
-and the raw-log collector refuses that case. No production bootstrap, coordinator
-or Player UI changes are involved. These offline tools have not established
-emulator/Fire TV playback, offset600/`EXT-X-START`, HDR or audio acceptance.
+The alternate [fixture entrypoint](../tool/android/fixtures/README.md#synthetic-session-hls-contract)
+has a debug-only synthetic HLS case using the ordinary production transport and
+adapter. It accepts no private capability input. The completed E6 observer and
+live delivery tools are excluded from the merge candidate; historical results
+remain tied to the preserved `54caf2e1` source and frozen APKs. Removing those
+measurement tools does not establish new emulator, Fire TV, HDR or audio
+acceptance for the production candidate.
 
 ## Storage and backup
 
