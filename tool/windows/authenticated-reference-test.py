@@ -541,7 +541,9 @@ def session_matrix(args):
              "-keyint_min", "10", "-sc_threshold", "0", "-bf", "0", "-f", "hls",
              "-hls_segment_type", "fmp4", "-hls_time", "1", "-hls_list_size", "0",
              "-hls_fmp4_init_filename", "session-init.mp4", "-hls_segment_filename",
-             str(root / "session-%d.m4s"), str(root / "session-source.m3u8")])
+             # FFmpeg's HLS muxer locates the init output directory using '/'
+             # even on Windows. Backslashes leave the init file in the CWD.
+             (root / "session-%d.m4s").as_posix(), (root / "session-source.m3u8").as_posix()])
         playlist = (root / "session-source.m3u8").read_bytes()
         if b'#EXT-X-MAP:URI="session-init.mp4"' not in playlist or b"#EXT-X-ENDLIST" not in playlist:
             raise RuntimeError("invalid_session_fixture")
