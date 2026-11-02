@@ -284,7 +284,7 @@ class TestMessenger final : public flutter::BinaryMessenger {
     }
     if (mode == "session-nested-hls" && ++event_count > 4096) session_structural_failure = true;
     const auto load_id = map->find(Value("loadId"));
-    if (load_id != map->end() && load_id->second != Value(active_load_id)) return;
+    if (load_id != map->end() && !(load_id->second == Value(active_load_id))) return;
     const auto state = map->find(Value("state"));
     if (state != map->end()) {
       const auto* text = std::get_if<std::string>(&state->second);
