@@ -1,8 +1,19 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'native_player.dart';
 
 class UnsupportedNativePlayer implements NativePlayer {
+  @override
+  final subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {}
+
   UnsupportedNativePlayer({required this.message});
 
   static const platformMessage = 'Playback is not implemented on this platform';

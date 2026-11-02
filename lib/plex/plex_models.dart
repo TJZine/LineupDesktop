@@ -216,11 +216,56 @@ typedef PlexLibraryPageProgress = ({
 });
 
 class PlexMediaPart {
-  PlexMediaPart({required this.path, this.duration})
-    : assert(duration == null || duration.inMicroseconds > 0);
+  PlexMediaPart({
+    required this.path,
+    this.duration,
+    this.id,
+    List<PlexMediaStream> streams = const [],
+  }) : assert(duration == null || duration.inMicroseconds > 0),
+       streams = List.unmodifiable(streams);
 
   final String path;
   final Duration? duration;
+  final String? id;
+  final List<PlexMediaStream> streams;
+}
+
+class PlexMediaStream {
+  const PlexMediaStream({
+    this.id,
+    this.streamType,
+    this.codec,
+    this.profile,
+    this.bitDepth,
+    this.width,
+    this.height,
+    this.bitrate,
+    this.doviProfile,
+    this.colorTrc,
+    this.channels,
+    this.language,
+    this.selected = false,
+    this.isDefault = false,
+    this.forced = false,
+    this.key,
+  });
+
+  final String? id;
+  final int? streamType;
+  final String? codec;
+  final String? profile;
+  final int? bitDepth;
+  final int? width;
+  final int? height;
+  final int? bitrate;
+  final int? doviProfile;
+  final String? colorTrc;
+  final int? channels;
+  final String? language;
+  final bool selected;
+  final bool isDefault;
+  final bool forced;
+  final String? key;
 }
 
 class PlexCastMember {

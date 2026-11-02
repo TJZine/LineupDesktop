@@ -54,6 +54,7 @@ add_library(lineup_player_core STATIC
   "session_playlist.cpp"
   "platform_arguments.cpp"
   "player_core.cpp"
+  "subtitle_cues.cpp"
   "track_list_encoder.cpp"
 )
 lineup_player_core_settings(lineup_player_core)
@@ -104,3 +105,9 @@ lineup_player_core_settings(session_playlist_test)
 target_link_libraries(session_playlist_test PRIVATE lineup_player_core)
 add_test(NAME session_playlist COMMAND session_playlist_test)
 set_tests_properties(session_playlist PROPERTIES TIMEOUT 15)
+add_executable(subtitle_cues_test ${LINEUP_PLAYER_CORE_TEST_OPTIONS}
+  "subtitle_cues_test.cpp"
+)
+lineup_player_core_settings(subtitle_cues_test)
+target_link_libraries(subtitle_cues_test PRIVATE lineup_player_core)
+add_test(NAME subtitle_cues COMMAND subtitle_cues_test)

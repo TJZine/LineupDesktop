@@ -124,7 +124,7 @@ def prepare(runtime, flutter, fixture, output):
            'FoundationValueConversion.mm', 'VideoGeometry.h', 'VideoGeometry.mm')],
         *(REPO / 'native/player_core').glob('*.h'),
         *[REPO / 'native/player_core' / name for name in
-          ('player_core.cpp', 'session_playlist.cpp', 'libmpv_operations.cpp', 'platform_arguments.cpp', 'track_list_encoder.cpp')]]
+          ('player_core.cpp', 'session_playlist.cpp', 'subtitle_cues.cpp', 'libmpv_operations.cpp', 'platform_arguments.cpp', 'track_list_encoder.cpp')]]
     source_hashes = {str(path.resolve()): sha(path) for path in sources if path.is_file()}
     runtime_inputs = [runtime / 'BUILD-INFO.txt', runtime / 'include/mpv/client.h', runtime / 'include/mpv/stream_cb.h',
         REPO / 'tool/macos/mpv-runtime.lock', REPO / 'tool/flutter_version.json']

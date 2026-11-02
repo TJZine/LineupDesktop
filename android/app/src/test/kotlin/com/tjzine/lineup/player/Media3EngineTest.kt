@@ -8,6 +8,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.Clock
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ExoTimeoutException
+import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.ui.SubtitleView
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -48,6 +50,55 @@ class Media3EngineTest {
         }
         assertNotNull("release callback must be bounded", result)
         return result!!
+    }
+
+    private val listener = object : PlayerEngine.Listener {
+        override fun ready(paused: Boolean) {}
+        override fun ended() {}
+        override fun failure(code: String, httpStatus: Int?) {}
+        override fun property(name: String, value: Any?) {}
+    }
+
+    @Test
+    fun initialPreparationUsesScheduledJoinSourceAtRequestedPosition() {
+        lateinit var player: ExoPlayer
+        var source: MediaSource? = null
+        val engine = engine {
+            player = ExoPlayer.Builder(it).build()
+            object : ExoPlayer by player {
+                override fun setMediaSource(mediaSource: MediaSource, startPositionMs: Long) {
+                    source = mediaSource
+                    player.setMediaSource(mediaSource, startPositionMs)
+                }
+            }
+        }
+        shadowOf(player.playbackLooper).unPause()
+        try {
+            engine.load(MediaLoad("https://127.0.0.1:9/synthetic", 1, null, true, 42.5), listener)
+            assertTrue(source is InitialJoinMediaSource)
+            assertEquals(42_500L, player.currentPosition)
+            assertFalse(player.playWhenReady)
+        } finally {
+            release(engine)
+        }
+    }
+
+    @Test
+    fun explicitSeeksReplaceInitialToleranceWithExactOrPreviousSync() {
+        lateinit var player: ExoPlayer
+        val engine = engine { ExoPlayer.Builder(it).build().also { value -> player = value } }
+        shadowOf(player.playbackLooper).unPause()
+        try {
+            engine.load(MediaLoad("https://127.0.0.1:9/synthetic", 1, null, true, 42.5), listener)
+            for (exact in listOf(true, false, true)) {
+                engine.seek(12.75, exact)
+                assertEquals(if (exact) SeekParameters.EXACT else SeekParameters.PREVIOUS_SYNC,
+                    player.seekParameters)
+                assertEquals(12_750L, player.currentPosition)
+            }
+        } finally {
+            release(engine)
+        }
     }
 
     @Test

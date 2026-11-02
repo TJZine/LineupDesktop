@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/playback/display_matching.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -496,6 +498,14 @@ class _Player implements NativePlayer {
   @override
   Future<MediaCapabilities> mediaCapabilities() async =>
       MediaCapabilities.desktop;
+  @override
+  final subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {}
 
   @override
   PlayerCapabilities get capabilities => const PlayerCapabilities.unavailable();

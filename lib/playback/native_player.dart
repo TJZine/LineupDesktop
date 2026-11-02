@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import '../plex/plex_transcode.dart';
 
 export '../plex/plex_transcode.dart' show MediaCapabilities;
+import 'subtitle_cues.dart';
+export 'subtitle_cues.dart';
 
 abstract interface class NativePlayer {
   PlayerStatus get status;
@@ -36,6 +38,16 @@ abstract interface class NativePlayer {
   /// Native initialization publishes a snapshot, including an already-fullscreen
   /// window. Command completion must not overwrite a newer observation.
   Stream<bool> get fullscreenChanges;
+
+  /// Ephemeral cues, independent of playback snapshots.
+  ValueListenable<SubtitleCues> get subtitleCues;
+
+  /// Completes on acceptance; rendering is unobserved. Player-scoped.
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  });
 
   Future<void> initialize();
 

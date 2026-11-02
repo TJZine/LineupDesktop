@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -65,6 +67,19 @@ class LocalMediaHarnessController extends HarnessController {
 /// Forwards to the real player and logs each call's outcome and the
 /// observable state it produces, without media identity.
 class HarnessLoggingPlayer implements NativePlayer {
+  @override
+  ValueListenable<SubtitleCues> get subtitleCues => _player.subtitleCues;
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) => _player.setSubtitlePresentation(
+    scale: scale,
+    imageRaise: imageRaise,
+    lineupDrawsStyled: lineupDrawsStyled,
+  );
+
   HarnessLoggingPlayer(this._player) {
     _player.events.listen(_logEvent);
     _player.displayReports.listen(

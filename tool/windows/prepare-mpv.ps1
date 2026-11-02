@@ -30,7 +30,7 @@ $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 $asset = 'mpv-dev-lgpl-x86_64-20261002-git-3186d369f9.7z'
 $sha256 = '322CB0040B97B15F97069F631F665FD63DA331CED92705F757DA13B99380DA5F'
-$url = "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-10-02-3186d369f9/$asset"
+$url = "https://github.com/TJZine/LineupDesktop/releases/download/runtime-mpv-20261002-3186d369f9/$asset"
 $Destination = [IO.Path]::GetFullPath($Destination)
 if (Test-Path -LiteralPath $Destination) {
   if (Get-ChildItem -LiteralPath $Destination -Force | Select-Object -First 1) {

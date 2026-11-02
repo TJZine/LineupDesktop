@@ -2,8 +2,15 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
+    show TargetPlatform, defaultTargetPlatform, ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
+import 'package:flutter/services.dart';
+
+import '../playback/subtitle_appearance_source.dart';
+import '../playback/subtitle_cues.dart';
+import '../playback/subtitle_layer.dart';
+import '../settings/subtitle_style.dart';
 
 import '../platform/device_profile.dart';
 import '../settings/lineup_settings.dart';
@@ -11,10 +18,13 @@ import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 
+part 'settings_subtitles.dart';
+
 enum SettingsCategory {
   appearance,
   guide,
   playback,
+  subtitles,
   accessibility,
   account,
   support,
@@ -23,6 +33,7 @@ enum SettingsCategory {
 class SettingsView extends StatefulWidget {
   const SettingsView({
     required this.controller,
+    this.subtitleAppearance,
     this.category = SettingsCategory.appearance,
     this.onCategoryChanged,
     this.onSwitchProfile,
@@ -40,6 +51,7 @@ class SettingsView extends StatefulWidget {
     super.key,
   });
   final LineupController controller;
+  final SubtitleAppearanceSource? subtitleAppearance;
   final SettingsCategory category;
   final ValueChanged<SettingsCategory>? onCategoryChanged;
   final VoidCallback? onSwitchProfile;
@@ -64,7 +76,21 @@ class _SettingsViewState extends State<SettingsView> {
   late LineupSettings _displaySettings;
   late LineupSettings _lastControllerSettings;
   bool _categoryFocusPlaced = false;
-  final Map<_SettingKey, _PendingSave> _pendingSaves = {};
+  final List<_PendingSave> _pendingSaves = [];
+  final _subtitleRailFocus = FocusNode(debugLabel: 'Subtitles category');
+  final _subtitleFocus = <_SettingKey, FocusNode>{};
+  final _subtitleHeights = <_SettingKey, double>{};
+  _SettingKey? _focusedSubtitle;
+  final _subtitlePageKey = GlobalKey();
+  final _subtitleHeadingKey = GlobalKey();
+  double _subtitlePinnedHeadingHeight = 0;
+  bool _subtitleHeadingIsPinned = true;
+  Size? _subtitlePageSize;
+  _SettingKey? _subtitleHeadingScrollRow;
+  Object? _subtitleHeadingExitToken;
+  double _subtitleRepinningSpace = 0;
+
+  bool _saving(_SettingKey key) => _pendingSaves.any((p) => p.key == key);
   final Map<_SettingKey, String> _errors = {};
 
   SettingsCategory get _category =>
@@ -77,6 +103,7 @@ class _SettingsViewState extends State<SettingsView> {
     _lastControllerSettings = widget.controller.settings;
     _displaySettings = _lastControllerSettings;
     widget.controller.addListener(_controllerChanged);
+    widget.subtitleAppearance?.addListener(_appearanceChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _categoryFocusPlaced = true;
     });
@@ -85,6 +112,17 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void didUpdateWidget(covariant SettingsView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.subtitleAppearance != widget.subtitleAppearance) {
+      oldWidget.subtitleAppearance?.removeListener(_appearanceChanged);
+      widget.subtitleAppearance?.addListener(_appearanceChanged);
+    }
+    if (oldWidget.category != widget.category &&
+        widget.category != SettingsCategory.subtitles) {
+      _focusedSubtitle = null;
+      _subtitleHeadingScrollRow = null;
+      _subtitleHeadingExitToken = null;
+      _subtitleRepinningSpace = 0;
+    }
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
     widget.controller.addListener(_controllerChanged);
@@ -92,12 +130,16 @@ class _SettingsViewState extends State<SettingsView> {
     _displaySettings = _lastControllerSettings;
   }
 
+  void _appearanceChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _controllerChanged() {
     final settings = widget.controller.settings;
     if (identical(settings, _lastControllerSettings)) return;
     _lastControllerSettings = settings;
     var refreshed = settings;
-    for (final pending in _pendingSaves.values) {
+    for (final pending in _pendingSaves) {
       refreshed = pending.change(refreshed);
     }
     if (!mounted) return;
@@ -107,7 +149,12 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void dispose() {
     widget.controller.removeListener(_controllerChanged);
-    for (final pending in _pendingSaves.values) {
+    widget.subtitleAppearance?.removeListener(_appearanceChanged);
+    _subtitleRailFocus.dispose();
+    for (final node in _subtitleFocus.values) {
+      node.dispose();
+    }
+    for (final pending in _pendingSaves) {
       pending.timer?.cancel();
     }
     super.dispose();
@@ -273,20 +320,50 @@ class _SettingsViewState extends State<SettingsView> {
               : SettingsCategory.values)
         Padding(
           padding: EdgeInsets.only(right: 10, bottom: 10),
-          child: LineupNavigationRow(
-            selected: category == _category,
-            focusNode: category == _category ? widget.focusNode : null,
-            autofocus: category == _category && !_categoryFocusPlaced,
-            onPressed: () {
-              setState(() => _localCategory = category);
-              widget.onCategoryChanged?.call(category);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted && category == _category) {
-                  widget.focusNode?.requestFocus();
-                }
-              });
+          child: Focus(
+            canRequestFocus: false,
+            onKeyEvent: (_, event) {
+              if (DeviceProfile.of(context).isTv &&
+                  category == SettingsCategory.subtitles &&
+                  _category == category &&
+                  event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                _subtitleFocus[defaultTargetPlatform == TargetPlatform.android
+                        ? _SettingKey.subtitleDevice
+                        : _SettingKey.subtitlePreset]
+                    ?.requestFocus();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
             },
-            child: Text(_categoryLabel(category)),
+            child: LineupNavigationRow(
+              selected: category == _category,
+              focusNode: category == SettingsCategory.subtitles
+                  ? (category == _category ? widget.focusNode : null) ??
+                        _subtitleRailFocus
+                  : category == _category
+                  ? widget.focusNode
+                  : null,
+              autofocus: category == _category && !_categoryFocusPlaced,
+              onPressed: () {
+                setState(() {
+                  _localCategory = category;
+                  if (category != SettingsCategory.subtitles) {
+                    _focusedSubtitle = null;
+                    _subtitleHeadingScrollRow = null;
+                    _subtitleHeadingExitToken = null;
+                    _subtitleRepinningSpace = 0;
+                  }
+                });
+                widget.onCategoryChanged?.call(category);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && category == _category) {
+                    widget.focusNode?.requestFocus();
+                  }
+                });
+              },
+              child: Text(_categoryLabel(category)),
+            ),
           ),
         ),
     ];
@@ -299,6 +376,9 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _categoryDetail(BuildContext context) {
+    if (_category == SettingsCategory.subtitles) {
+      return _subtitleDetail(context);
+    }
     final value = _displaySettings;
     final isTv = DeviceProfile.of(context).isTv;
 
@@ -459,6 +539,7 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                 ),
             ],
+            SettingsCategory.subtitles => const [],
             SettingsCategory.accessibility => [
               ..._settingControl<bool>(
                 _SettingKey.reduceMotion,
@@ -620,13 +701,147 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
+  void _changeSubtitle(
+    _SettingKey key,
+    SubtitleStyle Function(SubtitleStyle) change,
+  ) {
+    if (change(_displaySettings.subtitleStyle) ==
+        _displaySettings.subtitleStyle) {
+      return;
+    }
+    unawaited(
+      _update(
+        key,
+        (current) =>
+            current.copyWith(subtitleStyle: change(current.subtitleStyle)),
+        keepEnabled: true,
+      ),
+    );
+  }
+
+  bool _subtitleMeasured(
+    _SettingKey key,
+    double height,
+    bool focused,
+    ValueChanged<double> alignBeforeRepinning,
+  ) {
+    final page = _subtitlePageKey.currentContext?.findRenderObject();
+    final heading = _subtitleHeadingKey.currentContext?.findRenderObject();
+    final pageSize = page is RenderBox && page.hasSize ? page.size : null;
+    // A scrolling heading may wrap in the narrower A2 rows column. Only its
+    // pinned measurement defines the space the normal layout would reserve.
+    final resizedFullWidthHeading =
+        pageSize != null &&
+        pageSize != _subtitlePageSize &&
+        !_subtitleUsesColumns(context, pageSize.width);
+    final headingHeight =
+        (_subtitleHeadingIsPinned || resizedFullWidthHeading) &&
+            heading is RenderBox &&
+            heading.hasSize
+        ? heading.size.height
+        : _subtitlePinnedHeadingHeight;
+    final geometryChanged =
+        pageSize != _subtitlePageSize ||
+        headingHeight != _subtitlePinnedHeadingHeight;
+    if (geometryChanged &&
+        !focused &&
+        _subtitleHeadingScrollRow != null &&
+        _subtitleFocus.values.any((node) => node.hasFocus)) {
+      // Every row is laid out. Let the focus owner's measurement, rather
+      // than a preceding row's, decide how to leave the expanded viewport.
+      return false;
+    }
+    if (geometryChanged) {
+      _subtitleHeadingExitToken = null;
+      _subtitleRepinningSpace = 0;
+    }
+    var scrollRow = geometryChanged ? null : _subtitleHeadingScrollRow;
+    var managedReveal = focused && _subtitleHeadingExitToken != null;
+    if (focused) {
+      final changingRow = _focusedSubtitle != key;
+      if (changingRow) scrollRow = null;
+      final clearance = _displaySettings.largeFocusIndicators
+          ? LineupFocusFrame.contentClearance * 2
+          : 0.0;
+      if (pageSize != null &&
+          height + clearance > pageSize.height - headingHeight) {
+        _subtitleHeadingExitToken = null;
+        _subtitleRepinningSpace = 0;
+        managedReveal = false;
+        scrollRow = key;
+      } else if ((changingRow || geometryChanged) &&
+          _subtitleHeadingScrollRow != null) {
+        // The old expanded viewport may expose a row above the future pinned
+        // heading. Place its complete context at the shared bottom first;
+        // repinning on the following frame cannot hide or recycle its control.
+        scrollRow = _subtitleHeadingScrollRow;
+        managedReveal = true;
+        final exit = Object();
+        _subtitleHeadingExitToken = exit;
+        final columns = _subtitleUsesColumns(context, pageSize!.width);
+        final preview = _subtitlePreviewCrop(
+          availableHeight: pageSize.height - headingHeight,
+          frameHeight: MediaQuery.sizeOf(context).shortestSide,
+          rowHeight: height,
+          clearance: clearance,
+          columns: columns,
+          scrollingHeading: false,
+        );
+        // Reserve the returning preview at the bottom first. This makes the
+        // expanded and pinned scroll ranges equal, even at the end of the list.
+        _subtitleRepinningSpace = columns ? 0 : preview.height + preview.gap;
+        // Allow a resize or a preceding reveal to finish layout before asking
+        // for another scroll offset. Then repin after that offset is laid out.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !identical(_subtitleHeadingExitToken, exit)) return;
+          if (!(_subtitleFocus[key]?.hasFocus ?? false)) {
+            setState(() {
+              _subtitleHeadingExitToken = null;
+              _subtitleRepinningSpace = 0;
+            });
+            return;
+          }
+          alignBeforeRepinning(columns ? 0 : preview.height + preview.gap);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !identical(_subtitleHeadingExitToken, exit)) return;
+            setState(() {
+              _subtitleHeadingExitToken = null;
+              _subtitleRepinningSpace = 0;
+              if (_subtitleFocus[key]?.hasFocus ?? false) {
+                _subtitleHeadingScrollRow = null;
+              }
+            });
+          });
+          WidgetsBinding.instance.scheduleFrame();
+        });
+        WidgetsBinding.instance.scheduleFrame();
+      }
+    }
+    if (_subtitleHeights[key] == height &&
+        (!focused || _focusedSubtitle == key) &&
+        !geometryChanged &&
+        scrollRow == _subtitleHeadingScrollRow) {
+      return managedReveal;
+    }
+    setState(() {
+      _subtitleHeights[key] = height;
+      _subtitlePageSize = pageSize;
+      _subtitlePinnedHeadingHeight = headingHeight;
+      // Once required, retain this mode for the same focused row through
+      // Saving/error removal. Another row or viewport starts a new decision.
+      _subtitleHeadingScrollRow = scrollRow;
+      if (focused) _focusedSubtitle = key;
+    });
+    return managedReveal;
+  }
+
   List<Widget> _settingControl<T>(
     _SettingKey key,
     LineupSettings Function(LineupSettings, T) change,
     Widget Function(ValueChanged<T>?) build,
   ) => [
     build(
-      _pendingSaves.containsKey(key)
+      _saving(key)
           ? null
           : (value) =>
                 unawaited(_update(key, (current) => change(current, value))),
@@ -646,7 +861,7 @@ class _SettingsViewState extends State<SettingsView> {
         ),
       );
     }
-    if (_pendingSaves[key]?.showSaving ?? false) {
+    if (_pendingSaves.any((p) => p.key == key && p.showSaving)) {
       return Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text('Saving…'),
@@ -657,17 +872,18 @@ class _SettingsViewState extends State<SettingsView> {
 
   Future<void> _update(
     _SettingKey key,
-    LineupSettings Function(LineupSettings) change,
-  ) async {
-    if (_pendingSaves.containsKey(key)) return;
-    final pending = _PendingSave(change);
+    LineupSettings Function(LineupSettings) change, {
+    bool keepEnabled = false,
+  }) async {
+    if (!keepEnabled && _saving(key)) return;
+    final pending = _PendingSave(key, change);
     setState(() {
-      _pendingSaves[key] = pending;
+      _pendingSaves.add(pending);
       _errors.remove(key);
       _displaySettings = change(_displaySettings);
     });
     pending.timer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted && identical(_pendingSaves[key], pending)) {
+      if (mounted && _pendingSaves.contains(pending)) {
         setState(() => pending.showSaving = true);
       }
     });
@@ -680,13 +896,17 @@ class _SettingsViewState extends State<SettingsView> {
       pending.timer?.cancel();
       if (mounted) {
         setState(() {
-          _pendingSaves.remove(key);
+          _pendingSaves.remove(pending);
           var refreshed = widget.controller.settings;
-          for (final pending in _pendingSaves.values) {
+          for (final pending in _pendingSaves) {
             refreshed = pending.change(refreshed);
           }
           _displaySettings = refreshed;
-          if (error != null) _errors[key] = error;
+          if (error != null) {
+            _errors[key] = error;
+          } else {
+            _errors.remove(key);
+          }
         });
       }
     }
@@ -696,6 +916,7 @@ class _SettingsViewState extends State<SettingsView> {
     SettingsCategory.appearance => 'Appearance',
     SettingsCategory.guide => 'Guide',
     SettingsCategory.playback => 'Playback',
+    SettingsCategory.subtitles => 'Subtitles',
     SettingsCategory.accessibility => 'Accessibility',
     SettingsCategory.account => 'Account',
     SettingsCategory.support => 'Support',
@@ -706,6 +927,7 @@ class _SettingsViewState extends State<SettingsView> {
         SettingsCategory.appearance => 'Choose the atmosphere of your lineup.',
         SettingsCategory.guide => 'Browse the schedule your way.',
         SettingsCategory.playback => 'Control how playback controls behave.',
+        SettingsCategory.subtitles => 'Applies to text subtitles. Image subtitles follow Size and Position only.',
         SettingsCategory.accessibility =>
           'Make navigation easier to see and follow.',
         SettingsCategory.account =>
@@ -720,8 +942,10 @@ class _SettingsSection extends StatelessWidget {
     required this.title,
     required this.description,
     required this.children,
+    this.trailingGap = 32,
   });
 
+  final double trailingGap;
   final String title;
   final String description;
   final List<Widget> children;
@@ -754,7 +978,7 @@ class _SettingsSection extends StatelessWidget {
             height: 1.5,
           ),
         ),
-        SizedBox(height: 32),
+        SizedBox(height: trailingGap),
         ...children,
       ],
     );
@@ -1002,10 +1226,28 @@ enum _SettingKey {
   largeFocusIndicators,
   profilePickerOnStartup,
   diagnosticsEnabled,
+  subtitlePreset,
+  subtitleSize,
+  subtitlePosition,
+  subtitleTextColor,
+  subtitleTextOpacity,
+  subtitleFont,
+  subtitleBold,
+  subtitleEdge,
+  subtitleEdgeColor,
+  subtitleBackgroundOpacity,
+  subtitleBackgroundColor,
+  subtitleWindowOpacity,
+  subtitleWindowColor,
+  subtitleStyled,
+  subtitleDevice,
+  subtitleReset,
 }
 
 class _PendingSave {
-  _PendingSave(this.change);
+  _PendingSave(this.key, this.change);
+
+  final _SettingKey key;
 
   final LineupSettings Function(LineupSettings) change;
   Timer? timer;

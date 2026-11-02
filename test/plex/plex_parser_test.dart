@@ -8,6 +8,126 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  for (final xml in [false, true]) {
+    test(
+      'parses stream facts and external subtitle keys from ${xml ? 'XML' : 'JSON'} metadata',
+      () async {
+        var calls = 0;
+        final client = PlexClient(
+          clientIdentifier: 'synthetic-client',
+          httpClient: MockClient((request) async {
+            expect(
+              ++calls,
+              1,
+              reason: 'Streams come from the existing metadata response',
+            );
+            expect(request.url.path, '/library/sections/movies/all');
+            return http.Response(
+              xml
+                  ? '<MediaContainer size="1" totalSize="1" offset="0"><Video ratingKey="1" title="Synthetic" type="movie" duration="60000"><Media container="mkv" videoCodec="hevc"><Part id="7" key="/library/parts/7/file.mkv" duration="60000"><Stream id="11" streamType="1" codec="hevc" profile="main 10" bitDepth="10" width="3840" height="2160" bitrate="30000" DOVIProfile="8" colorTrc="smpte2084"/><Stream id="12" streamType="2" codec="eac3" channels="6" language="English" selected="1" default="1"/><Stream id="13" streamType="3" codec="srt" forced="1" key="/library/streams/13"/></Part></Media></Video></MediaContainer>'
+                  : jsonEncode({
+                      'MediaContainer': {
+                        'size': 1,
+                        'totalSize': 1,
+                        'offset': 0,
+                        'Metadata': [
+                          {
+                            'ratingKey': '1',
+                            'title': 'Synthetic',
+                            'type': 'movie',
+                            'duration': 60000,
+                            'Media': [
+                              {
+                                'container': 'mkv',
+                                'videoCodec': 'hevc',
+                                'Part': [
+                                  {
+                                    'id': 7,
+                                    'key': '/library/parts/7/file.mkv',
+                                    'duration': 60000,
+                                    'Stream': [
+                                      {
+                                        'id': 11,
+                                        'streamType': 1,
+                                        'codec': 'hevc',
+                                        'profile': 'main 10',
+                                        'bitDepth': 10,
+                                        'width': 3840,
+                                        'height': 2160,
+                                        'bitrate': 30000,
+                                        'DOVIProfile': 8,
+                                        'colorTrc': 'smpte2084',
+                                      },
+                                      {
+                                        'id': 12,
+                                        'streamType': 2,
+                                        'codec': 'eac3',
+                                        'channels': 6,
+                                        'language': 'English',
+                                        'selected': 1,
+                                        'default': 1,
+                                      },
+                                      {
+                                        'id': 13,
+                                        'streamType': 3,
+                                        'codec': 'srt',
+                                        'forced': 1,
+                                        'key': '/library/streams/13',
+                                      },
+                                    ],
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    }),
+              200,
+            );
+          }),
+        );
+        addTearDown(client.close);
+        final items = await client.libraryItems(
+          Uri.parse('https://synthetic.invalid'),
+          'synthetic-token',
+          'movies',
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        );
+        final part = items.single.parts.single;
+        expect(part.id, '7');
+        expect(part.duration, const Duration(seconds: 60));
+        final video = part.streams[0];
+        expect(video.id, '11');
+        expect(video.streamType, 1);
+        expect(video.codec, 'hevc');
+        expect(video.profile, 'main 10');
+        expect(video.bitDepth, 10);
+        expect(video.width, 3840);
+        expect(video.height, 2160);
+        expect(video.bitrate, 30000);
+        expect(video.doviProfile, 8);
+        expect(video.colorTrc, 'smpte2084');
+        final audio = part.streams[1];
+        expect(audio.codec, 'eac3');
+        expect(audio.channels, 6);
+        expect(audio.language, 'English');
+        expect(audio.selected, isTrue);
+        expect(audio.isDefault, isTrue);
+        expect(audio.forced, isFalse);
+        final subtitle = part.streams[2];
+        expect(subtitle.codec, 'srt');
+        expect(subtitle.forced, isTrue);
+        expect(subtitle.key, '/library/streams/13');
+        expect(subtitle.selected, isFalse);
+        expect(part.streams.clear, throwsUnsupportedError);
+        expect(calls, 1);
+      },
+    );
+  }
+
   test('formats connection routes and measured latency boundaries', () {
     PlexConnection connection({
       required bool local,

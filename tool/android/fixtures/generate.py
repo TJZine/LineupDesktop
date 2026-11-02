@@ -12,6 +12,90 @@ def run(args):
     except BaseException:
         if temporary.exists(): temporary.unlink()
         raise
+def generate_subtitle_fixtures():
+    """Additive corpus: never rewrite a pre-existing media fixture."""
+    (ROOT/'subtitle-routing.srt').write_text('1\n00:00:00,500 --> 00:00:06,000\nTwo-line <i>italic</i> cue\nSecond line\n\n2\n00:00:06,100 --> 00:00:12,000\n{\\an8}Top cue\n\n3\n00:00:12,100 --> 00:00:18,000\n<font color="#8000FF00">Alpha color cue</font>\n\n4\n00:00:18,100 --> 00:00:29,000\n{\\pos(40,40)}Position cue\n')
+    # Media3's SSA header parser requires blank section separators to retain
+    # the final PlayResY/Style rows; keep these blank lines in the fixture.
+    (ROOT/'subtitle-routing.ass').write_text(r'''[Script Info]
+ScriptType: v4.00+
+PlayResX: 640
+PlayResY: 360
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,32,&H8000FF00,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.50,0:00:29.00,Default,,0,0,0,,{\i1}Authored {\1c&HFF0000&\1a&H40&}color alpha{\r}\NSecond line
+Dialogue: 0,0:00:06.10,0:00:12.00,Default,,0,0,0,,{\pos(80,80)}Synthetic sign
+Dialogue: 0,0:00:12.10,0:00:18.00,Default,,0,0,0,,{\p1}m 0 0 l 30 0 30 30 0 30{\p0}
+''')
+    for name, size in [('subtitle-source.mp4','640x360'), ('subtitle-wide-source.mp4','860x360')]:
+        if not (ROOT/name).exists():
+            run(['ffmpeg','-y','-f','lavfi','-i',f'testsrc2=size={size}:rate=24','-t','30','-c:v','libx264','-preset','veryfast','-threads','4','-pix_fmt','yuv420p',str(ROOT/name)])
+    for name, source, subtitles, codec in [
+        ('subtitle-routing.mkv','subtitle-source.mp4','subtitle-routing.srt','srt'),
+        ('subtitle-wide.mkv','subtitle-wide-source.mp4','subtitle-routing.srt','srt'),
+        ('subtitle-authored.mkv','subtitle-source.mp4','subtitle-routing.ass','ass'),
+        ('subtitle-movtext.mp4','subtitle-source.mp4','subtitle-routing.ass','mov_text'),
+    ]:
+        if not (ROOT/name).exists():
+            run(['ffmpeg','-y','-i',str(ROOT/source),'-i',str(ROOT/subtitles),'-map','0:v','-map','1:0','-c:v','copy','-c:s',codec,'-disposition:s:0','default',str(ROOT/name)])
+
+
+    # dvdsub encodes bitmap input only. Rasterize fixture text with FreeType and
+    # feed the paletted AVSubtitleRect through the real FFmpeg encoder/muxer.
+    if not (ROOT/'subtitle-bitmap.mkv').exists():
+        import hashlib, os, shlex, tempfile
+        font = pathlib.Path(os.environ.get('LINEUP_SUBTITLE_FONT',
+            '/System/Library/Fonts/Supplemental/Arial.ttf'))
+        if not font.is_file():
+            raise RuntimeError('Set LINEUP_SUBTITLE_FONT to a fixture TrueType font')
+        with tempfile.TemporaryDirectory(prefix='lineup-subtitle-') as directory:
+            binary = pathlib.Path(directory)/'bitmap-subtitle'
+            flags = shlex.split(subprocess.check_output(['pkg-config','--cflags','--libs',
+                'libavcodec','libavformat','libavutil','freetype2'],text=True))
+            subprocess.run([os.environ.get('CC','cc'),str(pathlib.Path(__file__).with_name('bitmap_subtitle.c')),
+                *flags,'-o',str(binary)],check=True)
+            run([str(binary),str(font),str(ROOT/'subtitle-bitmap-only.mkv')])
+        run(['ffmpeg','-y','-i',str(ROOT/'subtitle-source.mp4'),'-i',str(ROOT/'subtitle-bitmap-only.mkv'),
+            '-map','0:v','-map','1:s','-c','copy','-disposition:s:0','default',str(ROOT/'subtitle-bitmap.mkv')])
+        (ROOT/'subtitle-bitmap-font.json').write_text(json.dumps({
+            'fontFile':font.name,'sha256':hashlib.sha256(font.read_bytes()).hexdigest(),
+            'pixelSize':24,'text':['Look out!','[Door creaks]']},indent=2)+'\n')
+
+
+    # SSA dialogue/sign/drawing parity controls; separate from prior corpus identities.
+    ssa_header = (ROOT/'subtitle-routing.ass').read_text().split('[Events]')[0]
+    for name, dialogue in [
+        ('subtitle-ass-dialogue', r'''Dialogue: 0,0:00:00.50,0:00:12.00,Default,,0,0,0,,Dialogue {\i1}italic{\i0} {\b1}bold{\b0} {\u1}underlined{\u0}
+Dialogue: 0,0:00:00.50,0:00:12.00,Default,,0,0,0,,{\p0\an8}p0 retained
+Dialogue: 0,0:00:06.10,0:00:12.00,Default,,0,0,0,,{\pos(80,80)}Synthetic sign
+Dialogue: 0,0:00:12.10,0:00:29.00,Default,,0,0,0,,Dialogue {\i1}italic{\i0} {\b1}bold{\b0} {\u1}underlined{\u0}
+Dialogue: 0,0:00:12.10,0:00:29.00,Default,,0,0,0,,{\p0\an8}p0 retained
+Dialogue: 0,0:00:12.10,0:00:18.00,Default,,0,0,0,,{\p1}m 0 0 l 30 0 30 30 0 30{\p0}
+'''),
+        ('subtitle-ass-fallback', 'Dialogue: 0,0:00:00.50,0:00:29.00,Default,,0,0,0,,Fallback literal \ue000LN: preserved\n'),
+    ]:
+        source = ROOT/(name+'.ass')
+        source.write_text(ssa_header+'[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'+dialogue)
+        if not (ROOT/(name+'.mkv')).exists():
+            run(['ffmpeg','-y','-i',str(ROOT/'subtitle-source.mp4'),'-i',str(source),'-map','0:v','-map','1:0','-c:v','copy','-c:s','ass','-disposition:s:0','default',str(ROOT/(name+'.mkv'))])
+
+    subtitle_facts = {}
+    for path in sorted(ROOT.glob('subtitle-*')):
+        if path.suffix not in ('.mkv', '.mp4'): continue
+        probe = subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)],capture_output=True,check=True)
+        subtitle_facts[path.name] = json.loads(probe.stdout)
+    (ROOT/'subtitle-ffprobe.json').write_text(json.dumps(subtitle_facts,indent=2))
+
+# Avoid regenerating the unrelated HDR/codec corpus during subtitle work.
+if '--subtitles-only' in __import__('sys').argv:
+    generate_subtitle_fixtures()
+    raise SystemExit(0)
+
 def encode(name, size='1920x1080', codec='libx264', extra=(), duration=30):
     output = ROOT/name
     if output.exists(): return
@@ -106,8 +190,11 @@ if not (ROOT/'bad-parent.mp4').exists():
         position+=size
     else: raise RuntimeError('missing_fixture_moov')
     (ROOT/'bad-parent.mp4').write_bytes(data)
+generate_subtitle_fixtures()
 facts={}
 for path in sorted(ROOT.glob('*')):
+    # Keep the existing index byte-identical; new media has its own additive index.
+    if path.name.startswith('subtitle-'): continue
     if path.suffix not in ('.mkv','.mp4'): continue
     probe=subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)],capture_output=True)
     if path.name=='bad-parent.mp4':
