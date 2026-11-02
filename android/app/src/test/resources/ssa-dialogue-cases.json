@@ -1,0 +1,314 @@
+[
+  {
+    "input": "{ \\pos(1,2)}sign",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event exclusion"
+  },
+  {
+    "input": "{ \\move(1,2,3,4)}sign",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event exclusion"
+  },
+  {
+    "input": "{ \\org(1,2)}sign",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event exclusion"
+  },
+  {
+    "input": "{ \\clip(1,2,3,4)}sign",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event exclusion"
+  },
+  {
+    "input": "{ \\iclip(1,2,3,4)}sign",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event exclusion"
+  },
+  {
+    "input": "{ \\p1}sign",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event exclusion"
+  },
+  {
+    "input": "{\\p0}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\p000}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\p+0}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\p-0}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\p-1}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\p}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\pbo2}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\painter1}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\position(1,2)}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\movements}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\rpos}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\fnposition}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "dialogue retained"
+  },
+  {
+    "input": "{\\p0\\an8\\i1\\b1\\u1}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "expectedAlign": 8,
+    "expectedSegment": {
+      "text": "dialogue",
+      "italic": true,
+      "bold": true,
+      "underline": true
+    }
+  },
+  {
+    "input": "{\\p1}drawing{\\p0}dialogue",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event positive drawing exclusion"
+  },
+  {
+    "input": "dialogue{\\p0\\p2}drawing{\\p0}tail",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event positive drawing exclusion"
+  },
+  {
+    "input": "{\\p+1}drawing",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event positive drawing exclusion"
+  },
+  {
+    "input": "{\\p 2}drawing",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event positive drawing exclusion"
+  },
+  {
+    "input": "{\\p0001}drawing",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event positive drawing exclusion"
+  },
+  {
+    "input": "{\\p999999999999999999999999999999}drawing",
+    "nativeAss": true,
+    "expectedText": "",
+    "class": "whole-event positive drawing exclusion"
+  },
+  {
+    "input": "literal \\p1 and \\pos(1,2) outside overrides",
+    "nativeAss": true,
+    "expectedText": "literal \\p1 and \\pos(1,2) outside overrides",
+    "class": "literal backslashes outside overrides"
+  },
+  {
+    "input": "{\\p1}drawing{\\p0}tail\n{\\p0\\i1}dialogue",
+    "nativeAss": true,
+    "expectedText": "dialogue",
+    "class": "event-local exclusion"
+  },
+  {
+    "input": "{\\i1}One{\\r}Two",
+    "nativeAss": true,
+    "expectedText": "OneTwo",
+    "expectedSegments": [
+      {
+        "text": "One",
+        "italic": true
+      },
+      {
+        "text": "Two"
+      }
+    ],
+    "class": "emphasis reset parity"
+  },
+  {
+    "input": "{\\i1}One{\\i}Two",
+    "nativeAss": true,
+    "expectedText": "OneTwo",
+    "expectedSegments": [
+      {
+        "text": "One",
+        "italic": true
+      },
+      {
+        "text": "Two"
+      }
+    ],
+    "class": "emphasis reset parity"
+  },
+  {
+    "input": "{\\b1}One{\\r}Two",
+    "nativeAss": true,
+    "expectedText": "OneTwo",
+    "expectedSegments": [
+      {
+        "text": "One",
+        "bold": true
+      },
+      {
+        "text": "Two"
+      }
+    ],
+    "class": "emphasis reset parity"
+  },
+  {
+    "input": "{\\b1}One{\\b}Two",
+    "nativeAss": true,
+    "expectedText": "OneTwo",
+    "expectedSegments": [
+      {
+        "text": "One",
+        "bold": true
+      },
+      {
+        "text": "Two"
+      }
+    ],
+    "class": "emphasis reset parity"
+  },
+  {
+    "input": "{\\u1}One{\\r}Two",
+    "nativeAss": true,
+    "expectedText": "OneTwo",
+    "expectedSegments": [
+      {
+        "text": "One",
+        "underline": true
+      },
+      {
+        "text": "Two"
+      }
+    ],
+    "class": "emphasis reset parity"
+  },
+  {
+    "input": "{\\u1}One{\\u}Two",
+    "nativeAss": true,
+    "expectedText": "OneTwo",
+    "expectedSegments": [
+      {
+        "text": "One",
+        "underline": true
+      },
+      {
+        "text": "Two"
+      }
+    ],
+    "class": "emphasis reset parity"
+  },
+  {
+    "input": "{\\b1\\i1\\u1}One{\\r}Two{\\u1}Three",
+    "nativeAss": true,
+    "expectedText": "OneTwoThree",
+    "expectedSegments": [
+      {
+        "text": "One",
+        "bold": true,
+        "italic": true,
+        "underline": true
+      },
+      {
+        "text": "Two"
+      },
+      {
+        "text": "Three",
+        "underline": true
+      }
+    ],
+    "class": "reset then explicit emphasis"
+  },
+  {
+    "input": "{\\i2}plain",
+    "nativeAss": true,
+    "expectedText": "plain",
+    "expectedSegments": [
+      {
+        "text": "plain"
+      }
+    ],
+    "class": "unknown emphasis values ignored"
+  },
+  {
+    "input": "{\\b700}plain",
+    "nativeAss": true,
+    "expectedText": "plain",
+    "expectedSegments": [
+      {
+        "text": "plain"
+      }
+    ],
+    "class": "unknown emphasis values ignored"
+  },
+  {
+    "input": "{\\i+1}plain",
+    "nativeAss": true,
+    "expectedText": "plain",
+    "expectedSegments": [
+      {
+        "text": "plain"
+      }
+    ],
+    "class": "unknown emphasis values ignored"
+  }
+]

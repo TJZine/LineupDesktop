@@ -134,6 +134,14 @@ internal object PlayerProtocol {
             else -> invalid()
         }
 
+    fun subtitlePresentation(value: Any?): SubtitlePresentation {
+        val a = map(value)
+        val scale = number(a["scale"], 0.25)
+        val raise = number(a["imageRaise"])
+        if (scale > 4.0 || raise > 0.25) invalid()
+        return SubtitlePresentation(scale.toFloat(), raise.toFloat(), boolean(a["lineupDrawsStyled"]))
+    }
+
     fun rect(value: Any?): VideoRect {
         val a = map(value)
         fun coordinate(key: String): Double {
@@ -203,6 +211,8 @@ internal interface PlayerHost {
 
     fun keepScreenOn(keep: Boolean)
 
+    fun subtitlePresentation(value: SubtitlePresentation?) {}
+
     fun createEngine(): PlayerEngine
 
     fun event(value: Map<String, Any?>)
@@ -223,15 +233,28 @@ internal class PlayerEventQueue {
         get() = queue.size
 
     fun add(event: QueuedEvent) {
-        if (queue.size == 256) {
-            val property = queue.indexOfFirst { it.value["type"] == "property" }
+        fun cues(e: QueuedEvent) = e.value["type"] == "property" && e.value["name"] == "subtitle-cues"
+        val cueIndex = queue.indexOfFirst { cues(it) }
+        if (cues(event)) {
+            if (cueIndex >= 0) queue[cueIndex] = event
+            else queue.addLast(event)
+            return
+        }
+        // One of the 256 total slots always belongs to the latest cue snapshot,
+        // including a clear. Its first admission must never evict a completion.
+        val ordinaryCount = queue.size - (if (cueIndex >= 0) 1 else 0)
+        if (ordinaryCount == 255) {
+            val property = queue.indexOfFirst { it.value["type"] == "property" && !cues(it) }
             if (property >= 0) {
                 val iterator = queue.iterator()
                 repeat(property + 1) { iterator.next() }
                 iterator.remove()
             } else if (event.value["type"] == "property") return
             else {
-                queue.removeFirst()
+                val iterator = queue.iterator()
+                while (iterator.hasNext()) {
+                    if (!cues(iterator.next())) { iterator.remove(); break }
+                }
                 overflowed = true
             }
         }
