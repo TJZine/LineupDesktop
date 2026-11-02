@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 
 SOURCE = pathlib.Path(__file__).with_name("authenticated-reference-test.py")
@@ -62,8 +63,6 @@ class FaultHandler(fixture.Handler):
 @contextlib.contextmanager
 def listener(context=None, handler=fixture.Handler):
     server = ObservedServer(("127.0.0.1", 0), handler)
-    # Also support the original fixture for the red comparison.
-    server.lock = threading.Lock()
     server.failed = False
     server.context = context
     server.authenticated = True
@@ -291,6 +290,18 @@ class FixtureControls(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "secret_in_child_output"):
                     fixture.read_outcomes(subprocess.CompletedProcess([], 0, **output), False)
 
+    def test_failure_message_only_exposes_fixed_stage_and_known_codes(self):
+        with mock.patch.object(fixture, "STAGE", "session_fixture"):
+            for code in fixture.FIXED_FAILURE_CODES:
+                self.assertEqual(fixture.failure_message(RuntimeError(code)),
+                                 "FAIL: fixture, runtime, or bounded-wait prerequisite "
+                                 f"(stage=session_fixture) (code={code})")
+            for error in (RuntimeError(fixture.TOKEN + " https://private.invalid/path"),
+                          OSError("invalid_session_fixture"), RuntimeError(["private path"])):
+                self.assertEqual(fixture.failure_message(error),
+                                 "FAIL: fixture, runtime, or bounded-wait prerequisite "
+                                 "(stage=session_fixture)")
+
 
 class SessionPayloadControls(unittest.TestCase):
     playlist = (b"#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:1\n"
@@ -437,9 +448,95 @@ class SessionPayloadControls(unittest.TestCase):
                     self.assertEqual(response.read(), body)
                 finally:
                     client.close()
-            self.assertEqual([row["bytes"] for row in server.response_records], [8, len(media)])
-            self.assertTrue(all(row["complete"] for row in server.response_records))
+            responses = server.wait_for_responses(bodies, timeout=3)
+            self.assertEqual([row["bytes"] for row in responses], [8, len(media)])
+            self.assertTrue(all(row["complete"] for row in responses))
             self.assertFalse(any(token for _, token, _ in server.requests))
+
+    def test_response_snapshot_waits_for_bookkeeping_after_client_reads_body(self):
+        body_written = threading.Event()
+        release_bookkeeping = threading.Event()
+        wait_entered = threading.Event()
+        snapshot_done = threading.Event()
+        snapshots = []
+
+        class DelayedHandler(fixture.Handler):
+            def end_headers(self):
+                super().end_headers()
+                flush = self.wfile.flush
+
+                def delayed_flush():
+                    flush()
+                    body_written.set()
+                    if not release_bookkeeping.wait(3):
+                        raise RuntimeError("test_bookkeeping_release_timeout")
+
+                self.wfile.flush = delayed_flush
+
+        with listener(handler=DelayedHandler) as server:
+            server.track_bodies = True
+            paths = {"/media.mp4"}
+            condition_wait = server.responses_finished.wait
+
+            def observed_wait(timeout):
+                wait_entered.set()
+                return condition_wait(timeout)
+
+            def snapshot():
+                try:
+                    snapshots.extend(server.wait_for_responses(paths, timeout=3))
+                finally:
+                    snapshot_done.set()
+
+            waiter = threading.Thread(target=snapshot, daemon=True)
+            try:
+                self.assertEqual(request(server), (206, b"fixture"))
+                self.assertTrue(body_written.wait(3))
+                # Deadline expiry returns the pending audit, without raising
+                # or turning an unfinished attempt into a successful write.
+                pending = server.wait_for_responses(paths, timeout=0)
+                self.assertEqual(len(pending), 1)
+                self.assertFalse(pending[0]["finished"])
+                self.assertFalse(pending[0]["complete"])
+                with mock.patch.object(server.responses_finished, "wait", side_effect=observed_wait):
+                    waiter.start()
+                    self.assertTrue(wait_entered.wait(3))
+                    self.assertFalse(snapshot_done.is_set())
+                    release_bookkeeping.set()
+                    self.assertTrue(snapshot_done.wait(3))
+                self.assertEqual(len(snapshots), 1)
+                self.assertEqual(snapshots[0]["bytes"], 7)
+                self.assertTrue(snapshots[0]["finished"])
+                self.assertTrue(snapshots[0]["complete"])
+                self.assertFalse(pending[0]["finished"]) # The earlier snapshot is detached.
+            finally:
+                release_bookkeeping.set()
+                if waiter.ident is not None:
+                    waiter.join(3)
+            self.assertFalse(waiter.is_alive())
+
+    def test_finished_short_or_failed_write_still_fails_nested_gate(self):
+        class ShortHandler(fixture.Handler):
+            def end_headers(self):
+                super().end_headers()
+                write = self.wfile.write
+                self.wfile.write = lambda payload: write(payload[:-1])
+
+        for handler, written in ((ShortHandler, 6), (FaultHandler, 0)):
+            with self.subTest(handler=handler.__name__), listener(handler=handler) as server:
+                server.track_bodies = True
+                with self.assertRaises(http.client.IncompleteRead):
+                    request(server, "/write-fault")
+                responses = server.wait_for_responses({"/write-fault"}, timeout=3)
+                self.assertEqual(len(responses), 1)
+                self.assertTrue(responses[0]["finished"])
+                self.assertEqual(responses[0]["bytes"], written)
+                self.assertFalse(responses[0]["complete"])
+                result, fields, audit = self.baseline()
+                fields.update(nested_forbidden_count="1", end_file_error_count="1", session_load_started="1")
+                audit.update(child_requests=2, nested_init_complete=responses[0]["complete"],
+                             nested_media_complete=True)
+                self.assertFalse(fixture.session_pass(result, fields, audit, False, False, "session-nested-hls"))
 
     def test_fixed_native_counts_are_bounded_and_boolean_fields_remain_boolean(self):
         fields = dict.fromkeys(("initialized", "initial_paused", "play_released", "landing_confirmed",

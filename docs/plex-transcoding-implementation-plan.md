@@ -166,8 +166,10 @@ behavior it is labelled an assumption until confirmed.
      Debounce repeated `seekBy` presses into one restart.
    - Never seek in-session: P0 showed in-session seeks stall and shift the
      server's window (question 6).
-   - Program position = start offset + libmpv `time-pos`. Program duration
-     comes from metadata (libmpv reports the full original duration).
+   - The P0 position observation is historical and used untrimmed loads. T4
+     defines session program-position mapping using `time-pos` and
+     `demuxer-start-time` (see the [native protocol clock notes](native-player-protocol.md#plex-session-loads-and-media-capabilities)).
+     Program duration comes from metadata (libmpv reports the full original duration).
    - Seeking needs the existing DVR controls. Live tuning always starts at the
      program offset.
 6. **Keep-alive: decided by P0 evidence.** Send a transcode ping every 30 s for
@@ -426,8 +428,10 @@ fixtures, or a relaxed master validator to complete an early foundation unit.
   - orphaned sessions after a crash or network loss rely on PMS reaping, about
     3–3.5 minutes per P0;
   - decision-only calls need no stop (P0: they create no session entry).
-- **Positions.** Program position = start offset + libmpv `time-pos`; program
-  duration comes from metadata (P0, question 5). `seekBy` uses that duration.
+- **Positions.** The P0 position observation is historical and used untrimmed
+  loads. T4 defines session program-position mapping using `time-pos` and
+  `demuxer-start-time` (see the [native protocol clock notes](native-player-protocol.md#plex-session-loads-and-media-capabilities)).
+  Program duration comes from metadata (P0, question 5). `seekBy` uses that duration.
 - **Seeking.** Always a debounced restart at the target offset with a new
   session id (decision 5); no in-session seek.
 - **Track changes.** For a session: PUT the stream selection, then restart at

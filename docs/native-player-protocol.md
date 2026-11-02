@@ -76,6 +76,8 @@ before deriving a trimmed finite view. Direct loads reject this payload. The
 optional Dart `NativeSessionPlaylist` transfer does not parse HLS or change the
 public HTTPS descriptor; Android URI-only session loads remain valid. Session
 wire `startPosition` is also rejected by presence, including null.
+Android URI-only session loads are specified for T3; Android implementation is
+not in this tree yet.
 
 The desktop core accepts only the bounded reference/lexical/tag scope: one finite
 media playlist, sequence zero, one MAP, no encryption/master/rendition/range or
@@ -135,6 +137,8 @@ looper and truncates lists deterministically. Dart caches the parsed result
 for one second; malformed, oversized or failed replies become
 `MediaCapabilities.unknown`, requiring a server decision. Desktop Dart uses
 `MediaCapabilities.desktop` and never sends this native query.
+Android `mediaCapabilities` is specified for T3; Android implementation is not
+in this tree yet.
 
 ### Command error mapping in Dart
 
@@ -582,6 +586,8 @@ host and port and contain neither userinfo nor a token query. Pin rejection
 maps to `network_error`; manifest parsing maps to `container_error`; child
 HTTP failures retain `http_error` and their bounded status. The following
 original-load restrictions apply to `direct` loads.
+This Android session HLS path is specified for T3; Android implementation is
+not in this tree yet.
 
 Only `ProgressiveMediaSource` and an HTTP-only OkHttp data source are installed;
 there is no manifest, file, nested-reference or external-subtitle resolver.

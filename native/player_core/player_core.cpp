@@ -1709,10 +1709,10 @@ void PlayerCore::DiscardQueuedEvents(std::string_view type) {
 
 void PlayerCore::QueueEvent(uint64_t generation, ValueMap value,
                             bool subtitle_content) {
-  const auto* type = FindString(&value, "type");
-  const auto* name = FindString(&value, "name");
-  const bool authored_cues = subtitle_content && type && *type == "property" &&
-      name && *name == "subtitle-cues";
+  const auto* event_type = FindString(&value, "type");
+  const auto* event_name = FindString(&value, "name");
+  const bool authored_cues = subtitle_content && event_type && *event_type == "property" &&
+      event_name && *event_name == "subtitle-cues";
   for (auto& item : value) {
     // Authored subtitle URLs/literals are rendered content, not filenames or
     // diagnostics. Only PublishSubtitleCues opts in for its bounded payload.

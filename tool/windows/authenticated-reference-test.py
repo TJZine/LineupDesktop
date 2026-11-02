@@ -22,6 +22,22 @@ TOKEN = "lineup-synthetic-reference-test"
 SESSION_PREFIX = "/video/:/transcode/universal/session/synthetic-reference/base"
 DLL_SHA256 = "4ba364226fd2ea5dd2c6f2333f0118462da549feed92360fb766a3924e313a51"
 DEADLINE = time.monotonic() + 150
+STAGE = "prerequisites"
+FIXED_FAILURE_CODES = {
+    "overall test deadline reached", "fixture tool failed", "secret_in_child_output",
+    "invalid_harness_outcome", "server termination timed out", "fixture_server_error",
+    "ffmpeg, ffprobe and openssl are required", "pinned DLL hash mismatch",
+    "unexpected_fixture_keyframes", "incomplete_profile_matrix", "invalid_session_fixture",
+    "missing_session_outcomes", "session_sentinel_contacted", "incomplete_session_matrix",
+}
+
+
+def failure_message(error):
+    message = f"FAIL: fixture, runtime, or bounded-wait prerequisite (stage={STAGE})"
+    if (type(error) is RuntimeError and len(error.args) == 1 and
+            isinstance(error.args[0], str) and error.args[0] in FIXED_FAILURE_CODES):
+        message += f" (code={error.args[0]})"
+    return message
 
 
 def remaining(timeout):
@@ -72,6 +88,7 @@ class Server(http.server.ThreadingHTTPServer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.lock = threading.Lock()
+        self.responses_finished = threading.Condition(self.lock)
         self.failed = False
         self.errors = []
         self.errors_omitted = 0
@@ -79,6 +96,14 @@ class Server(http.server.ThreadingHTTPServer):
         self.total_accepted_connections = 0
         self.response_records = []
         self.track_bodies = False
+
+    def wait_for_responses(self, paths, timeout):
+        """Snapshot finished write attempts, or incomplete records at the deadline."""
+        with self.responses_finished:
+            self.responses_finished.wait_for(
+                lambda: all(row["finished"] for row in self.response_records if row["path"] in paths),
+                timeout=timeout)
+            return [dict(row) for row in self.response_records if row["path"] in paths]
 
     def record_error(self, error, phase):
         # Keep peer disconnects distinct from fixture faults. In particular,
@@ -202,23 +227,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
         response_record = None
         if self.server.track_bodies:
             response_record = {"path": self.path, "method": self.command, "status": status,
-                               "bytes": 0, "complete": False}
+                               "bytes": 0, "complete": False, "finished": False}
             with self.server.lock:
                 self.server.response_records.append(response_record)
-        self.send_response(status)
-        self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(last - first + 1 if size else 0))
-        if partial:
-            self.send_header("Content-Range", f"bytes {first}-{last}/{size}")
-        self.end_headers()
-        if send_body:
-            payload = body[first:last + 1]
-            written = self.wfile.write(payload)
-            self.wfile.flush()
+        written, complete = 0, False
+        try:
+            self.send_response(status)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(last - first + 1 if size else 0))
+            if partial:
+                self.send_header("Content-Range", f"bytes {first}-{last}/{size}")
+            self.end_headers()
+            if send_body:
+                payload = body[first:last + 1]
+                written = self.wfile.write(payload)
+                self.wfile.flush()
+                complete = written == len(payload)
+        finally:
             if response_record is not None:
-                with self.server.lock:
-                    response_record.update(bytes=written, complete=written == len(payload))
+                with self.server.responses_finished:
+                    response_record.update(bytes=written, complete=complete, finished=True)
+                    self.server.responses_finished.notify_all()
 
 def certificate(root, openssl):
     config = root / "leaf.cnf"
@@ -287,6 +317,8 @@ def main():
 
 
 def matrix(args, nonzero_start):
+    global STAGE
+    STAGE = "direct_matrix"
     records = []
     profile = "nonzero-start" if nonzero_start else "omitted-start"
     duration = 6 if nonzero_start else 1
@@ -459,7 +491,10 @@ def matrix(args, nonzero_start):
                           not media_pass(result, fields, observed, True))
                 record({"case": "control-ignore-start-delayed", "pass": passed, **observed, **fields})
         finally:
+            failed_stage = STAGE
+            STAGE = "direct_cleanup"
             finish_servers(servers, threads)
+            STAGE = failed_stage
     expected = {name for name, *_ in cases} | {
         "reject-option-access-references", "reject-option-autoload-files", "untrusted-ca", "control-http-token"}
     if nonzero_start:
@@ -532,6 +567,8 @@ def session_pass(result, fields, audit, positive, restoration, mode):
 
 
 def session_matrix(args):
+    global STAGE
+    STAGE = "session_fixture"
     records = []
     with tempfile.TemporaryDirectory(prefix="lineup-session-reference-") as temporary:
         root = pathlib.Path(temporary)
@@ -549,6 +586,7 @@ def session_matrix(args):
             raise RuntimeError("invalid_session_fixture")
         servers, threads = [], []
         try:
+            STAGE = "session_listener"
             for _ in range(2):
                 server = Server(("127.0.0.1", 0), Handler)
                 server.context = context
@@ -597,6 +635,7 @@ def session_matrix(args):
                 ("session-nested-hls", nested_playlist, "session-nested-hls", False, False),
             ]
             for name, payload, mode, positive, restoration in cases:
+                STAGE = "session_child"
                 path = variant
                 payload_path = root / "session-input.m3u8"
                 payload_path.write_bytes(payload)
@@ -611,6 +650,7 @@ def session_matrix(args):
                 result = subprocess.run([str(args.harness), str(root / "ca.pem"), origin_a + path, mode,
                                          "--session-playlist=" + str(payload_path)],
                                         capture_output=True, timeout=remaining(30))
+                STAGE = "session_outcomes"
                 fields = read_outcomes(result, False)
                 required = {"session_progressed", "session_rejected", "session_override_removed",
                             "restoration_attempted", "restoration_progressed", "restoration_rejected",
@@ -621,6 +661,7 @@ def session_matrix(args):
                                 for phase in ("before", "after"))
                 if required - fields.keys():
                     raise RuntimeError("missing_session_outcomes")
+                responses = a.wait_for_responses(a.whole_body_paths, timeout=remaining(3))
                 with a.lock, b.lock:
                     root_requested = any(request == path for request, _, _ in a.requests)
                     root_token = any(token for request, token, _ in a.requests if request == path)
@@ -645,11 +686,11 @@ def session_matrix(args):
                         "nested_init_complete": any(row["path"] == SESSION_PREFIX + "/nested-init.mp4" and
                                                     row["method"] == "GET" and row["status"] == 200 and
                                                     row["bytes"] == len(nested_init) and row["complete"]
-                                                    for row in a.response_records),
+                                                    for row in responses),
                         "nested_media_complete": any(row["path"] == SESSION_PREFIX + "/attack.m3u8" and
                                                      row["method"] == "GET" and row["status"] == 200 and
                                                      row["bytes"] == len(nested_media) and row["complete"]
-                                                     for row in a.response_records),
+                                                     for row in responses),
                         "unexpected_requests": sum(not request.startswith(SESSION_PREFIX + "/") and
                                                    request != "/restore.m3u8" for server in servers
                                                    for request, _, _ in server.requests),
@@ -663,7 +704,10 @@ def session_matrix(args):
                 records.append(row)
                 print(json.dumps(row), flush=True)
         finally:
+            failed_stage = STAGE
+            STAGE = "session_cleanup"
             finish_servers(servers, threads)
+            STAGE = failed_stage
     # Count TCP accepts before TLS and inspect again after listener shutdown so
     # a late sentinel contact cannot escape the last per-case snapshot.
     if len(servers) == 2 and servers[1].total_accepted_connections:
@@ -676,6 +720,6 @@ def session_matrix(args):
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except Exception:
-        print("FAIL: fixture, runtime, or bounded-wait prerequisite", flush=True)
+    except Exception as error:
+        print(failure_message(error), flush=True)
         raise SystemExit(2)

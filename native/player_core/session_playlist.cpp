@@ -403,7 +403,8 @@ int64_t SessionPlaylistRegistry::Size(void* value) {
   auto& cookie = *static_cast<Cookie*>(value);
   auto& playlist = *cookie.playlist;
   std::lock_guard lock(playlist.mutex_);
-  return cookie.cancelled || playlist.retired_ ? MPV_ERROR_GENERIC : static_cast<int64_t>(playlist.bytes_.size());
+  if (cookie.cancelled || playlist.retired_) return MPV_ERROR_GENERIC;
+  return static_cast<int64_t>(playlist.bytes_.size());
 }
 void SessionPlaylistRegistry::Close(void* cookie) {
   delete static_cast<Cookie*>(cookie);
