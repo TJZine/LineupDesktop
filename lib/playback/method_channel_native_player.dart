@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -204,7 +205,20 @@ class MethodChannelNativePlayer implements NativePlayer {
     bool startPaused = false,
     Duration? startPosition,
     LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
+    const maxPlaylistBytes = 1024 * 1024;
+    if (sessionPlaylist != null &&
+        (kind != LoadKind.plexSession ||
+            sessionPlaylist.offsetMicroseconds < 0 ||
+            sessionPlaylist.offsetMicroseconds > 0x7fffffffffffffff ||
+            sessionPlaylist.text.length > maxPlaylistBytes ||
+            utf8.encode(sessionPlaylist.text).length > maxPlaylistBytes)) {
+      throw const PlayerUnavailable(
+        'The Plex session playlist is invalid.',
+        failureCode: 'invalid_argument',
+      );
+    }
     if (kind == LoadKind.plexSession &&
         (plexToken != null ||
             startPosition != null ||
@@ -267,6 +281,11 @@ class MethodChannelNativePlayer implements NativePlayer {
         'loadId': loadId,
         'startPaused': startPaused,
         'kind': kind.name,
+        if (sessionPlaylist != null)
+          'sessionPlaylist': {
+            'text': sessionPlaylist.text,
+            'offsetMicroseconds': sessionPlaylist.offsetMicroseconds,
+          },
         if (startPosition != null)
           'startSeconds':
               startPosition.inMicroseconds / Duration.microsecondsPerSecond,
@@ -734,6 +753,8 @@ class MethodChannelNativePlayer implements NativePlayer {
         _position = _durationFromSeconds(value);
       case 'duration':
         _duration = _durationFromSeconds(value);
+      case 'demuxer-start-time':
+        _telemetry = _copyTelemetry(demuxerStartTime: value);
       case 'track-list':
         _tracks = List.unmodifiable(_decodeTracks(value));
       case 'video-format':
@@ -907,6 +928,7 @@ class MethodChannelNativePlayer implements NativePlayer {
   }
 
   PlayerTelemetry _copyTelemetry({
+    Object? demuxerStartTime = _unchanged,
     Object? videoOutput = _unchanged,
     Object? hardwareDecoder = _unchanged,
     Object? videoCodec = _unchanged,
@@ -949,6 +971,11 @@ class MethodChannelNativePlayer implements NativePlayer {
       return _telemetry;
     }
     return PlayerTelemetry(
+      demuxerStartTime: demuxerStartTime == _unchanged
+          ? _telemetry.demuxerStartTime
+          : demuxerStartTime is num && demuxerStartTime.isFinite
+          ? demuxerStartTime.toDouble()
+          : null,
       videoOutput: videoOutput == _unchanged
           ? _telemetry.videoOutput
           : videoOutput is String

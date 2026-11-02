@@ -175,6 +175,7 @@ class FakeNativePlayer implements NativePlayer {
     bool startPaused = false,
     Duration? startPosition,
     LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     loads.add(media);
     loadPlexTokens.add(plexToken);

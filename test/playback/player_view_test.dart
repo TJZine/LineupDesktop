@@ -9049,6 +9049,7 @@ class _Native implements NativePlayer {
     bool startPaused = false,
     Duration? startPosition,
     LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     loadCalls++;
     lastLoadGeneration = generation;

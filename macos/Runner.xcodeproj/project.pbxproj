@@ -21,6 +21,8 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		5A1E0C00000000000D012001 /* session_playlist.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D012003 /* session_playlist.cpp */; };
+		5A1E0C00000000000D012002 /* session_playlist.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C00000000000D012003 /* session_playlist.cpp */; };
 		335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */; };
 		33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC10F02044A3C60003C045 /* AppDelegate.swift */; };
 		33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F22044A3C60003C045 /* Assets.xcassets */; };
@@ -73,6 +75,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		5A1E0C00000000000D012003 /* session_playlist.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = session_playlist.cpp; sourceTree = "<group>"; };
 		331C80D5294CF71000263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		333000ED22D3DE5D00554162 /* Warnings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Warnings.xcconfig; sourceTree = "<group>"; };
 		335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GeneratedPluginRegistrant.swift; sourceTree = "<group>"; };
@@ -257,6 +260,7 @@
 				5A1E0C00000000000D00E002 /* platform_arguments.h */,
 				5A1E0C00000000000D00E001 /* platform_arguments.cpp */,
 				5A1E0C00000000000D00D00B /* player_core.h */,
+				5A1E0C00000000000D012003 /* session_playlist.cpp */,
 				5A1E0C00000000000D00D00A /* player_core.cpp */,
 				5A1E0C00000000000D00D00D /* mpv_operations.h */,
 				5A1E0C00000000000D00D00C /* libmpv_operations.cpp */,
@@ -476,6 +480,7 @@
 				5A1E0C00000000000D00D030 /* LineupNativePlayer.mm in Sources */,
 				5A1E0C00000000000D00F004 /* LineupPlayerLifecycle.mm in Sources */,
 				5A1E0C00000000000D00F006 /* NativeShutdownTests.mm in Sources */,
+				5A1E0C00000000000D012001 /* session_playlist.cpp in Sources */,
 				5A1E0C00000000000D00D031 /* player_core.cpp in Sources */,
 				5A1E0C00000000000D00D032 /* libmpv_operations.cpp in Sources */,
 				5A1E0C00000000000D00D033 /* track_list_encoder.cpp in Sources */,
@@ -492,6 +497,7 @@
 				5A1E0C00000000000D00F003 /* LineupPlayerLifecycle.mm in Sources */,
 				5A1E0C00000000000D00D013 /* FoundationValueConversion.mm in Sources */,
 				5A1E0C00000000000D00D014 /* VideoGeometry.mm in Sources */,
+				5A1E0C00000000000D012002 /* session_playlist.cpp in Sources */,
 				5A1E0C00000000000D00D015 /* player_core.cpp in Sources */,
 				5A1E0C00000000000D00D016 /* libmpv_operations.cpp in Sources */,
 				5A1E0C00000000000D00D017 /* track_list_encoder.cpp in Sources */,

@@ -155,6 +155,7 @@ class HarnessPlayer implements NativePlayer {
     bool startPaused = false,
     Duration? startPosition,
     LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     if (_disposed) return;
     final operation = ++_loadEpoch;

@@ -65,6 +65,7 @@ class UnsupportedNativePlayer implements NativePlayer {
     bool startPaused = false,
     Duration? startPosition,
     LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async => _unavailable();
 
   @override

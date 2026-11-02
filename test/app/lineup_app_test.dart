@@ -2390,6 +2390,7 @@ class _DelayedLoadPlayer extends _FakePlayer {
     bool startPaused = false,
     Duration? startPosition,
     LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     await super.load(
       media,

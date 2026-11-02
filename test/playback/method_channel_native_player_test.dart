@@ -1488,6 +1488,8 @@ void main() {
   test(
     'session loads validate before sending and serialize their kind',
     () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final calls = <MethodCall>[];
       messenger.setMockMethodCallHandler(channel, (call) async {
         calls.add(call);
@@ -1520,6 +1522,10 @@ void main() {
           Uri.parse('https://media.example/index.m3u8'),
           kind: LoadKind.plexSession,
           plexToken: 'synthetic',
+          sessionPlaylist: const NativeSessionPlaylist(
+            text: '#EXTM3U\n',
+            offsetMicroseconds: 0,
+          ),
         ),
         throwsA(
           isA<PlayerUnavailable>().having(
@@ -1535,6 +1541,10 @@ void main() {
             Uri.parse('https://media.example/index.m3u8'),
             kind: LoadKind.plexSession,
             startPosition: position,
+            sessionPlaylist: const NativeSessionPlaylist(
+              text: '#EXTM3U\n',
+              offsetMicroseconds: 0,
+            ),
           ),
           throwsA(
             isA<PlayerUnavailable>().having(
@@ -1555,12 +1565,202 @@ void main() {
       expect(call.arguments['kind'], 'plexSession');
       expect(call.arguments.containsKey('startSeconds'), isFalse);
       expect(call.arguments['plexToken'], isNull);
+      expect(call.arguments.containsKey('sessionPlaylist'), isFalse);
       await _sendNativeEvent(messenger, {
         'type': 'state',
         'state': 'playing',
         'loadId': call.arguments['loadId'],
       });
       await load;
+    },
+  );
+
+  test(
+    'session playlist transfers raw text and signed-64-bit offset',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      for (final playlist in [
+        const NativeSessionPlaylist(text: '#EXTM3U\n', offsetMicroseconds: 0),
+        const NativeSessionPlaylist(
+          text: '#EXTM3U\n# Public variant: é\n',
+          offsetMicroseconds: 21000000,
+        ),
+        NativeSessionPlaylist(
+          text: 'é' * (1024 * 512),
+          offsetMicroseconds: 0x7fffffffffffffff,
+        ),
+      ]) {
+        final load = player.load(
+          Uri.parse('https://media.example/index.m3u8'),
+          kind: LoadKind.plexSession,
+          sessionPlaylist: playlist,
+        );
+        await pumpEventQueue();
+        final call = calls.last;
+        expect(call.method, 'load');
+        expect(call.arguments['sessionPlaylist'], {
+          'text': playlist.text,
+          'offsetMicroseconds': playlist.offsetMicroseconds,
+        });
+        expect(call.arguments['kind'], 'plexSession');
+        expect(call.arguments['plexToken'], isNull);
+        expect(call.arguments.containsKey('startSeconds'), isFalse);
+        await _sendNativeEvent(messenger, {
+          'type': 'state',
+          'state': 'playing',
+          'loadId': call.arguments['loadId'],
+        });
+        await load;
+      }
+    },
+  );
+
+  test(
+    'session playlist rejects invalid bounds and direct loads before dispatch',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      for (final playlist in [
+        const NativeSessionPlaylist(text: '#EXTM3U\n', offsetMicroseconds: -1),
+        NativeSessionPlaylist(
+          text: 'a' * (1024 * 1024 + 1),
+          offsetMicroseconds: 0,
+        ),
+        NativeSessionPlaylist(
+          text: 'é' * (1024 * 512 + 1),
+          offsetMicroseconds: 0,
+        ),
+      ]) {
+        await expectLater(
+          player.load(
+            Uri.parse('https://media.example/index.m3u8'),
+            kind: LoadKind.plexSession,
+            sessionPlaylist: playlist,
+          ),
+          throwsA(
+            isA<PlayerUnavailable>().having(
+              (error) => error.failureCode,
+              'failureCode',
+              'invalid_argument',
+            ),
+          ),
+        );
+      }
+      await expectLater(
+        player.load(
+          Uri.parse('https://media.example/direct.mp4'),
+          sessionPlaylist: const NativeSessionPlaylist(
+            text: '#EXTM3U\n',
+            offsetMicroseconds: 0,
+          ),
+        ),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.failureCode,
+            'failureCode',
+            'invalid_argument',
+          ),
+        ),
+      );
+      expect(calls.where((call) => call.method == 'load'), isEmpty);
+    },
+  );
+
+  test(
+    'demuxer start time retains finite signed facts and fences stale loads',
+    () async {
+      final calls = <MethodCall>[];
+      final disposeReply = Completer<void>();
+      messenger.setMockMethodCallHandler(channel, (call) {
+        calls.add(call);
+        return call.method == 'dispose' ? disposeReply.future : null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final first = player.load(Uri.parse('file:///first.mp4'), generation: 1);
+      await pumpEventQueue();
+      final firstId = calls.last.arguments['loadId'];
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': firstId,
+        'state': 'playing',
+      });
+      await first;
+      Future<void> demuxer(Object? value, {Object? loadId}) =>
+          _sendNativeEvent(messenger, {
+            'type': 'property',
+            'loadId': loadId ?? firstId,
+            'name': 'demuxer-start-time',
+            'value': value,
+          });
+      for (final value in [0, -2.75, 10.125]) {
+        await demuxer(value);
+        expect(player.telemetry.demuxerStartTime, value.toDouble());
+      }
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': firstId,
+        'name': 'video-codec',
+        'value': 'h264',
+      });
+      expect(player.telemetry.demuxerStartTime, 10.125);
+      for (final value in [
+        null,
+        double.nan,
+        double.infinity,
+        -double.infinity,
+        '10',
+        false,
+      ]) {
+        await demuxer(12.5);
+        await demuxer(value);
+        expect(player.telemetry.demuxerStartTime, isNull);
+      }
+      await demuxer(7.25);
+      final replacement = player.load(
+        Uri.parse('file:///second.mp4'),
+        generation: 2,
+      );
+      await pumpEventQueue();
+      final secondId = calls.last.arguments['loadId'];
+      expect(player.telemetry.demuxerStartTime, isNull);
+      await demuxer(999);
+      expect(player.telemetry.demuxerStartTime, isNull);
+      await demuxer(-0.25, loadId: secondId);
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': secondId,
+        'state': 'playing',
+      });
+      await replacement;
+      final disposing = player.dispose();
+      await pumpEventQueue();
+      await demuxer(999, loadId: secondId);
+      expect(player.telemetry.demuxerStartTime, -0.25);
+      disposeReply.complete();
+      await disposing;
+      expect(player.telemetry.demuxerStartTime, isNull);
+      expect(
+        const PlayerTelemetry(demuxerStartTime: 0),
+        isNot(const PlayerTelemetry()),
+      );
     },
   );
 
@@ -2267,6 +2467,12 @@ void main() {
       ],
     });
 
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'demuxer-start-time',
+      'value': 10.125,
+    });
     var stopSettled = false;
     final stop = player.stop().whenComplete(() => stopSettled = true);
     await Future<void>.delayed(Duration.zero);
@@ -2275,6 +2481,7 @@ void main() {
     expect(stopSettled, isFalse);
     expect(player.status.state, PlayerState.loading);
     expect(player.telemetry.videoCodec, 'h264');
+    expect(player.telemetry.demuxerStartTime, 10.125);
     await _sendNativeEvent(messenger, {
       'type': 'property',
       'loadId': loadId,
@@ -2287,6 +2494,13 @@ void main() {
       'state': 'playing',
     });
     expect(player.telemetry.videoCodec, 'h264');
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'demuxer-start-time',
+      'value': 999,
+    });
+    expect(player.telemetry.demuxerStartTime, 10.125);
 
     stopReply.complete();
     await _sendNativeEvent(messenger, {
@@ -2304,6 +2518,7 @@ void main() {
     expect(player.position, Duration.zero);
     expect(player.duration, Duration.zero);
     expect(player.telemetry.videoCodec, isNull);
+    expect(player.telemetry.demuxerStartTime, isNull);
     expect(player.tracks, isEmpty);
   });
 

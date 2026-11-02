@@ -8,7 +8,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -17,6 +19,11 @@ namespace {
 const char* test_ca = nullptr;
 std::string mode;
 std::atomic<mpv_handle*> observed_client{nullptr};
+std::atomic<int> nested_forbidden_count{0};
+std::atomic<int> internal_redirect_count{0};
+std::atomic<int> end_file_error_count{0};
+std::atomic<bool> session_structural_failure{false};
+int native_event_count = 0;
 
 // Each load has separate observations. Only the worker touches lifecycle
 // flags; publication to the platform messenger is atomic. No target jump is progress.
@@ -94,6 +101,25 @@ mpv_event* WaitTestEvent(mpv_handle* client, double timeout) {
   auto* event = mpv_wait_event(client, timeout);
   auto* current_observation = observation.load();
   if (!current_observation || !event) return event;
+  if (mode == "session-nested-hls" && event->event_id != MPV_EVENT_NONE) {
+    if (++native_event_count > 4096) session_structural_failure = true;
+    if (event->event_id == MPV_EVENT_QUEUE_OVERFLOW) session_structural_failure = true;
+    if (event->event_id == MPV_EVENT_LOG_MESSAGE) {
+      const auto* message = static_cast<mpv_event_log_message*>(event->data);
+      if (!message || !message->text) session_structural_failure = true;
+      else if (nested_forbidden_count.load() < 4096 &&
+          std::strstr(message->text, "Opening this file was forbidden for security reasons"))
+        ++nested_forbidden_count; // Fixed count only; never retain or print raw log text.
+    }
+    if (event->event_id == MPV_EVENT_END_FILE) {
+      const auto* end = static_cast<mpv_event_end_file*>(event->data);
+      if (!end) session_structural_failure = true;
+      else if (end->reason == MPV_END_FILE_REASON_REDIRECT && internal_redirect_count.load() < 4096)
+        ++internal_redirect_count;
+      else if (end->reason == MPV_END_FILE_REASON_ERROR && end_file_error_count.load() < 4096)
+        ++end_file_error_count;
+    }
+  }
   if (event->event_id == MPV_EVENT_START_FILE) {
     ++current_observation->files_started;
     current_observation->loaded = false;
@@ -145,11 +171,71 @@ mpv_handle* CreateTestClient() {
   return client;
 }
 
-bool ReferencesRestored() {
-  auto* client = observed_client.load();
-  int enabled = 1;
-  return client && mpv_get_property(client, "options/access-references",
-                                    MPV_FORMAT_FLAG, &enabled) >= 0 && !enabled;
+struct SessionOptions {
+  mpv_handle* client = nullptr;
+  bool valid = false;
+  int references = 0;
+  int64_t redirects = 0;
+  std::string demuxer;
+  std::map<std::string, std::string> lavf;
+};
+SessionOptions session_baseline;
+
+bool ReadOptionText(mpv_handle* client, const char* name, std::string& output) {
+  char* text = nullptr;
+  if (mpv_get_property(client, name, MPV_FORMAT_STRING, &text) < 0 || !text) return false;
+  const bool valid = std::strlen(text) <= 4096;
+  if (valid) output = text;
+  mpv_free(text);
+  return valid;
+}
+
+bool ReadLavfOptions(mpv_handle* client, std::map<std::string, std::string>& output) {
+  mpv_node node{};
+  if (mpv_get_property(client, "options/demuxer-lavf-o", MPV_FORMAT_NODE, &node) < 0) return false;
+  bool valid = node.format == MPV_FORMAT_NODE_MAP && node.u.list &&
+      node.u.list->num >= 0 && node.u.list->num <= 64;
+  if (valid) {
+    const auto& map = *node.u.list;
+    valid = map.num == 0 || (map.keys && map.values);
+    for (int i = 0; valid && i < map.num; ++i) {
+      const auto& value = map.values[i];
+      valid = map.keys[i] && std::strlen(map.keys[i]) <= 4096 &&
+          value.format == MPV_FORMAT_STRING && value.u.string &&
+          std::strlen(value.u.string) <= 4096;
+      if (valid) valid = output.emplace(map.keys[i], value.u.string).second;
+    }
+  }
+  mpv_free_node_contents(&node);
+  return valid;
+}
+
+SessionOptions ReadSessionOptions() {
+  SessionOptions result;
+  result.client = observed_client.load();
+  result.valid = result.client &&
+      mpv_get_property(result.client, "options/access-references", MPV_FORMAT_FLAG, &result.references) >= 0 &&
+      mpv_get_property(result.client, "options/curl-max-redirects", MPV_FORMAT_INT64, &result.redirects) >= 0 &&
+      ReadOptionText(result.client, "options/demuxer", result.demuxer) &&
+      ReadLavfOptions(result.client, result.lavf);
+  return result;
+}
+
+struct RestoredOptions {
+  bool references = false;
+  bool redirects = false;
+  bool demuxer = false;
+  bool lavf = false;
+  bool all() const { return references && redirects && demuxer && lavf; }
+};
+
+RestoredOptions OptionsRestored() {
+  const auto current = ReadSessionOptions();
+  if (!session_baseline.valid || !current.valid || current.client != session_baseline.client) return {};
+  return {current.references == session_baseline.references,
+          current.redirects == session_baseline.redirects,
+          current.demuxer == session_baseline.demuxer,
+          current.lavf == session_baseline.lavf};
 }
 
 int InitializeTestClient(mpv_handle* client) {
@@ -187,9 +273,16 @@ class TestMessenger final : public flutter::BinaryMessenger {
             flutter::BinaryReply = nullptr) const override {
     const auto call = flutter::StandardMethodCodec::GetInstance()
                           .DecodeMethodCall(bytes, size);
-    if (!call || !call->arguments()) return;
+    if (!call || !call->arguments()) {
+      if (mode == "session-nested-hls") session_structural_failure = true;
+      return;
+    }
     const auto* map = std::get_if<Map>(call->arguments());
-    if (!map) return;
+    if (!map) {
+      if (mode == "session-nested-hls") session_structural_failure = true;
+      return;
+    }
+    if (mode == "session-nested-hls" && ++event_count > 4096) session_structural_failure = true;
     const auto load_id = map->find(Value("loadId"));
     if (load_id != map->end() && load_id->second != Value(active_load_id)) return;
     const auto state = map->find(Value("state"));
@@ -198,6 +291,15 @@ class TestMessenger final : public flutter::BinaryMessenger {
       if (text && (*text == "ended" || *text == "stopped" || *text == "error")) {
         finished = true;
         failed = failed || (*text == "error");
+        if (mode == "session-nested-hls" && *text == "error") {
+          const auto code = map->find(Value("failureCode"));
+          bool ordinary = false;
+          for (const auto* allowed : {"mpv_error", "http_error", "network_error", "audio_decode_error",
+                                     "video_decode_error", "audio_output_error", "video_output_error",
+                                     "source_open_error", "container_error"})
+            ordinary = ordinary || (code != map->end() && code->second == Value(allowed));
+          if (!ordinary) session_structural_failure = true;
+        }
       }
     }
     const auto name = map->find(Value("name"));
@@ -221,6 +323,7 @@ class TestMessenger final : public flutter::BinaryMessenger {
       replied = true;
       success = size > 0 && bytes[0] == 0;
     });
+    if (mode == "session-nested-hls" && (!replied || !success)) session_structural_failure = true;
     return replied && success;
   }
 
@@ -230,6 +333,7 @@ class TestMessenger final : public flutter::BinaryMessenger {
   mutable bool finished = false;
   mutable bool failed = false;
   mutable bool progressed = false;
+  mutable int event_count = 0;
 };
 
 void SendTestEvent(TestMessenger& messenger, Map arguments) {
@@ -343,8 +447,12 @@ int main(int argc, char** argv) {
   }
   test_ca = argv[1];
   bool nonzero_start = false;
+  std::string session_playlist_path;
   for (int i = 3; i < argc; ++i) {
-    if (std::strcmp(argv[i], "--nonzero-start") == 0) {
+    if (std::strncmp(argv[i], "--session-playlist=", 19) == 0) {
+      if (!session_playlist_path.empty()) return 2;
+      session_playlist_path = argv[i] + 19;
+    } else if (std::strcmp(argv[i], "--nonzero-start") == 0) {
       if (nonzero_start) return 2;
       nonzero_start = true;
     } else {
@@ -357,9 +465,19 @@ int main(int argc, char** argv) {
       mode != "control-ignore-start-delayed" && mode != "session-complete" &&
       mode != "session-stop" && mode != "session-replace" &&
       mode != "session-redirect" && mode != "session-off-origin" &&
-      mode != "session-control-no-references") return 2;
+      mode != "session-control-no-references" && mode != "session-nested-hls") return 2;
   const bool session = mode.rfind("session-", 0) == 0;
-  if (session && nonzero_start) return 2;
+  if (session != !session_playlist_path.empty() || (session && nonzero_start)) return 2;
+  std::string session_playlist;
+  if (session) {
+    std::ifstream file(session_playlist_path, std::ios::binary | std::ios::ate);
+    if (!file) return 2;
+    const auto length = file.tellg();
+    if (length <= 0 || length > 1024 * 1024) return 2;
+    session_playlist.resize(static_cast<size_t>(length));
+    file.seekg(0);
+    if (!file.read(session_playlist.data(), static_cast<std::streamsize>(session_playlist.size()))) return 2;
+  }
   if (!nonzero_start && (mode == "control-delayed-start" || mode == "control-ignore-start-delayed")) return 2;
   const bool observe = mode == "observe";
   FILE* redirected = nullptr;
@@ -382,11 +500,12 @@ int main(int argc, char** argv) {
   bool restoration_attempted = false;
   bool restoration_rejected = false;
   bool restoration_progressed = false;
-  bool references_restored_before = false;
-  bool references_restored_after = false;
+  RestoredOptions restored_before;
+  RestoredOptions restored_after;
   {
     WindowsNativePlayer player(window, window, &messenger, TestOperations());
     initialized = messenger.Call("initialize");
+    if (session && initialized) session_baseline = ReadSessionOptions();
     Map load = {
         {Value("uri"), Value(argv[2])},
         {Value("loadId"), Value(int64_t{1})},
@@ -396,6 +515,10 @@ int main(int argc, char** argv) {
     if (session) {
       load.erase(Value("plexToken"));
       load.emplace(Value("kind"), Value("plexSession"));
+      load.emplace(Value("sessionPlaylist"), Value(Map{
+          {Value("text"), Value(session_playlist)},
+          {Value("offsetMicroseconds"), Value(int64_t{0})},
+      }));
     }
     if (nonzero_start) load.emplace(Value("startSeconds"), Value(3.5));
     if (initialized && messenger.Call("load", load)) {
@@ -427,6 +550,7 @@ int main(int argc, char** argv) {
     if (session) {
       session_progressed = messenger.progressed;
       session_rejected = messenger.failed;
+      if (session_rejected && !timed_out) restored_after = OptionsRestored();
       if (!timed_out && session_progressed && !session_rejected &&
           (mode == "session-complete" || mode == "session-stop" || mode == "session-replace")) {
         if (mode == "session-stop") {
@@ -449,7 +573,7 @@ int main(int argc, char** argv) {
           session_rejected = session_rejected || messenger.failed;
         }
         if (!timed_out && !session_rejected) {
-          references_restored_before = ReferencesRestored();
+          restored_before = OptionsRestored();
           // The same initialized client now makes an authenticated Direct Play
           // load. Its nested reference must be refused after every exit path.
           const std::string first_uri(argv[2]);
@@ -486,7 +610,7 @@ int main(int argc, char** argv) {
             }
             timed_out = !messenger.finished;
           }
-          references_restored_after = ReferencesRestored();
+          restored_after = OptionsRestored();
           restoration_rejected = messenger.failed;
           restoration_progressed = messenger.progressed;
           observation = nullptr;
@@ -506,14 +630,28 @@ int main(int argc, char** argv) {
             << " landing_confirmed=" << (playback.landing.load() >= 0)
             << " progressed=" << messenger.progressed
             << " rejected=" << messenger.failed
+            << " nested_forbidden_count=" << nested_forbidden_count.load()
+            << " internal_redirect_count=" << internal_redirect_count.load()
+            << " end_file_error_count=" << end_file_error_count.load()
+            << " session_structural_failure=" << session_structural_failure.load()
+            << " session_load_started=" << (playback.files_started == 1)
             << " session_progressed=" << session_progressed
             << " session_rejected=" << session_rejected
             << " session_override_removed=" << ignored_references
             << " restoration_attempted=" << restoration_attempted
             << " restoration_rejected=" << restoration_rejected
             << " restoration_progressed=" << restoration_progressed
-            << " references_restored_before=" << references_restored_before
-            << " references_restored_after=" << references_restored_after
+            << " session_options_captured=" << session_baseline.valid
+            << " references_restored_before=" << restored_before.references
+            << " references_restored_after=" << restored_after.references
+            << " redirects_restored_before=" << restored_before.redirects
+            << " redirects_restored_after=" << restored_after.redirects
+            << " demuxer_restored_before=" << restored_before.demuxer
+            << " demuxer_restored_after=" << restored_after.demuxer
+            << " lavf_options_restored_before=" << restored_before.lavf
+            << " lavf_options_restored_after=" << restored_after.lavf
+            << " session_options_restored_before=" << restored_before.all()
+            << " session_options_restored_after=" << restored_after.all()
             << " timed_out=" << timed_out << '\n';
   if (mode == "access-references" || mode == "autoload-files") return initialized ? 1 : 0;
   return initialized && !timed_out ? 0 : 1;

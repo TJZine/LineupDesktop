@@ -445,6 +445,7 @@ class _ProductPlayer extends FakeNativePlayer {
     bool startPaused = false,
     Duration? startPosition,
     LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     await super.load(
       media,

@@ -1,7 +1,7 @@
 """Focused server/checker controls; no libmpv or Windows playback claim.
 
 Run with Python 3 and openssl on PATH. Uses ephemeral loopback listeners and
-certificates, exercising the same Server and Handler as the 48-case matrix.
+certificates, exercising the same Server and Handler as the 56-case campaign.
 """
 
 import contextlib
@@ -181,6 +181,9 @@ class FixtureControls(unittest.TestCase):
                 with socket.create_connection(server.server_address, timeout=3) as client:
                     self.assertEqual(client.recv(1), b"")
                 self.assertTrue(server.error_observed.wait(3))
+                self.assertEqual(server.accepted_connections, 1)
+                self.assertEqual(server.total_accepted_connections, 1)
+                self.assertEqual(server.requests, [])
                 self.assert_sanitized_failure(server, "tls_accept", category)
                 server.context = None
                 self.assertEqual(request(server), (206, b"fixture"))
@@ -287,6 +290,199 @@ class FixtureControls(unittest.TestCase):
                 output = {"stdout": b"", "stderr": b"", stream: fixture.TOKEN.encode()}
                 with self.assertRaisesRegex(RuntimeError, "secret_in_child_output"):
                     fixture.read_outcomes(subprocess.CompletedProcess([], 0, **output), False)
+
+
+class SessionPayloadControls(unittest.TestCase):
+    playlist = (b"#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:1\n"
+                b"#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"session-init.mp4\"\n"
+                b"#EXTINF:1.000000,\nsession-0.m4s\n"
+                b"#EXTINF:1.000000,\nsession-1.m4s\n#EXT-X-ENDLIST\n")
+
+    def baseline(self, positive=False, restoration=False, stripped=False):
+        fields = dict.fromkeys(("initialized",), "1")
+        fields.update({"timed_out": "0", "session_progressed": str(int(positive)),
+                       "session_rejected": str(int(not positive)),
+                       "session_override_removed": str(int(stripped)),
+                       "restoration_attempted": str(int(restoration)),
+                       "restoration_rejected": "1", "restoration_progressed": "0",
+                       "session_options_captured": "1", "nested_forbidden_count": "0",
+                       "internal_redirect_count": "0", "end_file_error_count": "0",
+                       "session_load_started": "0", "session_structural_failure": "0"})
+        fields.update({name + "_restored_" + phase: "1"
+                       for name in ("references", "redirects", "demuxer", "lavf_options", "session_options")
+                       for phase in ("before", "after")})
+        audit = {"root_requested": False, "session_token": False, "token_in_url": False,
+                 "server_error": False, "off_origin_requests": 0, "off_origin_connections": 0,
+                 "unexpected_requests": 0, "nested_init_complete": False, "nested_media_complete": False,
+                 "nested_unexpected_children": 0,
+                 "child_requests": 0, "init_requested": False, "media_requests": 0,
+                 "redirect_child_requests": 0, "restore_requested": restoration,
+                 "restore_child_requests": 0}
+        if positive:
+            audit.update(child_requests=2, init_requested=True, media_requests=1)
+        return subprocess.CompletedProcess([], 0, b"", b""), fields, audit
+
+    def test_payloads_keep_complete_playlist_and_move_redirect_to_init_child(self):
+        other = "https://127.0.0.1:12345"
+        off_origin, redirect = fixture.session_playlists(self.playlist, other)
+        self.assertIn((other + fixture.SESSION_PREFIX + "/session-init.mp4").encode(), off_origin)
+        self.assertIn((other + fixture.SESSION_PREFIX + "/session-1.m4s").encode(), off_origin)
+        self.assertEqual(redirect, self.playlist.replace(b"session-init.mp4", b"session-redirect-init.mp4"))
+        for payload in (off_origin, redirect):
+            self.assertEqual(payload.count(b"#EXTINF:"), 2)
+            self.assertTrue(payload.endswith(b"#EXT-X-ENDLIST\n"))
+            self.assertIn(b"#EXT-X-MEDIA-SEQUENCE:0\n", payload)
+
+    def test_session_namespace_is_token_free_and_only_child_redirects(self):
+        with listener() as server:
+            init = fixture.SESSION_PREFIX + "/session-init.mp4"
+            redirected = fixture.SESSION_PREFIX + "/session-redirect-init.mp4"
+            variant = fixture.SESSION_PREFIX + "/index.m3u8"
+            server.files[init] = (b"init", "application/octet-stream")
+            server.files[variant] = (self.playlist, "application/vnd.apple.mpegurl")
+            server.redirect_paths = {redirected}
+            server.redirect = "https://127.0.0.1:1" + init
+            for path, expected in ((init, 200), (variant, 200), (redirected, 302),
+                                   ("/media.mp4", 401)):
+                with self.subTest(path=path):
+                    client = http.client.HTTPConnection(*server.server_address, timeout=3)
+                    try:
+                        client.request("GET", path) # No synthetic account credential on session I/O.
+                        response = client.getresponse()
+                        self.assertEqual(response.status, expected)
+                        if path == redirected:
+                            self.assertEqual(response.getheader("Location"), server.redirect)
+                        response.read()
+                    finally:
+                        client.close()
+            self.assertFalse(any(token for _, token, _ in server.requests))
+            self.assertFalse(server.failed)
+
+    def test_positive_requires_memory_variant_children_and_all_restoration_guards(self):
+        result, fields, audit = self.baseline(positive=True, restoration=True)
+        self.assertTrue(fixture.session_pass(result, fields, audit, True, True, "session-complete"))
+        mutations = {"root_requested": True, "session_token": True, "token_in_url": True,
+                     "server_error": True, "off_origin_requests": 1, "unexpected_requests": 1,
+                     "init_requested": False, "media_requests": 0,
+                     "restore_requested": False, "restore_child_requests": 1}
+        for key, value in mutations.items():
+            with self.subTest(key=key):
+                self.assertFalse(fixture.session_pass(result, fields, {**audit, key: value},
+                                                     True, True, "session-complete"))
+        for key in ("session_progressed", "restoration_rejected", "session_options_captured",
+                    *(name + "_restored_" + phase
+                      for name in ("references", "redirects", "demuxer", "lavf_options", "session_options")
+                      for phase in ("before", "after"))):
+            with self.subTest(key=key):
+                self.assertFalse(fixture.session_pass(result, {**fields, key: "0"}, audit,
+                                                     True, True, "session-complete"))
+        self.assertFalse(fixture.session_pass(result, {**fields, "session_rejected": "1"}, audit,
+                                             True, True, "session-complete"))
+
+    def test_redirect_requires_child_attempt_but_no_follow_or_media(self):
+        result, fields, audit = self.baseline()
+        audit.update(child_requests=1, redirect_child_requests=1)
+        self.assertTrue(fixture.session_pass(result, fields, audit, False, False, "session-redirect"))
+        for key, value in {"redirect_child_requests": 0, "off_origin_requests": 1,
+                           "root_requested": True, "media_requests": 1, "child_requests": 2}.items():
+            with self.subTest(key=key):
+                self.assertFalse(fixture.session_pass(result, fields, {**audit, key: value},
+                                                     False, False, "session-redirect"))
+
+    def test_nested_hls_requires_specific_blocker_real_bodies_and_no_sentinel_or_redirect(self):
+        result, fields, audit = self.baseline()
+        fields.update(nested_forbidden_count="2", end_file_error_count="1", session_load_started="1")
+        audit.update(child_requests=2, nested_init_complete=True, nested_media_complete=True)
+        self.assertTrue(fixture.session_pass(result, fields, audit, False, False, "session-nested-hls"))
+        for name, value in {"nested_forbidden_count": "0", "end_file_error_count": "0",
+                            "session_load_started": "0", "session_structural_failure": "1",
+                            "internal_redirect_count": "1", "session_rejected": "0",
+                            "session_progressed": "1", "demuxer_restored_after": "0",
+                            "lavf_options_restored_after": "0"}.items():
+            with self.subTest(native=name):
+                self.assertFalse(fixture.session_pass(result, {**fields, name: value}, audit,
+                                                     False, False, "session-nested-hls"))
+        for name, value in {"nested_init_complete": False, "nested_media_complete": False,
+                            "child_requests": 1, "nested_unexpected_children": 1,
+                            "off_origin_requests": 1, "off_origin_connections": 1}.items():
+            with self.subTest(audit=name):
+                self.assertFalse(fixture.session_pass(result, fields, {**audit, name: value},
+                                                     False, False, "session-nested-hls"))
+
+    def test_nested_map_and_media_are_the_nonempty_concatenated_hls_probe(self):
+        origin = "https://127.0.0.1:12345"
+        playlist, initialization, media = fixture.nested_hls_input(origin)
+        self.assertEqual(initialization, b"#EXTM3U\n")
+        self.assertEqual(len(initialization), 8)
+        self.assertNotEqual(media, b"")
+        combined = initialization + media
+        self.assertTrue(combined.startswith(b"#EXTM3U\n#EXT-X-TARGETDURATION:"))
+        self.assertEqual(combined.count(b"#EXTM3U"), 1)
+        self.assertIn((origin + "/nested-sentinel.m4s").encode(), combined)
+        self.assertIn(b'#EXT-X-MAP:URI="nested-init.mp4"', playlist)
+        self.assertIn(b"\nattack.m3u8\n", playlist)
+        self.assertNotIn(origin.encode(), playlist) # Native outer scope validation succeeds.
+        with listener() as server:
+            server.track_bodies = True
+            bodies = {fixture.SESSION_PREFIX + "/nested-init.mp4": initialization,
+                      fixture.SESSION_PREFIX + "/attack.m3u8": media}
+            server.whole_body_paths = set(bodies)
+            for path, body in bodies.items():
+                server.files[path] = (body, "application/octet-stream")
+                client = http.client.HTTPConnection(*server.server_address, timeout=3)
+                try:
+                    client.request("GET", path, headers={"Range": "bytes=0-6"})
+                    response = client.getresponse()
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.read(), body)
+                finally:
+                    client.close()
+            self.assertEqual([row["bytes"] for row in server.response_records], [8, len(media)])
+            self.assertTrue(all(row["complete"] for row in server.response_records))
+            self.assertFalse(any(token for _, token, _ in server.requests))
+
+    def test_fixed_native_counts_are_bounded_and_boolean_fields_remain_boolean(self):
+        fields = dict.fromkeys(("initialized", "initial_paused", "play_released", "landing_confirmed",
+                                "progressed"), "1")
+        fields.update(dict.fromkeys(("timed_out", "ignored_start", "rejected", "start_configured",
+                                     "delay_exercised"), "0"))
+        fields.update(nested_forbidden_count="2", internal_redirect_count="0", end_file_error_count="1")
+        def output(values):
+            return subprocess.CompletedProcess([], 0, " ".join(k + "=" + v for k,v in values.items()).encode(), b"")
+        self.assertEqual(fixture.read_outcomes(output(fields), False)["nested_forbidden_count"], "2")
+        for name, value in (("nested_forbidden_count", "4097"), ("nested_forbidden_count", "-1"),
+                            ("initialized", "2")):
+            with self.subTest(name=name, value=value):
+                with self.assertRaisesRegex(RuntimeError, "invalid_harness_outcome"):
+                    fixture.read_outcomes(output({**fields, name: value}), False)
+
+    def test_negative_exits_also_require_all_four_policies_restored(self):
+        for mode in ("session-off-origin", "session-redirect", "session-control-no-references", "session-nested-hls"):
+            result, fields, audit = self.baseline(stripped=mode == "session-control-no-references")
+            if mode == "session-redirect":
+                audit.update(child_requests=1, redirect_child_requests=1)
+            if mode == "session-nested-hls":
+                audit.update(child_requests=2, nested_init_complete=True, nested_media_complete=True)
+                fields.update(nested_forbidden_count="1", end_file_error_count="1", session_load_started="1")
+            self.assertTrue(fixture.session_pass(result, fields, audit, False, False, mode))
+            for name in ("references", "redirects", "demuxer", "lavf_options", "session_options"):
+                with self.subTest(mode=mode, policy=name):
+                    self.assertFalse(fixture.session_pass(result, {**fields, name + "_restored_after": "0"},
+                                                         audit, False, False, mode))
+
+    def test_off_origin_is_rejected_before_any_io_and_removed_reference_control_reaches_filter(self):
+        result, fields, audit = self.baseline()
+        self.assertTrue(fixture.session_pass(result, fields, audit, False, False, "session-off-origin"))
+        for key in ("child_requests", "off_origin_requests", "unexpected_requests"):
+            self.assertFalse(fixture.session_pass(result, fields, {**audit, key: 1},
+                                                 False, False, "session-off-origin"))
+        result, fields, audit = self.baseline(stripped=True)
+        self.assertTrue(fixture.session_pass(result, fields, audit, False, False,
+                                            "session-control-no-references"))
+        self.assertFalse(fixture.session_pass(result, {**fields, "session_override_removed": "0"}, audit,
+                                             False, False, "session-control-no-references"))
+        self.assertFalse(fixture.session_pass(result, fields, {**audit, "child_requests": 1},
+                                             False, False, "session-control-no-references"))
 
 
 if __name__ == "__main__":

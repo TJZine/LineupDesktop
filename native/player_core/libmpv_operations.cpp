@@ -4,6 +4,7 @@ namespace lineup::player {
 
 MpvOperations LibmpvOperations() {
   MpvOperations operations;
+  operations.stream_cb_add_ro = &::mpv_stream_cb_add_ro;
   operations.create = &::mpv_create;
   operations.initialize = &::mpv_initialize;
   operations.set_option = &::mpv_set_option;

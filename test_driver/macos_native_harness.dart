@@ -181,6 +181,7 @@ class HarnessLoggingPlayer implements NativePlayer {
     bool startPaused = false,
     Duration? startPosition,
     LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) => _call(
     'load generation=$generation',
     () => _player.load(
@@ -190,6 +191,7 @@ class HarnessLoggingPlayer implements NativePlayer {
       startPaused: startPaused,
       startPosition: startPosition,
       kind: kind,
+      sessionPlaylist: sessionPlaylist,
     ),
   );
   @override

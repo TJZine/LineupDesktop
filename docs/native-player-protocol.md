@@ -67,11 +67,58 @@ rejects any non-null Dart `startPosition` or present wire `startSeconds`,
 including zero or explicit null: its live offset belongs to the server session,
 so a player start would apply it twice.
 
-The shared libmpv core uses a node-map `loadfile` for sessions with string
-per-file options `access-references=yes` and `curl-max-redirects=0`, and no
-`http-header-fields`, `start` or `hr-seek`. Global reference restrictions remain
-unchanged. mpv restores the per-file options on completion, stop and replacement. There is
-no credential fallback for any playlist, init segment or media segment.
+Desktop session loads additionally require the private `sessionPlaylist` payload:
+`{text: <whole validated UTF-8 variant>, offsetMicroseconds: <non-negative int64>}`.
+The text is limited to 1 MiB. The shared core independently validates the entire
+original variant, including references before the chosen containing segment,
+before deriving a trimmed finite view. Direct loads reject this payload. The
+optional Dart `NativeSessionPlaylist` transfer does not parse HLS or change the
+public HTTPS descriptor; Android URI-only session loads remain valid. Session
+wire `startPosition` is also rejected by presence, including null.
+
+The desktop core accepts only the bounded reference/lexical/tag scope: one finite
+media playlist, sequence zero, one MAP, no encryption/master/rendition/range or
+unknown URI-bearing tags. Relative flat references resolve against the verified
+HTTPS session namespace; originally absolute references retain their resource
+identity. The trimmed view begins at the EXTINF-containing segment, renders
+absolute MAP/media targets, keeps EXTINF and media bytes unchanged, removes
+EXT-X-START and retains ENDLIST. No native or desktop alignment seek is added.
+
+One registered `lineup-session` stream callback serves a random 128-bit per-load
+opaque URI ending in `.m3u8`. It never exposes the manifest as a filename.
+libmpv has no unregister operation: stop/replacement revokes the capability and
+wipes its payload immediately, open cookies become inert, and registration
+state remains valid until client destruction returns. Callbacks never call
+libmpv. Registration cleanup occurs at destruction, not through a nonexistent
+per-load unregister API.
+
+The session node-map has these per-file options, with no token, start or hr-seek:
+
+```text
+access-references=yes
+curl-max-redirects=0
+demuxer=lavf
+demuxer-lavf-o=format_whitelist=%7%hls,mov,protocol_whitelist=%13%https,tls,tcp
+```
+
+The dictionary uses mpv's byte-count quoting for embedded commas. The lavf
+selector prevents failed HLS opens falling back to mpv's generic playlist parser;
+HLS probing itself still uses the private `.m3u8` name. No global format forcing
+is used. Unlike an HTTPS stream, a callback stream has UNSAFE origin in pinned
+libmpv. Containment therefore comes from whole-original closed-grammar validation,
+absolute same-origin HTTPS targets, zero redirects, per-file protocol/format
+lists and the HLS child-context I/O blocker; it does not inherit NET-origin
+sandboxing. Unexpected private playlist redirects fail closed. Direct-load
+global reference defaults remain unchanged.
+
+The core emits fresh finite or null `demuxer-start-time` seconds through the
+ordinary load-correlated property path, clearing it for a new load and rereading
+it at correlated FILE_LOADED rather than relabeling an old notification payload.
+Dart retains nullable signed finite `PlayerTelemetry.demuxerStartTime`; zero is
+valid, unavailable/invalid values clear it, and existing load/lifetime resets
+apply. `P + D - 10 s` mapping and schedule policy wait for T4. Manifest text and
+child references are never forwarded through logs, properties, errors or
+Diagnostics; internal libmpv errors are classified into fixed failures.
 
 Android additionally implements `mediaCapabilities` with no arguments:
 `{videoDecoders: [...], audioDecoders: [...], audioPassthrough: [...], containers: [...]}`.

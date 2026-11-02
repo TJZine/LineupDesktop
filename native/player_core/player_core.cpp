@@ -21,6 +21,7 @@ namespace {
 constexpr size_t kMaxQueuedEvents = 256;
 constexpr size_t kMaxQueuedCommands = 64;
 constexpr size_t kMaxQueuedCommandBytes = 128 * 1024;
+constexpr size_t kMaxQueuedPlaylistBytes = 2 * 1024 * 1024;
 constexpr size_t kMaxPlexTokenBytes = 8 * 1024;
 constexpr size_t kMaxMetadataStringBytes = 4096;
 
@@ -35,6 +36,7 @@ enum PropertyId : uint64_t {
   kHardwareDecoder,
   kVideoParameters,
   kVideoTargetParameters,
+  kDemuxerStartTime,
 };
 
 CallResult QueueFullError() {
@@ -365,6 +367,22 @@ void WriteFirstOpenProbe(ProbeModule module, ProbeCause cause,
   std::cerr << line.str();
 }
 
+bool PrivateText(std::string_view text) {
+  return text.find("://") != std::string_view::npos || text.find("#EXTM3U") != std::string_view::npos;
+}
+void RedactPrivateText(Value& value) {
+  if (auto* text = std::get_if<std::string>(&value)) {
+    if (PrivateText(*text)) {
+      SecureWipe(text->data(), text->size());
+      *text = "<redacted>";
+    }
+  } else if (auto* list = std::get_if<ValueList>(&value)) {
+    for (auto& item : *list) RedactPrivateText(item);
+  } else if (auto* map = std::get_if<ValueMap>(&value)) {
+    for (auto& item : *map) RedactPrivateText(item.second);
+  }
+}
+
 bool FirstOpenProbeEnabled() {
 #ifdef _WIN32
   char* value = nullptr;
@@ -387,6 +405,17 @@ class TokenArgumentScrubber {
   ~TokenArgumentScrubber() {
     if (!arguments_) {
       return;
+    }
+    const auto playlist = arguments_->find("sessionPlaylist");
+    if (playlist != arguments_->end()) {
+      if (auto* map = std::get_if<ValueMap>(&playlist->second)) {
+        auto text = map->find("text");
+        if (text != map->end()) {
+          if (auto* bytes = std::get_if<std::string>(&text->second)) {
+            SecureWipe(bytes->data(), bytes->size());
+          }
+        }
+      }
     }
     const auto token = arguments_->find("plexToken");
     if (token == arguments_->end()) {
@@ -531,6 +560,15 @@ CallResult PlayerCore::Initialize() {
   }
   std::cerr << "[lineup-player] libmpv initialized client-api="
             << mpv_operations_.client_api_version() << std::endl;
+  session_playlists_.Enable();
+  if (!mpv_operations_.stream_cb_add_ro ||
+      mpv_operations_.stream_cb_add_ro(mpv_, SessionPlaylistRegistry::kProtocol,
+                                      &session_playlists_, SessionPlaylistRegistry::Open) < 0) {
+    mpv_operations_.terminate_destroy(mpv_);
+    mpv_ = nullptr;
+    host_.CancelOutput();
+    return CallResult::Failure("initialize_failed", "The private playlist reader is unavailable.");
+  }
   mpv_operations_.request_log_messages(mpv_, "error");
 
   struct Observation {
@@ -541,6 +579,7 @@ CallResult PlayerCore::Initialize() {
   const Observation observations[] = {
       {kPause, "pause", MPV_FORMAT_FLAG},
       {kTimePosition, "time-pos", MPV_FORMAT_DOUBLE},
+      {kDemuxerStartTime, "demuxer-start-time", MPV_FORMAT_DOUBLE},
       {kDuration, "duration", MPV_FORMAT_DOUBLE},
       {kTrackList, "track-list", MPV_FORMAT_NODE},
       {kVideoFormat, "video-format", MPV_FORMAT_STRING},
@@ -599,6 +638,7 @@ void PlayerCore::BeginDispose() {
   generation_.fetch_add(1);
   accepting_commands_ = false;
   stopping_ = true;
+  session_playlists_.Disable();
 }
 
 void PlayerCore::ProcessWakeup(const EventSink& deliver) {
@@ -647,6 +687,7 @@ void PlayerCore::FinishDispose() {
     std::lock_guard lock(command_mutex_);
     commands_.clear();
     queued_command_bytes_ = 0;
+    queued_playlist_bytes_ = 0;
   }
   {
     std::lock_guard lock(event_mutex_);
@@ -654,6 +695,8 @@ void PlayerCore::FinishDispose() {
     wakeup_posted_ = false;
   }
   playback_.Reset();
+  session_clock_load_.reset();
+  session_clock_ready_ = false;
   first_open_probe_ = {};
   ResetSeekObservation();
 }
@@ -752,6 +795,9 @@ CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
     return CallResult::Failure("invalid_argument",
                                "A bounded media URI is required.");
   }
+  if (UriScheme(*uri) == SessionPlaylistRegistry::kProtocol) {
+    return CallResult::Failure("invalid_argument", "Private playlist capabilities cannot be loaded directly.");
+  }
   if (!load_id || *load_id < 0) {
     return CallResult::Failure("invalid_argument",
                                "A non-negative integer loadId is required.");
@@ -766,7 +812,7 @@ CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
   const bool token_supplied =
       token_value && !std::holds_alternative<std::monostate>(*token_value);
   const auto* plex_token = FindString(arguments, "plexToken");
-  if (plex_session && (token_supplied || Find(*arguments, "startSeconds") ||
+  if (plex_session && (token_supplied || Find(*arguments, "startSeconds") || Find(*arguments, "startPosition") ||
                        !IsSafeSessionUri(*uri))) {
     return CallResult::Failure("invalid_argument", "The Plex session load is invalid.");
   }
@@ -779,7 +825,20 @@ CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
         "insecure_media_uri",
         "Plex authentication requires an HTTPS media URI.");
   }
-  LoadCommand command{*load_id, *uri, {}};
+  const auto* playlist_value = Find(*arguments, "sessionPlaylist");
+  std::shared_ptr<SessionPlaylist> playlist;
+  if (plex_session) {
+    const auto* map = AsMap(playlist_value);
+    const auto* text = FindString(map, "text");
+    const auto offset = map ? AsInt(Find(*map, "offsetMicroseconds")) : std::nullopt;
+    if (!map || map->size() != 2 || !text || !offset ||
+        !(playlist = SessionPlaylist::Parse(*text, *uri, *offset))) {
+      return CallResult::Failure("invalid_argument", "The Plex session playlist is invalid.");
+    }
+  } else if (playlist_value) {
+    return CallResult::Failure("invalid_argument", "A session playlist requires a Plex session load.");
+  }
+  LoadCommand command{*load_id, *uri, {}, std::move(playlist)};
   command.plex_session = plex_session;
   if (Find(*arguments, "startPaused")) {
     const auto* paused = FindBool(arguments, "startPaused");
@@ -855,12 +914,16 @@ bool PlayerCore::QueueCommand(QueuedCommand command) {
       return 0;
     }
   }, command);
+  const auto* load = std::get_if<LoadCommand>(&command);
+  const size_t playlist_bytes = load && load->session_playlist ? load->session_playlist->byte_size() : 0;
+  if (playlist_bytes > kMaxQueuedPlaylistBytes - queued_playlist_bytes_) return false;
   if (!accepting_commands_ || commands_.size() >= kMaxQueuedCommands ||
       queued_command_bytes_ > kMaxQueuedCommandBytes ||
       command_bytes > kMaxQueuedCommandBytes - queued_command_bytes_) {
     return false;
   }
   queued_command_bytes_ += command_bytes;
+  queued_playlist_bytes_ += playlist_bytes;
   commands_.push_back(std::move(command));
   return true;
 }
@@ -872,6 +935,18 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
     if constexpr (std::is_same_v<Payload, LoadCommand>) {
       if (first_open_diagnostics_) first_open_probe_ = {};
       ResetSeekObservation();
+      session_playlists_.Retire();
+      session_clock_load_.reset();
+      session_clock_ready_ = false;
+      std::string load_uri = payload.uri;
+      if (payload.session_playlist) {
+        auto opaque = session_playlists_.Activate(payload.session_playlist);
+        if (!opaque) {
+          QueueEvent(generation, FailureStateEvent("source_open_error", std::nullopt, payload.load_id, "The private playlist reader is unavailable."));
+          return;
+        }
+        load_uri = std::move(*opaque);
+      }
       int paused = payload.start_paused ? 1 : 0;
       status =
           mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
@@ -882,7 +957,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           status = mpv_operations_.command(mpv_, value);
         } else {
           char* command_name = const_cast<char*>("loadfile");
-          char* uri = const_cast<char*>(payload.uri.c_str());
+          char* uri = const_cast<char*>(load_uri.c_str());
           char* flags = const_cast<char*>("replace");
           mpv_node values[5]{};
           values[0].format = MPV_FORMAT_STRING;
@@ -906,6 +981,10 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           };
           if (payload.plex_session) {
             option("access-references", const_cast<char*>("yes"));
+            // Exclude mpv's ordinary-playlist fallback, which would reopen
+            // children outside this file's security options after lavf fails.
+            option("demuxer", const_cast<char*>("lavf"));
+            option("demuxer-lavf-o", const_cast<char*>(SessionPlaylistRegistry::kLavfOptions));
             option("curl-max-redirects", const_cast<char*>("0"));
           }
           if (!payload.plex_header.empty()) {
@@ -941,11 +1020,23 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           if (!playback_.AcceptLoad(payload.load_id,
                   has_playlist_id ? std::optional<int64_t>(playlist_entry_id)
                                   : std::nullopt)) {
+            if (payload.plex_session) {
+              // A successfully opened file without a safe event identity must
+              // not retain a private reader or continue consuming its children.
+              session_playlists_.Retire();
+              const char* stop[] = {"stop", nullptr};
+              mpv_operations_.command(mpv_, stop);
+            }
             QueueEvent(generation,
                 FailureStateEvent("correlation_error", std::nullopt,
                                   payload.load_id,
                                   "Playback correlation exceeded native limits"));
           } else {
+            if (payload.plex_session) {
+              session_clock_load_ = payload.load_id;
+              session_clock_ready_ = false;
+              PublishSessionClock(generation, false);
+            }
             if (first_open_diagnostics_) {
               first_open_probe_ = FirstOpenProbe{payload.load_id};
               WriteFirstOpenProbe(ProbeModule::core, ProbeCause::accepted);
@@ -992,6 +1083,8 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       }
     } else if constexpr (std::is_same_v<Payload, StopCommand>) {
       ResetSeekObservation();
+      session_playlists_.Retire();
+      ClearSessionClock(generation);
       const char* value[] = {"stop", nullptr};
       status = mpv_operations_.command(mpv_, value);
       if (status < 0) {
@@ -1034,6 +1127,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       std::holds_alternative<TrackCommand>(command)) return;
   if (status < 0) {
     const auto* load = std::get_if<LoadCommand>(&command);
+    if (load) session_playlists_.Retire();
     const std::optional<int64_t> error_load_id =
         load ? std::optional<int64_t>(load->load_id) : playback_.active_load();
     // This error need not populate playback_.failure(). A later restart
@@ -1071,9 +1165,17 @@ void PlayerCore::EventLoop(uint64_t generation) {
       std::lock_guard lock(command_mutex_);
       std::swap(commands, commands_);
       queued_command_bytes_ = 0;
+      // Playlist accounting remains reserved until each staged command retires.
     }
     for (auto& command : commands) {
+      if (stopping_) break;
+      const auto* pending_load = std::get_if<LoadCommand>(&command);
+      const size_t playlist_bytes = pending_load && pending_load->session_playlist ? pending_load->session_playlist->byte_size() : 0;
       RunCommand(command, generation);
+      {
+        std::lock_guard lock(command_mutex_);
+        queued_playlist_bytes_ -= playlist_bytes;
+      }
       if (auto* load = std::get_if<LoadCommand>(&command)) {
         load->plex_header.Clear();
       }
@@ -1098,12 +1200,29 @@ void PlayerCore::EventLoop(uint64_t generation) {
       HandleMpvEvent(*event, generation);
     }
   }
+  session_playlists_.Retire();
   mpv_operations_.terminate_destroy(mpv_);
   mpv_ = nullptr;
   std::cerr << "[lineup-player] libmpv shutdown complete" << std::endl;
   dispose_ready_ = true;
   host_.PostWorkerFinished();
   worker_finished_ = true;
+}
+
+void PlayerCore::PublishSessionClock(uint64_t generation, bool sample) {
+  if (!session_clock_load_) return;
+  Value clock;
+  double seconds = 0;
+  if (sample && mpv_operations_.get_property(mpv_, "demuxer-start-time", MPV_FORMAT_DOUBLE, &seconds) >= 0 &&
+      std::isfinite(seconds)) clock = seconds;
+  QueueEvent(generation, {{"type", "property"}, {"name", "demuxer-start-time"},
+                          {"value", std::move(clock)}, {"loadId", *session_clock_load_}});
+}
+
+void PlayerCore::ClearSessionClock(uint64_t generation) {
+  PublishSessionClock(generation, false);
+  session_clock_load_.reset();
+  session_clock_ready_ = false;
 }
 
 void PlayerCore::ResetSeekObservation() {
@@ -1210,6 +1329,11 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
         observed_pause = -1;
       }
       ObserveSeekLanding(event.event_id);
+      if (session_clock_load_ && session_clock_load_ == playback_.event_load() &&
+          session_clock_load_ == playback_.active_load()) {
+        session_clock_ready_ = true;
+        PublishSessionClock(generation, true);
+      }
       auto ready = StateEvent("playing", "Playing", playback_.event_load());
       // A load hold can pause and resume before mpv emits another observed
       // property change. Publish the current flag atomically with readiness,
@@ -1256,6 +1380,16 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
         seek_observation_ambiguous_ = true;
       }
       if (end && end->reason == MPV_END_FILE_REASON_REDIRECT) {
+        if (session_clock_load_ && load_id == session_clock_load_) {
+          session_playlists_.Retire();
+          ClearSessionClock(generation);
+          const char* stop[] = {"stop", nullptr};
+          mpv_operations_.command(mpv_, stop);
+          QueueEvent(generation, FailureStateEvent("source_open_error", std::nullopt,
+              load_id, "The private session playlist could not be opened."));
+          playback_.RetireLoad(load_id);
+          break;
+        }
         if (!playback_.Redirect(load_id, end->playlist_insert_id,
                                 end->playlist_insert_num_entries)) {
           QueueEvent(generation,
@@ -1283,6 +1417,10 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       } else {
         QueueEvent(generation,
                    StateEvent("stopped", "Playback stopped", load_id));
+      }
+      if (load_id && load_id == playback_.active_load()) {
+        session_playlists_.Retire();
+        ClearSessionClock(generation);
       }
       playback_.RetireLoad(load_id);
       break;
@@ -1327,6 +1465,14 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       if (!property || !property->name) {
         break;
       }
+      if (event.reply_userdata == kDemuxerStartTime) {
+        // Notifications can be coalesced or queued across replacement. Read
+        // the current property only after this session has reached readiness.
+        PublishSessionClock(generation, session_clock_ready_ &&
+            session_clock_load_ == playback_.event_load() &&
+            session_clock_load_ == playback_.active_load());
+        break;
+      }
       Value value;
       if (property->data) {
         switch (property->format) {
@@ -1356,7 +1502,9 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
           event.reply_userdata == kHardwareDecoder) {
         const std::string fact = PropertyString(*property);
         if (!fact.empty()) {
-          std::cerr << "[lineup-player] " << property->name << '=' << fact
+          std::cerr << "[lineup-player] "
+                    << (event.reply_userdata == kCurrentVideoOutput ? "current-vo" : "hwdec-current")
+                    << '=' << (PrivateText(fact) ? "<redacted>" : fact)
                     << std::endl;
         }
       }
@@ -1407,6 +1555,7 @@ void PlayerCore::DiscardQueuedEvents(std::string_view type) {
 }
 
 void PlayerCore::QueueEvent(uint64_t generation, ValueMap value) {
+  for (auto& item : value) RedactPrivateText(item.second);
   {
     std::lock_guard lock(event_mutex_);
     // At capacity, evict the oldest property event; otherwise drop an

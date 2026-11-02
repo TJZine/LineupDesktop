@@ -154,7 +154,7 @@ def outcomes(result, case):
         raise HarnessOutcomeError(result, case, "malformed_fields") from None
     required = {"runtime_bound", "messenger_contract", "initialized", "progressed", "rejected", "timed_out",
                 "start_configured", "landing_confirmed", "initial_paused", "play_released",
-                "delay_exercised", "ignored_start", "playing"}
+                "delay_exercised", "ignored_start", "playing", "policy_checked", "policy_restored"}
     missing = sorted(required - fields.keys())
     invalid_values = sum(value not in ("0", "1") for value in fields.values())
     if missing or invalid_values:
@@ -167,6 +167,7 @@ def outcomes(result, case):
 def media_pass(result, fields, audit, positive):
     return (result.returncode == 0 and fields["runtime_bound"] == "1" and
             fields["messenger_contract"] == "1" and fields["initialized"] == "1" and
+            fields["policy_checked"] == "1" and fields["policy_restored"] == "1" and
             fields["timed_out"] == "0" and audit["A_token"] and not audit["B_token"] and
             not audit["secondary_A_token"] and not audit["token_in_url"] and
             not audit["server_error"] and
@@ -290,6 +291,22 @@ def atom(name, body):
     return struct.pack(">I", len(body) + 8) + name.encode("ascii") + body
 
 
+def configure_session_fixture(root, server):
+    """Supply the same original fMP4 playlist to the production memory callback."""
+    prefix = "/video/:/transcode/universal/session/synthetic-reference/base"
+    playlist = (root / "session.m3u8").read_bytes()
+    for path in root.iterdir():
+        if path.name.startswith("session-") and path.suffix in (".mp4", ".m4s"):
+            server.files[prefix + "/" + path.name] = (path.read_bytes(), "application/octet-stream")
+    # Keeping the original URI served makes an accidental HTTP fallback visible
+    # to the audit; the positive classifier below requires zero variant GETs.
+    variant = prefix + "/index.m3u8"
+    server.files[variant] = (playlist, "application/vnd.apple.mpegurl")
+    payload_path = root / "session-input.m3u8"
+    payload_path.write_bytes(playlist)
+    return variant, payload_path, prefix
+
+
 def matrix(args, harness, nonzero_start):
     records = []
     profile = "nonzero-start" if nonzero_start else "omitted-start"
@@ -395,7 +412,7 @@ def matrix(args, harness, nonzero_start):
                             "token_in_url": any(url for server in servers for _, _, url in server.requests),
                             "server_error": any(server.failed for server in servers)}
 
-            def invoke(name, path, ca="ca.pem", mode=None, origin=None):
+            def invoke(name, path, ca="ca.pem", mode=None, origin=None, session_playlist=None):
                 for server in servers:
                     with server.lock:
                         server.requests.clear()
@@ -406,6 +423,8 @@ def matrix(args, harness, nonzero_start):
                     command.append(mode)
                 if nonzero_start:
                     command.append("--nonzero-start")
+                if session_playlist is not None:
+                    command.append("--session-playlist=" + str(session_playlist))
                 result = captured(command, timeout=22, label=profile + "-" + name)
                 fields = outcomes(result, name)
                 if fields["start_configured"] != str(int(nonzero_start)):
@@ -451,17 +470,17 @@ def matrix(args, harness, nonzero_start):
                 # Use the same real adapter/core and TLS fixture host, but supply
                 # a token-free session load. All playlist/init/media requests are
                 # audited; ordinary authenticated-reference cases remain intact.
-                b.files["/session.m3u8"] = (
-                    (root / "session.m3u8").read_bytes(), "application/vnd.apple.mpegurl")
-                result, fields, observed = invoke("session-fmp4", "/session.m3u8",
-                                                   mode="session", origin=origin_b)
+                variant, payload, prefix = configure_session_fixture(root, b)
+                result, fields, observed = invoke("session-fmp4", variant,
+                                                   mode="session", origin=origin_b, session_playlist=payload)
                 requested = {path for path, _, _ in b.requests}
                 passed = (result.returncode == 0 and fields["runtime_bound"] == "1" and
                           fields["messenger_contract"] == "1" and fields["initialized"] == "1" and
+                          fields["policy_checked"] == "1" and fields["policy_restored"] == "1" and
                           fields["playing"] == "1" and fields["progressed"] == "1" and
                           fields["rejected"] == "0" and fields["timed_out"] == "0" and
                           fields["initial_paused"] == "1" and fields["play_released"] == "1" and
-                          "/session.m3u8" in requested and "/session-init.mp4" in requested and
+                          variant not in requested and prefix + "/session-init.mp4" in requested and
                           any(path.endswith(".m4s") for path in requested) and
                           observed["A_requests"] == 0 and not observed["B_token"] and
                           not observed["token_in_url"] and not observed["server_error"])
@@ -572,7 +591,7 @@ def main():
                        "FoundationValueConversion.mm", "VideoGeometry.h", "VideoGeometry.mm")],
                     *(REPO / "native/player_core").glob("*.h"),
                     *[REPO / "native/player_core" / name for name in
-                      ("player_core.cpp", "libmpv_operations.cpp", "platform_arguments.cpp", "track_list_encoder.cpp")]]
+                      ("player_core.cpp", "session_playlist.cpp", "libmpv_operations.cpp", "platform_arguments.cpp", "track_list_encoder.cpp")]]
     source_hashes = {str(path.relative_to(REPO)): sha(path) for path in source_paths if path.is_file()}
     metadata = {"runtime": identity, "source_files": source_hashes,
                 "source_head": run(["git", "-C", str(REPO), "rev-parse", "HEAD"], label="source-head").decode().strip()}

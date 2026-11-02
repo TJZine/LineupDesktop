@@ -19,6 +19,7 @@ import urllib.parse
 
 
 TOKEN = "lineup-synthetic-reference-test"
+SESSION_PREFIX = "/video/:/transcode/universal/session/synthetic-reference/base"
 DLL_SHA256 = "4ba364226fd2ea5dd2c6f2333f0118462da549feed92360fb766a3924e313a51"
 DEADLINE = time.monotonic() + 150
 
@@ -44,7 +45,10 @@ def read_outcomes(result, nonzero_start):
     required = {"initialized", "progressed", "rejected", "timed_out",
                 "start_configured", "landing_confirmed", "initial_paused", "play_released",
                 "delay_exercised", "ignored_start"}
-    if (required - fields.keys() or any(value not in ("0", "1") for value in fields.values()) or
+    counters = {"nested_forbidden_count", "internal_redirect_count", "end_file_error_count"}
+    if (required - fields.keys() or
+            any((not value.isdecimal() or int(value) > 4096) if name in counters else value not in ("0", "1")
+                for name, value in fields.items()) or
             fields["start_configured"] != str(int(nonzero_start))):
         raise RuntimeError("invalid_harness_outcome")
     return fields
@@ -71,6 +75,10 @@ class Server(http.server.ThreadingHTTPServer):
         self.failed = False
         self.errors = []
         self.errors_omitted = 0
+        self.accepted_connections = 0
+        self.total_accepted_connections = 0
+        self.response_records = []
+        self.track_bodies = False
 
     def record_error(self, error, phase):
         # Keep peer disconnects distinct from fixture faults. In particular,
@@ -109,6 +117,9 @@ class Server(http.server.ThreadingHTTPServer):
 
     def get_request(self):
         connection, address = super().get_request()
+        with self.lock:
+            self.accepted_connections += 1
+            self.total_accepted_connections += 1
         connection.settimeout(3)
         if self.context is None:
             return connection, address
@@ -145,13 +156,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                                   for name, value in self.headers.items()), token_url))
             if range_header:
                 self.server.range_requests = getattr(self.server, "range_requests", 0) + 1
-        if (self.server.authenticated and not self.path.startswith("/session-") and
+        if (self.server.authenticated and not self.path.startswith(SESSION_PREFIX + "/") and
                 self.headers.get("X-Plex-Token") != TOKEN):
             self.send_response(401)
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        if self.path.startswith(("/redirect", "/session-redirect")):
+        if (self.path.startswith("/redirect") or
+                self.path in getattr(self.server, "redirect_paths", ())):
             self.send_response(302)
             self.send_header("Location", self.server.redirect)
             self.send_header("Content-Length", "0")
@@ -160,6 +172,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         body, content_type = self.server.files.get(self.path, (b"", "application/octet-stream"))
         size = len(body)
         first, last = 0, size - 1
+        # The adversarial nested probe serves its complete tiny bodies with 200
+        # even if a client asks for a range, matching the measured control.
+        if self.path in getattr(self.server, "whole_body_paths", ()):
+            range_header = None
         partial = bool(range_header and size)
         if partial:
             match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header)
@@ -182,7 +198,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             with self.server.lock:
                 self.server.partial_responses = getattr(self.server, "partial_responses", 0) + 1
-        self.send_response(206 if partial else 200 if body else 404)
+        status = 206 if partial else 200 if body else 404
+        response_record = None
+        if self.server.track_bodies:
+            response_record = {"path": self.path, "method": self.command, "status": status,
+                               "bytes": 0, "complete": False}
+            with self.server.lock:
+                self.server.response_records.append(response_record)
+        self.send_response(status)
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(last - first + 1 if size else 0))
@@ -190,7 +213,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Range", f"bytes {first}-{last}/{size}")
         self.end_headers()
         if send_body:
-            self.wfile.write(body[first:last + 1])
+            payload = body[first:last + 1]
+            written = self.wfile.write(payload)
+            self.wfile.flush()
+            if response_record is not None:
+                with self.server.lock:
+                    response_record.update(bytes=written, complete=written == len(payload))
 
 def certificate(root, openssl):
     config = root / "leaf.cnf"
@@ -253,7 +281,7 @@ def main():
     records = [row for nonzero_start in (False, True)
                for row in matrix(args, nonzero_start)]
     records.extend(session_matrix(args))
-    passed = len(records) == 55 and all(row["pass"] for row in records)
+    passed = len(records) == 56 and all(row["pass"] for row in records)
     print(json.dumps({"pass": passed, "case_count": len(records)}), flush=True)
     return 0 if passed else 1
 
@@ -441,6 +469,68 @@ def matrix(args, nonzero_start):
     return records
 
 
+def session_playlists(playlist, other_origin):
+    """Complete inputs for the native validator; no host-side filtering of bad references."""
+    off_origin = playlist.replace(b'URI="session-init.mp4"',
+                                  ('URI="' + other_origin + SESSION_PREFIX + '/session-init.mp4"').encode())
+    off_origin = re.sub(rb"(?m)^(session-[0-9]+\.m4s)$",
+                        lambda match: (other_origin + SESSION_PREFIX + "/").encode() + match[1],
+                        off_origin)
+    redirect = playlist.replace(b'URI="session-init.mp4"', b'URI="session-redirect-init.mp4"')
+    return off_origin, redirect
+
+
+def nested_hls_input(other_origin):
+    # Concatenation matches the first complete HLS probe: MAP is the eight-byte
+    # header; the allowed media child supplies the rest, containing a B canary.
+    initialization = b"#EXTM3U\n"
+    media = ("#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:1,\n" +
+             other_origin + "/nested-sentinel.m4s\n#EXT-X-ENDLIST\n").encode()
+    playlist = (b"#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-PLAYLIST-TYPE:VOD\n"
+                b"#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n"
+                b'#EXT-X-MAP:URI="nested-init.mp4"\n#EXTINF:1,\nattack.m3u8\n#EXT-X-ENDLIST\n')
+    return playlist, initialization, media
+
+
+def session_pass(result, fields, audit, positive, restoration, mode):
+    passed = (result.returncode == 0 and fields["initialized"] == "1" and
+              fields["timed_out"] == "0" and fields["session_options_captured"] == "1" and
+              not audit["root_requested"] and
+              not audit["session_token"] and not audit["token_in_url"] and
+              not audit["server_error"] and audit["off_origin_requests"] == 0 and
+              audit["unexpected_requests"] == 0 and audit["off_origin_connections"] == 0 and
+              fields["session_progressed"] == str(int(positive)) and
+              fields["session_rejected"] == str(int(not positive)) and
+              fields["session_override_removed"] == str(int(mode == "session-control-no-references")) and
+              fields["restoration_attempted"] == str(int(restoration)))
+    restored = ("references", "redirects", "demuxer", "lavf_options", "session_options")
+    passed = passed and all(fields[name + "_restored_after"] == "1" for name in restored)
+    if positive:
+        passed = passed and audit["init_requested"] and audit["media_requests"] > 0
+    elif mode == "session-nested-hls":
+        passed = (passed and audit["nested_init_complete"] and audit["nested_media_complete"] and
+                  audit["child_requests"] >= 2 and audit["nested_unexpected_children"] == 0 and
+                  int(fields["nested_forbidden_count"]) >= 1 and
+                  fields["internal_redirect_count"] == "0" and
+                  int(fields["end_file_error_count"]) >= 1 and
+                  fields["session_load_started"] == "1" and fields["session_structural_failure"] == "0")
+    elif mode == "session-redirect":
+        passed = (passed and audit["redirect_child_requests"] > 0 and
+                  audit["child_requests"] == audit["redirect_child_requests"] and
+                  audit["media_requests"] == 0)
+    else:
+        # Off-origin validation must fail before any I/O. The no-references
+        # sensitivity control must reach the node filter but fetch no children.
+        passed = passed and audit["child_requests"] == 0
+    if restoration:
+        passed = (passed and audit["restore_requested"] and audit["restore_child_requests"] == 0 and
+                  fields["restoration_rejected"] == "1" and fields["restoration_progressed"] == "0" and
+                  fields["references_restored_after"] == "1" and
+                  (mode == "session-replace" or
+                   all(fields[name + "_restored_before"] == "1" for name in restored)))
+    return bool(passed)
+
+
 def session_matrix(args):
     records = []
     with tempfile.TemporaryDirectory(prefix="lineup-session-reference-") as temporary:
@@ -462,6 +552,7 @@ def session_matrix(args):
                 server.context = context
                 server.authenticated = not servers
                 server.requests = []
+                server.track_bodies = True
                 server.files = {"/" + path.name: (path.read_bytes(), "application/octet-stream")
                                 for path in root.iterdir() if path.suffix in (".mp4", ".m4s")}
                 servers.append(server)
@@ -471,42 +562,61 @@ def session_matrix(args):
             a, b = servers
             origin_a = f"https://127.0.0.1:{a.server_port}"
             origin_b = f"https://127.0.0.1:{b.server_port}"
-            a.redirect = origin_b + "/session-source.m3u8"
-            a.files["/session-good.m3u8"] = (playlist, "application/vnd.apple.mpegurl")
-            b.files["/session-source.m3u8"] = (playlist, "application/vnd.apple.mpegurl")
-            off_origin = playlist.replace(b'URI="session-init.mp4"',
-                                          ('URI="' + origin_b + '/session-init.mp4"').encode())
-            off_origin = re.sub(rb"(?m)^(session-[0-9]+\.m4s)$",
-                                lambda match: origin_b.encode() + b"/" + match[1], off_origin)
-            a.files["/session-off-origin.m3u8"] = (off_origin, "application/vnd.apple.mpegurl")
-            # A direct successor intentionally references a second origin. Its
-            # authenticated root must load, but references must already be off.
+            variant = SESSION_PREFIX + "/index.m3u8"
+            redirect_child = SESSION_PREFIX + "/session-redirect-init.mp4"
+            off_origin, redirected_playlist = session_playlists(playlist, origin_b)
+            nested_playlist, nested_init, nested_media = nested_hls_input(origin_b)
+            a.files[SESSION_PREFIX + "/nested-init.mp4"] = (nested_init, "video/mp4")
+            a.files[SESSION_PREFIX + "/attack.m3u8"] = (nested_media, "application/vnd.apple.mpegurl")
+            a.whole_body_paths = {SESSION_PREFIX + "/nested-init.mp4", SESSION_PREFIX + "/attack.m3u8"}
+            b.files["/nested-sentinel.m4s"] = (b"owned nested sentinel", "application/octet-stream")
+            for path in root.iterdir():
+                if path.name.startswith("session-") and path.suffix in (".mp4", ".m4s"):
+                    a.files[SESSION_PREFIX + "/" + path.name] = (path.read_bytes(), "application/octet-stream")
+            a.redirect = origin_b + SESSION_PREFIX + "/session-init.mp4"
+            b.files[SESSION_PREFIX + "/session-init.mp4"] = a.files[SESSION_PREFIX + "/session-init.mp4"]
+            # Direct restoration still loads an authenticated root, whose
+            # off-origin references must be disabled after each session exit.
             restore = off_origin.replace(b"/session-init.mp4", b"/restore-init.mp4")
             restore = re.sub(rb"/session-([0-9]+)\.m4s", rb"/restore-\1.m4s", restore)
             a.files["/restore.m3u8"] = (restore, "application/vnd.apple.mpegurl")
-            b.files["/restore-init.mp4"] = a.files["/session-init.mp4"]
+            b.files[SESSION_PREFIX + "/restore-init.mp4"] = a.files[SESSION_PREFIX + "/session-init.mp4"]
             for path in root.glob("session-*.m4s"):
-                b.files["/restore-" + path.name.removeprefix("session-")] = a.files["/" + path.name]
+                b.files[SESSION_PREFIX + "/restore-" + path.name.removeprefix("session-")] = a.files[SESSION_PREFIX + "/" + path.name]
 
             cases = [
-                ("session-complete", "/session-good.m3u8", "session-complete", True, True),
-                ("session-stop", "/session-good.m3u8", "session-stop", True, True),
-                ("session-replace", "/session-good.m3u8", "session-replace", True, True),
-                ("session-off-origin", "/session-off-origin.m3u8", "session-off-origin", True, False),
-                ("session-redirect", "/session-redirect.m3u8", "session-redirect", False, False),
-                ("session-control-no-references", "/session-good.m3u8", "session-control-no-references", False, False),
-                ("session-restored-override", "/session-good.m3u8", "session-complete", True, True),
+                ("session-complete", playlist, "session-complete", True, True),
+                ("session-stop", playlist, "session-stop", True, True),
+                ("session-replace", playlist, "session-replace", True, True),
+                ("session-off-origin", off_origin, "session-off-origin", False, False),
+                ("session-redirect", redirected_playlist, "session-redirect", False, False),
+                ("session-control-no-references", playlist, "session-control-no-references", False, False),
+                ("session-restored-override", playlist, "session-complete", True, True),
+                ("session-nested-hls", nested_playlist, "session-nested-hls", False, False),
             ]
-            for name, path, mode, positive, restoration in cases:
+            for name, payload, mode, positive, restoration in cases:
+                path = variant
+                payload_path = root / "session-input.m3u8"
+                payload_path.write_bytes(payload)
+                # Serve the original only as an accidental-fallback detector.
+                a.files[path] = (payload, "application/vnd.apple.mpegurl")
+                a.redirect_paths = {redirect_child} if mode == "session-redirect" else set()
                 for server in servers:
                     with server.lock:
                         server.requests.clear()
-                result = subprocess.run([str(args.harness), str(root / "ca.pem"), origin_a + path, mode],
+                        server.response_records.clear()
+                        server.accepted_connections = 0
+                result = subprocess.run([str(args.harness), str(root / "ca.pem"), origin_a + path, mode,
+                                         "--session-playlist=" + str(payload_path)],
                                         capture_output=True, timeout=remaining(30))
                 fields = read_outcomes(result, False)
                 required = {"session_progressed", "session_rejected", "session_override_removed",
                             "restoration_attempted", "restoration_progressed", "restoration_rejected",
-                            "references_restored_before", "references_restored_after"}
+                            "session_options_captured", "nested_forbidden_count", "internal_redirect_count",
+                            "end_file_error_count", "session_load_started", "session_structural_failure"}
+                required.update(name + "_restored_" + phase
+                                for name in ("references", "redirects", "demuxer", "lavf_options", "session_options")
+                                for phase in ("before", "after"))
                 if required - fields.keys():
                     raise RuntimeError("missing_session_outcomes")
                 with a.lock, b.lock:
@@ -514,46 +624,49 @@ def session_matrix(args):
                     root_token = any(token for request, token, _ in a.requests if request == path)
                     child_requests = [(request, token) for server in servers
                                       for request, token, _ in server.requests
-                                      if request not in (path, "/restore.m3u8")]
+                                      if request.startswith(SESSION_PREFIX + "/") and request != path]
                     restore_requested = any(request == "/restore.m3u8" and token
                                             for request, token, _ in a.requests)
-                    restore_child_requests = sum(request.startswith("/restore-")
-                                                 for request, _, _ in b.requests)
+                    restore_child_requests = sum("/restore-" in request for request, _, _ in b.requests)
                     audit = {
                         "root_requested": root_requested,
                         "session_token": root_token or any(token for _, token in child_requests),
                         "child_requests": len(child_requests),
+                        "init_requested": any(request == SESSION_PREFIX + "/session-init.mp4"
+                                              for request, _ in child_requests),
+                        "media_requests": sum(request.endswith(".m4s") for request, _ in child_requests),
+                        "redirect_child_requests": sum(request == redirect_child for request, _ in child_requests),
                         "off_origin_requests": len(b.requests),
+                        "off_origin_connections": b.accepted_connections,
+                        "nested_unexpected_children": sum(request not in a.whole_body_paths
+                                                          for request, _ in child_requests),
+                        "nested_init_complete": any(row["path"] == SESSION_PREFIX + "/nested-init.mp4" and
+                                                    row["method"] == "GET" and row["status"] == 200 and
+                                                    row["bytes"] == len(nested_init) and row["complete"]
+                                                    for row in a.response_records),
+                        "nested_media_complete": any(row["path"] == SESSION_PREFIX + "/attack.m3u8" and
+                                                     row["method"] == "GET" and row["status"] == 200 and
+                                                     row["bytes"] == len(nested_media) and row["complete"]
+                                                     for row in a.response_records),
+                        "unexpected_requests": sum(not request.startswith(SESSION_PREFIX + "/") and
+                                                   request != "/restore.m3u8" for server in servers
+                                                   for request, _, _ in server.requests),
                         "restore_requested": restore_requested,
                         "restore_child_requests": restore_child_requests,
                         "token_in_url": any(url for server in servers for _, _, url in server.requests),
                         "server_error": any(server.failed for server in servers),
                     }
-                passed = (result.returncode == 0 and fields["initialized"] == "1" and
-                          fields["timed_out"] == "0" and root_requested and
-                          not audit["session_token"] and not audit["token_in_url"] and
-                          not audit["server_error"] and
-                          fields["session_progressed"] == str(int(positive)) and
-                          fields["session_rejected"] == str(int(not positive)) and
-                          fields["session_override_removed"] == str(int(mode == "session-control-no-references")) and
-                          fields["restoration_attempted"] == str(int(restoration)))
-                if positive:
-                    passed = passed and audit["child_requests"] > 0
-                else:
-                    passed = passed and audit["child_requests"] == 0
-                if restoration:
-                    passed = (passed and restore_requested and restore_child_requests == 0 and
-                              fields["restoration_rejected"] == "1" and fields["restoration_progressed"] == "0" and
-                              fields["references_restored_after"] == "1" and
-                              (mode == "session-replace" or fields["references_restored_before"] == "1"))
-                if name == "session-off-origin":
-                    passed = passed and audit["off_origin_requests"] > 0
+                passed = session_pass(result, fields, audit, positive, restoration, mode)
                 row = {"case": name, "pass": bool(passed), **audit, **fields}
                 records.append(row)
                 print(json.dumps(row), flush=True)
         finally:
             finish_servers(servers, threads)
-    if len(records) != 7 or len({row["case"] for row in records}) != 7:
+    # Count TCP accepts before TLS and inspect again after listener shutdown so
+    # a late sentinel contact cannot escape the last per-case snapshot.
+    if len(servers) == 2 and servers[1].total_accepted_connections:
+        raise RuntimeError("session_sentinel_contacted")
+    if len(records) != 8 or len({row["case"] for row in records}) != 8:
         raise RuntimeError("incomplete_session_matrix")
     return records
 
