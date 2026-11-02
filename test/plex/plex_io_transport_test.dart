@@ -2,11 +2,78 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:lineup_desktop/plex/plex_transcode.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  test(
+    'session stop deadline aborts pending transport and never throws',
+    () async {
+      final transport = _PendingSessionTransport();
+      final failures = <String>[];
+      final client = PlexClient(
+        clientIdentifier: 'synthetic',
+        httpClient: transport,
+        requestTimeout: const Duration(seconds: 30),
+        onTranscodeStopFailure: failures.add,
+      );
+      addTearDown(client.close);
+      final stopped = client.stopTranscodeSession(
+        Uri.parse('https://synthetic.invalid'),
+        '00000000-0000-4000-8000-000000000001',
+        'synthetic-token',
+      );
+      await stopped.timeout(const Duration(seconds: 3));
+      expect(transport.calls, 1);
+      expect(transport.request!.url.path, '/video/:/transcode/universal/stop');
+      expect(transport.request!.followRedirects, isFalse);
+      expect(
+        transport.request!.url.toString(),
+        isNot(contains('synthetic-token')),
+      );
+      expect(transport.request!.headers['X-Plex-Token'], 'synthetic-token');
+      await transport.aborted.future.timeout(const Duration(seconds: 1));
+      expect(failures, ['network-timeout']);
+    },
+  );
+
+  test(
+    'streamed master size limit cancels before buffering unbounded body',
+    () async {
+      var cancelled = false;
+      final stream = StreamController<List<int>>(
+        onCancel: () {
+          cancelled = true;
+        },
+      );
+      final transport = _StreamingMasterTransport(stream.stream);
+      final client = PlexClient(
+        clientIdentifier: 'synthetic',
+        httpClient: transport,
+      );
+      addTearDown(client.close);
+      final result = client.startTranscodeSession(
+        Uri.parse('https://synthetic.invalid'),
+        PlexSessionRequest(
+          ratingKey: '42',
+          sessionId: '00000000-0000-4000-8000-000000000001',
+          profile: buildProfile(MediaCapabilities.desktop, desktop: true),
+        ),
+        'synthetic-token',
+      );
+      final assertion = expectLater(result, _plexError('session-invalid'));
+      stream.add(List.filled(maximumPlexMasterBytes, 32));
+      stream.add([32]);
+      await assertion;
+      expect(cancelled, isTrue);
+      expect(transport.calls, 1);
+      await stream.close();
+    },
+  );
+
   for (final cancelScan in [false, true]) {
     test(
       'IOClient closes a connection awaiting headers on ${cancelScan ? 'scan cancellation' : 'deadline'}',
@@ -66,3 +133,33 @@ void main() {
 Matcher _plexError(String code) => throwsA(
   isA<PlexException>().having((exception) => exception.code, 'code', code),
 );
+
+class _PendingSessionTransport extends http.BaseClient {
+  int calls = 0;
+  http.BaseRequest? request;
+  final aborted = Completer<void>();
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    expect(++calls, 1, reason: 'Unexpected session request');
+    this.request = request;
+    if (request is! http.AbortableRequest) fail('Expected abortable request');
+    unawaited(
+      request.abortTrigger!.then((_) {
+        aborted.complete();
+      }),
+    );
+    return Completer<http.StreamedResponse>().future;
+  }
+}
+
+class _StreamingMasterTransport extends http.BaseClient {
+  _StreamingMasterTransport(this.stream);
+  final Stream<List<int>> stream;
+  int calls = 0;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    expect(++calls, 1, reason: 'Unexpected session request');
+    expect(request.url.path, '/video/:/transcode/universal/start.m3u8');
+    return http.StreamedResponse(stream, 200);
+  }
+}
