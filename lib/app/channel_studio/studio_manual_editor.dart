@@ -542,6 +542,8 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             Text(
               entries.isEmpty
                   ? 'No programs selected. Return to Browse library to add programming.'
+                  : handheldStacked(context)
+                  ? '${rundownEntries.length} of ${entries.length} shown${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}'
                   : '${rundownEntries.length} of ${entries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
             ),
             SizedBox(height: 8),
@@ -668,34 +670,42 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
       if (season != null || episode != null)
         'S${season ?? '—'} E${episode ?? '—'}',
     ];
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        lineupArrowButton(
-          tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
-          onPressed: _saving || index == 0
-              ? null
-              : () => _moveManual(entry, -1),
-          icon: Icons.arrow_upward,
-        ),
-        lineupArrowButton(
-          tooltip: 'Move $positionedTitle later in $_draftChannelLabel',
-          onPressed: _saving || index == entries.length - 1
-              ? null
-              : () => _moveManual(entry, 1),
-          icon: Icons.arrow_downward,
-        ),
-        TextButton(
+    final actionChildren = <Widget>[
+      lineupArrowButton(
+        tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
+        onPressed: _saving || index == 0 ? null : () => _moveManual(entry, -1),
+        icon: Icons.arrow_upward,
+      ),
+      lineupArrowButton(
+        tooltip: 'Move $positionedTitle later in $_draftChannelLabel',
+        onPressed: _saving || index == entries.length - 1
+            ? null
+            : () => _moveManual(entry, 1),
+        icon: Icons.arrow_downward,
+      ),
+      LineupTouchTarget(
+        onPressed: _saving ? null : () => _moveManualTo(entry),
+        child: TextButton(
           onPressed: _saving ? null : () => _moveManualTo(entry),
           child: const Text('Move to…'),
         ),
-        IconButton(
+      ),
+      LineupTouchTarget(
+        onPressed: _saving ? null : () => _removeManual(entry),
+        child: IconButton(
           tooltip: 'Remove from channel',
           onPressed: _saving ? null : () => _removeManual(entry),
           icon: const Icon(Icons.close, semanticLabel: 'Remove from channel'),
         ),
-      ],
-    );
+      ),
+    ];
+    final Widget actions = handheldStacked(context)
+        ? Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: actionChildren,
+          )
+        : Row(mainAxisSize: MainAxisSize.min, children: actionChildren);
     final tile = LayoutBuilder(
       builder: (context, constraints) {
         final wrapActions =

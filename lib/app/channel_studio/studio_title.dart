@@ -144,6 +144,29 @@ class _StudioTitleState extends State<_StudioTitle> {
         );
       },
     );
+    if (handheldStacked(context)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            header: true,
+            child: HandheldPageBar(
+              title: name,
+              subtitle: '$mode · $status',
+              onBack: widget.busy ? null : () => unawaited(widget.onLeave()),
+              backTooltip: 'Back to Channels',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: handheldGutter),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _studioActions(persisted: persisted, saved: saved),
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -157,6 +180,9 @@ class _StudioTitleState extends State<_StudioTitle> {
   Widget _pendingActionTooltip(Widget child) => widget.hasPendingChoice
       ? Tooltip(message: widget.pendingHint, child: child)
       : child;
+
+  Widget _touchTarget(Widget child, VoidCallback? onPressed) =>
+      LineupTouchTarget(onPressed: onPressed, child: child);
 
   Widget _studioActions({required bool persisted, required bool saved}) {
     final recovering = widget.conflict || widget.baseDeleted;
@@ -173,48 +199,62 @@ class _StudioTitleState extends State<_StudioTitle> {
         if (widget.generated && !recovering)
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
-            child: OutlinedButton(
-              onPressed: widget.busy ? null : widget.onDuplicate,
-              child: const Text('Duplicate as custom'),
+            child: _touchTarget(
+              OutlinedButton(
+                onPressed: widget.busy ? null : widget.onDuplicate,
+                child: const Text('Duplicate as custom'),
+              ),
+              widget.busy ? null : widget.onDuplicate,
             ),
           ),
         if (persisted && !recovering)
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
             child: _pendingActionTooltip(
-              saved
-                  ? FilledButton.icon(
-                      key: const Key('studio-tune'),
-                      onPressed: widget.busy || widget.hasPendingChoice
+              _touchTarget(
+                saved
+                    ? FilledButton.icon(
+                        key: const Key('studio-tune'),
+                        onPressed: widget.busy || widget.hasPendingChoice
+                            ? null
+                            : widget.onTune,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Tune in'),
+                      )
+                    : OutlinedButton.icon(
+                        key: const Key('studio-tune'),
+                        onPressed: canSave ? widget.onSaveAndTune : null,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Tune in'),
+                      ),
+                saved
+                    ? (widget.busy || widget.hasPendingChoice
                           ? null
-                          : widget.onTune,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Tune in'),
-                    )
-                  : OutlinedButton.icon(
-                      key: const Key('studio-tune'),
-                      onPressed: canSave ? widget.onSaveAndTune : null,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Tune in'),
-                    ),
+                          : widget.onTune)
+                    : (canSave ? widget.onSaveAndTune : null),
+              ),
             ),
           ),
         if (showSave)
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
             child: _pendingActionTooltip(
-              FilledButton(
-                focusNode: _saveFocus,
-                onPressed: canSave ? widget.onSave : null,
-                child: Text(
-                  widget.saving
-                      ? 'Saving…'
-                      : switch (widget.mode) {
-                          ChannelStudioMode.editCustom => 'Save changes',
-                          ChannelStudioMode.inspectGenerated => 'Save identity',
-                          _ => 'Save channel',
-                        },
+              _touchTarget(
+                FilledButton(
+                  focusNode: _saveFocus,
+                  onPressed: canSave ? widget.onSave : null,
+                  child: Text(
+                    widget.saving
+                        ? 'Saving…'
+                        : switch (widget.mode) {
+                            ChannelStudioMode.editCustom => 'Save changes',
+                            ChannelStudioMode.inspectGenerated =>
+                              'Save identity',
+                            _ => 'Save channel',
+                          },
+                  ),
                 ),
+                canSave ? widget.onSave : null,
               ),
             ),
           ),

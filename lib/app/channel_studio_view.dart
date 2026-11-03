@@ -9,6 +9,7 @@ import '../channels/content_resolver.dart';
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/handheld_management.dart';
 import 'channel_air_check.dart';
 import 'air_check_verification.dart';
 import 'channel_studio_draft.dart';
@@ -354,6 +355,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       MediaQuery.sizeOf(context).width,
     );
     final baseFontSize = compact ? 14.0 : 18.0;
+    final stacked = handheldStacked(context);
     return Theme(
       data: theme.copyWith(
         textTheme: theme.textTheme.copyWith(
@@ -372,11 +374,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         type: MaterialType.transparency,
         child: LineupPage(
           traversalPolicy: OrderedTraversalPolicy(),
-          topBar: LineupTopBar(
-            menuKey: const Key('studio-app-menu'),
-            onOpenMenu: widget.onOpenMenu,
-            menuFocusNode: widget.menuFocusNode,
-          ),
+          topBar: stacked
+              ? null
+              : LineupTopBar(
+                  menuKey: const Key('studio-app-menu'),
+                  onOpenMenu: widget.onOpenMenu,
+                  menuFocusNode: widget.menuFocusNode,
+                ),
+          handheldContent: stacked,
           title: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
           titleWidget: _StudioTitle(
             key: _titleKey,
